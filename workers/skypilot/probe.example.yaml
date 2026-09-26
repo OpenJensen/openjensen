@@ -1,0 +1,24 @@
+# Experimental renderer diagnostic; does not publish a simulation result.
+name: isaac-render-probe
+workdir: ../isaac_sim
+resources:
+  accelerators: L4:1
+envs:
+  ACCEPT_EULA: null
+  SIM_PROBE_PROFILE: realtime
+  SIM_IMAGE: us-east4-docker.pkg.dev/CHANGE_ME_PROJECT_ID/simulation/isaac-worker@sha256:CHANGE_ME_IMAGE_DIGEST
+run: |
+  set -euo pipefail
+  [[ "${ACCEPT_EULA:-}" == Y ]] || { echo "Set ACCEPT_EULA=Y first." >&2; exit 1; }
+  SIM_PROBE_OUTPUT="$HOME/sim-debug/$SIM_PROBE_PROFILE"
+  mkdir -p "$SIM_PROBE_OUTPUT"
+  sudo chown 1234:1234 "$SIM_PROBE_OUTPUT"
+  trap 'docker rm -f isaac-render-probe >/dev/null 2>&1 || true' EXIT
+  docker run --name isaac-render-probe --rm --gpus all --init \
+    --user 1234:1234 --shm-size=2g \
+    --env ACCEPT_EULA=Y --env NVIDIA_DRIVER_CAPABILITIES=all \
+    --env SIM_PROBE_PROFILE \
+    --mount "type=bind,src=$HOME/sky_workdir,dst=/opt/sim-worker,readonly" \
+    --mount "type=bind,src=$SIM_PROBE_OUTPUT,dst=/probe-output" \
+    --entrypoint /usr/bin/timeout "$SIM_IMAGE" --kill-after=30 600 \
+    /isaac-sim/python.sh --no-ros-env /opt/sim-worker/tests/gpu_probe.py

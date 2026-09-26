@@ -1,0 +1,9 @@
+.git
+__pycache__/
+**/__pycache__/
+*.pyc
+**/*.pyc
+.venv/
+isaac-image.txt
+build-id.txt
+worker-image.txt
