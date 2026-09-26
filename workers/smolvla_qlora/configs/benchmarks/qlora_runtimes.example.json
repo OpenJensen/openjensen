@@ -1,0 +1,43 @@
+{
+  "smolvla": {
+    "python": "/path/to/envs/smolvla/bin/python",
+    "fixture": "/path/to/fixtures/smolvla",
+    "dependency_lock": "/path/to/locks/smolvla.txt"
+  },
+  "openvla_oft": {
+    "python": "/path/to/envs/openvla_oft/bin/python",
+    "fixture": "/path/to/fixtures/openvla_oft",
+    "dependency_lock": "/path/to/locks/openvla_oft.txt",
+    "native_repo": "/path/to/native/openvla_oft",
+    "native_code_commit": "e4287e94541f459edc4feabc4e181f537cd569a8"
+  },
+  "openvla": {
+    "python": "/path/to/envs/openvla/bin/python",
+    "fixture": "/path/to/fixtures/openvla",
+    "dependency_lock": "/path/to/locks/openvla.txt",
+    "native_repo": "/path/to/native/openvla",
+    "native_code_commit": "c8f03f48af692657d3060c19588038c7220e9af9"
+  },
+  "pi0": {
+    "python": "/path/to/envs/pi0/bin/python",
+    "fixture": "/path/to/fixtures/pi0",
+    "dependency_lock": "/path/to/locks/pi0.txt"
+  },
+  "pi05": {
+    "python": "/path/to/envs/pi05/bin/python",
+    "fixture": "/path/to/fixtures/pi05",
+    "dependency_lock": "/path/to/locks/pi05.txt",
+    "native_repo": "/path/to/native/pi05",
+    "native_code_commit": "215abfb217dbac7d5f1273282331b9b1866c0479",
+    "converted_checkpoint": "/path/to/pi05_libero_pytorch",
+    "conversion_manifest": "/path/to/pi05_conversion.json"
+  },
+  "gr00t_n17": {
+    "python": "/path/to/envs/gr00t_n17/bin/python",
+    "fixture": "/path/to/fixtures/gr00t_n17",
+    "dependency_lock": "/path/to/locks/gr00t_n17.txt",
+    "native_repo": "/path/to/native/gr00t_n17",
+    "native_code_commit": "51d4c89f72fda44cbf77285c6a8114b52676b8a1",
+    "backbone_revision": "9ce19a195e423419c349abfc86fd07178b230561"
+  }
+}

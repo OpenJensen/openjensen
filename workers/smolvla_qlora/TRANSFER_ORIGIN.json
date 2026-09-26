@@ -1,0 +1,39 @@
+{
+  "source_repository": "https://github.com/sobhanb-eth/firebird-hackathon-prep",
+  "source_commit": "a9a56ea105d061012abb79fe937d4237af2bf33e",
+  "target_repository": "https://github.com/sobhanb-eth/firebird-hackathon-codebase",
+  "target_base": "89fa8ea7b8458b3874a5f14b9abd9d78383a10d1",
+  "path_mapping": {
+    "src, tests, configs, manifests, docs/training": "workers/smolvla_qlora/"
+  },
+  "source_files_sha256": {
+    ".gitignore": "5a76c25c18874c078d4f64c09944000f1ff45f217f1a0fb929d5878f5a9ee37b",
+    "configs/benchmarks/open_weight_vlas.json": "b6f7c6321b471e4642df153fd18f1d6ff0cd033a875f7536a36a4432f44e82e7",
+    "configs/benchmarks/qlora_runtimes.example.json": "7906c7d4b5e972efee373fb949ef4f21d68439cb2bf86964af2b3ff9900cd6cb",
+    "configs/smolvla_qlora.json": "bff2a4de0811823d24ec7905fc475b1fa64a91fdf22de949d491fdcd9f9f4e0f",
+    "docs/training/multimodel-qlora-checks.md": "74bc6f698630c186f49819bca598630fb07b51b2bc0df67341c0d968836edeeb",
+    "docs/training/qlora-model-inspection-2026-09-26.json": "30d5bc94dd4af2f7dcc72f32efe42024881a6b5f2f613e915da484ae565a7a54",
+    "docs/training/smolvla-qlora.md": "0932206fae982887717899dfcfe54a15a636d41f92fe6af1d576cd9d9381658d",
+    "pyproject.toml": "83449ef20a342f88a1c3b1b27e3023aade5b59f9cf56a6002c982e168338e1af",
+    "requirements-smolvla-linux.txt": "e1c109fda3fa7bd2f3389341b9f7aea4a45442853a554f3b5d892a48a6eb2945",
+    "src/firebird_vla/__init__.py": "e6b59eda486a30484fdb72dfaae8f0c8070d4e167f54527839667ff5860b7606",
+    "src/firebird_vla/checkpoint.py": "73953c036f470a6706a358089bdd55fa104097fcdb333d181394d1271d1d2121",
+    "src/firebird_vla/checks/__init__.py": "6f46a5d6ee73d9974b49add6ef0553177d31aefad3fe7df9e74e4ab51870b08f",
+    "src/firebird_vla/checks/catalog.py": "1481944c4cca0c06753b043e77e3ecaff2fd259accbd9ee670fb286661a6ee38",
+    "src/firebird_vla/checks/cli.py": "bfa08e8b9202d75809c139b8fe984def04d7599af0f66f8d168c406b16b2510b",
+    "src/firebird_vla/checks/fixtures.py": "68c9d6b2271ba003a45103e9cf10b1468b2e3b4ac590356f9907d0f288d4bf90",
+    "src/firebird_vla/checks/inspect.py": "f22edd9560eb74aa033fdd804935e08301ccb3531cbcf6654fdf12592db8c917",
+    "src/firebird_vla/checks/native.py": "4b4afc00a0981c9393be40ccc70c9a05b98c61328383ec3c5adcc14e5fae37a4",
+    "src/firebird_vla/checks/worker.py": "44f345a78ff274086c0c8a8ca7d85fb162cf0e8ceeb2ec265ca33aab1b79b1c2",
+    "src/firebird_vla/config.py": "bd9a6f09db3c05e32e7b166bcfe9e2fe7d4a8b4a41e96bfa4048003b6f9f01cf",
+    "src/firebird_vla/data.py": "d156cd146fbaed00e7a7090f81a2af5ff314fb5b6d552e7708c50d5ef6f4f586",
+    "src/firebird_vla/model.py": "a960bcc30ec2b4c4eade670330449f6db9de4d9367704378ed546c19be58c986",
+    "src/firebird_vla/train.py": "52356d11d13ba69d61f41fc5c5f3d2316a4e6a6b2fc5a8076d17e5ed98b91aaf",
+    "src/firebird_vla/verify.py": "979ff08e270495748d052c5c2d9cd264e0424cb5075bacbbe5b44695fe8544ed",
+    "tests/test_cuda_quantization.py": "d28998f0206c3425ccc81f2fd4b21bf8c57431be83792aa5cc18dd52b0d2b342",
+    "tests/test_native_checks.py": "8aaf58a16913aef7ac284177aacff140f01f758febbc9f7ce7d50cdc0ecfb1d3",
+    "tests/test_qlora_catalog.py": "f0e6956c98892c794d46230e5d13da5a072ba9ce8fbcc8c8cddbd0d879e40233",
+    "tests/test_worker.py": "67923450526e691307c7f420efcc726dc19912f1171b58461112f68c5ef606c9"
+  },
+  "transfer_changes": "Worker placement, README and documentation links, and transfer provenance only; executable source and tests preserved. Training catalog protocol becomes a pinned prep URL."
+}
