@@ -5,13 +5,13 @@ from importlib.metadata import distribution
 from pathlib import Path
 
 OLD = (
-    "            input_ids=model_input.input_tokens,\n"
-    "            positions=model_input.input_positions,"
+    "                input_ids=model_input.input_tokens,\n"
+    "                positions=model_input.input_positions,"
 )
 NEW = (
-    "            input_ids=model_input.input_tokens,\n"
-    "            inputs_embeds=model_input.inputs_embeds,\n"
-    "            positions=model_input.input_positions,"
+    "                input_ids=model_input.input_tokens,\n"
+    "                inputs_embeds=model_input.inputs_embeds,\n"
+    "                positions=model_input.input_positions,"
 )
 
 

@@ -24,10 +24,13 @@ The startup boundary excludes imports and downloads. Timing includes full prepro
 
 | Candidate | Successes / 20 | Median of fixture p50 (ms/chunk) |
 |---|---:|---:|
+| cpp-Q4_0 | 8/20 | 110.92 |
 | cpp-Q8_0 | 15/20 | 109.30 |
 | cpp-bf16 | 14/20 | 112.72 |
 | native-bf16 | 15/20 | 325.29 |
 | native-fp16 | 15/20 | 312.30 |
+| native-int8 | 15/20 | 372.32 |
+| native-nf4 | 15/20 | 377.31 |
 
 Twenty paired episodes cover ten LIBERO Spatial tasks and two fixed initial states. This is a small behavior-retention sample, not a quality-equivalence or generalization claim. RTX is a shared WSL desktop; its timings are separate from the uncontended L4 window.
 
@@ -39,6 +42,10 @@ Across the 14 shared fixtures, C++ BF16 versus native BF16 had RMSE 0.005298 and
 
 vLLM 0.9.2 custom V0 pooling execution matched same-environment native BF16 exactly on three fixtures. This uses native PyTorch policy kernels inside vLLM and requires the pooling-input forwarding patch. The probe timings were contention-affected and are excluded from the table. Full shared-fixture and paired quality execution is in progress.
 
-TensorRT-LLM 0.21.0 is the target of an experimental full-policy PyTorch-executor adapter. Complete-action validation has not passed yet. No TensorRT-LLM performance, quality, INT8 or INT4 claim is made.
+TensorRT-LLM 0.21.0 complete-action execution passed through a custom PyTorch-executor adapter with the context-logit-capable sampler enabled. All three probe fixtures matched same-environment native FP16 exactly. Probe timings had contention and are excluded from the table. Full paired quality and isolated timing are in progress; INT8/INT4 engine execution remains unvalidated.
 
 Remaining evidence: the other RTX quantized quality rows, vLLM paired quality and isolated timing, TensorRT-LLM complete-action validation, and L4 paired quality. Historical smoke results with different noise handling are excluded from these quality rows.
+
+RTX TensorRT-LLM setup is deferred by user decision because no disk with enough free space was available. See the worker README for the measured storage constraint.
+
+The completed RTX C++ Q4 run scored 8/20 against native BF16's 15/20, a substantial observed quality loss. The draft does not treat reduced memory alone as acceptance.

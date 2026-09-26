@@ -70,12 +70,13 @@ def main():
             max_seq_len=1024,
             max_num_tokens=1024,
             disable_overlap_scheduler=True,
+            enable_trtllm_sampler=True,
             use_cuda_graph=False,
             kv_cache_config=KvCacheConfig(max_tokens=1024),
         )
         llm.input_processor = lambda inputs, params: (
             [0],
-            {"mm_embedding": [inputs["mm_processor_kwargs"]["envelope"]]},
+            {"mm_embedding": inputs["mm_processor_kwargs"]["envelope"]},
         )
         result["startup_s"] = time.perf_counter() - started
         from types import SimpleNamespace
@@ -119,7 +120,7 @@ def main():
                     ),
                     use_tqdm=False,
                 )
-                data = outputs[0].context_logits.reshape(-1, 512)[-1].float().cpu()
+                data = outputs.context_logits.reshape(-1, 512)[-1].float().cpu()
                 assert data[350] > 0, "Full policy forward was not executed"
                 actions = post(data[:350].reshape(1, 50, 7)).float().cpu()
                 times.append((time.perf_counter() - started) * 1000)

@@ -35,7 +35,8 @@ private connection configuration, or credentials belong in this directory.
 
 ```sh
 uv venv --python 3.11 .venv
-uv pip install --python .venv/bin/python -r requirements-native.txt
+uv pip install --python .venv/bin/python cmake==3.31.6
+PATH="$PWD/.venv/bin:$PATH" uv pip install --python .venv/bin/python -r requirements-native.txt
 ```
 
 Cache these exact Hugging Face snapshots before timing:
@@ -50,7 +51,8 @@ Checkpoint weights SHA256:
 `9a9f6413e42c0f332fccbce9a0dc796af2790f82cf002f791cdbf7e01e1afca8`.
 Set `LIBERO_CONFIG_PATH` to a directory containing `config.yaml` with absolute
 `assets`, `bddl_files`, `benchmark_root`, `datasets`, and `init_states` paths.
-Use the pinned assets snapshot and hf-libero's installed BDDL/init files.
+Use `scripts/prepare_libero_assets.py --config-dir /absolute/path/libero-config`
+with the selected environment to download the pinned assets and write this configuration.
 Use `MUJOCO_GL=egl` and `PYOPENGL_PLATFORM=egl`; software rendering is not required.
 
 The run root must contain `vla.cpp/build-cuda/vla-server`,
@@ -101,7 +103,9 @@ SmolVLM support alone does not execute SmolVLA's action expert/denoising loop.
 The custom adapters retain the original policy and transport continuous actions;
 they are not stock supported-model integrations.
 
-For vLLM, install `requirements-vllm.txt` in its own environment, then run
+For vLLM, install CMake 3.31.6 in its own environment and put that environment's
+`bin` directory on `PATH` while installing `requirements-vllm.txt` (EGL helper
+builds need CMake older than 4). Then run
 `scripts/patch_vllm_pooling.py` with that Python. vLLM 0.9.2's V0 pooling runner
 otherwise drops `prompt_embeds`. The version-guarded patch retains a backup and
 refuses unexpected source. Set `VLLM_USE_V1=0` and `PYTHONPATH="$SCRIPTS"`.
@@ -111,10 +115,12 @@ also accepts `--backend vllm-bf16` for shared fixtures and paired quality.
 TensorRT-LLM remains the requested target. Its experimental probe is
 `probe_trtllm_smolvla.py`; install `requirements-trtllm.txt` separately, plus system
 OpenMPI. When using portable Python, expose its `LIBDIR` through `LD_LIBRARY_PATH`.
-The adapter uses TensorRT-LLM's PyTorch executor and a custom context-output
+The validated FP16 adapter uses TensorRT-LLM's PyTorch executor, its context-logit-capable
+sampler (`enable_trtllm_sampler=True`), and a custom context-output
 buffer for continuous actions. Its first 350 entries are an action payload,
 not language logits. It must pass complete-action comparison before any timing
-or quality claim. INT8/INT4 TensorRT-LLM execution remains unvalidated.
+or quality claim. INT8/INT4 TensorRT-LLM execution remains unvalidated. The shared harness accepts
+`--backend trtllm-fp16` for the validated complete-action path.
 
 ## Tests
 
@@ -128,3 +134,8 @@ patch tests run without GPU dependencies. Keep raw result JSON, action arrays,
 logs, dependency freezes, hashes and measurement commands alongside each report.
 
 Latest committed measurements: [September 26 evidence](evidence/2026-09-26/REPORT.md).
+
+RTX 3070 TensorRT-LLM setup is deferred by user decision: the host drive had
+2.2 GiB free and WSL 6.6 GiB before cleaning this task's temporary transfer
+archive, while the tested L4 environment occupies 17 GiB. No alternate disk was
+available. This is a storage limitation, not a failed RTX model-execution test.

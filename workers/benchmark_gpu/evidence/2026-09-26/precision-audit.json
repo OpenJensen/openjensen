@@ -1,0 +1,23 @@
+[
+  {
+    "candidate": "Q8_0",
+    "packed_count": 112,
+    "byte_identical_protected_tensors": 391,
+    "sha256": "5635319a6fb8d4216dbfd4954b1905cc8994a02c31401e683e47da116f077ea9",
+    "bytes": 667593888
+  },
+  {
+    "candidate": "Q4_0",
+    "packed_count": 112,
+    "byte_identical_protected_tensors": 391,
+    "sha256": "cde72de5722e7d8886636095bc2b3b8c18e1c503164e0a788ddbc84ea58c62c0",
+    "bytes": 588950688
+  },
+  {
+    "candidate": "Q8_0-vision",
+    "packed_count": 184,
+    "byte_identical_protected_tensors": 319,
+    "sha256": "0a2fffa03bbaa96fb5429df7d7b1ec7e22ca74fde0e93b6f60dbd637a881694e",
+    "bytes": 587967648
+  }
+]

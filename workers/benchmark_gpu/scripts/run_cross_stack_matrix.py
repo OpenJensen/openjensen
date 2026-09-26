@@ -18,12 +18,10 @@ def main():
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--fixtures", type=Path, required=True)
     p.add_argument("--samples", type=int, default=5)
-    args = p.parse_args()
-    args.output.mkdir(parents=True, exist_ok=False)
-    rows = []
-    for backend, name in [
-        (x, x)
-        for x in (
+    p.add_argument(
+        "--backends",
+        nargs="+",
+        default=[
             "native-bf16",
             "cpp-bf16",
             "native-fp16",
@@ -32,8 +30,17 @@ def main():
             "cpp-Q4_0",
             "native-nf4",
             "cpp-Q8_0-vision",
-        )
-    ] + [("native-bf16", "native-bf16-repeat")]:
+        ],
+    )
+    p.add_argument("--repeat-backend", default="native-bf16")
+    args = p.parse_args()
+    args.output.mkdir(parents=True, exist_ok=False)
+    rows = []
+    candidates = [(backend, backend) for backend in args.backends]
+    candidates.append((args.repeat_backend, args.repeat_backend + "-repeat"))
+    if len({name for _, name in candidates}) != len(candidates):
+        p.error("Duplicate candidate names")
+    for backend, name in candidates:
         command = [
             sys.executable,
             "-u",
@@ -116,7 +123,8 @@ def main():
                     samples[timestamp] = samples.get(timestamp, 0) + float(memory)
             except (ValueError, IndexError):
                 pass
-        row["sampled_process_peak_mib"] = max(samples.values()) if samples else None
+        peak = max(samples.values()) if samples else 0
+        row["sampled_process_peak_mib"] = peak if peak > 0 else None
         rows.append(row)
         (args.output / "runs.json").write_text(json.dumps(rows, indent=2))
         print(name, proc.returncode, row["sampled_process_peak_mib"], flush=True)

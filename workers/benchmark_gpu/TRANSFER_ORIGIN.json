@@ -22,13 +22,17 @@
   ],
   "validation": {
     "l4_worker_tests": {
-      "passed": 4,
+      "passed": 6,
       "skipped": 0,
-      "seconds": 15.21
+      "seconds": 15.35
     },
     "local_pooling_patch_tests": {
       "passed": 2
     },
-    "ruff": "passed"
+    "ruff": "passed",
+    "local_pure_tests": {
+      "passed": 4,
+      "seconds": 0.02
+    }
   }
 }

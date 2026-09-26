@@ -223,7 +223,7 @@ def load_fixture(path):
 
 def run(args, result):
     torch.set_num_threads(4)
-    if args.backend.startswith("vllm-"):
+    if args.backend.startswith(("vllm-", "trtllm-")):
         from llm_policy_runtime import LLMRuntime
 
         runtime = LLMRuntime(args.backend, args.root, args.output)
@@ -232,6 +232,8 @@ def run(args, result):
     result.update(
         startup_s=runtime.startup_s, backend=args.backend, checkpoint=MODEL, revision=REVISION
     )
+    if hasattr(runtime, "integration"):
+        result["integration"] = runtime.integration
     try:
         fixtures = sorted(args.fixtures.glob("*.npz"))
         if not fixtures:
