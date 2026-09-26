@@ -1,19 +1,31 @@
 name: Simulation worker checks
 on:
   push:
+    branches: [main]
     paths: ['workers/isaac_sim/**', 'workers/skypilot/**', '.github/workflows/simulation.yml']
   pull_request:
     paths: ['workers/isaac_sim/**', 'workers/skypilot/**', '.github/workflows/simulation.yml']
+  workflow_dispatch:
+# Do not cancel another workflow, PR or a main-branch verification.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
   simulation:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            workers/isaac_sim/calibration.requirements.txt
+            workers/skypilot/requirements.txt
+            .github/workflows/simulation.yml
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg jq
       - run: >-
           python -m pip install PyYAML==6.0.3 usd-core==26.8
