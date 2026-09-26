@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { api, apiReferenceUrl, isActive, type DatasetProfile, type Job, type Project } from '@/lib/api';
+import { WorkflowPanel } from '@/components/workflow-panel';
 import { ThemeToggle } from '@/components/theme-toggle';
 
 const candidate = 'codywang/so101_pickup_test';
@@ -165,7 +166,7 @@ function JobDetail({ job, projectId }: { job: Job; projectId: string }) {
     <ErrorNotice error={cancel.error} />
     {job.error && <p className="error-notice" role="alert">{job.error}</p>}
     {(job.status === 'cancelled' || job.status === 'interrupted') && <p className="muted">This inspection did not complete. Start another inspection when you are ready.</p>}
-    {job.result && <DatasetResult profile={job.result} />}
+    {job.result && 'inspection_scope' in job.result && <DatasetResult profile={job.result} />}
   </>;
 }
 
@@ -213,11 +214,11 @@ function Workbench() {
     },
   });
   const project = projects.data?.find(item => item.id === projectId);
-  const sortedJobs = [...(jobs.data ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const sortedJobs = [...(jobs.data ?? [])].filter(job => job.kind === 'dataset.inspect').sort((a, b) => b.created_at.localeCompare(a.created_at));
   const selectedJob = sortedJobs.find(job => job.id === selectedJobId) ?? sortedJobs[0];
   const connected = health.isSuccess && !health.isError;
 
-  const stage = stages[activeStage];
+  const stage = stages[activeStage] ?? { name: 'Settings & diagnostics', icon: 'sliders' as const, description: 'Manage workflow preferences and inspect recorded evidence.' };
 
   return <div className="workspace">
     <a href="#main" className="skip-link">Skip to workspace</a>
@@ -227,9 +228,10 @@ function Workbench() {
         <p className="sidebar-section-label">Workspace</p>
         <ul className="stage-list">{stages.map((item, index) => <li key={item.name}>
           <button type="button" className={`stage-button${activeStage === index ? ' selected' : ''}`} onClick={() => setActiveStage(index)} aria-current={activeStage === index ? 'page' : undefined}>
-            <Icon name={item.icon} size={19} /><span>{item.name}</span>{index > 0 && <small>Planned</small>}
+            <Icon name={item.icon} size={19} /><span>{item.name}</span>{index === 2 && <small>Planned</small>}
           </button>
         </li>)}</ul>
+        <button className={`stage-button${activeStage === 6 ? ' selected' : ''}`} onClick={() => setActiveStage(6)}><Icon name="sliders" size={19} /><span>Settings & diagnostics</span></button>
       </nav>
       <section className="projects-section" aria-labelledby="projects-heading">
         <div className="sidebar-section-label"><h2 id="projects-heading">Project</h2><span>{projects.data?.length ?? '—'}</span></div>
@@ -270,7 +272,8 @@ function Workbench() {
           </div>
           <footer className="workspace-footer"><span>Inspect first. Build on what you know.</span><span>Metadata intake</span></footer>
         </div>
-        {activeStage > 0 && <section className="planned-panel" aria-labelledby="planned-title"><span className="empty-icon"><Icon name={stage.icon} size={28} /></span><span className="planned-badge">Planned</span><h2 id="planned-title">{stage.name} is on the roadmap</h2><p>{capabilities.data?.find(item => item.stage.toLowerCase() === stage.name.toLowerCase())?.description ?? 'This stage is not available in the current application.'}</p><p className="planned-note">You can start by inspecting your dataset. Your project and inspection history will be here when this stage is ready.</p><button className="secondary-button" onClick={() => setActiveStage(0)}>Go to Dataset <Icon name="arrow" size={15} /></button></section>}
+        {activeStage > 0 && activeStage !== 2 && <WorkflowPanel key={`${projectId}-${activeStage}`} projectId={projectId} stage={activeStage === 6 ? 'settings' : stage.name} />}
+        {activeStage === 2 && <section className="planned-panel" aria-labelledby="planned-title"><span className="empty-icon"><Icon name={stage.icon} size={28} /></span><span className="planned-badge">Planned</span><h2 id="planned-title">{stage.name} is on the roadmap</h2><p>{capabilities.data?.find(item => item.stage.toLowerCase() === stage.name.toLowerCase())?.description ?? 'This stage is not available in the current application.'}</p><p className="planned-note">You can start by inspecting your dataset. Your project and inspection history will be here when this stage is ready.</p><button className="secondary-button" onClick={() => setActiveStage(0)}>Go to Dataset <Icon name="arrow" size={15} /></button></section>}
       </main>
     </div>
   </div>;

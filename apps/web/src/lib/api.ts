@@ -1,5 +1,17 @@
 import type { components } from './api.generated';
 
+export type PolicyRequest = components['schemas']['PolicyRequest'];
+export type PolicyArtifact = components['schemas']['PolicyArtifact'];
+export type LifecycleResult = components['schemas']['LifecycleResult'];
+export type JobEvent = components['schemas']['JobEvent'];
+export type PolicyOptions = {
+  runtimes: { id: string; label: string; device: 'cpu' | 'cuda'; training: boolean; simulation: boolean }[];
+  sources: { id: string; label: string; task: string }[];
+  training_methods: { id: string; label: string; description: string }[];
+  default_training_method: string;
+  quantization_defaults: { cuda: { language: 'Q4_0'; vision: null }; cpu: { language: 'Q8_0'; vision: null }; note: string };
+};
+
 export type Project = components['schemas']['Project'];
 export type Job = components['schemas']['Job'];
 export type DatasetProfile = components['schemas']['DatasetProfile'];
@@ -48,7 +60,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 }
 
+export const artifactDownloadUrl = (projectId: string, artifactId: string) =>
+  `${origin}/api/v1/projects/${encodeURIComponent(projectId)}/artifacts/${encodeURIComponent(artifactId)}/download`;
+
 export const api = {
+  policyOptions: () => request<PolicyOptions>('/policy-options'),
+  artifacts: (id: string) => request<PolicyArtifact[]>(`/projects/${encodeURIComponent(id)}/artifacts`),
+  events: (id: string) => request<JobEvent[]>(`/jobs/${encodeURIComponent(id)}/events`),
+  policyJob: (id: string, body: PolicyRequest) => request<Job>(`/projects/${encodeURIComponent(id)}/policy-jobs`, {
+    method: 'POST', body: JSON.stringify(body),
+  }),
   health: () => request<{ status: string; version: string }>('/health'),
   capabilities: () => request<Capability[]>('/capabilities'),
   projects: () => request<Project[]>('/projects'),
