@@ -39,6 +39,78 @@ pnpm test:diagnostics
 The browser suite starts only local test servers and protocol fixtures. It does
 not connect to a benchmark host, download model weights or rent hardware.
 
+### TEST-001: bounded diagnostics worker waits
+
+Diagnostics and workflow browser tests now share a 45-second job observer. Import,
+evaluation and cancellation keep explicit expected terminal states; another terminal
+state fails immediately with the job ID, stage and recorded error. A deadline keeps
+the last observation, including when its HTTP request times out. Earlier transport
+failures retain their original cause. Diagnostics has a 120-second enclosing test
+budget for import plus evaluation; no application timeout or retry policy changed.
+Its disposable servers use ports 8767 and 8766, separate from the existing browser
+suite on 8765 and the user's application on 8000.
+
+Final local verification on macOS arm64, Node **24.21.0**, pnpm **12.6.0** and
+application Python **3.14.7**:
+
+- TypeScript and production build passed.
+- `pnpm test:web --retries=0`: **52 passed**. The existing real subprocess failure,
+  wrong-terminal rejection and seven-second delayed successful retry now exercise
+  the shared observer; the delay exceeds Playwright's former five-second default.
+- `pnpm test:diagnostics --retries=0`: **18 passed**. New checks exhaust a short
+  observation budget on a real slow job, prove that waiting did not cancel it,
+  explicitly cancel the owned fixture, and reject its unexpected terminal state.
+  A separate temporary HTTP fixture verifies deadline diagnostics both before any
+  snapshot and after a running snapshot. It contains no model metrics.
+- `git diff --check` passed. The first local command wrapper selected older tool
+  versions; final checks were repeated using the exact versions above.
+
+Independent review reproduced a raw transport-timeout message that omitted the last
+job snapshot. The corrected observer preserves the original timeout as its cause
+and consistently reports the bounded job deadline. All temporary HTTP connections
+and deliberately slow jobs are explicitly cleaned up. These are software test
+receipts only; Linux/native Windows CI for this repair and coordinator review remain
+required before TEST-001 completion. No GPU, cloud or user workspace was used.
+
+### WEB-004: project preference readiness
+
+[Windows run 36263941876](https://github.com/sobhanb-eth/firebird-hackathon-codebase/actions/runs/36263941876)
+exposed a separate product race during the TEST-001 checks. Both failed attempts
+opened Settings before project loading finished. Spatial settings were written
+under the empty project key, then a project-specific remount restored the default
+Object/engine/500 recipe. A controlled delayed-project probe reproduced that exact
+submitted request; the new disabled-control regression also failed on the old UI.
+
+Workflow controls now require a project present in successfully loaded project
+data and restoration of that project's preferences. Empty project keys are never
+read or written. Settings, job controls and submission stay unavailable while
+loading, after a load error, or if the selected project disappears. Navigation,
+diagnostics guidance and recorded benchmark comparisons remain accessible.
+Project switching and reload preserve each project's saved recipe. If browser
+storage is unavailable, editing works for the current mounted view only; settings
+do not persist across stage changes or reloads.
+
+Final local checks include the merged offline-preflight change from main
+`9c925e5db3c1f2137353fbf7ace30b82e8aaa5c3`, using Node **24.21.0**, pnpm **12.6.0**,
+application Python **3.14.7** and the existing native Python **3.11.14** environment:
+
+- Production build and TypeScript checks passed.
+- Application: **391 passed, 1 skipped**, with the existing Starlette deprecation
+  warning. Native CPU worker: **252 passed, 4 skipped** for conditional platform or
+  vendor checks. Ruff checks and formatting passed.
+- Browser suite: **64 passed**; diagnostics suite: **18 passed**, both with
+  **zero retries**. The delayed-project test checks the actual Spatial request;
+  additional checks cover saved A/B recipes and submitted requests, empty/error
+  recovery, removed-project refetch, invalid JSON and unavailable browser storage.
+- An independent reviewer passed all **14** focused desktop/mobile readiness
+  checks. The refetch test advances Playwright's clock past the application's
+  five-second cache freshness period, without a wall-clock sleep.
+
+These are application and synthetic-worker checks, not GPU performance or
+closed-loop policy acceptance. Exact-head Linux/native Windows CI and coordinator
+review remain required before WEB-004 completion. The existing application on port
+8000, cloud resources and real policy assets were not touched.
+
 ### Existing application checks
 
 - Application: **113 passed**, including the new native subprocess workflow,

@@ -1,4 +1,6 @@
+import { createServer } from 'node:http';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { waitForJob } from './job-waiter';
 
 const configured = 'http://127.0.0.1:8766';
 
@@ -25,7 +27,7 @@ async function policy(request: APIRequestContext, id: string) {
   });
   expect(response.status()).toBe(202);
   const job = await response.json();
-  await expect.poll(async () => (await (await request.get(`${configured}/api/v1/jobs/${job.id}`)).json()).status).toBe('succeeded');
+  await waitForJob(request, job.id, 'succeeded', { origin: configured });
   const artifacts = await (await request.get(`${configured}/api/v1/projects/${id}/artifacts`)).json();
   expect(artifacts[0].metadata.fixture_only).toBe(true);
   return artifacts[0].id as string;
@@ -107,7 +109,7 @@ test('submits the selected policy through the real API and shows subprocess resu
   expect(response.status()).toBe(202);
   expect(response.request().postDataJSON()).toMatchObject({ operation: 'policy.evaluate', runtime_id: 'fixture', artifact_id: artifact, evaluation: { mode: 'engine', warmups: 2, repetitions: 4 } });
   const job = await response.json();
-  await expect.poll(async () => (await (await request.get(`${configured}/api/v1/jobs/${job.id}`)).json()).status).toBe('succeeded');
+  await waitForJob(request, job.id, 'succeeded', { origin: configured });
   await expect(page.getByRole('table', { name: 'Recorded policy measurements' })).toBeVisible();
   // This proves UI → API → worker wiring only. The worker is explicitly synthetic.
   const completed = await (await request.get(`${configured}/api/v1/jobs/${job.id}`)).json();
@@ -148,7 +150,7 @@ test('cancels an active diagnostic worker from the diagnostics tab', async ({ pa
   const job = await (await accepted).json();
   await expect(page.getByRole('button', { name: 'Cancel run', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel run', exact: true }).click();
-  await expect.poll(async () => (await (await request.get(`${configured}/api/v1/jobs/${job.id}`)).json()).status).toBe('cancelled');
+  await waitForJob(request, job.id, 'cancelled', { origin: configured });
   await expect(page.getByRole('button', { name: 'Cancel run', exact: true })).toHaveCount(0);
 });
 
@@ -159,4 +161,56 @@ test('keeps reference results visible and blocks launch when target discovery fa
   await expect(page.getByRole('alert').filter({ hasText: 'Target discovery unavailable' })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole('button', { name: 'Start diagnostics', exact: true })).toBeDisabled();
   await expect(page.getByRole('table', { name: /NVIDIA L4 · 8 vCPUs/ })).toBeVisible();
+});
+
+test('worker waits reject wrong terminal states and report bounded timeouts without cancelling work', async ({ request }) => {
+  const id = await project(request, configured);
+  const artifact = await policy(request, id);
+  const response = await request.post(`${configured}/api/v1/projects/${id}/policy-jobs`, {
+    data: { operation: 'policy.evaluate', runtime_id: 'slow', artifact_id: artifact },
+  });
+  expect(response.status()).toBe(202);
+  const job = await response.json();
+  try {
+    await expect(waitForJob(request, job.id, 'succeeded', {
+      origin: configured, timeoutMs: 500,
+    })).rejects.toThrow(new RegExp(`within 500ms[.] Last observation: (Job ${job.id}: no snapshot received|.*${job.id}.*"status":"(queued|running)")`));
+    const pending = await request.get(`${configured}/api/v1/jobs/${job.id}`);
+    expect(['queued', 'running']).toContain((await pending.json()).status);
+  } finally {
+    // The wait observes only. Always clean up the owned slow fixture explicitly.
+    const cancelled = await request.post(`${configured}/api/v1/jobs/${job.id}/cancel`);
+    expect(cancelled.status()).toBe(200);
+    await waitForJob(request, job.id, 'cancelled', { origin: configured });
+  }
+  await expect(waitForJob(request, job.id, 'succeeded', {
+    origin: configured,
+  })).rejects.toThrow(`Job reached cancelled; expected succeeded`);
+});
+
+test('worker deadline retains diagnostics when its HTTP observation stalls', async ({ request }) => {
+  // This transport-only fixture has no model metrics or application side effects.
+  for (const firstSnapshot of [false, true]) {
+    let reads = 0;
+    const server = createServer((_incoming, response) => {
+      reads += 1;
+      if (firstSnapshot && reads === 1) {
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ id: 'http-timeout-fixture', status: 'running', stage: 'evaluation' }));
+      }
+      // Other reads remain pending until the observer's own deadline aborts them.
+    });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('Missing test server address');
+      const observation = firstSnapshot ? '"status":"running"' : 'no snapshot received';
+      await expect(waitForJob(request, 'http-timeout-fixture', 'succeeded', {
+        origin: `http://127.0.0.1:${address.port}`, timeoutMs: 500,
+      })).rejects.toThrow(new RegExp(`within 500ms[.] Last observation:.*${observation}`));
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
+  }
 });

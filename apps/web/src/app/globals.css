@@ -311,7 +311,8 @@ input::placeholder { color: var(--muted); opacity: .8; }
 .workflow-panel label { display: grid; gap: .5rem; font-size: .85rem; margin: 1rem 0; }
 .workflow-panel select, .workflow-panel input:not([type=checkbox]) { width: 100%; min-height: 2.75rem; padding: .6rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--surface); color: inherit; }
 .workflow-fields { max-width: 42rem; display: grid; gap: .6rem; align-content: start; }
-.workflow-fields h2:not(:first-child) { padding-top: 16px; border-top: 1px solid var(--line); }
+.workflow-controls { min-width: 0; margin: 0; padding: 0; border: 0; }
+.workflow-fields h2:not(:first-of-type) { padding-top: 16px; border-top: 1px solid var(--line); }
 .workflow-check { display: flex !important; align-items: center; }
 .workflow-json { max-height: 32rem; overflow: auto; white-space: pre-wrap; word-break: break-word; padding: 1rem; font-size: .78rem; }
 .workflow-events { padding: 1rem 1.5rem; font-size: .85rem; }

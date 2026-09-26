@@ -83,7 +83,8 @@ export function WorkflowPanel({
 }) {
   const client = useQueryClient();
   const [preferences, setPreferences] = useState(initial);
-  const [loaded, setLoaded] = useState(false);
+  const [loadedProjectId, setLoadedProjectId] = useState<string | null>(null);
+  const ready = !!projectId && loadedProjectId === projectId;
   const [runtimeId, setRuntimeId] = useState("");
   const [input, setInput] = useState("");
   const [datasetId, setDatasetId] = useState("");
@@ -108,7 +109,7 @@ export function WorkflowPanel({
     refetchInterval: 3000,
   });
   useEffect(() => {
-    setLoaded(false);
+    if (!projectId) return;
     try {
       const restored: Preferences = {
         ...initial,
@@ -122,10 +123,10 @@ export function WorkflowPanel({
     } catch {
       setPreferences(initial);
     }
-    setLoaded(true);
+    setLoadedProjectId(projectId);
   }, [projectId]);
   useEffect(() => {
-    if (loaded)
+    if (ready)
       try {
         localStorage.setItem(
           `firebird.workflow.${projectId}`,
@@ -134,7 +135,7 @@ export function WorkflowPanel({
       } catch {
         /* Settings still work for this session. */
       }
-  }, [projectId, preferences, loaded]);
+  }, [projectId, preferences, ready]);
   const runtime =
     options.data?.runtimes.find((x) => x.id === runtimeId) ??
     options.data?.runtimes[0];
@@ -171,7 +172,7 @@ export function WorkflowPanel({
       : preferences.precision;
   const mutation = useMutation({
     mutationFn: async () => {
-      if (!projectId || !runtime)
+      if (!ready || !runtime)
         throw new Error("Select a project and a configured execution target.");
       const evaluation: NonNullable<PolicyRequest["evaluation"]> = {
         mode: preferences.mode,
@@ -272,7 +273,7 @@ export function WorkflowPanel({
       client.invalidateQueries({ queryKey: ["jobs", projectId] }),
   });
   function update<K extends keyof Preferences>(key: K, value: Preferences[K]) {
-    setPreferences((old) => ({ ...old, [key]: value }));
+    if (ready) setPreferences((old) => ({ ...old, [key]: value }));
   }
   const errors = [
     options.error,
@@ -281,13 +282,18 @@ export function WorkflowPanel({
     mutation.error,
     cancel.error,
   ].filter(Boolean);
+  const preferencesBlocker = !projectId
+    ? "Select or create a project to edit workflow settings."
+    : !ready ? "Loading workflow settings…" : null;
   const diagnosticBlocker = options.isPending
     ? "Checking execution targets…"
     : options.isError
       ? "Execution targets could not be loaded. Check the application connection."
       : !projectId
         ? "Select or create a project to save your diagnostic results."
-        : !runtime
+        : !ready
+          ? "Loading workflow settings…"
+          : !runtime
           ? "No execution target is configured. Set up a native worker on the application host first."
           : artifacts.isPending || jobs.isPending
             ? "Loading project policies and runs…"
@@ -319,8 +325,10 @@ export function WorkflowPanel({
             Diagnostics
           </button>
         </div>
+        {tab === "settings" && preferencesBlocker && <p className="warning-box" role="status">{preferencesBlocker}</p>}
         {tab === "settings" ? (
-          <div className="workflow-fields">
+          <fieldset className="workflow-fields workflow-controls" disabled={!ready}>
+            <legend className="visually-hidden">Project workflow settings</legend>
             <h2>Compression defaults</h2>
             <p className="muted">
               Start with LM Q8 on CPU and CUDA, preserving vision precision.
@@ -547,7 +555,7 @@ export function WorkflowPanel({
               Settings are saved for this project on this browser. Each
               submitted job preserves its exact recipe.
             </p>
-          </div>
+          </fieldset>
         ) : (
           <>
             <h2>Run diagnostics</h2>
@@ -557,19 +565,19 @@ export function WorkflowPanel({
               if (!diagnosticBlocker && !mutation.isPending) mutation.mutate();
             }}>
               <label>Diagnostic execution target
-                <select value={runtime?.id ?? ""} onChange={(event) => setRuntimeId(event.target.value)}>
+                <select value={runtime?.id ?? ""} disabled={!ready} onChange={(event) => setRuntimeId(event.target.value)}>
                   <option value="" disabled>Select a target</option>
                   {options.data?.runtimes.map((target) => <option key={target.id} value={target.id}>{target.label}</option>)}
                 </select>
               </label>
               <label>Diagnostic policy
-                <select value={input} onChange={(event) => setInput(event.target.value)}>
+                <select value={input} disabled={!ready} onChange={(event) => setInput(event.target.value)}>
                   <option value="">Choose a project policy</option>
                   {inputs.map((artifact) => <option key={artifact.id} value={artifact.id}>{artifact.label} · {artifact.id.slice(0, 8)}</option>)}
                 </select>
               </label>
               <label>Diagnostic mode
-                <select value={preferences.mode} disabled={preferences.suite === "libero_spatial"} onChange={(event) => update("mode", event.target.value as Preferences["mode"])}>
+                <select value={preferences.mode} disabled={!ready || preferences.suite === "libero_spatial"} onChange={(event) => update("mode", event.target.value as Preferences["mode"])}>
                   <option value="engine">Engine checks</option>
                   <option value="libero" disabled={!runtime?.simulation}>LIBERO task evaluation</option>
                 </select>
@@ -719,13 +727,15 @@ export function WorkflowPanel({
             Configure a worker environment to enable policy jobs.
           </p>
         )}
+        {preferencesBlocker && <p className="warning-box" role="status">{preferencesBlocker}</p>}
         <form
-          className="workflow-fields"
           onSubmit={(e) => {
             e.preventDefault();
-            mutation.mutate();
+            if (ready && !mutation.isPending) mutation.mutate();
           }}
         >
+          <fieldset className="workflow-fields workflow-controls" disabled={!ready}>
+            <legend className="visually-hidden">Project policy job</legend>
           <label>
             Execution target
             <select
@@ -860,7 +870,7 @@ export function WorkflowPanel({
             className="primary-button"
             type="submit"
             disabled={
-              !projectId ||
+              !ready ||
               !runtime ||
               mutation.isPending ||
               (stage === "Fine-tune" && !runtime.training)
@@ -880,6 +890,7 @@ export function WorkflowPanel({
             Advanced controls and benchmark metrics are in Settings &
             diagnostics.
           </p>
+          </fieldset>
         </form>
         {errors.map((error, index) => (
           <p className="error-notice" role="alert" key={index}>
