@@ -28,7 +28,7 @@ export function WorkspaceShell({
     <a href="#main" className="skip-link">{skipLabel}</a>
     <aside className="sidebar" aria-label={sidebarLabel}>
       <a className="brand" href="/" aria-label="Firebird workspace home"><span className="brand-mark"><Icon name="layers" size={21} /></span><span>Firebird<span className="brand-subtitle">Robotics workspace</span></span></a>
-      {navigation}
+      <div className="sidebar-content">{navigation}</div>
       <div className="sidebar-bottom">
         {sidebarFooter}
         <a className="sidebar-link" href={apiReferenceUrl}><Icon name="book" size={18} /> API reference</a>
