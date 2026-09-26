@@ -324,6 +324,8 @@ test('direct docs URLs and reloads render without hydration or runtime errors', 
 });
 
 test('shared workspace shell preserves training, defaults, and separate diagnostics', async ({ page }) => {
+  // This view-only check requires an empty workspace even when real journey tests run.
+  await page.route('**/api/v1/projects', route => route.fulfill({ json: [] }));
   await page.goto('/');
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Fine-tune a policy' })).toBeVisible();
@@ -417,7 +419,11 @@ test('quantization submits Q4 only after an explicit experimental choice', async
   await submitQuantization(2);
   expect(requests[1].candidates).toEqual([{ language: 'Q8_0', vision: null }, { language: 'Q4_0', vision: null }]);
   await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
-  await page.getByLabel('Compare Q8 and Q4 (experimental)').uncheck();
+  const restoredCompare = page.getByLabel('Compare Q8 and Q4 (experimental)');
+  // Settings remounts; wait until its saved preference has been restored.
+  await expect(restoredCompare).toBeChecked();
+  await restoredCompare.uncheck();
+  await expect(restoredCompare).not.toBeChecked();
   await page.getByLabel('Quantization recipe').selectOption('Q4_0');
   await submitQuantization(3);
   expect(requests[2].candidates).toEqual([{ language: 'Q4_0', vision: null }]);
