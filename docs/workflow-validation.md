@@ -39,6 +39,39 @@ pnpm test:diagnostics
 The browser suite starts only local test servers and protocol fixtures. It does
 not connect to a benchmark host, download model weights or rent hardware.
 
+### TEST-001: bounded diagnostics worker waits
+
+Diagnostics and workflow browser tests now share a 45-second job observer. Import,
+evaluation and cancellation keep explicit expected terminal states; another terminal
+state fails immediately with the job ID, stage and recorded error. A deadline keeps
+the last observation, including when its HTTP request times out. Earlier transport
+failures retain their original cause. Diagnostics has a 120-second enclosing test
+budget for import plus evaluation; no application timeout or retry policy changed.
+Its disposable servers use ports 8767 and 8766, separate from the existing browser
+suite on 8765 and the user's application on 8000.
+
+Final local verification on macOS arm64, Node **24.21.0**, pnpm **12.6.0** and
+application Python **3.14.7**:
+
+- TypeScript and production build passed.
+- `pnpm test:web --retries=0`: **52 passed**. The existing real subprocess failure,
+  wrong-terminal rejection and seven-second delayed successful retry now exercise
+  the shared observer; the delay exceeds Playwright's former five-second default.
+- `pnpm test:diagnostics --retries=0`: **18 passed**. New checks exhaust a short
+  observation budget on a real slow job, prove that waiting did not cancel it,
+  explicitly cancel the owned fixture, and reject its unexpected terminal state.
+  A separate temporary HTTP fixture verifies deadline diagnostics both before any
+  snapshot and after a running snapshot. It contains no model metrics.
+- `git diff --check` passed. The first local command wrapper selected older tool
+  versions; final checks were repeated using the exact versions above.
+
+Independent review reproduced a raw transport-timeout message that omitted the last
+job snapshot. The corrected observer preserves the original timeout as its cause
+and consistently reports the bounded job deadline. All temporary HTTP connections
+and deliberately slow jobs are explicitly cleaned up. These are software test
+receipts only; Linux/native Windows CI for this repair and coordinator review remain
+required before TEST-001 completion. No GPU, cloud or user workspace was used.
+
 ### Existing application checks
 
 - Application: **113 passed**, including the new native subprocess workflow,
