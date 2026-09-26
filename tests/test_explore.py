@@ -1,9 +1,8 @@
 import asyncio
 import json
+import subprocess
 
 import httpx
-import pyarrow as pa
-import pyarrow.parquet as pq
 import pytest
 from fastapi.testclient import TestClient
 from vla_platform import api
@@ -20,6 +19,7 @@ from vla_platform.datasets.explore import (
     source_profile,
 )
 from vla_platform.datasets.inspect import profile
+from vla_platform.datasets.local_preview import reader_python
 from vla_platform.lifecycle.contracts import LifecycleResult, PolicyRequest
 from vla_platform.settings import Settings
 
@@ -27,10 +27,56 @@ SHA = "a" * 40
 CAMERA = "observation.images.wrist"
 
 
-def parquet(rows):
-    sink = pa.BufferOutputStream()
-    pq.write_table(pa.Table.from_pylist(rows), sink)
-    return sink.getvalue().to_pybytes()
+def parquet(rows, *, row_group_size=None, repeat_column=None):
+    # Only trusted fixture construction runs as code; production sends bytes to
+    # a fixed reader. The core test environment never needs native dependencies.
+    result = subprocess.run(
+        [
+            str(reader_python()),
+            "-I",
+            "-c",
+            """
+import json, sys
+import pyarrow as pa
+import pyarrow.parquet as pq
+request = json.load(sys.stdin)
+rows = request['rows']
+if request['repeat_column']:
+    rows[0][request['repeat_column']] *= 4_000_001
+sink = pa.BufferOutputStream()
+pq.write_table(pa.Table.from_pylist(rows), sink, row_group_size=request['row_group_size'])
+sys.stdout.buffer.write(sink.getvalue().to_pybytes())
+""",
+        ],
+        input=json.dumps(
+            dict(rows=rows, row_group_size=row_group_size, repeat_column=repeat_column)
+        ).encode(),
+        capture_output=True,
+        check=True,
+        timeout=30,
+    )
+    return result.stdout
+
+
+def parquet_rows(raw):
+    result = subprocess.run(
+        [
+            str(reader_python()),
+            "-I",
+            "-c",
+            """
+import json, sys
+import pyarrow as pa
+import pyarrow.parquet as pq
+print(json.dumps(pq.read_table(pa.BufferReader(sys.stdin.buffer.read())).to_pylist()))
+""",
+        ],
+        input=raw,
+        capture_output=True,
+        check=True,
+        timeout=10,
+    )
+    return json.loads(result.stdout)
 
 
 @pytest.fixture(params=["v2.1", "v3.0"])
@@ -269,9 +315,9 @@ def test_download_limits_apply_even_without_content_length():
 
 def test_samples_do_not_fabricate_rows_and_reject_missing_index():
     raw = parquet([{"episode_index": 0, "frame_index": 0, "timestamp": 0.0, "action": [1]}])
-    assert frame_samples(raw, 1) == []
+    assert asyncio.run(frame_samples(raw, 1)) == []
     with pytest.raises(ExplorationError, match="missing"):
-        frame_samples(parquet([{"action": [1]}]), 0)
+        asyncio.run(frame_samples(parquet([{"action": [1]}]), 0))
 
 
 def test_preview_routes_validate_state_bounds_and_serialize_contract(
@@ -363,7 +409,7 @@ def test_v3_invalid_video_segment_is_not_exposed(dataset):
     if job.result.format != "lerobot_v3":
         return
     key = "meta/episodes/chunk-000/file-000.parquet"
-    rows = pq.read_table(pa.BufferReader(files[key])).to_pylist()
+    rows = parquet_rows(files[key])
     rows[1][f"videos/{CAMERA}/to_timestamp"] = 1.0
     files[key] = parquet(rows)
 
@@ -422,18 +468,16 @@ def test_concurrent_cache_replacement_preserves_exact_size_and_eviction_budget(m
 
 
 def test_dictionary_encoded_tasks_are_preserved_and_materialization_is_bounded():
-    from vla_platform.datasets.explore import index_rows, parquet_file
+    from vla_platform.datasets.explore import index_rows
 
     task = "x" * 4096
     rows = [{"episode_index": i, "length": 1, "tasks": [task]} for i in range(1000)]
     raw = parquet(rows)
     assert len(raw) < 100_000
-    field = parquet_file(raw).schema_arrow.field("tasks")
-    assert pa.types.is_dictionary(field.type.value_type)
-    # The small encoded input would otherwise expand all repeated task strings.
+    # Small dictionary-encoded input must not expand all repeated task strings.
     with pytest.raises(ExplorationError, match="materialized preview size limit"):
-        index_rows(raw)
-    assert index_rows(parquet(rows[:2])) == rows[:2]
+        asyncio.run(index_rows(raw))
+    assert asyncio.run(index_rows(parquet(rows[:2]))) == rows[:2]
 
 
 def test_task_and_vector_lengths_are_checked_before_python_conversion():
@@ -441,42 +485,44 @@ def test_task_and_vector_lengths_are_checked_before_python_conversion():
 
     for tasks in [["x" * 4097], ["short"] * 21]:
         with pytest.raises(ExplorationError, match="length limit"):
-            index_rows(parquet([{"episode_index": 0, "length": 1, "tasks": tasks}]))
+            asyncio.run(index_rows(parquet([{"episode_index": 0, "length": 1, "tasks": tasks}])))
     with pytest.raises(ExplorationError, match="sample vector.*length limit"):
-        frame_samples(
-            parquet(
-                [
-                    {
-                        "episode_index": 0,
-                        "frame_index": 0,
-                        "timestamp": 0.0,
-                        "action": [1.0] * 1025,
-                    }
-                ]
-            ),
-            0,
+        asyncio.run(
+            frame_samples(
+                parquet(
+                    [
+                        {
+                            "episode_index": 0,
+                            "frame_index": 0,
+                            "timestamp": 0.0,
+                            "action": [1.0] * 1025,
+                        }
+                    ]
+                ),
+                0,
+            )
         )
 
 
-def test_projected_leaf_counts_reject_encoded_list_expansion_before_iteration(monkeypatch):
+def test_projected_leaf_counts_reject_encoded_list_expansion_before_iteration():
     from vla_platform.datasets.explore import index_rows
 
-    monkeypatch.setattr("vla_platform.datasets.explore.MAX_PROJECTED_VALUES", 10)
-    raw = parquet([{"episode_index": 0, "length": 1, "tasks": ["same"] * 9}])
+    raw = parquet([{"episode_index": 0, "length": 1, "tasks": ["same"]}], repeat_column="tasks")
     with pytest.raises(ExplorationError, match="decoded preview value limit"):
-        index_rows(raw)
+        asyncio.run(index_rows(raw))
     raw = parquet(
         [
             {
                 "episode_index": 0,
                 "frame_index": 0,
                 "timestamp": 0.0,
-                "action": [1.0] * 9,
+                "action": [1.0],
             }
-        ]
+        ],
+        repeat_column="action",
     )
     with pytest.raises(ExplorationError, match="decoded preview value limit"):
-        frame_samples(raw, 0)
+        asyncio.run(frame_samples(raw, 0))
 
 
 @pytest.mark.parametrize("row_group_size", [1, 2])
@@ -484,17 +530,56 @@ def test_episode_index_handles_distinct_task_dictionaries_across_row_groups(row_
     from vla_platform.datasets.explore import index_rows
 
     rows = [{"episode_index": i, "length": 6, "tasks": [f"Task {i}"]} for i in range(5)]
-    sink = pa.BufferOutputStream()
-    pq.write_table(pa.Table.from_pylist(rows), sink, row_group_size=row_group_size)
-    assert index_rows(sink.getvalue().to_pybytes()) == rows
+    assert asyncio.run(index_rows(parquet(rows, row_group_size=row_group_size))) == rows
 
 
-def test_episode_index_materialization_budget_spans_row_groups(monkeypatch):
+def test_episode_index_materialization_budget_spans_row_groups():
     from vla_platform.datasets.explore import index_rows
 
-    monkeypatch.setattr("vla_platform.datasets.explore.MAX_INDEX_MATERIALIZED_BYTES", 2000)
-    rows = [{"episode_index": i, "length": 6, "tasks": ["x" * 200]} for i in range(3)]
-    sink = pa.BufferOutputStream()
-    pq.write_table(pa.Table.from_pylist(rows), sink, row_group_size=1)
+    rows = [{"episode_index": i, "length": 6, "tasks": ["x" * 4096] * 20} for i in range(100)]
     with pytest.raises(ExplorationError, match="materialized preview size limit"):
-        index_rows(sink.getvalue().to_pybytes())
+        asyncio.run(index_rows(parquet(rows, row_group_size=1)))
+
+
+def test_cancelled_previews_reap_readers_and_release_explorer_capacity(
+    dataset, tmp_path, monkeypatch
+):
+    from vla_platform.datasets import hub_parquet
+
+    job, _, _, respond, _, _ = dataset
+    script = tmp_path / "hanging_reader.py"
+    script.write_text("import time; time.sleep(60)", encoding="utf-8")
+    original_script = hub_parquet.WORKER_SCRIPT
+    original_spawn = asyncio.create_subprocess_exec
+    children = []
+
+    async def spawn(*args, **kwargs):
+        child = await original_spawn(*args, **kwargs)
+        children.append(child)
+        return child
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", spawn)
+    monkeypatch.setattr(hub_parquet, "WORKER_SCRIPT", script)
+
+    async def run():
+        explorer = DatasetExplorer(httpx.AsyncClient(transport=httpx.MockTransport(respond)))
+        tasks = [asyncio.create_task(explorer.preview(job, 1)) for _ in range(2)]
+        try:
+            async with asyncio.timeout(5):
+                while len(children) < 2:
+                    await asyncio.sleep(0.01)
+            for task in tasks:
+                task.cancel()
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            assert all(isinstance(result, asyncio.CancelledError) for result in results)
+            assert all(child.returncode is not None for child in children)
+            monkeypatch.setattr(hub_parquet, "WORKER_SCRIPT", original_script)
+            preview = await asyncio.wait_for(explorer.preview(job, 1), timeout=10)
+            assert len(preview.samples) == 5 and preview.warnings == []
+        finally:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            await explorer.close()
+
+    asyncio.run(run())

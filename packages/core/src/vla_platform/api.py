@@ -3,7 +3,6 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 
 import httpx
-import pyarrow as pa
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -127,7 +126,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(504, "Dataset preview timed out; try again") from exc
         except httpx.HTTPError as exc:
             raise HTTPException(502, "Hugging Face could not serve this dataset preview") from exc
-        except (ValueError, pa.ArrowException) as exc:
+        except ValueError as exc:
             raise HTTPException(422, "Dataset preview metadata or Parquet data is invalid") from exc
 
     @app.get("/api/v1/health")
