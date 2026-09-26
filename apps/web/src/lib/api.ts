@@ -11,6 +11,8 @@ export type IntakeRequest = components['schemas']['IntakeRequest'];
 const origin = (process.env.NEXT_PUBLIC_API_URL ??
   (process.env.NODE_ENV === 'development' ? 'http://127.0.0.1:8000' : '')).replace(/\/$/, '');
 
+export const apiReferenceUrl = `${origin}/docs`;
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
