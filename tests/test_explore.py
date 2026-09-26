@@ -459,3 +459,24 @@ def test_projected_leaf_counts_reject_encoded_list_expansion_before_iteration(mo
     )
     with pytest.raises(ExplorationError, match="decoded preview value limit"):
         frame_samples(raw, 0)
+
+
+@pytest.mark.parametrize("row_group_size", [1, 2])
+def test_episode_index_handles_distinct_task_dictionaries_across_row_groups(row_group_size):
+    from vla_platform.datasets.explore import index_rows
+
+    rows = [{"episode_index": i, "length": 6, "tasks": [f"Task {i}"]} for i in range(5)]
+    sink = pa.BufferOutputStream()
+    pq.write_table(pa.Table.from_pylist(rows), sink, row_group_size=row_group_size)
+    assert index_rows(sink.getvalue().to_pybytes()) == rows
+
+
+def test_episode_index_materialization_budget_spans_row_groups(monkeypatch):
+    from vla_platform.datasets.explore import index_rows
+
+    monkeypatch.setattr("vla_platform.datasets.explore.MAX_INDEX_MATERIALIZED_BYTES", 2000)
+    rows = [{"episode_index": i, "length": 6, "tasks": ["x" * 200]} for i in range(3)]
+    sink = pa.BufferOutputStream()
+    pq.write_table(pa.Table.from_pylist(rows), sink, row_group_size=1)
+    with pytest.raises(ExplorationError, match="materialized preview size limit"):
+        index_rows(sink.getvalue().to_pybytes())

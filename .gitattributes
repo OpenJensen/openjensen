@@ -1,0 +1,2 @@
+# Preview fixture manifests hash exact committed bytes on every platform.
+/tests/fixtures/lerobot_v3_preview/** -text

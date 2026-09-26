@@ -304,13 +304,19 @@ def index_rows(raw: bytes) -> list[dict[str, Any]]:
     check_projected_values(file, columns)
     result = []
     materialized = 0
-    for batch in file.iter_batches(batch_size=32, columns=columns, use_threads=False):
-        materialized += batch.num_rows * (128 + len(columns) * 64)
-        if "tasks" in columns:
-            materialized += task_materialization_bytes(batch.column("tasks"))
-        if materialized > MAX_INDEX_MATERIALIZED_BYTES:
-            raise ExplorationError("Episode index exceeds the materialized preview size limit")
-        result.extend(batch.to_pylist())
+    # Nested task dictionaries can differ between row groups. Arrow cannot
+    # coalesce those lists into one batch; decode each group separately while
+    # keeping one cumulative materialization budget for the entire index.
+    for group in range(file.num_row_groups):
+        for batch in file.iter_batches(
+            batch_size=32, row_groups=[group], columns=columns, use_threads=False
+        ):
+            materialized += batch.num_rows * (128 + len(columns) * 64)
+            if "tasks" in columns:
+                materialized += task_materialization_bytes(batch.column("tasks"))
+            if materialized > MAX_INDEX_MATERIALIZED_BYTES:
+                raise ExplorationError("Episode index exceeds the materialized preview size limit")
+            result.extend(batch.to_pylist())
     return result
 
 
