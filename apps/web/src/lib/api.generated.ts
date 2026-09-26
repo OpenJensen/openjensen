@@ -801,7 +801,7 @@ export interface components {
         Precision: {
             /**
              * Language
-             * @default Q4_0
+             * @default Q8_0
              * @enum {string}
              */
             language: "Q4_0" | "Q8_0";

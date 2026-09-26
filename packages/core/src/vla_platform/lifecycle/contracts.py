@@ -10,7 +10,7 @@ class StrictRecord(BaseModel):
 
 
 class Precision(StrictRecord):
-    language: Literal["Q4_0", "Q8_0"] = "Q4_0"
+    language: Literal["Q4_0", "Q8_0"] = "Q8_0"
     vision: Literal["Q8_0"] | None = None
 
 

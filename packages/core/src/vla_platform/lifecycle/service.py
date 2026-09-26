@@ -418,11 +418,7 @@ class Lifecycle:
         payload["prior_reports"] = result.reports
         if request.source_id:
             payload["source"] = self.catalog.source(request.source_id).model_dump()
-        chosen_precision = (
-            precision
-            or request.precision
-            or Precision(language="Q4_0" if runtime.device == "cuda" else "Q8_0")
-        )
+        chosen_precision = precision or request.precision or Precision()
         payload["parameters"]["precision"] = chosen_precision.model_dump()
         if training and operation == "policy.finetune":
             dataset = await self.execution.get(request.dataset_job_id)

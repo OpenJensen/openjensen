@@ -122,12 +122,16 @@ def test_workflow_persists_artifacts_lineage_events_and_defaults(configured):
         assert client.get(f"/api/v1/jobs/{jid}").json()["status"] == "succeeded"
 
 
-def test_default_recipe_depends_on_target_and_training_is_a_method_choice(configured):
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+def test_default_recipe_requires_validation_and_training_is_a_method_choice(configured, device):
+    catalog = json.loads(configured.runtime_config.read_text())
+    catalog["runtimes"][0]["device"] = device
+    configured.runtime_config.write_text(json.dumps(catalog))
     with TestClient(create_app(configured)) as client:
         options = client.get("/api/v1/policy-options").json()
         assert {x["id"] for x in options["training_methods"]} == {"lora", "qlora"}
         assert options["default_training_method"] == "lora"
-        assert options["quantization_defaults"]["cuda"]["language"] == "Q4_0"
+        assert options["quantization_defaults"]["cuda"]["language"] == "Q8_0"
         assert options["quantization_defaults"]["cpu"]["language"] == "Q8_0"
         pid = project(client)
         imported = wait(client, submit(client, pid, operation="policy.import"))

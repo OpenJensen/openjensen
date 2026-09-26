@@ -203,11 +203,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ],
             "default_training_method": "lora",
             "quantization_defaults": {
-                "cuda": {"language": "Q4_0", "vision": None},
+                "cuda": {"language": "Q8_0", "vision": None},
                 "cpu": {"language": "Q8_0", "vision": None},
                 "note": (
-                    "Starting recipes from small target-specific pilots; "
-                    "new policies still require evaluation."
+                    "Q8 is the initial comparison candidate on CPU and CUDA, not a quality guarantee. "
+                    "Q4 and vision packing are experimental; validate every policy on its target."
                 ),
             },
         }

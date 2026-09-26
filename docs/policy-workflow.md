@@ -22,9 +22,12 @@ reference examples do not populate project jobs or establish results for a new p
 
 ## Defaults and selection
 
-The starting recipe is **LM Q4_0 on CUDA**, **LM Q8_0 on CPU**, with vision left in
-its source precision. These choices reflect the small existing target-specific
-pilots, not a universal quality claim. Vision Q8 is an explicit experimental option.
+The initial comparison candidate is **LM Q8_0 on CPU and CUDA**, with vision left
+in its source precision. This starting point requires task-success validation.
+LM Q4 and vision Q8 remain explicit experimental candidates. In the recorded
+RTX 3070 pilot, C++ Q4 completed 8/20 tasks versus 15/20 for native BF16;
+C++ Q8 matched all 20 reference episode outcomes. See the [comparison evidence](../workers/benchmark_gpu/README.md).
+Those measurements do not establish packed-policy quality on L4 or on a new policy.
 Fine-tuning defaults to **LoRA**; **QLoRA** uses the same adapter training path over
 an NF4 base. The method registry can grow without making QLoRA mandatory.
 
