@@ -71,4 +71,4 @@ pnpm exec playwright install chromium
 pnpm test:web
 ```
 
-Do not hand-edit generated API types. Claim a task card before parallel work, coordinate shared schema/manifest/migration changes, and provide evidence plus independent review. The Linux/Windows CI workflow is scaffolded; actual remote CI and Windows GPU evidence are separate gates. Mac development checks do not prove those gates passed.
+Do not hand-edit generated API types. Claim a task card before parallel work, coordinate shared schema/manifest/migration changes, and provide evidence plus independent review. CI runs application and browser checks on Linux/Windows, plus separate lightweight native-worker contract checks. Full GPU workflows and Windows GPU acceptance remain separate validation gates.

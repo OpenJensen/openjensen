@@ -79,9 +79,9 @@ performed. Historical Q4 quality includes regressions; no universal winner or
 deployment readiness is claimed. See [workflow validation](workflow-validation.md)
 and [GPU evidence](../workers/benchmark_gpu/evidence/2026-09-26/REPORT.md).
 
-Before landing, main advanced through `4388c53`, including #48's shared API
-reference. Its workspace/CSS conflicts were reconciled while preserving workflow
-controls and diagnostics. Main's stricter capability evidence contract also
+Before landing, main advanced through `652fdb9`, including #48's shared API
+reference and #50's sidebar layout. Workspace/CSS conflicts were reconciled while
+preserving workflow controls and diagnostics. Main's stricter capability evidence contract also
 required configured workers without registered support to report `untested`;
 configured local intake remains selectable. Windows checkout line-ending
 conversion is disabled for the checksum-backed preview metadata fixture.
@@ -91,6 +91,6 @@ formatting, TypeScript and the production build. Local fixture metadata intake
 succeeds through the browser. Final Linux/Windows CI and browser checks run on
 the reconciled PR commit before merge.
 
-Teammate #50/#51 still need shared workspace/CSS/schema reconciliation before
+Teammate #51 still needs shared workspace/CSS/schema reconciliation before
 claiming all open team branches integrate together. The isolated simulation
 worker does not complete the application's Evaluate/Run path.

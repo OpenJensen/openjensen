@@ -4,11 +4,10 @@ Status: **native GPU acceptance is deferred by user decision**. Further Xbox
 testing is deferred; the software foundation is approved for merging into main.
 This connects application jobs to workers; it does not complete TRAIN-001,
 QUANT-001, EVAL-002 or Windows support.
-The final integration includes main through `4388c53` (strict capability evidence,
-atomic restart reconciliation, isolated local preview and shared API reference).
-Hardware runs below
-preceded that merge and some later progress, packaging and identity checks; they
-are not an exact-final-commit GPU certification.
+The final integration includes main through `652fdb9` (strict capability evidence,
+atomic restart reconciliation, isolated local preview, shared API reference and
+sidebar layout). Hardware runs below preceded that merge and some later progress,
+packaging and identity checks; they are not an exact-final-commit GPU certification.
 
 ## Local checks
 
