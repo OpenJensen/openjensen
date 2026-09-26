@@ -60,10 +60,14 @@ export function WorkflowPanel({
   projectId,
   stage,
   onOpenQuantize,
+  tab,
+  onTabChange: setTab,
 }: {
   projectId: string;
   stage: string;
   onOpenQuantize: () => void;
+  tab: "settings" | "diagnostics";
+  onTabChange: (tab: "settings" | "diagnostics") => void;
 }) {
   const client = useQueryClient();
   const [preferences, setPreferences] = useState(initial);
@@ -73,7 +77,6 @@ export function WorkflowPanel({
   const [datasetId, setDatasetId] = useState("");
   const [method, setMethod] = useState("lora");
   const [resumeId, setResumeId] = useState("");
-  const [tab, setTab] = useState<"settings" | "diagnostics">("settings");
   const [selectedJobId, setSelectedJobId] = useState("");
   const options = useQuery({
     queryKey: ["policy-options"],

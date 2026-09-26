@@ -147,6 +147,8 @@ function Workbench() {
   const [projectName, setProjectName] = useState('');
   const [selectedJobId, setSelectedJobId] = useState('');
   const [activeStage, setActiveStage] = useState(0);
+  // Keep navigation stable while the project-specific workflow form remounts.
+  const [workflowTab, setWorkflowTab] = useState<'settings' | 'diagnostics'>('settings');
   const [datasetView, setDatasetView] = useState<'sources' | 'inspection'>('sources');
   const [starter, setStarter] = useState(datasetStarters[0]);
   const [starterSelection, setStarterSelection] = useState(0);
@@ -248,7 +250,7 @@ function Workbench() {
           {jobs.error && datasetView === 'sources' && <ErrorNotice error={jobs.error} />}
           <footer className="workspace-footer"><span>Inspect first. Build on what you know.</span><span>Dataset workspace</span></footer>
         </div>
-        {activeStage > 0 && activeStage !== 2 && <WorkflowPanel key={`${projectId}-${activeStage}`} projectId={projectId} stage={activeStage === 6 ? 'settings' : stage.name} onOpenQuantize={() => setActiveStage(3)} />}
+        {activeStage > 0 && activeStage !== 2 && <WorkflowPanel key={`${projectId}-${activeStage}`} projectId={projectId} stage={activeStage === 6 ? 'settings' : stage.name} onOpenQuantize={() => setActiveStage(3)} tab={workflowTab} onTabChange={setWorkflowTab} />}
         {activeStage === 2 && <section className="planned-panel" aria-labelledby="planned-title"><span className="empty-icon"><Icon name={stage.icon} size={28} /></span><span className="planned-badge">Planned</span><h2 id="planned-title">{stage.name} is on the roadmap</h2><p>{capabilities.data?.find(item => item.stage.toLowerCase() === stage.name.toLowerCase())?.description ?? 'This stage is not available in the current application.'}</p><p className="planned-note">You can start by inspecting your dataset. Your project and inspection history will be here when this stage is ready.</p><button className="secondary-button" onClick={() => setActiveStage(0)}>Go to Dataset <Icon name="arrow" size={15} /></button></section>}
   </WorkspaceShell>;
 }

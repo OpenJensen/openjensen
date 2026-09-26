@@ -61,6 +61,25 @@ test('shows complete reference numbers with separate hardware and honest missing
   await page.screenshot({ path: testInfo.outputPath('diagnostics.png'), fullPage: true });
 });
 
+test('keeps diagnostics open when the current project finishes loading', async ({ page, request }) => {
+  const id = await project(request);
+  let releaseProjects!: () => void;
+  const projectsReady = new Promise<void>(resolve => { releaseProjects = resolve; });
+  await page.route('**/api/v1/projects', async route => {
+    await projectsReady;
+    await route.continue();
+  });
+  try {
+    await openDiagnostics(page, id);
+    await expect(page.getByText('Select or create a project to save your diagnostic results.', { exact: true })).toBeVisible();
+  } finally {
+    releaseProjects();
+  }
+  await expect(page.getByRole('combobox', { name: 'Current project', exact: true })).toHaveValue(id);
+  await expect(page.getByText('No execution target is configured.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Run diagnostics', exact: true })).toBeVisible();
+});
+
 test('submits the selected policy through the real API and shows subprocess results', async ({ page, request }) => {
   const id = await project(request, configured);
   const artifact = await policy(request, id);
