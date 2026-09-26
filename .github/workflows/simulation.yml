@@ -23,8 +23,16 @@ jobs:
         env:
           SIM_REQUIRE_VIDEO_TOOLS: '1'
         run: python -m unittest discover -s tests -v
+      - name: Install pinned SkyPilot SDK for offline launcher compatibility
+        run: >-
+          python -m pip install -r workers/skypilot/requirements.txt
+          -c workers/isaac_sim/calibration.requirements.txt PyYAML==6.0.3 usd-core==26.8
+      - name: Check combined simulation dependency compatibility
+        run: python -m pip check
       - name: Launcher tests
         working-directory: workers/skypilot
+        env:
+          SIM_REQUIRE_SKYPILOT: '1'
         run: python -m unittest discover -s tests -v
       - name: Experimental scene checks
         run: python workers/isaac_sim/scenes/so101-pickup/test_experiment.py
