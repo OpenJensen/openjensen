@@ -259,7 +259,7 @@ function Workbench() {
         <div className="dataset-view" hidden={activeStage !== 0}>
           <div className="section-tabs"><span className="section-tab active">Dataset intake</span><span className="section-note">LeRobot v2 / v3</span></div>
           <div className="content-grid">
-            <div className="intake-column"><IntakeForm key={projectId} project={project} localAvailable={capabilities.data?.some(item => item.operation === 'dataset.inspect.local' && item.status === 'available') ?? false} onCreated={job => setSelectedJobId(job.id)} /><div className="source-note"><Icon name="database" size={16} /><p>Start with the included SO-101 example, or enter your own dataset repository.</p></div></div>
+            <div className="intake-column"><IntakeForm key={projectId} project={project} localAvailable={capabilities.data?.some(item => item.operation === 'dataset.inspect.local' && (item.status === 'available' || item.status === 'untested')) ?? false} onCreated={job => setSelectedJobId(job.id)} /><div className="source-note"><Icon name="database" size={16} /><p>Start with the included SO-101 example, or enter your own dataset repository.</p></div></div>
             <section className="panel activity-panel" aria-labelledby="activity-title">
               <div className="activity-heading"><div><h2 id="activity-title">Inspection</h2><p>{project ? 'Metadata and history for this project.' : 'Your dataset profile will appear here.'}</p></div><span className="quiet-icon"><Icon name="clock" size={18} /></span></div>
               <ErrorNotice error={jobs.error} />

@@ -1,11 +1,13 @@
 # Workflow integration validation — 2026-09-26
 
-Status: **draft; native acceptance is incomplete**. This connects application jobs
-to workers; it does not complete TRAIN-001, QUANT-001, EVAL-002 or Windows support.
-The final integration includes main through `30b0cab` (contract validation and
-atomic restart reconciliation). Hardware runs below preceded that final merge and
-some later progress, packaging and identity checks; they are not an exact-final-commit
-GPU certification.
+Status: **native GPU acceptance is deferred by user decision**. Further Xbox
+testing is deferred; the software foundation is approved for merging into main.
+This connects application jobs to workers; it does not complete TRAIN-001,
+QUANT-001, EVAL-002 or Windows support.
+The final integration includes main through `6267647` (strict capability evidence,
+atomic restart reconciliation and isolated local preview). Hardware runs below
+preceded that merge and some later progress, packaging and identity checks; they
+are not an exact-final-commit GPU certification.
 
 ## Local checks
 
@@ -85,6 +87,9 @@ Its bytes differ from the older GGUF-version pilot; the older pilot's task succe
 must not be attributed to this artifact without running its own episodes.
 
 ## Remaining hardware gates
+
+These GPU workflow checks are explicitly deferred by the user. They do not
+prevent landing the tested software foundation and are not claimed as passed.
 
 SSH to the RTX host stopped connecting after training/export completed. The
 following checks were prepared but could not run in that outage:

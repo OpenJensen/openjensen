@@ -104,10 +104,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             Capability(
                 stage="Dataset",
                 operation="dataset.inspect.local",
-                status="available" if settings.local_root else "planned",
-                support=[],  # Availability does not establish OS/device test coverage.
+                status="untested" if settings.local_root else "planned",
                 description=(
-                    "Local metadata intake is enabled within the configured dataset root."
+                    "Local metadata intake is configured; target evidence awaits CAP-001."
                     if settings.local_root
                     else "Local intake is disabled; configure FIREBIRD_LOCAL_DATA_ROOT."
                 ),

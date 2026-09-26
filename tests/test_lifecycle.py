@@ -281,11 +281,19 @@ def test_download_is_concurrent_and_revalidates_inventory(configured):
         assert client.get(url).status_code == 422
 
 
-def test_capabilities_require_a_training_environment(configured):
+@pytest.mark.parametrize("training", [False, True])
+def test_capabilities_require_a_training_environment(configured, training):
+    if training:
+        catalog = json.loads(configured.runtime_config.read_text())
+        catalog["runtimes"][0].update(training_python=sys.executable, training_root="fixture")
+        configured.runtime_config.write_text(json.dumps(catalog))
     with TestClient(create_app(configured)) as client:
-        status = {x["operation"]: x["status"] for x in client.get("/api/v1/capabilities").json()}
-        assert status["policy.quantize"] == "available"
-        assert status["policy.finetune"] == "planned"
+        response = client.get("/api/v1/capabilities")
+        assert response.status_code == 200
+        assert all(x["support"] == [] for x in response.json())
+        status = {x["operation"]: x["status"] for x in response.json()}
+        assert status["policy.quantize"] == "untested"
+        assert status["policy.finetune"] == ("untested" if training else "planned")
         assert status["policy.distill"] == "planned"
 
 

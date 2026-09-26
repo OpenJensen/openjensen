@@ -82,7 +82,7 @@ def support_data(state: str = "tested") -> dict[str, Any]:
         "os": "macos",
         "device": "cpu",
         "evidence_state": state,
-        "evidence": [evidence_data()] if state == "tested" else [],
+        "evidence": [evidence_data()],
     }
 
 
@@ -92,7 +92,7 @@ def capability_data() -> dict[str, Any]:
         "operation": "dataset.inspect",
         "status": "available",
         "description": "Metadata inspection only.",
-        "support": [],
+        "support": [support_data()],
     }
 
 
@@ -280,7 +280,7 @@ def test_worker_operation_and_result_boundary(profile_data: dict[str, Any]) -> N
         ("stage", "Imaginary"),
         ("stage", "Run"),
         ("description", "  "),
-        ("status", "untested"),
+        ("status", "unregistered"),
         ("schema_version", 99),
     ],
 )
@@ -326,14 +326,94 @@ def test_test_evidence_requires_provenance(field: str) -> None:
         CapabilityEvidence.model_validate(data)
 
 
-def test_capability_requires_explicit_support_but_allows_unknown_coverage() -> None:
-    data = capability_data()
-    assert Capability.model_validate(data).support == []
+@pytest.mark.parametrize("status", ["planned", "untested"])
+def test_planned_or_untested_with_empty_support_is_valid(status: str) -> None:
+    assert (
+        Capability.model_validate({**capability_data(), "status": status, "support": []}).support
+        == []
+    )
+
+
+@pytest.mark.parametrize("status", ["planned", "untested"])
+def test_planned_or_untested_with_absent_support_is_valid(status: str) -> None:
+    data = {**capability_data(), "status": status}
     del data["support"]
-    with pytest.raises(ValidationError, match="support"):
+    assert Capability.model_validate(data).support == []
+
+
+@pytest.mark.parametrize("status", ["planned", "untested"])
+@pytest.mark.parametrize("state", ["tested", "unsupported"])
+def test_planned_or_untested_with_nonempty_support_is_rejected(status: str, state: str) -> None:
+    data = {**capability_data(), "status": status, "support": [support_data(state)]}
+    with pytest.raises(ValidationError, match="cannot carry support"):
         Capability.model_validate(data)
-    with pytest.raises(ValidationError, match="support"):
-        Capability.model_validate({**data, "support": None})
+
+
+def test_available_with_missing_support_is_rejected() -> None:
+    data = capability_data()
+    del data["support"]
+    with pytest.raises(ValidationError, match="requires nonempty support"):
+        Capability.model_validate(data)
+
+
+def test_available_with_empty_support_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="requires nonempty support"):
+        Capability.model_validate({**capability_data(), "support": []})
+
+
+@pytest.mark.parametrize("state", ["", "none", "unknown", "unregistered", "planned", "untested"])
+def test_available_with_invalid_or_nonevidence_state_is_rejected(state: str) -> None:
+    with pytest.raises(ValidationError, match="evidence_state"):
+        Capability.model_validate({**capability_data(), "support": [support_data(state)]})
+
+
+def test_available_with_only_unsupported_entries_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="at least one tested"):
+        Capability.model_validate({**capability_data(), "support": [support_data("unsupported")]})
+
+
+@pytest.mark.parametrize("state", ["tested", "unsupported"])
+@pytest.mark.parametrize("evidence", [None, []])
+def test_tested_or_unsupported_entry_without_evidence_identity_is_rejected(
+    state: str, evidence: Any
+) -> None:
+    data = support_data(state)
+    if evidence is None:
+        del data["evidence"]
+    else:
+        data["evidence"] = evidence
+    with pytest.raises(ValidationError, match="evidence"):
+        CapabilitySupport.model_validate(data)
+
+
+@pytest.mark.parametrize(
+    "field", ["reference", "source_revision", "runtime", "device_name", "recorded_at"]
+)
+@pytest.mark.parametrize("missing", [False, True])
+def test_unsupported_entry_requires_every_evidence_identity_field(
+    field: str, missing: bool
+) -> None:
+    data = support_data("unsupported")
+    if missing:
+        del data["evidence"][0][field]
+    else:
+        data["evidence"][0][field] = ""
+    with pytest.raises(ValidationError):
+        CapabilitySupport.model_validate(data)
+
+
+def test_available_with_proper_measured_entry_is_valid() -> None:
+    capability = Capability.model_validate(capability_data())
+    assert capability.status == "available"
+    target = capability.support[0]
+    assert (target.backend, target.os, target.device, target.evidence_state) == (
+        "metadata",
+        "macos",
+        "cpu",
+        "tested",
+    )
+    assert target.evidence[0].source_revision == evidence_data()["source_revision"]
+    assert Capability.model_validate_json(capability.model_dump_json()) == capability
 
 
 @pytest.mark.parametrize("field", ["backend", "os", "device", "evidence_state"])
@@ -362,24 +442,21 @@ def test_support_requires_concrete_target_and_test_evidence(field: str, value: A
         CapabilitySupport.model_validate(data)
 
 
-@pytest.mark.parametrize("state", ["planned", "untested"])
-def test_planned_and_untested_targets_cannot_imply_tested_support(state: str) -> None:
-    data = support_data(state)
-    assert CapabilitySupport.model_validate(data).evidence == []
-    with pytest.raises(ValidationError, match="at least one tested"):
-        Capability.model_validate({**capability_data(), "support": [data]})
-    data["evidence"] = [evidence_data()]
-    with pytest.raises(ValidationError, match="cannot carry test evidence"):
-        CapabilitySupport.model_validate(data)
+def test_every_available_support_entry_must_have_evidence() -> None:
+    tested = support_data()
+    invalid = support_data("untested")
+    invalid.update(os="windows", evidence=[])
+    with pytest.raises(ValidationError):
+        Capability.model_validate({**capability_data(), "support": [tested, invalid]})
 
 
 def test_support_is_scoped_not_broadcast_to_other_targets() -> None:
     tested = support_data()
-    untested = support_data("untested")
-    untested["os"] = "windows"
-    capability = Capability.model_validate({**capability_data(), "support": [tested, untested]})
-    assert [s.evidence_state for s in capability.support] == ["tested", "untested"]
-    assert capability.support[1].evidence == []
+    unsupported = support_data("unsupported")
+    unsupported["os"] = "windows"
+    capability = Capability.model_validate({**capability_data(), "support": [tested, unsupported]})
+    assert [s.evidence_state for s in capability.support] == ["tested", "unsupported"]
+    assert all(entry.evidence for entry in capability.support)
     assert Capability.model_validate_json(capability.model_dump_json()) == capability
 
 
@@ -392,14 +469,13 @@ def test_duplicate_and_wrong_backend_targets_fail() -> None:
         Capability.model_validate({**capability_data(), "support": [entry]})
 
 
-def test_unsupported_target_is_not_available_and_can_reference_failure() -> None:
-    entry = support_data("unsupported")
-    entry["evidence"] = [evidence_data()]
-    data = {**capability_data(), "status": "planned", "support": [entry]}
-    assert Capability.model_validate(data).support[0].evidence_state == "unsupported"
-    data["status"] = "available"
-    with pytest.raises(ValidationError, match="at least one tested"):
-        Capability.model_validate(data)
+def test_unsupported_parent_preserves_only_evidenced_failure_claims() -> None:
+    data = {**capability_data(), "status": "unsupported", "support": [support_data("unsupported")]}
+    assert Capability.model_validate(data).status == "unsupported"
+    with pytest.raises(ValidationError, match="only unsupported"):
+        Capability.model_validate({**data, "support": [support_data()]})
+    with pytest.raises(ValidationError, match="requires nonempty support"):
+        Capability.model_validate({**data, "support": []})
 
 
 @pytest.mark.parametrize("local_enabled", [False, True])
@@ -413,15 +489,32 @@ def test_current_api_is_compatible_without_fabricated_target_evidence(
         assert all("support" in item for item in response.json())
         records = [Capability.model_validate(item) for item in response.json()]
         assert all(item.support == [] for item in records)
-        available = {item.operation for item in records if item.status == "available"}
-        assert available == (
-            {"dataset.inspect", "dataset.inspect.local"} if local_enabled else {"dataset.inspect"}
+        assert not any(item.status == "available" for item in records)
+        by_operation = {item.operation: item for item in records}
+        assert by_operation["dataset.inspect"].status == "untested"
+        assert by_operation["dataset.inspect.local"].status == (
+            "untested" if local_enabled else "planned"
         )
 
 
 def test_openapi_exposes_the_support_and_identity_contract(tmp_path: Path) -> None:
     schemas = create_app(Settings(data_dir=tmp_path)).openapi()["components"]["schemas"]
-    assert "support" in schemas["Capability"]["required"]
+    assert "support" not in schemas["Capability"]["required"]
+    branches = schemas["Capability"]["oneOf"]
+    assert branches[0]["properties"]["status"]["enum"] == ["planned", "untested"]
+    assert branches[0]["properties"]["support"]["maxItems"] == 0
+    for branch in branches[1:]:
+        assert "support" in branch["required"]
+        assert branch["properties"]["support"]["minItems"] == 1
+    assert (
+        branches[1]["properties"]["support"]["contains"]["properties"]["evidence_state"]["const"]
+        == "tested"
+    )
+    assert (
+        branches[2]["properties"]["support"]["items"]["properties"]["evidence_state"]["const"]
+        == "unsupported"
+    )
+    assert schemas["CapabilitySupport"]["properties"]["evidence"]["minItems"] == 1
     assert "arbitrary.unsupported" not in schemas["Capability"]["properties"]["operation"]["enum"]
     assert schemas["Project"]["properties"]["id"]["minLength"] == 1
     assert schemas["Job"]["properties"]["project_id"]["minLength"] == 1
@@ -433,6 +526,7 @@ def test_openapi_exposes_the_support_and_identity_contract(tmp_path: Path) -> No
         "os",
         "device",
         "evidence_state",
+        "evidence",
     }
     assert schemas["Capability"]["properties"]["support"]["items"]["$ref"].endswith(
         "/CapabilitySupport"

@@ -4,28 +4,28 @@ from vla_platform.contracts import Capability
 def registry(
     native_configured: bool = False, training_configured: bool = False
 ) -> list[Capability]:
-    available = {"Quantize", "Evaluate", "Run"} if native_configured else set()
+    configured = {"Quantize", "Evaluate", "Run"} if native_configured else set()
     if training_configured:
-        available.add("Fine-tune")
+        configured.add("Fine-tune")
     return [
         Capability(
             stage="Dataset",
             operation="dataset.inspect",
-            status="available",
-            support=[],  # Target coverage is unknown until CAP-001 supplies reviewed evidence.
+            status="untested",
             description=(
                 "Public HF and allowed local LeRobot metadata only; "
-                "no semantic or media validation."
+                "no semantic or media validation. Target evidence awaits CAP-001."
             ),
         ),
         *[
             Capability(
                 stage=stage,
                 operation=operation,
-                status="available" if stage in available else "planned",
+                status="untested" if stage in configured else "planned",
                 description=(
-                    "Native worker configured; each job performs runtime preflight."
-                    if stage in available
+                    "Native worker configured; target support evidence is unregistered. "
+                    "Each job performs runtime preflight."
+                    if stage in configured
                     else description
                 ),
                 support=[],
