@@ -98,6 +98,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 stage="Dataset",
                 operation="dataset.inspect.local",
                 status="available" if settings.local_root else "planned",
+                support=[],  # Availability does not establish OS/device test coverage.
                 description=(
                     "Local metadata intake is enabled within the configured dataset root."
                     if settings.local_root
