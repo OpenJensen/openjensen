@@ -1,12 +1,12 @@
 import hashlib
 import json
 import re
-from pathlib import Path
 from urllib.parse import quote
 
 import httpx
 
 from vla_platform.contracts import DatasetProfile, IntakeRequest, now
+from vla_platform.datasets.local import declared_files, read_local_metadata
 
 MAX_METADATA_BYTES = 2 * 1024 * 1024
 
@@ -102,15 +102,22 @@ async def inspect_hub(request: IntakeRequest) -> DatasetProfile:
 
 
 def inspect_local(request: IntakeRequest, allowed_root: str | None) -> DatasetProfile:
-    if not allowed_root:
-        raise ValueError("Local intake is disabled; configure FIREBIRD_LOCAL_DATA_ROOT first")
-    root = Path(allowed_root).resolve(strict=True)
-    candidate = Path(request.path or "")
-    dataset = (candidate if candidate.is_absolute() else root / candidate).resolve(strict=True)
-    target = (dataset / "meta/info.json").resolve(strict=True)
-    if not dataset.is_relative_to(root) or not target.is_relative_to(root):
-        raise ValueError("Dataset metadata must remain within FIREBIRD_LOCAL_DATA_ROOT")
-    with target.open("rb") as handle:
-        raw = handle.read(MAX_METADATA_BYTES + 1)
+    dataset, raw, info = read_local_metadata(request.path or "", allowed_root)
     digest = hashlib.sha256(raw).hexdigest()
-    return profile(raw, request, f"metadata-sha256:{digest}")
+    result = profile(raw, request, f"metadata-sha256:{digest}")
+    checks = declared_files(dataset, info)
+    result.warnings.extend(
+        f"Missing initial declared {check['kind']} file: {check['path']}"
+        for check in checks
+        if check["status"] == "missing"
+    )
+    result.warnings.extend(
+        f"Local {check['kind']} file presence is unverified: no path template declared."
+        for check in checks
+        if check["status"] == "unverified"
+    )
+    result.warnings.append(
+        "File presence checks cover only the initial declared shard and up to eight videos; "
+        "no full dataset inventory, video decode or frame validation was performed."
+    )
+    return result
