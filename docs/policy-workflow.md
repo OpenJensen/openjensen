@@ -20,6 +20,10 @@ reference results, even before a project has policy runs. The hardware views lin
 to the exact source snapshot and preserve missing measurements as unscored. These
 reference examples do not populate project jobs or establish results for a new policy.
 
+For the pinned newer Spatial policy, use the [Spatial optimizer workflow](spatial-workflow.md).
+It keeps a native BF16 reference and floating C++ control separate, with explicit
+parity admission before compression. Hardware acceptance is still pending.
+
 ## Defaults and selection
 
 The initial comparison candidate is **LM Q8_0 on CPU and CUDA**, with vision left
@@ -43,7 +47,7 @@ flowchart TD
     export --> float["F32/BF16 GGUF reference"]
     prepared["Pinned prepared policy"] --> float
     float --> baseline["Reference reload + measurement"]
-    float --> candidates["2–4 declared precision recipes"]
+    float --> candidates["1–4 explicit precision recipes"]
     candidates --> audit["Protected-tensor audit + packed reload"]
     audit --> measurement["Timing + memory + optional LIBERO episodes"]
     baseline --> decision{"Explicit quality limits<br/>and complete paired episodes?"}

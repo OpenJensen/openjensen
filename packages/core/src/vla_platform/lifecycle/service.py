@@ -261,6 +261,28 @@ class Lifecycle:
             raise ValueError("Runtime is not configured on this application host")
         if request.source_id and self.catalog.source(request.source_id) is None:
             raise ValueError("Policy source is not configured")
+        if request.evaluation.suite == "libero_spatial" and request.operation in {
+            "policy.workflow",
+            "policy.evaluate",
+            "policy.run",
+        }:
+            if runtime.device != "cuda" or not runtime.evaluation_python:
+                raise ValueError(
+                    "Spatial execution requires a prepared CUDA evaluation environment"
+                )
+            if request.training is not None:
+                raise ValueError(
+                    "Spatial training admission is not implemented; select a pinned Spatial source"
+                )
+            if (
+                request.source_id
+                and self.catalog.source(request.source_id).task != "libero_spatial"
+            ):
+                raise ValueError("Spatial evaluation requires a Spatial policy source")
+            if request.artifact_id:
+                artifact = await self.artifact(project_id, request.artifact_id)
+                if artifact.metadata.get("task") != "libero_spatial":
+                    raise ValueError("Spatial evaluation requires a Spatial policy artifact")
         if request.resume_job_id:
             if request.artifact_id:
                 raise ValueError("Choose either a checkpoint artifact or an interrupted job")
@@ -422,7 +444,17 @@ class Lifecycle:
                     pass
 
     async def native(
-        self, job, operation, artifact, output, result, *, final=False, precision=None
+        self,
+        job,
+        operation,
+        artifact,
+        output,
+        result,
+        *,
+        final=False,
+        precision=None,
+        evaluation_backend="cpp",
+        register_artifact=True,
     ):
         request = job.request
         runtime = self.catalog.runtime(request.runtime_id)
@@ -437,6 +469,7 @@ class Lifecycle:
             "output_dir": str(stage_dir.resolve()),
             "parameters": request.model_dump(),
             "final": final,
+            "evaluation_backend": evaluation_backend,
             "artifact": artifact.model_dump() if artifact else None,
             "source": None,
         }
@@ -469,10 +502,15 @@ class Lifecycle:
             container_name,
             training,
             operation in {"policy.import", "policy.quantize"},
+            operation in {"policy.evaluate", "policy.run"},
         )
         image = runtime.training_image if training else runtime.image
         if operation in {"policy.import", "policy.quantize"} and runtime.conversion_python:
             image = runtime.conversion_image
+        if operation in {"policy.evaluate", "policy.run"} and (
+            runtime.evaluation_python or runtime.evaluation_image
+        ):
+            image = runtime.evaluation_image
         await self.event(job, output, f"Starting {operation} on {runtime.label}")
         process = await asyncio.create_subprocess_exec(
             *argv,
@@ -540,7 +578,8 @@ class Lifecycle:
                 parent_ids=[artifact.id] if artifact else [],
                 metadata=manifest.get("metadata", {}),
             )
-            result.artifacts.append(created)
+            if register_artifact:
+                result.artifacts.append(created)
         await self.publish(job, result)
         await self.event(job, output, f"Completed {operation}")
         return created, report
@@ -574,6 +613,10 @@ class Lifecycle:
         if artifact.format != "gguf" or artifact.metadata.get("precision") != "float":
             raise ValueError("Workflow baseline must be a floating GGUF")
         baseline = artifact
+        if request.evaluation.suite == "libero_spatial":
+            from .spatial import run_spatial
+
+            return await run_spatial(self, job, result, baseline)
         _, reference = await self.native(job, "policy.evaluate", baseline, "baseline", result)
         measured = [(baseline, reference)]
         for index, precision in enumerate(request.candidates):

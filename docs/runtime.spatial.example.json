@@ -1,0 +1,37 @@
+{
+  "runtimes": [{
+    "id": "l4-spatial",
+    "label": "Operator-prepared NVIDIA L4 Spatial environment",
+    "device": "cuda",
+    "python": "/absolute/firebird/workers/vla_cpp/.venv-quantize/bin/python",
+    "conversion_python": "/absolute/firebird/workers/vla_cpp/.venv-quantize/bin/python",
+    "evaluation_python": "/absolute/firebird/workers/benchmark_gpu/.venv-native/bin/python",
+    "worker_root": "/absolute/firebird/workers/vla_cpp",
+    "vendor": "/absolute/native/vla.cpp",
+    "build": "/absolute/native/vla.cpp/build-cuda",
+    "simulator_lane": "/absolute/spatial-run-root",
+    "env": {
+      "LD_LIBRARY_PATH": "/absolute/native/vla.cpp/build-cuda/bin",
+      "MUJOCO_GL": "egl",
+      "PYOPENGL_PLATFORM": "egl",
+      "HF_HUB_OFFLINE": "1",
+      "TRANSFORMERS_OFFLINE": "1"
+    }
+  }],
+  "sources": [{
+    "id": "smolvla-spatial-pinned",
+    "label": "Pinned SmolVLA LIBERO Spatial policy",
+    "path": "/absolute/models/smolvla-spatial-float.gguf",
+    "sha256": "REPLACE_WITH_ACTUAL_FLOATING_GGUF_SHA256",
+    "task": "libero_spatial",
+    "action_dim": 7,
+    "evaluation_bundle": "/absolute/models/spatial-evaluation-bundle",
+    "evaluation_bundle_sha256": "REPLACE_WITH_ACTUAL_SPATIAL_ASSETS_JSON_SHA256",
+    "provenance": {
+      "repository": "lerobot/smolvla_libero",
+      "revision": "31d453f7edd78c839a8bbc39744a292686daf0de",
+      "native_weights_sha256": "9a9f6413e42c0f332fccbce9a0dc796af2790f82cf002f791cdbf7e01e1afca8",
+      "note": "Preserve and hash the original config and derived 8-coordinate state config"
+    }
+  }]
+}
