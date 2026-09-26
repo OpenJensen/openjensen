@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { BenchmarkReference } from "@/components/benchmark-reference";
 import {
   api,
   artifactDownloadUrl,
@@ -549,6 +550,7 @@ export function WorkflowPanel({
             ) : (
               <p>No policy runs in this project yet.</p>
             )}
+            <BenchmarkReference />
           </>
         )}
       </section>

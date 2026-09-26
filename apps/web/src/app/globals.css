@@ -317,6 +317,16 @@ input::placeholder { color: var(--muted); opacity: .8; }
 .workflow-events { padding: 1rem 1.5rem; font-size: .85rem; }
 .workflow-metrics caption { text-align: left; padding: 12px; font-size: 13px; font-weight: 550; }
 .workflow-metrics td { min-width: 90px; }
+.benchmark-reference { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--line); min-width: 0; }
+.reference-benchmark-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.reference-benchmark-heading .text-link { font-size: 12px; }
+.reference-hardware { max-width: 280px; }
+.benchmark-reference .table-scroll { margin-top: 16px; }
+.benchmark-reference .workflow-metrics th { min-width: 120px; }
+.benchmark-reference .workflow-metrics td { font-variant-numeric: tabular-nums; }
+.reference-benchmark-finding { margin-top: 14px; }
+.benchmark-reference .provenance { margin-top: 16px; }
+.benchmark-reference .provenance p { margin-top: 12px; }
 /* Shared shell links stay reachable on narrow screens. */
 .topbar-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 .breadcrumb strong { overflow: hidden; text-overflow: ellipsis; }
