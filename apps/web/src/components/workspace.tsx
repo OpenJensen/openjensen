@@ -248,7 +248,7 @@ function Workbench() {
           {jobs.error && datasetView === 'sources' && <ErrorNotice error={jobs.error} />}
           <footer className="workspace-footer"><span>Inspect first. Build on what you know.</span><span>Dataset workspace</span></footer>
         </div>
-        {activeStage > 0 && activeStage !== 2 && <WorkflowPanel key={`${projectId}-${activeStage}`} projectId={projectId} stage={activeStage === 6 ? 'settings' : stage.name} />}
+        {activeStage > 0 && activeStage !== 2 && <WorkflowPanel key={`${projectId}-${activeStage}`} projectId={projectId} stage={activeStage === 6 ? 'settings' : stage.name} onOpenQuantize={() => setActiveStage(3)} />}
         {activeStage === 2 && <section className="planned-panel" aria-labelledby="planned-title"><span className="empty-icon"><Icon name={stage.icon} size={28} /></span><span className="planned-badge">Planned</span><h2 id="planned-title">{stage.name} is on the roadmap</h2><p>{capabilities.data?.find(item => item.stage.toLowerCase() === stage.name.toLowerCase())?.description ?? 'This stage is not available in the current application.'}</p><p className="planned-note">You can start by inspecting your dataset. Your project and inspection history will be here when this stage is ready.</p><button className="secondary-button" onClick={() => setActiveStage(0)}>Go to Dataset <Icon name="arrow" size={15} /></button></section>}
   </WorkspaceShell>;
 }

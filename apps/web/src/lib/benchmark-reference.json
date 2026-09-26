@@ -1,153 +1,441 @@
 {
   "recordedOn": "2026-09-26",
-  "sourceCommit": "9ce5579bcb5bc4127b434cc53b5edfd78ffc4fb1",
+  "sourceCommit": "e5866f0877f7af12cc2ebc4276b1768fdeea3eeb",
   "sourcePath": "workers/benchmark_gpu/evidence/2026-09-26",
   "checkpoint": "lerobot/smolvla_libero",
   "checkpointRevision": "31d453f7edd78c839a8bbc39744a292686daf0de",
-  "l4": [
-    {
-      "candidate": "native-bf16",
-      "medianP50Ms": 348.8,
-      "startupSeconds": 27.79,
-      "processPeakMiB": 1186.0,
-      "quality": {
-        "succeeded": 16,
-        "total": 20
-      }
+  "hosts": {
+    "dedicatedL4": {
+      "label": "NVIDIA L4 \u00b7 dedicated rental",
+      "reportPath": "dedicated-l4/REPORT.md",
+      "fullStartup": true,
+      "scope": "Dedicated g2-standard-8, 8 vCPUs, 32 GiB RAM. No competing GPU workload. One warmup and five timed calls per fixture. Peak VRAM covers the benchmark process and descendants, sampled every 100 ms.",
+      "finding": "C++ Q8: 17/20 successes versus native BF16\u2019s 16/20. C++ Q4: 4/20, losing 13 reference successes and gaining one. Equal aggregate scores do not guarantee the same episode outcomes.",
+      "rows": [
+        {
+          "candidate": "native-bf16",
+          "medianP50Ms": 342.58590999991156,
+          "runtimeInitSeconds": 27.544147006999992,
+          "firstActionSeconds": 37.95750348599995,
+          "processPeakMiB": 1186.0,
+          "quality": {
+            "succeeded": 16,
+            "total": 20,
+            "lost": 0,
+            "gained": 0
+          },
+          "note": null
+        },
+        {
+          "candidate": "native-fp16",
+          "medianP50Ms": 348.87695249994977,
+          "runtimeInitSeconds": 27.689626067999598,
+          "firstActionSeconds": 37.820782937999866,
+          "processPeakMiB": 1186.0,
+          "quality": {
+            "succeeded": 15,
+            "total": 20,
+            "lost": 2,
+            "gained": 1
+          },
+          "note": null
+        },
+        {
+          "candidate": "native-int8",
+          "medianP50Ms": 411.03506000001744,
+          "runtimeInitSeconds": 28.851821223000115,
+          "firstActionSeconds": 39.080557096999655,
+          "processPeakMiB": 1036.0,
+          "quality": {
+            "succeeded": 18,
+            "total": 20,
+            "lost": 0,
+            "gained": 2
+          },
+          "note": null
+        },
+        {
+          "candidate": "native-nf4",
+          "medianP50Ms": 379.14849050014254,
+          "runtimeInitSeconds": 28.716781458000696,
+          "firstActionSeconds": 38.949347941999804,
+          "processPeakMiB": 950.0,
+          "quality": {
+            "succeeded": 12,
+            "total": 20,
+            "lost": 5,
+            "gained": 1
+          },
+          "note": null
+        },
+        {
+          "candidate": "cpp-bf16",
+          "medianP50Ms": 96.63501649993123,
+          "runtimeInitSeconds": 1.9587489939995066,
+          "firstActionSeconds": 11.663253139000517,
+          "processPeakMiB": 1162.0,
+          "quality": {
+            "succeeded": 17,
+            "total": 20,
+            "lost": 0,
+            "gained": 1
+          },
+          "note": null
+        },
+        {
+          "candidate": "cpp-Q8_0",
+          "medianP50Ms": 98.62204299997757,
+          "runtimeInitSeconds": 1.5535413910001807,
+          "firstActionSeconds": 11.274646528999256,
+          "processPeakMiB": 1018.0,
+          "quality": {
+            "succeeded": 17,
+            "total": 20,
+            "lost": 0,
+            "gained": 1
+          },
+          "note": null
+        },
+        {
+          "candidate": "cpp-Q4_0",
+          "medianP50Ms": 98.47280399992542,
+          "runtimeInitSeconds": 1.452185049000036,
+          "firstActionSeconds": 11.329326002000016,
+          "processPeakMiB": 946.0,
+          "quality": {
+            "succeeded": 4,
+            "total": 20,
+            "lost": 13,
+            "gained": 1
+          },
+          "note": null
+        },
+        {
+          "candidate": "cpp-Q8_0-vision",
+          "medianP50Ms": 98.52850749996378,
+          "runtimeInitSeconds": 1.2447636510005395,
+          "firstActionSeconds": 10.940241135000178,
+          "processPeakMiB": 944.0,
+          "quality": {
+            "succeeded": 15,
+            "total": 20,
+            "lost": 2,
+            "gained": 1
+          },
+          "note": null
+        },
+        {
+          "candidate": "vllm-bf16",
+          "medianP50Ms": 356.9595049999634,
+          "runtimeInitSeconds": 12.587772273000155,
+          "firstActionSeconds": 24.809427593999317,
+          "processPeakMiB": 1588.0,
+          "quality": {
+            "succeeded": 16,
+            "total": 20,
+            "lost": 1,
+            "gained": 1
+          },
+          "note": null
+        },
+        {
+          "candidate": "trtllm-fp16",
+          "medianP50Ms": 406.911599999944,
+          "runtimeInitSeconds": 41.71573480200004,
+          "firstActionSeconds": 55.451831751999634,
+          "processPeakMiB": 1632.0,
+          "quality": {
+            "succeeded": 16,
+            "total": 20,
+            "lost": 1,
+            "gained": 1
+          },
+          "note": null
+        }
+      ]
     },
-    {
-      "candidate": "cpp-bf16",
-      "medianP50Ms": 100.28,
-      "startupSeconds": 2.28,
-      "processPeakMiB": 1162.0,
-      "quality": {
-        "succeeded": 17,
-        "total": 20
-      }
+    "existingL4": {
+      "label": "NVIDIA L4 \u00b7 existing host",
+      "reportPath": "REPORT.md",
+      "fullStartup": false,
+      "scope": "Existing g2-standard-12, 12 vCPUs, 48 GiB RAM. Timing used authorized pauses of the collection job; quality used separate runs. Five timed calls per fixture. Process VRAM excludes the paused collectors.",
+      "finding": "All ten candidates completed 20 paired episodes. The dedicated rental reproduced every candidate\u2019s action outputs and episode outcomes exactly. These repeat the same test cases, not an additional independent quality sample.",
+      "rows": [
+        {
+          "candidate": "native-bf16",
+          "medianP50Ms": 348.8025914998616,
+          "runtimeInitSeconds": 27.794084416999794,
+          "firstActionSeconds": null,
+          "processPeakMiB": 1186.0,
+          "quality": {
+            "succeeded": 16,
+            "total": 20,
+            "lost": 0,
+            "gained": 0
+          },
+          "note": null
+        },
+        {
+          "candidate": "native-fp16",
+          "medianP50Ms": 347.3564340001758,
+          "runtimeInitSeconds": 27.945560836000368,
+          "firstActionSeconds": null,
+          "processPeakMiB": 1186.0,
+          "quality": {
+            "succeeded": 15,
+            "total": 20,
+            "lost": 2,
+            "gained": 1
+          },
+          "note": null
+        },
+        {
+          "candidate": "native-int8",
+          "medianP50Ms": 418.19594449998476,
+          "runtimeInitSeconds": 29.162606612999298,
+          "firstActionSeconds": null,
+          "processPeakMiB": 1036.0,
+          "quality": {
+            "succeeded": 18,
+            "total": 20,
+            "lost": 0,
+            "gained": 2
+          },
+          "note": null
+        },
+        {
+          "candidate": "native-nf4",
+          "medianP50Ms": 386.4893764998669,
+          "runtimeInitSeconds": 29.29410489699967,
+          "firstActionSeconds": null,
+          "processPeakMiB": 950.0,
+          "quality": {
+            "succeeded": 12,
+            "total": 20,
+            "lost": 5,
+            "gained": 1
+          },
+          "note": null
+        },
+        {
+          "candidate": "cpp-bf16",
+          "medianP50Ms": 100.28072100021745,
+          "runtimeInitSeconds": 2.28032807100044,
+          "firstActionSeconds": null,
+          "processPeakMiB": 1162.0,
+          "quality": {
+            "succeeded": 17,
+            "total": 20,
+            "lost": 0,
+            "gained": 1
+          },
+          "note": null
+        },
+        {
+          "candidate": "cpp-Q8_0",
+          "medianP50Ms": 99.34278299988364,
+          "runtimeInitSeconds": 3.057360287000847,
+          "firstActionSeconds": null,
+          "processPeakMiB": 1018.0,
+          "quality": {
+            "succeeded": 17,
+            "total": 20,
+            "lost": 0,
+            "gained": 1
+          },
+          "note": null
+        },
+        {
+          "candidate": "cpp-Q4_0",
+          "medianP50Ms": 101.62022699978479,
+          "runtimeInitSeconds": 2.8385351259994422,
+          "firstActionSeconds": null,
+          "processPeakMiB": 946.0,
+          "quality": {
+            "succeeded": 4,
+            "total": 20,
+            "lost": 13,
+            "gained": 1
+          },
+          "note": null
+        },
+        {
+          "candidate": "cpp-Q8_0-vision",
+          "medianP50Ms": 101.02468700006284,
+          "runtimeInitSeconds": 2.842282103000798,
+          "firstActionSeconds": null,
+          "processPeakMiB": 944.0,
+          "quality": {
+            "succeeded": 15,
+            "total": 20,
+            "lost": 2,
+            "gained": 1
+          },
+          "note": null
+        },
+        {
+          "candidate": "vllm-bf16",
+          "medianP50Ms": 356.2253290001536,
+          "runtimeInitSeconds": 12.335925265999322,
+          "firstActionSeconds": null,
+          "processPeakMiB": 1588.0,
+          "quality": {
+            "succeeded": 16,
+            "total": 20,
+            "lost": 1,
+            "gained": 1
+          },
+          "note": null
+        },
+        {
+          "candidate": "trtllm-fp16",
+          "medianP50Ms": 409.4195124998805,
+          "runtimeInitSeconds": 42.92648371799987,
+          "firstActionSeconds": null,
+          "processPeakMiB": 1632.0,
+          "quality": {
+            "succeeded": 16,
+            "total": 20,
+            "lost": 1,
+            "gained": 1
+          },
+          "note": null
+        }
+      ]
     },
-    {
-      "candidate": "native-fp16",
-      "medianP50Ms": 347.36,
-      "startupSeconds": 27.95,
-      "processPeakMiB": 1186.0,
-      "quality": {
-        "succeeded": 15,
-        "total": 20
-      }
-    },
-    {
-      "candidate": "cpp-Q8_0",
-      "medianP50Ms": 99.34,
-      "startupSeconds": 3.06,
-      "processPeakMiB": 1018.0,
-      "quality": null
-    },
-    {
-      "candidate": "native-int8",
-      "medianP50Ms": 418.2,
-      "startupSeconds": 29.16,
-      "processPeakMiB": 1036.0,
-      "quality": null
-    },
-    {
-      "candidate": "cpp-Q4_0",
-      "medianP50Ms": 101.62,
-      "startupSeconds": 2.84,
-      "processPeakMiB": 946.0,
-      "quality": null
-    },
-    {
-      "candidate": "native-nf4",
-      "medianP50Ms": 386.49,
-      "startupSeconds": 29.29,
-      "processPeakMiB": 950.0,
-      "quality": null
-    },
-    {
-      "candidate": "cpp-Q8_0-vision",
-      "medianP50Ms": 101.02,
-      "startupSeconds": 2.84,
-      "processPeakMiB": 944.0,
-      "quality": null
-    },
-    {
-      "candidate": "native-bf16-repeat",
-      "medianP50Ms": 350.64,
-      "startupSeconds": 27.92,
-      "processPeakMiB": 1186.0,
-      "quality": null
+    "rtx3070": {
+      "label": "NVIDIA RTX 3070 \u00b7 shared WSL",
+      "reportPath": "REPORT.md",
+      "fullStartup": false,
+      "scope": "Shared WSL desktop, three timed calls per fixture. Process peak VRAM was not reliably collected. Remaining runs stopped when the host failed; TensorRT-LLM was deferred for insufficient disk space.",
+      "finding": "C++ Q4 completed 8/20 tasks versus native BF16\u2019s 15/20. C++ Q8 matched the reference on all 20 outcomes. NF4 also scored 15/20, but lost three reference successes and gained three.",
+      "rows": [
+        {
+          "candidate": "native-bf16",
+          "medianP50Ms": 325.28962299875275,
+          "runtimeInitSeconds": 14.328712144000747,
+          "firstActionSeconds": null,
+          "processPeakMiB": null,
+          "quality": {
+            "succeeded": 15,
+            "total": 20,
+            "lost": 0,
+            "gained": 0
+          },
+          "note": null
+        },
+        {
+          "candidate": "native-fp16",
+          "medianP50Ms": 312.29993349916185,
+          "runtimeInitSeconds": 14.273300093998841,
+          "firstActionSeconds": null,
+          "processPeakMiB": null,
+          "quality": {
+            "succeeded": 15,
+            "total": 20,
+            "lost": 0,
+            "gained": 0
+          },
+          "note": null
+        },
+        {
+          "candidate": "native-int8",
+          "medianP50Ms": 372.3204674988665,
+          "runtimeInitSeconds": 14.84706587600158,
+          "firstActionSeconds": null,
+          "processPeakMiB": null,
+          "quality": {
+            "succeeded": 15,
+            "total": 20,
+            "lost": 0,
+            "gained": 0
+          },
+          "note": null
+        },
+        {
+          "candidate": "native-nf4",
+          "medianP50Ms": 377.3050185009197,
+          "runtimeInitSeconds": 15.80942578399845,
+          "firstActionSeconds": null,
+          "processPeakMiB": null,
+          "quality": {
+            "succeeded": 15,
+            "total": 20,
+            "lost": 3,
+            "gained": 3
+          },
+          "note": null
+        },
+        {
+          "candidate": "cpp-bf16",
+          "medianP50Ms": 112.72139550055726,
+          "runtimeInitSeconds": 1.4085162830015179,
+          "firstActionSeconds": null,
+          "processPeakMiB": null,
+          "quality": {
+            "succeeded": 14,
+            "total": 20,
+            "lost": 1,
+            "gained": 0
+          },
+          "note": null
+        },
+        {
+          "candidate": "cpp-Q8_0",
+          "medianP50Ms": 109.30289000134508,
+          "runtimeInitSeconds": 1.2964123799974914,
+          "firstActionSeconds": null,
+          "processPeakMiB": null,
+          "quality": {
+            "succeeded": 15,
+            "total": 20,
+            "lost": 0,
+            "gained": 0
+          },
+          "note": null
+        },
+        {
+          "candidate": "cpp-Q4_0",
+          "medianP50Ms": 110.9207304980373,
+          "runtimeInitSeconds": 1.3075855160022911,
+          "firstActionSeconds": null,
+          "processPeakMiB": null,
+          "quality": {
+            "succeeded": 8,
+            "total": 20,
+            "lost": 10,
+            "gained": 3
+          },
+          "note": null
+        },
+        {
+          "candidate": "cpp-Q8_0-vision",
+          "medianP50Ms": null,
+          "runtimeInitSeconds": null,
+          "firstActionSeconds": null,
+          "processPeakMiB": null,
+          "quality": null,
+          "note": "Not collected: host failed"
+        },
+        {
+          "candidate": "vllm-bf16",
+          "medianP50Ms": null,
+          "runtimeInitSeconds": null,
+          "firstActionSeconds": null,
+          "processPeakMiB": null,
+          "quality": null,
+          "note": "Not collected: host failed"
+        },
+        {
+          "candidate": "trtllm-fp16",
+          "medianP50Ms": null,
+          "runtimeInitSeconds": null,
+          "firstActionSeconds": null,
+          "processPeakMiB": null,
+          "quality": null,
+          "note": "Deferred: insufficient disk space"
+        }
+      ]
     }
-  ],
-  "rtx3070": [
-    {
-      "candidate": "native-bf16",
-      "medianP50Ms": 325.29,
-      "startupSeconds": 14.33,
-      "processPeakMiB": null,
-      "quality": {
-        "succeeded": 15,
-        "total": 20
-      }
-    },
-    {
-      "candidate": "native-fp16",
-      "medianP50Ms": 312.3,
-      "startupSeconds": 14.27,
-      "processPeakMiB": null,
-      "quality": {
-        "succeeded": 15,
-        "total": 20
-      }
-    },
-    {
-      "candidate": "native-int8",
-      "medianP50Ms": 372.32,
-      "startupSeconds": 14.85,
-      "processPeakMiB": null,
-      "quality": {
-        "succeeded": 15,
-        "total": 20
-      }
-    },
-    {
-      "candidate": "native-nf4",
-      "medianP50Ms": 377.31,
-      "startupSeconds": 15.81,
-      "processPeakMiB": null,
-      "quality": {
-        "succeeded": 15,
-        "total": 20
-      }
-    },
-    {
-      "candidate": "cpp-bf16",
-      "medianP50Ms": 112.72,
-      "startupSeconds": 1.41,
-      "processPeakMiB": null,
-      "quality": {
-        "succeeded": 14,
-        "total": 20
-      }
-    },
-    {
-      "candidate": "cpp-Q8_0",
-      "medianP50Ms": 109.3,
-      "startupSeconds": 1.3,
-      "processPeakMiB": null,
-      "quality": {
-        "succeeded": 15,
-        "total": 20
-      }
-    },
-    {
-      "candidate": "cpp-Q4_0",
-      "medianP50Ms": 110.92,
-      "startupSeconds": 1.31,
-      "processPeakMiB": null,
-      "quality": {
-        "succeeded": 8,
-        "total": 20
-      }
-    }
-  ]
+  }
 }
