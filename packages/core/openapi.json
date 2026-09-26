@@ -1,6 +1,67 @@
 {
   "components": {
     "schemas": {
+      "CameraPreview": {
+        "additionalProperties": false,
+        "properties": {
+          "end_seconds": {
+            "minimum": 0.0,
+            "title": "End Seconds",
+            "type": "number"
+          },
+          "fps": {
+            "exclusiveMinimum": 0.0,
+            "title": "Fps",
+            "type": "number"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "start_seconds": {
+            "minimum": 0.0,
+            "title": "Start Seconds",
+            "type": "number"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width"
+          }
+        },
+        "required": [
+          "key",
+          "url",
+          "start_seconds",
+          "end_seconds",
+          "width",
+          "height",
+          "fps"
+        ],
+        "title": "CameraPreview",
+        "type": "object"
+      },
       "Capability": {
         "additionalProperties": false,
         "description": "Planned/untested records carry no support; outcome claims carry evidence.",
@@ -375,6 +436,180 @@
         "title": "DatasetProfile",
         "type": "object"
       },
+      "EpisodePage": {
+        "additionalProperties": false,
+        "properties": {
+          "episodes": {
+            "items": {
+              "$ref": "#/components/schemas/EpisodeSummary"
+            },
+            "title": "Episodes",
+            "type": "array"
+          },
+          "limit": {
+            "maximum": 24.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "minimum": 0.0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "repo_id": {
+            "title": "Repo Id",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "total_episodes": {
+            "minimum": 0.0,
+            "title": "Total Episodes",
+            "type": "integer"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "repo_id",
+          "revision",
+          "total_episodes",
+          "offset",
+          "limit",
+          "episodes",
+          "warnings"
+        ],
+        "title": "EpisodePage",
+        "type": "object"
+      },
+      "EpisodePreview": {
+        "additionalProperties": false,
+        "properties": {
+          "action_names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Action Names",
+            "type": "array"
+          },
+          "cameras": {
+            "items": {
+              "$ref": "#/components/schemas/CameraPreview"
+            },
+            "title": "Cameras",
+            "type": "array"
+          },
+          "duration_seconds": {
+            "minimum": 0.0,
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "episode_index": {
+            "minimum": 0.0,
+            "title": "Episode Index",
+            "type": "integer"
+          },
+          "frame_count": {
+            "minimum": 0.0,
+            "title": "Frame Count",
+            "type": "integer"
+          },
+          "repo_id": {
+            "title": "Repo Id",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/FrameSample"
+            },
+            "title": "Samples",
+            "type": "array"
+          },
+          "state_names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "State Names",
+            "type": "array"
+          },
+          "tasks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tasks",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "episode_index",
+          "frame_count",
+          "duration_seconds",
+          "tasks",
+          "repo_id",
+          "revision",
+          "cameras",
+          "action_names",
+          "state_names",
+          "samples",
+          "warnings"
+        ],
+        "title": "EpisodePreview",
+        "type": "object"
+      },
+      "EpisodeSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "duration_seconds": {
+            "minimum": 0.0,
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "episode_index": {
+            "minimum": 0.0,
+            "title": "Episode Index",
+            "type": "integer"
+          },
+          "frame_count": {
+            "minimum": 0.0,
+            "title": "Frame Count",
+            "type": "integer"
+          },
+          "tasks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tasks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "episode_index",
+          "frame_count",
+          "duration_seconds",
+          "tasks"
+        ],
+        "title": "EpisodeSummary",
+        "type": "object"
+      },
       "Evaluation": {
         "additionalProperties": false,
         "properties": {
@@ -442,6 +677,57 @@
           }
         },
         "title": "Evaluation",
+        "type": "object"
+      },
+      "FrameSample": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          },
+          "frame_index": {
+            "minimum": 0.0,
+            "title": "Frame Index",
+            "type": "integer"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "timestamp": {
+            "minimum": 0.0,
+            "title": "Timestamp",
+            "type": "number"
+          }
+        },
+        "required": [
+          "frame_index",
+          "timestamp",
+          "action",
+          "state"
+        ],
+        "title": "FrameSample",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -1375,6 +1661,116 @@
           }
         },
         "summary": "Cancel Job"
+      }
+    },
+    "/api/v1/jobs/{job_id}/episodes": {
+      "get": {
+        "operationId": "list_episodes_api_v1_jobs__job_id__episodes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 12,
+              "maximum": 24,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EpisodePage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Episodes"
+      }
+    },
+    "/api/v1/jobs/{job_id}/episodes/{episode_index}": {
+      "get": {
+        "operationId": "get_episode_api_v1_jobs__job_id__episodes__episode_index__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "episode_index",
+            "required": true,
+            "schema": {
+              "title": "Episode Index",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EpisodePreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Episode"
       }
     },
     "/api/v1/jobs/{job_id}/events": {

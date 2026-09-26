@@ -72,6 +72,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/jobs/{job_id}/episodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Episodes */
+        get: operations["list_episodes_api_v1_jobs__job_id__episodes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{job_id}/episodes/{episode_index}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Episode */
+        get: operations["get_episode_api_v1_jobs__job_id__episodes__episode_index__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/jobs/{job_id}/events": {
         parameters: {
             query?: never;
@@ -213,6 +247,23 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** CameraPreview */
+        CameraPreview: {
+            /** End Seconds */
+            end_seconds: number;
+            /** Fps */
+            fps: number;
+            /** Height */
+            height: number | null;
+            /** Key */
+            key: string;
+            /** Start Seconds */
+            start_seconds: number;
+            /** Url */
+            url: string;
+            /** Width */
+            width: number | null;
+        };
         /**
          * Capability
          * @description Planned/untested records carry no support; outcome claims carry evidence.
@@ -359,6 +410,59 @@ export interface components {
             /** Warnings */
             warnings: string[];
         };
+        /** EpisodePage */
+        EpisodePage: {
+            /** Episodes */
+            episodes: components["schemas"]["EpisodeSummary"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Repo Id */
+            repo_id: string;
+            /** Revision */
+            revision: string;
+            /** Total Episodes */
+            total_episodes: number;
+            /** Warnings */
+            warnings: string[];
+        };
+        /** EpisodePreview */
+        EpisodePreview: {
+            /** Action Names */
+            action_names: string[];
+            /** Cameras */
+            cameras: components["schemas"]["CameraPreview"][];
+            /** Duration Seconds */
+            duration_seconds: number;
+            /** Episode Index */
+            episode_index: number;
+            /** Frame Count */
+            frame_count: number;
+            /** Repo Id */
+            repo_id: string;
+            /** Revision */
+            revision: string;
+            /** Samples */
+            samples: components["schemas"]["FrameSample"][];
+            /** State Names */
+            state_names: string[];
+            /** Tasks */
+            tasks: string[];
+            /** Warnings */
+            warnings: string[];
+        };
+        /** EpisodeSummary */
+        EpisodeSummary: {
+            /** Duration Seconds */
+            duration_seconds: number;
+            /** Episode Index */
+            episode_index: number;
+            /** Frame Count */
+            frame_count: number;
+            /** Tasks */
+            tasks: string[];
+        };
         /** Evaluation */
         Evaluation: {
             /** Final States */
@@ -396,6 +500,17 @@ export interface components {
              * @default 3
              */
             warmups: number;
+        };
+        /** FrameSample */
+        FrameSample: {
+            /** Action */
+            action: number[] | null;
+            /** Frame Index */
+            frame_index: number;
+            /** State */
+            state: number[] | null;
+            /** Timestamp */
+            timestamp: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -823,6 +938,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Job"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_episodes_api_v1_jobs__job_id__episodes_get: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EpisodePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_episode_api_v1_jobs__job_id__episodes__episode_index__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                episode_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EpisodePreview"];
                 };
             };
             /** @description Validation Error */

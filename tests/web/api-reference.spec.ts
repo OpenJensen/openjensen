@@ -339,3 +339,36 @@ test('shared workspace shell preserves training, defaults, and separate diagnost
   await expect(page.getByRole('heading', { name: 'Run diagnostics' })).toBeVisible();
   await expect(page.getByLabel('Quantization recipe')).toHaveCount(0);
 });
+
+test('dataset inspection stays separate from newer policy jobs in the same project', async ({ page }) => {
+  const timestamp = '2026-09-26T12:00:00Z';
+  const datasetJob = {
+    id: 'dataset-review', project_id: 'mixed-review', kind: 'dataset.inspect', status: 'succeeded',
+    request: { source: 'huggingface', repo_id: 'fixture/robot', revision: 'main' },
+    created_at: timestamp, updated_at: timestamp,
+    result: {
+      source: 'huggingface', repo_id: 'fixture/robot', revision: 'a'.repeat(40), format: 'lerobot_v3',
+      inspection_scope: 'metadata_only', total_episodes: 1, total_frames: 6, fps: 5,
+      features: { action: { dtype: 'float32', shape: [2] }, 'observation.state': { dtype: 'float32', shape: [2] } },
+      metadata_sha256: 'b'.repeat(64), inspected_at: timestamp, warnings: [],
+    },
+  };
+  const policyJob = {
+    id: 'policy-review', project_id: 'mixed-review', kind: 'policy.import', status: 'succeeded',
+    request: { operation: 'policy.import', runtime_id: 'fixture', source_id: 'source' },
+    created_at: '2026-09-26T13:00:00Z', updated_at: '2026-09-26T13:00:00Z',
+    result: { artifacts: [], reports: [], decision: 'completed' },
+  };
+  await page.route('**/api/v1/projects', route => route.fulfill({ json: [{ id: 'mixed-review', name: 'Mixed jobs', created_at: timestamp }] }));
+  await page.route('**/api/v1/projects/mixed-review/jobs', route => route.fulfill({ json: [policyJob, datasetJob] }));
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/');
+  await page.getByRole('button', { name: /^Inspection/ }).click();
+  await expect(page.getByRole('heading', { name: 'fixture/robot', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Load visual preview', exact: true })).toBeVisible();
+  await expect(page.getByText('policy-review', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Fine-tune a policy' })).toBeVisible();
+  expect(errors).toEqual([]);
+});

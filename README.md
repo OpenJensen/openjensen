@@ -1,6 +1,6 @@
 # Firebird application
 
-A local VLA lifecycle application with persistent projects, dataset intake, selectable LoRA/QLoRA fine-tuning, native quantization, evaluation and reload-verified packages through shared web/CLI jobs. Native operations require configured worker environments. Distillation remains planned.
+A local VLA lifecycle application with persistent projects, dataset intake and visual exploration, selectable LoRA/QLoRA fine-tuning, native quantization, evaluation and reload-verified packages through shared web/CLI jobs. Native operations require configured worker environments. Distillation remains planned.
 
 Start with the [policy workflow and setup guide](docs/policy-workflow.md). Recommended quantization defaults depend on the execution target; detailed metrics and advanced controls live under **Settings & diagnostics**. See [validation evidence](docs/workflow-validation.md) for the scope of actual hardware checks.
 
@@ -41,9 +41,19 @@ uv run --frozen firebird capabilities
 
 Replace IDs with the returned values. CLI commands output JSON and call the same API. They do not open a second scheduler or write the database.
 
-Metadata counts and schemas are **source-declared**. Intake preserves their provenance, hashes the metadata and warns that action units, calibration, controller semantics, media integrity and simulator compatibility have not been verified. It does not infer task success or a training recipe from a dataset name. Parquet/video previews and dataset-wide validation remain pending.
+Metadata counts and schemas are **source-declared**. Intake preserves their provenance, hashes the metadata and warns that action units, calibration, controller semantics, media integrity and simulator compatibility have not been verified. It does not infer task success or a training recipe from a dataset name. On-demand episode previews can now show camera videos and a small set of recorded action/state rows. Dataset-wide validation remains pending.
 
 Local metadata intake is disabled by default. Set `FIREBIRD_LOCAL_DATA_ROOT` to an explicitly permitted dataset directory before starting the server; paths must resolve within it. For example, if it contains `my-dataset/meta/info.json`, inspect with `--path my-dataset`. On PowerShell use `$env:FIREBIRD_LOCAL_DATA_ROOT = 'C:\robotics-data'`; on Linux/macOS use `export FIREBIRD_LOCAL_DATA_ROOT=/path/to/robotics-data`.
+
+## Explore a dataset visually
+
+The **Sources** view includes two real, revision-pinned starters: SO-101 pickup and SO-100 pick-and-place. Create a project, select a starter or enter a public LeRobot repository, and click **Inspect dataset**. The **Inspection** view preserves metadata counts, warnings, and source provenance.
+
+Click **Load visual preview** to explicitly fetch the episode index and a small sample of recorded data. Select an episode, play or seek its camera views with the shared episode controls, and switch between joint/state and action sample tables. Camera playback uses the source's episode offsets and stops on the selected episode's last frame. Switching views pauses playback.
+
+This operation is separate from metadata-only inspection. Public Hugging Face LeRobot v2/v3 datasets with supported file layouts are supported; local datasets and embedded image columns still expose metadata only. Video URLs point at the inspected commit and stream directly from Hugging Face to the browser. A browser unable to decode the source codec shows a video error and retry control.
+
+The API exposes `GET /api/v1/jobs/{job_id}/episodes?offset=0&limit=6` and `GET /api/v1/jobs/{job_id}/episodes/{episode_index}` after a successful inspection. Preview downloads and Parquet parsing are bounded; large or unsupported sources return a readable limitation. At most five actual sample rows and eight camera references are returned per episode. Numeric values are source samples, not validated controller semantics or model-performance evidence.
 
 ## Workspace and code boundaries
 

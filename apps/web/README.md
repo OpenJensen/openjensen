@@ -40,3 +40,9 @@ pnpm test:web
 ```
 
 Browser tests start an isolated Python API on port 8765 with a disposable workspace; they never reuse the running development application's database. They compare actual shell styles and every theme token between routes in light/dark mode and desktop/mobile layouts, verify theme persistence, exercise keyboard navigation, filters, schemas, copy behavior and error recovery, and inject a new operation to check automatic documentation updates. API tests check export routing, schema parity and access boundaries. These checks run on every push and pull request in the application CI workflow; failure traces and screenshots are uploaded for diagnosis.
+
+## Visual dataset explorer
+
+Sources provides real, attributed stills for two pinned starters. Inspection opens a full-width dataset overview and an explicit visual-preview action. The explorer uses generated episode API types, retains selected-episode state across workspace views, and pauses hidden media. Videos use source camera dimensions and episode-relative shared controls; v3 endpoints are treated as exclusive to avoid showing the following episode. Native source codec support is required in the browser.
+
+The first-frame table shows a bounded sample of actual selected-episode state/action values, with source channel names and display rounding. The original metadata-only warnings are retained under inspection provenance and distinguished from the additional preview operation.
