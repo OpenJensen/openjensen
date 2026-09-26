@@ -1,0 +1,17 @@
+[project]
+name = "firebird-benchmark-gpu"
+version = "0.1.0"
+description = "Isolated full-policy SmolVLA GPU benchmark harness"
+requires-python = ">=3.11,<3.13"
+dependencies = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["scripts"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]

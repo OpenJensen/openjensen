@@ -94,7 +94,9 @@ def test_invalid_and_disabled_requests(tmp_path):
             client.get("/api/v1/projects", headers={"Host": "attacker.invalid"}).status_code == 400
         )
         capabilities = client.get("/api/v1/capabilities").json()
-        assert [c["stage"] for c in capabilities if c["status"] == "available"] == ["Dataset"]
+        assert not any(c["status"] == "available" for c in capabilities)
+        metadata = next(c for c in capabilities if c["operation"] == "dataset.inspect")
+        assert metadata["status"] == "untested" and metadata["support"] == []
 
 
 def test_failed_local_job_does_not_publish_result(tmp_path, local_dataset):

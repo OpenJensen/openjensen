@@ -2,6 +2,7 @@
 
 import json
 import os
+from pathlib import Path
 from typing import Annotated
 
 import httpx
@@ -11,6 +12,8 @@ import uvicorn
 app = typer.Typer(no_args_is_help=True, help="Local VLA projects and robotics dataset intake.")
 projects = typer.Typer(no_args_is_help=True)
 jobs = typer.Typer(no_args_is_help=True)
+policy = typer.Typer(no_args_is_help=True)
+app.add_typer(policy, name="policy")
 app.add_typer(projects, name="projects")
 app.add_typer(jobs, name="jobs")
 
@@ -83,6 +86,28 @@ def show_job(job_id: str) -> None:
 @jobs.command("cancel")
 def cancel_job(job_id: str) -> None:
     call("POST", f"/jobs/{job_id}/cancel")
+
+
+@policy.command("options")
+def policy_options() -> None:
+    """Show configured execution targets, policy sources and fine-tuning methods."""
+    call("GET", "/policy-options")
+
+
+@policy.command("submit")
+def submit_policy(project_id: str, recipe: Path) -> None:
+    """Submit a policy operation/workflow through the shared application API."""
+    call("POST", f"/projects/{project_id}/policy-jobs", json.loads(recipe.read_text()))
+
+
+@policy.command("artifacts")
+def policy_artifacts(project_id: str) -> None:
+    call("GET", f"/projects/{project_id}/artifacts")
+
+
+@jobs.command("events")
+def job_events(job_id: str) -> None:
+    call("GET", f"/jobs/{job_id}/events")
 
 
 if __name__ == "__main__":

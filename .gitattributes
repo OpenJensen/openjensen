@@ -1,0 +1,2 @@
+# This fixture's manifest records the exact metadata bytes on every platform.
+/tests/fixtures/lerobot_v3_preview/meta/info.json text eol=lf
