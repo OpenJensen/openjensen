@@ -350,7 +350,23 @@ def run(args, result):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--root", type=Path, default=Path.cwd())
-    p.add_argument("--backend", required=True)
+    p.add_argument(
+        "--backend",
+        required=True,
+        choices=[
+            "native-bf16",
+            "native-fp16",
+            "native-f32",
+            "native-int8",
+            "native-nf4",
+            "cpp-bf16",
+            "cpp-Q8_0",
+            "cpp-Q4_0",
+            "cpp-Q8_0-vision",
+            "vllm-bf16",
+            "trtllm-fp16",
+        ],
+    )
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--fixtures", type=Path, required=True)
     p.add_argument("--samples", type=int, default=3)
