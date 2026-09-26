@@ -36,6 +36,15 @@ private connection configuration, or credentials belong in this directory.
 
 ## Prepare native execution
 
+On a minimal Ubuntu image, install the compiler/build tools and EGL libraries
+before creating the Python environments. The TensorRT-LLM environment also needs
+OpenMPI:
+
+```sh
+sudo apt-get update
+sudo apt-get install -y build-essential libegl1 libgl1 libgl1-mesa-dev libosmesa6-dev libopenmpi-dev
+```
+
 ```sh
 uv venv --python 3.11 .venv
 uv pip install --python .venv/bin/python cmake==3.31.6
@@ -117,7 +126,16 @@ also accepts `--backend vllm-bf16` for shared fixtures and paired quality.
 
 TensorRT-LLM remains the requested target. Its experimental probe is
 `probe_trtllm_smolvla.py`; install `requirements-trtllm.txt` separately, plus system
-OpenMPI. When using portable Python, expose its `LIBDIR` through `LD_LIBRARY_PATH`.
+OpenMPI. TensorRT-LLM 0.21 pins `datasets==3.1.0`, while LeRobot 0.4.4 requires
+`datasets>=4`; its `numpy<2` constraint also conflicts with LeRobot's `rerun-sdk`.
+The tested custom inference adapter uses `datasets==4.8.5` and `numpy==2.5.3` and
+does not exercise TensorRT-LLM's dataset pipeline. Apply the explicit overrides with
+`uv pip install --python .venv-trtllm/bin/python --index-strategy unsafe-best-match
+--override requirements-trtllm-overrides.txt -r requirements-trtllm.txt` after
+installing CMake 3.31.6 and putting that environment's `bin` on `PATH`.
+This overrides an upstream declared constraint; full-action admission and quality
+checks are required for the custom adapter, and do not validate unrelated engine
+features. When using portable Python, expose its `LIBDIR` through `LD_LIBRARY_PATH`.
 The validated FP16 adapter uses TensorRT-LLM's PyTorch executor, its context-logit-capable
 sampler (`enable_trtllm_sampler=True`), and a custom context-output
 buffer for continuous actions. Its first 350 entries are an action payload,

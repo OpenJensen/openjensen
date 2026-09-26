@@ -1,0 +1,8 @@
+# TensorRT-LLM 0.21 pins datasets==3.1.0; LeRobot 0.4.4 needs datasets>=4.
+# This custom inference adapter does not use TensorRT-LLM's dataset pipeline.
+# Matches the recovered, full-action-validated environment. Apply with uv's
+# --override option, then rerun admission and quality checks for this adapter.
+datasets==4.8.5
+# TensorRT-LLM also declares numpy<2, while LeRobot's rerun-sdk needs numpy>=2.
+# Use the version from the validated TensorRT-LLM adapter environment.
+numpy==2.5.3
