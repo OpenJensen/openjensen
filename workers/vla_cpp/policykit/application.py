@@ -13,9 +13,10 @@ import time
 from importlib.util import find_spec
 from pathlib import Path
 
+from .acceptance import artifact_contract, memory_coverage, sanitize_measurement, satisfies_limits
 from .cuda_bench import measure, percentile
-from .cuda_common import hardware_fingerprint
-from .worker import atomic_json, code_hash, describe_runtime, sha256
+from .provenance import runtime_identity
+from .worker import atomic_json, describe_runtime, sha256
 from .worker import run as quantize_job
 
 
@@ -54,35 +55,11 @@ def publish(directory, metadata, label, kind="gguf"):
 
 def copied(source, destination):
     source = Path(source)
-    verify(source)
+    original = verify(source)
     shutil.copytree(source, destination)
-    (destination / "manifest.json").unlink()
+    if verify(destination) != original:
+        raise ValueError("Artifact changed during materialization")
     return destination
-
-
-def runtime_identity(runtime):
-    build = Path(runtime["build"])
-    binaries = {name: sha256(build / name) for name in ["vla-bench", "tests/vla_predict_check"]}
-    if (build / "vla-server").is_file():
-        binaries["vla-server"] = sha256(build / "vla-server")
-    identity = {
-        "binaries": binaries,
-        "device": runtime["device"],
-        "hardware": hardware_fingerprint(),
-        "worker_sha256": code_hash(),
-    }
-    if runtime["device"] == "cuda":
-        identity["gpu"] = subprocess.check_output(
-            [
-                "nvidia-smi",
-                "-i",
-                "0",
-                "--query-gpu=uuid,name,driver_version",
-                "--format=csv,noheader",
-            ],
-            text=True,
-        ).strip()
-    return identity
 
 
 def import_policy(job):
@@ -219,7 +196,7 @@ def quantize_policy(job):
 
 
 def cpu_measure(command, log, runtime):
-    peak = 0
+    peak = samples = 0
     start = time.monotonic()
     with log.open("w") as stream:
         process = subprocess.Popen(
@@ -245,6 +222,8 @@ def cpu_measure(command, log, runtime):
                         )
                     except (FileNotFoundError, ProcessLookupError):
                         pass
+                if rss > 0:
+                    samples += 1
                 peak = max(peak, rss)
                 if time.monotonic() - start > 1800:
                     raise TimeoutError("Native prediction timed out")
@@ -257,6 +236,7 @@ def cpu_measure(command, log, runtime):
                 process.wait()
     return {
         "sampled_peak_rss_mib": peak / 1024 if peak else None,
+        "rss_samples": samples,
         "memory_scope": (
             "Process-tree RSS sum sampled at 50ms on Linux (shared pages counted per process); "
             "unavailable on other hosts"
@@ -273,6 +253,7 @@ def engine(job):
     manifest = verify(source)
     runtime = job["runtime"]
     identity = runtime_identity(runtime)
+    contract = artifact_contract(source, manifest)
     model = source / "model.gguf"
     build = Path(runtime["build"])
     output = Path(job["output_dir"])
@@ -285,6 +266,7 @@ def engine(job):
             if runtime["device"] == "cuda"
             else cpu_measure(argv, log, runtime)
         )
+        memory = sanitize_measurement(memory)
         text = log.read_text()
         if runtime["device"] == "cuda" and (
             "backend = CUDA" not in text or "falling back to CPU" in text
@@ -298,14 +280,14 @@ def engine(job):
         [str(build / "tests/vla_predict_check"), str(model)], "reload.log"
     )
     match = re.search(r"action_len=(\d+)\n", text)
-    if not match or int(match[1]) != 1600:
-        raise ValueError("Native probe must emit all 50 x 32 action values")
-    values = [float(x) for x in text[match.end() :].splitlines()[:1600]]
-    if len(values) != 1600 or not all(math.isfinite(x) for x in values):
+    action_length = contract["action_length"]
+    if not match or int(match[1]) != action_length:
+        raise ValueError("Native probe action length disagrees with validated GGUF metadata")
+    values = [float(x) for x in text[match.end() :].splitlines()[:action_length]]
+    if len(values) != action_length or not all(math.isfinite(x) for x in values):
         raise ValueError("Native probe produced invalid actions")
     packed = re.search(r"packed resident matrices: lm=(\d+) vision=(\d+)", text)
-    precision = manifest["metadata"].get("precision")
-    expected = (0, 0) if precision == "float" else (224, 72 if precision.get("vision") else 0)
+    expected = tuple(contract["packed_matrices"][name] for name in ("language", "vision"))
     if packed is None or tuple(map(int, packed.groups())) != expected:
         raise ValueError("Native resident packing does not match the artifact recipe")
     atomic_json(output / "actions.json", {"values": values})
@@ -332,20 +314,26 @@ def engine(job):
         math.isfinite(x) and x > 0 for x in samples
     ):
         raise ValueError("Native benchmark requires the per-call timing instrumentation")
-    key = "sampled_peak_device_used_mib" if runtime["device"] == "cuda" else "sampled_peak_rss_mib"
-    memory_values = [x[key] for x in (probe_memory, bench_memory) if x.get(key) is not None]
+    measurements = {"reload": probe_memory, "timing": bench_memory}
     if runtime_identity(runtime) != identity:
         raise ValueError("Runtime identity changed during measurement")
+    if verify(source) != manifest:
+        raise ValueError("Artifact changed during measurement")
     return {
         "scope": "engine_diagnostics",
         "model_sha256": sha256(model),
+        "artifact_path": str(source.resolve()),
+        "artifact_manifest_sha256": sha256(source / "manifest.json"),
+        "artifact_contract": contract,
+        "worker_process_id": os.getpid(),
         "runtime": identity,
         "fresh_reload_verified": True,
         "finite_action_values": len(values),
         "p50_ms": percentile(samples, 50),
         "p95_ms": percentile(samples, 95),
         "samples_ms": samples,
-        "peak_device_mib": max(memory_values) if memory_values else None,
+        **memory_coverage(measurements, runtime["device"]),
+        "measurements": measurements,
         "memory_scope": bench_memory["memory_scope"],
         "measurement": bench_memory,
         "success_rate": None,
@@ -415,15 +403,8 @@ def evaluate_policy(job):
                 if runtime["device"] == "cuda"
                 else cpu_measure(command, log, runtime)
             )
-            memory_key = (
-                "sampled_peak_device_used_mib"
-                if runtime["device"] == "cuda"
-                else "sampled_peak_rss_mib"
-            )
-            if resource.get(memory_key) is not None:
-                report["peak_device_mib"] = max(
-                    report.get("peak_device_mib") or 0, resource[memory_key]
-                )
+            resource = sanitize_measurement(resource)
+            report.setdefault("measurements", {})[f"rollout-{state}"] = resource
             report.setdefault("rollout_measurements", []).append(resource)
             path = (
                 output
@@ -435,14 +416,21 @@ def evaluate_policy(job):
                 / "result.json"
             )
             episodes.append(json.loads(path.read_text()))
-        complete = [x for x in episodes if x["status"] == "episode_complete"]
+        report.update(memory_coverage(report.get("measurements", {}), runtime["device"]))
+        if runtime_identity(runtime) != report["runtime"]:
+            raise ValueError("Runtime identity changed during simulator evaluation")
+        complete = [
+            x
+            for x in episodes
+            if x["status"] == "episode_complete" and type(x.get("task_success")) is bool
+        ]
         report.update(
             scope="libero_development" if not job.get("final") else "libero_final",
             episodes=episodes,
             complete_episodes=len(complete),
             requested_episodes=len(states),
             success_rate=sum(x["task_success"] for x in complete) / len(episodes)
-            if len(complete) == len(episodes)
+            if episodes and len(complete) == len(episodes)
             else None,
             protocol=evaluation,
             training_overlap="not audited",
@@ -450,20 +438,80 @@ def evaluate_policy(job):
     return {"report": report}
 
 
-def run_policy(job):
-    report = evaluate_policy(job)["report"]
-    limits = job["parameters"].get("limits")
-    if (
-        job.get("final")
-        and limits
-        and (
-            report.get("success_rate") is None
-            or report["success_rate"] < limits["min_success_rate"]
-            or report["p95_ms"] > limits["max_p95_ms"]
-            or report.get("peak_device_mib") is None
-            or report["peak_device_mib"] > limits["max_peak_device_mib"]
+def evaluate_package(job, package):
+    """Run the materialized package in an independent, offline worker process."""
+    output = Path(job["output_dir"]) / "package-verification"
+    output.mkdir()
+    request, result = output / "request.json", output / "result.json"
+    child = {
+        **job,
+        "operation": "policy.evaluate",
+        "artifact": {
+            **job["artifact"],
+            "path": str(package.resolve()),
+            "format": "deployment_package",
+        },
+        "output_dir": str(output.resolve()),
+        "source": None,
+        "prior_reports": [],
+    }
+    atomic_json(request, child)
+    manifest_sha = sha256(package / "manifest.json")
+    model_sha = sha256(package / "model.gguf")
+    # The fallback path supports direct local invocation without making the
+    # current working directory or the original policy directory import roots.
+    bootstrap = (
+        "import sys; sys.path.append("
+        + repr(str(Path(__file__).resolve().parents[1]))
+        + "); from policykit.application import main; raise SystemExit(main())"
+    )
+    with (output / "worker.log").open("w") as log:
+        completed = subprocess.run(
+            [sys.executable, "-c", bootstrap, str(request.resolve()), str(result.resolve())],
+            cwd=output,
+            env={**os.environ, "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"},
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            timeout=43200,
         )
+    if completed.returncode or not result.is_file() or result.stat().st_size > 4 * 1024 * 1024:
+        raise ValueError("Fresh package worker failed; inspect package-verification/worker.log")
+    response = json.loads(result.read_text())
+    report = response.get("report", {})
+    if (
+        response.get("schema_version") != 1
+        or response.get("job_id") != job["job_id"]
+        or response.get("error")
+        or report.get("worker_process_id") in {None, os.getpid()}
+        or report.get("artifact_path") != str(package.resolve())
+        or report.get("artifact_manifest_sha256") != manifest_sha
+        or report.get("model_sha256") != model_sha
+        or report.get("fresh_reload_verified") is not True
     ):
+        raise ValueError("Fresh package worker did not verify the exact materialized package")
+    return report
+
+
+def run_policy(job):
+    source = Path(job["artifact"]["path"])
+    manifest = verify(source)
+    reserved = {
+        "reload-verification.json",
+        "runtime-lock.json",
+        "tested-payload.json",
+        "workflow-evidence.json",
+        "lineage.json",
+    }
+    if reserved.intersection(manifest["files"]):
+        raise ValueError("Artifact contains reserved export evidence names")
+    output = copied(source, Path(job["output_dir"]) / "package-pending")
+    tested_manifest_sha = sha256(output / "manifest.json")
+    report = evaluate_package(job, output)
+    # The evaluator may add reports outside the package, never mutate its input.
+    if verify(output) != manifest or sha256(output / "manifest.json") != tested_manifest_sha:
+        raise ValueError("Materialized package changed during fresh-process evaluation")
+    limits = job["parameters"].get("limits")
+    if job.get("final") and limits and not satisfies_limits(report, limits):
         raise ValueError("Final package rerun failed acceptance constraints")
     if job.get("final") and limits:
         reference = next(
@@ -471,15 +519,25 @@ def run_policy(job):
         )
         if (
             not reference
+            or not isinstance(reference.get("success_rate"), (int, float))
+            or isinstance(reference.get("success_rate"), bool)
+            or not math.isfinite(reference["success_rate"])
+            or not 0 <= reference["success_rate"] <= 1
             or report["runtime"] != reference["runtime"]
             or report["complete_episodes"] != len(job["parameters"]["evaluation"]["final_states"])
             or report["success_rate"] < reference["success_rate"] - limits["max_success_drop"]
         ):
             raise ValueError("Final package rerun no longer matches the paired reference")
-    source = Path(job["artifact"]["path"])
-    manifest = verify(source)
-    output = copied(source, Path(job["output_dir"]) / "package")
     atomic_json(output / "reload-verification.json", report)
+    atomic_json(output / "runtime-lock.json", report["runtime"])
+    atomic_json(
+        output / "tested-payload.json",
+        {
+            "manifest_sha256": tested_manifest_sha,
+            "files": manifest["files"],
+            "scope": "Exact pre-export payload evaluated in the fresh package worker",
+        },
+    )
     atomic_json(
         output / "workflow-evidence.json",
         {
@@ -496,14 +554,15 @@ def run_policy(job):
         "fresh_reload_verified": True,
         "runtime": report["runtime"],
         "deployment_verified": bool(job.get("final") and limits),
-        "required_runtime": "Pinned vla.cpp binaries recorded in reload-verification.json",
+        "required_runtime": "External prepared Linux runtime; see runtime-lock.json",
     }
-    return {
-        "artifact": publish(
-            output, metadata, "Reload-verified SmolVLA package", "deployment_package"
-        ),
-        "report": report,
-    }
+    artifact = publish(output, metadata, "Reload-verified SmolVLA package", "deployment_package")
+    final = Path(job["output_dir"]) / "package"
+    if final.exists():
+        raise ValueError("Preserve the existing package before exporting again")
+    output.rename(final)
+    artifact["path"] = str(final)
+    return {"artifact": artifact, "report": report}
 
 
 def main():

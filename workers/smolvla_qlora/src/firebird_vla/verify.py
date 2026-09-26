@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from .checkpoint import load_for_inference, write_json
+from .checkpoint import load_for_inference, resolve_checkpoint, write_json
 from .config import TrainConfig
 
 
@@ -12,6 +12,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("checkpoint", type=Path)
     args = parser.parse_args()
+    args.checkpoint = resolve_checkpoint(args.checkpoint)
     import torch
     from safetensors.torch import load_file
     from torch.utils.data import default_collate

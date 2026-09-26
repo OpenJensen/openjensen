@@ -9,7 +9,7 @@ export type PolicyOptions = {
   sources: { id: string; label: string; task: string }[];
   training_methods: { id: string; label: string; description: string }[];
   default_training_method: string;
-  quantization_defaults: { cuda: { language: 'Q4_0'; vision: null }; cpu: { language: 'Q8_0'; vision: null }; note: string };
+  quantization_defaults: { cuda: { language: 'Q8_0'; vision: null }; cpu: { language: 'Q8_0'; vision: null }; note: string };
 };
 
 export type Project = components['schemas']['Project'];

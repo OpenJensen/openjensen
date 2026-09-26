@@ -1305,7 +1305,7 @@
               "$ref": "#/components/schemas/Precision"
             },
             "maxItems": 4,
-            "minItems": 2,
+            "minItems": 1,
             "title": "Candidates",
             "type": "array"
           },
@@ -1424,7 +1424,7 @@
         "additionalProperties": false,
         "properties": {
           "language": {
-            "default": "Q4_0",
+            "default": "Q8_0",
             "enum": [
               "Q4_0",
               "Q8_0"

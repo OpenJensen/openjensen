@@ -17,6 +17,7 @@ export default defineConfig({
   },
   projects: [
     { name: 'openapi', testMatch: 'openapi.spec.ts' },
+    { name: 'workflow', testMatch: 'workflow.spec.ts', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1000 } } },
     { name: 'desktop', testMatch: 'api-reference.spec.ts', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1000 } } },
     { name: 'mobile', testMatch: 'api-reference.spec.ts', use: { ...devices['Pixel 7'], defaultBrowserType: 'chromium' } },
   ],

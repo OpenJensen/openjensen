@@ -7,7 +7,13 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-from .checkpoint import sha256, verify_bundle, write_json
+from .checkpoint import (
+    resolve_checkpoint,
+    sha256,
+    verify_bundle,
+    verify_training_checkpoint,
+    write_json,
+)
 from .config import TrainConfig
 
 METHODS = {"lora": "LoRA", "qlora": "QLoRA (NF4)"}
@@ -88,7 +94,7 @@ def main():
                 verify_bundle(root)
                 resume = root / "checkpoint"
             if resume:
-                verify_bundle(resume)
+                resume = resolve_checkpoint(resume)
                 previous = TrainConfig.load(resume / "recipe.json")
                 if (previous.method, previous.dataset_id, previous.dataset_revision) != (
                     method,
@@ -103,8 +109,9 @@ def main():
             if resume:
                 command += ["--resume", str(resume)]
             subprocess.run(command, check=True)
-            latest = json.loads((output / "training/latest.json").read_text())
-            checkpoint = output / "training" / latest["checkpoint"]
+            checkpoint = resolve_checkpoint(output / "training")
+            if verify_training_checkpoint(checkpoint)["step"] != cfg.steps:
+                raise ValueError("Training returned without a complete final checkpoint")
             subprocess.run(
                 [sys.executable, "-m", "firebird_vla.verify", str(checkpoint)], check=True
             )

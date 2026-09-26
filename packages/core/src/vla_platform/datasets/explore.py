@@ -11,15 +11,12 @@ import math
 import re
 from collections import OrderedDict
 from dataclasses import dataclass
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from string import Formatter
 from typing import Any
 from urllib.parse import quote, urljoin
 
 import httpx
-import pyarrow as pa
-import pyarrow.compute as pc
-import pyarrow.parquet as pq
 
 from vla_platform.contracts import (
     CameraPreview,
@@ -30,6 +27,7 @@ from vla_platform.contracts import (
     FrameSample,
     Job,
 )
+from vla_platform.datasets.hub_parquet import ReaderError, read_parquet
 
 MAX_JSON_BYTES = 2 * 1024 * 1024
 MAX_INDEX_BYTES = 8 * 1024 * 1024
@@ -37,14 +35,6 @@ MAX_PARQUET_BYTES = 32 * 1024 * 1024
 MAX_REQUEST_BYTES = 48 * 1024 * 1024
 MAX_INDEX_FILES = 16
 MAX_INDEX_ROWS = 100_000
-MAX_SAMPLE_ROWS = 1_000_000
-MAX_UNCOMPRESSED_BYTES = 128 * 1024 * 1024
-MAX_PROJECTED_VALUES = 4_000_000
-MAX_INDEX_MATERIALIZED_BYTES = 8 * 1024 * 1024
-MAX_TASKS_PER_EPISODE = 20
-MAX_TASK_TEXT_BYTES = 4096
-MAX_VECTOR_LENGTH = 1024
-SAMPLE_COUNT = 5
 
 
 class ExplorationError(ValueError):
@@ -204,126 +194,6 @@ def number(value: Any, field: str) -> float:
     return float(value)
 
 
-def parquet_file(raw: bytes) -> pq.ParquetFile:
-    options = dict(
-        thrift_string_size_limit=2 * 1024 * 1024,
-        thrift_container_size_limit=100_000,
-    )
-    file = pq.ParquetFile(pa.BufferReader(raw), **options)
-    if sum(file.metadata.row_group(i).total_byte_size for i in range(file.num_row_groups)) > (
-        MAX_UNCOMPRESSED_BYTES
-    ):
-        raise ExplorationError("Parquet data exceeds the decoded preview size limit")
-    # Preserve encoded text dictionaries: repeated large strings must not be expanded
-    # before their logical materialization cost is checked below.
-    dictionaries = [column.path for column in file.schema if column.physical_type == "BYTE_ARRAY"]
-    return pq.ParquetFile(pa.BufferReader(raw), read_dictionary=dictionaries, **options)
-
-
-def check_projected_values(file: pq.ParquetFile, columns: list[str]) -> None:
-    # Encoded row-group byte sizes do not bound RLE/dictionary expansion. Leaf-value
-    # counts bound Arrow's allocation even when one list row contains huge repeated data.
-    fields = file.schema_arrow
-    leaves = []
-    for index, column in enumerate(file.schema):
-        for name in columns:
-            if column.path == name or (
-                column.path.startswith(name + ".") and is_list(fields.field(name).type)
-            ):
-                leaves.append(index)
-                break
-    count = sum(
-        file.metadata.row_group(group).column(index).num_values
-        for group in range(file.num_row_groups)
-        for index in leaves
-    )
-    if count > MAX_PROJECTED_VALUES:
-        raise ExplorationError("Parquet columns exceed the decoded preview value limit")
-
-
-def is_list(kind: pa.DataType) -> bool:
-    return (
-        pa.types.is_list(kind) or pa.types.is_large_list(kind) or pa.types.is_fixed_size_list(kind)
-    )
-
-
-def numeric(kind: pa.DataType) -> bool:
-    return pa.types.is_integer(kind) or pa.types.is_floating(kind)
-
-
-def list_values(array: pa.Array, limit: int, label: str) -> pa.Array:
-    if not is_list(array.type):
-        raise ExplorationError(f"Dataset {label} must be a list")
-    longest = (
-        array.type.list_size
-        if pa.types.is_fixed_size_list(array.type)
-        else pc.max(pc.list_value_length(array)).as_py() or 0
-    )
-    if longest > limit:
-        raise ExplorationError(f"Dataset {label} exceeds the preview length limit")
-    return array.flatten()
-
-
-def task_materialization_bytes(array: pa.Array) -> int:
-    values = list_values(array, MAX_TASKS_PER_EPISODE, "task list")
-    strings = values.dictionary if pa.types.is_dictionary(values.type) else values
-    if not (pa.types.is_string(strings.type) or pa.types.is_large_string(strings.type)):
-        raise ExplorationError("Dataset task descriptions must be text")
-    lengths = pc.binary_length(strings)
-    if (pc.max(lengths).as_py() or 0) > MAX_TASK_TEXT_BYTES:
-        raise ExplorationError("Dataset task text exceeds the preview length limit")
-    if pa.types.is_dictionary(values.type):
-        lengths = pc.take(lengths, values.indices)
-    # Count repetitions, not dictionary storage, and include conservative Python
-    # string/list overhead. This check runs before conversion to Python objects.
-    return (pc.sum(lengths).as_py() or 0) * 4 + len(values) * 80 + len(array) * 64
-
-
-def index_rows(raw: bytes) -> list[dict[str, Any]]:
-    file = parquet_file(raw)
-    if file.metadata.num_rows > MAX_INDEX_ROWS:
-        raise ExplorationError("Episode index exceeds the preview row limit")
-    columns = [
-        name
-        for name in file.schema_arrow.names
-        if name in {"episode_index", "length", "tasks", "data/chunk_index", "data/file_index"}
-        or (
-            name.startswith("videos/")
-            and name.rsplit("/", 1)[-1]
-            in {"chunk_index", "file_index", "from_timestamp", "to_timestamp"}
-        )
-    ]
-    for name in columns:
-        kind = file.schema_arrow.field(name).type
-        if name == "tasks":
-            if not is_list(kind):
-                raise ExplorationError("Episode tasks must be a list of text")
-            value_kind = kind.value_type
-            if pa.types.is_dictionary(value_kind):
-                value_kind = value_kind.value_type
-            if not (pa.types.is_string(value_kind) or pa.types.is_large_string(value_kind)):
-                raise ExplorationError("Episode tasks must be a list of text")
-        elif not numeric(kind):
-            raise ExplorationError("Episode index contains an invalid scalar column")
-    check_projected_values(file, columns)
-    result = []
-    materialized = 0
-    # Nested task dictionaries can differ between row groups. Arrow cannot
-    # coalesce those lists into one batch; decode each group separately while
-    # keeping one cumulative materialization budget for the entire index.
-    for group in range(file.num_row_groups):
-        for batch in file.iter_batches(
-            batch_size=32, row_groups=[group], columns=columns, use_threads=False
-        ):
-            materialized += batch.num_rows * (128 + len(columns) * 64)
-            if "tasks" in columns:
-                materialized += task_materialization_bytes(batch.column("tasks"))
-            if materialized > MAX_INDEX_MATERIALIZED_BYTES:
-                raise ExplorationError("Episode index exceeds the materialized preview size limit")
-            result.extend(batch.to_pylist())
-    return result
-
-
 def summary(row: dict[str, Any], fps: float) -> EpisodeSummary:
     index = integer(row.get("episode_index"), "episode index")
     length = integer(row.get("length"), "episode length")
@@ -346,63 +216,30 @@ def feature_names(features: dict[str, Any], key: str) -> list[str]:
     return names if isinstance(names, list) and all(isinstance(n, str) for n in names) else []
 
 
-def vector(value: Any) -> list[float] | None:
-    if value is None:
-        return None
-    if (
-        not isinstance(value, list)
-        or len(value) > MAX_VECTOR_LENGTH
-        or not all(
-            not isinstance(item, bool) and isinstance(item, (int, float)) and math.isfinite(item)
-            for item in value
-        )
-    ):
-        raise ExplorationError("Sample data contains an invalid action or state vector")
-    return [float(item) for item in value]
+async def index_rows(raw: bytes, *, python: str | Path | None = None) -> list[dict[str, Any]]:
+    try:
+        return await read_parquet(raw, "index", python=python)
+    except ReaderError as exc:
+        raise ExplorationError(str(exc)) from exc
 
 
-def frame_samples(raw: bytes, episode_index: int) -> list[FrameSample]:
-    file = parquet_file(raw)
-    if file.metadata.num_rows > MAX_SAMPLE_ROWS:
-        raise ExplorationError("Frame shard exceeds the preview row limit")
-    names = file.schema_arrow.names
-    required = {"episode_index", "frame_index", "timestamp"}
-    if not required.issubset(names):
-        raise ExplorationError("Frame data is missing episode, frame or timestamp columns")
-    columns = [name for name in names if name in required | {"action", "observation.state"}]
-    for name in columns:
-        kind = file.schema_arrow.field(name).type
-        if name in {"action", "observation.state"}:
-            if not pa.types.is_null(kind) and (not is_list(kind) or not numeric(kind.value_type)):
-                raise ExplorationError("Sample vectors must contain numeric values")
-        elif not numeric(kind):
-            raise ExplorationError("Frame data contains an invalid scalar column")
-    check_projected_values(file, columns)
-    result = []
-    for batch in file.iter_batches(batch_size=32, columns=columns, use_threads=False):
-        for name in {"action", "observation.state"}.intersection(columns):
-            if not pa.types.is_null(batch.column(name).type):
-                list_values(batch.column(name), MAX_VECTOR_LENGTH, "sample vector")
-        batch = batch.filter(pc.equal(batch.column("episode_index"), episode_index))
-        batch = batch.slice(0, SAMPLE_COUNT - len(result))
-        for row in batch.to_pylist():
-            result.append(
-                FrameSample(
-                    frame_index=integer(row["frame_index"], "frame index"),
-                    timestamp=number(row["timestamp"], "frame timestamp"),
-                    action=vector(row.get("action")),
-                    state=vector(row.get("observation.state")),
-                )
-            )
-            if len(result) == SAMPLE_COUNT:
-                return result
-    return result
+async def frame_samples(
+    raw: bytes, episode_index: int, *, python: str | Path | None = None
+) -> list[FrameSample]:
+    try:
+        rows = await read_parquet(raw, "frames", episode_index=episode_index, python=python)
+        return [FrameSample.model_validate(row) for row in rows]
+    except ReaderError as exc:
+        raise ExplorationError(str(exc)) from exc
 
 
 class DatasetExplorer:
-    def __init__(self, client: httpx.AsyncClient | None = None):
+    def __init__(
+        self, client: httpx.AsyncClient | None = None, *, reader_python: str | Path | None = None
+    ):
         self.client = client or httpx.AsyncClient(timeout=20, follow_redirects=False)
         self.reader = HubReader(self.client)
+        self.reader_python = reader_python
         self.slots = asyncio.Semaphore(2)
 
     async def close(self) -> None:
@@ -461,7 +298,7 @@ class DatasetExplorer:
         scanned = 0
         for path in files[:MAX_INDEX_FILES]:
             raw = await self.reader.read(hub_url(source, path), MAX_INDEX_BYTES, budget)
-            rows = await asyncio.to_thread(index_rows, raw)
+            rows = await index_rows(raw, python=self.reader_python)
             rows.sort(key=lambda row: integer(row.get("episode_index"), "episode index"))
             if selected is not None:
                 found = [row for row in rows if row["episode_index"] == selected]
@@ -518,10 +355,10 @@ class DatasetExplorer:
             try:
                 path = self.data_path(source, info, row)
                 raw = await self.reader.read(hub_url(source, path), MAX_PARQUET_BYTES, budget)
-                samples = await asyncio.to_thread(frame_samples, raw, episode_index)
+                samples = await frame_samples(raw, episode_index, python=self.reader_python)
                 if not samples:
                     warnings.append("The selected episode has no sample rows in its frame shard.")
-            except (ValueError, httpx.HTTPError, pa.ArrowException) as exc:
+            except (ValueError, httpx.HTTPError) as exc:
                 warnings.append(f"Sample rows unavailable: {self.friendly_error(exc)}")
             return EpisodePreview(
                 **item.model_dump(),

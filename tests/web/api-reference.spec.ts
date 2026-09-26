@@ -324,6 +324,8 @@ test('direct docs URLs and reloads render without hydration or runtime errors', 
 });
 
 test('shared workspace shell preserves training, defaults, and separate diagnostics', async ({ page }) => {
+  // This view-only check requires an empty workspace even when real journey tests run.
+  await page.route('**/api/v1/projects', route => route.fulfill({ json: [] }));
   await page.goto('/');
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Fine-tune a policy' })).toBeVisible();
@@ -383,4 +385,46 @@ test('dataset inspection stays separate from newer policy jobs in the same proje
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Fine-tune a policy' })).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+test('quantization submits Q4 only after an explicit experimental choice', async ({ page }) => {
+  const requests: { candidates: { language: string; vision: string | null }[] }[] = [];
+  const timestamp = '2026-09-26T12:00:00Z';
+  await page.route('**/api/v1/projects', route => route.fulfill({ json: [{ id: 'precision-review', name: 'Precision fixture', created_at: timestamp }] }));
+  await page.route('**/api/v1/projects/precision-review/jobs', route => route.fulfill({ json: [] }));
+  await page.route('**/api/v1/projects/precision-review/artifacts', route => route.fulfill({ json: [] }));
+  await page.route('**/api/v1/policy-options', route => route.fulfill({ json: {
+    runtimes: [{ id: 'fixture', label: 'CPU fixture', device: 'cpu', training: false, simulation: false }],
+    sources: [{ id: 'source', label: 'Synthetic policy', task: 'fixture' }],
+    training_methods: [], default_training_method: 'lora',
+    quantization_defaults: { cpu: { language: 'Q8_0', vision: null }, cuda: { language: 'Q8_0', vision: null }, note: 'Fixture only' },
+  } }));
+  await page.route('**/api/v1/projects/precision-review/policy-jobs', route => {
+    requests.push(route.request().postDataJSON());
+    return route.fulfill({ status: 422, json: { detail: 'Captured request; no worker started' } });
+  });
+  async function submitQuantization(count: number) {
+    await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+    await page.getByLabel('Input policy').selectOption('source:source');
+    await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
+    await expect.poll(() => requests.length).toBe(count);
+  }
+  await page.goto('/');
+  await submitQuantization(1);
+  expect(requests[0].candidates).toEqual([{ language: 'Q8_0', vision: null }]);
+  await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+  const compare = page.getByLabel('Compare Q8 and Q4 (experimental)');
+  await expect(compare).not.toBeChecked();
+  await compare.check();
+  await submitQuantization(2);
+  expect(requests[1].candidates).toEqual([{ language: 'Q8_0', vision: null }, { language: 'Q4_0', vision: null }]);
+  await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+  const restoredCompare = page.getByLabel('Compare Q8 and Q4 (experimental)');
+  // Settings remounts; wait until its saved preference has been restored.
+  await expect(restoredCompare).toBeChecked();
+  await restoredCompare.uncheck();
+  await expect(restoredCompare).not.toBeChecked();
+  await page.getByLabel('Quantization recipe').selectOption('Q4_0');
+  await submitQuantization(3);
+  expect(requests[2].candidates).toEqual([{ language: 'Q4_0', vision: null }]);
 });

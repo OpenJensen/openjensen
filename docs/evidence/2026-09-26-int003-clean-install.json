@@ -1,0 +1,249 @@
+{
+  "scope": "Clean wheel, local metadata and synthetic subprocess protocol only",
+  "application_revision": "74fae22903dc142f8ed9a179f04c7f63aff77f4d",
+  "wheel_sha256": "1eaeabd1731d91e94664b1d314188739630cd0bd8fc6d8d006b138a0e2b41157",
+  "locked_requirements_sha256": "e165df4f08ef78d5299f877b346901b61b285abbf91e24f1ed1221bc1952e798",
+  "python": "3.14.7",
+  "api_file": "/var/folders/5s/kc5h0p017r1dh6jq7y5jxl000000gn/T/firebird-clean-install-s9f5oa16/environment/lib/python3.14/site-packages/vla_platform/api.py",
+  "heavy_dependencies_absent": [
+    "torch",
+    "pyarrow"
+  ],
+  "job": {
+    "id": "f295be27-bda6-4696-bc2f-c03d511c031b",
+    "project_id": "d1cd79ab-b5d5-4fd6-8af8-e60f3d0fdc73",
+    "kind": "policy.workflow",
+    "status": "succeeded",
+    "request": {
+      "operation": "policy.workflow",
+      "runtime_id": "browser-success",
+      "source_id": "synthetic-source",
+      "artifact_id": null,
+      "dataset_job_id": null,
+      "resume_job_id": null,
+      "training_method": "lora",
+      "training": null,
+      "precision": null,
+      "candidates": [
+        {
+          "language": "Q8_0",
+          "vision": null
+        }
+      ],
+      "evaluation": {
+        "mode": "engine",
+        "warmups": 3,
+        "repetitions": 10,
+        "task_id": 0,
+        "initial_states": [
+          0,
+          1
+        ],
+        "final_states": [
+          2,
+          3
+        ],
+        "seed": 42,
+        "steps": 500
+      },
+      "limits": null,
+      "timeout_seconds": 7200
+    },
+    "created_at": "2026-09-26T17:21:22.262904+00:00",
+    "updated_at": "2026-09-26T17:21:22.377508+00:00",
+    "result": {
+      "artifacts": [
+        {
+          "id": "f295be27-bda6-4696-bc2f-c03d511c031b:import",
+          "project_id": "d1cd79ab-b5d5-4fd6-8af8-e60f3d0fdc73",
+          "job_id": "f295be27-bda6-4696-bc2f-c03d511c031b",
+          "label": "float",
+          "format": "gguf",
+          "path": "jobs/f295be27-bda6-4696-bc2f-c03d511c031b/import/bundle",
+          "manifest_sha256": "6a2fecf1dd2afdde506a26e491bdd3dac7f49371a599f6b18c8b6556d3ee9c1a",
+          "file_bytes": 100,
+          "parent_ids": [],
+          "metadata": {
+            "precision": "float",
+            "weight_bytes": 100,
+            "fixture_only": true
+          }
+        },
+        {
+          "id": "f295be27-bda6-4696-bc2f-c03d511c031b:quantize-0",
+          "project_id": "d1cd79ab-b5d5-4fd6-8af8-e60f3d0fdc73",
+          "job_id": "f295be27-bda6-4696-bc2f-c03d511c031b",
+          "label": "{'language': 'Q8_0', 'vision': None}",
+          "format": "gguf",
+          "path": "jobs/f295be27-bda6-4696-bc2f-c03d511c031b/quantize-0/bundle",
+          "manifest_sha256": "3125c7f8d71e97171c8db9ed35d1a9893931fa681ef2750cc520ec7ef280f3e1",
+          "file_bytes": 50,
+          "parent_ids": [
+            "f295be27-bda6-4696-bc2f-c03d511c031b:import"
+          ],
+          "metadata": {
+            "precision": {
+              "language": "Q8_0",
+              "vision": null
+            },
+            "weight_bytes": 50,
+            "fixture_only": true
+          }
+        }
+      ],
+      "reports": [
+        {
+          "scope": "test_fixture",
+          "stage": "import",
+          "operation": "policy.import",
+          "artifact_id": null,
+          "final": false
+        },
+        {
+          "scope": "test_fixture",
+          "p95_ms": 5,
+          "peak_device_mib": 10,
+          "memory_coverage": {
+            "complete": true
+          },
+          "runtime": {
+            "fixture": true
+          },
+          "complete_episodes": 2,
+          "success_rate": 1,
+          "stage": "baseline",
+          "operation": "policy.evaluate",
+          "artifact_id": "f295be27-bda6-4696-bc2f-c03d511c031b:import",
+          "final": false
+        },
+        {
+          "scope": "test_fixture",
+          "stage": "quantize-0",
+          "operation": "policy.quantize",
+          "artifact_id": "f295be27-bda6-4696-bc2f-c03d511c031b:import",
+          "final": false
+        },
+        {
+          "scope": "test_fixture",
+          "p95_ms": 5,
+          "peak_device_mib": 10,
+          "memory_coverage": {
+            "complete": true
+          },
+          "runtime": {
+            "fixture": true
+          },
+          "complete_episodes": 2,
+          "success_rate": 1,
+          "stage": "evaluate-0",
+          "operation": "policy.evaluate",
+          "artifact_id": "f295be27-bda6-4696-bc2f-c03d511c031b:quantize-0",
+          "final": false
+        }
+      ],
+      "selected_artifact_id": null,
+      "decision": "diagnostics_only"
+    },
+    "error": null,
+    "stage": "selection"
+  },
+  "intake": {
+    "id": "86afbd29-b7a7-47db-92a5-1150b1e0fd47",
+    "project_id": "d1cd79ab-b5d5-4fd6-8af8-e60f3d0fdc73",
+    "kind": "dataset.inspect",
+    "status": "succeeded",
+    "request": {
+      "source": "local",
+      "repo_id": null,
+      "revision": "main",
+      "path": "lerobot_v3_preview"
+    },
+    "created_at": "2026-09-26T17:21:21.978416+00:00",
+    "updated_at": "2026-09-26T17:21:22.121108+00:00",
+    "result": {
+      "schema_version": 1,
+      "source": "local",
+      "repo_id": null,
+      "revision": "metadata-sha256:9bb50633a153913b84fe801f028106dd180d60d82f956d2934138c0bf8e3ac24",
+      "format": "lerobot_v3",
+      "robot_type": "synthetic_fixture",
+      "total_episodes": 2,
+      "total_frames": 6,
+      "fps": 10.0,
+      "features": {
+        "index": {
+          "dtype": "int64",
+          "shape": [
+            1
+          ],
+          "names": null
+        },
+        "episode_index": {
+          "dtype": "int64",
+          "shape": [
+            1
+          ],
+          "names": null
+        },
+        "frame_index": {
+          "dtype": "int64",
+          "shape": [
+            1
+          ],
+          "names": null
+        },
+        "task_index": {
+          "dtype": "int64",
+          "shape": [
+            1
+          ],
+          "names": null
+        },
+        "timestamp": {
+          "dtype": "float32",
+          "shape": [
+            1
+          ],
+          "names": null
+        },
+        "action": {
+          "dtype": "float32",
+          "shape": [
+            2
+          ],
+          "names": [
+            "synthetic_a",
+            "synthetic_b"
+          ]
+        },
+        "observation.state": {
+          "dtype": "float32",
+          "shape": [
+            2
+          ],
+          "names": [
+            "synthetic_x",
+            "synthetic_y"
+          ]
+        }
+      },
+      "license": null,
+      "metadata_sha256": "9bb50633a153913b84fe801f028106dd180d60d82f956d2934138c0bf8e3ac24",
+      "inspected_at": "2026-09-26T17:21:22.097727+00:00",
+      "warnings": [
+        "Metadata-only inspection: episode counts and schemas are source-declared, not validated against frames.",
+        "Action units, reference frames, controller semantics and calibration are not verified.",
+        "Compatibility with a policy, robot or simulator is not established by this inspection.",
+        "No videos, frame data, task instructions or evaluation results were downloaded or inferred.",
+        "License metadata is missing; inspect the source terms before reuse.",
+        "Local revision hashes meta/info.json only; it is not a full dataset snapshot."
+      ],
+      "inspection_scope": "metadata_only"
+    },
+    "error": null,
+    "stage": null
+  },
+  "archive_sha256": "dd0e6effec9e3bb5703de5df33a06fdd609a84981caea01ad9f3f6ebf768bab1",
+  "restart_preserved_job_artifacts_events_and_archive": true,
+  "network": "Dependency/build setup may use network; application operations use local fixtures only"
+}

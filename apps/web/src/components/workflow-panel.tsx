@@ -28,6 +28,7 @@ type Preferences = {
   maxMemory: number;
   precision: "recommended" | "Q4_0" | "Q8_0";
   vision: boolean;
+  compareQ4: boolean;
 };
 const initial: Preferences = {
   mode: "engine",
@@ -45,6 +46,7 @@ const initial: Preferences = {
   maxMemory: 8192,
   precision: "recommended",
   vision: false,
+  compareQ4: false,
 };
 function states(text: string) {
   const values = text.split(",").map((x) => Number(x.trim()));
@@ -142,7 +144,7 @@ export function WorkflowPanel({
   const checkpoints = (artifacts.data ?? []).filter(
     (x) => x.format === "training_checkpoint",
   );
-  const defaultLanguage = runtime?.device === "cuda" ? "Q4_0" : "Q8_0";
+  const defaultLanguage = options.data?.quantization_defaults[runtime?.device ?? "cpu"].language ?? "Q8_0";
   const language =
     preferences.precision === "recommended"
       ? defaultLanguage
@@ -207,8 +209,12 @@ export function WorkflowPanel({
         if (stage === "Quantize") {
           body.candidates = [
             { language, vision: preferences.vision ? "Q8_0" : null },
-            { language: language === "Q4_0" ? "Q8_0" : "Q4_0", vision: null },
           ];
+          if (preferences.compareQ4)
+            body.candidates.push({
+              language: language === "Q4_0" ? "Q8_0" : "Q4_0",
+              vision: null,
+            });
           if (preferences.select && preferences.mode === "libero")
             body.limits = {
               min_success_rate: preferences.minSuccess / 100,
@@ -261,9 +267,9 @@ export function WorkflowPanel({
           <div className="workflow-fields">
             <h2>Compression defaults</h2>
             <p className="muted">
-              Recommended uses LM Q4 on CUDA and LM Q8 on CPU, preserving vision
-              precision. These are starting recipes from small pilots; each
-              policy still needs evaluation.
+              Start with LM Q8 on CPU and CUDA, preserving vision precision.
+              Q4 is experimental: a prior RTX 3070 pilot lost task success.
+              Every policy still needs evaluation on its execution target.
             </p>
             <label>
               Quantization recipe
@@ -277,11 +283,19 @@ export function WorkflowPanel({
                 }
               >
                 <option value="recommended">
-                  Recommended for the execution target
+                  Start with LM Q8; validate on your target
                 </option>
-                <option value="Q4_0">LM Q4</option>
+                <option value="Q4_0">LM Q4 (experimental)</option>
                 <option value="Q8_0">LM Q8</option>
               </select>
+            </label>
+            <label className="workflow-check">
+              <input
+                type="checkbox"
+                checked={preferences.compareQ4}
+                onChange={(e) => update("compareQ4", e.target.checked)}
+              />
+              Compare Q8 and Q4 (experimental)
             </label>
             <label className="workflow-check">
               <input
@@ -694,7 +708,7 @@ export function WorkflowPanel({
               {stage === "Quantize" && (
                 <p className="form-note">
                   {preferences.precision === "recommended"
-                    ? "Recommended"
+                    ? "Starting"
                     : "Custom"}{" "}
                   compression is selected. The workflow checks a floating
                   reference, creates candidates and evaluates their actual

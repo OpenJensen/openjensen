@@ -10,7 +10,7 @@ class StrictRecord(BaseModel):
 
 
 class Precision(StrictRecord):
-    language: Literal["Q4_0", "Q8_0"] = "Q4_0"
+    language: Literal["Q4_0", "Q8_0"] = "Q8_0"
     vision: Literal["Q8_0"] | None = None
 
 
@@ -60,8 +60,8 @@ class PolicyRequest(StrictRecord):
     training: dict[str, Any] | None = None
     precision: Precision | None = None
     candidates: list[Precision] = Field(
-        default_factory=lambda: [Precision(language="Q8_0"), Precision(language="Q4_0")],
-        min_length=2,
+        default_factory=lambda: [Precision(language="Q8_0")],
+        min_length=1,
         max_length=4,
     )
     evaluation: Evaluation = Field(default_factory=Evaluation)

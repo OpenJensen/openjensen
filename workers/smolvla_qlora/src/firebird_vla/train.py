@@ -8,7 +8,14 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
-from .checkpoint import save_checkpoint, verify_bundle, write_json
+from .checkpoint import (
+    resolve_checkpoint,
+    save_checkpoint,
+    validate_resume_recipe,
+    validate_resume_state,
+    verify_training_checkpoint,
+    write_json,
+)
 from .config import TrainConfig, batch_indices
 
 
@@ -67,13 +74,11 @@ def train(cfg, resume=None):
         torch.backends.cuda.matmul.allow_tf32 = False
         torch.backends.cudnn.benchmark = False
         torch.cuda.reset_peak_memory_stats()
-        resume_path = Path(resume) if resume else None
+        resume_path = resolve_checkpoint(resume) if resume else None
         manifest, saved_splits = None, None
         if resume_path:
-            manifest = verify_bundle(resume_path)
-            previous = TrainConfig.load(resume_path / "recipe.json")
-            if replace(previous, output_dir=cfg.output_dir) != cfg:
-                raise ValueError("Resume requires the original recipe except output_dir")
+            manifest = verify_training_checkpoint(resume_path)
+            validate_resume_recipe(resume_path, cfg)
             saved_splits = json.loads((resume_path / "splits.json").read_text())
         train_set, validation_set, stats, splits = load_data(cfg, saved_splits)
         if resume_path and stats != json.loads((resume_path / "stats.json").read_text()):
@@ -105,13 +110,10 @@ def train(cfg, resume=None):
         consumed = 0
         if resume_path:
             state = torch.load(resume_path / "training.pt", map_location="cpu", weights_only=True)
+            validate_resume_state(state, manifest, cfg)
             optimizer.load_state_dict(state["optimizer"])
             scheduler.load_state_dict(state["scheduler"])
             step, consumed = state["step"], state["consumed_batches"]
-            if consumed != step * cfg.gradient_accumulation_steps:
-                raise ValueError("Checkpoint batch cursor is inconsistent with optimizer step")
-            if step >= cfg.steps:
-                raise ValueError("Checkpoint already completed this recipe")
             torch.set_rng_state(state["torch_rng"])
             torch.cuda.set_rng_state(state["cuda_rng"], device=0)
             random.setstate(state["python_rng"])
@@ -192,7 +194,7 @@ def train(cfg, resume=None):
                 print(json.dumps(record), flush=True)
             if step % cfg.save_every == 0 or step == cfg.steps:
                 probe = predict(policy, probe_batch, postprocessor, cfg.seed)
-                saved = save_checkpoint(
+                save_checkpoint(
                     output / f"checkpoint-{step:06d}",
                     policy,
                     policy_config,
@@ -206,7 +208,6 @@ def train(cfg, resume=None):
                     consumed,
                     probe,
                 )
-                write_json(output / "latest.json", {"checkpoint": saved.name, "step": step})
         write_json(
             output / "status.json",
             {
@@ -235,7 +236,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="configs/smolvla_qlora.json")
     parser.add_argument("--output-dir")
-    parser.add_argument("--resume", help="Checkpoint to continue into a new output directory")
+    parser.add_argument(
+        "--resume", help="Checkpoint or interrupted run directory to continue into a new output"
+    )
     parser.add_argument(
         "--smoke", action="store_true", help="Two optimizer steps and one eval batch"
     )

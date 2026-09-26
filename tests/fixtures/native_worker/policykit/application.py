@@ -51,6 +51,7 @@ if op in {"policy.evaluate", "policy.run"}:
         "scope": "test_fixture",
         "p95_ms": 5,
         "peak_device_mib": 10,
+        "memory_coverage": {"complete": True},
         "runtime": {"fixture": True},
         "complete_episodes": len(states),
         "success_rate": 1,
@@ -61,8 +62,15 @@ if op in {"policy.evaluate", "policy.run"}:
         and out.name != "final-reference"
     ):
         result["report"]["success_rate"] = 0
+    if job["runtime"]["label"].startswith("invalid-report:"):
+        invalid = json.loads(job["runtime"]["label"].split(":", 1)[1])
+        if out.name == invalid["stage"]:
+            result["report"][invalid["field"]] = invalid["value"]
 elif op not in {"policy.import", "policy.quantize"}:
     result["error"] = "Unsupported fixture operation"
 print(json.dumps({"step": 1}), flush=True)
-destination.write_text(json.dumps(result))
+encoded = json.dumps(result)
+if job["runtime"]["label"] == "overflow-json:" + out.name:
+    encoded = encoded.replace('"p95_ms": 5', '"p95_ms": 1e309')
+destination.write_text(encoded)
 raise SystemExit(1 if result.get("error") else 0)

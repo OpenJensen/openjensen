@@ -1,0 +1,147 @@
+import { execFile } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
+import { promisify } from 'node:util';
+import { expect, test, type Page } from '@playwright/test';
+
+const execute = promisify(execFile);
+const python = process.platform === 'win32' ? '.venv/Scripts/python.exe' : '.venv/bin/python';
+
+async function cli(...args: string[]) {
+  const { stdout } = await execute(python, ['-m', 'vla_platform.cli', ...args], {
+    env: { ...process.env, FIREBIRD_API_URL: 'http://127.0.0.1:8765' },
+    timeout: 15_000,
+  });
+  return JSON.parse(stdout);
+}
+
+class WorkflowPage {
+  constructor(readonly page: Page) {}
+
+  async createProject(name: string) {
+    await this.page.goto('/');
+    await this.page.getByLabel('New project', { exact: true }).fill(name);
+    const created = this.page.waitForResponse(response => response.url().endsWith('/api/v1/projects') && response.request().method() === 'POST');
+    await this.page.getByRole('button', { name: 'Create project', exact: true }).click();
+    const response = await created;
+    expect(response.status()).toBe(201);
+    const project = await response.json();
+    await expect(this.page.getByLabel('Current project')).toHaveValue(project.id);
+    return project;
+  }
+
+  async quantize(runtime: string) {
+    await this.page.getByRole('button', { name: 'Quantize', exact: true }).click();
+    await this.page.getByLabel('Execution target').selectOption(runtime);
+    await this.page.getByLabel('Input policy').selectOption('source:synthetic-source');
+    const created = this.page.waitForResponse(response => response.url().endsWith('/policy-jobs') && response.request().method() === 'POST');
+    await this.page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
+    const response = await created;
+    expect(response.status()).toBe(202);
+    return response.json();
+  }
+}
+
+test('browser intake reads local metadata and preserves its limits after reload', async ({ page, request }, testInfo) => {
+  const workflow = new WorkflowPage(page);
+  const project = await workflow.createProject(`Synthetic intake ${testInfo.testId}`);
+  await page.getByRole('radio', { name: /Local directory/ }).check();
+  await page.getByLabel('Dataset directory', { exact: true }).fill('lerobot_v3_preview');
+  const created = page.waitForResponse(response => response.url().endsWith('/intakes') && response.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
+  const response = await created;
+  expect(response.status()).toBe(202);
+  const submitted = await response.json();
+  await expect(page.getByRole('heading', { name: 'Local dataset', exact: true })).toBeVisible();
+  const job = await (await request.get(`/api/v1/jobs/${submitted.id}`)).json();
+  expect(job.status).toBe('succeeded');
+  expect(job.result.inspection_scope).toBe('metadata_only');
+  expect(job.result.robot_type).toBe('synthetic_fixture');
+  expect(await cli('jobs', 'show', submitted.id)).toEqual(job);
+  await page.reload();
+  await expect(page.getByLabel('Current project')).toHaveValue(project.id);
+  await page.getByRole('button', { name: /^Inspection/ }).click();
+  await expect(page.getByRole('heading', { name: 'Local dataset', exact: true })).toBeVisible();
+  await page.getByText('Inspection notes & source provenance', { exact: true }).click();
+  await expect(page.getByText('Metadata-only inspection: episode counts and schemas are source-declared, not validated against frames.', { exact: true })).toBeVisible();
+  await expect(page.getByText(job.result.revision, { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Load visual preview', exact: true })).toHaveCount(0);
+});
+
+test('browser workflow persists real subprocess results and downloads the same artifacts seen by CLI', async ({ page, request }, testInfo) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  const workflow = new WorkflowPage(page);
+  const project = await workflow.createProject(`Synthetic workflow ${testInfo.testId}`);
+  const submitted = await workflow.quantize('browser-success');
+  await expect.poll(async () => (await (await request.get(`/api/v1/jobs/${submitted.id}`)).json()).status).toBe('succeeded');
+  await expect(page.getByText('Diagnostics complete. Task-quality approval is still required.', { exact: true })).toBeVisible();
+  const job = await (await request.get(`/api/v1/jobs/${submitted.id}`)).json();
+  expect(job.result.decision).toBe('diagnostics_only');
+  expect(job.result.selected_artifact_id).toBeNull();
+  expect(job.result.artifacts.length).toBeGreaterThan(1);
+  expect(job.result.artifacts.every((artifact: { metadata: { fixture_only: boolean } }) => artifact.metadata.fixture_only)).toBeTruthy();
+  expect(await cli('jobs', 'show', submitted.id)).toEqual(job);
+  expect(await cli('policy', 'artifacts', project.id)).toEqual(job.result.artifacts);
+  const events = await cli('jobs', 'events', submitted.id);
+  expect(events.some((event: { message: string }) => event.message === 'Optimizer step 1')).toBeTruthy();
+
+  await page.reload();
+  await expect(page.getByLabel('Current project')).toHaveValue(project.id);
+  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: /^Run/ })).toHaveValue(submitted.id);
+  await expect(page.getByText('Diagnostics complete. Task-quality approval is still required.', { exact: true })).toBeVisible();
+  const artifact = job.result.artifacts.find((item: { parent_ids: string[] }) => item.parent_ids.length > 0);
+  expect(artifact).toBeTruthy();
+  const path = `/api/v1/projects/${project.id}/artifacts/${encodeURIComponent(artifact.id)}/download`;
+  const downloadPromise = page.waitForEvent('download');
+  await page.locator(`a[href="${path}"]`).click();
+  const download = await downloadPromise;
+  const downloaded = testInfo.outputPath('synthetic-policy.tar');
+  await download.saveAs(downloaded);
+  const apiDownload = await request.get(path);
+  expect(await readFile(downloaded)).toEqual(await apiDownload.body());
+  const { stdout } = await execute(python, ['-c', `import hashlib,json,sys,tarfile
+with tarfile.open(sys.argv[1]) as archive:
+ manifest_bytes=archive.extractfile('policy/manifest.json').read()
+ manifest=json.loads(manifest_bytes)
+ assert manifest['metadata']['fixture_only'] is True
+ for name,sha in manifest['files'].items():
+  assert hashlib.sha256(archive.extractfile('policy/'+name).read()).hexdigest()==sha
+ print(hashlib.sha256(manifest_bytes).hexdigest())`, downloaded]);
+  expect(stdout.trim()).toBe(artifact.manifest_sha256);
+  expect(errors).toEqual([]);
+});
+
+test('cancelling a started worker remains cancelled after browser reload and in CLI', async ({ page, request }, testInfo) => {
+  const workflow = new WorkflowPage(page);
+  await workflow.createProject(`Synthetic cancellation ${testInfo.testId}`);
+  const submitted = await workflow.quantize('browser-slow');
+  // A recorded stdout event proves the registered worker process actually started.
+  await expect.poll(async () => {
+    const events = await (await request.get(`/api/v1/jobs/${submitted.id}/events`)).json();
+    return events.some((event: { message: string }) => event.message === 'Optimizer step 0');
+  }).toBeTruthy();
+  await page.getByRole('button', { name: 'Cancel run', exact: true }).click();
+  await expect.poll(async () => (await cli('jobs', 'show', submitted.id)).status).toBe('cancelled');
+  await page.reload();
+  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await expect(page.getByText('cancelled', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Cancel run', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Download', exact: true })).toHaveCount(0);
+  expect((await cli('jobs', 'show', submitted.id)).result).toBeNull();
+});
+
+test('a real worker failure is visible and does not prevent a subsequent successful run', async ({ page }, testInfo) => {
+  const workflow = new WorkflowPage(page);
+  await workflow.createProject(`Synthetic failure ${testInfo.testId}`);
+  const failed = await workflow.quantize('browser-failure');
+  await expect(page.getByRole('alert').filter({ hasText: 'Intentional synthetic browser worker failure' })).toBeVisible();
+  expect((await cli('jobs', 'show', failed.id)).status).toBe('failed');
+  await page.reload();
+  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Intentional synthetic browser worker failure' })).toBeVisible();
+  const retried = await workflow.quantize('browser-success');
+  await expect.poll(async () => (await cli('jobs', 'show', retried.id)).status).toBe('succeeded');
+  await expect(page.getByText('Diagnostics complete. Task-quality approval is still required.', { exact: true })).toBeVisible();
+  expect((await cli('jobs', 'show', failed.id)).status).toBe('failed');
+});
