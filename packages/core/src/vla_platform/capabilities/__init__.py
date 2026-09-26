@@ -6,11 +6,10 @@ def registry() -> list[Capability]:
         Capability(
             stage="Dataset",
             operation="dataset.inspect",
-            status="available",
-            support=[],  # Target coverage is unknown until CAP-001 supplies reviewed evidence.
+            status="untested",
             description=(
                 "Public HF and allowed local LeRobot metadata only; "
-                "no semantic or media validation."
+                "no semantic or media validation. Target evidence awaits CAP-001."
             ),
         ),
         *[

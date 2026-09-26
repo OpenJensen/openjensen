@@ -1,0 +1,19 @@
+{
+  "provenance": "Locally generated synthetic values; no external dataset",
+  "files": {
+    "data/chunk-000/file-000.parquet": {
+      "rows": 6,
+      "bytes": 3667,
+      "sha256": "6d217d5ff9d9ac1e079fbf9073a4d169a72e4407a110b0845c97cc760c60aee3"
+    },
+    "meta/episodes/chunk-000/file-000.parquet": {
+      "rows": 2,
+      "bytes": 3592,
+      "sha256": "6b94f9e94ad43f9d2b8bc56901ba5d1091e63772ffe9e8b4759a55facb8eca50"
+    },
+    "meta/info.json": {
+      "bytes": 1248,
+      "sha256": "9bb50633a153913b84fe801f028106dd180d60d82f956d2934138c0bf8e3ac24"
+    }
+  }
+}

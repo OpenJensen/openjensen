@@ -64,7 +64,76 @@
       },
       "Capability": {
         "additionalProperties": false,
-        "description": "Application availability plus separately scoped support evidence.\n\nExplicit empty support denotes unknown target coverage, not tested support.\nCallers must supply the field; CAP-001 must populate reviewed target records.",
+        "description": "Planned/untested records carry no support; outcome claims carry evidence.",
+        "oneOf": [
+          {
+            "properties": {
+              "status": {
+                "enum": [
+                  "planned",
+                  "untested"
+                ]
+              },
+              "support": {
+                "maxItems": 0,
+                "type": "array"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          {
+            "properties": {
+              "status": {
+                "const": "available"
+              },
+              "support": {
+                "contains": {
+                  "properties": {
+                    "evidence_state": {
+                      "const": "tested"
+                    }
+                  },
+                  "required": [
+                    "evidence_state"
+                  ]
+                },
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": [
+              "status",
+              "support"
+            ]
+          },
+          {
+            "properties": {
+              "status": {
+                "const": "unsupported"
+              },
+              "support": {
+                "items": {
+                  "properties": {
+                    "evidence_state": {
+                      "const": "unsupported"
+                    }
+                  },
+                  "required": [
+                    "evidence_state"
+                  ]
+                },
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": [
+              "status",
+              "support"
+            ]
+          }
+        ],
         "properties": {
           "description": {
             "minLength": 1,
@@ -104,8 +173,10 @@
           },
           "status": {
             "enum": [
+              "planned",
+              "untested",
               "available",
-              "planned"
+              "unsupported"
             ],
             "title": "Status",
             "type": "string"
@@ -122,8 +193,7 @@
           "stage",
           "operation",
           "status",
-          "description",
-          "support"
+          "description"
         ],
         "title": "Capability",
         "type": "object"
@@ -194,13 +264,12 @@
             "items": {
               "$ref": "#/components/schemas/CapabilityEvidence"
             },
+            "minItems": 1,
             "title": "Evidence",
             "type": "array"
           },
           "evidence_state": {
             "enum": [
-              "planned",
-              "untested",
               "tested",
               "unsupported"
             ],
@@ -221,7 +290,8 @@
           "backend",
           "os",
           "device",
-          "evidence_state"
+          "evidence_state",
+          "evidence"
         ],
         "title": "CapabilitySupport",
         "type": "object"
@@ -255,8 +325,11 @@
             "type": "string"
           },
           "inspection_scope": {
-            "const": "metadata_only",
             "default": "metadata_only",
+            "enum": [
+              "metadata_only",
+              "bounded_parquet_rows"
+            ],
             "title": "Inspection Scope",
             "type": "string"
           },
@@ -275,6 +348,16 @@
             "pattern": "^[a-f0-9]{64}$",
             "title": "Metadata Sha256",
             "type": "string"
+          },
+          "preview": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalDatasetPreview"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "repo_id": {
             "anyOf": [
@@ -716,6 +799,224 @@
           "updated_at"
         ],
         "title": "Job",
+        "type": "object"
+      },
+      "JsonValue": {},
+      "LocalDatasetPreview": {
+        "additionalProperties": false,
+        "properties": {
+          "columns": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 7,
+            "minItems": 1,
+            "title": "Columns",
+            "type": "array"
+          },
+          "declared_decoded_bytes": {
+            "minimum": 0.0,
+            "title": "Declared Decoded Bytes",
+            "type": "integer"
+          },
+          "file": {
+            "$ref": "#/components/schemas/LocalPreviewFile"
+          },
+          "format": {
+            "const": "lerobot_v3",
+            "default": "lerobot_v3",
+            "title": "Format",
+            "type": "string"
+          },
+          "inspection_scope": {
+            "const": "bounded_parquet_rows",
+            "default": "bounded_parquet_rows",
+            "title": "Inspection Scope",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "frames",
+              "episodes"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/LocalPreviewLimits"
+          },
+          "metadata_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Metadata Sha256",
+            "type": "string"
+          },
+          "omitted_columns": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "title": "Omitted Columns",
+            "type": "array"
+          },
+          "preview_schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Preview Schema Version",
+            "type": "integer"
+          },
+          "read_bytes": {
+            "minimum": 0.0,
+            "title": "Read Bytes",
+            "type": "integer"
+          },
+          "reader": {
+            "const": "pyarrow==25.0.1",
+            "title": "Reader",
+            "type": "string"
+          },
+          "returned_rows": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Returned Rows",
+            "type": "integer"
+          },
+          "row_offset": {
+            "const": 0,
+            "default": 0,
+            "title": "Row Offset",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              "type": "object"
+            },
+            "maxItems": 100,
+            "title": "Rows",
+            "type": "array"
+          },
+          "source": {
+            "const": "local",
+            "default": "local",
+            "title": "Source",
+            "type": "string"
+          },
+          "total_file_rows": {
+            "minimum": 0.0,
+            "title": "Total File Rows",
+            "type": "integer"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "warnings": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "metadata_sha256",
+          "file",
+          "reader",
+          "total_file_rows",
+          "rows",
+          "returned_rows",
+          "truncated",
+          "columns",
+          "omitted_columns",
+          "read_bytes",
+          "declared_decoded_bytes",
+          "limits",
+          "warnings"
+        ],
+        "title": "LocalDatasetPreview",
+        "type": "object"
+      },
+      "LocalPreviewFile": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          },
+          "size_bytes": {
+            "minimum": 0.0,
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "size_bytes",
+          "sha256"
+        ],
+        "title": "LocalPreviewFile",
+        "type": "object"
+      },
+      "LocalPreviewLimits": {
+        "additionalProperties": false,
+        "properties": {
+          "max_decoded_bytes": {
+            "default": 8388608,
+            "maximum": 67108864.0,
+            "minimum": 1.0,
+            "title": "Max Decoded Bytes",
+            "type": "integer"
+          },
+          "max_file_bytes": {
+            "default": 4194304,
+            "maximum": 67108864.0,
+            "minimum": 1.0,
+            "title": "Max File Bytes",
+            "type": "integer"
+          },
+          "max_output_bytes": {
+            "default": 65536,
+            "maximum": 1048576.0,
+            "minimum": 1024.0,
+            "title": "Max Output Bytes",
+            "type": "integer"
+          },
+          "max_read_bytes": {
+            "default": 16777216,
+            "maximum": 134217728.0,
+            "minimum": 1.0,
+            "title": "Max Read Bytes",
+            "type": "integer"
+          },
+          "max_rows": {
+            "default": 10,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Max Rows",
+            "type": "integer"
+          },
+          "timeout_seconds": {
+            "default": 10.0,
+            "exclusiveMinimum": 0.0,
+            "maximum": 30.0,
+            "title": "Timeout Seconds",
+            "type": "number"
+          }
+        },
+        "title": "LocalPreviewLimits",
         "type": "object"
       },
       "Project": {

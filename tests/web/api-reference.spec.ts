@@ -1,0 +1,320 @@
+import { expect, test, type Page } from '@playwright/test';
+
+const methods = new Set(['get', 'post', 'put', 'patch', 'delete', 'options', 'head', 'trace']);
+
+function endpoint(page: Page, method: string, path: string) {
+  return page.locator(`details[id=${JSON.stringify(`endpoint-${method.toLowerCase()}-${encodeURIComponent(path)}`)}]`);
+}
+
+async function openReference(page: Page) {
+  await page.goto('/docs/');
+  await expect(page.getByRole('heading', { name: 'API reference', exact: true })).toBeVisible();
+  await expect(endpoint(page, 'GET', '/api/v1/health')).toBeVisible();
+}
+
+async function expectNoPageOverflow(page: Page) {
+  const sizes = await page.evaluate(() => ({
+    viewport: document.documentElement.clientWidth,
+    document: document.documentElement.scrollWidth,
+    body: document.body.scrollWidth,
+  }));
+  expect(sizes.document).toBeLessThanOrEqual(sizes.viewport + 1);
+  expect(sizes.body).toBeLessThanOrEqual(sizes.viewport + 1);
+}
+
+async function shellAppearance(page: Page) {
+  return page.evaluate(() => {
+    const properties: Record<string, string[]> = {
+      body: ['font-family', 'font-size', 'line-height', 'color', 'background-color'],
+      '.brand': ['font-family', 'font-size', 'font-weight', 'letter-spacing', 'color', 'gap'],
+      '.brand-mark': ['background-color', 'color', 'border-radius', 'width', 'height'],
+      '.sidebar': ['background-color', 'color', 'padding'],
+      '.main-shell': ['background-color', 'border-color', 'border-width', 'border-radius'],
+      '.topbar': ['height', 'padding', 'border-bottom', 'align-items', 'justify-content'],
+      '.theme-toggle': ['padding', 'gap', 'background-color', 'border', 'border-radius'],
+      '.theme-toggle button.selected': ['font-size', 'color', 'background-color', 'border', 'border-radius'],
+      h1: ['font-family', 'font-size', 'font-weight', 'letter-spacing', 'line-height', 'color'],
+    };
+    const styles = Object.fromEntries(Object.entries(properties).map(([selector, names]) => {
+      const element = document.querySelector(selector);
+      if (!element) throw new Error(`Shared shell element disappeared: ${selector}`);
+      const computed = getComputedStyle(element);
+      return [selector, Object.fromEntries(names.map(name => [name, computed.getPropertyValue(name)]))];
+    }));
+    const root = getComputedStyle(document.documentElement);
+    const tokens = Object.fromEntries(Array.from(root).filter(name => name.startsWith('--')).sort()
+      .map(name => [name, root.getPropertyValue(name).trim()]));
+    return { styles, tokens };
+  });
+}
+
+for (const theme of ['Light', 'Dark']) {
+  test(`workspace and API reference share rendered styling in ${theme.toLowerCase()} mode`, async ({ page }, testInfo) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: theme, exact: true }).click();
+    await expect(page.getByRole('button', { name: theme, exact: true })).toHaveAttribute('aria-pressed', 'true');
+    const home = await shellAppearance(page);
+    expect(Object.keys(home.tokens).length).toBeGreaterThan(10);
+
+    await openReference(page);
+    await expect(page.getByRole('button', { name: theme, exact: true })).toHaveAttribute('aria-pressed', 'true');
+    // Compare against the current homepage, so a future shell or token change
+    // cannot leave the API reference stuck on an independently copied design.
+    expect(await shellAppearance(page)).toEqual(home);
+    await expectNoPageOverflow(page);
+    const screenshot = testInfo.outputPath(`api-reference-${theme.toLowerCase()}.png`);
+    await page.screenshot({ path: screenshot, fullPage: true });
+    await testInfo.attach(`api-reference-${theme.toLowerCase()}`, { path: screenshot, contentType: 'image/png' });
+  });
+}
+
+test('theme selection survives home/reference navigation and direct reloads', async ({ page, context }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Dark', exact: true }).click();
+  await page.locator('a[href="/docs/"]:visible').first().click();
+  await expect(page).toHaveURL(/\/docs\/$/);
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Dark', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Light', exact: true }).click();
+  await page.getByRole('link', { name: 'Firebird workspace home' }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('button', { name: 'Light', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  expect(await page.evaluate(() => localStorage.getItem('firebird.theme'))).toBe('light');
+  expect(context.pages()).toHaveLength(1);
+});
+
+test('appearance controls still work when browser storage is unavailable', async ({ page }) => {
+  await page.addInitScript(() => {
+    Storage.prototype.getItem = () => { throw new DOMException('Storage unavailable', 'SecurityError'); };
+    Storage.prototype.setItem = () => { throw new DOMException('Storage unavailable', 'SecurityError'); };
+  });
+  await openReference(page);
+  await page.getByRole('button', { name: 'Dark', exact: true }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect(page.getByRole('button', { name: 'Dark', exact: true })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('documents every live route and model, with the raw schema still accessible', async ({ page, request }) => {
+  const response = await request.get('/openapi.json');
+  expect(response.ok()).toBeTruthy();
+  const schema = await response.json();
+  await openReference(page);
+  let expected = 0;
+  for (const [path, item] of Object.entries(schema.paths)) {
+    for (const method of Object.keys(item as object).filter(method => methods.has(method))) {
+      expected += 1;
+      await expect(endpoint(page, method, path)).toBeVisible();
+    }
+  }
+  await expect(page.locator('details[id^="endpoint-"]')).toHaveCount(expected);
+  for (const name of Object.keys(schema.components.schemas)) {
+    await expect(page.locator(`[id=${JSON.stringify(`schema-${name}`)}]`)).toHaveCount(1);
+  }
+  await expect(page.locator('a[href="/openapi.json"]').first()).toBeVisible();
+  await expect(page.locator('.swagger-ui, .redoc-wrap')).toHaveCount(0);
+});
+
+test('filters endpoints by multiple search terms and HTTP method, then restores the list', async ({ page }) => {
+  await openReference(page);
+  const all = await page.locator('details[id^="endpoint-"]').count();
+  const search = page.getByRole('searchbox', { name: 'Search endpoints' });
+  const method = page.getByRole('combobox', { name: 'HTTP method' });
+  await search.fill('  PROJECTS   intakes  ');
+  await expect(page.locator('details[id^="endpoint-"]')).toHaveCount(1);
+  await expect(endpoint(page, 'POST', '/api/v1/projects/{project_id}/intakes')).toBeVisible();
+  await method.selectOption('GET');
+  await expect(page.locator('details[id^="endpoint-"]')).toHaveCount(0);
+  await expect(page.getByText(/No endpoints found/i)).toBeVisible();
+  await search.fill('');
+  const gets = page.locator('details[id^="endpoint-get-"]');
+  expect(await gets.count()).toBeGreaterThan(0);
+  await expect(page.locator('details[id^="endpoint-post-"]')).toHaveCount(0);
+  await method.selectOption('ALL');
+  await expect(page.locator('details[id^="endpoint-"]')).toHaveCount(all);
+});
+
+test('discovers newly introduced live endpoints and models without a web rebuild', async ({ page, request }) => {
+  const schema = await (await request.get('/openapi.json')).json();
+  schema.paths['/api/v1/runtime-discovery'] = {
+    patch: {
+      summary: 'New runtime operation', tags: ['Runtime discovery'],
+      responses: { '200': { description: 'Fresh result', content: { 'application/json': { schema: { $ref: '#/components/schemas/RuntimeDiscovery' } } } } },
+    },
+  };
+  schema.components.schemas.RuntimeDiscovery = {
+    type: 'object', properties: { new_field: { type: 'string' } }, required: ['new_field'],
+  };
+  await page.route('**/openapi.json', route => route.fulfill({ json: schema }));
+  await openReference(page);
+  await page.getByRole('searchbox', { name: 'Search endpoints' }).fill('runtime discovery');
+  await page.getByRole('combobox', { name: 'HTTP method' }).selectOption('PATCH');
+  const operation = endpoint(page, 'PATCH', '/api/v1/runtime-discovery');
+  await expect(operation).toBeVisible();
+  await operation.locator('summary').click();
+  await expect(operation).toContainText('Fresh result');
+  await expect(operation).toContainText('RuntimeDiscovery');
+  await expect(page.locator('[id="schema-RuntimeDiscovery"]')).toContainText('new_field');
+});
+
+test('shows path parameters, JSON request bodies, status codes, and referenced response models', async ({ page }) => {
+  await openReference(page);
+  const intake = endpoint(page, 'POST', '/api/v1/projects/{project_id}/intakes');
+  await intake.locator('summary').click();
+  await expect(intake).toContainText('project_id');
+  await expect(intake).toContainText('path');
+  await expect(intake).toContainText(/required/i);
+  await expect(intake).toContainText('IntakeRequest');
+  await expect(intake).toContainText('application/json');
+  await expect(intake).toContainText('202');
+  await expect(intake).toContainText('422');
+  await expect(intake).toContainText('Job');
+  await expect(intake.locator('pre').first()).toContainText('http://127.0.0.1:8765/api/v1/projects/{project_id}/intakes');
+  await expect(intake.locator('pre').first()).toContainText('--data @request.json');
+  const requestModel = page.locator('[id="schema-IntakeRequest"]');
+  await requestModel.locator('summary').first().click();
+  await expect(requestModel).toContainText('huggingface');
+  await expect(requestModel.getByRole('row').filter({ has: page.getByRole('rowheader', { name: /^repo_id/ }) }))
+    .toContainText('maxLength: 200');
+  await expect(requestModel.getByRole('row').filter({ has: page.getByRole('rowheader', { name: /^path/ }) }))
+    .toContainText('maxLength: 4096');
+  await expect(page.locator('[id="schema-Job"]')).toContainText('running');
+  await expectNoPageOverflow(page);
+});
+
+test('endpoint disclosures are keyboard-operable and remain within the viewport', async ({ page }) => {
+  await openReference(page);
+  const health = endpoint(page, 'GET', '/api/v1/health');
+  const summary = health.locator('summary');
+  await expect(health).not.toHaveAttribute('open', '');
+  await summary.focus();
+  await page.keyboard.press('Enter');
+  await expect(health).toHaveAttribute('open', '');
+  await expect(health).toContainText('200');
+  await page.keyboard.press('Space');
+  await expect(health).not.toHaveAttribute('open', '');
+  await expectNoPageOverflow(page);
+});
+
+test('endpoint and model permalinks open their targets after a direct load', async ({ page }) => {
+  const path = '/api/v1/projects/{project_id}/intakes';
+  await page.goto(`/docs/#endpoint-post-${encodeURIComponent(path)}`);
+  const intake = endpoint(page, 'POST', path);
+  await expect(intake).toHaveAttribute('open', '');
+  await intake.getByRole('link', { name: 'IntakeRequest', exact: true }).click();
+  await expect(page).toHaveURL(/#schema-IntakeRequest$/);
+  const model = page.locator('[id="schema-IntakeRequest"]');
+  await expect(model).toHaveAttribute('open', '');
+  await expect(model.getByRole('columnheader', { name: 'Type & constraints' })).toBeVisible();
+  await model.locator('summary').first().click();
+  await expect(model).not.toHaveAttribute('open', '');
+  await intake.getByRole('link', { name: 'IntakeRequest', exact: true }).click();
+  await expect(model).toHaveAttribute('open', '');
+  await page.reload();
+  await expect(model).toHaveAttribute('open', '');
+  const search = page.getByRole('searchbox', { name: 'Search endpoints' });
+  await search.scrollIntoViewIfNeeded();
+  const beforeSearch = await page.evaluate(() => window.scrollY);
+  await search.fill('projects');
+  await expect(page.locator('details[id^="endpoint-"]')).toHaveCount(4);
+  // Editing filters must not re-apply the old model permalink and scroll away
+  // from the input on every keystroke.
+  expect(await page.evaluate(() => window.scrollY)).toBeLessThanOrEqual(beforeSearch + 10);
+});
+
+test('copy examples uses the displayed active-origin command and reports clipboard failure', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+      writeText: async (value: string) => {
+        if (value.includes('--request POST')) throw new DOMException('Denied', 'NotAllowedError');
+        document.documentElement.setAttribute('data-copied-example', value);
+      },
+    } });
+  });
+  await openReference(page);
+  const health = endpoint(page, 'GET', '/api/v1/health');
+  await health.locator('summary').click();
+  const command = await health.locator('pre').textContent();
+  await health.getByRole('button', { name: 'Copy GET /api/v1/health example', exact: true }).click();
+  await expect(health.getByRole('status')).toHaveText('Example copied to clipboard.');
+  await expect(page.locator('html')).toHaveAttribute('data-copied-example', command!);
+  const project = endpoint(page, 'POST', '/api/v1/projects');
+  await project.locator('summary').click();
+  await project.getByRole('button', { name: 'Copy POST /api/v1/projects example', exact: true }).click();
+  await expect(project.getByRole('status')).toHaveText('Copy unavailable. Select the example text to copy it.');
+  await expect(project.locator('pre')).toBeVisible();
+});
+
+test('long endpoint, cURL, and full model contracts stay usable at 320px', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 740 });
+  await openReference(page);
+  await endpoint(page, 'POST', '/api/v1/projects/{project_id}/intakes').locator('summary').click();
+  const model = page.locator('[id="schema-Job"]');
+  await model.locator('summary').first().click();
+  await model.getByText('Full JSON schema', { exact: true }).click();
+  await expectNoPageOverflow(page);
+  await expect(model.locator('pre')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Dark', exact: true })).toBeVisible();
+  const header = await page.locator('.topbar').evaluate(element => {
+    const title = element.querySelector('.breadcrumb strong')!.getBoundingClientRect();
+    const link = element.querySelector('.mobile-api-link')!.getBoundingClientRect();
+    const toggle = element.querySelector('.theme-switcher')!.getBoundingClientRect();
+    return { titleRight: title.right, linkLeft: link.left, linkRight: link.right, toggleLeft: toggle.left };
+  });
+  expect(header.titleRight).toBeLessThanOrEqual(header.linkLeft);
+  expect(header.linkRight).toBeLessThanOrEqual(header.toggleLeft);
+});
+
+test('keeps shared navigation usable while the schema is loading', async ({ page, request }) => {
+  const schema = await (await request.get('/openapi.json')).json();
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/openapi.json', async route => {
+    await gate;
+    await route.fulfill({ json: schema });
+  });
+  await page.goto('/docs/');
+  await expect(page.getByText(/Loading API reference/i)).toBeVisible();
+  await page.getByRole('button', { name: 'Dark', exact: true }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  release();
+  await expect(endpoint(page, 'GET', '/api/v1/health')).toBeVisible();
+  await expect(page.getByText(/Loading API reference/i)).toHaveCount(0);
+});
+
+test('recovers from an HTTP schema error through Retry', async ({ page, request }) => {
+  const schema = await (await request.get('/openapi.json')).json();
+  let attempts = 0;
+  await page.route('**/openapi.json', route => ++attempts === 1
+    ? route.fulfill({ status: 503, json: { detail: 'Temporary schema outage' } })
+    : route.fulfill({ json: schema }));
+  await page.goto('/docs/');
+  const retry = page.getByRole('button', { name: 'Retry loading schema' });
+  await expect(retry).toBeVisible();
+  await retry.click();
+  await expect(endpoint(page, 'GET', '/api/v1/health')).toBeVisible();
+  await expect(retry).toHaveCount(0);
+  expect(attempts).toBe(2);
+});
+
+test('reports malformed schemas without crashing the shared page', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.route('**/openapi.json', route => route.fulfill({ json: { openapi: '2.0' } }));
+  await page.goto('/docs/');
+  await expect(page.getByText(/invalid OpenAPI document/i)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Retry loading schema' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Firebird workspace home' })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('direct docs URLs and reloads render without hydration or runtime errors', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/docs');
+  await expect(page).toHaveURL(/\/docs\/$/);
+  await expect(endpoint(page, 'GET', '/api/v1/health')).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'API reference', exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
+});
