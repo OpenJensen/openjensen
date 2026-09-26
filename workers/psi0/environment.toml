@@ -1,0 +1,22 @@
+# Isolated adapter environment. GPU execution must be verified before readiness is claimed.
+schema_version = 1
+backend = "psi0"
+status = "requires_gpu_validation"
+python = "3.11"
+source = "https://github.com/physical-superintelligence-lab/Psi0.git"
+source_revision = "4f3720d45e102b36d7c3e9465ab8062274170518"
+dependency_group = "psi"
+torch = "2.7.0"
+transformers = "4.57.1"
+flash_attn = "2.7.4.post1"
+model = "USC-PSI-Lab/psi-model"
+model_revision = "4c6f9776fc5b18d87945254175e38bb74b9d7748"
+vlm_subdirectory = "psi0/pre.fast.1by1.2601091803.ckpt.ego200k.he30k"
+expert_subdirectory = "psi0/postpre.1by1.pad36.2601131206.ckpt.he30k"
+entrypoint = "firebird_vla.psi_application"
+method = "full"
+training_scope = "action_expert_with_frozen_vlm"
+dataset_formats = ["lerobot_v2"]
+required_cameras = 1
+maximum_state_dimensions = 36
+maximum_action_dimensions = 36

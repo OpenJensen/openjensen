@@ -1,0 +1,275 @@
+{
+  "checked_at": "2026-09-26T19:22:09.556323+00:00",
+  "scope": "Linux target dependency metadata resolution only",
+  "uv_version": "0.12.19",
+  "python_version": "3.12",
+  "python_platform": "x86_64-unknown-linux-gnu",
+  "upstream_revision": "e595b7902714ba51f91e47523f66f89c5181b649",
+  "source_profiles_sha256": "0c3b6b4a83b708eee5e03ecb589e5ff3ce257e08df038426a8d1830c20a8af7c",
+  "no_build": true,
+  "packages_installed": false,
+  "gpus_launched": false,
+  "model_weights_downloaded": false,
+  "cache_audit": {
+    "new_wheel_archives": 0,
+    "new_cached_files_over_8_mib": 0
+  },
+  "indexes": [
+    "https://pypi.org/simple",
+    "https://download.pytorch.org/whl/cu128"
+  ],
+  "index_strategy": "unsafe-best-match",
+  "common_requirements": [
+    "google-cloud-storage==3.4.1",
+    "setuptools==80.10.2"
+  ],
+  "constraints": [
+    "torch==2.11.0+cu128",
+    "torchvision==0.26.0+cu128"
+  ],
+  "profiles": [
+    {
+      "model": "act",
+      "label": "ACT",
+      "extras": "training",
+      "resolved": true,
+      "package_count": 109,
+      "critical_versions": {
+        "torch": "2.11.0+cu128",
+        "torchvision": "0.26.0+cu128",
+        "torchcodec": "0.11.1+cu128",
+        "numpy": "2.2.6",
+        "protobuf": "7.36.2",
+        "google-cloud-storage": "3.4.1",
+        "setuptools": "80.10.2"
+      },
+      "resolution_sha256": "e1f7c574998bac8300981b22750faadb9d16f14423ffa2031dc3a54feacd637c"
+    },
+    {
+      "model": "diffusion",
+      "label": "Diffusion Policy",
+      "extras": "training,diffusion",
+      "resolved": true,
+      "package_count": 113,
+      "critical_versions": {
+        "torch": "2.11.0+cu128",
+        "torchvision": "0.26.0+cu128",
+        "torchcodec": "0.11.1+cu128",
+        "diffusers": "0.39.0",
+        "numpy": "2.2.6",
+        "protobuf": "7.36.2",
+        "google-cloud-storage": "3.4.1",
+        "setuptools": "80.10.2"
+      },
+      "resolution_sha256": "2106765032acd064c92a003edaa3e598dcefb677aa7bcf7a50e028802f6feb0b"
+    },
+    {
+      "model": "eo1",
+      "label": "EO-1",
+      "extras": "training,eo1",
+      "resolved": true,
+      "package_count": 120,
+      "critical_versions": {
+        "torch": "2.11.0+cu128",
+        "torchvision": "0.26.0+cu128",
+        "torchcodec": "0.11.1+cu128",
+        "transformers": "5.5.4",
+        "numpy": "2.2.6",
+        "protobuf": "7.36.2",
+        "google-cloud-storage": "3.4.1",
+        "setuptools": "80.10.2"
+      },
+      "resolution_sha256": "2d3876408a00714a5fc228f31b76017ef8078e13416ddf5d6304e112d4c0dba2"
+    },
+    {
+      "model": "evo1",
+      "label": "EVO-1",
+      "extras": "training,evo1",
+      "resolved": true,
+      "package_count": 119,
+      "critical_versions": {
+        "torch": "2.11.0+cu128",
+        "torchvision": "0.26.0+cu128",
+        "torchcodec": "0.11.1+cu128",
+        "transformers": "5.5.4",
+        "numpy": "2.2.6",
+        "protobuf": "7.36.2",
+        "google-cloud-storage": "3.4.1",
+        "setuptools": "80.10.2"
+      },
+      "resolution_sha256": "0880748fffe46e20bed0ca3d22711fa65c7b6288cea33e9175fddc8e2fef388f"
+    },
+    {
+      "model": "gr00t_n17",
+      "label": "GR00T N1.7",
+      "extras": "training,groot",
+      "resolved": true,
+      "package_count": 128,
+      "critical_versions": {
+        "torch": "2.11.0+cu128",
+        "torchvision": "0.26.0+cu128",
+        "torchcodec": "0.11.1+cu128",
+        "transformers": "5.5.4",
+        "peft": "0.21.0",
+        "diffusers": "0.39.0",
+        "decord": "0.6.0",
+        "numpy": "2.2.6",
+        "protobuf": "7.36.2",
+        "google-cloud-storage": "3.4.1",
+        "setuptools": "80.10.2"
+      },
+      "resolution_sha256": "e3096c7173de469df939b9c31fb39ab939d419e85a531779b4e3f021055a4882"
+    },
+    {
+      "model": "multi_task_dit",
+      "label": "Multi-Task DiT",
+      "extras": "training,multi_task_dit",
+      "resolved": true,
+      "package_count": 122,
+      "critical_versions": {
+        "torch": "2.11.0+cu128",
+        "torchvision": "0.26.0+cu128",
+        "torchcodec": "0.11.1+cu128",
+        "transformers": "5.5.4",
+        "diffusers": "0.39.0",
+        "numpy": "2.2.6",
+        "protobuf": "7.36.2",
+        "google-cloud-storage": "3.4.1",
+        "setuptools": "80.10.2"
+      },
+      "resolution_sha256": "abe84101b5844a2585ddfcc06a96a2b078eb93328860419a607490a498c96281"
+    },
+    {
+      "model": "pi0",
+      "label": "\u03c0\u2080",
+      "extras": "training,pi",
+      "resolved": true,
+      "package_count": 120,
+      "critical_versions": {
+        "torch": "2.11.0+cu128",
+        "torchvision": "0.26.0+cu128",
+        "torchcodec": "0.11.1+cu128",
+        "transformers": "5.5.4",
+        "numpy": "2.2.6",
+        "protobuf": "7.36.2",
+        "google-cloud-storage": "3.4.1",
+        "setuptools": "80.10.2"
+      },
+      "resolution_sha256": "0a8e5dcc8cd0351cca1099a30d12b57df8aff79fb8d84ad0e09a6770817a5a18"
+    },
+    {
+      "model": "pi0_fast",
+      "label": "\u03c0\u2080-FAST",
+      "extras": "training,pi",
+      "resolved": true,
+      "package_count": 120,
+      "critical_versions": {
+        "torch": "2.11.0+cu128",
+        "torchvision": "0.26.0+cu128",
+        "torchcodec": "0.11.1+cu128",
+        "transformers": "5.5.4",
+        "numpy": "2.2.6",
+        "protobuf": "7.36.2",
+        "google-cloud-storage": "3.4.1",
+        "setuptools": "80.10.2"
+      },
+      "resolution_sha256": "0a8e5dcc8cd0351cca1099a30d12b57df8aff79fb8d84ad0e09a6770817a5a18"
+    },
+    {
+      "model": "pi05",
+      "label": "\u03c0\u2080.\u2085",
+      "extras": "training,pi",
+      "resolved": true,
+      "package_count": 120,
+      "critical_versions": {
+        "torch": "2.11.0+cu128",
+        "torchvision": "0.26.0+cu128",
+        "torchcodec": "0.11.1+cu128",
+        "transformers": "5.5.4",
+        "numpy": "2.2.6",
+        "protobuf": "7.36.2",
+        "google-cloud-storage": "3.4.1",
+        "setuptools": "80.10.2"
+      },
+      "resolution_sha256": "0a8e5dcc8cd0351cca1099a30d12b57df8aff79fb8d84ad0e09a6770817a5a18"
+    },
+    {
+      "model": "vla_jepa",
+      "label": "VLA-JEPA",
+      "extras": "training,vla_jepa",
+      "resolved": true,
+      "package_count": 123,
+      "critical_versions": {
+        "torch": "2.11.0+cu128",
+        "torchvision": "0.26.0+cu128",
+        "torchcodec": "0.11.1+cu128",
+        "transformers": "5.5.4",
+        "diffusers": "0.39.0",
+        "numpy": "2.2.6",
+        "protobuf": "7.36.2",
+        "google-cloud-storage": "3.4.1",
+        "setuptools": "80.10.2"
+      },
+      "resolution_sha256": "3b914e90fd17c8451debc8c4271aa85a8534c787e8f9eafcb72a38fb968134d6"
+    },
+    {
+      "model": "vqbet",
+      "label": "VQ-BeT",
+      "extras": "training",
+      "resolved": true,
+      "package_count": 109,
+      "critical_versions": {
+        "torch": "2.11.0+cu128",
+        "torchvision": "0.26.0+cu128",
+        "torchcodec": "0.11.1+cu128",
+        "numpy": "2.2.6",
+        "protobuf": "7.36.2",
+        "google-cloud-storage": "3.4.1",
+        "setuptools": "80.10.2"
+      },
+      "resolution_sha256": "e1f7c574998bac8300981b22750faadb9d16f14423ffa2031dc3a54feacd637c"
+    },
+    {
+      "model": "wall_x",
+      "label": "WALL-X",
+      "extras": "training,wallx",
+      "resolved": true,
+      "package_count": 123,
+      "critical_versions": {
+        "torch": "2.11.0+cu128",
+        "torchvision": "0.26.0+cu128",
+        "torchcodec": "0.11.1+cu128",
+        "transformers": "5.5.4",
+        "peft": "0.21.0",
+        "numpy": "2.2.6",
+        "protobuf": "7.36.2",
+        "google-cloud-storage": "3.4.1",
+        "setuptools": "80.10.2"
+      },
+      "resolution_sha256": "c965f8445d67fd2ee049ef4ca7adb8f5a168f8acf844279ee8623cd9e5e48409"
+    },
+    {
+      "model": "xvla",
+      "label": "XVLA",
+      "extras": "training,xvla",
+      "resolved": true,
+      "package_count": 119,
+      "critical_versions": {
+        "torch": "2.11.0+cu128",
+        "torchvision": "0.26.0+cu128",
+        "torchcodec": "0.11.1+cu128",
+        "transformers": "5.5.4",
+        "numpy": "2.2.6",
+        "protobuf": "7.36.2",
+        "google-cloud-storage": "3.4.1",
+        "setuptools": "80.10.2"
+      },
+      "resolution_sha256": "0880748fffe46e20bed0ca3d22711fa65c7b6288cea33e9175fddc8e2fef388f"
+    }
+  ],
+  "limitations": [
+    "Resolution does not execute or GPU-test each policy.",
+    "Compiled requirements are point-in-time metadata evidence; production retains the pinned upstream source and CUDA constraints.",
+    "ACT already has a separate completed GPU training/reload record; other architectures need individual execution evidence."
+  ]
+}

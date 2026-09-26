@@ -2,7 +2,11 @@
   "runtimes": [{
     "id": "rtx3070",
     "label": "RTX 3070",
+    "provider": "local",
+    "region": null,
     "device": "cuda",
+    "gpu_name": "NVIDIA GeForce RTX 3070",
+    "gpu_memory_mib": 8192,
     "python": "/absolute/firebird/workers/vla_cpp/.venv/bin/python",
     "worker_root": "/absolute/firebird/workers/vla_cpp",
     "training_python": "/absolute/firebird/workers/smolvla_qlora/.venv/bin/python",

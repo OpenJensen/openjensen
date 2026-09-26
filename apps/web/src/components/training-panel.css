@@ -1,0 +1,142 @@
+.training-workspace { max-width: 1060px; }
+.training-workspace fieldset { min-width: 0; border: 0; padding: 0; margin-inline: 0; }
+.training-nav { display: flex; gap: 24px; margin-bottom: 28px; border-bottom: 1px solid var(--line); }
+.training-nav button { display: inline-flex; align-items: center; gap: 9px; padding: 11px 2px 13px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font-size: 12px; }
+.training-nav button[aria-current='step'] { border-bottom-color: var(--ink); color: var(--ink); }
+.training-nav button > span { display: grid; place-items: center; width: 20px; height: 20px; background: var(--subtle); border: 1px solid var(--line); border-radius: 50%; font-size: 10px; }
+.training-nav button[aria-current='step'] > span { color: var(--canvas); background: var(--ink); border-color: var(--ink); }
+.training-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 18px; }
+.training-heading h2 { font-size: 17px; font-weight: 600; letter-spacing: -.3px; }
+.training-heading h3 { font-size: 13px; font-weight: 550; }
+.training-heading h2:focus { outline: none; }
+.training-heading .text-button { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+.training-datasets { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; margin-block: 0 20px; }
+.training-dataset { position: relative; display: flex; align-items: center; gap: 12px; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+.training-dataset img, .training-dataset-icon { width: 58px; height: 46px; object-fit: cover; border-radius: 4px; flex-shrink: 0; }
+.training-dataset-icon { display: grid; place-items: center; background: var(--subtle); color: var(--muted); }
+.training-dataset > span:last-child { display: grid; min-width: 0; gap: 4px; }
+.training-dataset strong { font-size: 12px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.training-dataset small { font-size: 10px; color: var(--muted); overflow-wrap: anywhere; }
+.training-dataset > input, .training-model-tile > input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); margin: -1px; }
+.training-dataset:has(input:checked), .training-model-tile:has(input:checked), .training-compute-tile:has(input:checked) { border-color: var(--success); background: color-mix(in srgb, var(--success-bg) 45%, var(--surface)); box-shadow: 0 0 0 1px var(--success); }
+.training-dataset:has(input:focus-visible), .training-model-tile:has(input:focus-visible), .training-methods label:has(input:focus-visible), .training-compute-tile:has(input:focus-visible) { outline: 2px solid var(--ink); outline-offset: 3px; }
+.training-dataset:has(input:disabled), .training-model-tile:has(input:disabled), .training-compute-tile:has(input:disabled) { cursor: not-allowed; color: var(--muted); }
+.training-data-facts { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 20px 0 24px; }
+.training-data-facts span { padding: 4px 9px; border-radius: 5px; background: var(--subtle); color: var(--muted); font-size: 11px; }
+.training-data-facts span:empty { display: none; }
+.training-camera-heading { margin-bottom: 12px; }
+.training-episode-picker select { border: 1px solid var(--line); padding: 6px 9px; border-radius: 5px; color: var(--ink); background: var(--surface); font-size: 11px; }
+.training-workspace .dx-camera-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
+.training-workspace .dx-camera-grid:not(:has(> :nth-child(3))) { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.training-workspace .dx-camera-grid-single { grid-template-columns: minmax(0,420px) !important; }
+.training-workspace .dx-video-wrap { aspect-ratio: 4/3 !important; }
+.training-workspace .dx-camera figcaption { min-height: 42px; }
+.training-workspace .dx-camera figcaption label { display: flex; align-items: center; gap: 9px; min-width: 0; cursor: pointer; }
+.training-workspace .dx-camera input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--success); }
+.training-camera-fallback { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
+.training-camera-fallback > label { min-width: 0; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+.training-camera-fallback > label:has(input:checked) { border-color: var(--success); }
+.training-camera-placeholder { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 10px; aspect-ratio: 4/3; background: var(--subtle); color: var(--muted); }
+.training-camera-placeholder small { font-size: 11px; }
+.training-camera-fallback label > span:last-child { display: flex; align-items: center; gap: 8px; padding: 11px; font-size: 11px; overflow-wrap: anywhere; }
+.training-camera-fallback input, .training-extra-camera input { accent-color: var(--success); }
+.training-extra-camera { display: flex; align-items: center; gap: 8px; padding: 10px 0; font-size: 11px; }
+.training-extra-camera small { margin-left: auto; color: var(--muted); }
+.training-model-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; margin-block: 0; }
+.training-model-tile { position: relative; display: flex; align-items: center; gap: 12px; min-width: 0; min-height: 78px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: pointer; }
+.training-model-tile:hover, .training-dataset:hover { border-color: var(--line-strong); }
+.training-model-mark { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; border-radius: 9px; background: linear-gradient(145deg,#6e7787,#3d4350); color: #fff; font-family: ui-monospace,monospace; font-size: 11px; font-weight: 650; }
+.model-smolvla .training-model-mark { background: linear-gradient(135deg,#b4cf65,#48a98d); }
+.model-pi0 .training-model-mark, .model-pi05 .training-model-mark { background: linear-gradient(135deg,#9267c9,#d25c9a); font-size: 21px; }
+.model-pi05 .training-model-mark { font-size: 17px; }
+.model-openvla .training-model-mark { background: linear-gradient(135deg,#58a8af,#5b78b3); }
+.model-openvla_oft .training-model-mark { background: linear-gradient(135deg,#c58f54,#ba6373); }
+.training-model-copy { min-width: 0; flex: 1; display: grid; gap: 5px; }
+.training-model-copy > span { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.training-model-copy strong { font-size: 12px; font-weight: 600; white-space: nowrap; }
+.training-model-copy > small { color: var(--muted); font-size: 10px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+.training-model-status { font-size: 9px; color: var(--muted); border: 1px solid var(--line); padding: 1px 4px; border-radius: 4px; white-space: nowrap; }
+.training-methods { display: flex; gap: 7px; margin-top: 24px; }
+.training-methods legend { margin-bottom: 10px; font-size: 12px; font-weight: 500; }
+.training-methods label { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 6px; padding: 8px 13px; font-size: 12px; cursor: pointer; }
+.training-methods label:has(input:checked) { background: var(--selected); border-color: var(--line-strong); }
+.training-methods input { accent-color: var(--ink); margin: 0; }
+.training-footer { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--line); }
+.training-footer > span { color: var(--muted); font-size: 11px; }
+.training-footer .primary-button { min-height: 38px; padding: 9px 15px; font-size: 12px; }
+.training-footer .text-button { font-size: 12px; }
+.training-launch { display: flex; align-items: center; gap: 15px; }
+.training-launch > span { max-width: 280px; }
+.training-review { display: flex; gap: 9px; flex-wrap: wrap; margin-bottom: 20px; }
+.training-review > span { color: var(--muted); background: var(--subtle); border-radius: 5px; padding: 5px 9px; font-size: 11px; overflow-wrap: anywhere; }
+.training-count { color: var(--muted); font-size: 11px; }
+.training-compute-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; }
+.training-compute-tile { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 15px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+.training-compute-tile > span { display: grid; gap: 5px; min-width: 0; }
+.training-compute-tile strong { font-size: 12px; font-weight: 550; overflow-wrap: anywhere; }
+.training-compute-tile small { font-size: 10px; color: var(--muted); }
+.training-compute-tile input { accent-color: var(--success); }
+.training-empty { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 35px 20px; border: 1px dashed var(--line-strong); border-radius: 8px; color: var(--muted); font-size: 12px; }
+.training-disclosure { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 15px; }
+.training-disclosure summary { cursor: pointer; font-size: 12px; }
+.training-disclosure summary > span { margin-left: 15px; color: var(--muted); font-size: 10px; }
+.training-disclosure > p { margin-top: 14px; color: var(--muted); font-size: 11px; line-height: 1.7; overflow-wrap: anywhere; }
+.training-fields { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 15px; padding-top: 18px; }
+.training-fields label { display: grid; gap: 7px; font-size: 11px; color: var(--muted); }
+.training-fields input { width: 100%; min-width: 0; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface); color: var(--ink); font-size: 12px; }
+.training-resume { color: var(--muted); }
+.training-resume-options { display: grid; gap: 12px; margin-top: 16px; }
+.training-resume-options label { display: flex; align-items: center; gap: 9px; font-size: 11px; }
+.training-resume-options input { accent-color: var(--ink); }
+.training-activity { margin-top: 32px; padding-top: 22px; border-top: 1px solid var(--line); }
+.training-run-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.training-run-list button { display: flex; align-items: center; gap: 10px; padding: 9px 11px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; font-size: 11px; }
+.training-run-list button[aria-pressed=true] { border-color: var(--ink); color: var(--ink); }
+.training-run-detail { padding: 16px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 14px; font-size: 12px; }
+.dataset-train-action { display: flex; justify-content: flex-end; margin: 20px 0; }
+.main-content:has(.training-view:not([hidden])) { padding-top: 26px; }
+.training-page-heading { margin-bottom: 18px; }
+@media (max-width:1100px) {
+  .training-datasets, .training-model-grid, .training-compute-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width:700px) {
+  .training-nav { gap: 20px; margin-bottom: 22px; }
+  .training-workspace .dx-camera-grid, .training-workspace .dx-camera-grid:not(:has(> :nth-child(3))) { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .training-datasets { grid-template-columns: 1fr; }
+  .training-model-grid, .training-compute-grid { grid-template-columns: 1fr; gap: 8px; }
+  .training-model-tile { min-height: 68px; padding: 10px 12px; }
+  .training-fields { grid-template-columns: 1fr; }
+  .training-camera-fallback { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .training-footer { align-items: flex-end; }
+  .training-launch { align-items: flex-end; flex-direction: column; text-align: right; }
+  .training-disclosure summary > span { display: block; margin: 5px 0 0 16px; }
+}
+@media (max-width:480px) {
+  .training-workspace .dx-camera-grid, .training-workspace .dx-camera-grid:not(:has(> :nth-child(3))), .training-camera-fallback { grid-template-columns: 1fr; }
+  .training-nav { justify-content: space-between; gap: 8px; }
+}
+.training-compute-section-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin: 24px 0 12px; }
+.training-compute-section-heading h3 { font-size: 12px; font-weight: 550; }
+.training-compute-section-heading .text-button { font-size: 11px; display: inline-flex; align-items: center; gap: 5px; }
+.training-provider-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.training-provider-tile { position: relative; display: flex; align-items: center; gap: 11px; border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-width: 0; cursor: pointer; }
+.training-provider-tile > input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); margin: -1px; }
+.training-provider-tile:has(input:checked) { border-color: var(--success); background: color-mix(in srgb, var(--success-bg) 45%, var(--surface)); box-shadow: 0 0 0 1px var(--success); }
+.training-provider-tile:has(input:focus-visible) { outline: 2px solid var(--ink); outline-offset: 3px; }
+.training-provider-tile > span:last-child { display: grid; min-width: 0; gap: 5px; }
+.training-provider-tile strong { font-size: 12px; font-weight: 550; overflow-wrap: anywhere; }
+.training-provider-tile small { font-size: 10px; color: var(--muted); }
+.training-provider-mark { display: grid; place-items: center; flex-shrink: 0; width: 33px; height: 33px; background: var(--subtle); border-radius: 6px; font-size: 19px; font-weight: 600; }
+.provider-gcp { color: #4285f4; }
+.training-compute-filters { display: flex; align-items: center; gap: 14px; }
+.training-compute-filters label { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.training-compute-filters select { background: var(--surface); color: var(--ink); border: 1px solid var(--line); padding: 6px 9px; border-radius: 5px; font-size: 11px; max-width: 180px; }
+.training-compute-note { color: var(--muted); font-size: 11px; line-height: 1.7; margin-top: 15px; }
+@media (max-width:700px) {
+  .training-provider-grid { grid-template-columns: 1fr; }
+  .training-provider-tile { padding: 11px 13px; }
+}
+.training-gpu-select { max-width: 650px; display: grid; gap: 9px; }
+.training-gpu-select > label { font-size: 11px; color: var(--muted); }
+.training-gpu-select > select { width: 100%; min-width: 0; border: 1px solid var(--line-strong); border-radius: 7px; padding: 12px; background: var(--surface); color: var(--ink); font-size: 12px; }
+.training-gpu-select > p { color: var(--muted); font-size: 11px; line-height: 1.7; }

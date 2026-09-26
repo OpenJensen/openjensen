@@ -13,6 +13,8 @@ app = typer.Typer(no_args_is_help=True, help="Local VLA projects and robotics da
 projects = typer.Typer(no_args_is_help=True)
 jobs = typer.Typer(no_args_is_help=True)
 policy = typer.Typer(no_args_is_help=True)
+augmentation = typer.Typer(no_args_is_help=True)
+app.add_typer(augmentation, name="augmentation")
 app.add_typer(policy, name="policy")
 app.add_typer(projects, name="projects")
 app.add_typer(jobs, name="jobs")
@@ -92,6 +94,18 @@ def cancel_job(job_id: str) -> None:
 def policy_options() -> None:
     """Show configured execution targets, policy sources and fine-tuning methods."""
     call("GET", "/policy-options")
+
+
+@augmentation.command("options")
+def augmentation_options() -> None:
+    """Show Gemini Omni setup and appearance presets."""
+    call("GET", "/augmentation-options")
+
+
+@augmentation.command("submit")
+def submit_augmentation(project_id: str, recipe: Path) -> None:
+    """Augment selected dataset clips through the shared application API."""
+    call("POST", f"/projects/{project_id}/augmentations", json.loads(recipe.read_text()))
 
 
 @policy.command("submit")

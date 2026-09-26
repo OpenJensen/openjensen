@@ -27,3 +27,6 @@ test-results/
 /models/
 sim-rollout-runner*.json
 *.credentials.json
+
+# Private deployment/run evidence and local screenshots.
+/output/

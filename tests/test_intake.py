@@ -65,6 +65,13 @@ def test_real_subprocess_local_intake_persists_across_restart(tmp_path, local_da
     with TestClient(create_app(settings)) as client:
         assert client.get("/api/v1/projects").json() == [project]
         assert client.get(f"/api/v1/projects/{project['id']}/jobs").json() == [record]
+        reused = client.post(
+            f"/api/v1/projects/{project['id']}/intakes",
+            json={"source": "local", "path": str(local_dataset)},
+        )
+        assert reused.status_code == 202
+        assert reused.json() == record
+        assert client.get(f"/api/v1/projects/{project['id']}/jobs").json() == [record]
 
 
 def test_invalid_and_disabled_requests(tmp_path):

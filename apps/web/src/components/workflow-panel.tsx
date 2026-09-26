@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CloudConnectionsPanel } from "@/components/cloud-connections";
+import { conciseRunError, observedProgress, runLabel, runSummary } from "@/lib/run-summary";
+import { checkpointLabel, isCloudArtifact, quantizationIssue, sortCheckpoints } from "@/lib/checkpoints";
+import "./workflow-panel.css";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BenchmarkReference } from "@/components/benchmark-reference";
 import {
@@ -48,7 +52,7 @@ const initial: Preferences = {
   task: 0,
   searchStates: "0,1",
   finalStates: "2,3",
-  trainingSteps: 1000,
+  trainingSteps: 20000,
   camera: "observation.images.front",
   select: false,
   minSuccess: 100,
@@ -71,26 +75,31 @@ function resultOf(job?: Job): LifecycleResult | undefined {
 export function WorkflowPanel({
   projectId,
   stage,
-  onOpenQuantize,
   tab,
   onTabChange: setTab,
+  onOpenQuantize,
+  preferredArtifactId,
+  onViewTraining,
 }: {
   projectId: string;
   stage: string;
+  tab: "compute" | "settings" | "diagnostics";
+  onTabChange: (tab: "compute" | "settings" | "diagnostics") => void;
   onOpenQuantize: () => void;
-  tab: "settings" | "diagnostics";
-  onTabChange: (tab: "settings" | "diagnostics") => void;
+  preferredArtifactId?: string;
+  onViewTraining?: () => void;
 }) {
   const client = useQueryClient();
   const [preferences, setPreferences] = useState(initial);
   const [loadedProjectId, setLoadedProjectId] = useState<string | null>(null);
   const ready = !!projectId && loadedProjectId === projectId;
   const [runtimeId, setRuntimeId] = useState("");
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(preferredArtifactId ?? (stage === "settings" ? "" : "latest"));
   const [datasetId, setDatasetId] = useState("");
   const [method, setMethod] = useState("lora");
   const [resumeId, setResumeId] = useState("");
   const [selectedJobId, setSelectedJobId] = useState("");
+  const [detailsJobId, setDetailsJobId] = useState<string | null>(null);
   const options = useQuery({
     queryKey: ["policy-options"],
     queryFn: api.policyOptions,
@@ -136,14 +145,15 @@ export function WorkflowPanel({
         /* Settings still work for this session. */
       }
   }, [projectId, preferences, ready]);
-  const runtime =
-    options.data?.runtimes.find((x) => x.id === runtimeId) ??
-    options.data?.runtimes[0];
   const policyJobs = (jobs.data ?? [])
-    .filter((x) => x.kind !== "dataset.inspect")
+    .filter((x) => x.kind.startsWith("policy."))
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const stageJobs = stage === "settings" ? policyJobs : policyJobs.filter(job =>
+    stage === "Quantize" ? ["policy.quantize", "policy.workflow"].includes(job.kind)
+      : stage === "Evaluate" ? job.kind === "policy.evaluate"
+        : stage === "Fine-tune" ? job.kind === "policy.finetune" : job.kind === "policy.run");
   const selected =
-    policyJobs.find((x) => x.id === selectedJobId) ?? policyJobs[0];
+    stageJobs.find((x) => x.id === selectedJobId) ?? stageJobs[0];
   const events = useQuery({
     queryKey: ["job-events", selected?.id],
     queryFn: () => api.events(selected!.id),
@@ -151,6 +161,7 @@ export function WorkflowPanel({
     refetchInterval: selected && isActive(selected) ? 1000 : false,
   });
   const data = resultOf(selected);
+  const progress = observedProgress(events.data ?? []);
   const datasets = (jobs.data ?? []).filter(
     (x) => x.kind === "dataset.inspect" && x.status === "succeeded",
   );
@@ -162,10 +173,21 @@ export function WorkflowPanel({
         ? x.format === "gguf"
         : ["gguf", "deployment_package"].includes(x.format),
   );
-  const checkpoints = (artifacts.data ?? []).filter(
-    (x) => x.format === "training_checkpoint",
-  );
+  const checkpoints = sortCheckpoints((artifacts.data ?? []).filter(
+    (x) => x.format === "training_checkpoint" || x.format === "native_checkpoint",
+  ), policyJobs);
+  const selectedInput = input === "latest" ? (stage === "Quantize" ? checkpoints[0]?.id : inputs[0]?.id) ?? "" : input;
+  const inputArtifact = inputs.find(item => item.id === selectedInput);
+  const inputIssue = stage === "Quantize" ? quantizationIssue(inputArtifact) : null;
+  const cloudCheckpoint = !!inputArtifact && isCloudArtifact(inputArtifact);
+  const needsNativeExecution = stage === "Evaluate" || stage === "Run" || stage === "settings";
+  const runtimes = (options.data?.runtimes ?? []).filter(item => item.enabled !== false &&
+    (!needsNativeExecution || item.execution !== "skypilot") &&
+    (!needsNativeExecution || stage === "settings" || preferences.mode !== "libero" || item.simulation));
+  const runtime = runtimes.find(item => item.id === runtimeId) ??
+    (cloudCheckpoint ? runtimes.find(item => item.provider === "gcp" || item.execution === "skypilot") : undefined) ?? runtimes[0];
   const defaultLanguage = options.data?.quantization_defaults[runtime?.device ?? "cpu"].language ?? "Q8_0";
+  const nativeQuantization = stage === "Quantize" && runtime?.execution !== "skypilot";
   const language =
     preferences.precision === "recommended"
       ? defaultLanguage
@@ -174,7 +196,8 @@ export function WorkflowPanel({
     mutationFn: async () => {
       if (!ready || !runtime)
         throw new Error("Select a project and a configured execution target.");
-      const evaluation: NonNullable<PolicyRequest["evaluation"]> = {
+      if (inputIssue) throw new Error(inputIssue);
+      const evaluation: PolicyRequest["evaluation"] = stage === "Quantize" && !nativeQuantization ? undefined : {
         mode: preferences.mode,
         suite: preferences.suite,
         ...(preferences.suite === "libero_spatial"
@@ -188,7 +211,7 @@ export function WorkflowPanel({
         steps: preferences.steps,
         seed: 42,
       };
-      if (preferences.suite === "libero_spatial") {
+      if (evaluation && preferences.suite === "libero_spatial") {
         if (!preferences.parityProfile.trim() || !preferences.parityRmse.trim() || !preferences.parityMaxError.trim())
           throw new Error("Set your approved floating-policy parity profile and tolerances in Settings & diagnostics.");
         const rmse = Number(preferences.parityRmse);
@@ -204,7 +227,7 @@ export function WorkflowPanel({
           stage === "Fine-tune"
             ? "policy.finetune"
             : stage === "Quantize"
-              ? "policy.workflow"
+              ? nativeQuantization ? "policy.workflow" : "policy.quantize"
               : stage === "Evaluate" || stage === "settings"
                 ? "policy.evaluate"
                 : "policy.run",
@@ -239,31 +262,23 @@ export function WorkflowPanel({
           else body.artifact_id = resumeId;
         }
       } else {
-        if (!input) throw new Error("Choose an input policy.");
-        if (input.startsWith("source:")) body.source_id = input.slice(7);
-        else body.artifact_id = input;
-        if (stage === "Quantize") {
-          body.candidates = [
-            { language, vision: preferences.vision ? "Q8_0" : null },
-          ];
-          if (preferences.compareQ4)
-            body.candidates.push({
-              language: language === "Q4_0" ? "Q8_0" : "Q4_0",
-              vision: null,
-            });
-          if (preferences.select && preferences.mode === "libero")
-            body.limits = {
-              min_success_rate: preferences.minSuccess / 100,
-              max_success_drop: 0,
-              max_p95_ms: preferences.maxLatency,
-              max_peak_device_mib: preferences.maxMemory,
-            };
+        if (!selectedInput) throw new Error("Choose an input policy.");
+        if (selectedInput.startsWith("source:")) body.source_id = selectedInput.slice(7);
+        else body.artifact_id = selectedInput;
+        if (nativeQuantization) {
+          body.candidates = [{ language, vision: preferences.vision ? "Q8_0" : null }];
+          if (preferences.compareQ4) body.candidates.push({ language: language === "Q4_0" ? "Q8_0" : "Q4_0", vision: null });
+          if (preferences.select && preferences.mode === "libero") body.limits = {
+            min_success_rate: preferences.minSuccess / 100, max_success_drop: 0,
+            max_p95_ms: preferences.maxLatency, max_peak_device_mib: preferences.maxMemory,
+          };
         }
       }
       return api.policyJob(projectId, body);
     },
     onSuccess: (job) => {
       setSelectedJobId(job.id);
+      client.setQueryData<Job[]>(["jobs", projectId], previous => [job, ...(previous ?? []).filter(item => item.id !== job.id)]);
       void client.invalidateQueries({ queryKey: ["jobs", projectId] });
     },
   });
@@ -272,6 +287,8 @@ export function WorkflowPanel({
     onSuccess: () =>
       client.invalidateQueries({ queryKey: ["jobs", projectId] }),
   });
+  const submittedJob = mutation.data ? policyJobs.find(job => job.id === mutation.data.id) ?? mutation.data : undefined;
+  const starting = mutation.isPending || !!submittedJob && isActive(submittedJob);
   function update<K extends keyof Preferences>(key: K, value: Preferences[K]) {
     if (ready) setPreferences((old) => ({ ...old, [key]: value }));
   }
@@ -303,15 +320,16 @@ export function WorkflowPanel({
                 ? "Wait for the active policy job to finish, or cancel it below."
                 : !inputs.length
                   ? "This project has no GGUF policy yet. Create one in Quantize, then return here."
-                  : !inputs.some((artifact) => artifact.id === input)
+                  : !inputs.some((artifact) => artifact.id === selectedInput)
                     ? "Choose a project policy to evaluate."
                     : preferences.mode === "libero" && !runtime.simulation
                       ? "This target has no LIBERO simulator. Choose engine checks or a simulator-enabled target."
                       : null;
   if (stage === "settings")
     return (
-      <section className="panel workflow-panel">
-        <div className="section-tabs">
+      <section className={`panel ${tab === "compute" ? "compute-settings-panel" : "workflow-panel"}`}>
+        <div className="section-tabs settings-tabs">
+          <button className={`section-tab ${tab === "compute" ? "active" : ""}`} onClick={() => setTab("compute")}>Compute</button>
           <button
             className={`section-tab ${tab === "settings" ? "active" : ""}`}
             onClick={() => setTab("settings")}
@@ -326,15 +344,11 @@ export function WorkflowPanel({
           </button>
         </div>
         {tab === "settings" && preferencesBlocker && <p className="warning-box" role="status">{preferencesBlocker}</p>}
-        {tab === "settings" ? (
+        {tab === "compute" ? <CloudConnectionsPanel /> : tab === "settings" ? (
           <fieldset className="workflow-fields workflow-controls" disabled={!ready}>
             <legend className="visually-hidden">Project workflow settings</legend>
             <h2>Compression defaults</h2>
-            <p className="muted">
-              Start with LM Q8 on CPU and CUDA, preserving vision precision.
-              Q4 is experimental: a prior RTX 3070 pilot lost task success.
-              Every policy still needs evaluation on its execution target.
-            </p>
+            <p className="muted">Start with LM Q8 on CPU and CUDA, preserving vision precision. Q4 is experimental: a prior RTX 3070 pilot lost task success. Every policy still needs evaluation on its execution target.</p>
             <label>
               Quantization recipe
               <select
@@ -361,6 +375,7 @@ export function WorkflowPanel({
               />
               Compare Q8 and Q4 (experimental)
             </label>
+            <p className="muted">Candidate comparisons use a configured native evaluation worker. Cloud quantization produces the precision selected for that job.</p>
             <label className="workflow-check">
               <input
                 type="checkbox"
@@ -376,7 +391,7 @@ export function WorkflowPanel({
                 value={preferences.suite}
                 onChange={(e) => {
                   const suite = e.target.value as Preferences["suite"];
-                  setPreferences((old) => ({ ...old, suite,
+                  if (ready) setPreferences((old) => ({ ...old, suite,
                     mode: suite === "libero_spatial" ? "libero" : old.mode,
                     steps: suite === "libero_spatial" ? 280 : 500 }));
                 }}
@@ -420,11 +435,7 @@ export function WorkflowPanel({
                 <option value="libero">Paired LIBERO episodes</option>
               </select>
             </label>
-            <p className="muted">
-              {preferences.suite === "libero_spatial"
-                ? "Spatial uses paired LIBERO episodes and the full 280-step benchmark horizon."
-                : "Engine diagnostics check loading, finite actions and timing. Task-quality selection requires compatible LIBERO episodes and your acceptance limits."}
-            </p>
+            {preferences.mode === "engine" && <p className="muted">Measures latency and loading; task success requires LIBERO.</p>}
             <label>
               Timed predictions
               <input
@@ -523,11 +534,7 @@ export function WorkflowPanel({
                         }
                       />
                     </label>
-                    <p className="muted">
-                      The candidate must also match the floating reference’s
-                      success rate and pass the unused final states. GPU
-                      measurements include other device users.
-                    </p>
+                    <p className="muted">Candidates must match reference success and pass unused states. GPU memory includes other processes.</p>
                   </>
                 )}
               </>
@@ -544,17 +551,6 @@ export function WorkflowPanel({
                 }
               />
             </label>
-            <label>
-              Dataset camera feature
-              <input
-                value={preferences.camera}
-                onChange={(e) => update("camera", e.target.value)}
-              />
-            </label>
-            <p className="muted">
-              Settings are saved for this project on this browser. Each
-              submitted job preserves its exact recipe.
-            </p>
           </fieldset>
         ) : (
           <>
@@ -567,7 +563,7 @@ export function WorkflowPanel({
               <label>Diagnostic execution target
                 <select value={runtime?.id ?? ""} disabled={!ready} onChange={(event) => setRuntimeId(event.target.value)}>
                   <option value="" disabled>Select a target</option>
-                  {options.data?.runtimes.map((target) => <option key={target.id} value={target.id}>{target.label}</option>)}
+                  {runtimes.map((target) => <option key={target.id} value={target.id}>{target.label}</option>)}
                 </select>
               </label>
               <label>Diagnostic policy
@@ -607,12 +603,18 @@ export function WorkflowPanel({
                   >
                     {policyJobs.map((job) => (
                       <option key={job.id} value={job.id}>
-                        {job.kind} · {job.status} ·{" "}
+                        {runLabel(job)} · {job.status} ·{" "}
                         {new Date(job.created_at).toLocaleString()}
                       </option>
                     ))}
                   </select>
                 </label>
+                {selected && <div className="workflow-run-summary" role="status">
+                  <strong>{runSummary(selected)}</strong>
+                  {progress.step !== null && <span>Last reported step: {progress.step.toLocaleString()}</span>}
+                  {progress.checkpoint !== null && <span>Latest checkpoint: step {progress.checkpoint.toLocaleString()}</span>}
+                </div>}
+                {selected?.error && <p className="error-notice" role="alert">{conciseRunError(selected.error)}</p>}
                 {selected && <p className={`status status-${selected.status}`}>{selected.status}</p>}
                 {selected && isActive(selected) && <button className="secondary-button" disabled={cancel.isPending} onClick={() => cancel.mutate()}>Cancel run</button>}
                 {!!data?.reports?.some(
@@ -688,18 +690,19 @@ export function WorkflowPanel({
                     )}
                   </pre>
                 </details>
-                <ol className="workflow-events">
-                  {events.data?.map((event) => (
-                    <li key={event.sequence}>
-                      {event.stage}: {event.message}
-                    </li>
-                  ))}
-                </ol>
-                {selected?.error && (
-                  <p className="error-notice" role="alert">
-                    {selected.error}
-                  </p>
-                )}
+                <details className="provenance workflow-activity-details" key={selected?.id} onToggle={event => setDetailsJobId(event.currentTarget.open ? selected?.id ?? null : null)}>
+                  <summary>{selected && runLabel(selected) === "Training" ? "Training details" : "Run details"}<span>Recorded activity and errors</span></summary>
+                  {detailsJobId === selected?.id && <>
+                  {selected?.error && <pre className="workflow-json">{selected.error}</pre>}
+                  <ol className="workflow-events" aria-label="Detailed run activity">
+                    {events.data?.map(event => <li key={event.sequence}>
+                      <time>{new Date(event.timestamp).toLocaleString()}</time>
+                      <span>{event.message}</span>
+                    </li>)}
+                  </ol>
+                  {events.error && <p className="error-notice" role="alert">{events.error.message}</p>}
+                  </>}
+                </details>
               </>
             ) : (
               <p>No policy runs in this project yet.</p>
@@ -716,16 +719,17 @@ export function WorkflowPanel({
           {stage === "Fine-tune"
             ? "Fine-tune a policy"
             : stage === "Quantize"
-              ? "Create a smaller policy"
+              ? "Quantize policy"
               : stage === "Evaluate"
-                ? "Evaluate a policy"
-                : "Reload and run a policy"}
+                ? "Evaluate policy"
+                : "Run policy"}
         </h2>
-        {!options.data?.runtimes.length && (
-          <p className="warning-box">
-            No native execution target is configured on this application host.
-            Configure a worker environment to enable policy jobs.
-          </p>
+        {options.data && !runtimes.length && (
+          needsNativeExecution ? <div className="workflow-storage-note" role="status">
+            <p>{preferences.mode === "libero" ? "No native simulation worker is configured." : stage === "Evaluate" ? "No native evaluation worker is configured." : "No native policy runner is configured."} Cloud GPUs currently support training and quantization.</p>
+            <p>Training and validation loss remain available in Fine-tune.</p>
+            {onViewTraining && <button type="button" className="secondary-button" onClick={onViewTraining}>View training metrics</button>}
+          </div> : <p className="warning-box">Connect an execution worker to start a run.</p>
         )}
         {preferencesBlocker && <p className="warning-box" role="status">{preferencesBlocker}</p>}
         <form
@@ -739,13 +743,15 @@ export function WorkflowPanel({
           <label>
             Execution target
             <select
+              aria-label="Execution target"
+              disabled={!runtimes.length}
               value={runtime?.id ?? ""}
               onChange={(e) => setRuntimeId(e.target.value)}
             >
               <option value="" disabled>
                 Select a target
               </option>
-              {options.data?.runtimes.map((x) => (
+              {runtimes.map((x) => (
                 <option key={x.id} value={x.id}>
                   {x.label}
                 </option>
@@ -767,12 +773,6 @@ export function WorkflowPanel({
                   ))}
                 </select>
               </label>
-              <p className="muted">
-                {
-                  options.data?.training_methods.find((x) => x.id === method)
-                    ?.description
-                }
-              </p>
               <label>
                 Inspected dataset
                 <select
@@ -817,53 +817,42 @@ export function WorkflowPanel({
                     ))}
                 </select>
               </label>
-              {resumeId && (
-                <p className="muted">
-                  Resume preserves the original method, dataset and training
-                  recipe.
-                </p>
-              )}
             </>
           ) : (
             <>
               <label>
-                Input policy
+                {stage === "Quantize" ? "Checkpoint or policy" : "Input policy"}
                 <select
+                  aria-label={stage === "Quantize" ? "Checkpoint or policy" : "Input policy"}
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={(e) => { setInput(e.target.value); mutation.reset(); }}
                   required
                 >
                   <option value="">Choose a policy</option>
-                  {stage === "Quantize" &&
-                    options.data?.sources.map((x) => (
-                      <option key={x.id} value={`source:${x.id}`}>
-                        {x.label}
-                      </option>
-                    ))}
-                  {inputs.map((x) => (
+                  {stage === "Quantize" && checkpoints.length > 0 && <option value="latest">Latest checkpoint · {checkpointLabel(checkpoints[0], policyJobs, options.data?.training_models)}</option>}
+                  {stage !== "Quantize" && inputs.length > 0 && <option value="latest">Latest policy · {inputs[0].label}</option>}
+                  {stage === "Quantize" && checkpoints.length > 0 && <optgroup label="Trained checkpoints">{checkpoints.map(item => <option key={item.id} value={item.id}>{checkpointLabel(item, policyJobs, options.data?.training_models)}</option>)}</optgroup>}
+                  {stage === "Quantize" && !!options.data?.sources.length && <optgroup label="Base policies">{options.data.sources.map((x) => <option key={x.id} value={`source:${x.id}`}>{x.label}</option>)}</optgroup>}
+                  {inputs.filter(item => stage !== "Quantize" || !["training_checkpoint", "native_checkpoint"].includes(item.format)).map((x) => (
                     <option key={x.id} value={x.id}>
                       {x.label} · {x.id.slice(0, 8)}
                     </option>
                   ))}
                 </select>
               </label>
-              {stage === "Quantize" && (
-                <p className="form-note">
-                  {preferences.precision === "recommended"
-                    ? "Starting"
-                    : "Custom"}{" "}
-                  compression is selected. The workflow checks a floating
-                  reference, creates candidates and evaluates their actual
-                  outputs.
-                </p>
-              )}
-              {stage === "Run" && (
-                <p className="form-note">
-                  A fresh process checks the exact policy again. With LIBERO
-                  enabled in settings, it also runs the configured simulation
-                  episodes.
-                </p>
-              )}
+              {stage === "Quantize" && <>
+                <p className="workflow-input-help">Choose the latest saved checkpoint or any earlier step. Quantization creates a separate compressed policy.</p>
+                {cloudCheckpoint && <p className="workflow-storage-note">Stored on Google Cloud. The cloud worker reads this checkpoint directly; weights stay off your computer.</p>}
+                {inputIssue && <p className="workflow-storage-note" role="status">{inputIssue} You can still download this checkpoint from its training run.</p>}
+                {!checkpoints.length && !artifacts.isPending && <p className="muted">Trained checkpoints will appear here after they are saved. You can also start from a configured base policy.</p>}
+                <label>Quantization precision<select aria-label="Quantization precision" value={preferences.precision} onChange={event => update("precision", event.target.value as Preferences["precision"])}>
+                  <option value="recommended">Recommended · 8-bit (Q8)</option>
+                  <option value="Q4_0">4-bit (Q4) · experimental</option>
+                  <option value="Q8_0">8-bit (Q8) · higher precision</option>
+                </select></label>
+                <p className="workflow-input-help">Compresses the language model. Vision stays at its original precision{preferences.vision ? " unless enabled below" : ""}.</p>
+                <details className="workflow-advanced"><summary>Advanced quantization</summary><label className="workflow-check"><input type="checkbox" checked={preferences.vision} onChange={event => update("vision", event.target.checked)} />Also quantize vision to Q8 (experimental)</label></details>
+              </>}
             </>
           )}
           <button
@@ -872,24 +861,23 @@ export function WorkflowPanel({
             disabled={
               !ready ||
               !runtime ||
-              mutation.isPending ||
+              starting ||
+              (stage !== "Fine-tune" && !selectedInput) ||
+              !!inputIssue ||
               (stage === "Fine-tune" && !runtime.training)
             }
           >
             {mutation.isPending
               ? "Starting…"
+              : starting ? stage === "Quantize" ? "Quantizing…" : "Running…"
               : stage === "Fine-tune"
                 ? "Start fine-tuning"
                 : stage === "Quantize"
-                  ? "Run quantization workflow"
+                  ? nativeQuantization ? "Run quantization workflow" : "Start quantization"
                   : stage === "Evaluate"
                     ? "Start evaluation"
                     : "Reload and run"}
           </button>
-          <p className="muted">
-            Advanced controls and benchmark metrics are in Settings &
-            diagnostics.
-          </p>
           </fieldset>
         </form>
         {errors.map((error, index) => (
@@ -908,9 +896,9 @@ export function WorkflowPanel({
                 value={selected.id}
                 onChange={(e) => setSelectedJobId(e.target.value)}
               >
-                {policyJobs.map((job) => (
+                {stageJobs.map((job) => (
                   <option key={job.id} value={job.id}>
-                    {job.kind} · {job.status}
+                    {runLabel(job)} · {job.status} · {new Date(job.created_at).toLocaleString()}
                   </option>
                 ))}
               </select>
@@ -918,7 +906,10 @@ export function WorkflowPanel({
             <p className={`status status-${selected.status}`}>
               {selected.status}
             </p>
-            <p>{selected.stage?.replaceAll("-", " ") ?? "Waiting to start"}</p>
+            <p role="status">{runSummary(selected)}</p>
+            {isActive(selected) && <progress className="workflow-progress" aria-label="Run in progress" />}
+            {!!events.data?.length && <ol className="workflow-live-events" aria-label="Recent run activity">{events.data.slice(-5).map(event => <li key={event.sequence}><time>{new Date(event.timestamp).toLocaleTimeString()}</time><span>{event.message}</span></li>)}</ol>}
+            {events.error && <p className="error-notice" role="alert">Activity is unavailable: {events.error.message}</p>}
             {isActive(selected) && (
               <button
                 className="secondary-button"
@@ -942,29 +933,26 @@ export function WorkflowPanel({
                       ? "No candidate passed all acceptance checks."
                       : data.decision === "diagnostics_only"
                         ? "Diagnostics complete. Task-quality approval is still required."
-                        : "Operation completed."}
+                        : selected.kind === "policy.quantize" ? "Quantization complete. Your compressed policy is ready to download." : "Operation completed."}
                 </p>
                 <ul>
                   {data.artifacts?.map((x) => (
                     <li key={x.id}>
-                      {x.label} ·{" "}
+                      {x.label}{x.file_bytes > 0 ? ` · ${(x.file_bytes / 1024 / 1024).toLocaleString(undefined, { maximumFractionDigits: 1 })} MiB` : ""} ·{" "}
                       <a
                         className="text-link"
                         href={artifactDownloadUrl(projectId, x.id)}
                       >
-                        Download
+                        Download {x.label}
                       </a>
                     </li>
                   ))}
                 </ul>
               </>
             )}
-            <p className="muted">
-              Detailed measurements and evidence are available in Diagnostics.
-            </p>
           </>
         ) : (
-          <p>Your policy runs will appear here.</p>
+          <p>{stage === "Quantize" ? "Start quantization to follow conversion, compression and verification here." : "No runs yet."}</p>
         )}
       </section>
     </div>

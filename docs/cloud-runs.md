@@ -1,9 +1,14 @@
 # Read-only cloud run monitor
 
 The **Cloud runs** workspace view reads snapshots published by a separate operator
-monitor. The application does not load cloud credentials, connect to SkyPilot,
+monitor. This read-only snapshot view does not load cloud credentials, connect to SkyPilot,
 launch jobs, refresh cloud resources, cancel jobs or accept a browser-supplied
 filesystem path. Existing local host and origin restrictions apply to its API.
+
+Firebird-managed training and quantization use the separate compute connection
+and SkyPilot dispatch path. Follow those jobs in **Fine-tune** and **Quantize**;
+this view preserves the standalone operator monitor for runs such as Isaac
+rollouts. See [cloud training](skypilot-training.md) for the managed lifecycle.
 
 Monitoring is disabled unless the operator sets `FIREBIRD_CLOUD_RUNS_DIR` to a
 dedicated external directory before starting the application. Keep this directory

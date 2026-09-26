@@ -25,8 +25,13 @@ from firebird_vla.train import lr_multiplier
         {"weight_decay": -1},
         {"lora_dropout": 1},
         {"validation_fraction": 0},
-        {"warmup_steps": 1000},
+        {"warmup_steps": 20000},
         {"backbone_id": ""},
+        {"camera_keys": []},
+        {"camera_keys": "observation.images.top"},
+        {"camera_keys": ["observation.images.top", "observation.images.top"]},
+        {"camera_keys": ["observation.images.top", ""]},
+        {"camera_keys": ["observation.images.top", None]},
     ],
 )
 def test_invalid_recipe_rejected(updates):
@@ -37,6 +42,33 @@ def test_invalid_recipe_rejected(updates):
 def test_typo_does_not_silently_use_default():
     with pytest.raises(ValueError, match="Unknown"):
         TrainConfig.from_dict({"lora_rnak": 8})
+
+
+def test_ui_aligned_defaults_keep_batch_size_as_effective_batch():
+    config = TrainConfig()
+    assert config.steps == 20000
+    assert config.batch_size == 64
+    assert config.gradient_accumulation_steps == 1
+    assert config.save_every == 4000
+
+
+def test_camera_recipe_roundtrip_and_legacy_resume(tmp_path):
+    cameras = ["observation.images.wrist", "observation.images.top"]
+    config = TrainConfig.from_dict({"camera_keys": cameras})
+    path = tmp_path / "recipe.json"
+    write_json(path, config.to_dict())
+    restored = TrainConfig.load(path)
+    assert restored.selected_camera_keys == tuple(cameras)
+    assert restored.resume_matches(config)
+    assert not restored.resume_matches(replace(config, camera_keys=list(reversed(cameras))))
+    assert not restored.resume_matches(replace(config, camera_keys=cameras[:1]))
+
+    legacy = TrainConfig.from_dict({"camera_key": cameras[0]})
+    explicit = TrainConfig.from_dict({"camera_keys": cameras[:1], "output_dir": "new-run"})
+    assert legacy.selected_camera_keys == (cameras[0],)
+    assert explicit.resume_matches(legacy)
+    assert legacy.resume_matches(explicit)
+    assert not replace(explicit, batch_size=2).resume_matches(legacy)
 
 
 def test_split_is_disjoint_complete_and_independent_of_input_order():

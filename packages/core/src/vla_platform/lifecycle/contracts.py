@@ -1,12 +1,43 @@
 """GPU-independent application lifecycle contracts."""
 
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class StrictRecord(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class CloudExecutionTarget(StrictRecord):
+    """Server-owned selection captured when a job is accepted; no credentials."""
+
+    project_id: str = Field(pattern=r"^[a-z][a-z0-9-]{4,28}[a-z0-9]$")
+    workspace: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
+    sky_api_endpoint: str = Field(min_length=1, max_length=2048)
+    region: str = Field(pattern=r"^[a-z][a-z0-9-]+[0-9]$", max_length=64)
+    accelerator: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+    gpu_count: Literal[1] = 1
+    disk_size_gb: int = Field(ge=100, le=2000, strict=True)
+    idle_minutes: int = Field(ge=1, le=60, strict=True)
+    instance_type: str | None = Field(default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]+$")
+
+    @field_validator("sky_api_endpoint")
+    @classmethod
+    def safe_endpoint(cls, value: str) -> str:
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.query
+            or parsed.fragment
+            or any(character.isspace() or not character.isprintable() for character in value)
+        ):
+            raise ValueError("SkyPilot endpoint must be an HTTP URL without embedded credentials")
+        return value.rstrip("/")
 
 
 class Precision(StrictRecord):
@@ -150,3 +181,45 @@ class JobEvent(StrictRecord):
     stage: str
     message: str
     timestamp: str
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
+class TrainingMetric(StrictRecord):
+    step: int = Field(ge=0)
+    timestamp: str | None = None
+    train_loss: float | None = None
+    validation_loss: float | None = None
+    validation_action_mse: float | None = None
+    learning_rate: float | None = None
+    grad_norm: float | None = None
+    elapsed_seconds: float | None = None
+
+
+class TrainingCheckpoint(StrictRecord):
+    step: int = Field(ge=0)
+    name: str
+    timestamp: str | None = None
+    artifact_id: str | None = None
+    storage: str | None = None
+    remote_uri: str | None = None
+
+
+class TrainingTelemetry(StrictRecord):
+    job_id: str
+    status: str
+    phase: str
+    current_action: str
+    updated_at: str
+    completed_steps: int | None = None
+    total_steps: int | None = None
+    percent: float | None = None
+    elapsed_seconds: float | None = None
+    wall_seconds: float | None = None
+    eta_seconds: float | None = None
+    latest: TrainingMetric | None = None
+    metrics: list[TrainingMetric] = Field(default_factory=list)
+    metrics_truncated: bool = False
+    checkpoints: list[TrainingCheckpoint] = Field(default_factory=list)
+    events: list[JobEvent] = Field(default_factory=list)
+    logs: list[str] = Field(default_factory=list)
+    reproducibility: dict[str, Any] = Field(default_factory=dict)

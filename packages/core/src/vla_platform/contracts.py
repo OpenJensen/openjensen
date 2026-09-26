@@ -11,10 +11,12 @@ from pydantic import (
     Field,
     JsonValue,
     StringConstraints,
+    field_validator,
     model_validator,
 )
 
-from vla_platform.lifecycle.contracts import LifecycleResult, PolicyRequest
+from vla_platform.augmentation.contracts import AugmentationRequest, AugmentationResult
+from vla_platform.lifecycle.contracts import CloudExecutionTarget, LifecycleResult, PolicyRequest
 
 NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 RepositoryId = Annotated[
@@ -63,8 +65,17 @@ class Project(ProjectCreate):
 class IntakeRequest(Record):
     source: Literal["huggingface", "local"] = "huggingface"
     repo_id: RepositoryId | None = None
-    revision: NonEmptyString = Field(default="main", max_length=200)
+    revision: NonEmptyString = Field(
+        default="main",
+        max_length=200,
+        description="Branch, tag or commit. Omitted or blank uses the latest main revision.",
+    )
     path: NonEmptyString | None = Field(default=None, max_length=4096)
+
+    @field_validator("revision", mode="before")
+    @classmethod
+    def default_revision(cls, value):
+        return "main" if value is None or (isinstance(value, str) and not value.strip()) else value
 
     @model_validator(mode="after")
     def validate_source(self) -> IntakeRequest:
@@ -237,23 +248,31 @@ class Job(Record):
     project_id: NonEmptyString
     kind: NonEmptyString = "dataset.inspect"
     status: JobStatus = "queued"
-    request: IntakeRequest | PolicyRequest
+    request: IntakeRequest | PolicyRequest | AugmentationRequest
+    compute_target: CloudExecutionTarget | None = None
     created_at: Timestamp
     updated_at: Timestamp
-    result: DatasetProfile | LifecycleResult | None = None
+    result: DatasetProfile | LifecycleResult | AugmentationResult | None = None
     error: str | None = None
     stage: str | None = None
 
     @model_validator(mode="after")
     def validate_operation(self):
         expected = (
-            self.request.operation if isinstance(self.request, PolicyRequest) else "dataset.inspect"
+            self.request.operation
+            if isinstance(self.request, (PolicyRequest, AugmentationRequest))
+            else "dataset.inspect"
         )
         if self.kind != expected:
             raise ValueError("Job kind must match its registered request operation")
-        if self.result is not None and isinstance(self.request, PolicyRequest) != isinstance(
-            self.result, LifecycleResult
-        ):
+        result_type = (
+            AugmentationResult
+            if isinstance(self.request, AugmentationRequest)
+            else LifecycleResult
+            if isinstance(self.request, PolicyRequest)
+            else DatasetProfile
+        )
+        if self.result is not None and not isinstance(self.result, result_type):
             raise ValueError("Job result must match its operation family")
         return self
 
@@ -262,6 +281,7 @@ Stage = Literal["Dataset", "Fine-tune", "Distill", "Quantize", "Evaluate", "Run"
 Operation = Literal[
     "dataset.inspect",
     "dataset.inspect.local",
+    "dataset.augment",
     "policy.finetune",
     "policy.distill",
     "policy.quantize",
@@ -271,6 +291,7 @@ Operation = Literal[
 OPERATION_STAGES: dict[Operation, Stage] = {
     "dataset.inspect": "Dataset",
     "dataset.inspect.local": "Dataset",
+    "dataset.augment": "Dataset",
     "policy.finetune": "Fine-tune",
     "policy.distill": "Distill",
     "policy.quantize": "Quantize",
@@ -283,6 +304,7 @@ IMPLEMENTED_OPERATIONS = frozenset(
     {
         "dataset.inspect",
         "dataset.inspect.local",
+        "dataset.augment",
         "policy.finetune",
         "policy.quantize",
         "policy.evaluate",

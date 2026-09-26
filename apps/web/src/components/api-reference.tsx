@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { WorkspaceShell } from '@/components/workspace-shell';
 import { Icon } from '@/components/icon';
-import { apiOrigin, openApiUrl } from '@/lib/api';
+import { apiOrigin, apiReferenceUrl, openApiUrl } from '@/lib/api';
+import { publicPath } from '@/lib/base-path';
 import { curlExample, endpointsFor, filterEndpoints, httpMethods, parseDocument, referenceName, schemaType, type Endpoint, type Media, type OpenApiDocument, type Schema } from '@/lib/openapi';
 
 function SchemaLink({ schema }: { schema: Schema }) {
@@ -70,7 +71,7 @@ function RequestExample({ endpoint, origin }: { endpoint: Endpoint; origin: stri
     <div className="reference-example-heading"><span>cURL</span><button className="text-button" type="button" onClick={() => void copy()} aria-label={`Copy ${endpoint.method} ${endpoint.path} example`}>{copied ? 'Copied' : 'Copy example'}</button></div>
     <pre className="reference-code"><code>{example}</code></pre>
     {endpoint.parameters.length > 0 && <p className="reference-hint">Replace path placeholders and supply the parameters listed above before running.</p>}
-    {endpoint.operation.requestBody && <p className="reference-hint">Create <code>request.json</code> using the request body contract. Request examples do not run from this page.</p>}
+    {endpoint.operation.requestBody && <p className="reference-hint">Create <code>request.json</code> with the fields above.</p>}
     <span role="status" className={copyError ? 'reference-hint' : 'visually-hidden'}>{copyError ? 'Copy unavailable. Select the example text to copy it.' : copied ? 'Example copied to clipboard.' : ''}</span>
   </div>;
 }
@@ -103,12 +104,12 @@ export function ApiReference() {
   const [document, setDocument] = useState<OpenApiDocument | null>(null);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
-  const [origin, setOrigin] = useState('http://127.0.0.1:8000');
+  const [origin, setOrigin] = useState(apiOrigin);
   const [search, setSearch] = useState('');
   const [method, setMethod] = useState('ALL');
 
   useEffect(() => {
-    setOrigin(apiOrigin || window.location.origin);
+    setOrigin(new URL(apiOrigin || '/', window.location.origin).href.replace(/\/$/, ''));
     const controller = new AbortController();
     let active = true;
     const timeout = setTimeout(() => controller.abort(), 15000);
@@ -143,19 +144,17 @@ export function ApiReference() {
   const schemas = Object.entries(document?.components?.schemas ?? {});
   const navigation = <nav className="reference-navigation" aria-label="API navigation">
     <p className="sidebar-section-label">Workspace</p>
-    <ul className="stage-list"><li><a className="stage-button" href="/"><Icon name="database" size={19} /><span>Dataset workspace</span></a></li><li><a className="stage-button selected" href="/docs/" aria-current="page"><Icon name="book" size={19} /><span>API reference</span></a></li></ul>
+    <ul className="stage-list"><li><a className="stage-button" href={publicPath('/')}><Icon name="database" size={19} /><span>Dataset workspace</span></a></li><li><a className="stage-button selected" href={apiReferenceUrl} aria-current="page"><Icon name="book" size={19} /><span>API reference</span></a></li></ul>
     <div className="reference-nav-section"><p className="sidebar-section-label">On this page</p><ul className="stage-list"><li><a className="stage-button" href="#overview">Overview</a></li><li><a className="stage-button" href="#endpoints">Endpoints <small>{endpoints.length || '—'}</small></a></li><li><a className="stage-button" href="#schemas">Data models <small>{schemas.length || '—'}</small></a></li></ul></div>
-    <div className="reference-sidebar-note"><Icon name="check" size={15} /><p>Loaded from this API’s live OpenAPI contract.</p></div>
   </nav>;
 
   return <WorkspaceShell navigation={navigation} sidebarLabel="Reference navigation" skipLabel="Skip to API reference" contentClassName="reference-content" breadcrumb={<><Icon name="book" size={18} /><strong>API reference</strong><span className="breadcrumb-divider">/</span><span className="breadcrumb-project">Developer tools</span></>}>
     <section id="overview" className="reference-overview" aria-labelledby="reference-heading">
-      <div className="page-heading"><div><p className="eyebrow">Developer tools</p><h1 id="reference-heading">API reference</h1><p>The same workspace. Ready for your code.</p></div><a className="secondary-button reference-schema-link" href={openApiUrl}>OpenAPI JSON <Icon name="external" size={14} /></a></div>
-      <p className="reference-intro">Create projects, inspect robotics datasets, and follow jobs from your own tools. Explore the request and response contracts used by the Firebird workspace.</p>
+      <div className="page-heading"><div><h1 id="reference-heading">API reference</h1></div><a className="secondary-button reference-schema-link" href={openApiUrl}>OpenAPI JSON <Icon name="external" size={14} /></a></div>
       <div className="reference-overview-grid"><div><span className="eyebrow">Base URL</span><code>{origin}/api/v1</code></div><div><span className="eyebrow">API version</span><strong>{document ? `v${document.info.version}` : '—'}</strong></div><div><span className="eyebrow">Contract</span><strong>{document ? `OpenAPI ${document.openapi}` : 'Loading…'}</strong></div></div>
     </section>
 
-    {!document && !error && <div className="reference-state" role="status"><span className="spinner" /><h2>Loading API reference…</h2><p>Reading the current API contract.</p></div>}
+    {!document && !error && <div className="reference-state" role="status"><span className="spinner" /><h2>Loading API reference…</h2></div>}
     {error && <div className="reference-state"><span className="empty-icon"><Icon name="book" size={24} /></span><h2>API reference unavailable</h2><p role="alert">{error}</p><button className="secondary-button" type="button" onClick={() => setAttempt(value => value + 1)}>Retry loading schema <Icon name="arrow" size={15} /></button></div>}
     {document && <>
       <section id="endpoints" className="reference-section" aria-labelledby="endpoints-heading">
@@ -163,10 +162,10 @@ export function ApiReference() {
         <div className="reference-filters"><div className="reference-search"><Icon name="book" size={16} /><label className="visually-hidden" htmlFor="endpoint-search">Search endpoints</label><input id="endpoint-search" type="search" placeholder="Search endpoints, methods, or descriptions…" value={search} onChange={event => setSearch(event.target.value)} /></div><label className="visually-hidden" htmlFor="method-filter">HTTP method</label><select id="method-filter" value={method} onChange={event => setMethod(event.target.value)}><option value="ALL">All methods</option>{httpMethods.filter(value => endpoints.some(endpoint => endpoint.method === value.toUpperCase())).map(value => <option key={value} value={value.toUpperCase()}>{value.toUpperCase()}</option>)}</select></div>
         <p className="reference-result-count" role="status">Showing {filtered.length} of {endpoints.length} endpoints</p>
         <div className="reference-endpoints">{filtered.map(endpoint => <EndpointCard key={endpoint.id} endpoint={endpoint} origin={origin} />)}</div>
-        {!filtered.length && <div className="reference-state"><h3>No endpoints found</h3><p>Try another path, description, or HTTP method.</p><button className="secondary-button" type="button" onClick={() => { setSearch(''); setMethod('ALL'); }}>Clear filters</button></div>}
+        {!filtered.length && <div className="reference-state"><h3>No endpoints found</h3><button className="secondary-button" type="button" onClick={() => { setSearch(''); setMethod('ALL'); }}>Clear filters</button></div>}
       </section>
-      <section id="schemas" className="reference-section" aria-labelledby="schemas-heading"><div className="section-tabs"><h2 className="section-tab" id="schemas-heading">Data models</h2><span className="section-note">{schemas.length} schemas</span></div><p className="reference-hint">Request and response fields, types, and validation rules from the current API.</p><div className="reference-models">{schemas.map(([name, schema]) => <details className="reference-model" id={`schema-${encodeURIComponent(name)}`} key={name}><summary><Icon name="layers" size={17} /><code>{name}</code><span>{Object.keys(schema.properties ?? {}).length} fields</span><span className="endpoint-chevron" aria-hidden="true">⌄</span></summary><div className="reference-model-body">{schema.description && <p className="reference-hint">{schema.description}</p>}<SchemaFields schema={schema} /><details className="reference-raw"><summary>Full JSON schema</summary><pre className="reference-code"><code>{JSON.stringify(schema, null, 2)}</code></pre></details></div></details>)}</div></section>
-      <footer className="workspace-footer"><span>Built from the live API contract.</span><a className="text-link" href="/">Back to workspace <Icon name="arrow" size={13} /></a></footer>
+      <section id="schemas" className="reference-section" aria-labelledby="schemas-heading"><div className="section-tabs"><h2 className="section-tab" id="schemas-heading">Data models</h2><span className="section-note">{schemas.length} schemas</span></div><div className="reference-models">{schemas.map(([name, schema]) => <details className="reference-model" id={`schema-${encodeURIComponent(name)}`} key={name}><summary><Icon name="layers" size={17} /><code>{name}</code><span>{Object.keys(schema.properties ?? {}).length} fields</span><span className="endpoint-chevron" aria-hidden="true">⌄</span></summary><div className="reference-model-body">{schema.description && <p className="reference-hint">{schema.description}</p>}<SchemaFields schema={schema} /><details className="reference-raw"><summary>Full JSON schema</summary><pre className="reference-code"><code>{JSON.stringify(schema, null, 2)}</code></pre></details></div></details>)}</div></section>
+      <footer className="workspace-footer"><a className="text-link" href={publicPath('/')}>Back to workspace <Icon name="arrow" size={13} /></a></footer>
     </>}
   </WorkspaceShell>;
 }

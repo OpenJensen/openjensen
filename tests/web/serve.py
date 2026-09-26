@@ -9,9 +9,15 @@ from tempfile import TemporaryDirectory
 
 import uvicorn
 from vla_platform.api import create_app
+from vla_platform.compute_settings import ComputeSettings, ComputeSettingsUpdate
 from vla_platform.settings import Settings
 
-static_dir = Path(__file__).resolve().parents[2] / "apps" / "web" / "out"
+static_dir = Path(
+    os.environ.get(
+        "FIREBIRD_TEST_WEB_DIR",
+        Path(__file__).resolve().parents[2] / "apps" / "web" / "out",
+    )
+)
 if not (static_dir / "docs" / "index.html").is_file():
     raise SystemExit("Build the web app before browser tests: pnpm build:web")
 
@@ -92,6 +98,12 @@ with TemporaryDirectory(prefix="firebird-browser-tests-") as data_dir:
         )
     elif os.getenv("FIREBIRD_BROWSER_EMPTY_RUNTIME") == "1":
         runtime_config.write_text('{"runtimes": [], "sources": []}', encoding="utf-8")
+    if os.getenv("FIREBIRD_BROWSER_EMPTY_RUNTIME") != "1":
+        # Only this disposable fixture opts into its synthetic local workers.
+        # The application's default continues to require explicit local enablement.
+        ComputeSettings(workspace).update(
+            ComputeSettingsUpdate.model_validate({"local": {"enabled": True}})
+        )
     uvicorn.run(
         create_app(
             Settings(

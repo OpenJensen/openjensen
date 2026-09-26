@@ -15,6 +15,7 @@ from .checkpoint import (
     write_json,
 )
 from .config import TrainConfig
+from .telemetry import emit
 
 METHODS = {"lora": "LoRA", "qlora": "QLoRA (NF4)"}
 
@@ -54,6 +55,7 @@ def main():
             from .model import require_runtime
 
             require_runtime()
+            emit("preparing", "Checking available GPU memory")
             import torch
 
             free, total = torch.cuda.mem_get_info()
@@ -102,6 +104,9 @@ def main():
                     data["revision"],
                 ):
                     raise ValueError("Resume must use the checkpoint's method and pinned dataset")
+                if any(key in recipe for key in ("camera_key", "camera_keys")):
+                    if cfg.selected_camera_keys != previous.selected_camera_keys:
+                        raise ValueError("Resume must use the checkpoint's camera selection")
                 cfg = replace(previous, output_dir=str(output / "training"))
             recipe_path = output / "recipe.json"
             write_json(recipe_path, cfg.to_dict())
@@ -110,8 +115,15 @@ def main():
                 command += ["--resume", str(resume)]
             subprocess.run(command, check=True)
             checkpoint = resolve_checkpoint(output / "training")
-            if verify_training_checkpoint(checkpoint)["step"] != cfg.steps:
+            final_step = verify_training_checkpoint(checkpoint)["step"]
+            if final_step != cfg.steps:
                 raise ValueError("Training returned without a complete final checkpoint")
+            emit(
+                "verifying",
+                "Reloading checkpoint in a fresh process and checking action parity",
+                step=final_step,
+                total_steps=cfg.steps,
+            )
             subprocess.run(
                 [sys.executable, "-m", "firebird_vla.verify", str(checkpoint)], check=True
             )
@@ -123,6 +135,7 @@ def main():
                 bundle / "verification.json",
             )
             shutil.copyfile(output / "training/metrics.jsonl", bundle / "training-metrics.jsonl")
+            shutil.copyfile(output / "training/environment.json", bundle / "environment.json")
             last_metrics = {}
             with (bundle / "training-metrics.jsonl").open() as stream:
                 for line in stream:
@@ -134,6 +147,7 @@ def main():
                 "action_dim": data["features"]["action"]["shape"][0],
                 "dataset": data,
                 "base_model": {"repository": cfg.model_id, "revision": cfg.model_revision},
+                "camera_keys": list(cfg.selected_camera_keys),
                 "reload_verified": True,
                 "task_success": None,
             }
@@ -147,6 +161,13 @@ def main():
                 "final_optimizer_metrics": last_metrics,
                 "task_success": None,
             }
+            emit(
+                "verifying",
+                "Checkpoint reload verified; publishing training artifacts",
+                step=cfg.steps,
+                total_steps=cfg.steps,
+                reload_verified=True,
+            )
         elif job["operation"] == "policy.export":
             from .export import export_checkpoint
 

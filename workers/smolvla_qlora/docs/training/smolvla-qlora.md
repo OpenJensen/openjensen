@@ -12,8 +12,8 @@ the CUDA checks below. No 8 GB fit or robot/simulation success is claimed.
 
 ## Install on the training machine
 
-Use Linux x86-64, Python 3.11, and a CUDA/BF16-capable NVIDIA GPU (Ampere or
-newer, including RTX 4070). The lock uses PyTorch 2.7.1's CUDA 12.6 wheels;
+Use Linux x86-64, Python 3.11, and a compatible CUDA GPU. Ampere and newer use
+native BF16; T4 uses FP16 with gradient scaling. The lock uses PyTorch 2.7.1's CUDA 12.6 wheels;
 the NVIDIA driver must support that runtime. Keep this worker in its own environment.
 Allow disk for CUDA packages, the base policy, the approximately 1.3 GB candidate
 dataset, and checkpoints, plus enough host RAM to load the base policy in FP32.
@@ -61,15 +61,19 @@ firebird-finetune --config configs/smolvla_qlora.json \
   --resume outputs/smolvla-qlora/checkpoint-000100 \
   --output-dir outputs/smolvla-qlora-resumed
 
-firebird-verify outputs/smolvla-qlora/checkpoint-001000
+firebird-verify outputs/smolvla-qlora/checkpoint-020000
 ```
 
 Edit the JSON recipe before starting a different experiment. Steps count optimizer
-updates, not microbatches. Defaults are batch size 1, accumulation 8, LoRA rank 16,
-learning rate 1e-4, BF16 compute, and 1,000 updates. These are starting settings,
-not tuned hyperparameters. The final partial batch of an epoch is retained.
-Resume restores optimizer, scheduler, torch/CUDA/Python RNG state and the shuffled
-batch cursor. It requires the original settings except the output directory;
+updates, not microbatches. Defaults are batch size 64, accumulation 1, LoRA rank 16,
+learning rate 1e-4, and 20,000 updates. The visible batch/step defaults match the
+Kite SmolVLA setup; the adapter optimizer settings remain this worker's recipe.
+Checkpoints are saved every five completed updates. These are starting settings,
+not tuned hyperparameters or a promise of memory fit on every GPU. The final
+partial batch of an epoch is retained.
+Resume restores optimizer, scheduler, gradient scaler (FP16), torch/CUDA/Python RNG
+state and the shuffled batch cursor, including windows skipped after gradient
+overflow. It requires the original recipe and compute precision except the output directory;
 extending a completed schedule is a new experiment. Exact bitwise reproducibility
 across different GPU architectures or kernel versions is not promised.
 
@@ -84,13 +88,18 @@ dataset and downstream environment. Loss is not a success rate.
 ## What is quantized and trained
 
 - Language-backbone and action-expert transformer linear weights are frozen,
-  packed NF4 with double quantization. BF16 **storage containers** preserve the
+  packed NF4 with double quantization. BF16 or FP16 **storage containers** preserve the
   native model's activation casts; the contained weights remain packed 4-bit.
 - Expert attention and MLP projections receive trainable LoRA adapters.
 - State/action/time projections are trained and saved in full precision. The
   vision encoder, embeddings and normalization weights remain unquantized and frozen.
-- Autocast uses BF16; gradient accumulation and clipping bound optimizer updates.
+- Autocast uses native BF16, or FP16 on T4 with FP32 trainable parameters and dynamic
+  loss scaling. Gradients are unscaled before clipping; overflow skips the update
+  and scheduler advancement. SmolVLA's attention-score calculation stays FP32.
   The recipe does not enable gradient checkpointing or distributed training.
+
+The FP16 path has CPU contract coverage and optional CUDA regression tests. It has
+not been validated by a T4 training run in this change.
 
 This is adapter fine-tuning over quantized base weights. It is neither fake
 quantization nor a claim that every tensor occupies four bits. The code first

@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from test_lifecycle import project, submit, wait
 from vla_platform.api import create_app
+from vla_platform.compute_settings import ComputeSettings, ComputeSettingsUpdate
 from vla_platform.lifecycle.contracts import Evaluation, PolicyRequest
 from vla_platform.lifecycle.runtime import Runtime, Source, command
 from vla_platform.settings import Settings
@@ -47,7 +48,11 @@ def spatial(tmp_path):
             }
         )
     )
-    return Settings(data_dir=tmp_path / "workspace", runtime_config=config)
+    settings = Settings(data_dir=tmp_path / "workspace", runtime_config=config)
+    ComputeSettings(settings.data_dir).update(
+        ComputeSettingsUpdate.model_validate({"local": {"enabled": True}})
+    )
+    return settings
 
 
 def evaluation(**changes):

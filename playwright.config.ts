@@ -18,8 +18,8 @@ export default defineConfig({
   projects: [
     { name: 'openapi', testMatch: 'openapi.spec.ts' },
     { name: 'workflow', testMatch: 'workflow.spec.ts', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1000 } } },
-    { name: 'desktop', testMatch: ['api-reference.spec.ts', 'cloud-runs.spec.ts'], use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1000 } } },
-    { name: 'mobile', testMatch: ['api-reference.spec.ts', 'cloud-runs.spec.ts'], use: { ...devices['Pixel 7'], defaultBrowserType: 'chromium' } },
+    { name: 'desktop', testMatch: ['api-reference.spec.ts', 'augmentation.spec.ts', 'cloud-connections.spec.ts', 'gpu-picker.spec.ts', 'dataset-starters.spec.ts', 'training-monitor.spec.ts', 'hf-settings.spec.ts', 'quantization.spec.ts', 'cloud-runs.spec.ts'], use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1000 } } },
+    { name: 'mobile', testMatch: ['api-reference.spec.ts', 'augmentation.spec.ts', 'cloud-connections.spec.ts', 'gpu-picker.spec.ts', 'dataset-starters.spec.ts', 'training-monitor.spec.ts', 'hf-settings.spec.ts', 'quantization.spec.ts', 'cloud-runs.spec.ts'], use: { ...devices['Pixel 7'], defaultBrowserType: 'chromium' } },
   ],
   // Exercise the production export and Python routing together. Refuse to reuse
   // a server: the developer's workspace and running application stay untouched.
