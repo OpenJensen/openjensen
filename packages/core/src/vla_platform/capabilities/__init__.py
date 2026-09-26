@@ -6,14 +6,20 @@ def registry() -> list[Capability]:
         Capability(
             stage="Dataset",
             operation="dataset.inspect",
-            status="available",
+            status="untested",
             description=(
                 "Public HF and allowed local LeRobot metadata only; "
-                "no semantic or media validation."
+                "no semantic or media validation. Target evidence awaits CAP-001."
             ),
         ),
         *[
-            Capability(stage=stage, operation=operation, status="planned", description=description)
+            Capability(
+                stage=stage,
+                operation=operation,
+                status="planned",
+                description=description,
+                support=[],
+            )
             for stage, operation, description in [
                 ("Fine-tune", "policy.finetune", "Native training recipe integration is planned."),
                 (

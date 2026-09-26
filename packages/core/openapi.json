@@ -3,26 +3,129 @@
     "schemas": {
       "Capability": {
         "additionalProperties": false,
+        "description": "Planned/untested records carry no support; outcome claims carry evidence.",
+        "oneOf": [
+          {
+            "properties": {
+              "status": {
+                "enum": [
+                  "planned",
+                  "untested"
+                ]
+              },
+              "support": {
+                "maxItems": 0,
+                "type": "array"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          {
+            "properties": {
+              "status": {
+                "const": "available"
+              },
+              "support": {
+                "contains": {
+                  "properties": {
+                    "evidence_state": {
+                      "const": "tested"
+                    }
+                  },
+                  "required": [
+                    "evidence_state"
+                  ]
+                },
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": [
+              "status",
+              "support"
+            ]
+          },
+          {
+            "properties": {
+              "status": {
+                "const": "unsupported"
+              },
+              "support": {
+                "items": {
+                  "properties": {
+                    "evidence_state": {
+                      "const": "unsupported"
+                    }
+                  },
+                  "required": [
+                    "evidence_state"
+                  ]
+                },
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": [
+              "status",
+              "support"
+            ]
+          }
+        ],
         "properties": {
           "description": {
+            "minLength": 1,
             "title": "Description",
             "type": "string"
           },
           "operation": {
+            "enum": [
+              "dataset.inspect",
+              "dataset.inspect.local",
+              "policy.finetune",
+              "policy.distill",
+              "policy.quantize",
+              "policy.evaluate",
+              "policy.run"
+            ],
             "title": "Operation",
             "type": "string"
           },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
           "stage": {
+            "enum": [
+              "Dataset",
+              "Fine-tune",
+              "Distill",
+              "Quantize",
+              "Evaluate",
+              "Run"
+            ],
             "title": "Stage",
             "type": "string"
           },
           "status": {
             "enum": [
+              "planned",
+              "untested",
               "available",
-              "planned"
+              "unsupported"
             ],
             "title": "Status",
             "type": "string"
+          },
+          "support": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilitySupport"
+            },
+            "title": "Support",
+            "type": "array"
           }
         },
         "required": [
@@ -34,11 +137,110 @@
         "title": "Capability",
         "type": "object"
       },
+      "CapabilityEvidence": {
+        "additionalProperties": false,
+        "description": "Reference to reviewed evidence; validation does not execute or verify it.",
+        "properties": {
+          "device_name": {
+            "minLength": 1,
+            "title": "Device Name",
+            "type": "string"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:[Zz]|[+-](?:[01]\\d|2[0-3]):[0-5]\\d)$",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "reference": {
+            "minLength": 1,
+            "title": "Reference",
+            "type": "string"
+          },
+          "runtime": {
+            "minLength": 1,
+            "title": "Runtime",
+            "type": "string"
+          },
+          "source_revision": {
+            "pattern": "^[a-f0-9]{40}$",
+            "title": "Source Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reference",
+          "source_revision",
+          "runtime",
+          "device_name",
+          "recorded_at"
+        ],
+        "title": "CapabilityEvidence",
+        "type": "object"
+      },
+      "CapabilitySupport": {
+        "additionalProperties": false,
+        "description": "Evidence for one parent operation on one concrete execution target.",
+        "properties": {
+          "backend": {
+            "enum": [
+              "metadata",
+              "lerobot",
+              "openvla_oft"
+            ],
+            "title": "Backend",
+            "type": "string"
+          },
+          "device": {
+            "enum": [
+              "cpu",
+              "cuda"
+            ],
+            "title": "Device",
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilityEvidence"
+            },
+            "minItems": 1,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "evidence_state": {
+            "enum": [
+              "tested",
+              "unsupported"
+            ],
+            "title": "Evidence State",
+            "type": "string"
+          },
+          "os": {
+            "enum": [
+              "linux",
+              "windows",
+              "macos"
+            ],
+            "title": "Os",
+            "type": "string"
+          }
+        },
+        "required": [
+          "backend",
+          "os",
+          "device",
+          "evidence_state",
+          "evidence"
+        ],
+        "title": "CapabilitySupport",
+        "type": "object"
+      },
       "DatasetProfile": {
         "additionalProperties": false,
         "properties": {
           "features": {
             "additionalProperties": true,
+            "minProperties": 1,
             "title": "Features",
             "type": "object"
           },
@@ -56,6 +258,8 @@
             "type": "number"
           },
           "inspected_at": {
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:[Zz]|[+-](?:[01]\\d|2[0-3]):[0-5]\\d)$",
             "title": "Inspected At",
             "type": "string"
           },
@@ -77,12 +281,15 @@
             "title": "License"
           },
           "metadata_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
             "title": "Metadata Sha256",
             "type": "string"
           },
           "repo_id": {
             "anyOf": [
               {
+                "maxLength": 200,
+                "pattern": "^[\\w.-]+/[\\w.-]+$",
                 "type": "string"
               },
               {
@@ -92,6 +299,7 @@
             "title": "Repo Id"
           },
           "revision": {
+            "minLength": 1,
             "title": "Revision",
             "type": "string"
           },
@@ -173,6 +381,7 @@
             "anyOf": [
               {
                 "maxLength": 4096,
+                "minLength": 1,
                 "type": "string"
               },
               {
@@ -218,6 +427,8 @@
         "additionalProperties": false,
         "properties": {
           "created_at": {
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:[Zz]|[+-](?:[01]\\d|2[0-3]):[0-5]\\d)$",
             "title": "Created At",
             "type": "string"
           },
@@ -233,6 +444,7 @@
             "title": "Error"
           },
           "id": {
+            "minLength": 1,
             "title": "Id",
             "type": "string"
           },
@@ -243,6 +455,7 @@
             "type": "string"
           },
           "project_id": {
+            "minLength": 1,
             "title": "Project Id",
             "type": "string"
           },
@@ -273,6 +486,8 @@
             "type": "string"
           },
           "updated_at": {
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:[Zz]|[+-](?:[01]\\d|2[0-3]):[0-5]\\d)$",
             "title": "Updated At",
             "type": "string"
           }
@@ -291,10 +506,13 @@
         "additionalProperties": false,
         "properties": {
           "created_at": {
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:[Zz]|[+-](?:[01]\\d|2[0-3]):[0-5]\\d)$",
             "title": "Created At",
             "type": "string"
           },
           "id": {
+            "minLength": 1,
             "title": "Id",
             "type": "string"
           },
