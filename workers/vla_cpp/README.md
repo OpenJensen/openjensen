@@ -1,5 +1,12 @@
 # Standalone SmolVLA quantization module
 
+This checkout also includes the CPU benchmark layer. Its PR is
+`feat/quantization_benchmark_cpu` → codebase `main`, with the quantization module
+PR merged first; see
+[CPU reproduction and evidence](docs/cpu-benchmark.md). The module API and
+`policykit-worker` command below remain available. The added `policykit` command
+runs the historical experiment harness.
+
 This package converts an F32/BF16 SmolVLA GGUF into LM Q8_0/Q4_0, optionally with
 vision Q8_0, while preserving the action expert, projectors, embeddings, norms and
 other protected tensors. It includes the pinned vla.cpp packed-weight loader patch
@@ -93,7 +100,8 @@ uv run policykit-worker --help
 uv run python -m pytest -q
 ```
 
-The container builds from this directory and runs `policykit-worker`. Mount a
+The benchmark container builds from this directory and runs `policykit`.
+The standalone conversion entry point remains `policykit-worker`. Mount a
 prepared native checkout, floating checkpoint and writable job/output directory;
 the image does not download models or build a native inference runtime.
 

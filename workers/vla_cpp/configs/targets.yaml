@@ -1,0 +1,30 @@
+# Execution targets are separate benchmark lanes. Never merge their latency or
+# memory figures: only compare quantization quality within the same target.
+version: 1
+default_target: mac_cpu
+targets:
+  mac_cpu:
+    label: Intel MacBook Pro CPU
+    runtime_backend: cpu
+    artifact_format: gguf
+    benchmark_lane: intel-mac-cpu
+    deployment: local
+    notes: Primary v1 development and CPU feasibility target.
+  rtx_3070:
+    label: NVIDIA RTX 3070 laptop/desktop GPU
+    runtime_backend: cuda
+    artifact_format: gguf
+    benchmark_lane: rtx-3070-cuda
+    deployment: local
+    notes: Use a separate CUDA build and publish an independent leaderboard lane.
+  gcloud_gpu:
+    label: Google Cloud GPU worker
+    runtime_backend: cuda
+    artifact_format: gguf
+    benchmark_lane: gcloud-cuda
+    deployment: gcloud
+    required_environment:
+      - GOOGLE_CLOUD_PROJECT
+      - GOOGLE_CLOUD_REGION
+      - POLICYKIT_GCLOUD_ACCELERATOR
+    notes: Accelerator model and worker image are deployment-time inputs; record both in each run manifest.
