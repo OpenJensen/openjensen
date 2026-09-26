@@ -79,8 +79,9 @@ recipe; no CUDA or MPS execution is requested.
 
 After successful checks, one OS no-replace rename publishes the complete directory,
 including when another process races to create an empty destination. macOS publication
-is locally tested. The additive native-worker CI job runs these checks on Linux;
-check its result before claiming Linux acceptance. Native Windows publication is
+is locally tested. The additive Linux CPU CI job is prepared but publication is
+pending GitHub workflow permission; do not claim Linux acceptance until it runs.
+Native Windows publication is
 implemented but unverified. File contents are flushed before
 publication; no power-loss durability guarantee is made for directory metadata.
 
