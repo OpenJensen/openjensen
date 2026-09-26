@@ -21,9 +21,12 @@ private connection configuration, or credentials belong in this directory.
   excludes simulator stepping and camera acquisition.
 - Startup is cached runtime initialization timed inside the harness process. It
   includes model/processor setup, quantization, C++ server launch and engine-worker
-  initialization where applicable. Top-level Python imports, downloads and the
-  harness's first-inference warmup are excluded; engine-internal profiling is
-  included. This is not process-start-to-first-action time.
+  initialization where applicable. Parent-process backend imports before the
+  runtime timer, downloads and the harness's first-inference warmup are excluded;
+  engine-internal profiling is included. This is not process-start-to-first-action
+  time. `measure_startup.py` separately measures a fresh Python process through
+  its first valid CPU action chunk, including interpreter/backend imports,
+  initialization and first inference, with cached assets.
 - Each candidate gets a fresh process. NVIDIA memory sampling tracks the process
   and its children at 100 ms intervals. This is a sampled peak, not an exact
   allocator maximum. PyTorch allocator counters are recorded separately.
@@ -45,10 +48,19 @@ sudo apt-get update
 sudo apt-get install -y build-essential libegl1 libgl1 libgl1-mesa-dev libosmesa6-dev libopenmpi-dev
 ```
 
+CUDA-only VM images may omit NVIDIA's EGL library even when `nvidia-smi` works.
+LIBERO needs a working headless rendering context. Install the graphics/EGL
+package matching the existing NVIDIA driver and verify hardware rendering before
+starting quality runs. On the recorded GCP CUDA M132 image, adding
+`libnvidia-gl-580-server=580.178.04-0ubuntu0.22.04.1` supplied the missing EGL vendor
+without changing the compute driver. This example is specific to that Ubuntu
+image; WSL and other driver installations have different graphics packages.
+
 ```sh
 uv venv --python 3.11 .venv
 uv pip install --python .venv/bin/python cmake==3.31.6
-PATH="$PWD/.venv/bin:$PATH" uv pip install --python .venv/bin/python -r requirements-native.txt
+PATH="$PWD/.venv/bin:$PATH" uv pip install --python .venv/bin/python \
+  --index-strategy unsafe-best-match -r requirements-native.txt
 ```
 
 Cache these exact Hugging Face snapshots before timing:
@@ -100,6 +112,20 @@ Repeat the final command for all eight candidates. Every output directory must
 be new. Keep the captured fixture directory immutable for compared runs. The
 matrix repeats native BF16 at the end to expose drift. Run each GPU separately.
 Do not combine contention-affected timings with isolated measurements.
+
+Measure full process startup separately in the appropriate backend environment:
+
+```sh
+"$PYTHON" "$SCRIPTS/measure_startup.py" \
+  --backend native-bf16 --root "$PWD" \
+  --fixture fixtures/task0-init0-chunk0.npz --output outputs/startup-native-bf16
+```
+
+This uses a fresh child process and a shared monotonic clock, stopping the timer
+after the first complete, finite CPU action chunk. It excludes teardown and
+artifact writes. Assets are already cached, and OS/file/driver caches are not
+flushed. Keep these startup values separate from the harness's cached runtime
+initialization field.
 
 `scripts/with_paused_collection.py` is an optional administrative helper for an
 explicitly authorized brief collection pause. It requires the exact collector

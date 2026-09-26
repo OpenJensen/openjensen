@@ -1,0 +1,1609 @@
+{
+  "latency": {
+    "native": [
+      {
+        "name": "native-bf16",
+        "median_fixture_p50_ms": 342.58590999991156,
+        "startup_s": 27.476478271000133,
+        "sampled_process_peak_mib": 1186.0
+      },
+      {
+        "name": "cpp-bf16",
+        "median_fixture_p50_ms": 96.63501649993123,
+        "startup_s": 5.234244040000021,
+        "sampled_process_peak_mib": 1162.0
+      },
+      {
+        "name": "native-fp16",
+        "median_fixture_p50_ms": 348.87695249994977,
+        "startup_s": 27.76760435899996,
+        "sampled_process_peak_mib": 1186.0
+      },
+      {
+        "name": "cpp-Q8_0",
+        "median_fixture_p50_ms": 98.62204299997757,
+        "startup_s": 3.8624304159998246,
+        "sampled_process_peak_mib": 1018.0
+      },
+      {
+        "name": "native-int8",
+        "median_fixture_p50_ms": 411.03506000001744,
+        "startup_s": 28.82733939900004,
+        "sampled_process_peak_mib": 1036.0
+      },
+      {
+        "name": "cpp-Q4_0",
+        "median_fixture_p50_ms": 98.47280399992542,
+        "startup_s": 3.560806780999883,
+        "sampled_process_peak_mib": 946.0
+      },
+      {
+        "name": "native-nf4",
+        "median_fixture_p50_ms": 379.14849050014254,
+        "startup_s": 28.75477521500011,
+        "sampled_process_peak_mib": 950.0
+      },
+      {
+        "name": "cpp-Q8_0-vision",
+        "median_fixture_p50_ms": 98.52850749996378,
+        "startup_s": 3.45790860000011,
+        "sampled_process_peak_mib": 944.0
+      },
+      {
+        "name": "native-bf16-repeat",
+        "median_fixture_p50_ms": 345.15490400008275,
+        "startup_s": 27.541148422999868,
+        "sampled_process_peak_mib": 1186.0
+      }
+    ],
+    "vllm": [
+      {
+        "name": "native-bf16",
+        "median_fixture_p50_ms": 346.25971449997905,
+        "startup_s": 28.06967018399996,
+        "sampled_process_peak_mib": 1186.0
+      },
+      {
+        "name": "vllm-bf16",
+        "median_fixture_p50_ms": 356.9595049999634,
+        "startup_s": 12.516848436999908,
+        "sampled_process_peak_mib": 1588.0
+      },
+      {
+        "name": "native-bf16-repeat",
+        "median_fixture_p50_ms": 346.41423899995516,
+        "startup_s": 28.274603837999848,
+        "sampled_process_peak_mib": 1186.0
+      }
+    ],
+    "trtllm": [
+      {
+        "name": "native-fp16",
+        "median_fixture_p50_ms": 340.52343300004395,
+        "startup_s": 28.34913252299998,
+        "sampled_process_peak_mib": 1186.0
+      },
+      {
+        "name": "trtllm-fp16",
+        "median_fixture_p50_ms": 406.911599999944,
+        "startup_s": 41.99586120799995,
+        "sampled_process_peak_mib": 1632.0
+      },
+      {
+        "name": "native-fp16-repeat",
+        "median_fixture_p50_ms": 335.0436635000733,
+        "startup_s": 27.677555186000063,
+        "sampled_process_peak_mib": 1186.0
+      }
+    ]
+  },
+  "quality": {
+    "native-bf16": {
+      "reference": "quality-native-bf16",
+      "candidate": "quality-native-bf16",
+      "fixture_count": 14,
+      "mae": 0.0,
+      "rmse": 0.0,
+      "max_abs": 0.0,
+      "gripper_sign_agreement": 1.0,
+      "median_fixture_p50_ms": 347.6110479998624,
+      "fixtures": [
+        {
+          "fixture": "synthetic-0.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "synthetic-1.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task0-init0-chunk0.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task0-init0-chunk1.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task1-init0-chunk0.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task1-init0-chunk1.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task1-init0-chunk2.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task2-init0-chunk0.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task2-init0-chunk1.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task3-init0-chunk0.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task3-init0-chunk1.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task4-init0-chunk0.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task4-init0-chunk1.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task4-init0-chunk2.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        }
+      ],
+      "paired_quality": {
+        "episodes": 20,
+        "reference_successes": 16,
+        "candidate_successes": 16,
+        "both_succeed": 16,
+        "reference_only": 0,
+        "candidate_only": 0,
+        "both_fail": 4
+      }
+    },
+    "native-fp16": {
+      "reference": "quality-native-bf16",
+      "candidate": "quality-native-fp16",
+      "fixture_count": 14,
+      "mae": 0.001666237258676639,
+      "rmse": 0.025244496004923955,
+      "max_abs": 1.760064959526062,
+      "gripper_sign_agreement": 0.9985714285714286,
+      "median_fixture_p50_ms": 349.2899134998879,
+      "fixtures": [
+        {
+          "fixture": "synthetic-0.npz",
+          "mae": 0.007428452108371337,
+          "max_abs": 1.760064959526062
+        },
+        {
+          "fixture": "synthetic-1.npz",
+          "mae": 0.0020385555513868373,
+          "max_abs": 0.013073273003101349
+        },
+        {
+          "fixture": "task0-init0-chunk0.npz",
+          "mae": 0.0014160657625844968,
+          "max_abs": 0.012184828519821167
+        },
+        {
+          "fixture": "task0-init0-chunk1.npz",
+          "mae": 0.001618899616379557,
+          "max_abs": 0.011304259300231934
+        },
+        {
+          "fixture": "task1-init0-chunk0.npz",
+          "mae": 0.0010152071371807585,
+          "max_abs": 0.00675886869430542
+        },
+        {
+          "fixture": "task1-init0-chunk1.npz",
+          "mae": 0.0010631936620588282,
+          "max_abs": 0.0063703060150146484
+        },
+        {
+          "fixture": "task1-init0-chunk2.npz",
+          "mae": 0.0007550776683326279,
+          "max_abs": 0.005037784576416016
+        },
+        {
+          "fixture": "task2-init0-chunk0.npz",
+          "mae": 0.0009860716322769544,
+          "max_abs": 0.007044672966003418
+        },
+        {
+          "fixture": "task2-init0-chunk1.npz",
+          "mae": 0.0010768591669122023,
+          "max_abs": 0.0059174299240112305
+        },
+        {
+          "fixture": "task3-init0-chunk0.npz",
+          "mae": 0.0012687892789420272,
+          "max_abs": 0.014990448951721191
+        },
+        {
+          "fixture": "task3-init0-chunk1.npz",
+          "mae": 0.0009813120535441808,
+          "max_abs": 0.0054558515548706055
+        },
+        {
+          "fixture": "task4-init0-chunk0.npz",
+          "mae": 0.0009793572975987834,
+          "max_abs": 0.00521165132522583
+        },
+        {
+          "fixture": "task4-init0-chunk1.npz",
+          "mae": 0.0012618104052463813,
+          "max_abs": 0.0068885087966918945
+        },
+        {
+          "fixture": "task4-init0-chunk2.npz",
+          "mae": 0.0014376702806579748,
+          "max_abs": 0.008777439594268799
+        }
+      ],
+      "paired_quality": {
+        "episodes": 20,
+        "reference_successes": 16,
+        "candidate_successes": 15,
+        "both_succeed": 14,
+        "reference_only": 2,
+        "candidate_only": 1,
+        "both_fail": 3
+      }
+    },
+    "native-int8": {
+      "reference": "quality-native-bf16",
+      "candidate": "quality-native-int8",
+      "fixture_count": 14,
+      "mae": 0.004283184893304549,
+      "rmse": 0.007659694004464876,
+      "max_abs": 0.08010587096214294,
+      "gripper_sign_agreement": 1.0,
+      "median_fixture_p50_ms": 415.0497635000647,
+      "fixtures": [
+        {
+          "fixture": "synthetic-0.npz",
+          "mae": 0.0046159338714954045,
+          "max_abs": 0.035701215267181396
+        },
+        {
+          "fixture": "synthetic-1.npz",
+          "mae": 0.008692682304619146,
+          "max_abs": 0.08010587096214294
+        },
+        {
+          "fixture": "task0-init0-chunk0.npz",
+          "mae": 0.0049780481000198055,
+          "max_abs": 0.038805603981018066
+        },
+        {
+          "fixture": "task0-init0-chunk1.npz",
+          "mae": 0.003968349590764514,
+          "max_abs": 0.05200803279876709
+        },
+        {
+          "fixture": "task1-init0-chunk0.npz",
+          "mae": 0.002966170205202486,
+          "max_abs": 0.026058316230773926
+        },
+        {
+          "fixture": "task1-init0-chunk1.npz",
+          "mae": 0.003807388120829793,
+          "max_abs": 0.02301812171936035
+        },
+        {
+          "fixture": "task1-init0-chunk2.npz",
+          "mae": 0.0022101794442694104,
+          "max_abs": 0.012801647186279297
+        },
+        {
+          "fixture": "task2-init0-chunk0.npz",
+          "mae": 0.0033441069556699532,
+          "max_abs": 0.022366702556610107
+        },
+        {
+          "fixture": "task2-init0-chunk1.npz",
+          "mae": 0.003245014948770404,
+          "max_abs": 0.020478755235671997
+        },
+        {
+          "fixture": "task3-init0-chunk0.npz",
+          "mae": 0.005564264654780605,
+          "max_abs": 0.04718300700187683
+        },
+        {
+          "fixture": "task3-init0-chunk1.npz",
+          "mae": 0.003124976620643533,
+          "max_abs": 0.024592548608779907
+        },
+        {
+          "fixture": "task4-init0-chunk0.npz",
+          "mae": 0.0046656903753423,
+          "max_abs": 0.024328745901584625
+        },
+        {
+          "fixture": "task4-init0-chunk1.npz",
+          "mae": 0.002986863172845915,
+          "max_abs": 0.027361273765563965
+        },
+        {
+          "fixture": "task4-init0-chunk2.npz",
+          "mae": 0.005794920141010412,
+          "max_abs": 0.041367560625076294
+        }
+      ],
+      "paired_quality": {
+        "episodes": 20,
+        "reference_successes": 16,
+        "candidate_successes": 18,
+        "both_succeed": 16,
+        "reference_only": 0,
+        "candidate_only": 2,
+        "both_fail": 2
+      }
+    },
+    "native-nf4": {
+      "reference": "quality-native-bf16",
+      "candidate": "quality-native-nf4",
+      "fixture_count": 14,
+      "mae": 0.02764386503630536,
+      "rmse": 0.09410593194480538,
+      "max_abs": 2.107490658760071,
+      "gripper_sign_agreement": 0.9885714285714285,
+      "median_fixture_p50_ms": 380.47557350000716,
+      "fixtures": [
+        {
+          "fixture": "synthetic-0.npz",
+          "mae": 0.05501138113073206,
+          "max_abs": 0.4150126576423645
+        },
+        {
+          "fixture": "synthetic-1.npz",
+          "mae": 0.08449772929606426,
+          "max_abs": 2.094879627227783
+        },
+        {
+          "fixture": "task0-init0-chunk0.npz",
+          "mae": 0.018615405407867262,
+          "max_abs": 0.165872722864151
+        },
+        {
+          "fixture": "task0-init0-chunk1.npz",
+          "mae": 0.02215972386566656,
+          "max_abs": 0.09851109981536865
+        },
+        {
+          "fixture": "task1-init0-chunk0.npz",
+          "mae": 0.02102474110683293,
+          "max_abs": 0.21712657809257507
+        },
+        {
+          "fixture": "task1-init0-chunk1.npz",
+          "mae": 0.028549359761943508,
+          "max_abs": 1.9984944462776184
+        },
+        {
+          "fixture": "task1-init0-chunk2.npz",
+          "mae": 0.012127401502636661,
+          "max_abs": 0.07904356718063354
+        },
+        {
+          "fixture": "task2-init0-chunk0.npz",
+          "mae": 0.018423165016824245,
+          "max_abs": 1.9975342750549316
+        },
+        {
+          "fixture": "task2-init0-chunk1.npz",
+          "mae": 0.021131185611759844,
+          "max_abs": 0.08752608299255371
+        },
+        {
+          "fixture": "task3-init0-chunk0.npz",
+          "mae": 0.019531078142380077,
+          "max_abs": 0.1517065167427063
+        },
+        {
+          "fixture": "task3-init0-chunk1.npz",
+          "mae": 0.018545410570222885,
+          "max_abs": 0.09867709875106812
+        },
+        {
+          "fixture": "task4-init0-chunk0.npz",
+          "mae": 0.02164595720840485,
+          "max_abs": 0.13658902049064636
+        },
+        {
+          "fixture": "task4-init0-chunk1.npz",
+          "mae": 0.019321022706239352,
+          "max_abs": 0.10736215114593506
+        },
+        {
+          "fixture": "task4-init0-chunk2.npz",
+          "mae": 0.026430549180700577,
+          "max_abs": 2.107490658760071
+        }
+      ],
+      "paired_quality": {
+        "episodes": 20,
+        "reference_successes": 16,
+        "candidate_successes": 12,
+        "both_succeed": 11,
+        "reference_only": 5,
+        "candidate_only": 1,
+        "both_fail": 3
+      }
+    },
+    "cpp-bf16": {
+      "reference": "quality-native-bf16",
+      "candidate": "quality-cpp-bf16",
+      "fixture_count": 14,
+      "mae": 0.0013357459126475115,
+      "rmse": 0.006330484047065251,
+      "max_abs": 0.4197927713394165,
+      "gripper_sign_agreement": 1.0,
+      "median_fixture_p50_ms": 98.4244020000915,
+      "fixtures": [
+        {
+          "fixture": "synthetic-0.npz",
+          "mae": 0.003184081099544918,
+          "max_abs": 0.4197927713394165
+        },
+        {
+          "fixture": "synthetic-1.npz",
+          "mae": 0.0018881146386930986,
+          "max_abs": 0.012185841798782349
+        },
+        {
+          "fixture": "task0-init0-chunk0.npz",
+          "mae": 0.0014665126635892583,
+          "max_abs": 0.013844966888427734
+        },
+        {
+          "fixture": "task0-init0-chunk1.npz",
+          "mae": 0.0014611088886990079,
+          "max_abs": 0.009688109159469604
+        },
+        {
+          "fixture": "task1-init0-chunk0.npz",
+          "mae": 0.001012060223147273,
+          "max_abs": 0.005541443824768066
+        },
+        {
+          "fixture": "task1-init0-chunk1.npz",
+          "mae": 0.0010488605479310666,
+          "max_abs": 0.006886601448059082
+        },
+        {
+          "fixture": "task1-init0-chunk2.npz",
+          "mae": 0.0007452935978238071,
+          "max_abs": 0.004168868064880371
+        },
+        {
+          "fixture": "task2-init0-chunk0.npz",
+          "mae": 0.0009346393998878609,
+          "max_abs": 0.005914270877838135
+        },
+        {
+          "fixture": "task2-init0-chunk1.npz",
+          "mae": 0.0010964826719802138,
+          "max_abs": 0.006193339824676514
+        },
+        {
+          "fixture": "task3-init0-chunk0.npz",
+          "mae": 0.0012124472743432436,
+          "max_abs": 0.014222323894500732
+        },
+        {
+          "fixture": "task3-init0-chunk1.npz",
+          "mae": 0.0010487961915454694,
+          "max_abs": 0.0051729679107666016
+        },
+        {
+          "fixture": "task4-init0-chunk0.npz",
+          "mae": 0.0009479794365220836,
+          "max_abs": 0.004467025399208069
+        },
+        {
+          "fixture": "task4-init0-chunk1.npz",
+          "mae": 0.0012413606365277831,
+          "max_abs": 0.0073843300342559814
+        },
+        {
+          "fixture": "task4-init0-chunk2.npz",
+          "mae": 0.001412705506830077,
+          "max_abs": 0.007319271564483643
+        }
+      ],
+      "paired_quality": {
+        "episodes": 20,
+        "reference_successes": 16,
+        "candidate_successes": 17,
+        "both_succeed": 16,
+        "reference_only": 0,
+        "candidate_only": 1,
+        "both_fail": 3
+      }
+    },
+    "cpp-Q8_0": {
+      "reference": "quality-native-bf16",
+      "candidate": "quality-cpp-Q8_0",
+      "fixture_count": 14,
+      "mae": 0.0024619826739440123,
+      "rmse": 0.028021448566847167,
+      "max_abs": 1.9433926343917847,
+      "gripper_sign_agreement": 0.9985714285714286,
+      "median_fixture_p50_ms": 100.23941249983181,
+      "fixtures": [
+        {
+          "fixture": "synthetic-0.npz",
+          "mae": 0.010428817835802745,
+          "max_abs": 1.9433926343917847
+        },
+        {
+          "fixture": "synthetic-1.npz",
+          "mae": 0.0031113570224260913,
+          "max_abs": 0.018905580043792725
+        },
+        {
+          "fixture": "task0-init0-chunk0.npz",
+          "mae": 0.0019232146503470305,
+          "max_abs": 0.01690170168876648
+        },
+        {
+          "fixture": "task0-init0-chunk1.npz",
+          "mae": 0.0023598274904569343,
+          "max_abs": 0.01705142855644226
+        },
+        {
+          "fixture": "task1-init0-chunk0.npz",
+          "mae": 0.0017457375233061612,
+          "max_abs": 0.014124035835266113
+        },
+        {
+          "fixture": "task1-init0-chunk1.npz",
+          "mae": 0.0015693153216437038,
+          "max_abs": 0.00793921947479248
+        },
+        {
+          "fixture": "task1-init0-chunk2.npz",
+          "mae": 0.0014567509533039162,
+          "max_abs": 0.009382672607898712
+        },
+        {
+          "fixture": "task2-init0-chunk0.npz",
+          "mae": 0.0015326239974404285,
+          "max_abs": 0.009106338024139404
+        },
+        {
+          "fixture": "task2-init0-chunk1.npz",
+          "mae": 0.0017699692134712157,
+          "max_abs": 0.01075693964958191
+        },
+        {
+          "fixture": "task3-init0-chunk0.npz",
+          "mae": 0.0019584271817335063,
+          "max_abs": 0.022715270519256592
+        },
+        {
+          "fixture": "task3-init0-chunk1.npz",
+          "mae": 0.0014750392453944576,
+          "max_abs": 0.008201122283935547
+        },
+        {
+          "fixture": "task4-init0-chunk0.npz",
+          "mae": 0.0015599971298693811,
+          "max_abs": 0.010348856449127197
+        },
+        {
+          "fixture": "task4-init0-chunk1.npz",
+          "mae": 0.0017319060783899788,
+          "max_abs": 0.010358631610870361
+        },
+        {
+          "fixture": "task4-init0-chunk2.npz",
+          "mae": 0.0018447737916306194,
+          "max_abs": 0.014686375856399536
+        }
+      ],
+      "paired_quality": {
+        "episodes": 20,
+        "reference_successes": 16,
+        "candidate_successes": 17,
+        "both_succeed": 16,
+        "reference_only": 0,
+        "candidate_only": 1,
+        "both_fail": 3
+      }
+    },
+    "cpp-Q4_0": {
+      "reference": "quality-native-bf16",
+      "candidate": "quality-cpp-Q4_0",
+      "fixture_count": 14,
+      "mae": 0.03815363362950643,
+      "rmse": 0.09784983962009985,
+      "max_abs": 2.04758620262146,
+      "gripper_sign_agreement": 0.9885714285714285,
+      "median_fixture_p50_ms": 100.73497349981153,
+      "fixtures": [
+        {
+          "fixture": "synthetic-0.npz",
+          "mae": 0.052462929078444305,
+          "max_abs": 0.324833482503891
+        },
+        {
+          "fixture": "synthetic-1.npz",
+          "mae": 0.06849306201795116,
+          "max_abs": 2.04758620262146
+        },
+        {
+          "fixture": "task0-init0-chunk0.npz",
+          "mae": 0.027635195823469464,
+          "max_abs": 0.2114245668053627
+        },
+        {
+          "fixture": "task0-init0-chunk1.npz",
+          "mae": 0.04442326644818032,
+          "max_abs": 1.8842053413391113
+        },
+        {
+          "fixture": "task1-init0-chunk0.npz",
+          "mae": 0.037444359259846224,
+          "max_abs": 0.3454175591468811
+        },
+        {
+          "fixture": "task1-init0-chunk1.npz",
+          "mae": 0.03799580890893205,
+          "max_abs": 0.377010315656662
+        },
+        {
+          "fixture": "task1-init0-chunk2.npz",
+          "mae": 0.03587070490981984,
+          "max_abs": 1.9133914113044739
+        },
+        {
+          "fixture": "task2-init0-chunk0.npz",
+          "mae": 0.017362988086866347,
+          "max_abs": 0.08942639827728271
+        },
+        {
+          "fixture": "task2-init0-chunk1.npz",
+          "mae": 0.028457079808909578,
+          "max_abs": 0.12806293368339539
+        },
+        {
+          "fixture": "task3-init0-chunk0.npz",
+          "mae": 0.035168429537277134,
+          "max_abs": 0.3007012903690338
+        },
+        {
+          "fixture": "task3-init0-chunk1.npz",
+          "mae": 0.037691516557741646,
+          "max_abs": 1.9410234689712524
+        },
+        {
+          "fixture": "task4-init0-chunk0.npz",
+          "mae": 0.042935424345196226,
+          "max_abs": 0.3436870872974396
+        },
+        {
+          "fixture": "task4-init0-chunk1.npz",
+          "mae": 0.0316706720563317,
+          "max_abs": 0.13008087873458862
+        },
+        {
+          "fixture": "task4-init0-chunk2.npz",
+          "mae": 0.03653943397412409,
+          "max_abs": 1.8027454614639282
+        }
+      ],
+      "paired_quality": {
+        "episodes": 20,
+        "reference_successes": 16,
+        "candidate_successes": 4,
+        "both_succeed": 3,
+        "reference_only": 13,
+        "candidate_only": 1,
+        "both_fail": 3
+      }
+    },
+    "cpp-Q8_0-vision": {
+      "reference": "quality-native-bf16",
+      "candidate": "quality-cpp-Q8_0-vision",
+      "fixture_count": 14,
+      "mae": 0.0033716013061170164,
+      "rmse": 0.0387608125427228,
+      "max_abs": 1.9428256750106812,
+      "gripper_sign_agreement": 0.9971428571428571,
+      "median_fixture_p50_ms": 98.33032100004857,
+      "fixtures": [
+        {
+          "fixture": "synthetic-0.npz",
+          "mae": 0.011620367322383182,
+          "max_abs": 1.9428256750106812
+        },
+        {
+          "fixture": "synthetic-1.npz",
+          "mae": 0.004710962060739153,
+          "max_abs": 0.03645017743110657
+        },
+        {
+          "fixture": "task0-init0-chunk0.npz",
+          "mae": 0.0021526601078221573,
+          "max_abs": 0.019922494888305664
+        },
+        {
+          "fixture": "task0-init0-chunk1.npz",
+          "mae": 0.0030844326674871678,
+          "max_abs": 0.02659541368484497
+        },
+        {
+          "fixture": "task1-init0-chunk0.npz",
+          "mae": 0.002345791901129165,
+          "max_abs": 0.014635056257247925
+        },
+        {
+          "fixture": "task1-init0-chunk1.npz",
+          "mae": 0.0020511668712632465,
+          "max_abs": 0.011231832206249237
+        },
+        {
+          "fixture": "task1-init0-chunk2.npz",
+          "mae": 0.0016000484335901481,
+          "max_abs": 0.013365812599658966
+        },
+        {
+          "fixture": "task2-init0-chunk0.npz",
+          "mae": 0.001676822631187471,
+          "max_abs": 0.008456319570541382
+        },
+        {
+          "fixture": "task2-init0-chunk1.npz",
+          "mae": 0.0017884641822560558,
+          "max_abs": 0.011396020650863647
+        },
+        {
+          "fixture": "task3-init0-chunk0.npz",
+          "mae": 0.002065744485839137,
+          "max_abs": 0.03016972541809082
+        },
+        {
+          "fixture": "task3-init0-chunk1.npz",
+          "mae": 0.008254249299144638,
+          "max_abs": 1.8622152209281921
+        },
+        {
+          "fixture": "task4-init0-chunk0.npz",
+          "mae": 0.0015637192565814725,
+          "max_abs": 0.008178368210792542
+        },
+        {
+          "fixture": "task4-init0-chunk1.npz",
+          "mae": 0.0025809153109522804,
+          "max_abs": 0.013889849185943604
+        },
+        {
+          "fixture": "task4-init0-chunk2.npz",
+          "mae": 0.0017070737552629517,
+          "max_abs": 0.009422354400157928
+        }
+      ],
+      "paired_quality": {
+        "episodes": 20,
+        "reference_successes": 16,
+        "candidate_successes": 15,
+        "both_succeed": 14,
+        "reference_only": 2,
+        "candidate_only": 1,
+        "both_fail": 3
+      }
+    },
+    "vllm-bf16": {
+      "reference": "quality-native-bf16",
+      "candidate": "quality-vllm-bf16",
+      "fixture_count": 14,
+      "mae": 0.0014843590672683844,
+      "rmse": 0.0025781310081887925,
+      "max_abs": 0.033649742603302,
+      "gripper_sign_agreement": 1.0,
+      "median_fixture_p50_ms": 352.65510900035224,
+      "fixtures": [
+        {
+          "fixture": "synthetic-0.npz",
+          "mae": 0.003057861009147018,
+          "max_abs": 0.025020048022270203
+        },
+        {
+          "fixture": "synthetic-1.npz",
+          "mae": 0.002388906519460891,
+          "max_abs": 0.033649742603302
+        },
+        {
+          "fixture": "task0-init0-chunk0.npz",
+          "mae": 0.0017626310308696703,
+          "max_abs": 0.017372190952301025
+        },
+        {
+          "fixture": "task0-init0-chunk1.npz",
+          "mae": 0.0012493951292708516,
+          "max_abs": 0.009753584861755371
+        },
+        {
+          "fixture": "task1-init0-chunk0.npz",
+          "mae": 0.0010079561353528075,
+          "max_abs": 0.006098031997680664
+        },
+        {
+          "fixture": "task1-init0-chunk1.npz",
+          "mae": 0.0011876379565468856,
+          "max_abs": 0.0068274736404418945
+        },
+        {
+          "fixture": "task1-init0-chunk2.npz",
+          "mae": 0.0009327871312520334,
+          "max_abs": 0.005320250988006592
+        },
+        {
+          "fixture": "task2-init0-chunk0.npz",
+          "mae": 0.0011726380221911573,
+          "max_abs": 0.00586313009262085
+        },
+        {
+          "fixture": "task2-init0-chunk1.npz",
+          "mae": 0.0010815738282898175,
+          "max_abs": 0.006168365478515625
+        },
+        {
+          "fixture": "task3-init0-chunk0.npz",
+          "mae": 0.0011701044340484909,
+          "max_abs": 0.007536172866821289
+        },
+        {
+          "fixture": "task3-init0-chunk1.npz",
+          "mae": 0.0014013829576184176,
+          "max_abs": 0.009239405393600464
+        },
+        {
+          "fixture": "task4-init0-chunk0.npz",
+          "mae": 0.0013246614086840833,
+          "max_abs": 0.00989377498626709
+        },
+        {
+          "fixture": "task4-init0-chunk1.npz",
+          "mae": 0.0016497862511979681,
+          "max_abs": 0.014440655708312988
+        },
+        {
+          "fixture": "task4-init0-chunk2.npz",
+          "mae": 0.001393705127827291,
+          "max_abs": 0.008869841694831848
+        }
+      ],
+      "paired_quality": {
+        "episodes": 20,
+        "reference_successes": 16,
+        "candidate_successes": 16,
+        "both_succeed": 15,
+        "reference_only": 1,
+        "candidate_only": 1,
+        "both_fail": 3
+      }
+    },
+    "trtllm-fp16": {
+      "reference": "quality-native-bf16",
+      "candidate": "quality-trtllm-fp16",
+      "fixture_count": 14,
+      "mae": 0.0016836019391930491,
+      "rmse": 0.026426858175652487,
+      "max_abs": 1.8428789973258972,
+      "gripper_sign_agreement": 0.9985714285714286,
+      "median_fixture_p50_ms": 408.8248004995876,
+      "fixtures": [
+        {
+          "fixture": "synthetic-0.npz",
+          "mae": 0.007755072410467879,
+          "max_abs": 1.8428789973258972
+        },
+        {
+          "fixture": "synthetic-1.npz",
+          "mae": 0.00201167720203687,
+          "max_abs": 0.013192027807235718
+        },
+        {
+          "fixture": "task0-init0-chunk0.npz",
+          "mae": 0.0013493083155481146,
+          "max_abs": 0.012021005153656006
+        },
+        {
+          "fixture": "task0-init0-chunk1.npz",
+          "mae": 0.0015888642320143326,
+          "max_abs": 0.011631906032562256
+        },
+        {
+          "fixture": "task1-init0-chunk0.npz",
+          "mae": 0.0010084906586312822,
+          "max_abs": 0.007328927516937256
+        },
+        {
+          "fixture": "task1-init0-chunk1.npz",
+          "mae": 0.0010611561617614436,
+          "max_abs": 0.006446480751037598
+        },
+        {
+          "fixture": "task1-init0-chunk2.npz",
+          "mae": 0.0007636797561177185,
+          "max_abs": 0.005365431308746338
+        },
+        {
+          "fixture": "task2-init0-chunk0.npz",
+          "mae": 0.0009860349104772988,
+          "max_abs": 0.007044672966003418
+        },
+        {
+          "fixture": "task2-init0-chunk1.npz",
+          "mae": 0.0010830318344856745,
+          "max_abs": 0.006025969982147217
+        },
+        {
+          "fixture": "task3-init0-chunk0.npz",
+          "mae": 0.0012872374995744654,
+          "max_abs": 0.015727698802947998
+        },
+        {
+          "fixture": "task3-init0-chunk1.npz",
+          "mae": 0.0009823121433146299,
+          "max_abs": 0.005638718605041504
+        },
+        {
+          "fixture": "task4-init0-chunk0.npz",
+          "mae": 0.0009698430179352207,
+          "max_abs": 0.005265951156616211
+        },
+        {
+          "fixture": "task4-init0-chunk1.npz",
+          "mae": 0.0012883389340381005,
+          "max_abs": 0.007166057825088501
+        },
+        {
+          "fixture": "task4-init0-chunk2.npz",
+          "mae": 0.0014353800722996571,
+          "max_abs": 0.008869826793670654
+        }
+      ],
+      "paired_quality": {
+        "episodes": 20,
+        "reference_successes": 16,
+        "candidate_successes": 16,
+        "both_succeed": 15,
+        "reference_only": 1,
+        "candidate_only": 1,
+        "both_fail": 3
+      }
+    }
+  },
+  "same_environment_engine_fidelity": {
+    "vllm": {
+      "reference": "native-bf16",
+      "candidate": "vllm-bf16",
+      "fixture_count": 14,
+      "mae": 0.0,
+      "rmse": 0.0,
+      "max_abs": 0.0,
+      "gripper_sign_agreement": 1.0,
+      "median_fixture_p50_ms": 356.9595049999634,
+      "fixtures": [
+        {
+          "fixture": "synthetic-0.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "synthetic-1.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task0-init0-chunk0.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task0-init0-chunk1.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task1-init0-chunk0.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task1-init0-chunk1.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task1-init0-chunk2.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task2-init0-chunk0.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task2-init0-chunk1.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task3-init0-chunk0.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task3-init0-chunk1.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task4-init0-chunk0.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task4-init0-chunk1.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task4-init0-chunk2.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        }
+      ]
+    },
+    "trtllm": {
+      "reference": "native-fp16",
+      "candidate": "trtllm-fp16",
+      "fixture_count": 14,
+      "mae": 0.0,
+      "rmse": 0.0,
+      "max_abs": 0.0,
+      "gripper_sign_agreement": 1.0,
+      "median_fixture_p50_ms": 406.911599999944,
+      "fixtures": [
+        {
+          "fixture": "synthetic-0.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "synthetic-1.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task0-init0-chunk0.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task0-init0-chunk1.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task1-init0-chunk0.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task1-init0-chunk1.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task1-init0-chunk2.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task2-init0-chunk0.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task2-init0-chunk1.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task3-init0-chunk0.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task3-init0-chunk1.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task4-init0-chunk0.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task4-init0-chunk1.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "fixture": "task4-init0-chunk2.npz",
+          "mae": 0.0,
+          "max_abs": 0.0
+        }
+      ]
+    }
+  },
+  "startup": [
+    {
+      "status": "passed",
+      "backend": "native-bf16",
+      "checkpoint": "lerobot/smolvla_libero",
+      "revision": "31d453f7edd78c839a8bbc39744a292686daf0de",
+      "fixture": "task0-init0-chunk0.npz",
+      "fixture_sha256": "8ca68b94c9d0cdc60e6e7aad98453044be64936d40bb8050a2311ff186ad79c5",
+      "process_to_first_action_s": 37.95750348599995,
+      "cached_runtime_init_s": 27.544147006999992,
+      "first_inference_ms": 893.8652459992227,
+      "action_shape": [
+        1,
+        50,
+        7
+      ],
+      "child_pid": 21506,
+      "contract": "Fresh Python process, cached assets; includes interpreter and backend imports, runtime initialization, fixture read, preprocessing, all ten denoising steps and unnormalized CPU actions. Excludes teardown and result writes. OS/file and driver caches are not flushed.",
+      "process_wall_s": 40.36908310600029,
+      "command": [
+        "/home/xbox-363-i9mac/smolvla-benchmark/.venv-native/bin/python",
+        "-u",
+        "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/measure_startup.py",
+        "--worker",
+        "--backend",
+        "native-bf16",
+        "--root",
+        "/home/xbox-363-i9mac/smolvla-benchmark",
+        "--fixture",
+        "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures/task0-init0-chunk0.npz",
+        "--output",
+        "/home/xbox-363-i9mac/smolvla-benchmark/comparison/startup/native-bf16",
+        "--started-at",
+        "5257.975881677"
+      ],
+      "script_sha256": "ef2e0def333100ef535b7eb09da58bf3f06857b8a3fe09ed496bccb65bc7e303",
+      "measurement_name": "native-bf16",
+      "first_action_vs_warmed_max_abs": 0.0,
+      "first_action_vs_warmed_rmse": 0.0
+    },
+    {
+      "status": "passed",
+      "backend": "cpp-bf16",
+      "checkpoint": "lerobot/smolvla_libero",
+      "revision": "31d453f7edd78c839a8bbc39744a292686daf0de",
+      "fixture": "task0-init0-chunk0.npz",
+      "fixture_sha256": "8ca68b94c9d0cdc60e6e7aad98453044be64936d40bb8050a2311ff186ad79c5",
+      "process_to_first_action_s": 11.663253139000517,
+      "cached_runtime_init_s": 1.9587489939995066,
+      "first_inference_ms": 421.2380919998395,
+      "action_shape": [
+        1,
+        50,
+        7
+      ],
+      "child_pid": 21573,
+      "contract": "Fresh Python process, cached assets; includes interpreter and backend imports, runtime initialization, fixture read, preprocessing, all ten denoising steps and unnormalized CPU actions. Excludes teardown and result writes. OS/file and driver caches are not flushed.",
+      "process_wall_s": 14.050869059000433,
+      "command": [
+        "/home/xbox-363-i9mac/smolvla-benchmark/.venv-native/bin/python",
+        "-u",
+        "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/measure_startup.py",
+        "--worker",
+        "--backend",
+        "cpp-bf16",
+        "--root",
+        "/home/xbox-363-i9mac/smolvla-benchmark",
+        "--fixture",
+        "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures/task0-init0-chunk0.npz",
+        "--output",
+        "/home/xbox-363-i9mac/smolvla-benchmark/comparison/startup/cpp-bf16",
+        "--started-at",
+        "5298.455370215"
+      ],
+      "script_sha256": "ef2e0def333100ef535b7eb09da58bf3f06857b8a3fe09ed496bccb65bc7e303",
+      "measurement_name": "cpp-bf16",
+      "first_action_vs_warmed_max_abs": 0.0,
+      "first_action_vs_warmed_rmse": 0.0
+    },
+    {
+      "status": "passed",
+      "backend": "native-fp16",
+      "checkpoint": "lerobot/smolvla_libero",
+      "revision": "31d453f7edd78c839a8bbc39744a292686daf0de",
+      "fixture": "task0-init0-chunk0.npz",
+      "fixture_sha256": "8ca68b94c9d0cdc60e6e7aad98453044be64936d40bb8050a2311ff186ad79c5",
+      "process_to_first_action_s": 37.820782937999866,
+      "cached_runtime_init_s": 27.689626067999598,
+      "first_inference_ms": 881.7552059999798,
+      "action_shape": [
+        1,
+        50,
+        7
+      ],
+      "child_pid": 21648,
+      "contract": "Fresh Python process, cached assets; includes interpreter and backend imports, runtime initialization, fixture read, preprocessing, all ten denoising steps and unnormalized CPU actions. Excludes teardown and result writes. OS/file and driver caches are not flushed.",
+      "process_wall_s": 40.31833222900059,
+      "command": [
+        "/home/xbox-363-i9mac/smolvla-benchmark/.venv-native/bin/python",
+        "-u",
+        "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/measure_startup.py",
+        "--worker",
+        "--backend",
+        "native-fp16",
+        "--root",
+        "/home/xbox-363-i9mac/smolvla-benchmark",
+        "--fixture",
+        "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures/task0-init0-chunk0.npz",
+        "--output",
+        "/home/xbox-363-i9mac/smolvla-benchmark/comparison/startup/native-fp16",
+        "--started-at",
+        "5312.622757204"
+      ],
+      "script_sha256": "ef2e0def333100ef535b7eb09da58bf3f06857b8a3fe09ed496bccb65bc7e303",
+      "measurement_name": "native-fp16",
+      "first_action_vs_warmed_max_abs": 0.0,
+      "first_action_vs_warmed_rmse": 0.0
+    },
+    {
+      "status": "passed",
+      "backend": "cpp-Q8_0",
+      "checkpoint": "lerobot/smolvla_libero",
+      "revision": "31d453f7edd78c839a8bbc39744a292686daf0de",
+      "fixture": "task0-init0-chunk0.npz",
+      "fixture_sha256": "8ca68b94c9d0cdc60e6e7aad98453044be64936d40bb8050a2311ff186ad79c5",
+      "process_to_first_action_s": 11.274646528999256,
+      "cached_runtime_init_s": 1.5535413910001807,
+      "first_inference_ms": 424.42205599945737,
+      "action_shape": [
+        1,
+        50,
+        7
+      ],
+      "child_pid": 21717,
+      "contract": "Fresh Python process, cached assets; includes interpreter and backend imports, runtime initialization, fixture read, preprocessing, all ten denoising steps and unnormalized CPU actions. Excludes teardown and result writes. OS/file and driver caches are not flushed.",
+      "process_wall_s": 13.700044827000056,
+      "command": [
+        "/home/xbox-363-i9mac/smolvla-benchmark/.venv-native/bin/python",
+        "-u",
+        "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/measure_startup.py",
+        "--worker",
+        "--backend",
+        "cpp-Q8_0",
+        "--root",
+        "/home/xbox-363-i9mac/smolvla-benchmark",
+        "--fixture",
+        "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures/task0-init0-chunk0.npz",
+        "--output",
+        "/home/xbox-363-i9mac/smolvla-benchmark/comparison/startup/cpp-Q8_0",
+        "--started-at",
+        "5353.011504662"
+      ],
+      "script_sha256": "ef2e0def333100ef535b7eb09da58bf3f06857b8a3fe09ed496bccb65bc7e303",
+      "measurement_name": "cpp-Q8_0",
+      "first_action_vs_warmed_max_abs": 0.0,
+      "first_action_vs_warmed_rmse": 0.0
+    },
+    {
+      "status": "passed",
+      "backend": "native-int8",
+      "checkpoint": "lerobot/smolvla_libero",
+      "revision": "31d453f7edd78c839a8bbc39744a292686daf0de",
+      "fixture": "task0-init0-chunk0.npz",
+      "fixture_sha256": "8ca68b94c9d0cdc60e6e7aad98453044be64936d40bb8050a2311ff186ad79c5",
+      "process_to_first_action_s": 39.080557096999655,
+      "cached_runtime_init_s": 28.851821223000115,
+      "first_inference_ms": 940.6939690006766,
+      "action_shape": [
+        1,
+        50,
+        7
+      ],
+      "child_pid": 21789,
+      "contract": "Fresh Python process, cached assets; includes interpreter and backend imports, runtime initialization, fixture read, preprocessing, all ten denoising steps and unnormalized CPU actions. Excludes teardown and result writes. OS/file and driver caches are not flushed.",
+      "process_wall_s": 41.5197672889999,
+      "command": [
+        "/home/xbox-363-i9mac/smolvla-benchmark/.venv-native/bin/python",
+        "-u",
+        "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/measure_startup.py",
+        "--worker",
+        "--backend",
+        "native-int8",
+        "--root",
+        "/home/xbox-363-i9mac/smolvla-benchmark",
+        "--fixture",
+        "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures/task0-init0-chunk0.npz",
+        "--output",
+        "/home/xbox-363-i9mac/smolvla-benchmark/comparison/startup/native-int8",
+        "--started-at",
+        "5366.827788011"
+      ],
+      "script_sha256": "ef2e0def333100ef535b7eb09da58bf3f06857b8a3fe09ed496bccb65bc7e303",
+      "measurement_name": "native-int8",
+      "first_action_vs_warmed_max_abs": 0.0,
+      "first_action_vs_warmed_rmse": 0.0
+    },
+    {
+      "status": "passed",
+      "backend": "cpp-Q4_0",
+      "checkpoint": "lerobot/smolvla_libero",
+      "revision": "31d453f7edd78c839a8bbc39744a292686daf0de",
+      "fixture": "task0-init0-chunk0.npz",
+      "fixture_sha256": "8ca68b94c9d0cdc60e6e7aad98453044be64936d40bb8050a2311ff186ad79c5",
+      "process_to_first_action_s": 11.329326002000016,
+      "cached_runtime_init_s": 1.452185049000036,
+      "first_inference_ms": 420.93897799986735,
+      "action_shape": [
+        1,
+        50,
+        7
+      ],
+      "child_pid": 21861,
+      "contract": "Fresh Python process, cached assets; includes interpreter and backend imports, runtime initialization, fixture read, preprocessing, all ten denoising steps and unnormalized CPU actions. Excludes teardown and result writes. OS/file and driver caches are not flushed.",
+      "process_wall_s": 13.847212250000666,
+      "command": [
+        "/home/xbox-363-i9mac/smolvla-benchmark/.venv-native/bin/python",
+        "-u",
+        "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/measure_startup.py",
+        "--worker",
+        "--backend",
+        "cpp-Q4_0",
+        "--root",
+        "/home/xbox-363-i9mac/smolvla-benchmark",
+        "--fixture",
+        "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures/task0-init0-chunk0.npz",
+        "--output",
+        "/home/xbox-363-i9mac/smolvla-benchmark/comparison/startup/cpp-Q4_0",
+        "--started-at",
+        "5408.440926259"
+      ],
+      "script_sha256": "ef2e0def333100ef535b7eb09da58bf3f06857b8a3fe09ed496bccb65bc7e303",
+      "measurement_name": "cpp-Q4_0",
+      "first_action_vs_warmed_max_abs": 0.0,
+      "first_action_vs_warmed_rmse": 0.0
+    },
+    {
+      "status": "passed",
+      "backend": "native-nf4",
+      "checkpoint": "lerobot/smolvla_libero",
+      "revision": "31d453f7edd78c839a8bbc39744a292686daf0de",
+      "fixture": "task0-init0-chunk0.npz",
+      "fixture_sha256": "8ca68b94c9d0cdc60e6e7aad98453044be64936d40bb8050a2311ff186ad79c5",
+      "process_to_first_action_s": 38.949347941999804,
+      "cached_runtime_init_s": 28.716781458000696,
+      "first_inference_ms": 850.9991869996156,
+      "action_shape": [
+        1,
+        50,
+        7
+      ],
+      "child_pid": 21937,
+      "contract": "Fresh Python process, cached assets; includes interpreter and backend imports, runtime initialization, fixture read, preprocessing, all ten denoising steps and unnormalized CPU actions. Excludes teardown and result writes. OS/file and driver caches are not flushed.",
+      "process_wall_s": 41.373900282999784,
+      "command": [
+        "/home/xbox-363-i9mac/smolvla-benchmark/.venv-native/bin/python",
+        "-u",
+        "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/measure_startup.py",
+        "--worker",
+        "--backend",
+        "native-nf4",
+        "--root",
+        "/home/xbox-363-i9mac/smolvla-benchmark",
+        "--fixture",
+        "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures/task0-init0-chunk0.npz",
+        "--output",
+        "/home/xbox-363-i9mac/smolvla-benchmark/comparison/startup/native-nf4",
+        "--started-at",
+        "5422.401179655"
+      ],
+      "script_sha256": "ef2e0def333100ef535b7eb09da58bf3f06857b8a3fe09ed496bccb65bc7e303",
+      "measurement_name": "native-nf4",
+      "first_action_vs_warmed_max_abs": 0.0,
+      "first_action_vs_warmed_rmse": 0.0
+    },
+    {
+      "status": "passed",
+      "backend": "cpp-Q8_0-vision",
+      "checkpoint": "lerobot/smolvla_libero",
+      "revision": "31d453f7edd78c839a8bbc39744a292686daf0de",
+      "fixture": "task0-init0-chunk0.npz",
+      "fixture_sha256": "8ca68b94c9d0cdc60e6e7aad98453044be64936d40bb8050a2311ff186ad79c5",
+      "process_to_first_action_s": 10.940241135000178,
+      "cached_runtime_init_s": 1.2447636510005395,
+      "first_inference_ms": 431.91388299965183,
+      "action_shape": [
+        1,
+        50,
+        7
+      ],
+      "child_pid": 22007,
+      "contract": "Fresh Python process, cached assets; includes interpreter and backend imports, runtime initialization, fixture read, preprocessing, all ten denoising steps and unnormalized CPU actions. Excludes teardown and result writes. OS/file and driver caches are not flushed.",
+      "process_wall_s": 13.79787913400014,
+      "command": [
+        "/home/xbox-363-i9mac/smolvla-benchmark/.venv-native/bin/python",
+        "-u",
+        "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/measure_startup.py",
+        "--worker",
+        "--backend",
+        "cpp-Q8_0-vision",
+        "--root",
+        "/home/xbox-363-i9mac/smolvla-benchmark",
+        "--fixture",
+        "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures/task0-init0-chunk0.npz",
+        "--output",
+        "/home/xbox-363-i9mac/smolvla-benchmark/comparison/startup/cpp-Q8_0-vision",
+        "--started-at",
+        "5463.865942208"
+      ],
+      "script_sha256": "ef2e0def333100ef535b7eb09da58bf3f06857b8a3fe09ed496bccb65bc7e303",
+      "measurement_name": "cpp-Q8_0-vision",
+      "first_action_vs_warmed_max_abs": 0.0,
+      "first_action_vs_warmed_rmse": 0.0
+    },
+    {
+      "status": "passed",
+      "backend": "vllm-bf16",
+      "checkpoint": "lerobot/smolvla_libero",
+      "revision": "31d453f7edd78c839a8bbc39744a292686daf0de",
+      "fixture": "task0-init0-chunk0.npz",
+      "fixture_sha256": "8ca68b94c9d0cdc60e6e7aad98453044be64936d40bb8050a2311ff186ad79c5",
+      "process_to_first_action_s": 24.809427593999317,
+      "cached_runtime_init_s": 12.587772273000155,
+      "first_inference_ms": 1049.385526000151,
+      "action_shape": [
+        1,
+        50,
+        7
+      ],
+      "child_pid": 22080,
+      "contract": "Fresh Python process, cached assets; includes interpreter and backend imports, runtime initialization, fixture read, preprocessing, all ten denoising steps and unnormalized CPU actions. Excludes teardown and result writes. OS/file and driver caches are not flushed.",
+      "process_wall_s": 27.63266336199922,
+      "command": [
+        "/home/xbox-363-i9mac/smolvla-benchmark/.venv-vllm/bin/python",
+        "-u",
+        "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/measure_startup.py",
+        "--worker",
+        "--backend",
+        "vllm-bf16",
+        "--root",
+        "/home/xbox-363-i9mac/smolvla-benchmark",
+        "--fixture",
+        "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures/task0-init0-chunk0.npz",
+        "--output",
+        "/home/xbox-363-i9mac/smolvla-benchmark/comparison/startup/vllm-bf16",
+        "--started-at",
+        "5477.736924415"
+      ],
+      "script_sha256": "ef2e0def333100ef535b7eb09da58bf3f06857b8a3fe09ed496bccb65bc7e303",
+      "measurement_name": "vllm-bf16",
+      "first_action_vs_warmed_max_abs": 0.0,
+      "first_action_vs_warmed_rmse": 0.0
+    },
+    {
+      "status": "passed",
+      "backend": "trtllm-fp16",
+      "checkpoint": "lerobot/smolvla_libero",
+      "revision": "31d453f7edd78c839a8bbc39744a292686daf0de",
+      "fixture": "task0-init0-chunk0.npz",
+      "fixture_sha256": "8ca68b94c9d0cdc60e6e7aad98453044be64936d40bb8050a2311ff186ad79c5",
+      "process_to_first_action_s": 55.451831751999634,
+      "cached_runtime_init_s": 41.71573480200004,
+      "first_inference_ms": 1127.7233840000918,
+      "action_shape": [
+        1,
+        50,
+        7
+      ],
+      "child_pid": 22198,
+      "contract": "Fresh Python process, cached assets; includes interpreter and backend imports, runtime initialization, fixture read, preprocessing, all ten denoising steps and unnormalized CPU actions. Excludes teardown and result writes. OS/file and driver caches are not flushed.",
+      "process_wall_s": 58.820892036999794,
+      "command": [
+        "/home/xbox-363-i9mac/smolvla-benchmark/.venv-trtllm/bin/python",
+        "-u",
+        "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/measure_startup.py",
+        "--worker",
+        "--backend",
+        "trtllm-fp16",
+        "--root",
+        "/home/xbox-363-i9mac/smolvla-benchmark",
+        "--fixture",
+        "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures/task0-init0-chunk0.npz",
+        "--output",
+        "/home/xbox-363-i9mac/smolvla-benchmark/comparison/startup/trtllm-fp16",
+        "--started-at",
+        "5505.552136971"
+      ],
+      "script_sha256": "ef2e0def333100ef535b7eb09da58bf3f06857b8a3fe09ed496bccb65bc7e303",
+      "measurement_name": "trtllm-fp16",
+      "first_action_vs_warmed_max_abs": 0.0,
+      "first_action_vs_warmed_rmse": 0.0
+    },
+    {
+      "status": "passed",
+      "backend": "native-bf16",
+      "checkpoint": "lerobot/smolvla_libero",
+      "revision": "31d453f7edd78c839a8bbc39744a292686daf0de",
+      "fixture": "task0-init0-chunk0.npz",
+      "fixture_sha256": "8ca68b94c9d0cdc60e6e7aad98453044be64936d40bb8050a2311ff186ad79c5",
+      "process_to_first_action_s": 37.66474957199989,
+      "cached_runtime_init_s": 27.486152797000614,
+      "first_inference_ms": 898.1459460001133,
+      "action_shape": [
+        1,
+        50,
+        7
+      ],
+      "child_pid": 22343,
+      "contract": "Fresh Python process, cached assets; includes interpreter and backend imports, runtime initialization, fixture read, preprocessing, all ten denoising steps and unnormalized CPU actions. Excludes teardown and result writes. OS/file and driver caches are not flushed.",
+      "process_wall_s": 40.126589690999936,
+      "command": [
+        "/home/xbox-363-i9mac/smolvla-benchmark/.venv-native/bin/python",
+        "-u",
+        "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/measure_startup.py",
+        "--worker",
+        "--backend",
+        "native-bf16",
+        "--root",
+        "/home/xbox-363-i9mac/smolvla-benchmark",
+        "--fixture",
+        "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures/task0-init0-chunk0.npz",
+        "--output",
+        "/home/xbox-363-i9mac/smolvla-benchmark/comparison/startup/native-bf16-repeat",
+        "--started-at",
+        "5564.465045002"
+      ],
+      "script_sha256": "ef2e0def333100ef535b7eb09da58bf3f06857b8a3fe09ed496bccb65bc7e303",
+      "measurement_name": "native-bf16-repeat",
+      "first_action_vs_warmed_max_abs": 0.0,
+      "first_action_vs_warmed_rmse": 0.0
+    }
+  ]
+}

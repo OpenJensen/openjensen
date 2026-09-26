@@ -116,7 +116,10 @@ for _ in range(10):
         ).strip()
     )
     time.sleep(1)
-(out / "idle-before-timing.json").write_text(
+idle_target = out / "idle-before-timing.json"
+if idle_target.exists():
+    idle_target = out / f"idle-before-resume-{int(time.time())}.json"
+idle_target.write_text(
     json.dumps(
         {
             "samples": idle,

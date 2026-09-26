@@ -1,0 +1,36 @@
+{
+  "status": "passed",
+  "backend": "cpp-Q8_0-vision",
+  "checkpoint": "lerobot/smolvla_libero",
+  "revision": "31d453f7edd78c839a8bbc39744a292686daf0de",
+  "fixture": "task0-init0-chunk0.npz",
+  "fixture_sha256": "8ca68b94c9d0cdc60e6e7aad98453044be64936d40bb8050a2311ff186ad79c5",
+  "process_to_first_action_s": 10.940241135000178,
+  "cached_runtime_init_s": 1.2447636510005395,
+  "first_inference_ms": 431.91388299965183,
+  "action_shape": [
+    1,
+    50,
+    7
+  ],
+  "child_pid": 22007,
+  "contract": "Fresh Python process, cached assets; includes interpreter and backend imports, runtime initialization, fixture read, preprocessing, all ten denoising steps and unnormalized CPU actions. Excludes teardown and result writes. OS/file and driver caches are not flushed.",
+  "process_wall_s": 13.79787913400014,
+  "command": [
+    "/home/xbox-363-i9mac/smolvla-benchmark/.venv-native/bin/python",
+    "-u",
+    "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/measure_startup.py",
+    "--worker",
+    "--backend",
+    "cpp-Q8_0-vision",
+    "--root",
+    "/home/xbox-363-i9mac/smolvla-benchmark",
+    "--fixture",
+    "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures/task0-init0-chunk0.npz",
+    "--output",
+    "/home/xbox-363-i9mac/smolvla-benchmark/comparison/startup/cpp-Q8_0-vision",
+    "--started-at",
+    "5463.865942208"
+  ],
+  "script_sha256": "ef2e0def333100ef535b7eb09da58bf3f06857b8a3fe09ed496bccb65bc7e303"
+}

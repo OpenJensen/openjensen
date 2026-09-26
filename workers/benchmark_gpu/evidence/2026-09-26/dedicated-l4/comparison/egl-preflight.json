@@ -1,0 +1,12 @@
+{
+  "status": "passed",
+  "shape": [
+    64,
+    64,
+    3
+  ],
+  "renderer": "NVIDIA L4/PCIe/SSE2",
+  "vendor": "NVIDIA Corporation",
+  "version": "4.6.0 NVIDIA 580.178.04",
+  "nonzero_pixels": 830
+}

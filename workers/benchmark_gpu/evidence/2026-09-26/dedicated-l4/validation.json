@@ -1,0 +1,15 @@
+{
+  "latency_rows": 15,
+  "paired_candidates": 10,
+  "paired_episodes_per_candidate": 20,
+  "immutable_fixtures": 14,
+  "startup_runs": 11,
+  "startup_first_action_max_abs": 0,
+  "saved_action_arrays": 367,
+  "archived_scripts_match_local": 17,
+  "same_environment_engine_max_abs": {
+    "vllm": 0.0,
+    "trtllm": 0.0
+  },
+  "existing_l4_all_candidate_actions_and_episode_outcomes_identical": true
+}
