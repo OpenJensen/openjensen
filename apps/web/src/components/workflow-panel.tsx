@@ -105,12 +105,15 @@ export function WorkflowPanel({
   useEffect(() => {
     setLoaded(false);
     try {
-      setPreferences({
+      const restored: Preferences = {
         ...initial,
         ...JSON.parse(
           localStorage.getItem(`firebird.workflow.${projectId}`) ?? "{}",
         ),
-      });
+      };
+      // Restore saved Spatial preferences from before the protocol was restricted.
+      setPreferences(restored.suite === "libero_spatial"
+        ? { ...restored, mode: "libero", steps: 280 } : restored);
     } catch {
       setPreferences(initial);
     }
@@ -337,7 +340,9 @@ export function WorkflowPanel({
                 value={preferences.suite}
                 onChange={(e) => {
                   const suite = e.target.value as Preferences["suite"];
-                  setPreferences((old) => ({ ...old, suite, steps: suite === "libero_spatial" ? 280 : 500 }));
+                  setPreferences((old) => ({ ...old, suite,
+                    mode: suite === "libero_spatial" ? "libero" : old.mode,
+                    steps: suite === "libero_spatial" ? 280 : 500 }));
                 }}
               >
                 <option value="libero_object">LIBERO Object (legacy policy)</option>
@@ -370,6 +375,7 @@ export function WorkflowPanel({
               Protocol
               <select
                 value={preferences.mode}
+                disabled={preferences.suite === "libero_spatial"}
                 onChange={(e) =>
                   update("mode", e.target.value as Preferences["mode"])
                 }
@@ -379,9 +385,9 @@ export function WorkflowPanel({
               </select>
             </label>
             <p className="muted">
-              Engine diagnostics check loading, finite actions and timing.
-              Task-quality selection requires compatible LIBERO episodes and
-              your acceptance limits.
+              {preferences.suite === "libero_spatial"
+                ? "Spatial uses paired LIBERO episodes and the full 280-step benchmark horizon."
+                : "Engine diagnostics check loading, finite actions and timing. Task-quality selection requires compatible LIBERO episodes and your acceptance limits."}
             </p>
             <label>
               Timed predictions
@@ -433,6 +439,7 @@ export function WorkflowPanel({
                     min="1"
                     max="500"
                     value={preferences.steps}
+                    disabled={preferences.suite === "libero_spatial"}
                     onChange={(e) => update("steps", Number(e.target.value))}
                   />
                 </label>

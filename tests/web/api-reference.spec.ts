@@ -449,7 +449,10 @@ test('Spatial settings require explicit task and parity choices in the submitted
   await page.getByLabel('Task suite').selectOption('libero_spatial');
   await expect(page.getByLabel('Spatial task IDs')).toHaveValue('0,1,2,3,4,5,6,7,8,9');
   await expect(page.getByLabel('Approved parity profile')).toHaveValue('');
-  await page.getByLabel('Protocol', { exact: true }).selectOption('libero');
+  await expect(page.getByRole('combobox', { name: 'Protocol', exact: true })).toHaveValue('libero');
+  await expect(page.getByRole('combobox', { name: 'Protocol', exact: true })).toBeDisabled();
+  await expect(page.getByLabel('Episode step limit')).toHaveValue('280');
+  await expect(page.getByLabel('Episode step limit')).toBeDisabled();
   await page.getByLabel('Spatial task IDs').fill('0,2');
   await page.getByLabel('Approved parity profile').fill('synthetic-test-only');
   await page.getByLabel('Maximum action RMSE').fill('0');
@@ -459,7 +462,21 @@ test('Spatial settings require explicit task and parity choices in the submitted
   await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0].evaluation).toMatchObject({
-    suite: 'libero_spatial', task_ids: [0, 2], steps: 280,
+    mode: 'libero', suite: 'libero_spatial', task_ids: [0, 2], steps: 280,
     parity_limits: { profile: 'synthetic-test-only', max_rmse: 0, max_abs_error: 0 },
   });
+  // Old saved preferences must not revive the unsupported engine/short horizon.
+  await page.evaluate(() => {
+    const key = 'firebird.workflow.spatial-review';
+    localStorage.setItem(key, JSON.stringify({ ...JSON.parse(localStorage.getItem(key) ?? '{}'), mode: 'engine', steps: 1 }));
+  });
+  await page.reload();
+  await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Protocol', exact: true })).toHaveValue('libero');
+  await expect(page.getByLabel('Episode step limit')).toHaveValue('280');
+  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByLabel('Input policy').selectOption('source:source');
+  await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
+  await expect.poll(() => submitted.length).toBe(2);
+  expect(submitted[1].evaluation).toEqual(submitted[0].evaluation);
 });

@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -36,9 +37,30 @@ if op in {"policy.import", "policy.quantize", "policy.run"}:
             precision = job["parameters"]["precision"]
             metadata["precision"] = precision
             data = precision["language"].encode() * (10 if precision["language"] == "Q8_0" else 5)
+    if op == "policy.import":
+        (bundle / "fixtures").mkdir()
+        for name in ("first.npz", "second.npz"):
+            (bundle / "fixtures" / name).write_bytes(("synthetic " + name).encode())
+        assets = {
+            "schema_version": 1,
+            "reference_weights": False,
+            "fixtures": ["fixtures/first.npz", "fixtures/second.npz"],
+            "files": {
+                "fixtures/" + name: sha((bundle / "fixtures" / name).read_bytes())
+                for name in ("first.npz", "second.npz")
+            },
+        }
+        (bundle / "spatial-assets.json").write_text(json.dumps(assets))
+    else:
+        shutil.copytree(source / "fixtures", bundle / "fixtures")
+        shutil.copyfile(source / "spatial-assets.json", bundle / "spatial-assets.json")
     metadata.update(model_sha256=sha(data), weight_bytes=len(data))
     (bundle / "model.gguf").write_bytes(data)
-    files = {"model.gguf": sha(data)}
+    files = {
+        path.relative_to(bundle).as_posix(): sha(path.read_bytes())
+        for path in bundle.rglob("*")
+        if path.is_file()
+    }
     if op == "policy.run":
         receipt = {
             "manifest_sha256": sha((source / "manifest.json").read_bytes()),
@@ -71,6 +93,7 @@ if op in {"policy.evaluate", "policy.run"}:
             else "cpp-" + precision["language"] + ("-vision" if precision.get("vision") else "")
         )
     )
+    assets = json.loads((source / "spatial-assets.json").read_text())
     protocol = {
         "suite": "libero_spatial",
         "task_ids": tasks,
@@ -79,10 +102,9 @@ if op in {"policy.evaluate", "policy.run"}:
         "steps": evaluation["steps"],
         "action_steps": 50,
         "parity_limits": evaluation["parity_limits"],
-        "fixture_sha256s": ["f" * 64],
         "warmups": evaluation["warmups"],
         "repetitions": evaluation["repetitions"],
-        "inference_assets": {"fixture_only": True},
+        "inference_assets": assets["files"],
     }
     episodes = [
         {
@@ -124,7 +146,8 @@ if op in {"policy.evaluate", "policy.run"}:
         "episodes": episodes,
         "success_rate": 1,
         "fixture_actions": [
-            {"fixture_sha256": "f" * 64, "actions": [[0.0] * 7 for _ in range(50)]}
+            {"fixture_sha256": assets["files"][name], "actions": [[0.0] * 7 for _ in range(50)]}
+            for name in assets["fixtures"]
         ],
         "fixture_actions_deterministic": True,
         "fresh_reload_verified": True,
@@ -136,6 +159,24 @@ if op in {"policy.evaluate", "policy.run"}:
         for episode in episodes[: fault["failures"]]:
             episode["task_success"] = False
         report["success_rate"] = sum(ep["task_success"] for ep in episodes) / len(episodes)
+    if "episode_steps" in fault:
+        for episode in episodes:
+            episode["steps"] = fault["episode_steps"]
+    if fault.get("wrong_fixture"):
+        report["fixture_actions"][0]["fixture_sha256"] = "e" * 64
+    if fault.get("missing_fixture"):
+        report["fixture_actions"].pop()
+    if fault.get("wrong_asset_inventory"):
+        report["protocol"]["inference_assets"] = {"fixtures/wrong.npz": "e" * 64}
+        report["protocol_sha256"] = sha(
+            json.dumps(protocol, sort_keys=True, separators=(",", ":")).encode()
+        )
+    if fault.get("extra_package_asset"):
+        extra = bundle / "preprocessor_override.json"
+        extra.write_text("untested preprocessing change")
+        manifest = json.loads((bundle / "manifest.json").read_text())
+        manifest["files"][extra.name] = sha(extra.read_bytes())
+        (bundle / "manifest.json").write_text(json.dumps(manifest))
     if fault.get("parity"):
         report["fixture_actions"][0]["actions"][0][0] = 0.1
     if fault.get("duplicate_episode"):

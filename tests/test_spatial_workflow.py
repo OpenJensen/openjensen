@@ -75,7 +75,7 @@ def run(client, **fields):
 
 
 def test_spatial_defaults_and_explicit_tolerance_contract():
-    spatial = Evaluation(suite="libero_spatial")
+    spatial = Evaluation(suite="libero_spatial", mode="libero")
     assert spatial.task_ids == list(range(10)) and spatial.steps == 280
     assert Evaluation().suite == "libero_object" and Evaluation().steps == 500
     for fields in (
@@ -85,13 +85,13 @@ def test_spatial_defaults_and_explicit_tolerance_contract():
         {"suite": "libero_spatial", "steps": 281},
     ):
         with pytest.raises(ValidationError):
-            Evaluation(**fields)
+            Evaluation(mode="libero", **fields)
     with pytest.raises(ValidationError, match="explicit parity"):
         PolicyRequest(
             operation="policy.workflow",
             runtime_id="fixture",
             source_id="source",
-            evaluation={"suite": "libero_spatial"},
+            evaluation={"suite": "libero_spatial", "mode": "libero"},
         )
 
 
@@ -319,7 +319,11 @@ def test_float_package_allows_only_reference_weight_removal(tmp_path, alter_extr
     tested_manifest = {"schema_version": 1, "metadata": metadata, "files": files}
     receipt = {"manifest_sha256": digest(encoded(tested_manifest)), "files": files}
     (package / "tested-payload.json").write_bytes(encoded(receipt))
-    (package / "manifest.json").write_bytes(encoded(tested_manifest))
+    package_manifest = {
+        **tested_manifest,
+        "files": {**files, "tested-payload.json": digest(encoded(receipt))},
+    }
+    (package / "manifest.json").write_bytes(encoded(package_manifest))
     packaged = SimpleNamespace(path="package", metadata={**metadata, "deployment_verified": True})
     lifecycle = SimpleNamespace(settings=SimpleNamespace(data_dir=tmp_path))
     report = {"artifact_manifest_sha256": receipt["manifest_sha256"]}
@@ -328,3 +332,65 @@ def test_float_package_allows_only_reference_weight_removal(tmp_path, alter_extr
             validate_package_receipt(lifecycle, packaged, chosen, report)
     else:
         validate_package_receipt(lifecycle, packaged, chosen, report)
+
+
+@pytest.mark.parametrize("changes", [{"mode": "engine"}, {"steps": 1}, {"steps": 279}])
+def test_unsupported_spatial_protocol_is_rejected_before_job_creation(spatial, changes):
+    with TestClient(create_app(spatial)) as client:
+        pid = project(client)
+        response = client.post(
+            f"/api/v1/projects/{pid}/policy-jobs",
+            json={
+                "operation": "policy.workflow",
+                "runtime_id": "fixture",
+                "source_id": "source",
+                "evaluation": evaluation(**changes),
+            },
+        )
+        assert response.status_code == 422, response.text
+        assert client.get(f"/api/v1/projects/{pid}/jobs").json() == []
+
+
+@pytest.mark.parametrize("steps", [0, 281])
+def test_report_episode_steps_must_be_executed_within_requested_horizon(spatial, steps):
+    scenario(spatial, {"baseline": {"episode_steps": steps}})
+    with TestClient(create_app(spatial)) as client:
+        job = run(client)
+        assert job["result"]["decision"] == "no_feasible_candidate", job
+        assert not any(x["stage"].startswith("quantize") for x in job["result"]["reports"])
+
+
+@pytest.mark.parametrize("fault", ["wrong_fixture", "missing_fixture", "wrong_asset_inventory"])
+def test_shared_bad_parity_inputs_cannot_qualify_even_when_controls_agree(spatial, fault):
+    scenario(spatial, {stage: {fault: True} for stage in ("native-reference", "baseline")})
+    with TestClient(create_app(spatial)) as client:
+        job = run(client)
+        assert job["result"]["decision"] == "no_feasible_candidate", job
+        assert not any(x["stage"].startswith("quantize") for x in job["result"]["reports"])
+
+
+@pytest.mark.parametrize("stage", ["evaluate-0", "final-evaluation", "package-and-reload"])
+def test_every_candidate_and_package_must_use_all_pinned_fixtures(spatial, stage):
+    # The float control exceeds the limit, so it cannot hide a rejected packed candidate.
+    scenario(
+        spatial, {"baseline": {"fields": {"peak_device_mib": 30}}, stage: {"missing_fixture": True}}
+    )
+    with TestClient(create_app(spatial)) as client:
+        job = wait(
+            client,
+            submit(
+                client, project(client), evaluation=evaluation(), limits={"max_peak_device_mib": 15}
+            ),
+        )
+        assert job["result"]["decision"] == "no_feasible_candidate", job
+        assert job["result"]["selected_artifact_id"] is None
+        assert not any(x["format"] == "deployment_package" for x in job["result"]["artifacts"])
+
+
+def test_export_cannot_append_untested_runtime_assets(spatial):
+    scenario(spatial, {"package-and-reload": {"extra_package_asset": True}})
+    with TestClient(create_app(spatial)) as client:
+        job = run(client)
+        assert job["result"]["decision"] == "no_feasible_candidate", job
+        assert job["result"]["selected_artifact_id"] is None
+        assert not any(x["format"] == "deployment_package" for x in job["result"]["artifacts"])

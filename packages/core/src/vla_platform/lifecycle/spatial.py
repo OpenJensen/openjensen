@@ -6,6 +6,13 @@ import math
 import re
 
 SHA256 = re.compile(r"^[a-f0-9]{64}$")
+EXPORT_EVIDENCE = {
+    "reload-verification.json",
+    "runtime-lock.json",
+    "tested-payload.json",
+    "workflow-evidence.json",
+    "lineage.json",
+}
 
 
 def identity_hash(value):
@@ -65,11 +72,54 @@ def validate_package_receipt(lifecycle, package, chosen, report):
         or report.get("artifact_manifest_sha256") != expected_manifest_sha
         or package.metadata.get("deployment_verified") is not True
         or native_weights in package_manifest["files"]
+        or set(package_manifest["files"]) - set(expected_files) - EXPORT_EVIDENCE
+        or EXPORT_EVIDENCE.intersection(expected_files)
+        or "tested-payload.json" not in package_manifest["files"]
         or any(
             package_manifest["files"].get(name) != digest for name, digest in expected_files.items()
         )
     ):
         raise ValueError("Package receipt does not bind the exact tested candidate inventory")
+
+
+def pinned_fixture_hashes(lifecycle, artifact, protocol):
+    """Bind reports to the registered asset inventory, not matching worker claims alone."""
+    directory = lifecycle.settings.data_dir / artifact.path
+    manifest_bytes = (directory / "manifest.json").read_bytes()
+    manifest = json.loads(manifest_bytes)
+    asset_bytes = (directory / "spatial-assets.json").read_bytes()
+    assets = json.loads(asset_bytes)
+    if (
+        hashlib.sha256(manifest_bytes).hexdigest() != artifact.manifest_sha256
+        or manifest["files"].get("spatial-assets.json") != hashlib.sha256(asset_bytes).hexdigest()
+    ):
+        raise ValueError("Spatial inference asset inventory changed after registration")
+    files, fixtures = assets.get("files"), assets.get("fixtures")
+    if (
+        not isinstance(files, dict)
+        or not files
+        or any(
+            not isinstance(name, str)
+            or not isinstance(digest, str)
+            or not SHA256.fullmatch(digest)
+            or manifest["files"].get(name) != digest
+            for name, digest in files.items()
+        )
+        or not isinstance(fixtures, list)
+        or not 1 <= len(fixtures) <= 64
+        or any(not isinstance(name, str) or name not in files for name in fixtures)
+        or len(set(fixtures)) != len(fixtures)
+    ):
+        raise ValueError("Spatial parity fixtures lack a pinned artifact inventory")
+    expected = {files[name] for name in fixtures}
+    if len(expected) != len(fixtures):
+        raise ValueError("Spatial parity fixtures require distinct input hashes")
+    inference = {
+        name: digest for name, digest in files.items() if name != "policy/model.safetensors"
+    }
+    if protocol.get("inference_assets") != inference:
+        raise ValueError("Spatial protocol inference assets differ from the registered policy")
+    return expected
 
 
 def episode_ids(evaluation, final):
@@ -151,6 +201,8 @@ def validate_report(
         or hardware != anchor.get("target_identity")
     ):
         raise ValueError("Spatial comparisons require identical protocol and hardware")
+    if set(fixture_actions(report)) != pinned_fixture_hashes(lifecycle, artifact, protocol):
+        raise ValueError("Spatial parity evidence must include every pinned fixture exactly once")
     if evaluation.mode == "libero":
         expected_ids = episode_ids(evaluation, final)
         episodes = report.get("episodes")
@@ -175,7 +227,7 @@ def validate_report(
                 or type(episode.get("task_success")) is not bool
                 or episode.get("benchmark_horizon") != 280
                 or type(episode.get("steps")) is not int
-                or not 0 <= episode["steps"] <= 280
+                or not 1 <= episode["steps"] <= evaluation.steps
                 or (not episode["task_success"] and episode["steps"] != 280)
             ):
                 raise ValueError("Spatial episode is truncated or lacks authoritative success")

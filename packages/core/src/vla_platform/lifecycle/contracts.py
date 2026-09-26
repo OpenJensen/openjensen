@@ -40,10 +40,12 @@ class Evaluation(StrictRecord):
         if self.suite == "libero_object" and self.task_ids is not None:
             raise ValueError("Object evaluation uses task_id, not task_ids")
         if self.suite == "libero_spatial":
+            if self.mode != "libero":
+                raise ValueError("Spatial evaluation requires paired LIBERO episodes (mode=libero)")
             if "steps" not in self.model_fields_set:
                 self.steps = 280
-            if self.steps > 280:
-                raise ValueError("Spatial evaluation supports at most its 280-step horizon")
+            if self.steps != 280:
+                raise ValueError("Spatial evaluation requires the full 280-step benchmark horizon")
             if self.task_ids is None:
                 self.task_ids = list(range(10))
             if len(self.task_ids) != len(set(self.task_ids)) or any(
