@@ -1,0 +1,153 @@
+{
+  "recordedOn": "2026-09-26",
+  "sourceCommit": "9ce5579bcb5bc4127b434cc53b5edfd78ffc4fb1",
+  "sourcePath": "workers/benchmark_gpu/evidence/2026-09-26",
+  "checkpoint": "lerobot/smolvla_libero",
+  "checkpointRevision": "31d453f7edd78c839a8bbc39744a292686daf0de",
+  "l4": [
+    {
+      "candidate": "native-bf16",
+      "medianP50Ms": 348.8,
+      "startupSeconds": 27.79,
+      "processPeakMiB": 1186.0,
+      "quality": {
+        "succeeded": 16,
+        "total": 20
+      }
+    },
+    {
+      "candidate": "cpp-bf16",
+      "medianP50Ms": 100.28,
+      "startupSeconds": 2.28,
+      "processPeakMiB": 1162.0,
+      "quality": {
+        "succeeded": 17,
+        "total": 20
+      }
+    },
+    {
+      "candidate": "native-fp16",
+      "medianP50Ms": 347.36,
+      "startupSeconds": 27.95,
+      "processPeakMiB": 1186.0,
+      "quality": {
+        "succeeded": 15,
+        "total": 20
+      }
+    },
+    {
+      "candidate": "cpp-Q8_0",
+      "medianP50Ms": 99.34,
+      "startupSeconds": 3.06,
+      "processPeakMiB": 1018.0,
+      "quality": null
+    },
+    {
+      "candidate": "native-int8",
+      "medianP50Ms": 418.2,
+      "startupSeconds": 29.16,
+      "processPeakMiB": 1036.0,
+      "quality": null
+    },
+    {
+      "candidate": "cpp-Q4_0",
+      "medianP50Ms": 101.62,
+      "startupSeconds": 2.84,
+      "processPeakMiB": 946.0,
+      "quality": null
+    },
+    {
+      "candidate": "native-nf4",
+      "medianP50Ms": 386.49,
+      "startupSeconds": 29.29,
+      "processPeakMiB": 950.0,
+      "quality": null
+    },
+    {
+      "candidate": "cpp-Q8_0-vision",
+      "medianP50Ms": 101.02,
+      "startupSeconds": 2.84,
+      "processPeakMiB": 944.0,
+      "quality": null
+    },
+    {
+      "candidate": "native-bf16-repeat",
+      "medianP50Ms": 350.64,
+      "startupSeconds": 27.92,
+      "processPeakMiB": 1186.0,
+      "quality": null
+    }
+  ],
+  "rtx3070": [
+    {
+      "candidate": "native-bf16",
+      "medianP50Ms": 325.29,
+      "startupSeconds": 14.33,
+      "processPeakMiB": null,
+      "quality": {
+        "succeeded": 15,
+        "total": 20
+      }
+    },
+    {
+      "candidate": "native-fp16",
+      "medianP50Ms": 312.3,
+      "startupSeconds": 14.27,
+      "processPeakMiB": null,
+      "quality": {
+        "succeeded": 15,
+        "total": 20
+      }
+    },
+    {
+      "candidate": "native-int8",
+      "medianP50Ms": 372.32,
+      "startupSeconds": 14.85,
+      "processPeakMiB": null,
+      "quality": {
+        "succeeded": 15,
+        "total": 20
+      }
+    },
+    {
+      "candidate": "native-nf4",
+      "medianP50Ms": 377.31,
+      "startupSeconds": 15.81,
+      "processPeakMiB": null,
+      "quality": {
+        "succeeded": 15,
+        "total": 20
+      }
+    },
+    {
+      "candidate": "cpp-bf16",
+      "medianP50Ms": 112.72,
+      "startupSeconds": 1.41,
+      "processPeakMiB": null,
+      "quality": {
+        "succeeded": 14,
+        "total": 20
+      }
+    },
+    {
+      "candidate": "cpp-Q8_0",
+      "medianP50Ms": 109.3,
+      "startupSeconds": 1.3,
+      "processPeakMiB": null,
+      "quality": {
+        "succeeded": 15,
+        "total": 20
+      }
+    },
+    {
+      "candidate": "cpp-Q4_0",
+      "medianP50Ms": 110.92,
+      "startupSeconds": 1.31,
+      "processPeakMiB": null,
+      "quality": {
+        "succeeded": 8,
+        "total": 20
+      }
+    }
+  ]
+}

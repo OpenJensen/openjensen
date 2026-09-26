@@ -15,6 +15,11 @@ Metrics, recorded recipes, provenance and stage events are under
 Settings also hold advanced recipes and acceptance constraints. Browser preferences
 are per project; each job preserves the submitted recipe on the server.
 
+Diagnostics also shows the recorded L4/RTX 3070 benchmark comparison as labelled
+reference results, even before a project has policy runs. The hardware views link
+to the exact source snapshot and preserve missing measurements as unscored. These
+reference examples do not populate project jobs or establish results for a new policy.
+
 ## Defaults and selection
 
 The starting recipe is **LM Q4_0 on CUDA**, **LM Q8_0 on CPU**, with vision left in
