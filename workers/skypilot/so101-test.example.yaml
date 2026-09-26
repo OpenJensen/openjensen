@@ -1,0 +1,28 @@
+name: so101-scene-test
+workdir: ../isaac_sim
+resources:
+  accelerators: L4:1
+envs:
+  ACCEPT_EULA: null
+  SIM_PROBE_LABEL: so101-pickup
+  SIM_IMAGE: us-east4-docker.pkg.dev/CHANGE_ME_PROJECT_ID/simulation/isaac-worker@sha256:CHANGE_ME_IMAGE_DIGEST
+run: |
+  set -euo pipefail
+  [[ "${ACCEPT_EULA:-}" == Y ]] || { echo "ACCEPT_EULA=Y is required" >&2; exit 1; }
+  SIM_PROBE_ID="$(python3 -c 'import uuid; print(uuid.uuid4())')"
+  SIM_PROBE_ROOT="$HOME/sim-debug/$SIM_PROBE_LABEL/$SIM_PROBE_ID"
+  SIM_PROBE_OUTPUT="$SIM_PROBE_ROOT/outputs"
+  SIM_PROBE_CONTAINER="isaac-so101-$SIM_PROBE_ID"
+  mkdir -p "$SIM_PROBE_OUTPUT"
+  cp -a "$HOME/sky_workdir" "$SIM_PROBE_ROOT/source"
+  sudo chown 1234:1234 "$SIM_PROBE_OUTPUT"
+  printf 'Probe output: %s\n' "$SIM_PROBE_OUTPUT"
+  trap 'docker rm -f "$SIM_PROBE_CONTAINER" >/dev/null 2>&1 || true' EXIT
+  docker run --name "$SIM_PROBE_CONTAINER" --rm --gpus all --init \
+    --user 1234:1234 --shm-size=2g \
+    --env ACCEPT_EULA=Y --env NVIDIA_DRIVER_CAPABILITIES=all \
+    --mount "type=bind,src=$SIM_PROBE_ROOT/source,dst=/opt/sim-worker,readonly" \
+    --mount "type=bind,src=$SIM_PROBE_OUTPUT,dst=/probe-output" \
+    --entrypoint /usr/bin/timeout "$SIM_IMAGE" --kill-after=30 1200 \
+    /isaac-sim/python.sh --no-ros-env /opt/sim-worker/scenes/so101-pickup/smoke_test.py \
+    2>&1 | tee "$SIM_PROBE_ROOT/worker.log"

@@ -14,6 +14,11 @@ import {
 
 type Preferences = {
   mode: "engine" | "libero";
+  suite: "libero_object" | "libero_spatial";
+  taskIds: string;
+  parityProfile: string;
+  parityRmse: string;
+  parityMaxError: string;
   repetitions: number;
   steps: number;
   warmup: number;
@@ -28,9 +33,15 @@ type Preferences = {
   maxMemory: number;
   precision: "recommended" | "Q4_0" | "Q8_0";
   vision: boolean;
+  compareQ4: boolean;
 };
 const initial: Preferences = {
   mode: "engine",
+  suite: "libero_object",
+  taskIds: "0,1,2,3,4,5,6,7,8,9",
+  parityProfile: "",
+  parityRmse: "",
+  parityMaxError: "",
   repetitions: 10,
   steps: 500,
   warmup: 3,
@@ -45,6 +56,7 @@ const initial: Preferences = {
   maxMemory: 8192,
   precision: "recommended",
   vision: false,
+  compareQ4: false,
 };
 function states(text: string) {
   const values = text.split(",").map((x) => Number(x.trim()));
@@ -98,12 +110,15 @@ export function WorkflowPanel({
   useEffect(() => {
     setLoaded(false);
     try {
-      setPreferences({
+      const restored: Preferences = {
         ...initial,
         ...JSON.parse(
           localStorage.getItem(`firebird.workflow.${projectId}`) ?? "{}",
         ),
-      });
+      };
+      // Restore saved Spatial preferences from before the protocol was restricted.
+      setPreferences(restored.suite === "libero_spatial"
+        ? { ...restored, mode: "libero", steps: 280 } : restored);
     } catch {
       setPreferences(initial);
     }
@@ -149,7 +164,7 @@ export function WorkflowPanel({
   const checkpoints = (artifacts.data ?? []).filter(
     (x) => x.format === "training_checkpoint",
   );
-  const defaultLanguage = runtime?.device === "cuda" ? "Q4_0" : "Q8_0";
+  const defaultLanguage = options.data?.quantization_defaults[runtime?.device ?? "cpu"].language ?? "Q8_0";
   const language =
     preferences.precision === "recommended"
       ? defaultLanguage
@@ -160,6 +175,10 @@ export function WorkflowPanel({
         throw new Error("Select a project and a configured execution target.");
       const evaluation: NonNullable<PolicyRequest["evaluation"]> = {
         mode: preferences.mode,
+        suite: preferences.suite,
+        ...(preferences.suite === "libero_spatial"
+          ? { task_ids: states(preferences.taskIds) }
+          : {}),
         repetitions: preferences.repetitions,
         warmups: preferences.warmup,
         task_id: preferences.task,
@@ -168,6 +187,17 @@ export function WorkflowPanel({
         steps: preferences.steps,
         seed: 42,
       };
+      if (preferences.suite === "libero_spatial") {
+        if (!preferences.parityProfile.trim() || !preferences.parityRmse.trim() || !preferences.parityMaxError.trim())
+          throw new Error("Set your approved floating-policy parity profile and tolerances in Settings & diagnostics.");
+        const rmse = Number(preferences.parityRmse);
+        const maximum = Number(preferences.parityMaxError);
+        if (!Number.isFinite(rmse) || !Number.isFinite(maximum) || rmse < 0 || maximum < 0)
+          throw new Error("Parity tolerances must be finite, non-negative numbers.");
+        evaluation.parity_limits = {
+          profile: preferences.parityProfile.trim(), max_rmse: rmse, max_abs_error: maximum,
+        };
+      }
       const body: PolicyRequest = {
         operation:
           stage === "Fine-tune"
@@ -214,8 +244,12 @@ export function WorkflowPanel({
         if (stage === "Quantize") {
           body.candidates = [
             { language, vision: preferences.vision ? "Q8_0" : null },
-            { language: language === "Q4_0" ? "Q8_0" : "Q4_0", vision: null },
           ];
+          if (preferences.compareQ4)
+            body.candidates.push({
+              language: language === "Q4_0" ? "Q8_0" : "Q4_0",
+              vision: null,
+            });
           if (preferences.select && preferences.mode === "libero")
             body.limits = {
               min_success_rate: preferences.minSuccess / 100,
@@ -289,9 +323,9 @@ export function WorkflowPanel({
           <div className="workflow-fields">
             <h2>Compression defaults</h2>
             <p className="muted">
-              Recommended uses LM Q4 on CUDA and LM Q8 on CPU, preserving vision
-              precision. These are starting recipes from small pilots; each
-              policy still needs evaluation.
+              Start with LM Q8 on CPU and CUDA, preserving vision precision.
+              Q4 is experimental: a prior RTX 3070 pilot lost task success.
+              Every policy still needs evaluation on its execution target.
             </p>
             <label>
               Quantization recipe
@@ -305,11 +339,19 @@ export function WorkflowPanel({
                 }
               >
                 <option value="recommended">
-                  Recommended for the execution target
+                  Start with LM Q8; validate on your target
                 </option>
-                <option value="Q4_0">LM Q4</option>
+                <option value="Q4_0">LM Q4 (experimental)</option>
                 <option value="Q8_0">LM Q8</option>
               </select>
+            </label>
+            <label className="workflow-check">
+              <input
+                type="checkbox"
+                checked={preferences.compareQ4}
+                onChange={(e) => update("compareQ4", e.target.checked)}
+              />
+              Compare Q8 and Q4 (experimental)
             </label>
             <label className="workflow-check">
               <input
@@ -321,9 +363,47 @@ export function WorkflowPanel({
             </label>
             <h2>Evaluation</h2>
             <label>
+              Task suite
+              <select
+                value={preferences.suite}
+                onChange={(e) => {
+                  const suite = e.target.value as Preferences["suite"];
+                  setPreferences((old) => ({ ...old, suite,
+                    mode: suite === "libero_spatial" ? "libero" : old.mode,
+                    steps: suite === "libero_spatial" ? 280 : 500 }));
+                }}
+              >
+                <option value="libero_object">LIBERO Object (legacy policy)</option>
+                <option value="libero_spatial">LIBERO Spatial (pinned SmolVLA policy)</option>
+              </select>
+            </label>
+            {preferences.suite === "libero_spatial" && (
+              <>
+                <label>
+                  Spatial task IDs
+                  <input value={preferences.taskIds} onChange={(e) => update("taskIds", e.target.value)} />
+                </label>
+                <p className="muted">Use unique task IDs 0–9. Every task uses the same paired search and final states. Hardware acceptance is still required.</p>
+                <label>
+                  Approved parity profile
+                  <input value={preferences.parityProfile} onChange={(e) => update("parityProfile", e.target.value)} placeholder="Name your reviewed tolerance profile" />
+                </label>
+                <label>
+                  Maximum action RMSE
+                  <input type="number" min="0" step="any" value={preferences.parityRmse} onChange={(e) => update("parityRmse", e.target.value)} />
+                </label>
+                <label>
+                  Maximum absolute action error
+                  <input type="number" min="0" step="any" value={preferences.parityMaxError} onChange={(e) => update("parityMaxError", e.target.value)} />
+                </label>
+                <p className="muted">Declare reviewed tolerances before running. Native and floating C++ actions must pass this check before compression starts; no universal tolerance is assumed.</p>
+              </>
+            )}
+            <label>
               Protocol
               <select
                 value={preferences.mode}
+                disabled={preferences.suite === "libero_spatial"}
                 onChange={(e) =>
                   update("mode", e.target.value as Preferences["mode"])
                 }
@@ -333,9 +413,9 @@ export function WorkflowPanel({
               </select>
             </label>
             <p className="muted">
-              Engine diagnostics check loading, finite actions and timing.
-              Task-quality selection requires compatible LIBERO episodes and
-              your acceptance limits.
+              {preferences.suite === "libero_spatial"
+                ? "Spatial uses paired LIBERO episodes and the full 280-step benchmark horizon."
+                : "Engine diagnostics check loading, finite actions and timing. Task-quality selection requires compatible LIBERO episodes and your acceptance limits."}
             </p>
             <label>
               Timed predictions
@@ -359,16 +439,13 @@ export function WorkflowPanel({
             </label>
             {preferences.mode === "libero" && (
               <>
-                <label>
-                  LIBERO object task
-                  <input
-                    type="number"
-                    min="0"
-                    max="9"
-                    value={preferences.task}
-                    onChange={(e) => update("task", Number(e.target.value))}
-                  />
-                </label>
+                {preferences.suite === "libero_object" && (
+                  <label>
+                    LIBERO object task
+                    <input type="number" min="0" max="9" value={preferences.task}
+                      onChange={(e) => update("task", Number(e.target.value))} />
+                  </label>
+                )}
                 <label>
                   Search initial states
                   <input
@@ -390,6 +467,7 @@ export function WorkflowPanel({
                     min="1"
                     max="500"
                     value={preferences.steps}
+                    disabled={preferences.suite === "libero_spatial"}
                     onChange={(e) => update("steps", Number(e.target.value))}
                   />
                 </label>
@@ -491,14 +569,16 @@ export function WorkflowPanel({
                 </select>
               </label>
               <label>Diagnostic mode
-                <select value={preferences.mode} onChange={(event) => update("mode", event.target.value as Preferences["mode"])}>
+                <select value={preferences.mode} disabled={preferences.suite === "libero_spatial"} onChange={(event) => update("mode", event.target.value as Preferences["mode"])}>
                   <option value="engine">Engine checks</option>
                   <option value="libero" disabled={!runtime?.simulation}>LIBERO task evaluation</option>
                 </select>
               </label>
               <p className="muted">{preferences.mode === "engine"
                 ? `Checks loading, finite actions, prediction latency and memory with ${preferences.warmup} warmups and ${preferences.repetitions} repetitions. Task success is not measured.`
-                : `Evaluates LIBERO Object task ${preferences.task} with initial states ${preferences.searchStates}, seed 42 and up to ${preferences.steps} steps. The policy must declare LIBERO Object compatibility.`}</p>
+                : preferences.suite === "libero_spatial"
+                  ? `Evaluates LIBERO Spatial tasks ${preferences.taskIds} with initial states ${preferences.searchStates}, seed 42 and the full 280-step horizon. The policy must include pinned Spatial assets and approved parity limits.`
+                  : `Evaluates LIBERO Object task ${preferences.task} with initial states ${preferences.searchStates}, seed 42 and up to ${preferences.steps} steps. The policy must declare LIBERO Object compatibility.`}</p>
               <button className="text-link" type="button" onClick={() => setTab("settings")}>Edit diagnostic settings</button>
               {diagnosticBlocker && <p className="warning-box" id="diagnostic-readiness" role="status">{diagnosticBlocker}</p>}
               {!runtime && !options.isPending && <p className="muted"><a className="text-link" href="https://github.com/sobhanb-eth/firebird-hackathon-codebase/blob/main/docs/policy-workflow.md#configure-the-execution-host" target="_blank" rel="noreferrer">Worker setup instructions ↗</a></p>}
@@ -760,7 +840,7 @@ export function WorkflowPanel({
               {stage === "Quantize" && (
                 <p className="form-note">
                   {preferences.precision === "recommended"
-                    ? "Recommended"
+                    ? "Starting"
                     : "Custom"}{" "}
                   compression is selected. The workflow checks a floating
                   reference, creates candidates and evaluates their actual

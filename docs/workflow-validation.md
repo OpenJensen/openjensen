@@ -19,8 +19,9 @@ recorded model measurements remain separate from application job results.
 
 The production UI was exercised against two disposable real application servers:
 one with no execution target and one with an explicit synthetic subprocess worker.
-Twelve browser checks passed across desktop and mobile: recorded numbers and
-hardware switching, navigation during delayed project loading, missing runtime
+Fourteen browser checks passed across desktop and mobile: recorded numbers and
+hardware switching, navigation during delayed project loading, Spatial protocol
+selection and locking, missing runtime
 guidance, policy submission through the real API, persisted results after reload,
 missing-policy navigation, unsupported simulation,
 active-worker cancellation, and target-discovery failure. Production build and

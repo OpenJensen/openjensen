@@ -1,0 +1,62 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    metersPerUnit = 1
+    upAxis = "Z"
+    timeCodesPerSecond = 30
+    startTimeCode = 0
+    endTimeCode = 180
+)
+
+def Xform "World"
+{
+    def PhysicsScene "Physics" (
+        prepend apiSchemas = ["PhysxSceneAPI"]
+    )
+    {
+        vector3f physics:gravityDirection = (0, 0, -1)
+        float physics:gravityMagnitude = 9.81
+        uint physxScene:timeStepsPerSecond = 120
+    }
+
+    def Cube "Ground" (
+        prepend apiSchemas = ["PhysicsCollisionAPI"]
+    )
+    {
+        double size = 1
+        double3 xformOp:translate = (0, 0, -0.1)
+        float3 xformOp:scale = (12, 12, 0.2)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        color3f[] primvars:displayColor = [(0.18, 0.22, 0.28)]
+    }
+
+    def Cube "Cube" (
+        prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+    )
+    {
+        double size = 0.6
+        float physics:mass = 1
+        vector3f physics:velocity = (0.6, 0.3, 0)
+        double3 xformOp:translate = (0, 0, 3)
+        float3 xformOp:rotateXYZ = (20, 15, 10)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ"]
+        color3f[] primvars:displayColor = [(0.1, 0.65, 0.9)]
+    }
+
+    def DomeLight "Light"
+    {
+        float inputs:intensity = 1000
+        color3f inputs:color = (1, 1, 1)
+    }
+
+    def Camera "Camera"
+    {
+        float focalLength = 35
+        float horizontalAperture = 36
+        float verticalAperture = 20.25
+        float2 clippingRange = (0.1, 1000)
+        double3 xformOp:translate = (7, -7, 5)
+        float3 xformOp:rotateXYZ = (68, 0, 45)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ"]
+    }
+}

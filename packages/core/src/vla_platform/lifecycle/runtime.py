@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from vla_platform.lifecycle.contracts import StrictRecord
 
@@ -16,6 +16,8 @@ class Runtime(StrictRecord):
     worker_root: str
     conversion_python: str | None = None
     conversion_image: str | None = None
+    evaluation_python: str | None = None
+    evaluation_image: str | None = None
     training_python: str | None = None
     training_root: str | None = None
     vendor: str
@@ -35,9 +37,19 @@ class Source(StrictRecord):
     label: str
     path: str
     sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
-    task: Literal["libero_object", "unverified"] = "unverified"
+    task: Literal["libero_object", "libero_spatial", "unverified"] = "unverified"
+    evaluation_bundle: str | None = None
+    evaluation_bundle_sha256: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     action_dim: int = Field(default=7, ge=1, le=32)
     provenance: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def pinned_evaluation_bundle(self):
+        if bool(self.evaluation_bundle) != bool(self.evaluation_bundle_sha256):
+            raise ValueError("Evaluation bundle path and SHA256 must be supplied together")
+        if self.task == "libero_spatial" and not self.evaluation_bundle:
+            raise ValueError("Spatial source requires a pinned local evaluation bundle")
+        return self
 
 
 class RuntimeCatalog(StrictRecord):
@@ -82,6 +94,7 @@ def command(
     container_name: str,
     training: bool = False,
     conversion: bool = False,
+    evaluation: bool = False,
 ):
     root = runtime.training_root if training else runtime.worker_root
     python = runtime.training_python if training else runtime.python
@@ -92,6 +105,9 @@ def command(
     if conversion and runtime.conversion_python:
         python = runtime.conversion_python
         image = runtime.conversion_image
+    if evaluation and (runtime.evaluation_python or runtime.evaluation_image):
+        python = runtime.evaluation_python or python
+        image = runtime.evaluation_image
     argv = [python, "-m", module, str(request), str(output)]
     env = {**os.environ, **runtime.env, "PYTHONUNBUFFERED": "1"}
     paths = [root, str(Path(root) / "src")]

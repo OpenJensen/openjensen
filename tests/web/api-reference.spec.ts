@@ -324,6 +324,8 @@ test('direct docs URLs and reloads render without hydration or runtime errors', 
 });
 
 test('shared workspace shell preserves training, defaults, and separate diagnostics', async ({ page }) => {
+  // This view-only check requires an empty workspace even when real journey tests run.
+  await page.route('**/api/v1/projects', route => route.fulfill({ json: [] }));
   await page.goto('/');
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Fine-tune a policy' })).toBeVisible();
@@ -384,4 +386,98 @@ test('dataset inspection stays separate from newer policy jobs in the same proje
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Fine-tune a policy' })).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+test('quantization submits Q4 only after an explicit experimental choice', async ({ page }) => {
+  const requests: { candidates: { language: string; vision: string | null }[] }[] = [];
+  const timestamp = '2026-09-26T12:00:00Z';
+  await page.route('**/api/v1/projects', route => route.fulfill({ json: [{ id: 'precision-review', name: 'Precision fixture', created_at: timestamp }] }));
+  await page.route('**/api/v1/projects/precision-review/jobs', route => route.fulfill({ json: [] }));
+  await page.route('**/api/v1/projects/precision-review/artifacts', route => route.fulfill({ json: [] }));
+  await page.route('**/api/v1/policy-options', route => route.fulfill({ json: {
+    runtimes: [{ id: 'fixture', label: 'CPU fixture', device: 'cpu', training: false, simulation: false }],
+    sources: [{ id: 'source', label: 'Synthetic policy', task: 'fixture' }],
+    training_methods: [], default_training_method: 'lora',
+    quantization_defaults: { cpu: { language: 'Q8_0', vision: null }, cuda: { language: 'Q8_0', vision: null }, note: 'Fixture only' },
+  } }));
+  await page.route('**/api/v1/projects/precision-review/policy-jobs', route => {
+    requests.push(route.request().postDataJSON());
+    return route.fulfill({ status: 422, json: { detail: 'Captured request; no worker started' } });
+  });
+  async function submitQuantization(count: number) {
+    await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+    await page.getByLabel('Input policy').selectOption('source:source');
+    await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
+    await expect.poll(() => requests.length).toBe(count);
+  }
+  await page.goto('/');
+  await submitQuantization(1);
+  expect(requests[0].candidates).toEqual([{ language: 'Q8_0', vision: null }]);
+  await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+  const compare = page.getByLabel('Compare Q8 and Q4 (experimental)');
+  await expect(compare).not.toBeChecked();
+  await compare.check();
+  await submitQuantization(2);
+  expect(requests[1].candidates).toEqual([{ language: 'Q8_0', vision: null }, { language: 'Q4_0', vision: null }]);
+  await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+  const restoredCompare = page.getByLabel('Compare Q8 and Q4 (experimental)');
+  // Settings remounts; wait until its saved preference has been restored.
+  await expect(restoredCompare).toBeChecked();
+  await restoredCompare.uncheck();
+  await expect(restoredCompare).not.toBeChecked();
+  await page.getByLabel('Quantization recipe').selectOption('Q4_0');
+  await submitQuantization(3);
+  expect(requests[2].candidates).toEqual([{ language: 'Q4_0', vision: null }]);
+});
+
+test('Spatial settings require explicit task and parity choices in the submitted request', async ({ page }) => {
+  const submitted: { evaluation: Record<string, unknown> }[] = [];
+  await page.route('**/api/v1/projects', route => route.fulfill({ json: [{ id: 'spatial-review', name: 'Spatial fixture', created_at: '2026-09-26T12:00:00Z' }] }));
+  await page.route('**/api/v1/projects/spatial-review/jobs', route => route.fulfill({ json: [] }));
+  await page.route('**/api/v1/projects/spatial-review/artifacts', route => route.fulfill({ json: [] }));
+  await page.route('**/api/v1/policy-options', route => route.fulfill({ json: {
+    runtimes: [{ id: 'fixture', label: 'Synthetic L4 fixture', device: 'cuda', training: false, simulation: true }],
+    sources: [{ id: 'source', label: 'Synthetic Spatial policy', task: 'libero_spatial' }],
+    training_methods: [], default_training_method: 'lora',
+    quantization_defaults: { cpu: { language: 'Q8_0', vision: null }, cuda: { language: 'Q8_0', vision: null }, note: 'Fixture only' },
+  } }));
+  await page.route('**/api/v1/projects/spatial-review/policy-jobs', route => {
+    submitted.push(route.request().postDataJSON());
+    return route.fulfill({ status: 422, json: { detail: 'Captured request; no worker started' } });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+  await page.getByLabel('Task suite').selectOption('libero_spatial');
+  await expect(page.getByLabel('Spatial task IDs')).toHaveValue('0,1,2,3,4,5,6,7,8,9');
+  await expect(page.getByLabel('Approved parity profile')).toHaveValue('');
+  await expect(page.getByRole('combobox', { name: 'Protocol', exact: true })).toHaveValue('libero');
+  await expect(page.getByRole('combobox', { name: 'Protocol', exact: true })).toBeDisabled();
+  await expect(page.getByLabel('Episode step limit')).toHaveValue('280');
+  await expect(page.getByLabel('Episode step limit')).toBeDisabled();
+  await page.getByLabel('Spatial task IDs').fill('0,2');
+  await page.getByLabel('Approved parity profile').fill('synthetic-test-only');
+  await page.getByLabel('Maximum action RMSE').fill('0');
+  await page.getByLabel('Maximum absolute action error').fill('0');
+  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByLabel('Input policy').selectOption('source:source');
+  await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
+  await expect.poll(() => submitted.length).toBe(1);
+  expect(submitted[0].evaluation).toMatchObject({
+    mode: 'libero', suite: 'libero_spatial', task_ids: [0, 2], steps: 280,
+    parity_limits: { profile: 'synthetic-test-only', max_rmse: 0, max_abs_error: 0 },
+  });
+  // Old saved preferences must not revive the unsupported engine/short horizon.
+  await page.evaluate(() => {
+    const key = 'firebird.workflow.spatial-review';
+    localStorage.setItem(key, JSON.stringify({ ...JSON.parse(localStorage.getItem(key) ?? '{}'), mode: 'engine', steps: 1 }));
+  });
+  await page.reload();
+  await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Protocol', exact: true })).toHaveValue('libero');
+  await expect(page.getByLabel('Episode step limit')).toHaveValue('280');
+  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByLabel('Input policy').selectOption('source:source');
+  await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
+  await expect.poll(() => submitted.length).toBe(2);
+  expect(submitted[1].evaluation).toEqual(submitted[0].evaluation);
 });

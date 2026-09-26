@@ -475,6 +475,7 @@ export interface components {
              * @enum {string}
              */
             mode: "engine" | "libero";
+            parity_limits?: components["schemas"]["ParityLimits"] | null;
             /**
              * Repetitions
              * @default 10
@@ -491,10 +492,18 @@ export interface components {
              */
             steps: number;
             /**
+             * Suite
+             * @default libero_object
+             * @enum {string}
+             */
+            suite: "libero_object" | "libero_spatial";
+            /**
              * Task Id
              * @default 0
              */
             task_id: number;
+            /** Task Ids */
+            task_ids?: number[] | null;
             /**
              * Warmups
              * @default 3
@@ -732,6 +741,18 @@ export interface components {
              */
             timeout_seconds: number;
         };
+        /**
+         * ParityLimits
+         * @description Operator-declared tolerances; no unmeasured universal default.
+         */
+        ParityLimits: {
+            /** Max Abs Error */
+            max_abs_error: number;
+            /** Max Rmse */
+            max_rmse: number;
+            /** Profile */
+            profile: string;
+        };
         /** PolicyArtifact */
         PolicyArtifact: {
             /** File Bytes */
@@ -801,7 +822,7 @@ export interface components {
         Precision: {
             /**
              * Language
-             * @default Q4_0
+             * @default Q8_0
              * @enum {string}
              */
             language: "Q4_0" | "Q8_0";

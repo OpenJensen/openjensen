@@ -80,6 +80,22 @@ test('keeps diagnostics open when the current project finishes loading', async (
   await expect(page.getByRole('heading', { name: 'Run diagnostics', exact: true })).toBeVisible();
 });
 
+test('keeps the Spatial protocol locked and labels the selected suite', async ({ page, request }) => {
+  await openDiagnostics(page, await project(request), '', {
+    suite: 'libero_spatial', mode: 'engine', steps: 10, taskIds: '1,2',
+  });
+  const mode = page.getByRole('combobox', { name: 'Diagnostic mode', exact: true });
+  await expect(mode).toHaveValue('libero');
+  await expect(mode).toBeDisabled();
+  await expect(page.getByText('Evaluates LIBERO Spatial tasks 1,2', { exact: false })).toContainText('full 280-step horizon');
+  await page.getByRole('button', { name: 'Edit diagnostic settings', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Task suite', exact: true }).selectOption('libero_object');
+  await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
+  await expect(mode).toBeEnabled();
+  await mode.selectOption('engine');
+  await expect(page.getByText('Checks loading, finite actions', { exact: false })).toBeVisible();
+});
+
 test('submits the selected policy through the real API and shows subprocess results', async ({ page, request }) => {
   const id = await project(request, configured);
   const artifact = await policy(request, id);

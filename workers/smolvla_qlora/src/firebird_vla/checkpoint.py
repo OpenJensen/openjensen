@@ -3,13 +3,41 @@
 import hashlib
 import json
 import os
+import re
 import shutil
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 
 
 def write_json(path, value):
-    Path(path).write_text(json.dumps(value, indent=2, allow_nan=False) + "\n")
+    """Replace JSON atomically; a stopped writer leaves the previous version readable."""
+    path = Path(path)
+    content = json.dumps(value, indent=2, allow_nan=False) + "\n"
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", prefix=f".{path.name}-", dir=path.parent, delete=False
+        ) as stream:
+            temporary = Path(stream.name)
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        _sync_directory(path.parent)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def _sync_directory(path):
+    # Windows does not expose directory handles to os.open; file fsync still applies there.
+    if os.name != "nt":
+        descriptor = os.open(path, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
 
 
 def sha256(path):
@@ -21,12 +49,25 @@ def sha256(path):
 
 
 def verify_bundle(directory):
+    if Path(directory).is_symlink():
+        raise ValueError("Checkpoint directory must not be a symlink")
     directory = Path(directory).resolve()
-    manifest = json.loads((directory / "manifest.json").read_text())
-    if manifest.get("schema_version") != 1 or not manifest.get("files"):
+    if any(p.is_symlink() for p in directory.rglob("*")):
+        raise ValueError("Checkpoint files must not be symlinks")
+    try:
+        manifest = json.loads((directory / "manifest.json").read_text())
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"Checkpoint manifest is missing or invalid: {directory}") from exc
+    if (
+        not isinstance(manifest, dict)
+        or type(manifest.get("schema_version")) is not int
+        or manifest["schema_version"] != 1
+        or not isinstance(manifest.get("files"), dict)
+        or not manifest["files"]
+    ):
         raise ValueError("Unsupported or empty checkpoint manifest")
     actual = {
-        str(p.relative_to(directory))
+        p.relative_to(directory).as_posix()
         for p in directory.rglob("*")
         if p.is_file() and p != directory / "manifest.json"
     }
@@ -34,9 +75,120 @@ def verify_bundle(directory):
         raise ValueError("Checkpoint file inventory differs from manifest")
     for name, expected in manifest["files"].items():
         path = (directory / name).resolve()
-        if not path.is_relative_to(directory) or not path.is_file() or sha256(path) != expected:
+        if (
+            not isinstance(expected, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", expected)
+            or not path.is_relative_to(directory)
+            or not path.is_file()
+            or sha256(path) != expected
+        ):
             raise ValueError(f"Missing, unsafe or corrupt checkpoint file: {name}")
     return manifest
+
+
+def verify_training_checkpoint(directory):
+    """Validate the complete native training inventory without importing Torch."""
+    manifest = verify_bundle(directory)
+    required = {
+        "recipe.json",
+        "stats.json",
+        "splits.json",
+        "training.pt",
+        "probe.safetensors",
+        "adapter/adapter_config.json",
+        "adapter/adapter_model.safetensors",
+        "policy/config.json",
+    }
+    if not required.issubset(manifest["files"]):
+        raise ValueError("Incomplete training checkpoint inventory")
+    step = manifest.get("step")
+    if type(step) is not int or step < 1:
+        raise ValueError("Checkpoint manifest must contain a positive optimizer step")
+    name = Path(directory).name
+    if re.fullmatch(r"checkpoint-\d{6,}", name) and int(name.split("-")[1]) != step:
+        raise ValueError("Checkpoint directory and manifest optimizer steps differ")
+    return manifest
+
+
+def resolve_checkpoint(path):
+    """Select the latest verified checkpoint; latest.json is only an advisory index.
+
+    A rename may have committed a bundle before the pointer was published. Ignore
+    incomplete staging directories and damaged candidates, but never silently fall
+    back when an explicitly selected checkpoint fails validation.
+    """
+    path = Path(path)
+    if path.is_symlink():
+        raise ValueError("Checkpoint directory must not be a symlink")
+    if (path / "manifest.json").exists() or re.fullmatch(r"checkpoint-\d{6,}", path.name):
+        verify_training_checkpoint(path)
+        return path
+    candidates = sorted(
+        (
+            candidate
+            for candidate in path.iterdir()
+            if re.fullmatch(r"checkpoint-\d{6,}", candidate.name)
+        ),
+        key=lambda candidate: int(candidate.name.split("-")[1]),
+        reverse=True,
+    )
+    failures = []
+    for candidate in candidates:
+        try:
+            verify_training_checkpoint(candidate)
+        except (OSError, ValueError) as exc:
+            failures.append(f"{candidate.name}: {exc}")
+            continue
+        return candidate
+    detail = "; ".join(failures) if failures else "no completed checkpoint directories"
+    raise ValueError(f"No complete, integrity-verified training checkpoint in {path}: {detail}")
+
+
+def publish_checkpoint(staging, destination):
+    """Commit a complete bundle before atomically advancing its advisory pointer."""
+    staging, destination = Path(staging), Path(destination)
+    if destination.exists():
+        raise FileExistsError(f"Refusing to overwrite checkpoint {destination}")
+    manifest = verify_training_checkpoint(staging)
+    if destination.name != f"checkpoint-{manifest['step']:06d}":
+        raise ValueError("Checkpoint destination and manifest optimizer steps differ")
+    # Flush contents and directory entries before making this bundle discoverable.
+    for path in staging.rglob("*"):
+        if path.is_file():
+            # Windows _commit requires write access for flushing file data.
+            with path.open("r+b") as stream:
+                os.fsync(stream.fileno())
+    for path in sorted((p for p in staging.rglob("*") if p.is_dir()), reverse=True):
+        _sync_directory(path)
+    _sync_directory(staging)
+    os.rename(staging, destination)
+    _sync_directory(destination.parent)
+    write_json(
+        destination.parent / "latest.json",
+        {"checkpoint": destination.name, "step": manifest["step"]},
+    )
+    return destination
+
+
+def validate_resume_state(state, manifest, cfg):
+    """Reject a hashed but inconsistent optimizer cursor before restoring state."""
+    if not isinstance(state, dict):
+        raise ValueError("Checkpoint training state must be a mapping")
+    step, consumed = state.get("step"), state.get("consumed_batches")
+    if type(step) is not int or step < 1 or step != manifest["step"]:
+        raise ValueError("Checkpoint training state and manifest optimizer steps differ")
+    if type(consumed) is not int or consumed != step * cfg.gradient_accumulation_steps:
+        raise ValueError("Checkpoint batch cursor is inconsistent with optimizer step")
+    if step >= cfg.steps:
+        raise ValueError("Checkpoint already completed this recipe")
+
+
+def validate_resume_recipe(directory, cfg):
+    from .config import TrainConfig
+
+    previous = TrainConfig.load(Path(directory) / "recipe.json")
+    if replace(previous, output_dir=cfg.output_dir) != cfg:
+        raise ValueError("Resume requires the original recipe except output_dir")
 
 
 def save_checkpoint(
@@ -85,7 +237,7 @@ def save_checkpoint(
             staging / "training.pt",
         )
         files = {
-            str(p.relative_to(staging)): sha256(p)
+            p.relative_to(staging).as_posix(): sha256(p)
             for p in sorted(staging.rglob("*"))
             if p.is_file()
         }
@@ -119,7 +271,7 @@ def save_checkpoint(
                 "reload_verified": False,
             },
         )
-        os.rename(staging, destination)
+        publish_checkpoint(staging, destination)
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
         raise

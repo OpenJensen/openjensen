@@ -12,7 +12,8 @@ export default defineConfig({
     { name: 'mobile', testMatch: 'diagnostics.spec.ts', use: { ...devices['Pixel 7'], defaultBrowserType: 'chromium' } },
   ],
   webServer: [
-    { command, url: 'http://127.0.0.1:8765/api/v1/health', reuseExistingServer: false },
+    { command, url: 'http://127.0.0.1:8765/api/v1/health', reuseExistingServer: false,
+      env: { FIREBIRD_BROWSER_EMPTY_RUNTIME: '1' } },
     { command, url: 'http://127.0.0.1:8766/api/v1/health', reuseExistingServer: false,
       env: { FIREBIRD_BROWSER_PORT: '8766', FIREBIRD_BROWSER_NATIVE_FIXTURE: '1' } },
   ],

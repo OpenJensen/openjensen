@@ -1,0 +1,202 @@
+{
+  "status": "passed",
+  "scene": "/opt/sim-worker/scenes/so101-pickup/scene.usda",
+  "camera": "/World/Cameras/Front",
+  "width": 1280,
+  "height": 720,
+  "fps": 30,
+  "frames": 150,
+  "scope": "Passive pose-hold smoke test; no pickup controller or task-success claim.",
+  "authored": {
+    "base_position": [
+      -0.475,
+      -0.005,
+      0.202401
+    ],
+    "cup_position": [
+      -0.165,
+      -0.045,
+      0.2005
+    ],
+    "shelf_top": 0.1999999996945262,
+    "q_degrees": {
+      "gripper": 1.4299999475479126,
+      "wrist_roll": 7.960000038146973,
+      "wrist_flex": 50.0,
+      "elbow_flex": 96.56999969482422,
+      "shoulder_lift": -100.0,
+      "shoulder_pan": 9.359999656677246
+    }
+  },
+  "asset_loading": {
+    "previous_seconds": null,
+    "limit_seconds": 60.0
+  },
+  "physics": {
+    "dof_names": [
+      "shoulder_pan",
+      "shoulder_lift",
+      "elbow_flex",
+      "wrist_flex",
+      "wrist_roll",
+      "gripper"
+    ],
+    "q_limits_degrees": [
+      [
+        -109.99987556416437,
+        109.99987556416437
+      ],
+      [
+        -100.00004831734799,
+        100.00004831734799
+      ],
+      [
+        -96.82986382541075,
+        96.82986382541075
+      ],
+      [
+        -94.9998375807109,
+        94.9998375807109
+      ],
+      [
+        -157.21102420169544,
+        162.78933531949323
+      ],
+      [
+        -10.000003977961152,
+        100.00004831734799
+      ]
+    ],
+    "q_targets_degrees": [
+      9.359999884805324,
+      -100.0000005060238,
+      96.56999561805928,
+      50.0000002530119,
+      7.959999788928533,
+      1.429999887537075
+    ],
+    "articulation_count": 1,
+    "link_count": 7,
+    "engine": "physx",
+    "state_source": "Isaac SimulationManager live tensor view, world coordinates"
+  },
+  "checks": {
+    "frame_count": true,
+    "finite_joint_state": true,
+    "joint_limits": true,
+    "fixed_base": true,
+    "cup_on_shelf": true,
+    "visible_frames": true,
+    "timeline_advanced": true,
+    "physics_advanced": true
+  },
+  "max_base_drift_meters": 6.576709367670069e-09,
+  "final_cup_planar_drift_meters": 6.781175308038169e-07,
+  "final_cup_height_above_shelf_meters": 1.0165646672222195e-06,
+  "max_target_error_degrees": [
+    0.0002988207761873696,
+    0.21981597805852005,
+    0.2598203960272798,
+    0.09986419585475659,
+    0.0005600755119417045,
+    0.0022431835338201367
+  ],
+  "initial": {
+    "frame": 0,
+    "time": 0.03333333333333333,
+    "simulation_time": 0.05,
+    "elapsed_seconds": 448.76673636400005,
+    "pixel_min": 1,
+    "pixel_max": 233,
+    "pixel_mean": 91.66040726273148,
+    "pixel_std": 70.79566473984706,
+    "q_degrees": [
+      9.35983937535983,
+      -99.8908267623303,
+      96.80955084281914,
+      50.049037596158,
+      7.959712920983392,
+      1.4288873137543034
+    ],
+    "qd_degrees_per_second": [
+      -0.0047995152328297805,
+      -0.22588129276319746,
+      -1.6176511174118302,
+      -0.1842177257955015,
+      3.466245965082093e-05,
+      0.00144223129558722
+    ],
+    "base_pose": [
+      -0.4749999940395355,
+      -0.004999999422580004,
+      0.20240099728107452,
+      0.0,
+      0.0,
+      0.0,
+      1.0000001192092896
+    ],
+    "cup_pose": [
+      -0.1650002896785736,
+      -0.045000217854976654,
+      0.20000095665454865,
+      6.364941509673372e-05,
+      2.907505950133782e-05,
+      3.0241690183174796e-05,
+      1.0
+    ]
+  },
+  "final": {
+    "frame": 149,
+    "time": 4.999999999999992,
+    "simulation_time": 5.016666666666667,
+    "elapsed_seconds": 467.4965114009999,
+    "pixel_min": 1,
+    "pixel_max": 234,
+    "pixel_mean": 92.07743127893518,
+    "pixel_std": 70.45804477833714,
+    "q_degrees": [
+      9.359701064029137,
+      -99.78018452796528,
+      96.82980235370823,
+      50.099864448866654,
+      7.959439713416591,
+      1.4277567040032548
+    ],
+    "qd_degrees_per_second": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "base_pose": [
+      -0.4749999940395355,
+      -0.004999999422580004,
+      0.20240099728107452,
+      0.0,
+      0.0,
+      0.0,
+      1.0000001192092896
+    ],
+    "cup_pose": [
+      -0.16500060260295868,
+      -0.045000310987234116,
+      0.20000101625919342,
+      6.458895950345322e-05,
+      3.023938916157931e-05,
+      3.250992449466139e-05,
+      1.0
+    ]
+  },
+  "thresholds": {
+    "base_drift_meters": 0.0001,
+    "cup_planar_drift_meters": 0.05,
+    "cup_height_meters": 0.01,
+    "joint_limit_slack_degrees": 1.0
+  },
+  "video": {
+    "path": "/probe-output/video.mp4",
+    "sha256": "0f86035c469921dbfe066679eb002fd6d81f8a20a7ddd3abf8f69af2108fafc7"
+  }
+}

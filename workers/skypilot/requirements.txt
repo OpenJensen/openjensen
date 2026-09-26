@@ -1,0 +1,1 @@
+skypilot[gcp]==0.13.0

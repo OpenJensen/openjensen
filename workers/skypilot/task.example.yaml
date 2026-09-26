@@ -1,0 +1,39 @@
+name: isaac-recording
+
+# Paths are relative to skypilot; sky.sh selects that directory.
+workdir: ../isaac_sim
+file_mounts:
+  ~/sim-control: ./remote
+
+num_nodes: 1
+resources:
+  infra: gcp/us-east4
+  instance_type: g2-standard-16
+  accelerators: L4:1
+  use_spot: false
+  disk_size: 200
+  disk_tier: medium
+  image_id: projects/sky-dev-465/global/images/skypilot-gcp-gpu-ubuntu-260603
+  autostop:
+    idle_minutes: 15
+    down: true
+    wait_for: jobs
+  labels:
+    app: isaac-sim
+
+envs:
+  ACCEPT_EULA: null
+  SIM_IMAGE: us-east4-docker.pkg.dev/CHANGE_ME_PROJECT_ID/simulation/isaac-worker@sha256:CHANGE_ME_IMAGE_DIGEST
+  SIM_MANIFEST: demo.local.yaml
+  SIM_RESULTS_URI: gs://CHANGE_ME_PROJECT_ID-sim-results/sky-runs
+  SIM_SETUP_TIMEOUT: '2400'
+  SIM_SETUP_KILL_GRACE: '60'
+  SIM_JOB_TIMEOUT: '3600'
+
+setup: |
+  set -euo pipefail
+  timeout --signal=TERM --kill-after="$SIM_SETUP_KILL_GRACE" "$SIM_SETUP_TIMEOUT" bash ~/sim-control/setup.sh
+
+run: |
+  set -euo pipefail
+  bash ~/sim-control/run.sh

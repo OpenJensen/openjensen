@@ -1,0 +1,8 @@
+.venv
+.tools
+__pycache__/
+*.pyc
+config.yaml
+task.yaml
+probe.yaml
+so101-test.local.yaml

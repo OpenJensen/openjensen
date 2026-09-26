@@ -40,18 +40,27 @@ startup failures are reported by the job. The retired benchmark rental and faile
 RTX host are not available execution targets.
 
 Project diagnostics evaluate **one native policy** using the application's protocol.
-The application simulator uses **LIBERO Object**; the recorded comparison uses
-**LIBERO Spatial**. These task scores must not be compared as the same benchmark.
+The application defaults to **LIBERO Object**; the recorded comparison uses
+**LIBERO Spatial**. Select the matching suite and configure its required assets
+before comparing scores. Spatial diagnostics require the full 280-step horizon
+and explicit parity limits, as described in the Spatial workflow below.
 They do not launch the ten-stack LeRobot/bitsandbytes/C++/vLLM/TensorRT-LLM comparison,
 whose complete observation-to-action timing, process memory and paired fixture
 contract differ. **Measurement scope & reproduction** in the example links to the
 pinned standalone GPU benchmark setup and commands for reproducing that comparison.
 
+For the pinned newer Spatial policy, use the [Spatial optimizer workflow](spatial-workflow.md).
+It keeps a native BF16 reference and floating C++ control separate, with explicit
+parity admission before compression. Hardware acceptance is still pending.
+
 ## Defaults and selection
 
-The starting recipe is **LM Q4_0 on CUDA**, **LM Q8_0 on CPU**, with vision left in
-its source precision. These choices reflect the small existing target-specific
-pilots, not a universal quality claim. Vision Q8 is an explicit experimental option.
+The initial comparison candidate is **LM Q8_0 on CPU and CUDA**, with vision left
+in its source precision. This starting point requires task-success validation.
+LM Q4 and vision Q8 remain explicit experimental candidates. In the recorded
+RTX 3070 pilot, C++ Q4 completed 8/20 tasks versus 15/20 for native BF16;
+C++ Q8 matched all 20 reference episode outcomes. See the [comparison evidence](../workers/benchmark_gpu/README.md).
+Those measurements do not establish packed-policy quality on L4 or on a new policy.
 Fine-tuning defaults to **LoRA**; **QLoRA** uses the same adapter training path over
 an NF4 base. The method registry can grow without making QLoRA mandatory.
 
@@ -67,7 +76,7 @@ flowchart TD
     export --> float["F32/BF16 GGUF reference"]
     prepared["Pinned prepared policy"] --> float
     float --> baseline["Reference reload + measurement"]
-    float --> candidates["2–4 declared precision recipes"]
+    float --> candidates["1–4 explicit precision recipes"]
     candidates --> audit["Protected-tensor audit + packed reload"]
     audit --> measurement["Timing + memory + optional LIBERO episodes"]
     baseline --> decision{"Explicit quality limits<br/>and complete paired episodes?"}

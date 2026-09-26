@@ -3,7 +3,6 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 
 import httpx
-import pyarrow as pa
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -127,7 +126,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(504, "Dataset preview timed out; try again") from exc
         except httpx.HTTPError as exc:
             raise HTTPException(502, "Hugging Face could not serve this dataset preview") from exc
-        except (ValueError, pa.ArrowException) as exc:
+        except ValueError as exc:
             raise HTTPException(422, "Dataset preview metadata or Parquet data is invalid") from exc
 
     @app.get("/api/v1/health")
@@ -203,11 +202,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ],
             "default_training_method": "lora",
             "quantization_defaults": {
-                "cuda": {"language": "Q4_0", "vision": None},
+                "cuda": {"language": "Q8_0", "vision": None},
                 "cpu": {"language": "Q8_0", "vision": None},
                 "note": (
-                    "Starting recipes from small target-specific pilots; "
-                    "new policies still require evaluation."
+                    "Q8 is the initial comparison candidate on CPU and CUDA, "
+                    "not a quality guarantee. "
+                    "Q4 and vision packing are experimental; validate every policy on its target."
                 ),
             },
         }
@@ -241,7 +241,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def job_events(job_id: str, execution: ExecutionDep, after: int = 0):
         if await execution.get(job_id) is None:
             raise HTTPException(404, "Job not found")
-        return execution.lifecycle.events(job_id, after)
+        try:
+            return execution.lifecycle.events(job_id, after)
+        except ValueError as exc:
+            raise HTTPException(
+                422, "Job event history is corrupt; preserve it for inspection"
+            ) from exc
 
     @app.get("/api/v1/jobs/{job_id}", response_model=Job)
     async def get_job(job_id: str, execution: ExecutionDep) -> Job:

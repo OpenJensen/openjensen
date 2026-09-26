@@ -1,6 +1,6 @@
 # Firebird application
 
-A local VLA lifecycle application with persistent projects, dataset intake and visual exploration, selectable LoRA/QLoRA fine-tuning, native quantization, evaluation and reload-verified packages through shared web/CLI jobs. Native operations require configured worker environments. Distillation remains planned.
+A local VLA lifecycle application with persistent projects, dataset intake and visual exploration, selectable LoRA/QLoRA fine-tuning, native quantization, evaluation and reload-verified packages through shared web/CLI jobs. Native operations require configured worker environments and the documented acceptance checks. Distillation remains planned.
 
 Start with the [policy workflow and setup guide](docs/policy-workflow.md). Recommended quantization defaults depend on the execution target; detailed metrics and advanced controls live under **Settings & diagnostics**. See [validation evidence](docs/workflow-validation.md) for the scope of actual hardware checks.
 
@@ -8,14 +8,18 @@ Application Git root: this directory. The nested `firebird-hackathon-prep/` dire
 
 ## Run locally
 
-Use Node **24.21.0**, pnpm **12.6.0**, Python **3.14.7** and uv **0.12.19**. Worker Python/GPU dependencies are separate and are not needed for intake. First installation requires network access; no remote application service or API key is required.
+Use Node **24.21.0**, pnpm **12.6.0**, Python **3.14.7** and uv **0.12.19**. GPU dependencies are separate and are not needed for metadata intake. Parquet episode previews use an isolated CPU reader. First installation requires network access; no remote application service or API key is required.
 
 ```sh
 uv sync --frozen
+uv venv --python 3.14.7 workers/_cpu_readers/.venv
+uv pip install --python workers/_cpu_readers/.venv/bin/python --no-deps pyarrow==25.0.1
 pnpm install --frozen-lockfile
 pnpm build:web
 uv run --frozen firebird serve
 ```
+
+On Windows, use `workers/_cpu_readers/.venv/Scripts/python.exe` for the reader installation command. The [CPU reader guide](workers/_cpu_readers/README.md) covers a custom interpreter location and supported preview boundaries. A missing reader produces an explicit preview error; the application never installs one automatically.
 
 Open **http://127.0.0.1:8000**. Python serves the static frontend and API; Node is only needed to build/develop it. The app binds to loopback. Hosted authentication and desktop installers are later tasks. `Ctrl+C` stops the server and reconciles active jobs.
 

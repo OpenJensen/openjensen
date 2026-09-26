@@ -1,0 +1,1 @@
+"""Manifest-driven Isaac worker."""
