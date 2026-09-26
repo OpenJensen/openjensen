@@ -68,7 +68,7 @@ def parquet_rows(raw):
 import json, sys
 import pyarrow as pa
 import pyarrow.parquet as pq
-print(json.dumps(pq.read_table(pa.BufferReader(sys.stdin.buffer.read())).to_pylist()))
+print(json.dumps(pq.ParquetFile(pa.BufferReader(sys.stdin.buffer.read())).read(use_threads=False).to_pylist()))
 """,
         ],
         input=raw,
