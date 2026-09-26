@@ -347,6 +347,7 @@ def test_memory_never_counts_other_processes_or_invalid_samples(text, expected):
     assert app.parse_memory(text, {11, 12}, "GPU-one") == expected
 
 
+@pytest.mark.skipif(os.name != "posix", reason="Spatial Linux process group contract")
 def test_process_telemetry_covers_each_stage_and_reaps_timeout(tmp_path, monkeypatch):
     pytest.importorskip("psutil")
 
