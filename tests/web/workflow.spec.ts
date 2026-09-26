@@ -1,10 +1,43 @@
 import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
-import { expect, test, type Page } from '@playwright/test';
+import { setTimeout as delay } from 'node:timers/promises';
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
 const execute = promisify(execFile);
 const python = process.platform === 'win32' ? '.venv/Scripts/python.exe' : '.venv/bin/python';
+const jobWaitMs = 45_000;
+// Cancellation and failure/retry each need two independently bounded worker waits.
+// This only extends the real-workflow test budget, never an application timeout.
+test.describe.configure({ timeout: 120_000 });
+
+async function waitForJob(
+  request: APIRequestContext,
+  id: string,
+  expected: 'succeeded' | 'failed' | 'cancelled' | 'worker_started',
+) {
+  const deadline = performance.now() + jobWaitMs;
+  let last = `Job ${id}: no snapshot received`;
+  while (performance.now() < deadline) {
+    const timeout = () => Math.max(1, Math.min(5_000, deadline - performance.now()));
+    const response = await request.get(`/api/v1/jobs/${id}`, { timeout: timeout() });
+    expect(response.status(), `Reading job ${id}: ${await response.text()}`).toBe(200);
+    const job = await response.json();
+    last = JSON.stringify({ id: job.id, status: job.status, stage: job.stage, error: job.error, updated_at: job.updated_at });
+    if (!['queued', 'running'].includes(job.status)) {
+      // Fail immediately on another terminal state, rather than polling it for 45s.
+      expect(job.status, `Job reached ${job.status}; expected ${expected}. ${last}`).toBe(expected);
+      return job;
+    }
+    if (expected === 'worker_started') {
+      const events = await request.get(`/api/v1/jobs/${id}/events`, { timeout: timeout() });
+      expect(events.status(), `Reading worker events for ${id}: ${await events.text()}`).toBe(200);
+      if ((await events.json()).some((event: { message: string }) => event.message === 'Optimizer step 0')) return job;
+    }
+    await delay(Math.max(0, Math.min(250, deadline - performance.now())));
+  }
+  throw new Error(`Job did not reach ${expected} within ${jobWaitMs}ms. Last observation: ${last}`);
+}
 
 async function cli(...args: string[]) {
   const { stdout } = await execute(python, ['-m', 'vla_platform.cli', ...args], {
@@ -51,9 +84,8 @@ test('browser intake reads local metadata and preserves its limits after reload'
   const response = await created;
   expect(response.status()).toBe(202);
   const submitted = await response.json();
+  const job = await waitForJob(request, submitted.id, 'succeeded');
   await expect(page.getByRole('heading', { name: 'Local dataset', exact: true })).toBeVisible();
-  const job = await (await request.get(`/api/v1/jobs/${submitted.id}`)).json();
-  expect(job.status).toBe('succeeded');
   expect(job.result.inspection_scope).toBe('metadata_only');
   expect(job.result.robot_type).toBe('synthetic_fixture');
   expect(await cli('jobs', 'show', submitted.id)).toEqual(job);
@@ -73,9 +105,8 @@ test('browser workflow persists real subprocess results and downloads the same a
   const workflow = new WorkflowPage(page);
   const project = await workflow.createProject(`Synthetic workflow ${testInfo.testId}`);
   const submitted = await workflow.quantize('browser-success');
-  await expect.poll(async () => (await (await request.get(`/api/v1/jobs/${submitted.id}`)).json()).status).toBe('succeeded');
+  const job = await waitForJob(request, submitted.id, 'succeeded');
   await expect(page.getByText('Diagnostics complete. Task-quality approval is still required.', { exact: true })).toBeVisible();
-  const job = await (await request.get(`/api/v1/jobs/${submitted.id}`)).json();
   expect(job.result.decision).toBe('diagnostics_only');
   expect(job.result.selected_artifact_id).toBeNull();
   expect(job.result.artifacts.length).toBeGreaterThan(1);
@@ -117,12 +148,10 @@ test('cancelling a started worker remains cancelled after browser reload and in 
   await workflow.createProject(`Synthetic cancellation ${testInfo.testId}`);
   const submitted = await workflow.quantize('browser-slow');
   // A recorded stdout event proves the registered worker process actually started.
-  await expect.poll(async () => {
-    const events = await (await request.get(`/api/v1/jobs/${submitted.id}/events`)).json();
-    return events.some((event: { message: string }) => event.message === 'Optimizer step 0');
-  }).toBeTruthy();
+  await waitForJob(request, submitted.id, 'worker_started');
   await page.getByRole('button', { name: 'Cancel run', exact: true }).click();
-  await expect.poll(async () => (await cli('jobs', 'show', submitted.id)).status).toBe('cancelled');
+  const cancelled = await waitForJob(request, submitted.id, 'cancelled');
+  expect(await cli('jobs', 'show', submitted.id)).toEqual(cancelled);
   await page.reload();
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
   await expect(page.getByText('cancelled', { exact: true })).toBeVisible();
@@ -131,17 +160,24 @@ test('cancelling a started worker remains cancelled after browser reload and in 
   expect((await cli('jobs', 'show', submitted.id)).result).toBeNull();
 });
 
-test('a real worker failure is visible and does not prevent a subsequent successful run', async ({ page }, testInfo) => {
+test('a real worker failure is visible and does not prevent a subsequent successful run', async ({ page, request }, testInfo) => {
   const workflow = new WorkflowPage(page);
   await workflow.createProject(`Synthetic failure ${testInfo.testId}`);
   const failed = await workflow.quantize('browser-failure');
+  const failure = await waitForJob(request, failed.id, 'failed');
+  expect(await cli('jobs', 'show', failed.id)).toEqual(failure);
+  // A known wrong terminal state must fail as such, not as a completion timeout.
+  await expect(waitForJob(request, failed.id, 'succeeded')).rejects.toThrow('Job reached failed; expected succeeded');
   await expect(page.getByRole('alert').filter({ hasText: 'Intentional synthetic browser worker failure' })).toBeVisible();
   expect((await cli('jobs', 'show', failed.id)).status).toBe('failed');
   await page.reload();
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'Intentional synthetic browser worker failure' })).toBeVisible();
-  const retried = await workflow.quantize('browser-success');
-  await expect.poll(async () => (await cli('jobs', 'show', retried.id)).status).toBe('succeeded');
+  const retryStarted = performance.now();
+  const retried = await workflow.quantize('browser-delayed-success');
+  const completed = await waitForJob(request, retried.id, 'succeeded');
+  expect(await cli('jobs', 'show', retried.id)).toEqual(completed);
   await expect(page.getByText('Diagnostics complete. Task-quality approval is still required.', { exact: true })).toBeVisible();
+  expect(performance.now() - retryStarted).toBeGreaterThanOrEqual(7_000);
   expect((await cli('jobs', 'show', failed.id)).status).toBe('failed');
 });
