@@ -1,10 +1,19 @@
 name: Native worker contract checks
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+# Supersede obsolete PR revisions, but retain every main/manual verification.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
   quantization:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: workers/vla_cpp
@@ -14,10 +23,14 @@ jobs:
         with:
           version: '0.12.19'
           python-version: '3.11'
+          enable-cache: true
+          cache-suffix: quantization
+          cache-dependency-glob: workers/vla_cpp/uv.lock
       - run: uv sync --locked --extra quantize --extra test
       - run: uv run --no-sync python -m pytest -q -rs
   training:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: workers/smolvla_qlora
@@ -27,12 +40,16 @@ jobs:
         with:
           version: '0.12.19'
           python-version: '3.11'
+          enable-cache: true
+          cache-suffix: training
+          cache-dependency-glob: workers/smolvla_qlora/pyproject.toml
       - run: uv venv --python 3.11
       - run: uv pip install --python .venv/bin/python -e '.[dev]'
       - run: .venv/bin/python -m pytest -q -rs
       - run: .venv/bin/ruff check src tests
   benchmark:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: workers/benchmark_gpu
@@ -42,6 +59,9 @@ jobs:
         with:
           version: '0.12.19'
           python-version: '3.11'
+          enable-cache: true
+          cache-suffix: benchmark
+          cache-dependency-glob: .github/workflows/native-workers.yml
       - run: uv venv --python 3.11
       - run: uv pip install --python .venv/bin/python pytest==8.4.2 ruff==0.13.2
       - run: .venv/bin/python -m pytest -q -rs
@@ -49,3 +69,26 @@ jobs:
       - name: Verify preserved evidence
         working-directory: workers/benchmark_gpu/evidence/2026-09-26
         run: sha256sum -c SHA256SUMS
+  act-inference-export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: workers/act_optimizer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.19'
+          python-version: '3.12'
+          enable-cache: true
+          cache-suffix: act-inference-export
+          cache-dependency-glob: workers/act_optimizer/uv.lock
+      - run: uv sync --locked --extra cpu --extra dev
+      - run: uv run --no-sync python -m pytest -q -rs
+        env:
+          HF_HUB_OFFLINE: '1'
+          CUDA_VISIBLE_DEVICES: ''
+      - run: uv run --no-sync ruff check --target-version py312 src tests
+      - run: uv run --no-sync ruff format --check src tests
+      - run: uv run --no-sync mypy --config-file pyproject.toml src --follow-imports=silent

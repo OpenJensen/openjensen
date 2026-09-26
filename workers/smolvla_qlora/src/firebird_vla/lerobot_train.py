@@ -12,7 +12,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from .checkpoint import sha256, write_json
+from .checkpoint import commit_checkpoint_directory, sha256, write_json
 from .lerobot_application import cli_arguments
 from .native_profiles import LEROBOT_REVISION, native_profile_for_recipe
 from .telemetry import emit, environment_report
@@ -98,7 +98,7 @@ def commit_checkpoint(source, destination, recipe, *, step):
                 "task_success": None,
             },
         )
-        staging.rename(destination)
+        commit_checkpoint_directory(staging, destination)
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
         raise

@@ -56,6 +56,9 @@ by `firebird-public`, a separate password-protected gateway on `127.0.0.1:8097`.
 This gateway serves the prefixed export and proxies authenticated API requests to
 the existing backend on `8096`; it does not start a second workspace owner.
 The normal root deployment remains available independently.
+Gateway credential loading requires POSIX ownership, mode and no-follow checks
+(as provided by Linux/WSL); it explicitly refuses native Windows configuration
+loading. Non-regular files, including FIFOs, are rejected without blocking startup.
 
 - Intended URL: `https://<host>.<tailnet>.ts.net/firebird/`
 - Public export: `public-web/funnel-20260926/`

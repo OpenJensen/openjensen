@@ -1,6 +1,7 @@
 """Compute preferences gate configured workers without provisioning resources."""
 
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -96,7 +97,8 @@ def test_settings_persist_label_and_disable_model_availability(configured_comput
         "local": result["local"],
         "gcp": result["gcp"],
     }
-    assert saved.stat().st_mode & 0o077 == 0
+    if os.name == "posix":
+        assert saved.stat().st_mode & 0o077 == 0
     with TestClient(create_app(configured_compute)) as client:
         assert client.get("/api/v1/compute-settings").json() == result
         response = client.put(

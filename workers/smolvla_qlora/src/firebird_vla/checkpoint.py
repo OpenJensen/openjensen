@@ -143,14 +143,11 @@ def resolve_checkpoint(path):
     raise ValueError(f"No complete, integrity-verified training checkpoint in {path}: {detail}")
 
 
-def publish_checkpoint(staging, destination):
-    """Commit a complete bundle before atomically advancing its advisory pointer."""
+def commit_checkpoint_directory(staging, destination):
+    """Durably expose a finished private directory; the caller validates its inventory."""
     staging, destination = Path(staging), Path(destination)
-    if destination.exists():
+    if destination.exists() or destination.is_symlink():
         raise FileExistsError(f"Refusing to overwrite checkpoint {destination}")
-    manifest = verify_training_checkpoint(staging)
-    if destination.name != f"checkpoint-{manifest['step']:06d}":
-        raise ValueError("Checkpoint destination and manifest optimizer steps differ")
     # Flush contents and directory entries before making this bundle discoverable.
     for path in staging.rglob("*"):
         if path.is_file():
@@ -162,6 +159,18 @@ def publish_checkpoint(staging, destination):
     _sync_directory(staging)
     os.rename(staging, destination)
     _sync_directory(destination.parent)
+    return destination
+
+
+def publish_checkpoint(staging, destination):
+    """Commit a complete bundle before atomically advancing its advisory pointer."""
+    staging, destination = Path(staging), Path(destination)
+    if destination.exists():
+        raise FileExistsError(f"Refusing to overwrite checkpoint {destination}")
+    manifest = verify_training_checkpoint(staging)
+    if destination.name != f"checkpoint-{manifest['step']:06d}":
+        raise ValueError("Checkpoint destination and manifest optimizer steps differ")
+    commit_checkpoint_directory(staging, destination)
     write_json(
         destination.parent / "latest.json",
         {"checkpoint": destination.name, "step": manifest["step"]},

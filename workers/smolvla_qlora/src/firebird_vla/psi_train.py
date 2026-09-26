@@ -17,7 +17,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from .checkpoint import sha256, verify_bundle, write_json
+from .checkpoint import commit_checkpoint_directory, sha256, verify_bundle, write_json
 from .config import batch_indices, split_episodes
 from .data import vector_stats
 from .psi_profile import (
@@ -246,7 +246,7 @@ def save_checkpoint(
                 "reload_verified": False,
             },
         )
-        staging.rename(destination)
+        commit_checkpoint_directory(staging, destination)
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
         raise
@@ -263,9 +263,9 @@ def train(recipe, output, resume=None):
     require_runtime()
     import numpy as np
     import torch
+    from psi.trainers.qwen3vl_mixin import PaddedCollatorForTogether
     from safetensors.torch import load_file
     from transformers.optimization import get_scheduler
-    from psi.trainers.qwen3vl_mixin import PaddedCollatorForTogether
 
     output.mkdir(parents=True, exist_ok=True)
     random.seed(recipe["seed"])

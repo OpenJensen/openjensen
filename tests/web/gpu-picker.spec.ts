@@ -165,3 +165,143 @@ for (const theme of ['Light', 'Dark']) {
     expect(unexpected).toEqual([]);
   });
 }
+
+// These fixtures exercise admission and the exact submitted recipe only. They
+// never invoke a provider or claim policy/model execution evidence.
+async function trainingAdmission(page: Page, { format = 'lerobot_v3', dimensions = 6, cloudConnected = true } = {}) {
+  const timestamp = '2026-09-26T12:00:00Z';
+  const project = { id: 'admission', name: 'Admission fixture', created_at: timestamp };
+  const state = { projectStatus: 200, projects: [project], projectReads: 0, submitted: [] as Record<string, any>[] };
+  const profiles = [
+    { id: 'act', label: 'ACT', model_id: 'code://lerobot/act', minimum_gpu_memory_gb: 16 },
+    { id: 'gr00t_n17', label: 'GR00T N1.7', model_id: 'nvidia/GR00T-N1.7-LIBERO', minimum_gpu_memory_gb: 40 },
+    { id: 'evo1', label: 'EVO-1', model_id: 'zuoxingdong/evo1_libero', minimum_gpu_memory_gb: 24 },
+  ];
+  const runtime = { id: 'skypilot-gcp-A100', label: 'A100', accelerator: 'A100', execution: 'skypilot', provider: 'gcp', enabled: true, device: 'cuda', training: true, simulation: false, gpu_memory_mib: 40960, training_model_ids: ['smolvla', ...profiles.map(model => model.id)] };
+  const dataset = { id: 'admission-dataset', project_id: project.id, kind: 'dataset.inspect', status: 'succeeded', created_at: timestamp, updated_at: timestamp,
+    request: { source: 'huggingface', repo_id: 'fixture/admission', revision: 'a'.repeat(40) },
+    result: { source: 'huggingface', repo_id: 'fixture/admission', revision: 'a'.repeat(40), format, inspection_scope: 'metadata_only', total_episodes: 10, total_frames: 1000, fps: 30, metadata_sha256: 'b'.repeat(64), inspected_at: timestamp, warnings: [],
+      features: { 'observation.images.front': { dtype: 'video', shape: [480, 640, 3] }, 'observation.state': { dtype: 'float32', shape: [dimensions] }, action: { dtype: 'float32', shape: [dimensions] } } } };
+  await page.route('**/api/v1/**', async route => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (request.method() === 'POST' && path === '/api/v1/projects/admission/policy-jobs') {
+      state.submitted.push(request.postDataJSON());
+      await route.fulfill({ status: 422, json: { detail: 'Recorded fixture request; no worker is launched.' } });
+      return;
+    }
+    if (request.method() !== 'GET') throw new Error(`Unexpected write ${path}`);
+    if (path === '/api/v1/projects') {
+      state.projectReads += 1;
+      await route.fulfill({ status: state.projectStatus, json: state.projectStatus === 200 ? state.projects : { detail: 'Project list temporarily unavailable' } });
+      return;
+    }
+    const replies: Record<string, unknown> = {
+      '/api/v1/health': { status: 'ok', version: 'admission-fixture' }, '/api/v1/capabilities': [],
+      '/api/v1/projects/admission/jobs': [dataset], '/api/v1/projects/admission/artifacts': [],
+      '/api/v1/jobs/admission-dataset/episodes': { episodes: [], total: 10, offset: 0, limit: 6 },
+      '/api/v1/policy-options': { runtimes: cloudConnected ? [runtime] : [], sources: [],
+        training_models: [...profiles.map((model, index) => ({ ...model, model_revision: 'c'.repeat(40), description: 'Fixture profile', backend: 'lerobot', methods: ['full'], runtime_ids: cloudConnected ? [runtime.id] : [],
+          // Include a stale ready record with no matching runtime: the client must
+          // retain its own compute gate while accurately labeling the API state.
+          ...(!cloudConnected ? { status: ['connect_account', 'setup_required', 'ready'][index] } : {}),
+        })), ...(!cloudConnected ? [{ id: 'smolvla', label: 'SmolVLA', model_id: 'lerobot/smolvla_base', model_revision: 'a'.repeat(40), description: 'Fixture preflight-selectable adapter', backend: 'smolvla', methods: ['lora'], runtime_ids: [], status: 'connect_account' }] : [])],
+        training_methods: [{ id: 'lora', label: 'LoRA', description: 'Adapter training' }, { id: 'full', label: 'Full training', description: 'Native policy training' }], default_training_method: 'lora',
+        compute: { local: { enabled: false, label: 'Local' }, gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 } },
+        quantization_defaults: { cuda: { language: 'Q8_0', vision: null }, cpu: { language: 'Q8_0', vision: null }, note: '' } },
+    };
+    if (!(path in replies)) throw new Error(`Unexpected admission request ${path}`);
+    await route.fulfill({ json: replies[path] });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await expect(page.getByRole('radio', { name: 'fixture/admission', exact: true })).toBeVisible();
+  const setup = page.getByRole('navigation', { name: 'Training setup' });
+  async function chooseModel(label: string) {
+    await setup.getByRole('button', { name: 'Model', exact: true }).click();
+    await page.getByRole('radio', { name: label, exact: true }).locator('..').click();
+    await setup.getByRole('button', { name: 'Compute', exact: true }).click();
+  }
+  return { state, setup, chooseModel, start: page.getByRole('button', { name: 'Start fine-tuning', exact: true }) };
+}
+
+test('native training explains the v3 requirement before submission while SmolVLA keeps its v2 path', async ({ page }) => {
+  const fixture = await trainingAdmission(page, { format: 'lerobot_v2' });
+  await fixture.chooseModel('ACT');
+  await expect(fixture.start).toBeDisabled();
+  await expect(page.getByText(/ACT currently needs a LeRobot v3 dataset/)).toBeVisible();
+  expect(fixture.state.submitted).toEqual([]);
+  await fixture.chooseModel('SmolVLA');
+  await expect(fixture.start).toBeEnabled();
+  await fixture.start.click();
+  await expect.poll(() => fixture.state.submitted.length).toBe(1);
+  expect(fixture.state.submitted[0].training.model_id).toBe('lerobot/smolvla_base');
+});
+
+test('native model dimension bounds allow GR00T vectors above 36 and reject narrower architectures', async ({ page }) => {
+  const fixture = await trainingAdmission(page, { dimensions: 100 });
+  await expect(page.getByRole('radio', { name: 'fixture/admission', exact: true })).toBeEnabled();
+  await fixture.chooseModel('GR00T N1.7');
+  await expect(fixture.start).toBeEnabled();
+  await fixture.start.click();
+  await expect.poll(() => fixture.state.submitted.length).toBe(1);
+  expect(fixture.state.submitted[0]).toMatchObject({ dataset_job_id: 'admission-dataset', training_method: 'full', training: { model_id: 'nvidia/GR00T-N1.7-LIBERO', camera_keys: ['observation.images.front'] } });
+  await fixture.chooseModel('EVO-1');
+  await expect(fixture.start).toBeDisabled();
+  await expect(page.getByText('EVO-1 supports at most 24 observation.state dimensions.')).toBeVisible();
+  expect(fixture.state.submitted).toHaveLength(1);
+});
+
+test('training cannot submit using cached project data after a failed project refetch', async ({ page }) => {
+  await page.clock.install();
+  const fixture = await trainingAdmission(page);
+  await fixture.chooseModel('ACT');
+  await expect(fixture.start).toBeEnabled();
+  const reads = fixture.state.projectReads;
+  fixture.state.projectStatus = 503;
+  await page.clock.fastForward(6_000);
+  await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
+  await expect.poll(() => fixture.state.projectReads).toBeGreaterThan(reads);
+  await expect(fixture.start).toBeDisabled();
+  expect(fixture.state.submitted).toEqual([]);
+  expect(await page.evaluate(() => localStorage.getItem('firebird.workflow.'))).toBeNull();
+  fixture.state.projectStatus = 200;
+  await page.clock.fastForward(6_000);
+  await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
+  await expect(fixture.start).toBeEnabled();
+  await fixture.start.click();
+  await expect.poll(() => fixture.state.submitted.length).toBe(1);
+  expect(fixture.state.submitted[0].training).toMatchObject({ model_id: 'code://lerobot/act', batch_size: 4 });
+});
+
+
+test('GR00T rejects vectors exceeding its architecture bound before any submission', async ({ page }) => {
+  const fixture = await trainingAdmission(page, { dimensions: 133 });
+  await fixture.chooseModel('GR00T N1.7');
+  await expect(fixture.start).toBeDisabled();
+  await expect(page.getByText('GR00T N1.7 supports at most 132 observation.state dimensions.')).toBeVisible();
+  expect(fixture.state.submitted).toEqual([]);
+});
+
+
+test('disconnected cloud labels implemented trainers separately from planned adapters without enabling launch', async ({ page }) => {
+  const fixture = await trainingAdmission(page, { cloudConnected: false });
+  await fixture.setup.getByRole('button', { name: 'Model', exact: true }).click();
+  for (const [model, label] of [
+    ['ACT', 'Connect Google Cloud'],
+    ['GR00T N1.7', 'Setup required'],
+    ['EVO-1', 'Compute unavailable'],
+    ['OpenVLA', 'Coming soon'],
+  ]) {
+    const radio = page.getByRole('radio', { name: model, exact: true });
+    await expect(radio).toBeDisabled();
+    await expect(radio.locator('..').locator('.training-model-status')).toHaveText(label);
+  }
+  // SmolVLA can still be selected before cloud preparation, but this cannot launch.
+  const smol = page.getByRole('radio', { name: 'SmolVLA', exact: true });
+  await expect(smol).toBeEnabled();
+  await expect(smol.locator('..').locator('.training-model-status')).toHaveText('Connect Google Cloud');
+  await fixture.setup.getByRole('button', { name: 'Compute', exact: true }).click();
+  await expect(fixture.start).toBeDisabled();
+  expect(fixture.state.submitted).toEqual([]);
+});

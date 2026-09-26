@@ -2,11 +2,12 @@
 
 import json
 import os
-from pathlib import Path
+import shlex
 import subprocess
+import sys
 import tempfile
 import unittest
-
+from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
 _PROJECT = "simulation-test-project"
@@ -15,15 +16,30 @@ _ACCOUNT = f"skypilot-v1@{_PROJECT}.iam.gserviceaccount.com"
 
 
 class ConfigureTests(unittest.TestCase):
-    def _run(self, scenario, missing=None):
+    def _run(self, scenario, missing=None, competing_sdk=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             calls = root / "calls.jsonl"
-            self._fake_sky(root)
+            self._fake_sky(root, scenario)
             self._fake_gcloud(root)
+            # configure.sh and the fake gcloud must use the suite's interpreter,
+            # including its installed SDK, rather than an ambient PATH Python.
+            interpreter = root / "python3"
+            interpreter.write_text(
+                f'#!/usr/bin/env bash\nexec {shlex.quote(sys.executable)} "$@"\n'
+            )
+            interpreter.chmod(0o755)
+            python_path = str(root)
+            if competing_sdk:
+                installed = root / "installed" / "sky"
+                installed.mkdir(parents=True)
+                (installed / "__init__.py").write_text(
+                    "raise RuntimeError('Ambient SDK must not replace the unit fixture')\n"
+                )
+                python_path += os.pathsep + str(installed.parent)
             environment = os.environ | {
                 "PATH": f"{root}:{os.environ['PATH']}",
-                "PYTHONPATH": str(root),
+                "PYTHONPATH": python_path,
                 "SIM_TEST_CALLS": str(calls),
                 "SIM_TEST_SCENARIO": scenario,
                 "SIM_TEST_ROLE": str(_ROOT / "role.json"),
@@ -34,23 +50,38 @@ class ConfigureTests(unittest.TestCase):
                 environment.pop(missing, None)
             result = subprocess.run(
                 ["bash", str(_ROOT / "configure.sh")],
-                env=environment, text=True, capture_output=True, check=False,
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=False,
             )
-            commands = [json.loads(line) for line in calls.read_text().splitlines()] if calls.exists() else []
+            commands = (
+                [json.loads(line) for line in calls.read_text().splitlines()]
+                if calls.exists()
+                else []
+            )
             return result, commands
 
-    def _fake_sky(self, root):
+    def _fake_sky(self, root, scenario):
         package = root / "sky" / "clouds" / "utils"
         package.mkdir(parents=True)
+        # A namespace fragment loses to a later installed regular sky package.
+        # Make every fixture level a regular package to keep the unit boundary.
+        for directory in (root / "sky", root / "sky" / "clouds", package):
+            (directory / "__init__.py").write_text("")
         (package / "gcp_utils.py").write_text(
             "import json, os\n"
             "def get_minimal_compute_permissions():\n"
             "    with open(os.environ['SIM_TEST_ROLE']) as stream:\n"
-            "        return json.load(stream)['includedPermissions']\n"
+            "        required = json.load(stream)['includedPermissions']\n"
+            "    if os.environ['SIM_TEST_SCENARIO'] == 'permission-mismatch':\n"
+            "        required.append('compute.instances.fixtureOnly')\n"
+            "    return required\n"
         )
-        distribution = root / "skypilot-0.13.0.dist-info"
+        sdk_version = "0.12.0" if scenario == "sdk-version-mismatch" else "0.13.0"
+        distribution = root / f"skypilot-{sdk_version}.dist-info"
         distribution.mkdir()
-        (distribution / "METADATA").write_text("Name: skypilot\nVersion: 0.13.0\n")
+        (distribution / "METADATA").write_text(f"Name: skypilot\nVersion: {sdk_version}\n")
 
     def _fake_gcloud(self, root):
         script = root / "gcloud"
@@ -100,6 +131,23 @@ else:
 """)
         script.chmod(0o755)
 
+    def test_fixture_wins_over_installed_regular_sdk_package(self):
+        result, commands = self._run("missing", competing_sdk=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(any("add-iam-policy-binding" in args for args in commands))
+
+    def test_required_permission_mismatch_still_stops_before_cloud_commands(self):
+        result, commands = self._run("permission-mismatch")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("SkyPilot permissions differ from role.json", result.stderr)
+        self.assertEqual(commands, [])
+
+    def test_sdk_version_mismatch_still_stops_before_cloud_commands(self):
+        result, commands = self._run("sdk-version-mismatch")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Install skypilot[gcp]==0.13.0 first", result.stderr)
+        self.assertEqual(commands, [])
+
     def test_missing_project_stops(self):
         result, commands = self._run("missing", "SIM_PROJECT_ID")
         self.assertNotEqual(result.returncode, 0)
@@ -124,9 +172,9 @@ else:
             if args[0] == "iap":
                 continue
             self.assertIn(f"--member=serviceAccount:{_ACCOUNT}", args)
-        firewall = next(args for args in commands if args[:3] == [
-            "compute", "firewall-rules", "create"
-        ])
+        firewall = next(
+            args for args in commands if args[:3] == ["compute", "firewall-rules", "create"]
+        )
         self.assertIn("--source-ranges=35.235.240.0/20", firewall)
         self.assertIn("--rules=tcp:22", firewall)
         self.assertIn(f"--target-service-accounts={_ACCOUNT}", firewall)
@@ -137,9 +185,11 @@ else:
     def test_operator_iap_grant(self):
         result, commands = self._run("missing")
         self.assertEqual(result.returncode, 0, result.stderr)
-        grants = [args for args in commands if args[:4] == [
-            "iap", "tcp", "dest-groups", "add-iam-policy-binding"
-        ]]
+        grants = [
+            args
+            for args in commands
+            if args[:4] == ["iap", "tcp", "dest-groups", "add-iam-policy-binding"]
+        ]
         self.assertEqual(len(grants), 1)
         self.assertIn("--dest-group=sim-ssh", grants[0])
         self.assertIn("--region=us-east4", grants[0])
@@ -163,6 +213,17 @@ else:
     def _assert_no_grants(self, scenario):
         result, commands = self._run(scenario)
         self.assertNotEqual(result.returncode, 0)
+        messages = {
+            "broad-iam": "Existing SkyPilot account has other project grants",
+            "public-ssh": "Existing sim-sky-iap-ssh differs",
+            "broad-group": "Existing sim-ssh differs",
+        }
+        if scenario in messages:
+            self.assertIn(messages[scenario], result.stderr)
+        if scenario == "read-failure":
+            self.assertTrue(
+                any(args[:3] == ["compute", "firewall-rules", "list"] for args in commands)
+            )
         for args in commands:
             self.assertNotIn("create", args)
             self.assertNotIn("add-iam-policy-binding", args)

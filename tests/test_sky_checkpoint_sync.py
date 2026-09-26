@@ -1,5 +1,6 @@
 import json
 import sys
+from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
 from vla_platform.lifecycle import sky_checkpoint_sync
@@ -28,7 +29,7 @@ def test_selective_transfer_downloads_index_and_only_unseen_snapshots(
 
     def download(paths, *, remote_machine_prefix, local_machine_prefix):
         assert remote_machine_prefix == remote
-        assert local_machine_prefix.endswith(f"/{cluster}/1-firebird-training")
+        assert Path(local_machine_prefix).parts[-2:] == (cluster, "1-firebird-training")
         downloads.extend(paths)
         path = paths[0]
         return {

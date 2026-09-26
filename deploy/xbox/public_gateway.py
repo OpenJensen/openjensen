@@ -112,8 +112,12 @@ class GatewayConfig:
 
     @classmethod
     def load(cls, path):
+        # This deployment template relies on POSIX owner/mode and no-follow checks.
+        # Fail closed rather than silently replacing those checks with Windows mode bits.
+        if os.name != "posix":
+            raise ValueError("The Xbox gateway requires POSIX file ownership and permissions")
         # A credential file must be owned by this service user and unreadable to others.
-        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
         with os.fdopen(descriptor, "rb") as stream:
             info = os.fstat(stream.fileno())
             if (

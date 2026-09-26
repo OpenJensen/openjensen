@@ -5,8 +5,11 @@ import base64
 import hashlib
 import importlib.util
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -301,6 +304,7 @@ def test_proxy_response_streams_each_chunk_before_requesting_next_and_closes(con
     assert stream.closed
 
 
+@pytest.mark.skipif(os.name != "posix", reason="Xbox gateway configuration uses POSIX permissions")
 def test_config_requires_private_file_and_rejects_arbitrary_preview_origin(config, tmp_path):
     path = tmp_path / "gateway.json"
     path.write_text(json.dumps(config[1]))
@@ -333,3 +337,41 @@ def test_config_requires_private_file_and_rejects_arbitrary_preview_origin(confi
 def test_malformed_config_field_types_fail_closed(config, field, value):
     with pytest.raises(ValueError, match="Invalid gateway configuration"):
         gateway.GatewayConfig.from_value({**config[1], field: value})
+
+
+def test_gateway_configuration_fails_closed_without_posix_permissions(tmp_path, monkeypatch):
+    # No filesystem call is available on this stand-in: failure must precede open.
+    monkeypatch.setattr(gateway, "os", SimpleNamespace(name="nt"))
+    with pytest.raises(ValueError, match="requires POSIX"):
+        gateway.GatewayConfig.load(tmp_path / "gateway.json")
+
+
+def test_gateway_rejects_arbitrary_preview_origin_on_every_platform(config):
+    with pytest.raises(ValueError, match="Invalid gateway configuration"):
+        gateway.GatewayConfig.from_value({**config[1], "preview_origins": ["https://evil.example"]})
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX FIFO boundary")
+def test_gateway_rejects_fifo_without_blocking_startup(tmp_path):
+    fifo = tmp_path / "gateway.json"
+    os.mkfifo(fifo, 0o600)
+    code = """
+import runpy, sys
+config = runpy.run_path(sys.argv[1])["GatewayConfig"]
+try:
+    config.load(sys.argv[2])
+except ValueError as exc:
+    assert "regular file" in str(exc)
+    print("rejected fifo")
+else:
+    raise AssertionError("FIFO accepted as a credential file")
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code, gateway.__file__, str(fifo)],
+        capture_output=True,
+        text=True,
+        timeout=5,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "rejected fifo"

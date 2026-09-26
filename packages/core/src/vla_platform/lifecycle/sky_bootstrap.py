@@ -74,6 +74,73 @@ def publish_archive(output, log_dir):
         temporary.replace(descriptor)
 
 
+class WorkerInterrupted(BaseException):
+    def __init__(self, signum):
+        self.signum = signum
+
+
+def terminate_worker(process, grace):
+    """Terminate only the new session created for this worker, including children."""
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    try:
+        process.wait(timeout=grace)
+    except subprocess.TimeoutExpired:
+        pass
+    # The leader can exit before a data-loader child which ignored TERM.
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    process.wait(timeout=5)
+
+
+def run_worker(command, *, env, timeout, terminate_grace=10):
+    """Own the trainer across timeout, interrupt and the Popen return window.
+
+    This standalone bootstrap runs on Linux. Defer signals while obtaining the
+    child handle and during bounded cleanup; never signal the SkyPilot session.
+    """
+    handlers = {number: signal.getsignal(number) for number in (signal.SIGINT, signal.SIGTERM)}
+    pending = []
+    process = None
+    phase = "starting"
+
+    def interrupted(signum, frame):
+        nonlocal phase
+        pending.append(signum)
+        if phase == "waiting":
+            # Enter cleanup before raising, so repeated signals are deferred.
+            phase = "cleanup"
+            raise WorkerInterrupted(signum)
+
+    try:
+        for number in handlers:
+            signal.signal(number, interrupted)
+        try:
+            process = subprocess.Popen(command, start_new_session=True, env=env)
+            phase = "waiting"
+            if pending:
+                phase = "cleanup"
+                raise WorkerInterrupted(pending[0])
+            code = process.wait(timeout=timeout)
+            return code
+        except subprocess.TimeoutExpired:
+            return 124
+        except WorkerInterrupted as error:
+            return 128 + error.signum
+        finally:
+            phase = "cleanup"
+            if process is not None:
+                # A completed leader may leave data-loader descendants behind.
+                terminate_worker(process, terminate_grace)
+    finally:
+        for number, handler in handlers.items():
+            signal.signal(number, handler)
+
+
 def main():
     workdir = Path.cwd().resolve()
     config = json.loads((workdir / "dispatch.json").read_text())
@@ -118,9 +185,9 @@ def main():
         "policykit.cloud_quantize",
     }:
         raise ValueError("Unknown cloud worker module")
-    process = subprocess.Popen(
+    code = run_worker(
         [sys.executable, "-m", worker_module, str(request_path), str(result_path)],
-        start_new_session=True,
+        timeout=config["timeout_seconds"],
         env={
             **os.environ,
             "FIREBIRD_CHECKPOINT_EXPORT_ROOT": str(log_dir),
@@ -132,17 +199,7 @@ def main():
             ),
         },
     )
-    try:
-        code = process.wait(timeout=config["timeout_seconds"])
-    except subprocess.TimeoutExpired:
-        os.killpg(process.pid, signal.SIGTERM)
-        try:
-            process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
-            process.wait()
-        code = 124
-    # A timeout still exports completed checkpoints for an explicit resume.
+    # Timeout/cancellation still exports completed checkpoints for explicit resume.
     if not result_path.is_file():
         result_path.write_text(
             json.dumps(
@@ -151,6 +208,8 @@ def main():
                     "job_id": payload["job_id"],
                     "error": "Remote worker timed out"
                     if code == 124
+                    else "Remote worker was cancelled"
+                    if code in {128 + signal.SIGINT, 128 + signal.SIGTERM}
                     else "Remote worker did not finish",
                 }
             )
