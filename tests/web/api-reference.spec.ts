@@ -789,16 +789,20 @@ test('model picker offers SmolVLA on demand and marks unimplemented adapters Com
   await expect(models.getByRole('radio')).toHaveCount(6);
   await expect(models.getByRole('radio', { name: 'SmolVLA', exact: true })).toBeEnabled();
   await expect(models.getByRole('radio', { name: 'SmolVLA', exact: true })).toBeChecked();
-  await expect(models.getByRole('radio', { name: 'SmolVLA', exact: true }).locator('..').getByText(/Setup required|Coming soon/)).toHaveCount(0);
+  await expect(models.getByRole('radio', { name: 'SmolVLA', exact: true }).locator('..').getByText('Setup required', { exact: true })).toBeVisible();
+  await expect(models.getByRole('radio', { name: 'SmolVLA', exact: true }).locator('..').getByText('Coming soon', { exact: true })).toHaveCount(0);
   for (const name of ['OpenVLA-OFT', 'OpenVLA', 'π₀', 'π₀.₅', 'GR00T N1.7']) {
     const choice = models.getByRole('radio', { name, exact: true });
     await expect(choice).toBeDisabled();
     await expect(choice.locator('..').getByText('Coming soon', { exact: true })).toBeVisible();
   }
-  await expect(models.getByText('Setup required', { exact: true })).toHaveCount(0);
+  await expect(models.getByText('Setup required', { exact: true })).toHaveCount(1);
   await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await chooseGpu(page, 'L4');
   await expect(page.getByRole('button', { name: 'Start fine-tuning', exact: true })).toBeEnabled();
-  expect(submitted).toEqual([]);
+  await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
+  await expect.poll(() => submitted.length).toBe(1);
+  expect(submitted[0]).toMatchObject({ operation: 'policy.finetune', runtime_id: 'skypilot-gcp-L4', training: { model_id: 'lerobot/smolvla_base', model_revision: modelRevision } });
   expect(unexpectedRequests).toEqual([]);
 });
 
@@ -1023,6 +1027,70 @@ test('an explicitly enabled local GPU can be selected without adding provider co
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0].runtime_id).toBe('gpu-4090');
   expect(unexpectedRequests).toEqual([]);
+});
+
+test('dataset intake waits for a confirmed project and preserves its draft during project recovery', async ({ page }) => {
+  await page.clock.install();
+  let releaseProjects!: () => void;
+  const pendingProjects = new Promise<void>(resolve => { releaseProjects = resolve; });
+  let projectError = false;
+  const submitted: { projectId: string; body: unknown }[] = [];
+  await page.route('**/api/v1/**', async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/v1/projects') {
+      await pendingProjects;
+      return route.fulfill(projectError
+        ? { status: 503, json: { detail: 'Project fixture unavailable' } }
+        : { json: ['first', 'second'].map(id => ({ id, name: `Project ${id}`, created_at: trainingTimestamp })) });
+    }
+    if (path.endsWith('/intakes')) {
+      submitted.push({ projectId: path.split('/')[4], body: route.request().postDataJSON() });
+      return route.fulfill({ status: 422, json: { detail: 'Captured intake; no worker started' } });
+    }
+    if (path === '/api/v1/health') return route.fulfill({ json: { status: 'ok', version: 'intake-fixture' } });
+    return route.fulfill({ json: [] });
+  });
+  await page.goto('/');
+  const repository = page.getByLabel('Dataset repository', { exact: true });
+  const revision = page.getByLabel('Revision', { exact: true });
+  const inspect = page.getByRole('button', { name: 'Inspect dataset', exact: true });
+  await expect(repository).toBeDisabled();
+  await page.locator('.intake-advanced > summary').click();
+  await expect(revision).toBeDisabled();
+  await expect(page.getByRole('radio', { name: 'Hugging Face', exact: true })).toBeDisabled();
+  await expect(inspect).toBeDisabled();
+  await expect(page.getByText('Loading projects before importing a dataset.', { exact: true })).toBeVisible();
+  releaseProjects();
+  await expect(repository).toBeEnabled();
+  await repository.fill('fixture/operator-entry');
+  // Confirm the mounted form reflects the actual operator input before refetch.
+  await page.locator('.intake-advanced > summary').click();
+  await revision.fill('operator-revision');
+  projectError = true;
+  await page.clock.fastForward(6_000);
+  await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
+  await expect(page.getByRole('button', { name: 'Retry projects', exact: true })).toBeVisible();
+  await expect(repository).toBeDisabled();
+  await expect(revision).toBeDisabled();
+  await expect(inspect).toBeDisabled();
+  await expect(page.getByText('Project list unavailable. Retry projects to continue.', { exact: true })).toBeVisible();
+  await expect(repository).toHaveValue('fixture/operator-entry');
+  await expect(revision).toHaveValue('operator-revision');
+  projectError = false;
+  await page.getByRole('button', { name: 'Retry projects', exact: true }).click();
+  await expect(repository).toBeEnabled();
+  await expect(repository).toHaveValue('fixture/operator-entry');
+  await expect(revision).toHaveValue('operator-revision');
+  await inspect.click();
+  await expect.poll(() => submitted).toEqual([{ projectId: 'first', body: { source: 'huggingface', repo_id: 'fixture/operator-entry', revision: 'operator-revision' } }]);
+  await page.getByLabel('Current project', { exact: true }).selectOption('second');
+  await expect(repository).toHaveValue('codywang/so101_pickup_test');
+  await repository.fill('fixture/second-project');
+  await inspect.click();
+  await expect.poll(() => submitted).toEqual([
+    { projectId: 'first', body: { source: 'huggingface', repo_id: 'fixture/operator-entry', revision: 'operator-revision' } },
+    { projectId: 'second', body: { source: 'huggingface', repo_id: 'fixture/second-project', revision: 'main' } },
+  ]);
 });
 
 test('blank dataset revision uses latest and reused inspections keep one history entry and cached previews', async ({ page }) => {
