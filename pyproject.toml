@@ -6,6 +6,7 @@ dependencies = ["vla-platform"]
 
 [tool.uv.workspace]
 members = ["packages/core"]
+exclude = ["workers/*"]
 
 [tool.uv.sources]
 vla-platform = { workspace = true }
