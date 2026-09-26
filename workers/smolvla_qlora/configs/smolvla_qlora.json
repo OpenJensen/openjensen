@@ -1,0 +1,23 @@
+{
+  "model_id": "lerobot/smolvla_base",
+  "model_revision": "d9f33c94a60fb382c90dea2164c96845bd955e28",
+  "backbone_id": "HuggingFaceTB/SmolVLM2-500M-Video-Instruct",
+  "backbone_revision": "7b375e1b73b11138ff12fe22c8f2822d8fe03467",
+  "dataset_id": "codywang/so101_pickup_test",
+  "dataset_revision": "ecef85bc07005f771ad86deeff1427f9d72953ed",
+  "camera_key": "observation.images.front",
+  "output_dir": "outputs/smolvla-qlora",
+  "steps": 1000,
+  "batch_size": 1,
+  "gradient_accumulation_steps": 8,
+  "learning_rate": 0.0001,
+  "warmup_steps": 50,
+  "lora_rank": 16,
+  "lora_alpha": 32,
+  "chunk_size": 50,
+  "validation_fraction": 0.2,
+  "eval_every": 100,
+  "eval_batches": 20,
+  "save_every": 100,
+  "seed": 42
+}

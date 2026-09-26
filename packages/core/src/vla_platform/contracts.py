@@ -14,6 +14,8 @@ from pydantic import (
     model_validator,
 )
 
+from vla_platform.lifecycle.contracts import LifecycleResult, PolicyRequest
+
 NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 RepositoryId = Annotated[
     str, StringConstraints(strip_whitespace=True, pattern=r"^[\w.-]+/[\w.-]+$", max_length=200)
@@ -233,13 +235,27 @@ TERMINAL = {"succeeded", "failed", "cancelled", "interrupted"}
 class Job(Record):
     id: NonEmptyString
     project_id: NonEmptyString
-    kind: Literal["dataset.inspect"] = "dataset.inspect"
+    kind: NonEmptyString = "dataset.inspect"
     status: JobStatus = "queued"
-    request: IntakeRequest
+    request: IntakeRequest | PolicyRequest
     created_at: Timestamp
     updated_at: Timestamp
-    result: DatasetProfile | None = None
+    result: DatasetProfile | LifecycleResult | None = None
     error: str | None = None
+    stage: str | None = None
+
+    @model_validator(mode="after")
+    def validate_operation(self):
+        expected = (
+            self.request.operation if isinstance(self.request, PolicyRequest) else "dataset.inspect"
+        )
+        if self.kind != expected:
+            raise ValueError("Job kind must match its registered request operation")
+        if self.result is not None and isinstance(self.request, PolicyRequest) != isinstance(
+            self.result, LifecycleResult
+        ):
+            raise ValueError("Job result must match its operation family")
+        return self
 
 
 Stage = Literal["Dataset", "Fine-tune", "Distill", "Quantize", "Evaluate", "Run"]
@@ -263,7 +279,16 @@ OPERATION_STAGES: dict[Operation, Stage] = {
 }
 # Catalog vocabulary is not executable registration. Extend this only alongside
 # a reviewed application/worker integration, never from an incoming capability.
-IMPLEMENTED_OPERATIONS = frozenset({"dataset.inspect", "dataset.inspect.local"})
+IMPLEMENTED_OPERATIONS = frozenset(
+    {
+        "dataset.inspect",
+        "dataset.inspect.local",
+        "policy.finetune",
+        "policy.quantize",
+        "policy.evaluate",
+        "policy.run",
+    }
+)
 
 
 class CapabilityEvidence(Record):
@@ -279,7 +304,7 @@ class CapabilityEvidence(Record):
 class CapabilitySupport(Record):
     """Evidence for one parent operation on one concrete execution target."""
 
-    backend: Literal["metadata", "lerobot", "openvla_oft"]
+    backend: Literal["metadata", "lerobot", "openvla_oft", "vla_cpp"]
     os: Literal["linux", "windows", "macos"]
     device: Literal["cpu", "cuda"]
     evidence_state: Literal["tested", "unsupported"]

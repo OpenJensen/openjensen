@@ -196,7 +196,11 @@ test('endpoint disclosures are keyboard-operable and remain within the viewport'
   await expectNoPageOverflow(page);
 });
 
-test('endpoint and model permalinks open their targets after a direct load', async ({ page }) => {
+test('endpoint and model permalinks open their targets after a direct load', async ({ page, request }) => {
+  const schema = await (await request.get('/openapi.json')).json();
+  const projectOperations = Object.entries(schema.paths)
+    .filter(([path]) => path.includes('projects'))
+    .reduce((count, [, operations]) => count + Object.keys(operations as object).filter(method => methods.has(method)).length, 0);
   const path = '/api/v1/projects/{project_id}/intakes';
   await page.goto(`/docs/#endpoint-post-${encodeURIComponent(path)}`);
   const intake = endpoint(page, 'POST', path);
@@ -216,7 +220,7 @@ test('endpoint and model permalinks open their targets after a direct load', asy
   await search.scrollIntoViewIfNeeded();
   const beforeSearch = await page.evaluate(() => window.scrollY);
   await search.fill('projects');
-  await expect(page.locator('details[id^="endpoint-"]')).toHaveCount(4);
+  await expect(page.locator('details[id^="endpoint-"]')).toHaveCount(projectOperations);
   // Editing filters must not re-apply the old model permalink and scroll away
   // from the input on every keystroke.
   expect(await page.evaluate(() => window.scrollY)).toBeLessThanOrEqual(beforeSearch + 10);
@@ -316,5 +320,55 @@ test('direct docs URLs and reloads render without hydration or runtime errors', 
   await expect(endpoint(page, 'GET', '/api/v1/health')).toBeVisible();
   await page.reload();
   await expect(page.getByRole('heading', { name: 'API reference', exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('shared workspace shell preserves training, defaults, and separate diagnostics', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Fine-tune a policy' })).toBeVisible();
+  const method = page.getByLabel('Fine-tuning method');
+  await expect(method).toHaveValue('lora');
+  await method.selectOption('qlora');
+  await expect(method).toHaveValue('qlora');
+  await expect(page.getByRole('button', { name: 'Start fine-tuning' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+  await expect(page.getByLabel('Quantization recipe')).toHaveValue('recommended');
+  await expect(page.getByLabel('Also quantize vision to Q8 (experimental)')).not.toBeChecked();
+  await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Run diagnostics' })).toBeVisible();
+  await expect(page.getByLabel('Quantization recipe')).toHaveCount(0);
+});
+
+test('dataset inspection stays separate from newer policy jobs in the same project', async ({ page }) => {
+  const timestamp = '2026-09-26T12:00:00Z';
+  const datasetJob = {
+    id: 'dataset-review', project_id: 'mixed-review', kind: 'dataset.inspect', status: 'succeeded',
+    request: { source: 'huggingface', repo_id: 'fixture/robot', revision: 'main' },
+    created_at: timestamp, updated_at: timestamp,
+    result: {
+      source: 'huggingface', repo_id: 'fixture/robot', revision: 'a'.repeat(40), format: 'lerobot_v3',
+      inspection_scope: 'metadata_only', total_episodes: 1, total_frames: 6, fps: 5,
+      features: { action: { dtype: 'float32', shape: [2] }, 'observation.state': { dtype: 'float32', shape: [2] } },
+      metadata_sha256: 'b'.repeat(64), inspected_at: timestamp, warnings: [],
+    },
+  };
+  const policyJob = {
+    id: 'policy-review', project_id: 'mixed-review', kind: 'policy.import', status: 'succeeded',
+    request: { operation: 'policy.import', runtime_id: 'fixture', source_id: 'source' },
+    created_at: '2026-09-26T13:00:00Z', updated_at: '2026-09-26T13:00:00Z',
+    result: { artifacts: [], reports: [], decision: 'completed' },
+  };
+  await page.route('**/api/v1/projects', route => route.fulfill({ json: [{ id: 'mixed-review', name: 'Mixed jobs', created_at: timestamp }] }));
+  await page.route('**/api/v1/projects/mixed-review/jobs', route => route.fulfill({ json: [policyJob, datasetJob] }));
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/');
+  await page.getByRole('button', { name: /^Inspection/ }).click();
+  await expect(page.getByRole('heading', { name: 'fixture/robot', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Load visual preview', exact: true })).toBeVisible();
+  await expect(page.getByText('policy-review', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Fine-tune a policy' })).toBeVisible();
   expect(errors).toEqual([]);
 });

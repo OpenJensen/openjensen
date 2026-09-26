@@ -1,0 +1,25 @@
+version: 1
+dataset:
+  repository: codywang/so101_pickup_test
+  revision: ecef85bc07005f771ad86deeff1427f9d72953ed
+  root: artifacts/datasets/so101_pickup_test
+  camera: observation.images.front
+  expected_state_dim: 6
+  expected_action_dim: 6
+evaluation:
+  kind: offline_recorded_actions
+  metrics: [quantize_seconds, p50_ms, p90_ms, per_channel_mae, per_channel_rmse, output_agreement]
+  holdout: use_matching_checkpoint_splits_json
+  normalization: use_matching_checkpoint_training_statistics
+  compatible_checkpoint: null
+  # Dataset replay alone does not provide these simulator requirements.
+  simulator: null
+  success_predicate: null
+  action_units_and_controller: null
+# Discovered public candidate; not substituted for the requested dataset policy.
+discovered_candidate:
+  repository: codywang/cuponcup-smolvla
+  revision: eca17ca01f54abb0f53ed5122ca61ed5c10fc2d3
+  trained_dataset: codywang/cuponcup_20260625_163207
+  training_environment: null
+  status: compatible_feature_names_and_dimensions_only

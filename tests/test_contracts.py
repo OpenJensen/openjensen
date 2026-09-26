@@ -230,7 +230,9 @@ def test_local_profile_cannot_claim_unrelated_identity(
 
 
 def test_saved_job_and_project_shape_is_compatible(job_data: dict[str, Any]) -> None:
-    assert Job.model_validate_json(json.dumps(job_data)).model_dump() == job_data
+    restored = Job.model_validate_json(json.dumps(job_data))
+    assert restored.model_dump(exclude={"stage"}) == job_data
+    assert restored.stage is None
     project = {"id": "legacy-project", "name": "Project", "created_at": TIMESTAMP}
     assert Project.model_validate_json(json.dumps(project)).model_dump() == project
 
@@ -292,11 +294,7 @@ def test_capability_rejects_invalid_claims(field: str, value: Any) -> None:
 @pytest.mark.parametrize(
     ("stage", "operation"),
     [
-        ("Fine-tune", "policy.finetune"),
         ("Distill", "policy.distill"),
-        ("Quantize", "policy.quantize"),
-        ("Evaluate", "policy.evaluate"),
-        ("Run", "policy.run"),
     ],
 )
 def test_catalog_operations_cannot_advertise_execution(stage: str, operation: str) -> None:

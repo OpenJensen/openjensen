@@ -54,11 +54,15 @@ class ExplorationError(ValueError):
 
 
 def source_profile(job: Job) -> DatasetProfile:
+    if job.kind != "dataset.inspect":
+        raise ExplorationError("Episode previews require a dataset inspection", 422)
     if job.status != "succeeded" or job.result is None:
         raise ExplorationError(
             "Finish a successful dataset inspection before exploring episodes", 409
         )
     result = job.result
+    if not isinstance(result, DatasetProfile):
+        raise ExplorationError("Episode previews require a dataset inspection", 422)
     if result.source != "huggingface":
         raise ExplorationError(
             "Episode previews currently support public Hugging Face datasets only"

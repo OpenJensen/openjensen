@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState } from 'react';
-import { api, type CameraPreview, type EpisodePreview, type FrameSample, type Job } from '@/lib/api';
+import { api, type CameraPreview, type EpisodePreview, type FrameSample, type DatasetJob } from '@/lib/api';
 import '@/app/dataset-explorer.css';
 
 const pageSize = 6;
@@ -266,7 +266,7 @@ function EpisodeDetail({ preview, active }: { preview: EpisodePreview; active: b
   </div>;
 }
 
-function Explorer({ job, active }: { job: Job; active: boolean }) {
+function Explorer({ job, active }: { job: DatasetJob; active: boolean }) {
   const headingId = useId();
   const [enabled, setEnabled] = useState(false);
   const [offset, setOffset] = useState(0);
@@ -303,6 +303,6 @@ function Explorer({ job, active }: { job: Job; active: boolean }) {
   </section>;
 }
 
-export function DatasetExplorer({ job, active = true }: { job: Job; active?: boolean }) {
+export function DatasetExplorer({ job, active = true }: { job: DatasetJob; active?: boolean }) {
   return <Explorer key={job.id} job={job} active={active} />;
 }

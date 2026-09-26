@@ -1,0 +1,183 @@
+{
+  "schema_version": 1,
+  "kind": "benchmark_catalog",
+  "status": "planned_not_executed",
+  "description": "Experiment inputs only; not accepted by firebird-finetune. Every model requires a native benchmark adapter and resolved runtime before execution.",
+  "target_suite": "libero_spatial",
+  "protocol": "https://github.com/sobhanb-eth/firebird-hackathon-prep/blob/a9a56ea105d061012abb79fe937d4237af2bf33e/docs/idea/18_multimodel-quantization-benchmark.md",
+  "candidate_classes": [
+    {
+      "id": "C0",
+      "precision": "native_float",
+      "backend": null
+    },
+    {
+      "id": "C1",
+      "precision": "packed_weight_8bit",
+      "backend": null
+    },
+    {
+      "id": "C2",
+      "precision": "packed_weight_4bit",
+      "backend": null
+    },
+    {
+      "id": "C3",
+      "precision": "selective_mixed_precision",
+      "backend": null
+    }
+  ],
+  "required_before_execution": [
+    "native_adapter",
+    "runtime_code_commit",
+    "dependency_lock",
+    "checkpoint_and_auxiliary_hashes",
+    "license_metadata",
+    "observation_action_contract",
+    "evaluator_commit",
+    "task_and_initial_state_splits",
+    "hardware_profile",
+    "resolved_quantizer_and_module_map"
+  ],
+  "models": [
+    {
+      "id": "smolvla",
+      "label": "SmolVLA",
+      "priority": 1,
+      "native_backend": "lerobot_pytorch",
+      "checkpoint": {
+        "source": "lerobot/smolvla_libero",
+        "revision": "31d453f7edd78c839a8bbc39744a292686daf0de",
+        "subdirectory": null
+      },
+      "source_url": "https://huggingface.co/lerobot/smolvla_libero",
+      "status": "catalogued",
+      "enabled_for_execution": false,
+      "inference_verified": false,
+      "quantization_verified": false,
+      "closed_loop_verified": false,
+      "export_verified": false,
+      "evidence_refs": [],
+      "metrics": null,
+      "model_specific_preflight": [
+        "Confirm checkpoint suite coverage and matching LeRobot evaluator."
+      ]
+    },
+    {
+      "id": "openvla_oft",
+      "label": "OpenVLA-OFT",
+      "priority": 2,
+      "native_backend": "openvla_oft_pytorch",
+      "checkpoint": {
+        "source": "moojink/openvla-7b-oft-finetuned-libero-spatial",
+        "revision": "6d0231af0e48c5985f1ff86908f4674b84bc049b",
+        "subdirectory": null
+      },
+      "source_url": "https://github.com/moojink/openvla-oft",
+      "status": "catalogued",
+      "enabled_for_execution": false,
+      "inference_verified": false,
+      "quantization_verified": false,
+      "closed_loop_verified": false,
+      "export_verified": false,
+      "evidence_refs": [],
+      "metrics": null,
+      "model_specific_preflight": [
+        "Resolve all auxiliary action heads, projectors and normalization assets."
+      ]
+    },
+    {
+      "id": "openvla",
+      "label": "OpenVLA",
+      "priority": 3,
+      "native_backend": "openvla_pytorch",
+      "checkpoint": {
+        "source": "openvla/openvla-7b-finetuned-libero-spatial",
+        "revision": "962318cec55ac10993ff0f5f43eda9a270b4c873",
+        "subdirectory": null
+      },
+      "source_url": "https://github.com/openvla/openvla",
+      "status": "catalogued",
+      "enabled_for_execution": false,
+      "inference_verified": false,
+      "quantization_verified": false,
+      "closed_loop_verified": false,
+      "export_verified": false,
+      "evidence_refs": [],
+      "metrics": null,
+      "model_specific_preflight": [
+        "Preserve native action-token decoding and center-crop settings."
+      ]
+    },
+    {
+      "id": "pi0",
+      "label": "π₀",
+      "priority": 4,
+      "native_backend": "lerobot_pytorch",
+      "checkpoint": {
+        "source": "lerobot/pi0_libero_finetuned_v044",
+        "revision": "45dcc8fc0e02601c8ccf0554fbd1d26a55070c1f",
+        "subdirectory": null
+      },
+      "source_url": "https://huggingface.co/lerobot/pi0_libero_finetuned_v044",
+      "status": "catalogued",
+      "enabled_for_execution": false,
+      "inference_verified": false,
+      "quantization_verified": false,
+      "closed_loop_verified": false,
+      "export_verified": false,
+      "evidence_refs": [],
+      "metrics": null,
+      "model_specific_preflight": [
+        "Confirm checkpoint suite coverage and matching LeRobot evaluator."
+      ]
+    },
+    {
+      "id": "pi05",
+      "label": "π₀.₅",
+      "priority": 5,
+      "native_backend": "openpi_pytorch",
+      "checkpoint": {
+        "source": "gs://openpi-assets/checkpoints/pi05_libero",
+        "revision": null,
+        "subdirectory": null
+      },
+      "source_url": "https://github.com/Physical-Intelligence/openpi",
+      "status": "catalogued",
+      "enabled_for_execution": false,
+      "inference_verified": false,
+      "quantization_verified": false,
+      "closed_loop_verified": false,
+      "export_verified": false,
+      "evidence_refs": [],
+      "metrics": null,
+      "model_specific_preflight": [
+        "Pin source checkpoint files by hash.",
+        "Convert with pinned OpenPI tooling and verify floating-point equivalence."
+      ]
+    },
+    {
+      "id": "gr00t_n17",
+      "label": "GR00T N1.7",
+      "priority": 6,
+      "native_backend": "isaac_gr00t_pytorch",
+      "checkpoint": {
+        "source": "nvidia/GR00T-N1.7-LIBERO",
+        "revision": "2ea293aa20ba7cf5bbf3ba17a5fbcb1a01cbfe21",
+        "subdirectory": "libero_spatial"
+      },
+      "source_url": "https://github.com/NVIDIA/Isaac-GR00T/blob/main/examples/LIBERO/README.md",
+      "status": "catalogued",
+      "enabled_for_execution": false,
+      "inference_verified": false,
+      "quantization_verified": false,
+      "closed_loop_verified": false,
+      "export_verified": false,
+      "evidence_refs": [],
+      "metrics": null,
+      "model_specific_preflight": [
+        "Preserve LIBERO_PANDA embodiment, suite-specific processors and statistics."
+      ]
+    }
+  ]
+}

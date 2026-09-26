@@ -20,6 +20,7 @@ from vla_platform.datasets.explore import (
     source_profile,
 )
 from vla_platform.datasets.inspect import profile
+from vla_platform.lifecycle.contracts import LifecycleResult, PolicyRequest
 from vla_platform.settings import Settings
 
 SHA = "a" * 40
@@ -281,6 +282,19 @@ def test_preview_routes_validate_state_bounds_and_serialize_contract(
     async def get(_, job_id):
         if job_id == "done":
             return job
+        if job_id == "policy":
+            return Job(
+                id="policy",
+                project_id="p",
+                kind="policy.import",
+                status="succeeded",
+                request=PolicyRequest(
+                    operation="policy.import", runtime_id="fixture", source_id="source"
+                ),
+                result=LifecycleResult(),
+                created_at=now(),
+                updated_at=now(),
+            )
         if job_id == "pending":
             return job.model_copy(update={"status": "queued", "result": None})
         if job_id == "local":
@@ -298,6 +312,10 @@ def test_preview_routes_validate_state_bounds_and_serialize_contract(
     with TestClient(api.create_app(Settings(data_dir=tmp_path))) as client:
         base = "/api/v1/jobs"
         assert client.get(f"{base}/missing/episodes").status_code == 404
+        for suffix in ("episodes", "episodes/0"):
+            rejected = client.get(f"{base}/policy/{suffix}")
+            assert rejected.status_code == 422
+            assert "dataset inspection" in rejected.json()["detail"]
         assert client.get(f"{base}/pending/episodes").status_code == 409
         assert client.get(f"{base}/local/episodes").status_code == 422
         assert client.get(f"{base}/done/episodes?offset=-1").status_code == 422

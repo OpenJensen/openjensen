@@ -1,6 +1,8 @@
 # Firebird application
 
-The first application slice of a local VLA lifecycle platform: **persistent projects, real robotics metadata intake, and visual dataset exploration**, through one Python application and shared web/CLI operations. Dataset → Fine-tune → Distill → Quantize → Evaluate → Run remains the product scope. Training, compression, simulator evaluation and policy execution are **planned**, not working features in this scaffold.
+A local VLA lifecycle application with persistent projects, dataset intake and visual exploration, selectable LoRA/QLoRA fine-tuning, native quantization, evaluation and reload-verified packages through shared web/CLI jobs. Native operations require configured worker environments. Distillation remains planned.
+
+Start with the [policy workflow and setup guide](docs/policy-workflow.md). Recommended quantization defaults depend on the execution target; detailed metrics and advanced controls live under **Settings & diagnostics**. See [validation evidence](docs/workflow-validation.md) for the scope of actual hardware checks.
 
 Application Git root: this directory. The nested `firebird-hackathon-prep/` directory remains a separate, ignored Git repository. Its [accepted plan](firebird-hackathon-prep/docs/idea/18_stack-and-phased-build-plan.md) and [task register](firebird-hackathon-prep/docs/tasks/README.md) hold planning and coordination records; they are not included in an application-only clone.
 
@@ -57,7 +59,7 @@ The API exposes `GET /api/v1/jobs/{job_id}/episodes?offset=0&limit=6` and `GET /
 
 - `apps/web`: static Next/React client; generated API types under `src/lib`.
 - `packages/core`: GPU-independent Python modular monolith, API, CLI, async SQLite records and versioned migrations.
-- `workers`: native environment boundaries and contracts. The lightweight metadata worker runs as a supervised subprocess; GPU environments are not installed yet.
+- `workers`: native environment boundaries and contracts. Metadata and native policy workers run as supervised subprocesses; GPU environments are installed separately.
 - `apps/desktop`: reserved later Tauri shell.
 - `tests`: persistence, subprocess intake, bounded reads, cancellation, failure and access-boundary checks.
 
@@ -79,4 +81,4 @@ pnpm exec playwright install chromium
 pnpm test:web
 ```
 
-Do not hand-edit generated API types. Claim a task card before parallel work, coordinate shared schema/manifest/migration changes, and provide evidence plus independent review. The Linux/Windows CI workflow is scaffolded; actual remote CI and Windows GPU evidence are separate gates. Mac development checks do not prove those gates passed.
+Do not hand-edit generated API types. Claim a task card before parallel work, coordinate shared schema/manifest/migration changes, and provide evidence plus independent review. CI runs application and browser checks on Linux/Windows, plus separate lightweight native-worker contract checks. Full GPU workflows and Windows GPU acceptance remain separate validation gates.

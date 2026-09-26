@@ -1,0 +1,183 @@
+diff --git a/src/models/smolvla.cpp b/src/models/smolvla.cpp
+index 62c062c..78a9908 100644
+--- a/src/models/smolvla.cpp
++++ b/src/models/smolvla.cpp
+@@ -183,6 +183,48 @@ struct gguf_source {
+             ggml_free(meta_ctx);
+     }
+ 
++    // Keep quantization restricted to LM/vision matrices. Sensitive tensors
++    // retain their existing floating-point allocation and loading paths.
++    bool validate_packed() const {
++        for (int64_t i = 0; i < gguf_get_n_tensors(gctx); ++i) {
++            const std::string name = gguf_get_tensor_name(gctx, i);
++            const ggml_tensor * t = ggml_get_tensor(meta_ctx, name.c_str());
++            if (!t || !ggml_is_quantized(t->type)) continue;
++            const bool block = name.rfind("vlm.blk.", 0) == 0 || name.rfind("vit.blk.", 0) == 0;
++            if (!block || (t->type != GGML_TYPE_Q8_0 && t->type != GGML_TYPE_Q4_0) ||
++                name.find("norm") != std::string::npos || name.find(".ln") != std::string::npos ||
++                name.size() < 7 || name.substr(name.size()-7) != ".weight" ||
++                t->ne[2] != 1 || t->ne[3] != 1 || t->ne[1] <= 1 ||
++                t->ne[0] % ggml_blck_size(t->type) != 0) {
++                std::fprintf(stderr, "vla: unsupported packed SmolVLA tensor %s (%s)\n",
++                             name.c_str(), ggml_type_name(t->type));
++                return false;
++            }
++        }
++        return true;
++    }
++
++    ggml_type matrix_type(const std::string & name, ggml_type fallback) const {
++        const ggml_tensor * src = ggml_get_tensor(meta_ctx, name.c_str());
++        return src && ggml_is_quantized(src->type) ? src->type : fallback;
++    }
++
++    bool load_packed(const std::string & name, ggml_tensor * destination,
++                     const std::vector<int64_t> & shape) {
++        const ggml_tensor * src = ggml_get_tensor(meta_ctx, name.c_str());
++        const int64_t id = gguf_find_tensor(gctx, name.c_str());
++        if (!src || id < 0 || src->type != destination->type || !shape_matches(src, shape) ||
++            gguf_get_tensor_size(gctx, id) != ggml_nbytes(destination)) {
++            std::fprintf(stderr, "vla: packed tensor shape/type/size mismatch for %s\n", name.c_str());
++            return false;
++        }
++        std::vector<uint8_t> packed(ggml_nbytes(destination));
++        if (fseeko(fp, (off_t)(data_off + gguf_get_tensor_offset(gctx, id)), SEEK_SET) != 0 ||
++            std::fread(packed.data(), 1, packed.size(), fp) != packed.size()) return false;
++        ggml_backend_tensor_set(destination, packed.data(), 0, packed.size());
++        return true;
++    }
++
+     static bool shape_matches(const ggml_tensor * t, const std::vector<int64_t> & pt_shape) {
+         const int nd_used = std::max(1, (int) pt_shape.size());
+         if (nd_used > GGML_MAX_DIMS)
+@@ -949,7 +991,7 @@ SmolVLAModelArch* smolvla_load_impl(ggml_type weight_dtype,
+     gguf_source  gst;
+ 
+     if (use_gguf) {
+-        if (!gst.open(ckpt_path)) {
++        if (!gst.open(ckpt_path) || !gst.validate_packed()) {
+             delete m;
+             return nullptr;
+         }
+@@ -1088,6 +1130,16 @@ SmolVLAModelArch* smolvla_load_impl(ggml_type weight_dtype,
+     auto * ctx = m->ctx_weights;
+     const auto & cfg = m->cfg;
+     const ggml_type wdt = m->weight_dtype;
++    int packed_lm = 0, packed_vision = 0;
++    auto new_matrix = [&](const std::string & hf_name, int64_t ne0, int64_t ne1) {
++        const std::string name = hf_to_gguf(hf_name);
++        const ggml_type type = use_gguf ? gst.matrix_type(name, wdt) : wdt;
++        if (ggml_is_quantized(type)) {
++            if (name.rfind("vlm.blk.", 0) == 0) ++packed_lm;
++            if (name.rfind("vit.blk.", 0) == 0) ++packed_vision;
++        }
++        return ggml_new_tensor_2d(ctx, type, ne0, ne1);
++    };
+ 
+     struct PendingF32  { std::string name; ggml_tensor * t; std::vector<int64_t> shape; };
+     struct PendingBF16 { std::string name; ggml_tensor * t; };
+@@ -1126,12 +1178,12 @@ SmolVLAModelArch* smolvla_load_impl(ggml_type weight_dtype,
+             const std::string pf = pb;
+             w.ln1w = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, H); w.ln1b = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, H);
+             w.ln2w = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, H); w.ln2b = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, H);
+-            w.Wq = ggml_new_tensor_2d(ctx, wdt, H, H); w.bq = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, H);
+-            w.Wk = ggml_new_tensor_2d(ctx, wdt, H, H); w.bk = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, H);
+-            w.Wv = ggml_new_tensor_2d(ctx, wdt, H, H); w.bv = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, H);
+-            w.Wo = ggml_new_tensor_2d(ctx, wdt, H, H); w.bo = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, H);
+-            w.Wfc1 = ggml_new_tensor_2d(ctx, wdt, H, FF);  w.bfc1 = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, FF);
+-            w.Wfc2 = ggml_new_tensor_2d(ctx, wdt, FF, H);  w.bfc2 = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, H);
++            w.Wq = new_matrix(pf + "self_attn.q_proj.weight", H, H); w.bq = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, H);
++            w.Wk = new_matrix(pf + "self_attn.k_proj.weight", H, H); w.bk = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, H);
++            w.Wv = new_matrix(pf + "self_attn.v_proj.weight", H, H); w.bv = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, H);
++            w.Wo = new_matrix(pf + "self_attn.out_proj.weight", H, H); w.bo = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, H);
++            w.Wfc1 = new_matrix(pf + "mlp.fc1.weight", H, FF);  w.bfc1 = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, FF);
++            w.Wfc2 = new_matrix(pf + "mlp.fc2.weight", FF, H);  w.bfc2 = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, H);
+             pending_f32.push_back({pf + "layer_norm1.weight", w.ln1w, {H}}); pending_f32.push_back({pf + "layer_norm1.bias", w.ln1b, {H}});
+             pending_f32.push_back({pf + "layer_norm2.weight", w.ln2w, {H}}); pending_f32.push_back({pf + "layer_norm2.bias", w.ln2b, {H}});
+             pending_f32.push_back({pf + "self_attn.q_proj.weight", w.Wq, {H, H}}); pending_f32.push_back({pf + "self_attn.q_proj.bias", w.bq, {H}});
+@@ -1149,19 +1201,17 @@ SmolVLAModelArch* smolvla_load_impl(ggml_type weight_dtype,
+     m->vlm_layers.resize(cfg.n_layers);
+     for (int i=0; i<cfg.n_layers; ++i) {
+         VlmLayerW & w = m->vlm_layers[i];
++        const std::string pf = "model.vlm_with_expert.vlm.model.text_model.layers." + std::to_string(i) + ".";
+         w.Wln_in   = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, cfg.hidden);
+-        w.Wq       = ggml_new_tensor_2d(ctx, wdt, cfg.hidden, cfg.q_full_dim);
+-        w.Wk       = ggml_new_tensor_2d(ctx, wdt, cfg.hidden, cfg.kv_full_dim);
+-        w.Wv       = ggml_new_tensor_2d(ctx, wdt, cfg.hidden, cfg.kv_full_dim);
+-        w.Wo       = ggml_new_tensor_2d(ctx, wdt, cfg.q_full_dim, cfg.hidden);
++        w.Wq       = new_matrix(pf + "self_attn.q_proj.weight", cfg.hidden, cfg.q_full_dim);
++        w.Wk       = new_matrix(pf + "self_attn.k_proj.weight", cfg.hidden, cfg.kv_full_dim);
++        w.Wv       = new_matrix(pf + "self_attn.v_proj.weight", cfg.hidden, cfg.kv_full_dim);
++        w.Wo       = new_matrix(pf + "self_attn.o_proj.weight", cfg.q_full_dim, cfg.hidden);
+         w.Wln_post = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, cfg.hidden);
+-        w.Wgate    = ggml_new_tensor_2d(ctx, wdt, cfg.hidden,       cfg.intermediate);
+-        w.Wup      = ggml_new_tensor_2d(ctx, wdt, cfg.hidden,       cfg.intermediate);
+-        w.Wdown    = ggml_new_tensor_2d(ctx, wdt, cfg.intermediate, cfg.hidden);
++        w.Wgate    = new_matrix(pf + "mlp.gate_proj.weight", cfg.hidden,       cfg.intermediate);
++        w.Wup      = new_matrix(pf + "mlp.up_proj.weight", cfg.hidden,       cfg.intermediate);
++        w.Wdown    = new_matrix(pf + "mlp.down_proj.weight", cfg.intermediate, cfg.hidden);
+ 
+-        char p[256]; std::snprintf(p, sizeof(p),
+-                                   "model.vlm_with_expert.vlm.model.text_model.layers.%d.", i);
+-        const std::string pf = p;
+         pending_f32.push_back({pf + "input_layernorm.weight",          w.Wln_in,   {cfg.hidden}});
+         pending_f32.push_back({pf + "self_attn.q_proj.weight",         w.Wq,       {cfg.q_full_dim,  cfg.hidden}});
+         pending_f32.push_back({pf + "self_attn.k_proj.weight",         w.Wk,       {cfg.kv_full_dim, cfg.hidden}});
+@@ -1241,6 +1291,8 @@ SmolVLAModelArch* smolvla_load_impl(ggml_type weight_dtype,
+                                                    cfg.expert_h, cfg.n_suffix);
+     }
+ 
++    std::printf("vla: packed resident matrices: lm=%d vision=%d; action expert/projector=float\n",
++                packed_lm, packed_vision);
+     m->weight_buf = ggml_backend_alloc_ctx_tensors(m->ctx_weights, m->backend);
+     if (!m->weight_buf) {
+         std::fprintf(stderr, "vla: ggml_backend_alloc_ctx_tensors (weights) failed\n");
+@@ -1253,6 +1305,8 @@ SmolVLAModelArch* smolvla_load_impl(ggml_type weight_dtype,
+ 
+     auto stream_f32 = [&](const std::string & hf_name, ggml_tensor * t,
+                           const std::vector<int64_t> & shape) -> bool {
++        if (use_gguf && ggml_is_quantized(t->type))
++            return gst.load_packed(hf_to_gguf(hf_name), t, shape);
+         std::vector<float> hbuf(ggml_nelements(t));
+         const bool ok = use_gguf
+             ? gst.read_to_f32(hf_to_gguf(hf_name), hbuf.data(), shape)
+diff --git a/src/serving/vla-bench.cpp b/src/serving/vla-bench.cpp
+index d3aeb88..5767982 100644
+--- a/src/serving/vla-bench.cpp
++++ b/src/serving/vla-bench.cpp
+@@ -117,12 +117,15 @@ int main(int argc, char ** argv) {
+         label = (slash == std::string::npos) ? ckpt : ckpt.substr(slash+1);
+     }
+ 
++    const auto load_start = std::chrono::steady_clock::now();
+     vla::Model * m = vla::model_load(mmproj, ckpt, "");
+     if (!m) {
+         std::fprintf(stderr, "vla-bench: model_load failed\n");
+         return 1;
+     }
+     const vla::Config & cfg = vla::model_config(m);
++    std::printf("vla-bench: load_ms=%.3f\n",
++        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now()-load_start).count());
+ 
+     std::vector<std::vector<uint8_t>> pixels(n_images, std::vector<uint8_t>((size_t) 3*side * side));
+     std::vector<vla::ImageView> views(n_images);
+@@ -157,7 +160,8 @@ int main(int argc, char ** argv) {
+     in.noise       = noise.data();
+ 
+     for (int i=0; i<warmup; ++i) {
+-        if (vla::predict(m, in).empty()) {
++        const auto out = vla::predict(m, in);
++        if (out.empty() || !std::all_of(out.begin(), out.end(), [](float x) { return std::isfinite(x); })) {
+             std::fprintf(stderr, "vla-bench: predict failed\n");
+             vla::model_free(m);
+             return 1;
+@@ -171,7 +175,7 @@ int main(int argc, char ** argv) {
+         const auto t0 = std::chrono::steady_clock::now();
+         const std::vector<float> out = vla::predict(m, in);
+         const auto t1 = std::chrono::steady_clock::now();
+-        if (out.empty()) {
++        if (out.empty() || !std::all_of(out.begin(), out.end(), [](float x) { return std::isfinite(x); })) {
+             std::fprintf(stderr, "vla-bench: predict failed at rep %d\n", i);
+             vla::model_free(m);
+             return 1;

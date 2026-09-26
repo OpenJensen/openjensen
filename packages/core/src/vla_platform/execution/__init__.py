@@ -8,6 +8,8 @@ from uuid import uuid4
 from sqlalchemy import insert, select, update
 
 from vla_platform.contracts import TERMINAL, IntakeRequest, Job, WorkerRequest, WorkerResult, now
+from vla_platform.lifecycle.contracts import PolicyRequest
+from vla_platform.lifecycle.service import Lifecycle
 from vla_platform.settings import Settings
 from vla_platform.storage import Storage, jobs
 
@@ -20,6 +22,8 @@ class Execution:
         self.storage, self.settings = storage, settings
         self.tasks: dict[str, asyncio.Task] = {}
         self.lock = asyncio.Lock()
+        self.native_slots = asyncio.Semaphore(1)
+        self.lifecycle = Lifecycle(self)
         self.slots = asyncio.Semaphore(2)  # Metadata jobs only; not a GPU admission policy.
 
     async def get(self, job_id: str) -> Job | None:
@@ -49,10 +53,13 @@ class Execution:
                 .values(status=job.status, record=job.model_dump())
             )
 
-    async def submit(self, project_id: str, request: IntakeRequest) -> Job:
+    async def submit(self, project_id: str, request: IntakeRequest | PolicyRequest) -> Job:
+        if isinstance(request, PolicyRequest):
+            await self.lifecycle.validate(project_id, request)
         job = Job(
             id=str(uuid4()),
             project_id=project_id,
+            kind=request.operation if isinstance(request, PolicyRequest) else "dataset.inspect",
             request=request,
             created_at=now(),
             updated_at=now(),
@@ -74,7 +81,7 @@ class Execution:
             if job is None or job.status in TERMINAL:
                 return job
             job.status = "cancelled"
-            job.error = "Cancelled by the user; no inspection result was published."
+            job.error = "Cancelled by the user; no later stage will be published."
             await self.save(job)
             task = self.tasks.get(job_id)
             if task:
@@ -105,6 +112,10 @@ class Execution:
         return request_path, result_path
 
     async def run(self, job_id: str) -> None:
+        initial = await self.get(job_id)
+        if initial and isinstance(initial.request, PolicyRequest):
+            await self.run_policy(initial)
+            return
         process = None
         try:
             async with self.slots:
@@ -153,6 +164,32 @@ class Execution:
                 except ProcessLookupError:
                     pass
 
+    async def run_policy(self, job: Job) -> None:
+        try:
+            async with self.native_slots:
+                async with self.lock:
+                    current = await self.get(job.id)
+                    if current.status in TERMINAL:
+                        return
+                    current.status = "running"
+                    await self.save(current)
+                await asyncio.wait_for(self.lifecycle.run(current), job.request.timeout_seconds)
+                async with self.lock:
+                    current = await self.get(job.id)
+                    if current.status not in TERMINAL:
+                        current.status = "succeeded"
+                        await self.save(current)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            await self.lifecycle.event(job, "failed", f"{type(exc).__name__}: {exc}")
+            async with self.lock:
+                current = await self.get(job.id)
+                if current.status not in TERMINAL:
+                    current.status = "failed"
+                    current.error = f"{type(exc).__name__}: {str(exc)[:2000]}"
+                    await self.save(current)
+
     async def reconcile(self) -> None:
         """Fence abandoned work before serving requests, or after shutdown drains tasks.
 
@@ -161,8 +198,9 @@ class Execution:
         reruns the request. Preserve those files as evidence. No persisted PID is safe
         to signal after restart (PID reuse): orphan cleanup requires an operator to
         verify process identity. A blocked orphan may need explicit termination; the
-        old supervisor's 90-second timeout no longer exists. This policy is scoped to
-        metadata-only workers, which cannot write application records.
+        old supervisor's timeout no longer exists. Workers cannot write application
+        records. Completed native stage artifacts remain registered; an orphan
+        cannot publish a later stage.
         """
         # Serialize with cancel/finish and commit the entire recovery batch atomically.
         # A crash before commit rolls back; after commit, repeated recovery is a no-op.
@@ -192,8 +230,18 @@ class Execution:
                             " An orphan metadata worker may still be running; late result files "
                             "are not adopted. Verify process identity before manual cleanup."
                         )
-                    job.error = f"{job.error}\n{evidence}" if job.error else evidence
-                    job.result = None
+                    if isinstance(job.request, PolicyRequest):
+                        evidence = evidence.replace("new inspection", "new job")
+                        evidence = evidence.replace(
+                            "orphan metadata worker", "orphan native worker"
+                        )
+                        evidence += (
+                            " Completed stage artifacts are retained; no late stage is adopted."
+                        )
+                        job.error = f"{job.error}\n{evidence}" if job.error else evidence
+                    else:
+                        job.error = f"{job.error}\n{evidence}" if job.error else evidence
+                        job.result = None
                     # Compare-and-swap keeps the indexed state and public record in sync.
                     await connection.execute(
                         update(jobs)

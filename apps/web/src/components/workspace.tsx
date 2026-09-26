@@ -2,7 +2,8 @@
 
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type FormEvent } from 'react';
-import { api, isActive, type DatasetProfile, type Job, type Project } from '@/lib/api';
+import { api, isActive, isDatasetJob, type DatasetJob, type DatasetProfile, type Job, type Project } from '@/lib/api';
+import { WorkflowPanel } from '@/components/workflow-panel';
 import { Icon } from '@/components/icon';
 import { WorkspaceShell } from '@/components/workspace-shell';
 import { DatasetExplorer } from '@/components/dataset-explorer';
@@ -124,7 +125,7 @@ function IntakeForm({ project, localAvailable, onCreated, starter, onSourceEdite
   </section>;
 }
 
-function JobDetail({ job, projectId }: { job: Job; projectId: string }) {
+function JobDetail({ job, projectId }: { job: DatasetJob; projectId: string }) {
   const queryClient = useQueryClient();
   const cancel = useMutation({
     mutationFn: () => api.cancel(job.id),
@@ -136,7 +137,7 @@ function JobDetail({ job, projectId }: { job: Job; projectId: string }) {
     <ErrorNotice error={cancel.error} />
     {job.error && <p className="error-notice" role="alert">{job.error}</p>}
     {(job.status === 'cancelled' || job.status === 'interrupted') && <p className="muted">This inspection did not complete. Start another inspection when you are ready.</p>}
-    {job.result && <DatasetResult profile={job.result} />}
+    {job.result && 'inspection_scope' in job.result && <DatasetResult profile={job.result} />}
   </>;
 }
 
@@ -189,11 +190,11 @@ function Workbench() {
     },
   });
   const project = projects.data?.find(item => item.id === projectId);
-  const sortedJobs = [...(jobs.data ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const sortedJobs = [...(jobs.data ?? [])].filter(isDatasetJob).sort((a, b) => b.created_at.localeCompare(a.created_at));
   const selectedJob = sortedJobs.find(job => job.id === selectedJobId) ?? sortedJobs[0];
   const connected = health.isSuccess && !health.isError;
 
-  const stage = stages[activeStage];
+  const stage = stages[activeStage] ?? { name: 'Settings & diagnostics', icon: 'sliders' as const, description: 'Manage workflow preferences and inspect recorded evidence.' };
 
   return <WorkspaceShell
     breadcrumb={<><Icon name={stage.icon} size={18} /><strong>{stage.name}</strong><span className="breadcrumb-divider">/</span><span className="breadcrumb-project">{project?.name ?? 'No project selected'}</span></>}
@@ -202,9 +203,10 @@ function Workbench() {
         <p className="sidebar-section-label">Workspace</p>
         <ul className="stage-list">{stages.map((item, index) => <li key={item.name}>
           <button type="button" className={`stage-button${activeStage === index ? ' selected' : ''}`} onClick={() => setActiveStage(index)} aria-current={activeStage === index ? 'page' : undefined}>
-            <Icon name={item.icon} size={19} /><span>{item.name}</span>{index > 0 && <small>Planned</small>}
+            <Icon name={item.icon} size={19} /><span>{item.name}</span>{index === 2 && <small>Planned</small>}
           </button>
         </li>)}</ul>
+        <button className={`stage-button${activeStage === 6 ? ' selected' : ''}`} onClick={() => setActiveStage(6)}><Icon name="sliders" size={19} /><span>Settings & diagnostics</span></button>
       </nav>
       <section className="projects-section" aria-labelledby="projects-heading">
         <div className="sidebar-section-label"><h2 id="projects-heading">Project</h2><span>{projects.data?.length ?? '—'}</span></div>
@@ -228,7 +230,7 @@ function Workbench() {
         <div className="dataset-view" hidden={activeStage !== 0}>
           <div className="section-tabs"><nav className="dataset-tab-buttons" aria-label="Dataset views"><button type="button" className={`section-tab${datasetView === 'sources' ? ' active' : ''}`} aria-pressed={datasetView === 'sources'} onClick={() => setDatasetView('sources')}>Sources</button><button type="button" className={`section-tab${datasetView === 'inspection' ? ' active' : ''}`} aria-pressed={datasetView === 'inspection'} disabled={!selectedJob} onClick={() => setDatasetView('inspection')}>Inspection{sortedJobs.length > 0 && <span className="tab-count">{sortedJobs.length}</span>}</button></nav><span className="section-note">LeRobot v2 / v3</span></div>
           <div className="content-grid source-grid" hidden={datasetView !== 'sources'}>
-            <div className="intake-column"><IntakeForm key={`${projectId}-${starterSelection}`} project={project} starter={starter} onSourceEdited={() => setActiveStarterId('')} localAvailable={capabilities.data?.some(item => item.operation === 'dataset.inspect.local' && item.status === 'available') ?? false} onCreated={job => { setSelectedJobId(job.id); setDatasetView('inspection'); }} /><div className="source-note"><Icon name="database" size={16} /><p>Inspect metadata first. Camera media and sample rows load when you open a visual preview.</p></div></div>
+            <div className="intake-column"><IntakeForm key={`${projectId}-${starterSelection}`} project={project} starter={starter} onSourceEdited={() => setActiveStarterId('')} localAvailable={capabilities.data?.some(item => item.operation === 'dataset.inspect.local' && (item.status === 'available' || item.status === 'untested')) ?? false} onCreated={job => { setSelectedJobId(job.id); setDatasetView('inspection'); }} /><div className="source-note"><Icon name="database" size={16} /><p>Inspect metadata first. Camera media and sample rows load when you open a visual preview.</p></div></div>
             <DatasetStarters selected={activeStarterId} onSelect={item => { setStarter(item); setActiveStarterId(item.id); setStarterSelection(previous => previous + 1); }} />
           </div>
           <div className="inspection-view" hidden={datasetView !== 'inspection'}>
@@ -246,7 +248,8 @@ function Workbench() {
           {jobs.error && datasetView === 'sources' && <ErrorNotice error={jobs.error} />}
           <footer className="workspace-footer"><span>Inspect first. Build on what you know.</span><span>Dataset workspace</span></footer>
         </div>
-        {activeStage > 0 && <section className="planned-panel" aria-labelledby="planned-title"><span className="empty-icon"><Icon name={stage.icon} size={28} /></span><span className="planned-badge">Planned</span><h2 id="planned-title">{stage.name} is on the roadmap</h2><p>{capabilities.data?.find(item => item.stage.toLowerCase() === stage.name.toLowerCase())?.description ?? 'This stage is not available in the current application.'}</p><p className="planned-note">You can start by inspecting your dataset. Your project and inspection history will be here when this stage is ready.</p><button className="secondary-button" onClick={() => setActiveStage(0)}>Go to Dataset <Icon name="arrow" size={15} /></button></section>}
+        {activeStage > 0 && activeStage !== 2 && <WorkflowPanel key={`${projectId}-${activeStage}`} projectId={projectId} stage={activeStage === 6 ? 'settings' : stage.name} />}
+        {activeStage === 2 && <section className="planned-panel" aria-labelledby="planned-title"><span className="empty-icon"><Icon name={stage.icon} size={28} /></span><span className="planned-badge">Planned</span><h2 id="planned-title">{stage.name} is on the roadmap</h2><p>{capabilities.data?.find(item => item.stage.toLowerCase() === stage.name.toLowerCase())?.description ?? 'This stage is not available in the current application.'}</p><p className="planned-note">You can start by inspecting your dataset. Your project and inspection history will be here when this stage is ready.</p><button className="secondary-button" onClick={() => setActiveStage(0)}>Go to Dataset <Icon name="arrow" size={15} /></button></section>}
   </WorkspaceShell>;
 }
 
