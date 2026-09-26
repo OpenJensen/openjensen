@@ -53,7 +53,7 @@ Local metadata intake is disabled by default. Set `FIREBIRD_LOCAL_DATA_ROOT` to 
 - `apps/desktop`: reserved later Tauri shell.
 - `tests`: persistence, subprocess intake, bounded reads, cancellation, failure and access-boundary checks.
 
-The default workspace is `.firebird/`, ignored by Git. Set `FIREBIRD_DATA_DIR` to choose a different directory. One application process owns it via an OS file lock. SQLite stores projects/job records; each job has its request/result files. Startup marks unfinished jobs interrupted and requires an explicit retry. Do not run multiple server workers on the same workspace. The API reference is at `/docs` and the schema at `/openapi.json`.
+The default workspace is `.firebird/`, ignored by Git. Set `FIREBIRD_DATA_DIR` to choose a different directory. One application process owns it via an OS file lock. SQLite stores projects/job records; each job has its request/result files. Startup marks unfinished jobs interrupted and requires an explicit retry. Do not run multiple server workers on the same workspace. The API reference is at `/docs/` and the schema at `/openapi.json`. The reference shares the web workspace shell and theme, and loads its endpoint/model content from the live schema. Build the web client to serve the reference; the JSON schema remains available without a web build.
 
 `FIREBIRD_WEB_DIR` selects the static build directory (default `apps/web/out`). `FIREBIRD_API_URL` changes the CLI's server URL. Do not expose this initial local server to untrusted networks; hosted access control is not implemented.
 
@@ -67,6 +67,8 @@ uv run --frozen python scripts/export_openapi.py
 pnpm generate:client
 pnpm check:web
 pnpm build:web
+pnpm exec playwright install chromium
+pnpm test:web
 ```
 
 Do not hand-edit generated API types. Claim a task card before parallel work, coordinate shared schema/manifest/migration changes, and provide evidence plus independent review. The Linux/Windows CI workflow is scaffolded; actual remote CI and Windows GPU evidence are separate gates. Mac development checks do not prove those gates passed.

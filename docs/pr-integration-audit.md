@@ -4,7 +4,8 @@ The six author-owned PRs (#43–#47 and #52) form one application integration.
 This is a software integration check, **not a completed product acceptance**.
 The locked product brief requires measured task quality, target constraints,
 independent final evaluation and an exact tested export. Those hardware gates
-remain incomplete, so #52 remains a draft and main requires explicit approval.
+remain incomplete. The user subsequently deferred further Xbox/GPU validation
+and approved merging the tested software foundation into main.
 
 ## Consolidation
 
@@ -15,7 +16,7 @@ remain incomplete, so #52 remains a draft and main requires explicit approval.
   `5942f4f`; there is no additional training-branch diff to merge.
 - The workflow uses the existing execution owner, project records and isolated
   Python 3.11 workers. The application remains GPU-independent on Python 3.14.
-- No merge into main is part of this audit.
+- Main merge approval followed the audit, with GPU acceptance explicitly deferred.
 
 ## Reproduced defects fixed
 
@@ -34,7 +35,7 @@ remain incomplete, so #52 remains a draft and main requires explicit approval.
    jobs, including locked installation and preserved-evidence checksum checks.
    These jobs do not certify CUDA, full model execution or simulator quality.
 
-## Local verification
+## Initial consolidation verification
 
 Pinned application tools: Python 3.14.7, uv 0.12.19, Node 24.21.0, pnpm 12.6.0.
 Workers use Python 3.11.14 in separate environments.
@@ -78,9 +79,18 @@ performed. Historical Q4 quality includes regressions; no universal winner or
 deployment readiness is claimed. See [workflow validation](workflow-validation.md)
 and [GPU evidence](../workers/benchmark_gpu/evidence/2026-09-26/REPORT.md).
 
-At the reviewed refs, teammate #48/#50 conflicts with the workflow in shared
-workspace/CSS files; #51 also conflicts in README/CSS/generated schemas. These
-separate PRs must be reconciled and the combined build tested before claiming
-all open team branches integrate together. Main itself is included through
-`30b0cab`. The isolated simulation worker does not complete the application's
-Evaluate/Run path.
+Before landing, main advanced through `4388c53`, including #48's shared API
+reference. Its workspace/CSS conflicts were reconciled while preserving workflow
+controls and diagnostics. Main's stricter capability evidence contract also
+required configured workers without registered support to report `untested`;
+configured local intake remains selectable. Windows checkout line-ending
+conversion is disabled for the checksum-backed preview metadata fixture.
+
+The combined application passes 250 local tests (one platform skip), Ruff,
+formatting, TypeScript and the production build. Local fixture metadata intake
+succeeds through the browser. Final Linux/Windows CI and browser checks run on
+the reconciled PR commit before merge.
+
+Teammate #50/#51 still need shared workspace/CSS/schema reconciliation before
+claiming all open team branches integrate together. The isolated simulation
+worker does not complete the application's Evaluate/Run path.
