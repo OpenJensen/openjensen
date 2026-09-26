@@ -76,6 +76,7 @@ export const artifactDownloadUrl = (projectId: string, artifactId: string) =>
   `${apiOrigin}/api/v1/projects/${encodeURIComponent(projectId)}/artifacts/${encodeURIComponent(artifactId)}/download`;
 
 export const api = {
+  cloudRuns: () => request<components['schemas']['CloudRunsFeed']>('/cloud-runs'),
   policyOptions: () => request<PolicyOptions>('/policy-options'),
   artifacts: (id: string) => request<PolicyArtifact[]>(`/projects/${encodeURIComponent(id)}/artifacts`),
   events: (id: string) => request<JobEvent[]>(`/jobs/${encodeURIComponent(id)}/events`),

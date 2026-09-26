@@ -1,9 +1,10 @@
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -12,6 +13,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from vla_platform import __version__
 from vla_platform.capabilities import registry
+from vla_platform.cloud_runs import CloudRunsFeed, read_cloud_runs
 from vla_platform.contracts import (
     Capability,
     EpisodePage,
@@ -132,6 +134,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/v1/health")
     async def health() -> dict[str, str]:
         return {"status": "ok", "version": __version__}
+
+    @app.get("/api/v1/cloud-runs", response_model=CloudRunsFeed)
+    async def cloud_runs(response: Response) -> CloudRunsFeed:
+        """Read bounded operator snapshots; never connect to or control a cloud host."""
+        response.headers["Cache-Control"] = "no-store"
+        return await asyncio.to_thread(read_cloud_runs, settings.cloud_runs_dir)
 
     @app.get("/api/v1/capabilities", response_model=list[Capability])
     async def capabilities(execution: ExecutionDep) -> list[Capability]:

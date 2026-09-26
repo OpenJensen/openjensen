@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, isActive, isDatasetJob, type DatasetJob, type DatasetProfile, type Job, type Project } from '@/lib/api';
+import { CloudRuns } from '@/components/cloud-runs';
 import { WorkflowPanel } from '@/components/workflow-panel';
 import { Icon } from '@/components/icon';
 import { WorkspaceShell } from '@/components/workspace-shell';
@@ -198,7 +199,7 @@ function Workbench() {
   const selectedJob = sortedJobs.find(job => job.id === selectedJobId) ?? sortedJobs[0];
   const connected = health.isSuccess && !health.isError;
 
-  const stage = stages[activeStage] ?? { name: 'Settings & diagnostics', icon: 'sliders' as const, description: 'Manage workflow preferences and inspect recorded evidence.' };
+  const stage = activeStage === 7 ? { name: 'Cloud runs', icon: 'clock' as const, description: 'Follow cloud execution and read recent worker logs.' } : stages[activeStage] ?? { name: 'Settings & diagnostics', icon: 'sliders' as const, description: 'Manage workflow preferences and inspect recorded evidence.' };
 
   return <WorkspaceShell
     breadcrumb={<><Icon name={stage.icon} size={18} /><strong>{stage.name}</strong><span className="breadcrumb-divider">/</span><span className="breadcrumb-project">{project?.name ?? 'No project selected'}</span></>}
@@ -211,6 +212,7 @@ function Workbench() {
           </button>
         </li>)}</ul>
         <button className={`stage-button${activeStage === 6 ? ' selected' : ''}`} onClick={() => setActiveStage(6)}><Icon name="sliders" size={19} /><span>Settings & diagnostics</span></button>
+        <button className={`stage-button${activeStage === 7 ? ' selected' : ''}`} onClick={() => setActiveStage(7)} aria-current={activeStage === 7 ? 'page' : undefined}><Icon name="clock" size={19} /><span>Cloud runs</span></button>
       </nav>
       <section className="projects-section" aria-labelledby="projects-heading">
         <div className="sidebar-section-label"><h2 id="projects-heading">Project</h2><span>{projects.data?.length ?? '—'}</span></div>
@@ -228,7 +230,7 @@ function Workbench() {
       </section>
     </>}
   >
-        <div className="page-heading"><div><p className="eyebrow">Step {String(activeStage + 1).padStart(2, '0')}</p><h1>{stage.name}</h1><p>{stage.description}</p></div><div className={`connection ${connected ? 'connected' : ''}`} role="status"><span />{health.isPending ? 'Connecting' : connected ? 'Connected' : 'Offline'}</div></div>
+        <div className="page-heading"><div><p className="eyebrow">{activeStage === 7 ? 'Monitor' : `Step ${String(activeStage + 1).padStart(2, '0')}`}</p><h1>{stage.name}</h1><p>{stage.description}</p></div><div className={`connection ${connected ? 'connected' : ''}`} role="status"><span />{health.isPending ? 'Connecting' : connected ? 'Connected' : 'Offline'}</div></div>
         {!connected && !health.isPending && <div className="connection-notice"><ErrorNotice error={health.error} /><button className="text-button" onClick={() => { void health.refetch(); void projects.refetch(); void capabilities.refetch(); }}>Retry connection</button></div>}
         {capabilities.error && connected && <div className="connection-notice"><ErrorNotice error={capabilities.error} /><button className="text-button" onClick={() => void capabilities.refetch()} disabled={capabilities.isFetching}>Retry capabilities</button></div>}
         <div className="dataset-view" hidden={activeStage !== 0}>
@@ -252,7 +254,8 @@ function Workbench() {
           {jobs.error && datasetView === 'sources' && <ErrorNotice error={jobs.error} />}
           <footer className="workspace-footer"><span>Inspect first. Build on what you know.</span><span>Dataset workspace</span></footer>
         </div>
-        {activeStage > 0 && activeStage !== 2 && <WorkflowPanel key={`${workflowProjectId}-${activeStage}`} projectId={workflowProjectId} stage={activeStage === 6 ? 'settings' : stage.name} onOpenQuantize={() => setActiveStage(3)} tab={workflowTab} onTabChange={setWorkflowTab} />}
+        {activeStage === 7 && <CloudRuns />}
+        {activeStage > 0 && activeStage !== 2 && activeStage !== 7 && <WorkflowPanel key={`${workflowProjectId}-${activeStage}`} projectId={workflowProjectId} stage={activeStage === 6 ? 'settings' : stage.name} onOpenQuantize={() => setActiveStage(3)} tab={workflowTab} onTabChange={setWorkflowTab} />}
         {activeStage === 2 && <section className="planned-panel" aria-labelledby="planned-title"><span className="empty-icon"><Icon name={stage.icon} size={28} /></span><span className="planned-badge">Planned</span><h2 id="planned-title">{stage.name} is on the roadmap</h2><p>{capabilities.data?.find(item => item.stage.toLowerCase() === stage.name.toLowerCase())?.description ?? 'This stage is not available in the current application.'}</p><p className="planned-note">You can start by inspecting your dataset. Your project and inspection history will be here when this stage is ready.</p><button className="secondary-button" onClick={() => setActiveStage(0)}>Go to Dataset <Icon name="arrow" size={15} /></button></section>}
   </WorkspaceShell>;
 }
