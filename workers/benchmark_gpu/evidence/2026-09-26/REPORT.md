@@ -1,6 +1,6 @@
 # SmolVLA GPU comparison — September 26, 2026
 
-**Partial comparison; no overall winner is selected.** Completed evidence includes all eight native/C++ L4 latency candidates, seven RTX 20-episode quality runs, eight L4 20-episode quality runs, and full-action custom vLLM/TensorRT-LLM admission probes. The RTX Tailscale gateway went offline at 14:14 UTC (18:14 Yerevan) and the host subsequently failed. Direct access to the existing L4 has been restored through the user's GCP account; additional completed results and all fourteen original fixtures were recovered. A dedicated replacement GPU is prepared but not yet rented. Results from unfinished runs are not scored.
+**No overall winner is selected.** Completed evidence includes all eight native/C++ L4 latency candidates, isolated custom-engine timings with native controls, seven RTX 20-episode quality runs, all ten L4 20-episode quality runs, and full-action custom vLLM/TensorRT-LLM admission probes. The RTX Tailscale gateway went offline at 14:14 UTC (18:14 Yerevan) and the host subsequently failed. Direct access to the existing L4 has been restored through the user's GCP account; all fourteen original fixtures were recovered. A dedicated replacement L4 is running within a user-authorized $6 budget. Results from unfinished runs are not scored.
 
 RTX TensorRT-LLM setup is explicitly deferred by user decision: WSL had 6.6 GiB free and its Windows host drive 2.2 GiB, versus a 17 GiB tested L4 environment. Cleaning this task's temporary transfer archive recovered WSL space, but no sufficiently large alternate disk was available. This is a storage gate, not an RTX model-execution failure.
 
@@ -28,7 +28,20 @@ The authorized collection pause lasted about eight minutes. Ten pre-run GPU util
 | cpp-Q8_0-vision | 101.02 | 2.84 | 944 |
 | native-bf16-repeat | 350.64 | 27.92 | 1186 |
 
-BF16 median drift from the first to the final fresh-process repeat was +0.53%. These measurements are specific to this L4 window. Custom-engine isolated timings remain uncollected; their contended probe times are excluded.
+BF16 median drift from the first to the final fresh-process repeat was +0.53%. These measurements are specific to this existing `g2-standard-12` L4 window (12 vCPUs, 48 GiB RAM, driver 580.159.04).
+
+A second authorized pause collected the custom engines in their own environments, each bracketed by native controls. Ten pre-run utilization samples were 0%; the helper resumed all nine recorded collection processes after 489 seconds. These are separate measurement windows from the core table, with one warmup and five timed calls per fixture.
+
+| Environment / candidate | Median of fixture p50 (ms/chunk) | Cached startup (s) | Sampled process peak (MiB) |
+|---|---:|---:|---:|
+| vLLM environment: native-bf16 | 349.58 | 31.55 | 1186 |
+| custom vLLM BF16 | 356.23 | 12.34 | 1588 |
+| vLLM environment: native-bf16-repeat | 355.75 | 28.13 | 1186 |
+| TensorRT-LLM environment: native-fp16 | 338.61 | 27.93 | 1186 |
+| custom TensorRT-LLM FP16 | 409.42 | 42.93 | 1632 |
+| TensorRT-LLM environment: native-fp16-repeat | 346.14 | 28.21 | 1186 |
+
+Native-control drift was +1.76% in the vLLM environment and +2.23% in the TensorRT-LLM environment. Neither custom adapter demonstrates an observation-to-action speed advantage over its native controls in these measurements. Their contended admission-probe times are excluded.
 
 ## RTX 3070: observation-to-action diagnostics and paired quality
 
@@ -61,10 +74,12 @@ These quality runs used the same episode identities with the collection job runn
 | native-nf4 | 12/20 | 5 | 1 |
 | cpp-bf16 | 17/20 | 0 | 1 |
 | cpp-Q8_0 | 17/20 | 0 | 1 |
+| cpp-Q4_0 | 4/20 | 13 | 1 |
+| cpp-Q8_0-vision | 15/20 | 2 | 1 |
 | custom vLLM BF16 | 16/20 | 1 | 1 |
 | custom TensorRT-LLM FP16 | 16/20 | 1 | 1 |
 
-Native INT8, C++ Q8 and TensorRT-LLM completed before direct access was restored. Native NF4 subsequently completed in the recovery queue at 12/20, losing five reference successes and gaining one. C++ Q4 and C++ Q8 with vision Q8 remain in that queue against the same fixture hashes and episode identities. GPU-specific quality outcomes are kept separate.
+All ten candidates completed against the same fixture hashes and episode identities. C++ Q4 lost thirteen reference successes and gained one; its 4/20 result does not retain reference quality. Native NF4 lost five and gained one. Vision Q8 lost two and gained one. GPU-specific quality outcomes are kept separate.
 
 ## Numerical fidelity and integration scope
 
@@ -89,6 +104,6 @@ Environment versions differ across engines: native Torch 2.7.1 / Transformers 4.
 
 Six standalone worker regression tests passed on L4 with zero skips; four dependency-light tests passed locally. Ruff and diff checks passed. JSON evidence, paired comparisons, protected-tensor hashes and `SHA256SUMS` accompany this report. Collected raw action arrays, logs and all fourteen input fixtures are retained in the task's local evidence archive. Every recovered fixture was checked against its historical baseline hash; `l4/recovered-fixtures-sha256.json` records those identities. Package inventories, GPU/driver identity and harness hashes are recorded separately for the three L4 environments. Model weights are not committed.
 
-The user authorized a replacement GCP GPU. Account access is working; the prepared replacement is an L4 with 8 vCPUs, 32 GiB RAM, a 200 GiB disk and a six-hour automatic stop. Creation is pending the requested rental budget confirmation. Keep any new VM's hardware and environment records separate from this historical L4 window.
+The user authorized a $6 replacement rental. A dedicated `g2-standard-8` L4 (8 vCPUs, 32 GiB RAM, 200 GiB auto-delete disk, driver 580.178.04) started at 15:04 UTC. Its four-hour termination deadline is 19:04 UTC, with automatic VM deletion and boot-disk deletion. New measurements remain pending and will be recorded separately from this historical L4. Results are copied locally during execution; the VM will be explicitly deleted after collection.
 
-On the existing L4, missing quality runs execute first. A supervisor then runs custom-engine latency matrices with same-environment native controls and repeated native baselines, using the previously authorized bounded collection pause with a detached resume watchdog. Those measurements remain pending. The prior collection pause was confirmed resumed well before the gateway disconnected. RTX TensorRT-LLM remains deferred, and remaining RTX runs cannot continue on the failed host.
+Both collection pauses on the existing L4 were confirmed resumed. RTX TensorRT-LLM remains deferred, and remaining RTX runs cannot continue on the failed host.

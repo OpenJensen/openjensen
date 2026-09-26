@@ -1,0 +1,44 @@
+[
+  {
+    "engine": "vllm",
+    "command": [
+      "/home/aayrapetyan/firebird-gpu-tests/20260926/.venv-vllm/bin/python",
+      "-u",
+      "/home/aayrapetyan/firebird-gpu-tests/20260926/transferred/recovery-20260926/workers/benchmark_gpu/scripts/run_cross_stack_matrix.py",
+      "--output",
+      "/home/aayrapetyan/firebird-gpu-tests/20260926/comparison/l4-isolated-engines-recovered/vllm",
+      "--fixtures",
+      "/home/aayrapetyan/firebird-gpu-tests/20260926/comparison/fixtures",
+      "--samples",
+      "5",
+      "--backends",
+      "native-bf16",
+      "vllm-bf16",
+      "--repeat-backend",
+      "native-bf16"
+    ],
+    "returncode": 0,
+    "wall_s": 219.08915424346924
+  },
+  {
+    "engine": "trtllm",
+    "command": [
+      "/home/aayrapetyan/firebird-gpu-tests/20260926/.venv-trtllm-py312/bin/python",
+      "-u",
+      "/home/aayrapetyan/firebird-gpu-tests/20260926/transferred/recovery-20260926/workers/benchmark_gpu/scripts/run_cross_stack_matrix.py",
+      "--output",
+      "/home/aayrapetyan/firebird-gpu-tests/20260926/comparison/l4-isolated-engines-recovered/trtllm",
+      "--fixtures",
+      "/home/aayrapetyan/firebird-gpu-tests/20260926/comparison/fixtures",
+      "--samples",
+      "5",
+      "--backends",
+      "native-fp16",
+      "trtllm-fp16",
+      "--repeat-backend",
+      "native-fp16"
+    ],
+    "returncode": 0,
+    "wall_s": 257.13451075553894
+  }
+]
