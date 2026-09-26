@@ -1,0 +1,91 @@
+{
+  "reference": "native-bf16",
+  "candidate": "cpp-bf16",
+  "fixture_count": 14,
+  "mae": 0.0013119348678238957,
+  "rmse": 0.005297993532756419,
+  "max_abs": 0.3394981622695923,
+  "gripper_sign_agreement": 1.0,
+  "median_fixture_p50_ms": 112.72139550055726,
+  "fixtures": [
+    {
+      "fixture": "synthetic-0.npz",
+      "mae": 0.0027242275428891716,
+      "max_abs": 0.3394981622695923
+    },
+    {
+      "fixture": "synthetic-1.npz",
+      "mae": 0.0018860326318203338,
+      "max_abs": 0.010722488164901733
+    },
+    {
+      "fixture": "task0-init0-chunk0.npz",
+      "mae": 0.0016150760837730818,
+      "max_abs": 0.01378566026687622
+    },
+    {
+      "fixture": "task0-init0-chunk1.npz",
+      "mae": 0.0012451265136977391,
+      "max_abs": 0.010281503200531006
+    },
+    {
+      "fixture": "task1-init0-chunk0.npz",
+      "mae": 0.0008608635179033236,
+      "max_abs": 0.004265099763870239
+    },
+    {
+      "fixture": "task1-init0-chunk1.npz",
+      "mae": 0.001241821282809334,
+      "max_abs": 0.005985260009765625
+    },
+    {
+      "fixture": "task1-init0-chunk2.npz",
+      "mae": 0.0009178820824516671,
+      "max_abs": 0.006395190954208374
+    },
+    {
+      "fixture": "task2-init0-chunk0.npz",
+      "mae": 0.0007924296134816748,
+      "max_abs": 0.005204617977142334
+    },
+    {
+      "fixture": "task2-init0-chunk1.npz",
+      "mae": 0.0010374366487875314,
+      "max_abs": 0.005703598260879517
+    },
+    {
+      "fixture": "task3-init0-chunk0.npz",
+      "mae": 0.0010806927334384194,
+      "max_abs": 0.006078660488128662
+    },
+    {
+      "fixture": "task3-init0-chunk1.npz",
+      "mae": 0.0008970082765777729,
+      "max_abs": 0.00622934103012085
+    },
+    {
+      "fixture": "task4-init0-chunk0.npz",
+      "mae": 0.0012405591920417334,
+      "max_abs": 0.006880283355712891
+    },
+    {
+      "fixture": "task4-init0-chunk1.npz",
+      "mae": 0.0012032793633573288,
+      "max_abs": 0.010296463966369629
+    },
+    {
+      "fixture": "task4-init0-chunk2.npz",
+      "mae": 0.0016246526665054262,
+      "max_abs": 0.011748135089874268
+    }
+  ],
+  "paired_quality": {
+    "episodes": 20,
+    "reference_successes": 15,
+    "candidate_successes": 14,
+    "both_succeed": 14,
+    "reference_only": 1,
+    "candidate_only": 0,
+    "both_fail": 5
+  }
+}
