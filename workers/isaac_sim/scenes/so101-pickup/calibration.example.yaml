@@ -1,0 +1,11 @@
+# Format illustration only. These values are NOT this robot's calibration.
+api_version: simulation.joints/v1alpha1
+status: unverified
+source: REPLACE_WITH_RECORDING_CALIBRATION_OR_VALIDATED_FIT
+joints:
+  shoulder_pan: {sim_rad: [-1, 1], policy: [-1, 1]}
+  shoulder_lift: {sim_rad: [-1, 1], policy: [-1, 1]}
+  elbow_flex: {sim_rad: [-1, 1], policy: [-1, 1]}
+  wrist_flex: {sim_rad: [-1, 1], policy: [-1, 1]}
+  wrist_roll: {sim_rad: [-1, 1], policy: [-1, 1]}
+  gripper: {sim_rad: [0, 1], policy: [0, 100]}

@@ -1,6 +1,9 @@
 # Isaac on SkyPilot
 
 Run the standalone Isaac worker on a GCP L4 from a local SkyPilot client.
+For a policy running on a separate H100, use the [rollout Job Group](ROLLOUT.md).
+To run the existing ACT experiment with the shared service account, follow
+[runner setup](RUNNER.md).
 This launcher has **no integration with the repository's API or job database**.
 Related to [SKY-001 (#26)](https://github.com/sobhanb-eth/firebird-hackathon-codebase/issues/26);
 application recipe integration and acceptance remain open.

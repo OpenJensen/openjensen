@@ -15,7 +15,9 @@ jobs:
         with:
           python-version: '3.12'
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg jq
-      - run: python -m pip install PyYAML==6.0.3
+      - run: >-
+          python -m pip install PyYAML==6.0.3 usd-core==26.8
+          -r workers/isaac_sim/calibration.requirements.txt
       - name: Worker and encoding tests
         working-directory: workers/isaac_sim
         env:
@@ -24,5 +26,7 @@ jobs:
       - name: Launcher tests
         working-directory: workers/skypilot
         run: python -m unittest discover -s tests -v
+      - name: Experimental scene checks
+        run: python workers/isaac_sim/scenes/so101-pickup/test_experiment.py
       - name: Shell syntax
         run: find workers/isaac_sim workers/skypilot -name '*.sh' -exec bash -n {} \;

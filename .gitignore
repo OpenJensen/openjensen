@@ -23,3 +23,7 @@ playwright-report/
 test-results/
 *.sqlite*
 *.log
+/credentials/
+/models/
+sim-rollout-runner*.json
+*.credentials.json

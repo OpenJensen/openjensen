@@ -1,0 +1,129 @@
+{
+  "status": "experimental_unverified",
+  "fit_source": "evidence/calibration/report.json",
+  "fit_sha256": "84a330d2575851316fb3891905e21fc6616c1b76dbaa7b30f1f226ac163cfc69",
+  "urdf_sha256": "3a65d2d35e68a8d2f0c2cc176d19b884506543c93ba72980145b80abe276022c",
+  "source_scene_sha256": "d6c286dc816825a6ca4a4dd05e8aa6989777da6a8144a0ab2a6c0133f9fd3dcd",
+  "stage_metadata": {
+    "defaultPrim": "World",
+    "metersPerUnit": 1.0,
+    "upAxis": "Z",
+    "framesPerSecond": 30.0,
+    "timeCodesPerSecond": 30.0,
+    "startTimeCode": 0.0,
+    "endTimeCode": 150.0
+  },
+  "initial_state_source": "evidence/dataset.json:first_frame_raw.observation.state",
+  "initial_joints": {
+    "shoulder_pan": {
+      "policy_state": 9.362637519836426,
+      "requested_rad": 0.1634088513919016,
+      "applied_rad": 0.1634088513919016,
+      "applied_degrees": 9.36263751983643,
+      "limit_rad": [
+        -1.91986,
+        1.91986
+      ],
+      "clipped": false
+    },
+    "shoulder_lift": {
+      "policy_state": -104.04395294189453,
+      "requested_rad": -1.9431488657546974,
+      "applied_rad": -1.74533,
+      "applied_degrees": -100.00004285756798,
+      "limit_rad": [
+        -1.74533,
+        1.74533
+      ],
+      "clipped": true
+    },
+    "elbow_flex": {
+      "policy_state": 96.57142639160156,
+      "requested_rad": 1.589746237329436,
+      "applied_rad": 1.589746237329436,
+      "applied_degrees": 91.0857498957796,
+      "limit_rad": [
+        -1.69,
+        1.69
+      ],
+      "clipped": false
+    },
+    "wrist_flex": {
+      "policy_state": 76.61538696289062,
+      "requested_rad": 1.3640426598318793,
+      "applied_rad": 1.3640426598318793,
+      "applied_degrees": 78.15388748416571,
+      "limit_rad": [
+        -1.65806,
+        1.65806
+      ],
+      "clipped": false
+    },
+    "wrist_roll": {
+      "policy_state": 7.956043720245361,
+      "requested_rad": 1.8823096164042996,
+      "applied_rad": 1.8823096164042996,
+      "applied_degrees": 107.84839675685532,
+      "limit_rad": [
+        -2.74385,
+        2.84121
+      ],
+      "clipped": false
+    },
+    "gripper": {
+      "policy_state": 1.4256619215011597,
+      "requested_rad": 0.0664172798746499,
+      "applied_rad": 0.0664172798746499,
+      "applied_degrees": 3.805429823556621,
+      "limit_rad": [
+        -0.174533,
+        1.74533
+      ],
+      "clipped": false
+    }
+  },
+  "camera": {
+    "robot_to_camera_rotation": [
+      [
+        0.9843894969473143,
+        0.16139582304333727,
+        0.0702047477310295
+      ],
+      [
+        0.11980571615794083,
+        -0.32225303184029463,
+        -0.9390418381763515
+      ],
+      [
+        -0.12893373753869328,
+        0.9327938527745034,
+        -0.33655864206762176
+      ]
+    ],
+    "robot_to_camera_translation": [
+      -0.3639314006379117,
+      0.08348574709468853,
+      2.25714408965991
+    ],
+    "world_position": [
+      0.1642702023208491,
+      -2.024809588607081,
+      1.0660086713534047
+    ],
+    "focal_pixels": 3208.2141231027977,
+    "focal_mm": 60.15401480817745,
+    "source_image_width": 1920
+  },
+  "urdf_limits_changed": false,
+  "mapping_support_extended": false,
+  "limitations": [
+    "Independent landmark geometry and its propagated uncertainty remain unproven",
+    "Competing joint-sign hypotheses have not been independently resolved",
+    "state.shoulder_lift mapped support must lie inside its URDF limits",
+    "state.wrist_roll mapped support must lie inside its URDF limits",
+    "action.shoulder_lift mapped support must lie inside its URDF limits",
+    "action.wrist_roll mapped support must lie inside its URDF limits",
+    "shoulder_lift_offset standard error exceeds 2 degrees or is unavailable",
+    "Gripper standard error exceeds 2 degrees over full support or is unavailable"
+  ]
+}

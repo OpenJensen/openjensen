@@ -1,0 +1,114 @@
+#usda 1.0
+(
+    customLayerData = {
+        string calibration = "unverified"
+        string purpose = "bounded ACT motion experiment; no task-success claim"
+        string source = "evidence/calibration/report.json"
+    }
+    defaultPrim = "World"
+    endTimeCode = 150
+    framesPerSecond = 30
+    metersPerUnit = 1
+    startTimeCode = 0
+    subLayers = [
+        @scene.usda@
+    ]
+    timeCodesPerSecond = 30
+    upAxis = "Z"
+)
+
+over "World"
+{
+    over "Robot"
+    {
+        over "base_link"
+        {
+            quatf xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:translate = (0, 0, 0)
+        }
+
+        over "shoulder_link"
+        {
+            quatf xformOp:orient = (-1.082862e-7, 0.08161223, 0.99666417, 0.0000013223686)
+            double3 xformOp:translate = (0.0388353, -8.97657e-9, 0.0624)
+        }
+
+        over "upper_arm_link"
+        {
+            quatf xformOp:orient = (-0.69703746, 0.7070949, 0.0039365757, 0.11891206)
+            double3 xformOp:translate = (0.06585611694955056, -0.02297981304396433, 0.11659993902102703)
+        }
+
+        over "lower_arm_link"
+        {
+            quatf xformOp:orient = (0.11230114, 0.0027644918, 0.70710045, 0.69813305)
+            double3 xformOp:translate = (-0.04832439979955758, -0.0041546036790165684, 0.12462651906937347)
+        }
+
+        over "wrist_link"
+        {
+            quatf xformOp:orient = (0.18374518, -0.07021924, 0.70361066, 0.682817)
+            double3 xformOp:translate = (0.08237590080447285, -0.025703562002243132, 0.1506673296788746)
+        }
+
+        over "gripper_link"
+        {
+            quatf xformOp:orient = (0.66010964, -0.15147187, -0.09758034, 0.72923905)
+            double3 xformOp:translate = (0.1066896185198487, -0.011367718287121548, 0.09353461824459533)
+        }
+
+        over "moving_jaw_so101_v1_link"
+        {
+            quatf xformOp:orient = (0.5541459, 0.37429392, 0.43446326, 0.60338056)
+            double3 xformOp:translate = (0.0956606355922195, 0.005269926859974782, 0.06335862945315114)
+        }
+
+        over "joints"
+        {
+            over "shoulder_pan"
+            {
+                float drive:angular:physics:targetPosition = 9.3626375
+                float state:angular:physics:position = 9.3626375
+            }
+
+            over "shoulder_lift"
+            {
+                float drive:angular:physics:targetPosition = -100.000046
+                float state:angular:physics:position = -100.000046
+            }
+
+            over "elbow_flex"
+            {
+                float drive:angular:physics:targetPosition = 91.08575
+                float state:angular:physics:position = 91.08575
+            }
+
+            over "wrist_flex"
+            {
+                float drive:angular:physics:targetPosition = 78.153885
+                float state:angular:physics:position = 78.153885
+            }
+
+            over "wrist_roll"
+            {
+                float drive:angular:physics:targetPosition = 107.8484
+                float state:angular:physics:position = 107.8484
+            }
+
+            over "gripper"
+            {
+                float drive:angular:physics:targetPosition = 3.80543
+                float state:angular:physics:position = 3.80543
+            }
+        }
+    }
+
+    over "Cameras"
+    {
+        over "Front"
+        {
+            float focalLength = 60.154015
+            matrix4d xformOp:transform = ( (0.9843894969473143, 0.16139582304333727, 0.0702047477310295, 0), (-0.11980571615794083, 0.32225303184029463, 0.9390418381763515, 0), (0.12893373753869328, -0.9327938527745034, 0.33655864206762176, 0), (0.1642702023208491, -2.024809588607081, 1.0660086713534047, 1) )
+        }
+    }
+}

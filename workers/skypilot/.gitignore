@@ -6,3 +6,6 @@ config.yaml
 task.yaml
 probe.yaml
 so101-test.local.yaml
+rollout.local.yaml
+rollout.experimental.local.yaml
+.rollout-*.yaml
