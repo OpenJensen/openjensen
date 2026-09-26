@@ -1,0 +1,361 @@
+{
+  "date": "2026-09-26",
+  "repository_base_commit": "d4aba383b50e105b48235200468c2408c4d24330",
+  "source_state": "Uncommitted experiment source snapshot; no implementation commit claimed",
+  "source_snapshot": "artifacts/cuda/source-snapshot-20260926.tar.gz",
+  "source_snapshot_sha256": "65b49957e3239c9d17dd74b04d747c09bd348da7c79633af00992ac35a363756",
+  "source_files_sha256": {
+    "Dockerfile.cuda": "7af6d3c10602e0946dd00218c2e92feb7a76e3dd1b3680003652ed7d1522f93d",
+    "Dockerfile.cuda-sim": "c4e096789066fb0201dd8b88fcc52f6bba4492b14d879373ef34c149f2199b27",
+    "Dockerfile.modelopt": "d3d4be14a80c26a436dfa3c1ef7e1211ab4737d19cabf7f740337985e43456d5",
+    "configs/benchmark.docker.yaml": "faf1de6916271f4a6a4f3743fa3611999107244e0ecace2220ff10d9b02057d4",
+    "configs/benchmark.v1.yaml": "8f3fbcb22b6458744aa5ca2fc40f66db387fa6801949de2ed9d606d16524a9c3",
+    "configs/evaluation.so101.yaml": "f112e2d0637e5011562e3e3024c4929fd31a7dbb5fbfaa6f1b21a47e463050a0",
+    "configs/libero-cpu-requirements.txt": "83ebeaacbe9b5d9b61ba9a6b238aa8873349a5ff44556b110646f449f725f6fa",
+    "configs/targets.yaml": "85ad22c945ee47cf04cf684b63ff7c2c0e3dad89e477513b90f37cc66bbf65ca",
+    "patches/README.md": "5222cc87b9f57ed05c1eea93e09406703ae5030014600ec6c39e459a602fca4f",
+    "patches/vla-cpp-smolvla-packed.patch": "b1ebe5bee36be84b843b5f140f97fe26ca66d36f4514331cf80b0fd4b8dbc36c",
+    "policykit/__init__.py": "00cb5fb0badccdac6aa3f17f00e7b8aaa584376536665f67a6574c69f959c5ed",
+    "policykit/benchmark.py": "1ba82c87bee9b265f9a95199289694c7669256804335e5c00f44856bbb77fa9a",
+    "policykit/cli.py": "0e6a772036af6300a03ed9b41d9cb8e42b6f24acb92b3d621338716fd5ccdb8c",
+    "policykit/config.py": "21bf4cdf7edf907cd05d059f03fec834af03d1a87dddee3095bc974cba08bfd1",
+    "policykit/cuda_bench.py": "fc80139caf76baaecdbab0192094366a6851d1536696c3b3028730c8208a9f66",
+    "policykit/dataset_preflight.py": "206f05e8cc544d1322e7abe9c8ef4b672f261fc864a3c5e9ae5ce17079af982d",
+    "policykit/interleaved_bench.py": "c2bd5b5d4f759a23502fe10f7c0585645cffc0f24e57342e992334a8cfe25094",
+    "policykit/leaderboard.py": "05cb00a5ad4011ff6f01d82cead4f73f62ebbcca5f03f0e9c842e597dc0f007b",
+    "policykit/libero_observation_bench.py": "77a835b6e1a2a0d141c857df9440ec1af250a4faf3bab8a7f8015d88b66c5f36",
+    "policykit/metrics.py": "cd3c6926d76f418915b29eed04a00a6733beefff720e0019af1d065a5f575cca",
+    "policykit/modelopt_pilot.py": "5894e276037ff9a4ceca5f3f8f6e5a1a67b8f48bc91250407f71f9742142151e",
+    "policykit/offline_bench.py": "55a95d77c326595124e1916549b451d267619d99508c87733c72176c1fd9c914",
+    "policykit/output_fidelity.py": "89a80ec721b1e94657638c06fcc3289a140bfe53b5a0f6b3237faef26eaa8785",
+    "policykit/packed_bench.py": "b6f5a1a2bdd86392e65391dfa486c24ce8e31ce01924ecec1612cf436528d578",
+    "policykit/performance_report.py": "e411275172569dae23e0362712bba61cff05072cfa5ea7ad9d671b74d7733e1d",
+    "policykit/prepare_offline.py": "284ac170efadf899229a7a4c18c870a3910675e5b85e194c9f1f27c263930e8f",
+    "policykit/quantization.py": "ddab713d83f1605dcedbbcf86b1e4c241d614b22a45410bbfa0110bda02ab902",
+    "policykit/runtime.py": "90079f4900ae94e85332c1bbb9aa8c1c3cace998e88df578f8ef9647812ae128",
+    "policykit/screen.py": "11dd8336247c1b8d70b0cab379154876a5bd47a6efb2cf3d9ce09937178a1e3e",
+    "policykit/selection.py": "78003cba361cc97571c1925b00b67d4da8eb1c7d1630b16f4851c23dd424268b",
+    "policykit/smoke_rollout.py": "bc21580623f40f07394e38cded85e2f93d4eca98445466b1ad4a0d90440029f6",
+    "pyproject.toml": "80beb0947073e968c5641ef36600e825239918732f4a676873ff748b8f1e660a",
+    "scripts/build_cuda.sh": "5d5378553a298416a285b4941f75c9d454cd1caa70a2a16acd6f6aff657b5a39",
+    "scripts/capture_cuda_environment.py": "925f36969081a7c77f6baac7a717a7f0f6743e01c78238fabb2704f787568c36",
+    "scripts/instrument_cuda_bench.py": "4f3c0fa789f456dc59817b36e25cb3fa38c4ecbdd42bc577358dbdf08c3e9b95",
+    "scripts/prepare_cuda_models.py": "bfb99bf894e5beb1819a30eee0e44f76d12fe082f838f1b263c561f36d6f20f3",
+    "scripts/prepare_modelopt_metadata.py": "b70d19036eeeeeadfcd959bd9a25ba8352c645215ffc7b0664a52236a8e2b9c8",
+    "scripts/run_cuda_rollouts.sh": "2b32588341a6271e0ad7a757bd9a713864358135839852443c91da0f1d69bdeb",
+    "scripts/summarize_cuda_rollouts.py": "ec9d3404c7a2460201795ee828b12c1b608d212bb501ac66393f3ec0793137ad",
+    "tests/test_benchmark.py": "cf41cc8aefe0d7a753149eaccd13724cbd45b9fe0900379de519cf166d373b96",
+    "tests/test_config.py": "95a7caffbfd4a69ca20b2962f83bb7cadc734771dcf9a47512f8e9394cfa066a",
+    "tests/test_cuda_bench.py": "6e91725ae14ee4606faabee016674bc79b6b46ab4d9e9310e1759d33107aed77",
+    "tests/test_dataset_preflight.py": "a5dc8334c2290e7bdceb43bfa80bb304993caa58d65913ff11d3f28ea9e64d85",
+    "tests/test_leaderboard.py": "ef787c911757af21fdf94102f5e3ebb750984cd61a0327b0a2d33c4f853de438",
+    "tests/test_libero_observation_bench.py": "1c1d8d7ae5bc0eef47e969f2945bcf19f0bb4d8f252aafbc99c5dcbdd8cd8442",
+    "tests/test_metrics.py": "6d185deab1b7572d45cdf67cfbafa7e3390688c49197adb1b59fa6ab9493a054",
+    "tests/test_offline_bench.py": "55e9b5a0d60c994117b9044978f875e93f87d8af282d40334d3b0342d9abcd15",
+    "tests/test_output_fidelity.py": "3e00a59c877f97fc129e9b15a581e13a286f907a4f6c708a081decd61f59d90e",
+    "tests/test_packed_runtime.py": "b4f74156af694e15ee6b8851afbbdf7a67bda25e76a0247dce29cba50b4827c8",
+    "tests/test_pipeline_timing.py": "34a7830e5684bbcdd3e5e99681d8cfb092612139b237f00fc47136378b07a844",
+    "tests/test_prepare_offline.py": "6919bd9e05c13c3723215f2e14bdbf31558c5f451bac33697344053bd27297c4",
+    "tests/test_quantization.py": "aba9d5efb1a365587d7e2b374c1cb421027fff8ed9b24e1dea7318bb4b9fef0b",
+    "tests/test_runtime.py": "962aa68c81d4839d2ed5b7e8fcc6e0abdfc9d38f05ca407818b5ac1d43294144",
+    "tests/test_selection.py": "28f7937630e9caabe4233fce2e9eb51101d058e5a81fa91f8b421fe1adc399d6"
+  },
+  "source_checkpoint": {
+    "repository": "HuggingFaceVLA/smolvla_libero",
+    "revision": "6721902bc4d61e50a3bfdb11dfb4cb626f05d102",
+    "model_sha256": "71d9563c8295284acba8fc2d5c19de000d6fe9ba58a406832af7ef3d221ed52f"
+  },
+  "runtime_base_commit": "52439f7c6c362d7bee218b400b9080cc32d75cc3",
+  "runtime_patch_sha256": "a5ab0671d77e15a9053a3bc3d595c87eb98d65adc4d21f50d8a5a2e388d293f3",
+  "benchmark_binary_sha256": "f8e66d9c0efa3d4bba1c1edc75b2c53fa557c79d77d9e71f76603129d7ec29f5",
+  "engine_report_sha256": "9fa8f3c8c0d98ec9eca6b39a500ebcd85700ea097a736312eefd05f8c316f20f",
+  "rollout_report_sha256": "d5011e231417d2d89edebeb5970f6de9c008a40e08c1a083d2bf6c19140a43a9",
+  "evidence_archive_sha256": "eb9f27a34618724f37fd6e556aa1585dc5bd68ae1f6877fed3b64e2f4dc75a0a",
+  "images": [
+    {
+      "tag": "firebird-quant-cuda:20260926",
+      "id": "sha256:db553119e92dd23e1822266ee1a011ea12e274fb2fa758f36aa5c5d5a88683e2",
+      "created": "2026-09-26T16:34:50.5821678+04:00",
+      "architecture": "amd64"
+    },
+    {
+      "tag": "firebird-quant-sim:20260926",
+      "id": "sha256:29feee6acdad06aa97d9a286ab6e7392b7f43a47f69e6899b1e156c01644d77b",
+      "created": "2026-09-26T17:06:13.463001971+04:00",
+      "architecture": "amd64"
+    },
+    {
+      "tag": "firebird-modelopt:20260926",
+      "id": "sha256:50a3db08379900c723380719f469c01d7f48c37f2edd20989eaa444f7861e65c",
+      "created": "2026-09-26T17:04:11.344500243+04:00",
+      "architecture": "amd64"
+    }
+  ],
+  "engine_results": [
+    {
+      "preset": "float_reference",
+      "sha256": "ed2c28e16ca6bb0d312483b6a57d306f6bb09360fc9a99e37a3a30f1beaa90c3",
+      "size_mib": 1074.1813049316406,
+      "weight_buffer_mib": 1069.0,
+      "timed_calls": 60,
+      "p50_ms": 170.933857,
+      "p95_ms": 205.2232086,
+      "action_mae": 0.0,
+      "action_max_abs": 0.0
+    },
+    {
+      "preset": "lm_q8",
+      "sha256": "d702cc52c89a1a8f1caa00f49df8c14f4633673b6c36d27cb887643edb1daf76",
+      "size_mib": 792.9313049316406,
+      "weight_buffer_mib": 787.8,
+      "timed_calls": 60,
+      "p50_ms": 161.4249275,
+      "p95_ms": 167.5701648,
+      "action_mae": 0.0025710892961318173,
+      "action_max_abs": 0.013803928999999993
+    },
+    {
+      "preset": "lm_q4",
+      "sha256": "5d9706af2f1f305a0bdb939ddd57f74164ad931cd335bec43487758ec1991037",
+      "size_mib": 642.9313049316406,
+      "weight_buffer_mib": 637.8,
+      "timed_calls": 60,
+      "p50_ms": 161.0303355,
+      "p95_ms": 167.36805255,
+      "action_mae": 0.010631288520856461,
+      "action_max_abs": 0.040987224000000044
+    },
+    {
+      "preset": "lm_q8_vision_q8",
+      "sha256": "1da7e8031e5b8821aaf40c03f9b00dba3bbe42d572a4ddc7a8d2f91d566b6a66",
+      "size_mib": 716.9938049316406,
+      "weight_buffer_mib": 711.8,
+      "timed_calls": 60,
+      "p50_ms": 153.32341000000002,
+      "p95_ms": 192.662408,
+      "action_mae": 0.005075195440116675,
+      "action_max_abs": 0.041543423999999995
+    },
+    {
+      "preset": "lm_q4_vision_q8",
+      "sha256": "b36a44d3c46c3925308e9c1cce88c4411aff696592fb4b7f04dba32f5a06a133",
+      "size_mib": 566.9938049316406,
+      "weight_buffer_mib": 561.8,
+      "timed_calls": 60,
+      "p50_ms": 152.9068165,
+      "p95_ms": 161.44539780000002,
+      "action_mae": 0.00874449530404304,
+      "action_max_abs": 0.03392743318
+    }
+  ],
+  "paired_episodes": {
+    "scope": "One paired development episode per candidate; no population success-rate claim",
+    "protocol": {
+      "task": "libero_object",
+      "task_id": 0,
+      "init_state_id": 0,
+      "seed": 42,
+      "policy_noise_seed": 42,
+      "action_steps": 4,
+      "step_budget": 500,
+      "simulator_commit": "8f1084e3132a39270c3a13ebe37270a43ece2a01",
+      "evaluation_inputs": {
+        "task_name": "pick_up_the_alphabet_soup_and_place_it_in_the_basket",
+        "language": "pick up the alphabet soup and place it in the basket",
+        "initial_states": {
+          "path": "/workspace/artifacts/docker/LIBERO/libero/libero/init_files/libero_object/pick_up_the_alphabet_soup_and_place_it_in_the_basket.pruned_init",
+          "sha256": "b9023e5546b239cacb2aaa3c76df3b73c3de6f97500fea5e27a0db9827002a19"
+        },
+        "task_definition": {
+          "path": "/workspace/artifacts/docker/LIBERO/libero/libero/bddl_files/libero_object/pick_up_the_alphabet_soup_and_place_it_in_the_basket.bddl",
+          "sha256": "df088984da13131f8332ee0f13a7896c6a97afd02ee5007a42e8fc5e0893571e"
+        }
+      },
+      "runtime_binary_sha256": "0b8e2032a548bbc26b75220415e80ac66227c29969aa87bb331859644fafe311",
+      "tokenizer": "/workspace/artifacts/cuda/modelopt-metadata"
+    },
+    "results": [
+      {
+        "preset": "float_reference",
+        "task_success": true,
+        "steps": 208,
+        "terminated": true,
+        "truncated": false,
+        "artifact_sha256": "ed2c28e16ca6bb0d312483b6a57d306f6bb09360fc9a99e37a3a30f1beaa90c3",
+        "result_sha256": "d3c8a0d0ece4cf4e5f430679f6b6cdfa6ddba48c9a0e39a90cc61074c73aedb7",
+        "observation_space_mismatches": [
+          "observation.task_description"
+        ],
+        "videos": [
+          {
+            "path": "artifacts/cuda/runs/smolvla-cuda-libero-v1/float_reference/task0-init0-seed42-steps500/videos/episode_000000.mp4",
+            "sha256": "790e3193ecc2045eae2c9caa220d952a3583271352e8b1b82bbbe13fa73de0f7",
+            "bytes": 312611
+          }
+        ]
+      },
+      {
+        "preset": "lm_q8",
+        "task_success": true,
+        "steps": 128,
+        "terminated": true,
+        "truncated": false,
+        "artifact_sha256": "d702cc52c89a1a8f1caa00f49df8c14f4633673b6c36d27cb887643edb1daf76",
+        "result_sha256": "d286eed66f7953e3aa743e538140f68df41fd9555fd071de1e48c0617a3841bb",
+        "observation_space_mismatches": [
+          "observation.task_description"
+        ],
+        "videos": [
+          {
+            "path": "artifacts/cuda/runs/smolvla-cuda-libero-v1/lm_q8/task0-init0-seed42-steps500/videos/episode_000000.mp4",
+            "sha256": "1d909bd7dfa42096a1b4210b89d7be762b3b2f5b6fdf1ae309a9a74458625b6a",
+            "bytes": 197124
+          }
+        ]
+      },
+      {
+        "preset": "lm_q4",
+        "task_success": true,
+        "steps": 169,
+        "terminated": true,
+        "truncated": false,
+        "artifact_sha256": "5d9706af2f1f305a0bdb939ddd57f74164ad931cd335bec43487758ec1991037",
+        "result_sha256": "ca8b60a36a8e0ec20874012cff7b9906c46fd3ae1021fae84ef476345ac3e92d",
+        "observation_space_mismatches": [
+          "observation.task_description"
+        ],
+        "videos": [
+          {
+            "path": "artifacts/cuda/runs/smolvla-cuda-libero-v1/lm_q4/task0-init0-seed42-steps500/videos/episode_000000.mp4",
+            "sha256": "9221dcd4913378791fa6b073759078910269208a735576932ffa7dd25a4b9ffa",
+            "bytes": 261598
+          }
+        ]
+      },
+      {
+        "preset": "lm_q8_vision_q8",
+        "task_success": true,
+        "steps": 128,
+        "terminated": true,
+        "truncated": false,
+        "artifact_sha256": "1da7e8031e5b8821aaf40c03f9b00dba3bbe42d572a4ddc7a8d2f91d566b6a66",
+        "result_sha256": "2933abdf126c88bb7d821ad8506e2f9bef45bc756d9530bab7ecf96cf9fd2e3e",
+        "observation_space_mismatches": [
+          "observation.task_description"
+        ],
+        "videos": [
+          {
+            "path": "artifacts/cuda/runs/smolvla-cuda-libero-v1/lm_q8_vision_q8/task0-init0-seed42-steps500/videos/episode_000000.mp4",
+            "sha256": "839fc678585a36cc7eb21125071d435122f980c5462df724892798ea865b09aa",
+            "bytes": 195483
+          }
+        ]
+      },
+      {
+        "preset": "lm_q4_vision_q8",
+        "task_success": false,
+        "steps": 500,
+        "terminated": false,
+        "truncated": true,
+        "artifact_sha256": "b36a44d3c46c3925308e9c1cce88c4411aff696592fb4b7f04dba32f5a06a133",
+        "result_sha256": "79125f6e9b15a1497e107adac7fff4d6085791b8da06c8bdc87b47b5406acc61",
+        "observation_space_mismatches": [
+          "observation.task_description"
+        ],
+        "videos": [
+          {
+            "path": "artifacts/cuda/runs/smolvla-cuda-libero-v1/lm_q4_vision_q8/task0-init0-seed42-steps500/videos/episode_000000.mp4",
+            "sha256": "46c3e4babb6eeac8ec41785b980bf1e60954ecb4d8880ed1a94c9348810df974",
+            "bytes": 607742
+          }
+        ]
+      }
+    ],
+    "deployment_winner": null
+  },
+  "modelopt": {
+    "awq": {
+      "status": "fake_quant_numerics_verified",
+      "versions": {
+        "torch": "2.7.1+cu128",
+        "transformers": "4.57.1",
+        "lerobot": "0.4.3",
+        "nvidia-modelopt": "0.41.0"
+      },
+      "calibration_seconds": 19.69851535399721,
+      "action_mae": 0.02156842313706875,
+      "action_max_abs": 1.985586166381836,
+      "per_channel_mae": [
+        0.02129378728568554,
+        0.03576685115695,
+        0.04077298194169998,
+        0.0023847888223826885,
+        0.012827625498175621,
+        0.007307474501430988,
+        0.030625401064753532
+      ],
+      "export_status": "failed",
+      "export_error": "AttributeError: 'SmolVLAConfig' object has no attribute 'torch_dtype'",
+      "protected_parameters_sha256_before": "3ae7e03441eeaf34f7d1d2a93ac44e3a9849a1fa7e816a0a1c96f56cc58bb9fc",
+      "protected_parameters_sha256_after": "3ae7e03441eeaf34f7d1d2a93ac44e3a9849a1fa7e816a0a1c96f56cc58bb9fc",
+      "parameter_elements_by_dtype": {
+        "torch.float32": 149570176,
+        "torch.bfloat16": 455364000
+      },
+      "target_lm_parameter_elements_by_dtype": {
+        "torch.bfloat16": 314634240
+      },
+      "cuda_autocast_dtype": "bfloat16",
+      "run_id": "modelopt-awq-v2",
+      "enabled_quantizer_count": 224,
+      "calibration_count": 3,
+      "evaluation_count": 4,
+      "results_sha256": "4f4ae2baae2d1ccef862eb1acc53cce3992d5b03bc34839d2d03fa2da0a42402"
+    },
+    "smoothquant": {
+      "status": "fake_quant_numerics_verified",
+      "versions": {
+        "torch": "2.7.1+cu128",
+        "transformers": "4.57.1",
+        "lerobot": "0.4.3",
+        "nvidia-modelopt": "0.41.0"
+      },
+      "calibration_seconds": 7.229567598998983,
+      "action_mae": 0.04634479433298111,
+      "action_max_abs": 2.0738561153411865,
+      "per_channel_mae": [
+        0.041907332837581635,
+        0.030600396916270256,
+        0.0735720694065094,
+        0.0028758393600583076,
+        0.01085665076971054,
+        0.009011519141495228,
+        0.15558983385562897
+      ],
+      "export_status": "failed",
+      "export_error": "AttributeError: 'SmolVLAConfig' object has no attribute 'torch_dtype'",
+      "protected_parameters_sha256_before": "3ae7e03441eeaf34f7d1d2a93ac44e3a9849a1fa7e816a0a1c96f56cc58bb9fc",
+      "protected_parameters_sha256_after": "3ae7e03441eeaf34f7d1d2a93ac44e3a9849a1fa7e816a0a1c96f56cc58bb9fc",
+      "parameter_elements_by_dtype": {
+        "torch.float32": 149570176,
+        "torch.bfloat16": 455364000
+      },
+      "target_lm_parameter_elements_by_dtype": {
+        "torch.bfloat16": 314634240
+      },
+      "cuda_autocast_dtype": "bfloat16",
+      "run_id": "modelopt-smoothquant-v2",
+      "enabled_quantizer_count": 448,
+      "calibration_count": 3,
+      "evaluation_count": 4,
+      "results_sha256": "e2cca2891223ccf440460b363290a1de7ac624c50a1ae1bdd4ffb7480cbb4347"
+    }
+  },
+  "validation": {
+    "remote_python_passed": 63,
+    "remote_python_skipped": 2,
+    "scope": "CPU-path skips; CUDA separately exercised by actual engine/rollout runs"
+  },
+  "deployment_winner": null,
+  "modelopt_dtype_audit_sha256": "d34c2ed196bd63ea7f0de69dd46b9d3f489265e4aac7d187145ccb97ae05651f"
+}
