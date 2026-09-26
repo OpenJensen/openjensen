@@ -268,43 +268,11 @@ def offline_environment(output, lane):
 def spatial_contract(source, manifest):
     """Check the 6-to-8 state correction and exact serialized normalization."""
     import gguf
-    import numpy as np
-    from safetensors.numpy import load_file
+
+    from .spatial_validation import validate_spatial_layout
 
     contract = artifact_contract(source, manifest)
-    required = {"chunk_size": 50, "max_action_dim": 32, "real_action_dim": 7, "image_size": 512}
-    if any(contract[key] != value for key, value in required.items()):
-        raise ValueError("GGUF and Spatial inference protocol disagree")
-    reader = gguf.GGUFReader(source / "model.gguf")
-    for name, expected in (("real_state_dim", 8), ("max_state_dim", 32), ("num_steps", 10)):
-        field = reader.fields.get("smolvla." + name)
-        if field is None or field.contents() != expected:
-            raise ValueError("GGUF lacks the verified Spatial state/denoising contract: " + name)
-    tensors = {tensor.name: tensor for tensor in reader.tensors}
-    for filename, prefix, feature, dimension in (
-        (
-            "policy_preprocessor_step_5_normalizer_processor.safetensors",
-            "state",
-            "observation.state",
-            8,
-        ),
-        ("policy_postprocessor_step_0_unnormalizer_processor.safetensors", "action", "action", 7),
-    ):
-        saved = load_file(source / "policy" / filename)
-        for suffix in ("mean", "std"):
-            value = saved.get(feature + "." + suffix)
-            tensor = tensors.get(prefix + "_" + suffix)
-            if value is None or tensor is None:
-                raise ValueError("Missing serialized normalization statistics")
-            native = np.asarray(value, dtype=np.float32).reshape(-1)
-            converted = gguf.quants.dequantize(tensor.data, tensor.tensor_type).reshape(-1)
-            if (
-                native.shape != (dimension,)
-                or converted.shape != (dimension,)
-                or not np.isfinite(native).all()
-                or not np.array_equal(native, converted)
-            ):
-                raise ValueError("GGUF normalization differs from the native processor")
+    validate_spatial_layout(gguf.GGUFReader(source / "model.gguf"), source)
     return contract
 
 

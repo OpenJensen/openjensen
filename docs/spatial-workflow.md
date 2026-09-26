@@ -6,6 +6,69 @@ synthetic subprocess fixtures; they do not establish L4 quality, memory savings,
 latency or a deployable robot capability. L4 access, resource budget, final-state
 approval and measured acceptance remain pending.
 
+## Validate local assets before GPU work
+
+The offline preflight checks an already prepared reference bundle and its paired
+floating GGUF. Run it from the application checkout with the existing Python 3.11
+worker environment (`quantize` and `test` extras provide GGUF, NumPy and
+safetensors without Torch). Dependency installation is a separate setup step;
+`--offline --frozen` below requires those dependencies to be available locally.
+Replace the paths and both expected SHA256 values with the inspected source
+identities, not hashes of a newly substituted candidate:
+
+```sh
+uv run --offline --frozen --project workers/vla_cpp --extra quantize --extra test \
+  python -m policykit.spatial_preflight \
+  --bundle /local/spatial-bundle \
+  --bundle-sha256 EXPECTED_SPATIAL_ASSETS_JSON_SHA256 \
+  --gguf /local/smolvla-bf16.gguf \
+  --gguf-sha256 EXPECTED_FLOATING_GGUF_SHA256
+```
+
+The command only reads local files and emits one versioned JSON receipt on stdout.
+Exit zero means `static_assets_verified`; validation failure emits `status: failed`
+and exits one. It never writes a receipt over an input file. The receipt identifies
+both source hashes, the full asset inventory, fixed fixture hashes, validator code,
+Python, dependency versions and the source checkout's worker lock when present.
+Keep inputs unchanged while inspecting them. Model identities are streamed hashes;
+the checker does not deserialize the native policy or execute the GGUF.
+
+The shared checks require a floating F32/BF16 SmolVLA source, its pinned native
+weight and backbone identities, exact 8-state/7-action normalization, 50×32 padded
+actions, ten denoising steps and the declared image layout. Packed GGUF candidates
+cannot serve as the floating reference. Required normalization vectors must be
+finite F32 and match exactly; negative standard deviations fail, while zero values
+retain the processor's existing epsilon semantics. Additional serialized processor
+statistics are allowed within a 1 MiB file and 64 KiB metadata bound.
+
+Every fixed NPZ is checked before array allocation: exact field names, shapes,
+dtypes, finite values, RGB bounds, one bounded Unicode task and no pickle. Each
+archive is capped at 16 MiB both compressed and expanded; the existing fixture-set
+limit is 64 unique fixtures and 256 MiB compressed total. Header validation and
+decoding use the same immutable bytes, bound to the inventory hash, so replacing
+a pathname between those operations cannot bypass the bounds. Normalization
+files use the same snapshot approach. Duplicate entries, oversized declared shapes,
+corrupt bytes and changed identities fail validation.
+
+The existing [local bundle preparation command](../workers/vla_cpp/docs/spatial-application.md#prepare-exact-local-assets)
+now runs these same checks in a private sibling staging directory. It publishes
+the requested output only after success and prints the final manifest digest.
+Publication refuses any existing destination, including one created during
+preparation, and failure removes only its own staging directory. Inputs and other
+staging directories remain unchanged. Atomic no-replace publication uses the
+platform's native operation on Linux, macOS and Windows; unavailable operations
+fail closed. This change has local macOS coverage. Linux CI is pending; native Windows
+publication is implemented but unverified.
+
+`static_assets_verified` is deliberately limited to hashes, declared GGUF layout,
+normalization and fixture arrays. The receipt marks **GPU, runtime, episodes,
+authorization, action parity and model loading as not checked**. It does not prove
+a complete executable weight inventory or confer selection/deployment eligibility.
+Tests use tiny actual-format files with synthetic contents; the real pinned bundle
+and its full model remain unexercised in this CPU-only slice. Preparing simulator
+assets, capturing real observations, approving thresholds, and running the L4
+acceptance protocol remain separate steps.
+
 ## Configure and submit
 
 Use the [Spatial runtime template](runtime.spatial.example.json). Replace every

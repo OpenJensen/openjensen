@@ -7,10 +7,14 @@ Native reference weights are excluded from deployable C++ candidate inventories.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import json
+import os
+import platform
 import re
 import shutil
+import tempfile
 from pathlib import Path, PurePosixPath
 
 from .worker import atomic_json, canonical, sha256
@@ -238,9 +242,47 @@ def protocol(evaluation, assets, simulator, final=False):
     return value, digest(value)
 
 
+def publish_new_directory(staging, output):
+    """Atomic publication that cannot replace even a raced empty destination."""
+    system = platform.system()
+    if system == "Windows":
+        # Windows rename rejects every existing destination, unlike POSIX rename.
+        os.rename(staging, output)
+        return
+    libc = ctypes.CDLL(None, use_errno=True)
+    if system == "Linux" and hasattr(libc, "renameat2"):
+        rename = libc.renameat2
+        rename.argtypes = (
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        )
+        arguments = (-100, os.fsencode(staging), -100, os.fsencode(output), 1)
+    elif system == "Darwin" and hasattr(libc, "renamex_np"):
+        rename = libc.renamex_np
+        rename.argtypes = (ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint)
+        arguments = (os.fsencode(staging), os.fsencode(output), 0x00000004)
+    else:
+        raise OSError("Atomic no-replace directory publication is unavailable on this platform")
+    rename.restype = ctypes.c_int
+    if rename(*arguments) != 0:
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error), str(output))
+
+
 def prepare(policy, backbone, fixtures, gguf, output):
-    """Copy only already-cached local files; never downloads or executes a model."""
+    """Validate local inputs in owned staging; publish the complete directory once."""
+    from .spatial_preflight import preflight
+
     policy, backbone, fixtures, gguf, output = map(Path, (policy, backbone, fixtures, gguf, output))
+    if any(
+        output.resolve().is_relative_to(path.resolve()) for path in (policy, backbone, fixtures)
+    ):
+        raise ValueError("Bundle output must be outside the source input directories")
+    if os.path.lexists(output):
+        raise FileExistsError("Preserve the existing output before preparing again: " + str(output))
     if policy.name != REVISION or backbone.name != BACKBONE_REVISION:
         raise ValueError("Use the exact pinned local snapshot directories")
     if sha256(policy / "model.safetensors") != WEIGHTS_SHA256:
@@ -248,31 +290,45 @@ def prepare(policy, backbone, fixtures, gguf, output):
     names = sorted(path.name for path in fixtures.glob("*.npz"))
     if not names or len(names) > 64:
         raise ValueError("Provide 1..64 pre-captured observation/noise fixtures")
-    output.mkdir(parents=True, exist_ok=False)
-    for directory, files, prefix in (
-        (policy, (*POLICY_FILES, "model.safetensors"), "policy"),
-        (backbone, BACKBONE_FILES, "backbone"),
-        (fixtures, names, "fixtures"),
-    ):
-        (output / prefix).mkdir()
-        for name in files:
-            shutil.copyfile(directory / name, output / prefix / name)
-    record = {
-        "schema_version": 1,
-        "checkpoint": {"repo_id": MODEL, "revision": REVISION, "weights_sha256": WEIGHTS_SHA256},
-        "backbone": {"repo_id": BACKBONE, "revision": BACKBONE_REVISION},
-        "floating_gguf_sha256": sha256(gguf),
-        "reference_weights": True,
-        "fixtures": ["fixtures/" + x for x in names],
-        "files": {
-            p.relative_to(output).as_posix(): sha256(p)
-            for p in sorted(output.rglob("*"))
-            if p.is_file()
-        },
-    }
-    atomic_json(output / "spatial-assets.json", record)
-    verify_assets(output, require_reference=True)
-    return record
+    model_sha = sha256(gguf)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(
+        tempfile.mkdtemp(prefix="." + output.name + "-", suffix=".staging", dir=output.parent)
+    )
+    try:
+        for directory, files, prefix in (
+            (policy, (*POLICY_FILES, "model.safetensors"), "policy"),
+            (backbone, BACKBONE_FILES, "backbone"),
+            (fixtures, names, "fixtures"),
+        ):
+            (staging / prefix).mkdir()
+            for name in files:
+                shutil.copyfile(directory / name, staging / prefix / name)
+        record = {
+            "schema_version": 1,
+            "checkpoint": {
+                "repo_id": MODEL,
+                "revision": REVISION,
+                "weights_sha256": WEIGHTS_SHA256,
+            },
+            "backbone": {"repo_id": BACKBONE, "revision": BACKBONE_REVISION},
+            "floating_gguf_sha256": model_sha,
+            "reference_weights": True,
+            "fixtures": ["fixtures/" + x for x in names],
+            "files": {
+                p.relative_to(staging).as_posix(): sha256(p)
+                for p in sorted(staging.rglob("*"))
+                if p.is_file()
+            },
+        }
+        atomic_json(staging / "spatial-assets.json", record)
+        preflight(staging, sha256(staging / "spatial-assets.json"), gguf, model_sha)
+        publish_new_directory(staging, output)
+        return record
+    finally:
+        # Never remove a caller's destination, source, or another operation's staging.
+        if staging.exists():
+            shutil.rmtree(staging)
 
 
 def main():
