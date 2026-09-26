@@ -180,10 +180,21 @@ class RunnerTests(unittest.TestCase):
             source = root / "input"
             source.mkdir(mode=0o700)
             (source / "worker.py").write_text("original")
+            assets = source / "jobs" / "my-scene" / "assets"
+            assets.mkdir(parents=True)
+            (assets.parent / "job.local.yaml").write_text("scene: {uri: scene.usda}\n")
+            (assets.parent / "scene.usda").write_text("#usda 1.0\n")
+            texture = assets / "texture.png"
+            texture.write_bytes(b"original texture")
             first = runner._snapshot(source, root / "first")
             (source / "worker.py").write_text("changed")
+            texture.write_bytes(b"changed texture")
             second = runner._snapshot(source, root / "second")
             self.assertEqual((root / "first" / "worker.py").read_text(), "original")
+            frozen = root / "first" / "jobs" / "my-scene"
+            self.assertTrue((frozen / "job.local.yaml").is_file())
+            self.assertEqual((frozen / "scene.usda").read_text(), "#usda 1.0\n")
+            self.assertEqual((frozen / "assets" / "texture.png").read_bytes(), b"original texture")
             self.assertEqual((root / "first").stat().st_mode & 0o777, 0o755)
             self.assertNotEqual(first, second)
 

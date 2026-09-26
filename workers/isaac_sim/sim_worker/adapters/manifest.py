@@ -46,6 +46,27 @@ def _integer(value: object, maximum: int, label: str) -> int:
     return value
 
 
+def _scene_path(uri: object, manifest: Path) -> str:
+    if not isinstance(uri, str):
+        raise ValueError("scene.uri must be a string")
+    if uri == BUILTIN_SCENE:
+        return uri
+
+    target = urlsplit(uri)
+    location = Path(uri)
+    if (target.scheme or target.netloc or target.query or target.fragment
+            or location.suffix.lower() not in _USD_SUFFIXES):
+        raise ValueError("scene.uri must be builtin:falling-cube or a USD file path")
+    if location.is_absolute():
+        return uri
+
+    # Resolve after transfer so a bundle works on both client and container.
+    location = (manifest.parent / location).resolve()
+    if not location.is_file():
+        raise ValueError(f"Scene file not found: {location}")
+    return str(location)
+
+
 def load(path: Path) -> RunSpec:
     with path.open("rb") as source:
         contents = source.read(_MAX_MANIFEST_BYTES + 1)
@@ -60,13 +81,7 @@ def load(path: Path) -> RunSpec:
     scene = _fields(data["scene"], {"uri", "camera"}, "scene")
     capture = _fields(data["capture"], {"width", "height", "fps", "frames"}, "capture")
     outputs = _fields(data["outputs"], {"uri"}, "outputs")
-    uri = scene["uri"]
-    if not isinstance(uri, str):
-        raise ValueError("scene.uri must be a string")
-    if uri != BUILTIN_SCENE:
-        location = Path(uri)
-        if not location.is_absolute() or location.suffix.lower() not in _USD_SUFFIXES:
-            raise ValueError("scene.uri must be builtin:falling-cube or an absolute USD path")
+    uri = _scene_path(scene["uri"], path)
 
     camera = scene["camera"]
     if not isinstance(camera, str) or not re.fullmatch(r"(/[A-Za-z_][A-Za-z_0-9]*)+", camera):

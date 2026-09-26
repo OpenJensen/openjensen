@@ -22,11 +22,11 @@ application operation is registered by this transfer.
 example. Copy it to `demo.local.yaml` and set `outputs.uri` to your GCS prefix.
 The bundled scene contains a falling cube, ground, light and camera.
 
-For another scene, use an absolute container USD path and camera prim path.
-All scene dependencies must be mounted. GCS scene staging and policy execution
-are not implemented. Validation rejects unknown/duplicate keys, YAML aliases,
-unsupported URIs and invalid capture values. Limits are 1920×1080, 60 fps and
-600 seconds; H.264 dimensions must be even.
+`scene.uri` accepts `.usd`, `.usda` and `.usdc` files. Relative paths resolve
+from the manifest directory and must exist during validation; absolute
+container paths remain supported. Validation rejects unknown/duplicate keys,
+YAML aliases, unsupported URIs and invalid capture values. Limits are
+1920×1080, 60 fps and 600 seconds; H.264 dimensions must be even.
 
 Each invocation creates a UUID below `outputs.uri`:
 
@@ -47,6 +47,48 @@ and warmup took about eight minutes on the tested L4 host.
 
 The worker rejects entirely black builtin-demo output before publishing
 success. This guard does not validate motion or custom scenes, which may be dark.
+
+## Custom scenes
+
+Keep the scene and its dependencies together:
+
+```text
+workers/isaac_sim/jobs/my-scene/
+├── job.local.yaml
+├── scene.usda
+└── assets/           # referenced layers, models and textures
+```
+
+From this directory, copy the manifest template:
+
+```sh
+mkdir -p jobs/my-scene
+cp scene.example.yaml jobs/my-scene/job.local.yaml
+```
+
+Copy your scene bundle there, preserving relative references and directories.
+Set `outputs.uri` to your GCS prefix and edit the manifest's scene:
+
+```yaml
+scene:
+  uri: scene.usda
+  camera: /World/Camera
+```
+
+Use an existing camera prim. The scene must supply lighting and any physics
+needed for motion. Recording starts at time zero; the worker supplies no
+policies or controllers. GCS scene staging is not implemented.
+
+Check the manifest and scene path with the worker's Python 3.12 environment:
+
+```sh
+python -m sim_worker --manifest jobs/my-scene/job.local.yaml --validate-only
+```
+
+`jobs/` is ignored by Git but synced by SkyPilot. Submit with
+`SIM_MANIFEST=jobs/my-scene/job.local.yaml`; see the
+[launcher commands](../skypilot/README.md#custom-usda-jobs). No image rebuild
+is needed. Custom scenes require their own GPU validation.
 
 ## Build
 

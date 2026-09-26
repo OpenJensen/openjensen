@@ -88,6 +88,23 @@ another submission. Dependency or Isaac version changes need a new image.
 Setup installs a missing Vulkan loader and checks graphics dependencies without
 replacing the NVIDIA driver.
 
+### Custom USDA jobs
+
+Prepare a [scene bundle](../isaac_sim/README.md#custom-scenes) under
+`../isaac_sim/jobs/my-scene/`, with `job.local.yaml`, `scene.usda` and its
+dependencies. From this directory:
+
+```bash
+# New or stopped cluster.
+SIM_MANIFEST=jobs/my-scene/job.local.yaml ACCEPT_EULA=Y bash launch.sh
+
+# Running cluster.
+bash sky.sh exec isaac-sim task.yaml --env ACCEPT_EULA=Y \
+  --env SIM_MANIFEST=jobs/my-scene/job.local.yaml
+```
+
+Each submission syncs the bundle. Scene changes need no image rebuild.
+
 ## Results and cleanup
 
 The MP4 remains at the manifest's `outputs.uri/<worker UUID>/video.mp4`;

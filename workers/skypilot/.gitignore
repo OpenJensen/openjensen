@@ -1,5 +1,5 @@
-.venv/
-.tools/
+.venv
+.tools
 __pycache__/
 *.pyc
 config.yaml
