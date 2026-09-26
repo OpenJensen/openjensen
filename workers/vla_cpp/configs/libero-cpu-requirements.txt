@@ -1,0 +1,30 @@
+# Minimal evaluation dependencies; install lerobot==0.4.3 separately with
+# --no-deps. Its declared rerun viewer dependency requires NumPy 2 and is
+# excluded from this evaluation-only environment; full LeRobot usage is untested.
+torch==2.7.1+cpu
+torchvision==0.22.1+cpu
+numpy==1.26.4
+robosuite==1.4.0
+mujoco==2.3.2
+bddl==1.0.1
+robomimic==0.2.0
+transformers==4.51.3
+diffusers==0.30.1
+einops==0.8.1
+msgpack==1.1.0
+msgpack-numpy==0.4.8
+gymnasium==1.1.1
+opencv-python-headless==4.11.0.86
+dm_tree
+easydict
+imageio-ffmpeg
+pyzmq
+datasets>=4.0,<4.2
+accelerate>=1.10,<2
+draccus==0.10.0
+jsonlines>=4,<5
+termcolor>=2.4,<4
+av>=15,<16
+huggingface-hub>=0.34.2,<0.36
+wandb>=0.24,<0.25
+deepdiff>=7,<9
