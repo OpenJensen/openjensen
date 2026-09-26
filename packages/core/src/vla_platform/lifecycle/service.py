@@ -8,6 +8,7 @@ import re
 import signal
 import tarfile
 import tempfile
+import threading
 from pathlib import Path
 
 from vla_platform.contracts import TERMINAL, DatasetProfile, Job, now
@@ -57,6 +58,7 @@ class Lifecycle:
         self.settings = execution.settings
         self.catalog = RuntimeCatalog.load(self.settings.runtime_config)
         self.sequences: dict[str, int] = {}
+        self.export_lock = threading.Lock()
 
     async def artifacts(self, project_id: str):
         return [
@@ -106,15 +108,19 @@ class Lifecycle:
         destination.parent.mkdir(exist_ok=True)
 
         def archive():
-            # Concurrent downloads must never write the same temporary file.
-            with tempfile.NamedTemporaryFile(dir=destination.parent, delete=False) as stream:
-                temporary = Path(stream.name)
-            try:
-                with tarfile.open(temporary, "w") as tar:
-                    tar.add(directory, arcname="policy")
-                temporary.replace(destination)
-            finally:
-                temporary.unlink(missing_ok=True)
+            # Windows cannot replace an archive while another FileResponse reads it.
+            # The thread lock also survives cancellation of the awaiting HTTP request.
+            with self.export_lock:
+                if destination.exists():
+                    return
+                with tempfile.NamedTemporaryFile(dir=destination.parent, delete=False) as stream:
+                    temporary = Path(stream.name)
+                try:
+                    with tarfile.open(temporary, "w") as tar:
+                        tar.add(directory, arcname="policy")
+                    temporary.replace(destination)
+                finally:
+                    temporary.unlink(missing_ok=True)
 
         if not destination.exists():
             await asyncio.to_thread(archive)
