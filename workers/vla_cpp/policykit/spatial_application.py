@@ -213,6 +213,38 @@ def measure_child(command, output, env, stages, target, timeout):
     return measurements
 
 
+def run_package_process(command, *, timeout, **kwargs):
+    """Allow the nested Spatial supervisor to clean up before forced termination."""
+    import psutil
+
+    process = subprocess.Popen(command, **kwargs)
+    try:
+        process.wait(timeout=timeout)
+    except BaseException:
+        try:
+            descendants = psutil.Process(process.pid).children(recursive=True)
+        except psutil.NoSuchProcess:
+            descendants = []
+        try:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+        finally:
+            # Fallback for an unresponsive supervisor; psutil's Process object
+            # checks PID reuse before killing a previously observed descendant.
+            for child in reversed(descendants):
+                try:
+                    child.kill()
+                except psutil.NoSuchProcess:
+                    pass
+            psutil.wait_procs(descendants, timeout=2)
+        raise
+    return subprocess.CompletedProcess(command, process.returncode)
+
+
 def offline_environment(output, lane):
     cache = Path(output) / "empty-hf-cache"
     cache.mkdir(exist_ok=False)

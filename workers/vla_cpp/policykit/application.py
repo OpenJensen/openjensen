@@ -492,8 +492,13 @@ def evaluate_package(job, package):
         + repr(str(Path(__file__).resolve().parents[1]))
         + "); from policykit.application import main; raise SystemExit(main())"
     )
+    run_child = subprocess.run
+    if job["parameters"]["evaluation"].get("suite") == "libero_spatial":
+        from .spatial_application import run_package_process
+
+        run_child = run_package_process
     with (output / "worker.log").open("w") as log:
-        completed = subprocess.run(
+        completed = run_child(
             [sys.executable, "-c", bootstrap, str(request.resolve()), str(result.resolve())],
             cwd=output,
             env={**os.environ, "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"},

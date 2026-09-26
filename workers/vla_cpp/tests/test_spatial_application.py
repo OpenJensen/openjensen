@@ -667,3 +667,38 @@ def test_cancellation_during_spawn_is_not_lost_and_restores_signal_handlers(tmp_
         )
     assert children[0].poll() is not None
     assert signal.getsignal(signal.SIGTERM) == previous
+
+
+@pytest.mark.skipif(os.name != "posix", reason="Spatial Linux process group contract")
+def test_outer_package_timeout_cleans_detached_inference_tree(tmp_path):
+    import psutil
+
+    worker = Path(application.__file__).resolve().parents[1]
+    child_code = """
+import subprocess, sys, os, pathlib, time
+server = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
+pathlib.Path('inference.pid').write_text(str(os.getpid()))
+pathlib.Path('server.pid').write_text(str(server.pid))
+time.sleep(60)
+"""
+    wrapper = (
+        "import sys, os; from pathlib import Path; from types import SimpleNamespace\n"
+        f"sys.path.insert(0, {str(worker)!r})\n"
+        "from policykit import spatial_application as app\n"
+        "app.subprocess.run = lambda *a, **k: SimpleNamespace(stdout='',returncode=0)\n"
+        f"app.measure_child([sys.executable, '-c', {child_code!r}], Path.cwd(), "
+        "os.environ.copy(), ['reload','timing'], {'gpu_uuid':'GPU-fixture'}, 86400)\n"
+    )
+    with pytest.raises(subprocess.TimeoutExpired):
+        app.run_package_process(
+            [sys.executable, "-c", wrapper],
+            timeout=3,
+            cwd=tmp_path,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    pids = [int((tmp_path / name).read_text()) for name in ("inference.pid", "server.pid")]
+    assert not psutil.pid_exists(pids[0])
+    for pid in pids:
+        if psutil.pid_exists(pid):
+            assert psutil.Process(pid).status() == psutil.STATUS_ZOMBIE

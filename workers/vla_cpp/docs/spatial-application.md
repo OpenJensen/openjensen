@@ -155,7 +155,11 @@ per-process GPU allocations at intervals of at least 100 ms. Each phase waits fo
 a positive sample before advancing. Missing/nonfinite/zero telemetry leaves the
 run unqualified; unrelated GPU processes are never substituted. Brief transients
 between samples may still be missed. Timeout/error kills and reaps the process
-group; diagnostics are capped at 64 MiB.
+group; diagnostics are capped at 64 MiB. The enclosing 12-hour package deadline
+sends TERM first, gives the nested supervisor a cleanup interval, then kills and
+reaps it if unresponsive. Previously observed descendants receive a PID-reuse
+checked fallback termination, so a longer requested inner deadline cannot leave
+its detached inference/server session running.
 
 Packed candidates copy all inference assets and omit native reference weights.
 If the floating control wins, export removes only its native reference weights
@@ -183,8 +187,8 @@ uv sync --locked --extra quantize --extra test
 uv run --locked --extra quantize --extra test pytest -q -rs
 ```
 
-Observed with the frozen Python 3.11 worker environment: **203 passed, 4 skipped**,
-including **71 new Spatial CPU tests**. The skips require the prepared native
+Observed with the frozen Python 3.11 worker environment: **204 passed, 4 skipped**,
+including **72 new Spatial CPU tests**. The skips require the prepared native
 vendor source or Linux native integration. The benchmark CPU suite separately
 passed four tests and skipped two tests needing Torch/LeRobot. These counts do
 not establish actual policy execution or GPU acceptance.
