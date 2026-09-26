@@ -151,21 +151,27 @@ class Execution:
                     pass
 
     async def reconcile(self) -> None:
-        async with self.storage.engine.connect() as connection:
-            values = (
-                (
-                    await connection.execute(
-                        select(jobs.c.record).where(jobs.c.status.in_(["queued", "running"]))
+        # Startup owns the workspace before this runs; the lock also prevents an
+        # in-process completion/cancellation from racing an explicit reconciliation.
+        async with self.lock:
+            async with self.storage.engine.connect() as connection:
+                values = (
+                    (
+                        await connection.execute(
+                            select(jobs.c.record).where(jobs.c.status.in_(["queued", "running"]))
+                        )
                     )
+                    .scalars()
+                    .all()
                 )
-                .scalars()
-                .all()
-            )
-        for value in values:
-            job = Job.model_validate(value)
-            job.status = "interrupted"
-            job.error = "Application stopped before completion. Submit a new inspection to retry."
-            await self.save(job)
+            for value in values:
+                job = Job.model_validate(value)
+                job.status = "interrupted"
+                job.result = None
+                job.error = (
+                    "Application stopped before completion. Submit a new inspection to retry."
+                )
+                await self.save(job)
 
     async def close(self) -> None:
         tasks = list(self.tasks.values())

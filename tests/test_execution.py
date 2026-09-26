@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import insert
 from vla_platform.api import create_app
-from vla_platform.contracts import IntakeRequest, Job, now
+from vla_platform.contracts import DatasetProfile, IntakeRequest, Job, WorkerResult, now
 from vla_platform.execution import Execution
 from vla_platform.settings import Settings
 from vla_platform.storage import Storage, jobs
@@ -65,6 +65,56 @@ def test_cancellation_cannot_publish_late_success(tmp_path):
         await execution.close()
         assert (await execution.get(record.id)).status == "cancelled"
         await storage.close()
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("status", ["queued", "running"])
+def test_recovery_clears_stale_result_and_rejects_late_outcomes(tmp_path, status):
+    async def exercise():
+        storage = Storage(tmp_path)
+        await storage.initialize()
+        execution = Execution(storage, Settings(data_dir=tmp_path))
+        execution.slots = asyncio.Semaphore(0)
+        try:
+            job = await execution.submit("p", IntakeRequest(repo_id="fixture/data"))
+            # Inject inconsistent persisted state solely to exercise the defensive guard.
+            job.status = status
+            job.result = DatasetProfile(
+                source="huggingface",
+                repo_id="fixture/data",
+                revision="a" * 40,
+                format="lerobot_v3",
+                total_episodes=1,
+                total_frames=1,
+                fps=1,
+                features={},
+                metadata_sha256="b" * 64,
+                inspected_at=now(),
+                warnings=["Recovery control fixture; no actual inspection."],
+            )
+            await execution.save(job)
+            await execution.reconcile()
+            recovered = await execution.get(job.id)
+            assert recovered.status == "interrupted"
+            assert recovered.result is None
+            assert "Submit a new inspection" in recovered.error
+            await execution.finish(job.id, WorkerResult(result=job.result))
+            await execution.finish(job.id, WorkerResult(error="late worker failure"))
+            await execution.cancel(job.id)
+            await execution.reconcile()
+            assert await execution.get(job.id) == recovered
+            # A new explicit submission gets a fresh ID; queued shutdown launches no child.
+            retry = await execution.submit("p", job.request)
+            assert retry.id != job.id
+            await execution.close()
+            assert (await execution.get(retry.id)).status == "interrupted"
+            assert not (tmp_path / "jobs").exists()
+            assert not execution.tasks
+            assert await execution.get(job.id) == recovered
+        finally:
+            await execution.close()
+            await storage.close()
 
     asyncio.run(exercise())
 
