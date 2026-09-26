@@ -1,0 +1,34 @@
+{
+  "source_repository": "sobhanb-eth/firebird-hackathon-prep",
+  "source_base_commit": "067d0660a6f6ead2ac3257ed036884010cb90997",
+  "source_worktree": "GPU benchmark additions, including changes not committed in source repository",
+  "source_script_hashes": {
+    "run_cross_stack_matrix.py": "df3c4e88192a39e16ccc196dd924ed3bf4dd961e0fbe65fcdb5552651dc77d87",
+    "probe_trtllm_smolvla.py": "e6a3c6fede41b69f7495f4700162ee0bbb710c7703c675ee2c4ade05afb51508",
+    "llm_runtime_admission.py": "893a918e9009714584750be003bf90dd959a55e4be19af7bca77bf9d93c4d13a",
+    "smolvla_action_envelope.py": "dc494eb3fc5bc5a08c4c3946c8c5e9b4ae449e2365496ad748e42288abf1a5f8",
+    "probe_vllm_smolvla.py": "3fd91d782c08a5687cc691cfd24e930ba74f3b9c9427bfa02bbd813f19c9e384",
+    "vllm_smolvla_plugin.py": "6c6b3c106373d3a18cf88eb2367751ae3034eff0b6871e3d4bccec6e486f3de9",
+    "smolvla_cross_stack.py": "155080f8e42344c2b3af519001537f4fd5096a0207d7f440153312463567e99a",
+    "trtllm_smolvla_plugin.py": "9bccb79af7ad364ab54ae7ecb5d9b82fcae3fd46e3501d348ffefb8347121cf4",
+    "with_paused_collection.py": "d6d1f1a969e1ab0005ec688b318bb4acb9fc9e12ec9cebdd2980d96418286cf3",
+    "smolvla_gpu_probe.py": "50d44d733031735225a1c78aa7db8d600961ddb2de591d56647e3731f08a695d"
+  },
+  "adaptations": [
+    "Self-contained checkpoint/NF4 helpers; no firebird_vla dependency",
+    "Portable sibling-script lookup in matrix runner",
+    "Explicit collector identity for authorized pause helper",
+    "Custom engine adapters and regression tests"
+  ],
+  "validation": {
+    "l4_worker_tests": {
+      "passed": 4,
+      "skipped": 0,
+      "seconds": 15.21
+    },
+    "local_pooling_patch_tests": {
+      "passed": 2
+    },
+    "ruff": "passed"
+  }
+}
