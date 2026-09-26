@@ -12,6 +12,7 @@ def registry(
             stage="Dataset",
             operation="dataset.inspect",
             status="available",
+            support=[],  # Target coverage is unknown until CAP-001 supplies reviewed evidence.
             description=(
                 "Public HF and allowed local LeRobot metadata only; "
                 "no semantic or media validation."
@@ -27,6 +28,7 @@ def registry(
                     if stage in available
                     else description
                 ),
+                support=[],
             )
             for stage, operation, description in [
                 ("Fine-tune", "policy.finetune", "Native training recipe integration is planned."),

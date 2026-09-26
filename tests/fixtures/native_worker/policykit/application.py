@@ -10,7 +10,9 @@ request, destination = map(Path, sys.argv[1:])
 job = json.loads(request.read_text())
 out = Path(job["output_dir"])
 op = job["operation"]
-if job["runtime"]["label"] == "slow fixture":
+if job["runtime"]["label"] == "slow fixture" or (
+    job["runtime"]["label"] == "slow evaluation fixture" and op == "policy.evaluate"
+):
     (out / "started").write_text("fixture is running")
     time.sleep(60)
 result = {"schema_version": 1, "job_id": job["job_id"], "report": {"scope": "test_fixture"}}

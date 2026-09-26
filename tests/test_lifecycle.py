@@ -230,3 +230,55 @@ def test_capabilities_require_a_training_environment(configured):
         assert status["policy.quantize"] == "available"
         assert status["policy.finetune"] == "planned"
         assert status["policy.distill"] == "planned"
+
+
+def test_restart_preserves_completed_native_stages_without_adopting_late_results(configured):
+    set_label(configured, "slow evaluation fixture")
+    with TestClient(create_app(configured)) as client:
+        pid = project(client)
+        jid = submit(client, pid)
+        started = configured.data_dir / "jobs" / jid / "baseline/started"
+        deadline = time.monotonic() + 10
+        while not started.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert started.exists()
+        original = client.get(f"/api/v1/projects/{pid}/artifacts").json()
+        assert len(original) == 1
+    with TestClient(create_app(configured)) as client:
+        job = client.get(f"/api/v1/jobs/{jid}").json()
+        assert job["status"] == "interrupted"
+        assert client.get(f"/api/v1/projects/{pid}/artifacts").json() == original
+        assert not (started.parent / "result.json").exists()
+        assert job["result"]["selected_artifact_id"] is None
+
+
+def test_resume_checkpoint_is_project_scoped_and_contained(configured):
+    from vla_platform.lifecycle.contracts import PolicyRequest
+
+    app = create_app(configured)
+    with TestClient(app) as client:
+        pid = project(client)
+        jid = submit(client, pid, operation="policy.import")
+        wait(client, jid)
+        execution = app.state.execution
+        job = client.portal.call(execution.get, jid)
+        job.status, job.kind, job.result = "interrupted", "policy.finetune", None
+        job.request = PolicyRequest(
+            operation="policy.finetune", runtime_id="fixture", dataset_job_id="fixture-intake"
+        )
+        client.portal.call(execution.save, job)
+        directory = configured.data_dir / "jobs" / jid / "operation/training"
+        checkpoint = directory / "checkpoint-000001"
+        checkpoint.mkdir(parents=True)
+        (checkpoint / "manifest.json").write_text("{}")
+        (directory / "latest.json").write_text(json.dumps({"checkpoint": checkpoint.name}))
+        assert client.portal.call(execution.lifecycle.resume_checkpoint, pid, jid) == checkpoint
+        with pytest.raises(ValueError, match="in this project"):
+            client.portal.call(execution.lifecycle.resume_checkpoint, project(client), jid)
+        (directory / "latest.json").write_text(json.dumps({"checkpoint": "../../outside"}))
+        with pytest.raises(ValueError, match="checkpoint name"):
+            client.portal.call(execution.lifecycle.resume_checkpoint, pid, jid)
+        job.status = "running"
+        client.portal.call(execution.save, job)
+        with pytest.raises(ValueError, match="interrupted training job"):
+            client.portal.call(execution.lifecycle.resume_checkpoint, pid, jid)

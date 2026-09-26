@@ -213,19 +213,86 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** Capability */
+        /**
+         * Capability
+         * @description Application availability plus separately scoped support evidence.
+         *
+         *     Explicit empty support denotes unknown target coverage, not tested support.
+         *     Callers must supply the field; CAP-001 must populate reviewed target records.
+         */
         Capability: {
             /** Description */
             description: string;
-            /** Operation */
-            operation: string;
-            /** Stage */
-            stage: string;
+            /**
+             * Operation
+             * @enum {string}
+             */
+            operation: "dataset.inspect" | "dataset.inspect.local" | "policy.finetune" | "policy.distill" | "policy.quantize" | "policy.evaluate" | "policy.run";
+            /**
+             * Schema Version
+             * @default 1
+             * @constant
+             */
+            schema_version: 1;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "Dataset" | "Fine-tune" | "Distill" | "Quantize" | "Evaluate" | "Run";
             /**
              * Status
              * @enum {string}
              */
             status: "available" | "planned";
+            /** Support */
+            support: components["schemas"]["CapabilitySupport"][];
+        };
+        /**
+         * CapabilityEvidence
+         * @description Reference to reviewed evidence; validation does not execute or verify it.
+         */
+        CapabilityEvidence: {
+            /** Device Name */
+            device_name: string;
+            /**
+             * Recorded At
+             * Format: date-time
+             */
+            recorded_at: string;
+            /** Reference */
+            reference: string;
+            /** Runtime */
+            runtime: string;
+            /** Source Revision */
+            source_revision: string;
+        };
+        /**
+         * CapabilitySupport
+         * @description Evidence for one parent operation on one concrete execution target.
+         */
+        CapabilitySupport: {
+            /**
+             * Backend
+             * @enum {string}
+             */
+            backend: "metadata" | "lerobot" | "openvla_oft" | "vla_cpp";
+            /**
+             * Device
+             * @enum {string}
+             */
+            device: "cpu" | "cuda";
+            /** Evidence */
+            evidence?: components["schemas"]["CapabilityEvidence"][];
+            /**
+             * Evidence State
+             * @enum {string}
+             */
+            evidence_state: "planned" | "untested" | "tested" | "unsupported";
+            /**
+             * Os
+             * @enum {string}
+             */
+            os: "linux" | "windows" | "macos";
         };
         /** DatasetProfile */
         DatasetProfile: {
@@ -240,7 +307,10 @@ export interface components {
             format: "lerobot_v2" | "lerobot_v3";
             /** Fps */
             fps: number;
-            /** Inspected At */
+            /**
+             * Inspected At
+             * Format: date-time
+             */
             inspected_at: string;
             /**
              * Inspection Scope
@@ -339,7 +409,10 @@ export interface components {
         };
         /** Job */
         Job: {
-            /** Created At */
+            /**
+             * Created At
+             * Format: date-time
+             */
             created_at: string;
             /** Error */
             error?: string | null;
@@ -364,7 +437,10 @@ export interface components {
              * @enum {string}
              */
             status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted";
-            /** Updated At */
+            /**
+             * Updated At
+             * Format: date-time
+             */
             updated_at: string;
         };
         /** JobEvent */
@@ -496,7 +572,10 @@ export interface components {
         };
         /** Project */
         Project: {
-            /** Created At */
+            /**
+             * Created At
+             * Format: date-time
+             */
             created_at: string;
             /** Id */
             id: string;
