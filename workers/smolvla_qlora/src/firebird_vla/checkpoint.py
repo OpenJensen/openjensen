@@ -155,7 +155,8 @@ def publish_checkpoint(staging, destination):
     # Flush contents and directory entries before making this bundle discoverable.
     for path in staging.rglob("*"):
         if path.is_file():
-            with path.open("rb") as stream:
+            # Windows _commit requires write access for flushing file data.
+            with path.open("r+b") as stream:
                 os.fsync(stream.fileno())
     for path in sorted((p for p in staging.rglob("*") if p.is_dir()), reverse=True):
         _sync_directory(path)

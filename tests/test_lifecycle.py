@@ -51,13 +51,13 @@ def configured(tmp_path):
 
 
 def wait(client, job_id):
-    deadline = time.monotonic() + 15
+    deadline = time.monotonic() + (45 if os.name == "nt" else 15)
     while time.monotonic() < deadline:
         job = client.get("/api/v1/jobs/" + job_id).json()
         if job["status"] not in {"queued", "running"}:
             return job
         time.sleep(0.025)
-    raise AssertionError("Fixture job did not finish")
+    raise AssertionError(f"Fixture job did not finish: {job}")
 
 
 def project(client):

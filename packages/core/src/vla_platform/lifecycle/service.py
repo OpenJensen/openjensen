@@ -243,7 +243,9 @@ class Lifecycle:
                             tar.add(directory / name, arcname="policy/" + name, recursive=False)
                     # Detect source changes between bundle validation and archiving.
                     validate_archive(temporary, manifest["files"], sha)
-                    with temporary.open("rb") as stream:
+                    # Windows _commit requires a writable descriptor, even
+                    # after tarfile has closed its writer.
+                    with temporary.open("r+b") as stream:
                         os.fsync(stream.fileno())
                     destination = temporary.with_suffix(".tar")
                     temporary.replace(destination)
