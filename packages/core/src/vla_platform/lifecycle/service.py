@@ -3,13 +3,18 @@
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import re
 import signal
 import tarfile
 import tempfile
 import threading
-from pathlib import Path
+from collections import deque
+from datetime import UTC, datetime
+from pathlib import Path, PurePosixPath
+
+from pydantic import ValidationError
 
 from vla_platform.contracts import TERMINAL, DatasetProfile, Job, now
 from vla_platform.lifecycle.contracts import (
@@ -20,6 +25,8 @@ from vla_platform.lifecycle.contracts import (
     Precision,
 )
 from vla_platform.lifecycle.runtime import RuntimeCatalog, command
+
+logger = logging.getLogger(__name__)
 
 
 def digest(path: Path) -> str:
@@ -33,8 +40,10 @@ def validate_bundle(directory: Path, job_dir: Path):
         raise ValueError("Worker artifact must stay in its application job directory")
     manifest_path = directory / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
+    if not isinstance(manifest, dict):
+        raise ValueError("Invalid artifact manifest")
     files = manifest.get("files", {})
-    if not files:
+    if not isinstance(files, dict) or not files:
         raise ValueError("Empty artifact manifest")
     actual = set()
     total = 0
@@ -52,12 +61,46 @@ def validate_bundle(directory: Path, job_dir: Path):
     return manifest, digest(manifest_path), total
 
 
+def validate_archive(path: Path, files: dict[str, str], manifest_sha256: str):
+    """Check the delivered bytes, including inventory, without extracting the archive."""
+    expected = {"policy/" + name: sha for name, sha in files.items()}
+    expected["policy/manifest.json"] = manifest_sha256
+    directories = {"policy"}
+    for name in expected:
+        directories.update(
+            str(parent) for parent in PurePosixPath(name).parents if str(parent) != "."
+        )
+    seen = set()
+    with tarfile.open(path, "r:", stream=True) as archive:
+        for member in archive:
+            if member.name in seen:
+                raise ValueError("Duplicate archive member")
+            seen.add(member.name)
+            if member.isdir() and member.name in directories:
+                continue
+            if not member.isfile() or member.name not in expected:
+                raise ValueError("Unexpected archive member")
+            with archive.extractfile(member) as stream:
+                if hashlib.file_digest(stream, "sha256").hexdigest() != expected[member.name]:
+                    raise ValueError("Archive member hash mismatch")
+        if set(expected) != seen - directories:
+            raise ValueError("Archive inventory differs from manifest")
+        # tarfile also accepts archives missing the closing blocks. A published
+        # cache entry must be complete, with no payload hidden after the end marker.
+        archive.fileobj.seek(archive.offset)
+        if archive.fileobj.read(1024) != bytes(1024):
+            raise ValueError("Incomplete archive terminator")
+        while block := archive.fileobj.read(1024 * 1024):
+            if any(block):
+                raise ValueError("Unexpected data after archive terminator")
+
+
 class Lifecycle:
     def __init__(self, execution):
         self.execution = execution
         self.settings = execution.settings
         self.catalog = RuntimeCatalog.load(self.settings.runtime_config)
-        self.sequences: dict[str, int] = {}
+        self.event_lock = threading.Lock()
         self.export_lock = threading.Lock()
 
     async def artifacts(self, project_id: str):
@@ -85,46 +128,96 @@ class Lifecycle:
             raise ValueError("Resume requires an interrupted training job in this project")
         stage = "operation" if job.kind == "policy.finetune" else "training"
         directory = self.settings.data_dir / "jobs" / job.id / stage / "training"
-        latest = directory / "latest.json"
-        if not latest.is_file():
+
+        def discover():
+            required = {
+                "recipe.json",
+                "stats.json",
+                "splits.json",
+                "training.pt",
+                "probe.safetensors",
+                "adapter/adapter_config.json",
+                "adapter/adapter_model.safetensors",
+                "policy/config.json",
+            }
+            job_dir = self.settings.data_dir / "jobs" / job.id
+            if directory.is_symlink() or not directory.resolve().is_relative_to(job_dir.resolve()):
+                raise ValueError("Checkpoint directory escapes its run")
+            # latest.json is advisory. A kill after bundle publication can leave
+            # it missing, stale or truncated; never follow paths stored in it.
+            candidates = []
+            if directory.is_dir():
+                for path in directory.iterdir():
+                    if (
+                        re.fullmatch(r"checkpoint-\d{6,}", path.name)
+                        and not path.is_symlink()
+                        and path.is_dir()
+                    ):
+                        candidates.append((int(path.name.removeprefix("checkpoint-")), path))
+            for step, checkpoint in sorted(candidates, reverse=True):
+                try:
+                    manifest, _, _ = validate_bundle(checkpoint, directory)
+                    if (
+                        manifest.get("schema_version") != 1
+                        or type(manifest.get("step")) is not int
+                        or manifest["step"] != step
+                        or step <= 0
+                        or not required.issubset(manifest["files"])
+                    ):
+                        raise ValueError("Incomplete training checkpoint manifest")
+                    # Recipe compatibility and optimizer/RNG deserialization are
+                    # worker gates; the Torch-free core verifies bundle integrity.
+                    return checkpoint
+                except (OSError, ValueError) as exc:
+                    logger.warning("Skipping incomplete checkpoint %s: %s", checkpoint, exc)
             raise ValueError("This run has no completed checkpoint to resume")
-        name = json.loads(latest.read_text()).get("checkpoint")
-        if not isinstance(name, str) or not re.fullmatch(r"checkpoint-\d{6,}", name):
-            raise ValueError("Invalid checkpoint name")
-        checkpoint = directory / name
-        if not checkpoint.resolve().is_relative_to(directory.resolve()):
-            raise ValueError("Checkpoint escapes its run directory")
-        if not (checkpoint / "manifest.json").is_file():
-            raise ValueError("Last checkpoint is incomplete or missing")
-        return checkpoint
+
+        return await asyncio.to_thread(discover)
 
     async def download(self, project_id, artifact_id):
         artifact = await self.artifact(project_id, artifact_id)
         directory = self.settings.data_dir / artifact.path
-        if digest(directory / "manifest.json") != artifact.manifest_sha256:
-            raise ValueError("Registered artifact manifest changed")
-        await asyncio.to_thread(validate_bundle, directory, directory.parent)
-        destination = self.settings.data_dir / "exports" / (artifact.id.replace(":", "-") + ".tar")
-        destination.parent.mkdir(exist_ok=True)
+        cache = self.settings.data_dir / "exports" / artifact.id.replace(":", "-")
 
         def archive():
-            # Windows cannot replace an archive while another FileResponse reads it.
-            # The thread lock also survives cancellation of the awaiting HTTP request.
+            # The lock survives cancellation of an awaiting HTTP request. Each
+            # repaired archive gets a new name: Windows readers can hold an old
+            # generation open without blocking publication of its replacement.
             with self.export_lock:
-                if destination.exists():
-                    return
-                with tempfile.NamedTemporaryFile(dir=destination.parent, delete=False) as stream:
+                manifest, sha, _ = validate_bundle(directory, directory.parent)
+                if sha != artifact.manifest_sha256:
+                    raise ValueError("Registered artifact manifest changed")
+                cache.mkdir(parents=True, exist_ok=True)
+                for candidate in cache.glob("*.tar"):
+                    try:
+                        validate_archive(candidate, manifest["files"], sha)
+                        return candidate
+                    except OSError, ValueError, tarfile.TarError:
+                        logger.warning("Discarding corrupt export cache %s", candidate)
+                        try:
+                            candidate.unlink()
+                        except OSError:
+                            # In particular, an existing Windows response may
+                            # still hold this file. Never overwrite it in place.
+                            pass
+                with tempfile.NamedTemporaryFile(dir=cache, suffix=".tmp", delete=False) as stream:
                     temporary = Path(stream.name)
                 try:
                     with tarfile.open(temporary, "w") as tar:
-                        tar.add(directory, arcname="policy")
+                        tar.add(directory, arcname="policy", recursive=False)
+                        for name in ["manifest.json", *sorted(manifest["files"])]:
+                            tar.add(directory / name, arcname="policy/" + name, recursive=False)
+                    # Detect source changes between bundle validation and archiving.
+                    validate_archive(temporary, manifest["files"], sha)
+                    with temporary.open("rb") as stream:
+                        os.fsync(stream.fileno())
+                    destination = temporary.with_suffix(".tar")
                     temporary.replace(destination)
+                    return destination
                 finally:
                     temporary.unlink(missing_ok=True)
 
-        if not destination.exists():
-            await asyncio.to_thread(archive)
-        return destination
+        return await asyncio.to_thread(archive)
 
     async def validate(self, project_id: str, request: PolicyRequest):
         runtime = self.catalog.runtime(request.runtime_id)
@@ -160,34 +253,70 @@ class Lifecycle:
         ):
             raise ValueError("LIBERO is not configured for this runtime")
 
+    def _read_events(self, path: Path):
+        records: deque[JobEvent] = deque(maxlen=200)
+        offset, terminated, recovery = 0, True, None
+        if not path.is_file():
+            return records, offset, terminated, recovery
+        with path.open("rb") as stream:
+            while line := stream.readline(16385):
+                if len(line) > 16384:
+                    raise ValueError(f"Oversized event record at byte {offset}")
+                try:
+                    record = JobEvent.model_validate_json(line)
+                except ValidationError as exc:
+                    if line.endswith(b"\n") or any(
+                        error["type"] != "json_invalid" for error in exc.errors()
+                    ):
+                        raise ValueError(f"Corrupt event record at byte {offset}") from exc
+                    # Only an invalid unterminated final record can be a torn
+                    # write. Complete records and interior corruption fail closed.
+                    recovery = JobEvent(
+                        sequence=records[-1].sequence + 1 if records else 1,
+                        stage="recovery",
+                        message=(
+                            "An incomplete final event was ignored after an interrupted write."
+                        ),
+                        timestamp=datetime.fromtimestamp(path.stat().st_mtime, UTC).isoformat(),
+                    )
+                    records.append(recovery)
+                    logger.warning("Incomplete final event record in %s at byte %s", path, offset)
+                    break
+                if record.sequence <= (records[-1].sequence if records else 0):
+                    raise ValueError(f"Non-increasing event sequence at byte {offset}")
+                records.append(record)
+                offset += len(line)
+                terminated = line.endswith(b"\n")
+        return records, offset, terminated, recovery
+
     def events(self, job_id: str, after: int = 0):
         path = self.settings.data_dir / "jobs" / job_id / "events.jsonl"
-        if not path.is_file():
-            return []
-        result = []
-        with path.open() as stream:
-            for line in stream:
-                event = JobEvent.model_validate_json(line)
-                if event.sequence > after:
-                    result.append(event)
-        return result[-200:]
+        with self.event_lock:
+            records, _, _, _ = self._read_events(path)
+            return [record for record in records if record.sequence > after]
 
     async def event(self, job: Job, stage: str, message: str):
         directory = self.settings.data_dir / "jobs" / job.id
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / "events.jsonl"
-        if job.id not in self.sequences:
-            prior = self.events(job.id)
-            self.sequences[job.id] = prior[-1].sequence if prior else 0
-        self.sequences[job.id] += 1
-        record = JobEvent(
-            sequence=self.sequences[job.id],
-            stage=stage,
-            message=message[:2000],
-            timestamp=now(),
-        )
-        with path.open("a") as stream:
-            stream.write(record.model_dump_json() + "\n")
+        with self.event_lock:
+            prior, offset, terminated, recovery = self._read_events(path)
+            record = JobEvent(
+                sequence=prior[-1].sequence + 1 if prior else 1,
+                stage=stage,
+                message=message[:2000],
+                timestamp=now(),
+            )
+            with path.open("r+b" if path.exists() else "w+b") as stream:
+                stream.seek(offset)
+                if recovery:
+                    stream.truncate()
+                    stream.write(recovery.model_dump_json().encode("utf-8") + b"\n")
+                elif not terminated:
+                    stream.write(b"\n")
+                stream.write(record.model_dump_json().encode("utf-8") + b"\n")
+                stream.flush()
+                os.fsync(stream.fileno())
         async with self.execution.lock:
             current = await self.execution.get(job.id)
             if current and current.status not in TERMINAL:
