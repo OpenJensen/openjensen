@@ -36,6 +36,7 @@ jobs:
       - run: pnpm build:web
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:web
+      - run: pnpm test:diagnostics
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
