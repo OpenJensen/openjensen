@@ -1,0 +1,29 @@
+{
+  "status": "passed",
+  "integration": "Custom full-policy TensorRT-LLM PyTorch executor using native PyTorch SmolVLA kernels; no claim of TensorRT-compiled policy acceleration.",
+  "startup_s": 64.51648596700034,
+  "cases": [
+    {
+      "fixture": "synthetic-0.npz",
+      "p50_ms": 878.7443990004249,
+      "mae": 0.0,
+      "max_abs": 0.0,
+      "worker_policy_calls": 4.0
+    },
+    {
+      "fixture": "synthetic-1.npz",
+      "p50_ms": 666.2176860008913,
+      "mae": 0.0,
+      "max_abs": 0.0,
+      "worker_policy_calls": 8.0
+    },
+    {
+      "fixture": "task0-init0-chunk0.npz",
+      "p50_ms": 847.6354489994264,
+      "mae": 0.0,
+      "max_abs": 0.0,
+      "worker_policy_calls": 12.0
+    }
+  ],
+  "full_action_execution": true
+}

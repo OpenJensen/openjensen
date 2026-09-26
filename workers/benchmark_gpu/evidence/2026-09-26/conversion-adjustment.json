@@ -1,0 +1,12 @@
+{
+  "checkpoint_weights_unchanged": true,
+  "original_declared_state_shape": [
+    6
+  ],
+  "converted_declared_state_shape": [
+    8
+  ],
+  "reason": "Saved observation.state normalization tensors and native LIBERO processor both have 8 coordinates. Correct the converter metadata so the gripper coordinates are retained.",
+  "original_config_sha256": "5c9f3ba9f5f37ea7024c9501b0b20b1941f232989c2167853cb46d9071a70dd7",
+  "conversion_config_sha256": "51b6e4b0f13e0d5f9283a6b22eadcde0c612985f2e79e779a82f9a7043685545"
+}

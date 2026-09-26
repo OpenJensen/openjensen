@@ -1,0 +1,29 @@
+{
+  "status": "passed",
+  "integration": "Custom full-policy vLLM V0 pooling worker using native PyTorch SmolVLA kernels; no claim of vLLM attention acceleration.",
+  "startup_s": 15.403654409999945,
+  "cases": [
+    {
+      "fixture": "synthetic-0.npz",
+      "p50_ms": 557.5554509996437,
+      "mae": 0.0,
+      "max_abs": 0.0,
+      "worker_policy_calls": 4.0
+    },
+    {
+      "fixture": "synthetic-1.npz",
+      "p50_ms": 552.3781370002325,
+      "mae": 0.0,
+      "max_abs": 0.0,
+      "worker_policy_calls": 8.0
+    },
+    {
+      "fixture": "task0-init0-chunk0.npz",
+      "p50_ms": 555.5441760006943,
+      "mae": 0.0,
+      "max_abs": 0.0,
+      "worker_policy_calls": 12.0
+    }
+  ],
+  "full_action_execution": true
+}

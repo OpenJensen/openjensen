@@ -6,6 +6,8 @@ with v3 `data/chunk-000/file-000.parquet` and
 `meta/episodes/chunk-000/file-000.parquet` paths. The accompanying `meta/info.json`
 declares the same counts and features. `manifest.json` records exact bytes, row
 counts and SHA-256 for every input file.
+The metadata uses UTF-8 with LF line endings; `.gitattributes` preserves its
+recorded bytes even when Git's Windows checkout conversion is enabled.
 
 Frame `i` has action `[i, -i]` and state `[i + 0.25, i + 0.5]`; timestamps restart
 at zero for each episode. Episode ranges are `[0, 3)` and `[3, 6)`. This is a

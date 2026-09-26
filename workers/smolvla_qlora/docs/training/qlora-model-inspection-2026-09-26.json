@@ -1,0 +1,878 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-09-26T11:05:08.086528+00:00",
+  "catalog_sha256": "b6f7c6321b471e4642df153fd18f1d6ff0cd033a875f7536a36a4432f44e82e7",
+  "scope": "QLoRA integration diagnostics",
+  "closed_loop_benchmark_executed": false,
+  "rows": [
+    {
+      "model_id": "smolvla",
+      "checkpoint": {
+        "source": "lerobot/smolvla_libero",
+        "revision": "31d453f7edd78c839a8bbc39744a292686daf0de",
+        "subdirectory": null
+      },
+      "suite": "libero_spatial",
+      "status": "metadata_inspected",
+      "reason": "Metadata/asset presence checked; QLoRA still requires CUDA and a fixture",
+      "scope": "native training-batch QLoRA diagnostic; not a closed-loop benchmark",
+      "candidate": "Q2_backbone_nf4_lora",
+      "runtime_profile": {
+        "loader": "smolvla",
+        "roots": [
+          "model.vlm_with_expert.vlm.model.text_model.layers."
+        ],
+        "runtime": "lerobot==0.4.4; requirements-smolvla-linux.txt",
+        "code_commit": "8fff0fde7c79f23a93d845d1a50e985de01f8b8a"
+      },
+      "metrics": null,
+      "qlora_verified": false,
+      "inference_verified": false,
+      "quantization_verified": false,
+      "closed_loop_verified": false,
+      "export_verified": false,
+      "evidence_refs": [],
+      "inspection": {
+        "status": "metadata_inspected",
+        "qlora_verified": false,
+        "license": "apache-2.0",
+        "architecture": [
+          "smolvla"
+        ],
+        "checkpoint_files": {
+          ".gitattributes": {
+            "bytes": 1519,
+            "lfs_sha256": null,
+            "git_blob_id": "a6344aac8c09253b3b630fb776ae94478aa0275b"
+          },
+          "README.md": {
+            "bytes": 1686,
+            "lfs_sha256": null,
+            "git_blob_id": "87293179763b567d75a6c22e2cff007c2ce406eb"
+          },
+          "config.json": {
+            "bytes": 2419,
+            "lfs_sha256": null,
+            "git_blob_id": "3558454eb6a96ae2d7d581b2550e6bd9ca53944f"
+          },
+          "model.safetensors": {
+            "bytes": 906712520,
+            "lfs_sha256": "9a9f6413e42c0f332fccbce9a0dc796af2790f82cf002f791cdbf7e01e1afca8",
+            "git_blob_id": "e1d31164a8f443ab2382a6e0efd5a65002292217"
+          },
+          "policy_postprocessor.json": {
+            "bytes": 660,
+            "lfs_sha256": null,
+            "git_blob_id": "0ec8146a07f9b92bc5a3c02e2d6b7d49ba6d26e8"
+          },
+          "policy_postprocessor_step_0_unnormalizer_processor.safetensors": {
+            "bytes": 5676,
+            "lfs_sha256": "b0cdde6e8a6f49a8e19eefb376728e47c09d3b3cc20ce3a97c45619fe7a732d9",
+            "git_blob_id": "63c8351ecc39631c78d7581ea141e408ca803159"
+          },
+          "policy_preprocessor.json": {
+            "bytes": 2042,
+            "lfs_sha256": null,
+            "git_blob_id": "bfc5d95567d6ec89532f0542789378109a04b619"
+          },
+          "policy_preprocessor_step_5_normalizer_processor.safetensors": {
+            "bytes": 5676,
+            "lfs_sha256": "b0cdde6e8a6f49a8e19eefb376728e47c09d3b3cc20ce3a97c45619fe7a732d9",
+            "git_blob_id": "63c8351ecc39631c78d7581ea141e408ca803159"
+          },
+          "train_config.json": {
+            "bytes": 9631,
+            "lfs_sha256": null,
+            "git_blob_id": "0da59331eae316b7c377b8ab8703a43f73f20b78"
+          }
+        },
+        "input_features": {
+          "observation.state": {
+            "type": "STATE",
+            "shape": [
+              6
+            ]
+          },
+          "observation.images.camera1": {
+            "type": "VISUAL",
+            "shape": [
+              3,
+              256,
+              256
+            ]
+          },
+          "observation.images.camera2": {
+            "type": "VISUAL",
+            "shape": [
+              3,
+              256,
+              256
+            ]
+          },
+          "observation.images.camera3": {
+            "type": "VISUAL",
+            "shape": [
+              3,
+              256,
+              256
+            ]
+          }
+        },
+        "output_features": {
+          "action": {
+            "type": "ACTION",
+            "shape": [
+              7
+            ]
+          }
+        },
+        "action_horizon": 50,
+        "reason": "Metadata/asset presence checked; QLoRA still requires CUDA and a fixture"
+      }
+    },
+    {
+      "model_id": "openvla_oft",
+      "checkpoint": {
+        "source": "moojink/openvla-7b-oft-finetuned-libero-spatial",
+        "revision": "6d0231af0e48c5985f1ff86908f4674b84bc049b",
+        "subdirectory": null
+      },
+      "suite": "libero_spatial",
+      "status": "metadata_inspected",
+      "reason": "Metadata/asset presence checked; QLoRA still requires CUDA and a fixture",
+      "scope": "native training-batch QLoRA diagnostic; not a closed-loop benchmark",
+      "candidate": "Q2_backbone_nf4_lora",
+      "runtime_profile": {
+        "loader": "openvla_oft",
+        "roots": [
+          "vla.language_model.model.layers."
+        ],
+        "runtime": "isolated native OpenVLA-OFT environment (its Transformers fork)",
+        "code_commit": "e4287e94541f459edc4feabc4e181f537cd569a8",
+        "transformers_code_commit": "bc339d9ad707454c0c115970db43c260067c61ab",
+        "auxiliary_files": [
+          "action_head--150000_checkpoint.pt",
+          "proprio_projector--150000_checkpoint.pt"
+        ]
+      },
+      "metrics": null,
+      "qlora_verified": false,
+      "inference_verified": false,
+      "quantization_verified": false,
+      "closed_loop_verified": false,
+      "export_verified": false,
+      "evidence_refs": [],
+      "inspection": {
+        "status": "metadata_inspected",
+        "qlora_verified": false,
+        "license": "mit",
+        "architecture": [
+          "OpenVLAForActionPrediction"
+        ],
+        "checkpoint_files": {
+          ".gitattributes": {
+            "bytes": 674,
+            "lfs_sha256": null,
+            "git_blob_id": "98f7a64c0688425846e08b61a04e9e0362274ada"
+          },
+          "README.md": {
+            "bytes": 2909,
+            "lfs_sha256": null,
+            "git_blob_id": "9599033bbdf96650cda0daaafeb3eb3348edd843"
+          },
+          "action_head--150000_checkpoint.pt": {
+            "bytes": 302242674,
+            "lfs_sha256": "809858636cf0a65009dd567d2f4e116249442790f02b8fe31f24500ea6118908",
+            "git_blob_id": "51c585f8b787145d8740e416343fe2ef32f2d5a4"
+          },
+          "added_tokens.json": {
+            "bytes": 21,
+            "lfs_sha256": null,
+            "git_blob_id": "8671820d1bb0dfd4dd92d5bd0fa9b5a7773f843e"
+          },
+          "config.json": {
+            "bytes": 60711,
+            "lfs_sha256": null,
+            "git_blob_id": "5d288cead81e02ee4f0cfb8fee1a5f153948e812"
+          },
+          "configuration_prismatic.py": {
+            "bytes": 5865,
+            "lfs_sha256": null,
+            "git_blob_id": "c2625753c4da1a6ef274a02645d4086bc7a7fb2b"
+          },
+          "dataset_statistics.json": {
+            "bytes": 2957,
+            "lfs_sha256": null,
+            "git_blob_id": "2746cb5835b4fa4653a59783d9bd382b3d05a119"
+          },
+          "generation_config.json": {
+            "bytes": 136,
+            "lfs_sha256": null,
+            "git_blob_id": "2cefc1e51e6ccfe846d2b509ced403df73a8efe2"
+          },
+          "lora_adapter/README.md": {
+            "bytes": 5034,
+            "lfs_sha256": "1acb533904cd9931276014499b51c98c0fc8e3eab8962de7b971547116068383",
+            "git_blob_id": "3afc19ecf015990c1c2279f244c2a0f53a679366"
+          },
+          "lora_adapter/adapter_config.json": {
+            "bytes": 813,
+            "lfs_sha256": "30462bf8022279e5c8fe8c58db30d4c9c919b0a43feb0a99b5ca8f8b54c286df",
+            "git_blob_id": "94d2f0648aaf20e9563c3d640b4c2a9add40c2d8"
+          },
+          "lora_adapter/adapter_model.safetensors": {
+            "bytes": 484458600,
+            "lfs_sha256": "4bd2e808805f9b67af090c37e70f239b3b4da7a6473ec621ead6702b16a302ec",
+            "git_blob_id": "1815c46ca65c8ad021aa4e68d3f839fdb375d457"
+          },
+          "model-00001-of-00004.safetensors": {
+            "bytes": 4925122448,
+            "lfs_sha256": "2809bd7be9422315c5ecbe91eea612f5b02925f37e0051728ad45bc993c79251",
+            "git_blob_id": "820435fa77bab078feb562ee949fc7b4faa6c094"
+          },
+          "model-00002-of-00004.safetensors": {
+            "bytes": 4947392496,
+            "lfs_sha256": "a00a7c5f2b6586ccfc89c693a9c36f3552ff455ff2b1bfea3e92642e4cd2b6d3",
+            "git_blob_id": "9f58b1a39dbaeca7b524da01b083e349b40596d1"
+          },
+          "model-00003-of-00004.safetensors": {
+            "bytes": 4947417456,
+            "lfs_sha256": "a894b7230a08b471af55c57dd7385fd3b51fae2c4d9307a36a8017ef57abf22a",
+            "git_blob_id": "786085e28c2d8baeec42ba0a36fd06cb53eb0d22"
+          },
+          "model-00004-of-00004.safetensors": {
+            "bytes": 262668432,
+            "lfs_sha256": "a877e3fece1feafb80f59f91585ce04379ee39e2bf9a25cb7b4acf237e896e60",
+            "git_blob_id": "57ef905a83f317f4d0d5f9e5a5611f97c45b7f5d"
+          },
+          "model.safetensors.index.json": {
+            "bytes": 94764,
+            "lfs_sha256": null,
+            "git_blob_id": "bd7cc8ff8070ead248023feae55303f5a3b900d1"
+          },
+          "modeling_prismatic.py": {
+            "bytes": 49029,
+            "lfs_sha256": null,
+            "git_blob_id": "9013a4f57eb18fa770efcbe9d0a1445d6c16bb72"
+          },
+          "preprocessor_config.json": {
+            "bytes": 1650,
+            "lfs_sha256": null,
+            "git_blob_id": "92975ace548590d24f65f497d7610af3b92b4dcd"
+          },
+          "processing_prismatic.py": {
+            "bytes": 12718,
+            "lfs_sha256": null,
+            "git_blob_id": "3f2daaf82c3b8946fe57596f656f14a031eaef93"
+          },
+          "processor_config.json": {
+            "bytes": 130,
+            "lfs_sha256": null,
+            "git_blob_id": "f892f8a8f53e2f3603a7cf86043a1add317c1787"
+          },
+          "proprio_projector--150000_checkpoint.pt": {
+            "bytes": 67275256,
+            "lfs_sha256": "438d28e81e125166d0771762424aaf017de3a8daaebde06a5cb71157e62b3bf3",
+            "git_blob_id": "284c8308dacd7ff3a7b9597b2a5719570613de38"
+          },
+          "special_tokens_map.json": {
+            "bytes": 552,
+            "lfs_sha256": null,
+            "git_blob_id": "ab75c8e0a22550f0667501a0c52758f071a9efd8"
+          },
+          "tokenizer.json": {
+            "bytes": 1842976,
+            "lfs_sha256": null,
+            "git_blob_id": "591f1fc6ff695d967513100f707e66d5bf731414"
+          },
+          "tokenizer.model": {
+            "bytes": 499723,
+            "lfs_sha256": null,
+            "git_blob_id": "22bccbcb41ec929cf0c9dbe8f41036db82e5e773"
+          },
+          "tokenizer_config.json": {
+            "bytes": 1192,
+            "lfs_sha256": null,
+            "git_blob_id": "d39defd338dee423ae0a71abfd7ea69a44fb1e52"
+          }
+        },
+        "input_features": null,
+        "output_features": null,
+        "action_horizon": null,
+        "reason": "Metadata/asset presence checked; QLoRA still requires CUDA and a fixture"
+      }
+    },
+    {
+      "model_id": "openvla",
+      "checkpoint": {
+        "source": "openvla/openvla-7b-finetuned-libero-spatial",
+        "revision": "962318cec55ac10993ff0f5f43eda9a270b4c873",
+        "subdirectory": null
+      },
+      "suite": "libero_spatial",
+      "status": "metadata_inspected",
+      "reason": "Metadata/asset presence checked; QLoRA still requires CUDA and a fixture",
+      "scope": "native training-batch QLoRA diagnostic; not a closed-loop benchmark",
+      "candidate": "Q2_backbone_nf4_lora",
+      "runtime_profile": {
+        "loader": "openvla",
+        "roots": [
+          "language_model.model.layers."
+        ],
+        "runtime": "isolated native OpenVLA environment (Transformers 4.40.1)",
+        "code_commit": "c8f03f48af692657d3060c19588038c7220e9af9"
+      },
+      "metrics": null,
+      "qlora_verified": false,
+      "inference_verified": false,
+      "quantization_verified": false,
+      "closed_loop_verified": false,
+      "export_verified": false,
+      "evidence_refs": [],
+      "inspection": {
+        "status": "metadata_inspected",
+        "qlora_verified": false,
+        "license": "mit",
+        "architecture": [
+          "OpenVLAForActionPrediction"
+        ],
+        "checkpoint_files": {
+          ".gitattributes": {
+            "bytes": 1519,
+            "lfs_sha256": null,
+            "git_blob_id": "a6344aac8c09253b3b630fb776ae94478aa0275b"
+          },
+          "README.md": {
+            "bytes": 1847,
+            "lfs_sha256": null,
+            "git_blob_id": "c48b5a4fe0ef50f839ecd8748f6cdd56f1f4a9cb"
+          },
+          "added_tokens.json": {
+            "bytes": 21,
+            "lfs_sha256": null,
+            "git_blob_id": "8671820d1bb0dfd4dd92d5bd0fa9b5a7773f843e"
+          },
+          "config.json": {
+            "bytes": 3508,
+            "lfs_sha256": null,
+            "git_blob_id": "a526dfba05192d51edae48b070fbad7c8fd00236"
+          },
+          "dataset_statistics.json": {
+            "bytes": 2109,
+            "lfs_sha256": null,
+            "git_blob_id": "a1df5b6c2b29301143b940d35ba1b0700f37b43f"
+          },
+          "generation_config.json": {
+            "bytes": 136,
+            "lfs_sha256": null,
+            "git_blob_id": "2cefc1e51e6ccfe846d2b509ced403df73a8efe2"
+          },
+          "model-00001-of-00004.safetensors": {
+            "bytes": 4925122448,
+            "lfs_sha256": "094ba8d798d0e13152230897e893d4d12ca3fe11ddb218f27545b1e6e7536134",
+            "git_blob_id": "ea5497a436539bcbe09956ed8ef7fad38f4ec8fd"
+          },
+          "model-00002-of-00004.safetensors": {
+            "bytes": 4947392496,
+            "lfs_sha256": "086780bb21b61eee9fb54acc0b938017c599e9d741bcdda18da23c4617fa36d7",
+            "git_blob_id": "49e06792b2f1552f518a98df92379f95772aa763"
+          },
+          "model-00003-of-00004.safetensors": {
+            "bytes": 4947417456,
+            "lfs_sha256": "d696e042cf49abd0b5846e73cbd4931d75a5467ae44857bf8e54a90ed6588308",
+            "git_blob_id": "3035779fe85ee5a4870c00c8d2400d3d081dc307"
+          },
+          "model-00004-of-00004.safetensors": {
+            "bytes": 262668432,
+            "lfs_sha256": "234f92229d4055749c17e904e4d3f1c9a9af3eb13f96f14eaaa4530c0c376473",
+            "git_blob_id": "c0c4850d1d320b53fac0fff920a21c4c591bc1b3"
+          },
+          "model.safetensors.index.json": {
+            "bytes": 94764,
+            "lfs_sha256": null,
+            "git_blob_id": "bd7cc8ff8070ead248023feae55303f5a3b900d1"
+          },
+          "preprocessor_config.json": {
+            "bytes": 1690,
+            "lfs_sha256": null,
+            "git_blob_id": "c804c0dfcb9655fe2933d2fe20ec3a210068bb82"
+          },
+          "special_tokens_map.json": {
+            "bytes": 552,
+            "lfs_sha256": null,
+            "git_blob_id": "ab75c8e0a22550f0667501a0c52758f071a9efd8"
+          },
+          "tokenizer.json": {
+            "bytes": 1842976,
+            "lfs_sha256": null,
+            "git_blob_id": "591f1fc6ff695d967513100f707e66d5bf731414"
+          },
+          "tokenizer.model": {
+            "bytes": 499723,
+            "lfs_sha256": "9e556afd44213b6bd1be2b850ebbbd98f5481437a8021afaf58ee7fb1818d347",
+            "git_blob_id": "6c00c742ce03c627d6cd5b795984876fa49fa899"
+          },
+          "tokenizer_config.json": {
+            "bytes": 1212,
+            "lfs_sha256": null,
+            "git_blob_id": "7566269cef6fd7301700397bcc988fcab8ca0e52"
+          }
+        },
+        "input_features": null,
+        "output_features": null,
+        "action_horizon": null,
+        "reason": "Metadata/asset presence checked; QLoRA still requires CUDA and a fixture"
+      }
+    },
+    {
+      "model_id": "pi0",
+      "checkpoint": {
+        "source": "lerobot/pi0_libero_finetuned_v044",
+        "revision": "45dcc8fc0e02601c8ccf0554fbd1d26a55070c1f",
+        "subdirectory": null
+      },
+      "suite": "libero_spatial",
+      "status": "metadata_inspected",
+      "reason": "Metadata/asset presence checked; QLoRA still requires CUDA and a fixture",
+      "scope": "native training-batch QLoRA diagnostic; not a closed-loop benchmark",
+      "candidate": "Q2_backbone_nf4_lora",
+      "runtime_profile": {
+        "loader": "pi0",
+        "roots": [
+          "model.paligemma_with_expert.paligemma.model.language_model.layers."
+        ],
+        "runtime": "lerobot==0.4.4; requirements-smolvla-linux.txt",
+        "code_commit": "8fff0fde7c79f23a93d845d1a50e985de01f8b8a"
+      },
+      "metrics": null,
+      "qlora_verified": false,
+      "inference_verified": false,
+      "quantization_verified": false,
+      "closed_loop_verified": false,
+      "export_verified": false,
+      "evidence_refs": [],
+      "inspection": {
+        "status": "metadata_inspected",
+        "qlora_verified": false,
+        "license": "gemma",
+        "architecture": [
+          "pi0"
+        ],
+        "checkpoint_files": {
+          ".gitattributes": {
+            "bytes": 1519,
+            "lfs_sha256": null,
+            "git_blob_id": "a6344aac8c09253b3b630fb776ae94478aa0275b"
+          },
+          "README.md": {
+            "bytes": 4033,
+            "lfs_sha256": null,
+            "git_blob_id": "9d63d00e1f8c321e007d5d02f2efb18fd389a2a6"
+          },
+          "config.json": {
+            "bytes": 2191,
+            "lfs_sha256": null,
+            "git_blob_id": "1e98aa6aed8ad06583d5c1cec3f31cf6d01c6845"
+          },
+          "model.safetensors": {
+            "bytes": 7011548640,
+            "lfs_sha256": "31633cfa2131c058ac1a00fddec9f5731ca17842af46d802cc75fea0f725a386",
+            "git_blob_id": "295fcef6b91e8bace288d12bbd540ff5df831635"
+          },
+          "policy_postprocessor.json": {
+            "bytes": 660,
+            "lfs_sha256": null,
+            "git_blob_id": "0ec8146a07f9b92bc5a3c02e2d6b7d49ba6d26e8"
+          },
+          "policy_postprocessor_step_0_unnormalizer_processor.safetensors": {
+            "bytes": 7668,
+            "lfs_sha256": "a002c0df7f79c5b169c5a899ad151d4ea1bed246c7d82bd93ed1556558d517a9",
+            "git_blob_id": "e75542de525061dee2549887013968b3516cdfdc"
+          },
+          "policy_preprocessor.json": {
+            "bytes": 1881,
+            "lfs_sha256": null,
+            "git_blob_id": "84bc897d7a2c6775b21fdd77ecfa951524e53eb7"
+          },
+          "policy_preprocessor_step_5_normalizer_processor.safetensors": {
+            "bytes": 7668,
+            "lfs_sha256": "a002c0df7f79c5b169c5a899ad151d4ea1bed246c7d82bd93ed1556558d517a9",
+            "git_blob_id": "e75542de525061dee2549887013968b3516cdfdc"
+          },
+          "train_config.json": {
+            "bytes": 5629,
+            "lfs_sha256": null,
+            "git_blob_id": "51f369a6e2cac5c2a92c7694bd35d69b57441074"
+          }
+        },
+        "input_features": {
+          "observation.images.image": {
+            "type": "VISUAL",
+            "shape": [
+              3,
+              256,
+              256
+            ]
+          },
+          "observation.images.image2": {
+            "type": "VISUAL",
+            "shape": [
+              3,
+              256,
+              256
+            ]
+          },
+          "observation.state": {
+            "type": "STATE",
+            "shape": [
+              8
+            ]
+          },
+          "observation.images.empty_camera_0": {
+            "type": "VISUAL",
+            "shape": [
+              3,
+              224,
+              224
+            ]
+          }
+        },
+        "output_features": {
+          "action": {
+            "type": "ACTION",
+            "shape": [
+              7
+            ]
+          }
+        },
+        "action_horizon": 50,
+        "reason": "Metadata/asset presence checked; QLoRA still requires CUDA and a fixture"
+      }
+    },
+    {
+      "model_id": "pi05",
+      "checkpoint": {
+        "source": "gs://openpi-assets/checkpoints/pi05_libero",
+        "revision": null,
+        "subdirectory": null
+      },
+      "suite": "libero_spatial",
+      "status": "blocked",
+      "reason": "Requires hashed OpenPI source and a verified PyTorch conversion",
+      "scope": "native training-batch QLoRA diagnostic; not a closed-loop benchmark",
+      "candidate": "Q2_backbone_nf4_lora",
+      "runtime_profile": {
+        "loader": "pi05",
+        "roots": [
+          "paligemma_with_expert.paligemma.model.language_model.layers."
+        ],
+        "runtime": "isolated native OpenPI PyTorch environment and converted checkpoint",
+        "code_commit": "215abfb217dbac7d5f1273282331b9b1866c0479"
+      },
+      "metrics": null,
+      "qlora_verified": false,
+      "inference_verified": false,
+      "quantization_verified": false,
+      "closed_loop_verified": false,
+      "export_verified": false,
+      "evidence_refs": [],
+      "inspection": {
+        "status": "blocked",
+        "reason": "Requires hashed OpenPI source and a verified PyTorch conversion",
+        "qlora_verified": false
+      }
+    },
+    {
+      "model_id": "gr00t_n17",
+      "checkpoint": {
+        "source": "nvidia/GR00T-N1.7-LIBERO",
+        "revision": "2ea293aa20ba7cf5bbf3ba17a5fbcb1a01cbfe21",
+        "subdirectory": "libero_spatial"
+      },
+      "suite": "libero_spatial",
+      "status": "metadata_inspected",
+      "reason": "Metadata/asset presence checked; QLoRA still requires CUDA and a fixture",
+      "scope": "native training-batch QLoRA diagnostic; not a closed-loop benchmark",
+      "candidate": "Q2_backbone_nf4_lora",
+      "runtime_profile": {
+        "loader": "gr00t_n17",
+        "roots": [
+          "backbone.model.model.language_model.layers."
+        ],
+        "runtime": "isolated Isaac-GR00T environment; LIBERO_PANDA processor fixture",
+        "code_commit": "51d4c89f72fda44cbf77285c6a8114b52676b8a1"
+      },
+      "metrics": null,
+      "qlora_verified": false,
+      "inference_verified": false,
+      "quantization_verified": false,
+      "closed_loop_verified": false,
+      "export_verified": false,
+      "evidence_refs": [],
+      "inspection": {
+        "status": "metadata_inspected",
+        "qlora_verified": false,
+        "license": null,
+        "architecture": [
+          "Gr00tN1d7"
+        ],
+        "checkpoint_files": {
+          "SUCCESS": {
+            "bytes": 0,
+            "lfs_sha256": null,
+            "git_blob_id": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+          },
+          "config.json": {
+            "bytes": 2266,
+            "lfs_sha256": null,
+            "git_blob_id": "b56fe951e6a36ec714cf35978287b28940f3fc9d"
+          },
+          "embodiment_id.json": {
+            "bytes": 2145,
+            "lfs_sha256": null,
+            "git_blob_id": "907dd5cd22ee3b17b24146d86090bfee694efd25"
+          },
+          "experiment_cfg/conf.yaml": {
+            "bytes": 7657,
+            "lfs_sha256": null,
+            "git_blob_id": "f7f6f39f8b5202f2b5bee3c52b0d19ef72ef688c"
+          },
+          "experiment_cfg/config.yaml": {
+            "bytes": 9675,
+            "lfs_sha256": null,
+            "git_blob_id": "c70c3064f08aa15be4eb2d19a4be8509c5d97b0c"
+          },
+          "experiment_cfg/dataset_statistics.json": {
+            "bytes": 5291,
+            "lfs_sha256": null,
+            "git_blob_id": "e607c01616759384301bf439d964c87f09843f1a"
+          },
+          "global_step20000/bf16_zero_pp_rank_0_mp_rank_00_optim_states.pt": {
+            "bytes": 1215396185,
+            "lfs_sha256": "62d015ea937f748b5eff71880bdf35334048e81866a188e5ca506ff01f528264",
+            "git_blob_id": "7b50732a1a2ddd0c1ce561e844bf1b3aa50fd1ec"
+          },
+          "global_step20000/bf16_zero_pp_rank_10_mp_rank_00_optim_states.pt": {
+            "bytes": 1215395942,
+            "lfs_sha256": "0022232877c809b8d8ba25af34ff7b943c300538ffb8947abbbcbf8decbb1e87",
+            "git_blob_id": "61b7a38ed32abd870b72335db7161cd4e7e90cfa"
+          },
+          "global_step20000/bf16_zero_pp_rank_11_mp_rank_00_optim_states.pt": {
+            "bytes": 1215394278,
+            "lfs_sha256": "6eeaf2f940f56b63ca3ca3e56434b0836366e1e59b5298111033ae12180bce82",
+            "git_blob_id": "1d393f44c8c1c43883978e2fe53714feba80813b"
+          },
+          "global_step20000/bf16_zero_pp_rank_12_mp_rank_00_optim_states.pt": {
+            "bytes": 1215394342,
+            "lfs_sha256": "b95f326f5d56512c4db20a8c197145839b36c81aa187b8d6c305a29a2ea162f1",
+            "git_blob_id": "6be46ba0e05808d435aeeb638cbf24d9b436f628"
+          },
+          "global_step20000/bf16_zero_pp_rank_13_mp_rank_00_optim_states.pt": {
+            "bytes": 1215394342,
+            "lfs_sha256": "387863aaf3a4f670290a86a103423086e2c939876d04d4174ed9915bb82bebb5",
+            "git_blob_id": "93b955b0922c9572030f76332cb791d5c4677c50"
+          },
+          "global_step20000/bf16_zero_pp_rank_14_mp_rank_00_optim_states.pt": {
+            "bytes": 1215395558,
+            "lfs_sha256": "a2068bd869538ee71b2306053fa51388c3d918d1e58caa13102b4d848f2d381b",
+            "git_blob_id": "35d58c76a663c2c8c477b8c2b12e3b2db4c35f00"
+          },
+          "global_step20000/bf16_zero_pp_rank_15_mp_rank_00_optim_states.pt": {
+            "bytes": 1215395238,
+            "lfs_sha256": "26b650ee7fda1e649d7bd9a5c0c9901de351a535a2e84f8bb54f7c3ae42a5354",
+            "git_blob_id": "610f7ad0f85711a6e9010d4fc5a195b6f3bc47a1"
+          },
+          "global_step20000/bf16_zero_pp_rank_1_mp_rank_00_optim_states.pt": {
+            "bytes": 1215396121,
+            "lfs_sha256": "8cdfce2772dbf332bf2f9c78ac1bd998aa575de0ae1fc35ff6743369b73e9b3a",
+            "git_blob_id": "4311184208542c4ad29f30dc82446d2e6ad1ca27"
+          },
+          "global_step20000/bf16_zero_pp_rank_2_mp_rank_00_optim_states.pt": {
+            "bytes": 1215395929,
+            "lfs_sha256": "8e70ccce3d4da395cc679c4f039ca3b65fff19b57c77f4e10e737146f0f8fcf5",
+            "git_blob_id": "49cf0bfaa1f6d35b272af9e286bd66a417ca5edf"
+          },
+          "global_step20000/bf16_zero_pp_rank_3_mp_rank_00_optim_states.pt": {
+            "bytes": 1215396249,
+            "lfs_sha256": "e5c5e8a316ae515a7d85e578b036d616a142c7c0cb8cf3d1dc8edba84a5d9de9",
+            "git_blob_id": "17572ca376f187029eb0014b00d23e71b5424753"
+          },
+          "global_step20000/bf16_zero_pp_rank_4_mp_rank_00_optim_states.pt": {
+            "bytes": 1215395929,
+            "lfs_sha256": "11d36936a8a606e30edbbbed1adf42d2a77f84ef0ef47883b3c65e7f7bd38dac",
+            "git_blob_id": "4a8895a36a7b7c8a9a1bed8e3b2379f081ce3db0"
+          },
+          "global_step20000/bf16_zero_pp_rank_5_mp_rank_00_optim_states.pt": {
+            "bytes": 1215396185,
+            "lfs_sha256": "50add64e685e947f165af76a6c6132b39affde0e6e4c2eeaccbccee07531a3fa",
+            "git_blob_id": "898ecabc3f0e45e96dbe79fd8303de4940cc07c4"
+          },
+          "global_step20000/bf16_zero_pp_rank_6_mp_rank_00_optim_states.pt": {
+            "bytes": 1215395993,
+            "lfs_sha256": "42da5a9b82dc2207bdae64069abc433f709c26dd1e090c01def34ef2380969e0",
+            "git_blob_id": "ca5b97d9cc0c47010da50965dff8ef0b7b8512f8"
+          },
+          "global_step20000/bf16_zero_pp_rank_7_mp_rank_00_optim_states.pt": {
+            "bytes": 1215396185,
+            "lfs_sha256": "35fb741aac0aef8b794e7f6df3b0820a4b0da60183682aabca218a230f79668a",
+            "git_blob_id": "c94e4a3fb8c4b98879f00064464d3d9b009ce26f"
+          },
+          "global_step20000/bf16_zero_pp_rank_8_mp_rank_00_optim_states.pt": {
+            "bytes": 1215396121,
+            "lfs_sha256": "0e05f49c27d11493f7c1b906f051eb3d90e0f575afa67bf90df0eb094eb3beeb",
+            "git_blob_id": "7621aff6a7d07319672e56bfae0108fd08abbd4e"
+          },
+          "global_step20000/bf16_zero_pp_rank_9_mp_rank_00_optim_states.pt": {
+            "bytes": 1215395993,
+            "lfs_sha256": "8f6c77b2e49692bab6727f158c0783d53f0aa671045b71526ddd0209b5858026",
+            "git_blob_id": "a4aa2f56389fa5a5a39b9f1fc00f2c5e59935dd6"
+          },
+          "global_step20000/mp_rank_00_model_states.pt": {
+            "bytes": 9335640663,
+            "lfs_sha256": "5e3e98481ea50effbec79a9f67505b1edae03fdd540356a4a2a383f6d7f45819",
+            "git_blob_id": "3ccb2c25dca0101dbf631e7b91700470fb446e89"
+          },
+          "latest": {
+            "bytes": 16,
+            "lfs_sha256": null,
+            "git_blob_id": "50908603509898f37e005b455ca2e7cad40a4bb0"
+          },
+          "model-00001-of-00002.safetensors": {
+            "bytes": 4990519232,
+            "lfs_sha256": "b7c7314a989ae3b577e3265e3f25c42a018ab4a476ab99e4d0fa61266d38a878",
+            "git_blob_id": "ee78daf181b188b51a2cec8e3149cc53df342142"
+          },
+          "model-00002-of-00002.safetensors": {
+            "bytes": 1919980184,
+            "lfs_sha256": "ac70555aee124ef20d23473c85dbcfda42dc8d9f859384822e8aef19fd2d45dd",
+            "git_blob_id": "3deab60688e7c7ed7405f688a1139490c1c5a845"
+          },
+          "model.safetensors.index.json": {
+            "bytes": 104985,
+            "lfs_sha256": null,
+            "git_blob_id": "4761851d9515098ac203474f61221a26cd3a98b6"
+          },
+          "processor_config.json": {
+            "bytes": 26935,
+            "lfs_sha256": null,
+            "git_blob_id": "bcbf138a69c57e445e79fe8e76e84b39f11d25ab"
+          },
+          "rng_state_0.pth": {
+            "bytes": 16249,
+            "lfs_sha256": "3fe8c2fcdb1ff96e0935048e134452c8a972d967da8d4cf422024a2526bc3b87",
+            "git_blob_id": "651cb9903fb411ba816b96e26d024381616e8a7c"
+          },
+          "rng_state_1.pth": {
+            "bytes": 16249,
+            "lfs_sha256": "26418203a181417388c60f51b6a76f6b0fa9de263fc19161cce591f37c688dac",
+            "git_blob_id": "de55a6b65c9c6fc37ac524bd787b862850941b06"
+          },
+          "rng_state_10.pth": {
+            "bytes": 16263,
+            "lfs_sha256": "0ff7a08d691a5e23cd7b6115b36dfedddd3cbf22098676d415a2e9651770398d",
+            "git_blob_id": "d0c9f12f2046c81ab8a5b106cae1a394446fbccb"
+          },
+          "rng_state_11.pth": {
+            "bytes": 16263,
+            "lfs_sha256": "8a7959ce6421be19733e53f1fa01c4f746fce83f2cea4ba54f24c3dc91b4626d",
+            "git_blob_id": "abbf31aaf2ed1d9a435ec19671f586bddcf17792"
+          },
+          "rng_state_12.pth": {
+            "bytes": 16263,
+            "lfs_sha256": "9529dc5e41ee5a5409260407dd6e1664959fb3889ce423df58bbef740458400f",
+            "git_blob_id": "d3ff25df04c535da5015a94fbd08ff24c9491b3a"
+          },
+          "rng_state_13.pth": {
+            "bytes": 16263,
+            "lfs_sha256": "9d2d44017d0d5a2d94dd0f65c51bba723e26553ec8e383a29cf7c3ffd720a81c",
+            "git_blob_id": "4cbc46161f80fcf2063a4f0e969b9412bf3746c8"
+          },
+          "rng_state_14.pth": {
+            "bytes": 16263,
+            "lfs_sha256": "90e81cb4e8bc7f876deba2a33d04988f4271ebb785669a3ac0480f2c001ebef1",
+            "git_blob_id": "33281063ba0e79f9833734bf4423cdd2f9938775"
+          },
+          "rng_state_15.pth": {
+            "bytes": 16263,
+            "lfs_sha256": "3a2f0e6517f292f383fe5f7ab726b6000d780c53fb9eb3e28ddd606316ae098f",
+            "git_blob_id": "b804b78e536f329adf0d10394e9ac6c3971ec03c"
+          },
+          "rng_state_2.pth": {
+            "bytes": 16249,
+            "lfs_sha256": "b2ec1debf4e29ab54ec07bf5d5b00056ed9b69b4c4c8ca5d7517bc9becef3ac2",
+            "git_blob_id": "08edcbbe52cd5a27a76009fec55c822c47bc1358"
+          },
+          "rng_state_3.pth": {
+            "bytes": 16249,
+            "lfs_sha256": "e2d129e37efc453fd764f98b9827c8b04ae9efd844f0ada7ce6243e5ef2e9a67",
+            "git_blob_id": "4d3d173dde17ef91d7575ae0f2a410da8bfc39e6"
+          },
+          "rng_state_4.pth": {
+            "bytes": 16249,
+            "lfs_sha256": "af024ce9bbc7d3ce7b38870abc4f184e80c6750c9da2301cfd5b6435a9144f3b",
+            "git_blob_id": "8015ecfdaacff7bb94c022761ed343022a00d029"
+          },
+          "rng_state_5.pth": {
+            "bytes": 16249,
+            "lfs_sha256": "0ddc351c9b0fe781abbe70c7d6fc7d1c9cee008fd81f0232bd513a2a29b09e23",
+            "git_blob_id": "ed85f6b5823b52f8c8c9f9f7b42ad2872a68cd11"
+          },
+          "rng_state_6.pth": {
+            "bytes": 16249,
+            "lfs_sha256": "d468e9254cbc2c8c003d76844196fa656b4b2c80f8b1468f288331465120294a",
+            "git_blob_id": "f08da6cbca0461231fb09d1ae89addd51ea5542a"
+          },
+          "rng_state_7.pth": {
+            "bytes": 16249,
+            "lfs_sha256": "4f8495178a11407bdfa307672745f3cca156311b7df8b944208e751fd55f7d1d",
+            "git_blob_id": "5ea44a18d22190734673182c4ec1d1670a8b43c8"
+          },
+          "rng_state_8.pth": {
+            "bytes": 16249,
+            "lfs_sha256": "ff92aa444768b8507be2245aaa21fbfe76a77b888330fec704d6cdc4e1fcc7dc",
+            "git_blob_id": "54a5dd78df310c1f4785989f623037444c71c63c"
+          },
+          "rng_state_9.pth": {
+            "bytes": 16249,
+            "lfs_sha256": "d61692028542fd023385497cc2ee75db14ed479cdb7201df80d47a78e5a0a0f1",
+            "git_blob_id": "81292b68e32353f682eef8112136a8bd0760d3e8"
+          },
+          "scheduler.pt": {
+            "bytes": 1263,
+            "lfs_sha256": "f4c44c39940e187648f7b3d89a36afc16ae1b6b30a2dcd7ee50379d16e650d15",
+            "git_blob_id": "7aa685d0f7ba06793767ec7688552fdcd57fbdb5"
+          },
+          "statistics.json": {
+            "bytes": 4298385,
+            "lfs_sha256": null,
+            "git_blob_id": "e256dc6d590039a1da6f2cf0277c3b1cb9404a0b"
+          },
+          "trainer_state.json": {
+            "bytes": 9938815,
+            "lfs_sha256": null,
+            "git_blob_id": "289c6f18ab78567b5a1e6627cb9465024f694390"
+          },
+          "training_args.bin": {
+            "bytes": 8067,
+            "lfs_sha256": "62d6bb642cf6c8676d6c5c78ac5dc859dcf51feb793eea4e9bda715f25972571",
+            "git_blob_id": "30fdd8b97bb934939499da905f89a1216a42eee1"
+          },
+          "wandb_config.json": {
+            "bytes": 65,
+            "lfs_sha256": null,
+            "git_blob_id": "decf7e646b5eefa912d8c2ad0448809d035c6599"
+          },
+          "zero_to_fp32.py": {
+            "bytes": 33270,
+            "lfs_sha256": null,
+            "git_blob_id": "5995d6e6f04e43b989587aa9022a3aef0c66d694"
+          }
+        },
+        "input_features": null,
+        "output_features": null,
+        "action_horizon": 40,
+        "reason": "Metadata/asset presence checked; QLoRA still requires CUDA and a fixture"
+      }
+    }
+  ]
+}

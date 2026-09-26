@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from filelock import FileLock, Timeout
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -13,6 +13,7 @@ from vla_platform import __version__
 from vla_platform.capabilities import registry
 from vla_platform.contracts import Capability, IntakeRequest, Job, Project, ProjectCreate
 from vla_platform.execution import Execution
+from vla_platform.lifecycle.contracts import JobEvent, PolicyArtifact, PolicyRequest
 from vla_platform.projects import Projects
 from vla_platform.settings import Settings
 from vla_platform.storage import Storage
@@ -99,9 +100,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"status": "ok", "version": __version__}
 
     @app.get("/api/v1/capabilities", response_model=list[Capability])
-    async def capabilities() -> list[Capability]:
+    async def capabilities(execution: ExecutionDep) -> list[Capability]:
         return [
-            *registry(),
+            *registry(
+                bool(execution.lifecycle.catalog.runtimes),
+                any(
+                    r.training_python and r.training_root
+                    for r in execution.lifecycle.catalog.runtimes
+                ),
+            ),
             Capability(
                 stage="Dataset",
                 operation="dataset.inspect.local",
@@ -142,6 +149,64 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if payload.source == "local" and settings.local_root is None:
             raise HTTPException(422, "Local intake is disabled; configure FIREBIRD_LOCAL_DATA_ROOT")
         return await execution.submit(project_id, payload)
+
+    @app.get("/api/v1/policy-options")
+    async def policy_options(execution: ExecutionDep) -> dict:
+        return {
+            **execution.lifecycle.catalog.public(),
+            "training_methods": [
+                {
+                    "id": "lora",
+                    "label": "LoRA",
+                    "description": "Train adapters over a floating base",
+                },
+                {
+                    "id": "qlora",
+                    "label": "QLoRA",
+                    "description": "Train adapters over an NF4 base to reduce memory",
+                },
+            ],
+            "default_training_method": "lora",
+            "quantization_defaults": {
+                "cuda": {"language": "Q4_0", "vision": None},
+                "cpu": {"language": "Q8_0", "vision": None},
+                "note": (
+                    "Starting recipes from small target-specific pilots; "
+                    "new policies still require evaluation."
+                ),
+            },
+        }
+
+    @app.post("/api/v1/projects/{project_id}/policy-jobs", response_model=Job, status_code=202)
+    async def policy_job(
+        project_id: str, payload: PolicyRequest, projects: ProjectsDep, execution: ExecutionDep
+    ) -> Job:
+        if await projects.get(project_id) is None:
+            raise HTTPException(404, "Project not found")
+        try:
+            return await execution.submit(project_id, payload)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.get("/api/v1/projects/{project_id}/artifacts", response_model=list[PolicyArtifact])
+    async def artifacts(project_id: str, projects: ProjectsDep, execution: ExecutionDep):
+        if await projects.get(project_id) is None:
+            raise HTTPException(404, "Project not found")
+        return await execution.lifecycle.artifacts(project_id)
+
+    @app.get("/api/v1/projects/{project_id}/artifacts/{artifact_id}/download")
+    async def download_artifact(project_id: str, artifact_id: str, execution: ExecutionDep):
+        try:
+            path = await execution.lifecycle.download(project_id, artifact_id)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return FileResponse(path, media_type="application/x-tar", filename=path.name)
+
+    @app.get("/api/v1/jobs/{job_id}/events", response_model=list[JobEvent])
+    async def job_events(job_id: str, execution: ExecutionDep, after: int = 0):
+        if await execution.get(job_id) is None:
+            raise HTTPException(404, "Job not found")
+        return execution.lifecycle.events(job_id, after)
 
     @app.get("/api/v1/jobs/{job_id}", response_model=Job)
     async def get_job(job_id: str, execution: ExecutionDep) -> Job:

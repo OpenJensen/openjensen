@@ -1,0 +1,10 @@
+.DS_Store
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.egg-info/
+
+# Benchmarks are intentionally local: model snapshots, GGUF files, LIBERO videos,
+# logs, and generated dashboard output must never enter Git history.
+artifacts/

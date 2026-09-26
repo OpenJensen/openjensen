@@ -1,0 +1,19 @@
+FROM firebird-quant-cuda:20260926
+RUN python3 -m pip install --no-cache-dir torch==2.7.1 torchvision==0.22.1 \
+    --index-url https://download.pytorch.org/whl/cpu
+RUN apt-get update && apt-get install -y --no-install-recommends python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+RUN python3 -m pip install --no-cache-dir \
+    numpy==1.26.4 mujoco==2.3.2 robosuite==1.4.0 robomimic==0.2.0 \
+    gym==0.25.2 gymnasium==1.1.1 bddl==1.0.1 easydict==1.13 \
+    transformers==4.51.3 diffusers==0.30.1 accelerate==1.15.0 \
+    dm-tree==0.1.10 einops==0.8.1 pyzmq==27.2.0 msgpack-numpy==0.4.8 \
+    imageio==2.37.4 imageio-ffmpeg==0.6.0 av==15.1.0 \
+    h5py PyOpenGL Pillow scipy matplotlib pandas packaging \
+    draccus==0.10.0 datasets==4.1.1 deepdiff==8.6.2 \
+    huggingface-hub==0.35.3 safetensors==0.8.0 \
+    opencv-python-headless==4.11.0.86 wandb jsonlines termcolor \
+    jsonschema tensorboard tensorboardx future cloudpickle protobuf \
+    pynput pyserial
+RUN python3 -m pip install --no-cache-dir --no-deps lerobot==0.4.3
+ENV MUJOCO_GL=osmesa PYOPENGL_PLATFORM=osmesa OMP_NUM_THREADS=4 MKL_NUM_THREADS=4

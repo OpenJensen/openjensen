@@ -1,0 +1,72 @@
+{
+  "kind": "imported_experiment",
+  "source_base_commit": "d4aba38",
+  "source_state": "Uncommitted Documents experiment; original evidence hashes are historical, not hashes of this import",
+  "recorded_evidence": "docs/quantization-rtx3070-evidence.json",
+  "changes_on_import": [
+    "Move the scripts into workers/vla_cpp without importing the separate CPU benchmark harness",
+    "Reuse the existing worker SHA-256 helper and isolate action parsing/hardware identification",
+    "Keep CUDA rollout entry point separate from the CPU branch smoke_rollout entry point",
+    "Use the packaged native patch path and document required prepared inputs"
+  ],
+  "original_files_sha256": {
+    "Dockerfile.cuda": "7af6d3c10602e0946dd00218c2e92feb7a76e3dd1b3680003652ed7d1522f93d",
+    "Dockerfile.cuda-sim": "c4e096789066fb0201dd8b88fcc52f6bba4492b14d879373ef34c149f2199b27",
+    "Dockerfile.modelopt": "d3d4be14a80c26a436dfa3c1ef7e1211ab4737d19cabf7f740337985e43456d5",
+    "policykit/cuda_bench.py": "fc80139caf76baaecdbab0192094366a6851d1536696c3b3028730c8208a9f66",
+    "policykit/modelopt_pilot.py": "5894e276037ff9a4ceca5f3f8f6e5a1a67b8f48bc91250407f71f9742142151e",
+    "scripts/build_cuda.sh": "5d5378553a298416a285b4941f75c9d454cd1caa70a2a16acd6f6aff657b5a39",
+    "scripts/instrument_cuda_bench.py": "4f3c0fa789f456dc59817b36e25cb3fa38c4ecbdd42bc577358dbdf08c3e9b95",
+    "scripts/prepare_cuda_models.py": "bfb99bf894e5beb1819a30eee0e44f76d12fe082f838f1b263c561f36d6f20f3",
+    "scripts/prepare_modelopt_metadata.py": "b70d19036eeeeeadfcd959bd9a25ba8352c645215ffc7b0664a52236a8e2b9c8",
+    "scripts/capture_cuda_environment.py": "925f36969081a7c77f6baac7a717a7f0f6743e01c78238fabb2704f787568c36",
+    "scripts/run_cuda_rollouts.sh": "2b32588341a6271e0ad7a757bd9a713864358135839852443c91da0f1d69bdeb",
+    "scripts/summarize_cuda_rollouts.py": "ec9d3404c7a2460201795ee828b12c1b608d212bb501ac66393f3ec0793137ad",
+    "tests/test_cuda_bench.py": "6e91725ae14ee4606faabee016674bc79b6b46ab4d9e9310e1759d33107aed77",
+    "docs/quantization-rtx3070.md": "8444cac18d9b79c64c7585020e4c35cb75248ba03b87a89b930f6773476bb1e0",
+    "docs/quantization-rtx3070-evidence.json": "6a6c8e7cb287b4f5379f34ea6951603aa96158f8cba2ecba49453576b33d0ccb",
+    "policykit/smoke_rollout.py": "bc21580623f40f07394e38cded85e2f93d4eca98445466b1ad4a0d90440029f6"
+  },
+  "import_base": {
+    "branch": "feat/quantization_module",
+    "commit": "edd9fb00d234bd350b566ad66d1a92551bf67a35"
+  },
+  "file_mapping": {
+    "Dockerfile.cuda": "Dockerfile.cuda",
+    "Dockerfile.cuda-sim": "Dockerfile.cuda-sim",
+    "Dockerfile.modelopt": "Dockerfile.modelopt",
+    "policykit/cuda_bench.py": "policykit/cuda_bench.py",
+    "policykit/modelopt_pilot.py": "policykit/modelopt_pilot.py",
+    "scripts/build_cuda.sh": "scripts/build_cuda.sh",
+    "scripts/instrument_cuda_bench.py": "scripts/instrument_cuda_bench.py",
+    "scripts/prepare_cuda_models.py": "scripts/prepare_cuda_models.py",
+    "scripts/prepare_modelopt_metadata.py": "scripts/prepare_modelopt_metadata.py",
+    "scripts/capture_cuda_environment.py": "scripts/capture_cuda_environment.py",
+    "scripts/run_cuda_rollouts.sh": "scripts/run_cuda_rollouts.sh",
+    "scripts/summarize_cuda_rollouts.py": "scripts/summarize_cuda_rollouts.py",
+    "tests/test_cuda_bench.py": "tests/test_cuda_bench.py",
+    "docs/quantization-rtx3070.md": "docs/quantization-rtx3070.md",
+    "docs/quantization-rtx3070-evidence.json": "docs/quantization-rtx3070-evidence.json",
+    "policykit/smoke_rollout.py": "policykit/cuda_rollout.py"
+  },
+  "imported_files_sha256": {
+    "Dockerfile.cuda": "7af6d3c10602e0946dd00218c2e92feb7a76e3dd1b3680003652ed7d1522f93d",
+    "Dockerfile.cuda-sim": "c4e096789066fb0201dd8b88fcc52f6bba4492b14d879373ef34c149f2199b27",
+    "Dockerfile.modelopt": "d3d4be14a80c26a436dfa3c1ef7e1211ab4737d19cabf7f740337985e43456d5",
+    "policykit/cuda_bench.py": "e5c59ce076014524e5f3bb5e0640b1325b272c966e3ba13e0ba52f740c292bb1",
+    "policykit/modelopt_pilot.py": "6973e0feaf5b8d61309e48c058c7a7e8a545cd08ec28fa194690f10de62a73d6",
+    "scripts/build_cuda.sh": "6361b747f746ec4389b50b66a56f3bd87575c84bc2a45e3a1c53fbc9d6fd738a",
+    "scripts/instrument_cuda_bench.py": "4f3c0fa789f456dc59817b36e25cb3fa38c4ecbdd42bc577358dbdf08c3e9b95",
+    "scripts/prepare_cuda_models.py": "8e44a4f2bcf5018f1d8a9c5eb3dad5abcdc4ecdf6dba0037d68aa5fa777ee746",
+    "scripts/prepare_modelopt_metadata.py": "b70d19036eeeeeadfcd959bd9a25ba8352c645215ffc7b0664a52236a8e2b9c8",
+    "scripts/capture_cuda_environment.py": "925f36969081a7c77f6baac7a717a7f0f6743e01c78238fabb2704f787568c36",
+    "scripts/run_cuda_rollouts.sh": "073e8842e406d1848e461ad549c0f5485ade01f2ad6f1fd030d265e4e40c82b4",
+    "scripts/summarize_cuda_rollouts.py": "326964bca2a77c7a54c3e2f48abc1612a6f02d7da915c05ea86ddcbb5a4de25d",
+    "tests/test_cuda_bench.py": "6e91725ae14ee4606faabee016674bc79b6b46ab4d9e9310e1759d33107aed77",
+    "docs/quantization-rtx3070.md": "7e9797b33f062d247c8bfdc0f4328644cabf2670f0f5cd5ba678bdda2fafc711",
+    "docs/quantization-rtx3070-evidence.json": "6a6c8e7cb287b4f5379f34ea6951603aa96158f8cba2ecba49453576b33d0ccb",
+    "policykit/cuda_rollout.py": "d25c365f12d55001cdcdc7532a07dc05323c626eab8a24065be420668550b80a"
+  },
+  "additional_helper": "policykit/cuda_common.py",
+  "branch_validation": "docs/gpu-branch-validation.md"
+}
