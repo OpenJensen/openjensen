@@ -11,6 +11,36 @@ packaging and identity checks; they are not an exact-final-commit GPU certificat
 
 ## Local checks
 
+### Diagnostics follow-up
+
+The Diagnostics tab now contains the completed dedicated-L4 reference snapshot
+from benchmark commit `e5866f0`, alongside the existing L4 and RTX views. These
+recorded model measurements remain separate from application job results.
+
+The production UI was exercised against two disposable real application servers:
+one with no execution target and one with an explicit synthetic subprocess worker.
+Fourteen browser checks passed across desktop and mobile: recorded numbers and
+hardware switching, navigation during delayed project loading, Spatial protocol
+selection and locking, missing runtime
+guidance, policy submission through the real API, persisted results after reload,
+missing-policy navigation, unsupported simulation,
+active-worker cancellation, and target-discovery failure. Production build and
+TypeScript checks passed. These tests verify UI/API/worker wiring; their synthetic
+reports are not GPU performance or LIBERO quality evidence. Actual application
+GPU acceptance gates below remain deferred.
+
+```sh
+uv sync --frozen
+pnpm install --frozen-lockfile
+pnpm build:web
+pnpm test:diagnostics
+```
+
+The browser suite starts only local test servers and protocol fixtures. It does
+not connect to a benchmark host, download model weights or rent hardware.
+
+### Existing application checks
+
 - Application: **113 passed**, including the new native subprocess workflow,
   cross-project boundaries, cancellation, concurrent artifact downloads, resume
   containment and preservation of completed stages across restart. Main's process

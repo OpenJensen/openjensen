@@ -71,9 +71,15 @@ function resultOf(job?: Job): LifecycleResult | undefined {
 export function WorkflowPanel({
   projectId,
   stage,
+  onOpenQuantize,
+  tab,
+  onTabChange: setTab,
 }: {
   projectId: string;
   stage: string;
+  onOpenQuantize: () => void;
+  tab: "settings" | "diagnostics";
+  onTabChange: (tab: "settings" | "diagnostics") => void;
 }) {
   const client = useQueryClient();
   const [preferences, setPreferences] = useState(initial);
@@ -83,7 +89,6 @@ export function WorkflowPanel({
   const [datasetId, setDatasetId] = useState("");
   const [method, setMethod] = useState("lora");
   const [resumeId, setResumeId] = useState("");
-  const [tab, setTab] = useState<"settings" | "diagnostics">("settings");
   const [selectedJobId, setSelectedJobId] = useState("");
   const options = useQuery({
     queryKey: ["policy-options"],
@@ -152,7 +157,9 @@ export function WorkflowPanel({
     stage === "Quantize"
       ? ["training_checkpoint", "native_checkpoint"].includes(x.format) ||
         (x.format === "gguf" && x.metadata?.precision === "float")
-      : ["gguf", "deployment_package"].includes(x.format),
+      : stage === "settings"
+        ? x.format === "gguf"
+        : ["gguf", "deployment_package"].includes(x.format),
   );
   const checkpoints = (artifacts.data ?? []).filter(
     (x) => x.format === "training_checkpoint",
@@ -197,7 +204,7 @@ export function WorkflowPanel({
             ? "policy.finetune"
             : stage === "Quantize"
               ? "policy.workflow"
-              : stage === "Evaluate"
+              : stage === "Evaluate" || stage === "settings"
                 ? "policy.evaluate"
                 : "policy.run",
         runtime_id: runtime.id,
@@ -274,6 +281,27 @@ export function WorkflowPanel({
     mutation.error,
     cancel.error,
   ].filter(Boolean);
+  const diagnosticBlocker = options.isPending
+    ? "Checking execution targets…"
+    : options.isError
+      ? "Execution targets could not be loaded. Check the application connection."
+      : !projectId
+        ? "Select or create a project to save your diagnostic results."
+        : !runtime
+          ? "No execution target is configured. Set up a native worker on the application host first."
+          : artifacts.isPending || jobs.isPending
+            ? "Loading project policies and runs…"
+            : artifacts.isError || jobs.isError
+              ? "Project policies or runs could not be loaded. Check the application connection."
+              : policyJobs.some(isActive)
+                ? "Wait for the active policy job to finish, or cancel it below."
+                : !inputs.length
+                  ? "This project has no GGUF policy yet. Create one in Quantize, then return here."
+                  : !inputs.some((artifact) => artifact.id === input)
+                    ? "Choose a project policy to evaluate."
+                    : preferences.mode === "libero" && !runtime.simulation
+                      ? "This target has no LIBERO simulator. Choose engine checks or a simulator-enabled target."
+                      : null;
   if (stage === "settings")
     return (
       <section className="panel workflow-panel">
@@ -523,6 +551,44 @@ export function WorkflowPanel({
         ) : (
           <>
             <h2>Run diagnostics</h2>
+            <p className="muted">Check a policy on your configured target. Results are saved to this project.</p>
+            <form className="workflow-fields diagnostic-launcher" onSubmit={(event) => {
+              event.preventDefault();
+              if (!diagnosticBlocker && !mutation.isPending) mutation.mutate();
+            }}>
+              <label>Diagnostic execution target
+                <select value={runtime?.id ?? ""} onChange={(event) => setRuntimeId(event.target.value)}>
+                  <option value="" disabled>Select a target</option>
+                  {options.data?.runtimes.map((target) => <option key={target.id} value={target.id}>{target.label}</option>)}
+                </select>
+              </label>
+              <label>Diagnostic policy
+                <select value={input} onChange={(event) => setInput(event.target.value)}>
+                  <option value="">Choose a project policy</option>
+                  {inputs.map((artifact) => <option key={artifact.id} value={artifact.id}>{artifact.label} · {artifact.id.slice(0, 8)}</option>)}
+                </select>
+              </label>
+              <label>Diagnostic mode
+                <select value={preferences.mode} disabled={preferences.suite === "libero_spatial"} onChange={(event) => update("mode", event.target.value as Preferences["mode"])}>
+                  <option value="engine">Engine checks</option>
+                  <option value="libero" disabled={!runtime?.simulation}>LIBERO task evaluation</option>
+                </select>
+              </label>
+              <p className="muted">{preferences.mode === "engine"
+                ? `Checks loading, finite actions, prediction latency and memory with ${preferences.warmup} warmups and ${preferences.repetitions} repetitions. Task success is not measured.`
+                : preferences.suite === "libero_spatial"
+                  ? `Evaluates LIBERO Spatial tasks ${preferences.taskIds} with initial states ${preferences.searchStates}, seed 42 and the full 280-step horizon. The policy must include pinned Spatial assets and approved parity limits.`
+                  : `Evaluates LIBERO Object task ${preferences.task} with initial states ${preferences.searchStates}, seed 42 and up to ${preferences.steps} steps. The policy must declare LIBERO Object compatibility.`}</p>
+              <button className="text-link" type="button" onClick={() => setTab("settings")}>Edit diagnostic settings</button>
+              {diagnosticBlocker && <p className="warning-box" id="diagnostic-readiness" role="status">{diagnosticBlocker}</p>}
+              {!runtime && !options.isPending && <p className="muted"><a className="text-link" href="https://github.com/sobhanb-eth/firebird-hackathon-codebase/blob/main/docs/policy-workflow.md#configure-the-execution-host" target="_blank" rel="noreferrer">Worker setup instructions ↗</a></p>}
+              {!!runtime && !inputs.length && !artifacts.isPending && <button className="secondary-button" type="button" onClick={onOpenQuantize}>Open Quantize</button>}
+              <button className="primary-button" type="submit" disabled={!!diagnosticBlocker || mutation.isPending} aria-describedby={diagnosticBlocker ? "diagnostic-readiness" : undefined}>
+                {mutation.isPending ? "Starting…" : "Start diagnostics"}
+              </button>
+            </form>
+            {errors.map((error, index) => <p className="error-notice" role="alert" key={index}>{error?.message}</p>)}
+            <h2 className="diagnostic-runs-heading">Diagnostic runs</h2>
             {policyJobs.length ? (
               <>
                 <label>
@@ -539,6 +605,8 @@ export function WorkflowPanel({
                     ))}
                   </select>
                 </label>
+                {selected && <p className={`status status-${selected.status}`}>{selected.status}</p>}
+                {selected && isActive(selected) && <button className="secondary-button" disabled={cancel.isPending} onClick={() => cancel.mutate()}>Cancel run</button>}
                 {!!data?.reports?.some(
                   (report) => typeof report.p95_ms === "number",
                 ) && (
@@ -575,12 +643,12 @@ export function WorkflowPanel({
                               <td>
                                 {typeof report.peak_device_mib === "number"
                                   ? report.peak_device_mib.toFixed(1)
-                                  : "Unavailable"}
+                                  : "—"}
                               </td>
                               <td>
                                 {typeof report.success_rate === "number"
                                   ? `${(report.success_rate * 100).toFixed(0)}% · ${report.complete_episodes} episodes`
-                                  : "Not measured"}
+                                  : "—"}
                               </td>
                             </tr>
                           ))}

@@ -317,6 +317,14 @@ input::placeholder { color: var(--muted); opacity: .8; }
 .workflow-events { padding: 1rem 1.5rem; font-size: .85rem; }
 .workflow-metrics caption { text-align: left; padding: 12px; font-size: 13px; font-weight: 550; }
 .workflow-metrics td { min-width: 90px; }
+.diagnostic-runs-heading { margin-top: 28px; }
+.diagnostic-launcher { max-width: none; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 12px; }
+.diagnostic-launcher label { margin: 0; min-width: 0; }
+.diagnostic-launcher > :not(label) { grid-column: 1 / -1; }
+.diagnostic-launcher .muted { padding: 0; }
+.diagnostic-launcher > button { justify-self: start; }
+@media (max-width: 1000px) { .diagnostic-launcher { grid-template-columns: minmax(0, 1fr); } }
+.workflow-fields button.text-link { justify-self: start; border: 0; padding: 0; background: transparent; cursor: pointer; font: inherit; font-size: 13px; }
 .benchmark-reference { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--line); min-width: 0; }
 .reference-benchmark-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .reference-benchmark-heading .text-link { font-size: 12px; }

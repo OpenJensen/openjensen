@@ -15,10 +15,39 @@ Metrics, recorded recipes, provenance and stage events are under
 Settings also hold advanced recipes and acceptance constraints. Browser preferences
 are per project; each job preserves the submitted recipe on the server.
 
-Diagnostics also shows the recorded L4/RTX 3070 benchmark comparison as labelled
-reference results, even before a project has policy runs. The hardware views link
-to the exact source snapshot and preserve missing measurements as unscored. These
-reference examples do not populate project jobs or establish results for a new policy.
+Diagnostics also shows the completed GPU benchmark comparison as labelled reference
+results, even before a project has policy runs. NVIDIA L4 (8 vCPUs / 32 GiB), NVIDIA
+L4 (12 vCPUs / 48 GiB) and RTX 3070 have separate views, pinned to evidence commit
+`e5866f0`. The L4 (8 vCPUs / 32 GiB) view
+includes all ten candidates, process-to-first-action startup, cached runtime
+initialization, sampled process VRAM, and paired success changes. Missing RTX runs
+and VRAM appear as dashes. Labels contain only hardware details. These examples do
+not populate project jobs or establish results for a new policy.
+
+To run project diagnostics, select **Settings & diagnostics → Diagnostics**, choose
+an execution target and a project GGUF policy, choose **Engine checks** or **LIBERO
+task evaluation**, then click **Start diagnostics**. **Edit diagnostic settings**
+opens the per-project warmup, repetitions, task and initial-state controls. Results,
+status, stage events and cancellation are available under **Diagnostic runs**, and
+completed runs remain visible after reload. A project without a GGUF policy links
+to **Quantize** to create one. An unavailable API, missing runtime or missing
+simulator is shown explicitly and blocks the relevant launch.
+
+The application host must already have a working native worker configured through
+`FIREBIRD_RUNTIME_CONFIG`; these controls do not provision GPUs. Registering a
+target advertises its configuration, not a live hardware health check. Worker
+startup failures are reported by the job. The retired benchmark rental and failed
+RTX host are not available execution targets.
+
+Project diagnostics evaluate **one native policy** using the application's protocol.
+The application defaults to **LIBERO Object**; the recorded comparison uses
+**LIBERO Spatial**. Select the matching suite and configure its required assets
+before comparing scores. Spatial diagnostics require the full 280-step horizon
+and explicit parity limits, as described in the Spatial workflow below.
+They do not launch the ten-stack LeRobot/bitsandbytes/C++/vLLM/TensorRT-LLM comparison,
+whose complete observation-to-action timing, process memory and paired fixture
+contract differ. **Measurement scope & reproduction** in the example links to the
+pinned standalone GPU benchmark setup and commands for reproducing that comparison.
 
 For the pinned newer Spatial policy, use the [Spatial optimizer workflow](spatial-workflow.md).
 It keeps a native BF16 reference and floating C++ control separate, with explicit
