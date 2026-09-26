@@ -338,7 +338,12 @@ def test_import_check_uses_sky_environment_and_never_executes_shell_wrapper(tmp_
     python.write_text("")
     python.chmod(0o700)
     sky = tmp_path / "sky"
-    sky.write_text(f"#!{python}\n")
+    import shlex
+
+    sky.write_text(f"#!{shlex.quote(str(python))}\n")
+    monkeypatch.setattr(
+        catalog.shutil, "which", lambda value: str(python) if value == str(python) else None
+    )
     assert catalog.sky_python(str(sky)) == str(python)
     sky.write_text("#!/bin/sh\nexec arbitrary-shell\n")
     assert catalog.sky_python(str(sky)) is None
@@ -577,3 +582,13 @@ def test_endpoint_drift_and_credentials_in_workspace_response_are_rejected(monke
     with pytest.raises(catalog.SetupCheckError) as error:
         asyncio.run(catalog.verify_sky_target("/fixture/sky", "robotics-demo", SKY_ENDPOINT))
     assert "secret" not in str(error.value)
+
+
+def test_import_check_locates_windows_console_script_environment_without_execution(tmp_path):
+    scripts = tmp_path / "Scripts"
+    scripts.mkdir()
+    launcher = scripts / "sky.exe"
+    launcher.write_bytes(b"\x00\xffbinary console launcher")
+    python = tmp_path / "python.exe"
+    python.write_bytes(b"fixture interpreter; never executed")
+    assert catalog.sky_python(str(launcher)) == str(python)

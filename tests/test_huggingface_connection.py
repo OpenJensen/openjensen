@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 from unittest.mock import AsyncMock
 
 import httpx
@@ -55,7 +56,8 @@ def test_token_saved_privately_and_status_only_exposes_mask(tmp_path, identity):
         assert client.get("/api/v1/huggingface-connection").json() == result
         assert TOKEN not in client.get("/api/v1/policy-options").text
     saved = tmp_path / "huggingface-credential.json"
-    assert saved.stat().st_mode & 0o077 == 0
+    if os.name == "posix":
+        assert saved.stat().st_mode & 0o077 == 0
     assert json.loads(saved.read_text())["token"] == TOKEN
     # Tokens are loaded only from this known application credential file.
     restored = HuggingFaceConnection(tmp_path)
@@ -134,11 +136,17 @@ def test_disconnect_deletes_only_app_credential(tmp_path, identity):
     assert HuggingFaceConnection(tmp_path).token() is None
 
 
-def test_symlink_or_nonprivate_saved_file_never_loaded(tmp_path, identity):
+@pytest.mark.skipif(os.name != "posix", reason="POSIX mode bits are not Windows ACLs")
+def test_nonprivate_saved_file_never_loaded(tmp_path, identity):
     connection = HuggingFaceConnection(tmp_path)
     asyncio.run(connection.save(SecretStr(TOKEN)))
     connection.path.chmod(0o644)
     assert HuggingFaceConnection(tmp_path).token() is None
+
+
+def test_symlink_saved_file_never_loaded_or_target_deleted(tmp_path, identity):
+    connection = HuggingFaceConnection(tmp_path)
+    asyncio.run(connection.save(SecretStr(TOKEN)))
     original = tmp_path / "private-original.json"
     connection.path.rename(original)
     original.chmod(0o600)

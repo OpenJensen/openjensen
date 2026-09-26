@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import os
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -67,7 +69,8 @@ def test_gcp_verifies_active_identity_and_project_then_saves_selection(
     )
     saved = tmp_path / "cloud-connections.json"
     assert json.loads(saved.read_text()) == {"version": 1, "providers": {"gcp": GCP}}
-    assert saved.stat().st_mode & 0o077 == 0
+    if os.name == "posix":
+        assert saved.stat().st_mode & 0o077 == 0
     assert cloud_client.get("/api/v1/cloud-connections").json()["providers"][0] == result
 
 
@@ -264,14 +267,20 @@ def test_cli_uses_argv_and_does_not_return_sensitive_diagnostics(monkeypatch):
     assert "shell" not in spawn.await_args.kwargs
 
 
+@pytest.mark.parametrize("platform", ["posix", "nt"])
 @pytest.mark.parametrize("parent_returncode", [None, 0])
-def test_cli_timeout_kills_process_and_returns_short_failure(monkeypatch, parent_returncode):
+def test_cli_timeout_kills_process_and_returns_short_failure(
+    monkeypatch, parent_returncode, platform
+):
     monkeypatch.setattr("vla_platform.cloud_connections.shutil.which", lambda _: "/fixture/gcloud")
     process = Mock(returncode=parent_returncode, communicate=AsyncMock(return_value=(b"", b"")))
     spawn = AsyncMock(return_value=process)
     monkeypatch.setattr("vla_platform.cloud_connections.asyncio.create_subprocess_exec", spawn)
     kill_group = Mock()
-    monkeypatch.setattr("vla_platform.cloud_connections.os.killpg", kill_group)
+    monkeypatch.setattr(
+        "vla_platform.cloud_connections.os",
+        SimpleNamespace(name=platform, environ=os.environ, killpg=kill_group),
+    )
 
     async def timeout(awaitable, *, timeout):
         await awaitable
@@ -282,7 +291,13 @@ def test_cli_timeout_kills_process_and_returns_short_failure(monkeypatch, parent
     monkeypatch.setattr("vla_platform.cloud_connections.asyncio.wait_for", timeout)
     with pytest.raises(_CheckFailed, match="timed out"):
         asyncio.run(run_cloud_cli("gcloud", ["auth", "list"]))
-    kill_group.assert_called_once()
+    if platform == "posix":
+        kill_group.assert_called_once()
+        process.kill.assert_not_called()
+    else:
+        kill_group.assert_not_called()
+        assert process.kill.call_count == (1 if parent_returncode is None else 0)
+    assert process.communicate.await_count == 2
 
 
 def test_provider_cli_invalid_json_is_not_returned(monkeypatch):

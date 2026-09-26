@@ -344,27 +344,24 @@ def test_remote_bootstrap_runs_protocol_and_makes_downloadable_bundle(tmp_path, 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setenv("SKYPILOT_INTERNAL_JOB_ID", "1")
 
-    class Process:
-        def __init__(self, argv, **kwargs):
-            assert argv[1:3] == ["-m", "firebird_vla.application"]
-            request = json.loads(Path(argv[3]).read_text())
-            output = Path(request["output_dir"])
-            (output / "bundle").mkdir()
-            (output / "bundle" / "manifest.json").write_text("{}")
-            Path(argv[4]).write_text(
-                json.dumps(
-                    {
-                        "job_id": "example",
-                        "artifact": {"path": str(output / "bundle")},
-                    }
-                )
+    def run_worker(argv, **kwargs):
+        assert kwargs["timeout"] == 300
+        assert argv[1:3] == ["-m", "firebird_vla.application"]
+        request = json.loads(Path(argv[3]).read_text())
+        output = Path(request["output_dir"])
+        (output / "bundle").mkdir()
+        (output / "bundle" / "manifest.json").write_text("{}")
+        Path(argv[4]).write_text(
+            json.dumps(
+                {
+                    "job_id": "example",
+                    "artifact": {"path": str(output / "bundle")},
+                }
             )
+        )
+        return 0
 
-        def wait(self, timeout):
-            assert timeout == 300
-            return 0
-
-    monkeypatch.setattr(sky_bootstrap.subprocess, "Popen", Process)
+    monkeypatch.setattr(sky_bootstrap, "run_worker", run_worker)
     assert sky_bootstrap.main() == 0
     with tarfile.open(
         fileobj=io.BytesIO((logs / "final-output" / "firebird-output.part-00000").read_bytes())

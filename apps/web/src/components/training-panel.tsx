@@ -103,28 +103,41 @@ function datasetIssue(profile: DatasetProfile) {
       !Array.isArray(shape) ||
       shape.length !== 1 ||
       typeof shape[0] !== "number" ||
-      shape[0] < 1 ||
-      shape[0] > 36
+      !Number.isInteger(shape[0]) ||
+      shape[0] < 1
     )
-      return `Training needs a ${key} vector with 1–36 values.`;
+      return `Training needs a non-empty ${key} vector.`;
   }
   return null;
 }
 function number(value: number) {
   return value.toLocaleString();
 }
+// Mirrors the reviewed adapters in native_profiles.py and psi_profile.py. The
+// server remains authoritative; camera/dimension limits are model-specific.
+const dimensionLimits: Record<string, number> = {
+  smolvla: 32, psi0: 36, eo1: 32, evo1: 24, gr00t_n17: 132,
+  pi0: 32, pi05: 32, pi0_fast: 32, wall_x: 20, xvla: 20,
+};
 function modelDatasetIssue(model: TrainingModel | undefined, profile: DatasetProfile | undefined, cameraKeys: string[]) {
   if (!model || !profile) return null;
   if (model.id === "psi0" && profile.format !== "lerobot_v2")
     return "Psi-Zero currently needs a LeRobot v2 dataset. Choose a v2 inspection or another model.";
+  if (model.backend === "lerobot" && profile.format !== "lerobot_v3")
+    return `${model.label} currently needs a LeRobot v3 dataset. Choose a v3 inspection or another model.`;
   if (model.required_cameras && cameraKeys.length !== model.required_cameras)
     return `${model.label} requires ${model.required_cameras} selected camera${model.required_cameras === 1 ? "" : "s"}. Change the camera selection in Dataset.`;
+  if (model.id === "evo1" && cameraKeys.length > 3)
+    return "EVO-1 supports at most three selected cameras. Change the camera selection in Dataset.";
   if (model.id !== "psi0" && !("observation.state" in profile.features))
     return `${model.label} requires an observation.state feature.`;
-  if (model.id === "smolvla") {
-    for (const key of ["observation.state", "action"]) {
+  const maximum = dimensionLimits[model.id];
+  if (maximum) {
+    const state = "observation.state" in profile.features ? "observation.state" : "states";
+    for (const key of [state, "action"]) {
       const feature = profile.features[key] as { shape?: number[] } | undefined;
-      if ((feature?.shape?.[0] ?? 0) > 32) return "SmolVLA supports at most 32 state and action values. Choose another model.";
+      if ((feature?.shape?.[0] ?? 0) > maximum)
+        return `${model.label} supports at most ${maximum} ${key} dimensions.`;
     }
   }
   return null;
@@ -432,7 +445,7 @@ export function TrainingPanel({
     positiveInteger(recipe.evalEvery);
   const blocked = !projectId
     ? "Select a project."
-    : options.isPending || jobs.isPending
+    : !loaded || options.isPending || jobs.isPending
       ? "Loading…"
       : options.isError || jobs.isError
         ? "Couldn’t load training options."

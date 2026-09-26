@@ -51,7 +51,8 @@ def resolve_recipe(job):
         raise ValueError("Psi-Zero requires an immutable Hugging Face dataset inspection")
     if data.get("format") not in {"lerobot_v2", "lerobot_v21"}:
         raise ValueError(
-            "Psi-Zero's pinned upstream loader requires LeRobot v2.x; v3 datasets are not supported by this adapter"
+            "Psi-Zero's pinned upstream loader requires LeRobot v2.x; "
+            "v3 datasets are not supported by this adapter"
         )
     features = data["features"]
     state_key = "observation.state" if "observation.state" in features else "states"

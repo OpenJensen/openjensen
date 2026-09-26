@@ -94,7 +94,9 @@ class HuggingFaceConnection:
         try:
             if self.path.is_symlink():
                 raise ValueError("Credential file must not be a symlink")
-            handle = os.open(self.path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            # Opening a FIFO must not block before fstat can reject it.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+            handle = os.open(self.path, flags)
             with os.fdopen(handle, "r") as stream:
                 info = os.fstat(stream.fileno())
                 if (
