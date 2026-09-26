@@ -38,6 +38,12 @@ finite actions but both full-policy exports failed. The evidence predates this
 source import; `GPU_ORIGIN.json` records the import changes. Broader quality,
 packed ModelOpt execution and verified deployment packages remain open.
 
+## Application acceptance
+
+The [native acceptance contract](docs/native-acceptance.md) describes the repaired
+GGUF checks, complete memory coverage, Linux runtime fingerprints and fresh-process
+package verification. Its CPU regressions are separate from hardware/model evidence.
+
 ## Testing and benchmarking
 
 The [application workflow diagram](../../docs/policy-workflow.md#defaults-and-selection)
