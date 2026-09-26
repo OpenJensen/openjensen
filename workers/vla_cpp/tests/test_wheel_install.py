@@ -53,3 +53,11 @@ with patch.object(worker, 'check_runtime'), patch.object(worker, 'version', retu
     expected_patch = source / "policykit/patches/vla-cpp-smolvla-packed.patch"
     assert runtime["patch_sha256"] == hashlib.sha256(expected_patch.read_bytes()).hexdigest()
     assert runtime["vendor_path"] == str(vendor.resolve())
+    # Experimental entry points must be inspectable from the installed wheel
+    # without importing optional CUDA/PyTorch/simulator dependencies.
+    for module in ("cuda_bench", "cuda_rollout", "modelopt_pilot"):
+        help_result = subprocess.run(
+            [str(python), "-I", "-m", f"policykit.{module}", "--help"],
+            cwd=tmp_path, check=True, capture_output=True, text=True,
+        )
+        assert "usage:" in help_result.stdout

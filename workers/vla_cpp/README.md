@@ -13,6 +13,22 @@ the standalone worker protocol is not yet wired into `vla_platform.contracts`.
 
 Related task: [QUANT-001 (#24)](https://github.com/sobhanb-eth/firebird-hackathon-codebase/issues/24).
 
+## Experimental CUDA and NVIDIA quantization
+
+The `feat/quantization-rtx3070` PR targets codebase `main` and depends on the
+quantization module PR. It relates to [QUANT-001 (#24)](https://github.com/sobhanb-eth/firebird-hackathon-codebase/issues/24)
+and [EVAL-002 (#21)](https://github.com/sobhanb-eth/firebird-hackathon-codebase/issues/21). It adds isolated CUDA engine/rollout tools
+and small ModelOpt AWQ/SmoothQuant pilots. Start with the
+[GPU setup](docs/gpu-setup.md), [RTX 3070 results](docs/quantization-rtx3070.md)
+and [NVIDIA research plan](docs/nvidia-quantization-plan.md).
+
+The recorded experiment completed 300 CUDA predictions and one paired LIBERO
+development episode per candidate. Four candidates succeeded; LM Q4 plus vision
+Q8 reached the natural horizon without success. ModelOpt calibration produced
+finite actions but both full-policy exports failed. The evidence predates this
+source import; `GPU_ORIGIN.json` records the import changes. Broader quality,
+packed ModelOpt execution and verified deployment packages remain open.
+
 ## Testing and benchmarking
 
 We validate the implementation first, then measure actual model artifacts. These
