@@ -621,8 +621,11 @@ def test_completed_invalid_final_event_is_rejected(configured):
         path = configured.data_dir / "jobs" / jid / "events.jsonl"
         with path.open("ab") as stream:
             stream.write(b'{"sequence":99,"stage":\n')
-        with pytest.raises(ValueError, match="Corrupt event record"):
-            client.get(f"/api/v1/jobs/{jid}/events")
+        response = client.get(f"/api/v1/jobs/{jid}/events")
+        assert response.status_code == 422
+        assert response.json()["detail"] == (
+            "Job event history is corrupt; preserve it for inspection"
+        )
 
 
 @pytest.mark.parametrize("schema", [True, 1.0, "1"])
