@@ -1,0 +1,7 @@
+**/.tools/
+**/results/
+**/*.local.yaml
+**/build-id.txt
+**/worker-image.txt
+**/isaac-image.txt
+jobs/

@@ -1,0 +1,62 @@
+substitutions:
+  _REGION: us-east4
+  _REPOSITORY: simulation
+  _ISAAC_IMAGE: nvcr.io/nvidia/isaac-sim:6.1.0
+
+serviceAccount: projects/$PROJECT_ID/serviceAccounts/sim-builder@$PROJECT_ID.iam.gserviceaccount.com
+timeout: 3600s
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+  diskSizeGb: '200'
+
+steps:
+  # Resolve the version tag once and build against that immutable digest.
+  - id: resolve-base
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    env:
+      - ISAAC_IMAGE=${_ISAAC_IMAGE}
+    args:
+      - -euo
+      - pipefail
+      - -c
+      - |
+        docker pull --platform linux/amd64 "$$ISAAC_IMAGE"
+        docker inspect --format='{{index .RepoDigests 0}}' "$$ISAAC_IMAGE" > isaac-image.txt
+
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    env:
+      - WORKER_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/isaac-worker:$BUILD_ID
+    args:
+      - -euo
+      - pipefail
+      - -c
+      - |
+        docker build --platform linux/amd64 \
+          --build-arg "ISAAC_IMAGE=$$(cat isaac-image.txt)" \
+          --tag "$$WORKER_IMAGE" .
+
+  # These tests need no GPU and never start Isaac or contact GCS.
+  - id: test
+    name: gcr.io/cloud-builders/docker
+    args:
+      - run
+      - --rm
+      - --env
+      - SIM_REQUIRE_VIDEO_TOOLS=1
+      - --entrypoint
+      - /isaac-sim/python.sh
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/isaac-worker:$BUILD_ID
+      - --no-ros-env
+      - -m
+      - unittest
+      - discover
+      - -s
+      - tests
+      - -v
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/isaac-worker:$BUILD_ID

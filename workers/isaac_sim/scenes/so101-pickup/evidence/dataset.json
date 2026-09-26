@@ -1,0 +1,814 @@
+{
+  "dataset": {
+    "repo_id": "codywang/so101_pickup_test",
+    "revision": "ecef85bc07005f771ad86deeff1427f9d72953ed",
+    "url": "https://huggingface.co/datasets/codywang/so101_pickup_test/tree/ecef85bc07005f771ad86deeff1427f9d72953ed",
+    "license": "apache-2.0",
+    "license_source": "Hugging Face dataset card metadata",
+    "inspected_on": "2026-09-26"
+  },
+  "confirmed_metadata": {
+    "format_version": "v3.0",
+    "robot_type": "so_follower",
+    "episodes": 30,
+    "frames": 4500,
+    "fps": 30,
+    "task": "Pick up the cube and place it in the box",
+    "split": {
+      "train": "0:30"
+    },
+    "joint_order": [
+      "shoulder_pan.pos",
+      "shoulder_lift.pos",
+      "elbow_flex.pos",
+      "wrist_flex.pos",
+      "wrist_roll.pos",
+      "gripper.pos"
+    ],
+    "camera": {
+      "feature": "observation.images.front",
+      "width": 1920,
+      "height": 1080,
+      "channels": 3,
+      "codec": "av1",
+      "pixel_format": "yuv420p",
+      "depth": false,
+      "audio": false
+    }
+  },
+  "source_files": [
+    {
+      "path": "meta/info.json",
+      "url": "https://huggingface.co/datasets/codywang/so101_pickup_test/resolve/ecef85bc07005f771ad86deeff1427f9d72953ed/meta/info.json",
+      "sha256": "2257f8360a272ff10bff3d5aeeb4d365c9716141dee5a74ecfe7fe5e8cfca6be",
+      "bytes": 2596
+    },
+    {
+      "path": "meta/episodes/chunk-000/file-000.parquet",
+      "url": "https://huggingface.co/datasets/codywang/so101_pickup_test/resolve/ecef85bc07005f771ad86deeff1427f9d72953ed/meta/episodes/chunk-000/file-000.parquet",
+      "sha256": "75985cf07c9cebfe3dd91920065703bef20b9f8b94521ac7c29f1d9cba852723",
+      "bytes": 121561
+    },
+    {
+      "path": "meta/tasks.parquet",
+      "url": "https://huggingface.co/datasets/codywang/so101_pickup_test/resolve/ecef85bc07005f771ad86deeff1427f9d72953ed/meta/tasks.parquet",
+      "sha256": "2b3044279acac6c5954ae87f69001764fd3cb3986c3491d35054d92e6b58a8ce",
+      "bytes": 2296
+    },
+    {
+      "path": "data/chunk-000/file-000.parquet",
+      "url": "https://huggingface.co/datasets/codywang/so101_pickup_test/resolve/ecef85bc07005f771ad86deeff1427f9d72953ed/data/chunk-000/file-000.parquet",
+      "sha256": "49bb7229183d5a3c89052a61a7a57d425fb6c3a6c78ae758c1f03f6f1531e729",
+      "bytes": 233421
+    }
+  ],
+  "first_frame_raw": {
+    "action": [
+      -1.4505494832992554,
+      -104.87911987304688,
+      90.24176025390625,
+      74.68132019042969,
+      -5.934065818786621,
+      5.111294269561768
+    ],
+    "observation.state": [
+      9.362637519836426,
+      -104.04395294189453,
+      96.57142639160156,
+      76.61538696289062,
+      7.956043720245361,
+      1.4256619215011597
+    ],
+    "timestamp": 0.0,
+    "frame_index": 0,
+    "episode_index": 0,
+    "index": 0,
+    "task_index": 0
+  },
+  "raw_statistics": {
+    "observation.state": {
+      "min": [
+        -15.252747535705566,
+        -104.48351287841797,
+        -36.96703338623047,
+        18.329669952392578,
+        -12.263736724853516,
+        1.3577733039855957
+      ],
+      "max": [
+        60.35165023803711,
+        32.30769348144531,
+        96.57142639160156,
+        84.52747344970703,
+        80.13186645507812,
+        42.769859313964844
+      ],
+      "arm_encoder_grid_max_residual_ticks": [
+        2.3245811462402344e-05,
+        7.82012939453125e-05,
+        6.771087646484375e-05,
+        6.961822509765625e-05,
+        4.559755325317383e-05
+      ]
+    },
+    "action": {
+      "min": [
+        -16.923076629638672,
+        -105.31867980957031,
+        -41.4505500793457,
+        16.30769157409668,
+        -12.879120826721191,
+        0.0
+      ],
+      "max": [
+        61.14285659790039,
+        35.60439682006836,
+        94.63735961914062,
+        85.31867980957031,
+        101.5824203491211,
+        44.0230827331543
+      ],
+      "arm_encoder_grid_max_residual_ticks": [
+        2.1830201148986816e-05,
+        5.435943603515625e-05,
+        6.580352783203125e-05,
+        6.008148193359375e-05,
+        4.4226646423339844e-05
+      ]
+    }
+  },
+  "joint_conventions": {
+    "metadata_units": "Unspecified. Dataset contains no recording configuration, motor calibration, or URDF.",
+    "arm_unit_inference": "Strong evidence for degrees in the five arm channels; not verified as calibrated URDF coordinates.",
+    "numerical_evidence": "Across every state and action row, arm differences lie on a 360/4095 degree grid within float32 error. Shoulder values below -100 also disagree with current LeRobot bounded [-100,100] normalization.",
+    "encoder_degree_step": 0.08791208791208792,
+    "lerobot_degree_formula": "(encoder_value - (range_min + range_max) / 2) * 360 / (motor_resolution - 1)",
+    "lerobot_modes": "SO follower selects degrees or [-100,100] for the arm. The gripper always uses [0,100] calibration normalization.",
+    "gripper_inference": "Normalized opening, 0 closed and 100 open; not radians or a directly usable URDF joint angle.",
+    "manufacturer_conventions": {
+      "new_calibration": "Virtual zero at the middle of joint range.",
+      "old_calibration": "Virtual zero in the fully extended horizontal pose.",
+      "gripper": "Manufacturer warns LeRobot opening normalization is not reflected in the angular URDF/MJCF joint."
+    },
+    "limit_mismatch": "The new URDF shoulder_lift limit is approximately +/-100 degrees. Recorded states reach -104.48 and actions -105.32; direct assignment would exceed that model limit.",
+    "initial_pose_recommendation": "Fit a folded resting pose visually within model limits. Use raw first-frame state only as a starting estimate; preserve it separately from scene joint angles.",
+    "replay_status": "Exact calibrated replay is unverified. Confirm recording software/configuration, per-motor calibration, joint signs/zeros, and gripper mapping before converting the dataset to simulator joint targets.",
+    "sources": [
+      {
+        "url": "https://github.com/huggingface/lerobot/blob/main/src/lerobot/robots/so_follower/so_follower.py",
+        "observed": "2026-09-26",
+        "scope": "Current source describes mode selection and calibration, not necessarily recording-time code."
+      },
+      {
+        "url": "https://github.com/huggingface/lerobot/blob/main/src/lerobot/motors/motors_bus.py",
+        "observed": "2026-09-26",
+        "scope": "Current normalization formulas."
+      },
+      {
+        "url": "https://github.com/TheRobotStudio/SO-ARM100/blob/5f6d2b876a53a4872e405b991dd925556c9e38a4/Simulation/SO101/README.md",
+        "scope": "Manufacturer calibration and gripper conventions."
+      },
+      {
+        "url": "https://github.com/TheRobotStudio/SO-ARM100/blob/5f6d2b876a53a4872e405b991dd925556c9e38a4/Simulation/SO101/so101_new_calib.urdf",
+        "scope": "Nominal new-calibration kinematics and angular limits."
+      }
+    ]
+  },
+  "visual_evidence": {
+    "coverage": "Reviewed front-video file 000 sampled frames 0,30,60,90,120,149,300,449,599: episodes 0-3 only.",
+    "observed": [
+      "White articulated SO-series arm at the left of a wooden shelf; black servos and cables; orange gripper contact surfaces.",
+      "Tapered white printed paper cup on the shelf.",
+      "Open brown cardboard box with a green circular logo on the carpet in front of the shelf.",
+      "Orange-brown wooden shelving in a gray metal rectangular frame.",
+      "Dark gray fabric wall panels, gray patterned carpet, and visible floor cables."
+    ],
+    "task_label_mismatch": "The task text says cube. Reviewed frames show a paper cup and no visible cube. Scene reconstruction should follow the images.",
+    "robot_identity": "SO-101 is inferred from dataset name and appearance; metadata identifies only the generic so_follower family.",
+    "dimensions_and_poses": "Estimated from monocular video; no metric scene survey or object poses are supplied."
+  },
+  "missing_for_exact_replica": [
+    "Camera intrinsics, distortion, and calibrated world pose.",
+    "Metric shelf, box, cup, carpet, wall and room geometry.",
+    "Robot-to-world transform and per-unit joint calibration.",
+    "Object mass, friction, compliance and contact properties.",
+    "Complete textures and geometry of hidden surfaces.",
+    "Recording-time robot configuration and exact hardware revision."
+  ],
+  "episodes": [
+    {
+      "episode": 0,
+      "frames": 150,
+      "data_rows_half_open": [
+        0,
+        150
+      ],
+      "video_file": 0,
+      "video_seconds_half_open": [
+        0.0,
+        5.0
+      ],
+      "video_frame_range_half_open": [
+        0,
+        150
+      ]
+    },
+    {
+      "episode": 1,
+      "frames": 150,
+      "data_rows_half_open": [
+        150,
+        300
+      ],
+      "video_file": 0,
+      "video_seconds_half_open": [
+        5.0,
+        10.0
+      ],
+      "video_frame_range_half_open": [
+        150,
+        300
+      ]
+    },
+    {
+      "episode": 2,
+      "frames": 150,
+      "data_rows_half_open": [
+        300,
+        450
+      ],
+      "video_file": 0,
+      "video_seconds_half_open": [
+        10.0,
+        15.0
+      ],
+      "video_frame_range_half_open": [
+        300,
+        450
+      ]
+    },
+    {
+      "episode": 3,
+      "frames": 150,
+      "data_rows_half_open": [
+        450,
+        600
+      ],
+      "video_file": 0,
+      "video_seconds_half_open": [
+        15.0,
+        20.0
+      ],
+      "video_frame_range_half_open": [
+        450,
+        600
+      ]
+    },
+    {
+      "episode": 4,
+      "frames": 150,
+      "data_rows_half_open": [
+        600,
+        750
+      ],
+      "video_file": 1,
+      "video_seconds_half_open": [
+        0.0,
+        5.0
+      ],
+      "video_frame_range_half_open": [
+        0,
+        150
+      ]
+    },
+    {
+      "episode": 5,
+      "frames": 150,
+      "data_rows_half_open": [
+        750,
+        900
+      ],
+      "video_file": 1,
+      "video_seconds_half_open": [
+        5.0,
+        10.0
+      ],
+      "video_frame_range_half_open": [
+        150,
+        300
+      ]
+    },
+    {
+      "episode": 6,
+      "frames": 150,
+      "data_rows_half_open": [
+        900,
+        1050
+      ],
+      "video_file": 1,
+      "video_seconds_half_open": [
+        10.0,
+        15.0
+      ],
+      "video_frame_range_half_open": [
+        300,
+        450
+      ]
+    },
+    {
+      "episode": 7,
+      "frames": 150,
+      "data_rows_half_open": [
+        1050,
+        1200
+      ],
+      "video_file": 1,
+      "video_seconds_half_open": [
+        15.0,
+        20.0
+      ],
+      "video_frame_range_half_open": [
+        450,
+        600
+      ]
+    },
+    {
+      "episode": 8,
+      "frames": 150,
+      "data_rows_half_open": [
+        1200,
+        1350
+      ],
+      "video_file": 2,
+      "video_seconds_half_open": [
+        0.0,
+        5.0
+      ],
+      "video_frame_range_half_open": [
+        0,
+        150
+      ]
+    },
+    {
+      "episode": 9,
+      "frames": 150,
+      "data_rows_half_open": [
+        1350,
+        1500
+      ],
+      "video_file": 2,
+      "video_seconds_half_open": [
+        5.0,
+        10.0
+      ],
+      "video_frame_range_half_open": [
+        150,
+        300
+      ]
+    },
+    {
+      "episode": 10,
+      "frames": 150,
+      "data_rows_half_open": [
+        1500,
+        1650
+      ],
+      "video_file": 2,
+      "video_seconds_half_open": [
+        10.0,
+        15.0
+      ],
+      "video_frame_range_half_open": [
+        300,
+        450
+      ]
+    },
+    {
+      "episode": 11,
+      "frames": 150,
+      "data_rows_half_open": [
+        1650,
+        1800
+      ],
+      "video_file": 2,
+      "video_seconds_half_open": [
+        15.0,
+        20.0
+      ],
+      "video_frame_range_half_open": [
+        450,
+        600
+      ]
+    },
+    {
+      "episode": 12,
+      "frames": 150,
+      "data_rows_half_open": [
+        1800,
+        1950
+      ],
+      "video_file": 3,
+      "video_seconds_half_open": [
+        0.0,
+        5.0
+      ],
+      "video_frame_range_half_open": [
+        0,
+        150
+      ]
+    },
+    {
+      "episode": 13,
+      "frames": 150,
+      "data_rows_half_open": [
+        1950,
+        2100
+      ],
+      "video_file": 3,
+      "video_seconds_half_open": [
+        5.0,
+        10.0
+      ],
+      "video_frame_range_half_open": [
+        150,
+        300
+      ]
+    },
+    {
+      "episode": 14,
+      "frames": 150,
+      "data_rows_half_open": [
+        2100,
+        2250
+      ],
+      "video_file": 3,
+      "video_seconds_half_open": [
+        10.0,
+        15.0
+      ],
+      "video_frame_range_half_open": [
+        300,
+        450
+      ]
+    },
+    {
+      "episode": 15,
+      "frames": 150,
+      "data_rows_half_open": [
+        2250,
+        2400
+      ],
+      "video_file": 3,
+      "video_seconds_half_open": [
+        15.0,
+        20.0
+      ],
+      "video_frame_range_half_open": [
+        450,
+        600
+      ]
+    },
+    {
+      "episode": 16,
+      "frames": 150,
+      "data_rows_half_open": [
+        2400,
+        2550
+      ],
+      "video_file": 4,
+      "video_seconds_half_open": [
+        0.0,
+        5.0
+      ],
+      "video_frame_range_half_open": [
+        0,
+        150
+      ]
+    },
+    {
+      "episode": 17,
+      "frames": 150,
+      "data_rows_half_open": [
+        2550,
+        2700
+      ],
+      "video_file": 4,
+      "video_seconds_half_open": [
+        5.0,
+        10.0
+      ],
+      "video_frame_range_half_open": [
+        150,
+        300
+      ]
+    },
+    {
+      "episode": 18,
+      "frames": 150,
+      "data_rows_half_open": [
+        2700,
+        2850
+      ],
+      "video_file": 4,
+      "video_seconds_half_open": [
+        10.0,
+        15.0
+      ],
+      "video_frame_range_half_open": [
+        300,
+        450
+      ]
+    },
+    {
+      "episode": 19,
+      "frames": 150,
+      "data_rows_half_open": [
+        2850,
+        3000
+      ],
+      "video_file": 4,
+      "video_seconds_half_open": [
+        15.0,
+        20.0
+      ],
+      "video_frame_range_half_open": [
+        450,
+        600
+      ]
+    },
+    {
+      "episode": 20,
+      "frames": 150,
+      "data_rows_half_open": [
+        3000,
+        3150
+      ],
+      "video_file": 5,
+      "video_seconds_half_open": [
+        0.0,
+        5.0
+      ],
+      "video_frame_range_half_open": [
+        0,
+        150
+      ]
+    },
+    {
+      "episode": 21,
+      "frames": 150,
+      "data_rows_half_open": [
+        3150,
+        3300
+      ],
+      "video_file": 5,
+      "video_seconds_half_open": [
+        5.0,
+        10.0
+      ],
+      "video_frame_range_half_open": [
+        150,
+        300
+      ]
+    },
+    {
+      "episode": 22,
+      "frames": 150,
+      "data_rows_half_open": [
+        3300,
+        3450
+      ],
+      "video_file": 5,
+      "video_seconds_half_open": [
+        10.0,
+        15.0
+      ],
+      "video_frame_range_half_open": [
+        300,
+        450
+      ]
+    },
+    {
+      "episode": 23,
+      "frames": 150,
+      "data_rows_half_open": [
+        3450,
+        3600
+      ],
+      "video_file": 5,
+      "video_seconds_half_open": [
+        15.0,
+        20.0
+      ],
+      "video_frame_range_half_open": [
+        450,
+        600
+      ]
+    },
+    {
+      "episode": 24,
+      "frames": 150,
+      "data_rows_half_open": [
+        3600,
+        3750
+      ],
+      "video_file": 6,
+      "video_seconds_half_open": [
+        0.0,
+        5.0
+      ],
+      "video_frame_range_half_open": [
+        0,
+        150
+      ]
+    },
+    {
+      "episode": 25,
+      "frames": 150,
+      "data_rows_half_open": [
+        3750,
+        3900
+      ],
+      "video_file": 6,
+      "video_seconds_half_open": [
+        5.0,
+        10.0
+      ],
+      "video_frame_range_half_open": [
+        150,
+        300
+      ]
+    },
+    {
+      "episode": 26,
+      "frames": 150,
+      "data_rows_half_open": [
+        3900,
+        4050
+      ],
+      "video_file": 6,
+      "video_seconds_half_open": [
+        10.0,
+        15.0
+      ],
+      "video_frame_range_half_open": [
+        300,
+        450
+      ]
+    },
+    {
+      "episode": 27,
+      "frames": 150,
+      "data_rows_half_open": [
+        4050,
+        4200
+      ],
+      "video_file": 6,
+      "video_seconds_half_open": [
+        15.0,
+        20.0
+      ],
+      "video_frame_range_half_open": [
+        450,
+        600
+      ]
+    },
+    {
+      "episode": 28,
+      "frames": 150,
+      "data_rows_half_open": [
+        4200,
+        4350
+      ],
+      "video_file": 7,
+      "video_seconds_half_open": [
+        0.0,
+        5.0
+      ],
+      "video_frame_range_half_open": [
+        0,
+        150
+      ]
+    },
+    {
+      "episode": 29,
+      "frames": 150,
+      "data_rows_half_open": [
+        4350,
+        4500
+      ],
+      "video_file": 7,
+      "video_seconds_half_open": [
+        5.0,
+        10.0
+      ],
+      "video_frame_range_half_open": [
+        150,
+        300
+      ]
+    }
+  ],
+  "videos": [
+    {
+      "file": 0,
+      "path": "videos/observation.images.front/chunk-000/file-000.mp4",
+      "url": "https://huggingface.co/datasets/codywang/so101_pickup_test/resolve/ecef85bc07005f771ad86deeff1427f9d72953ed/videos/observation.images.front/chunk-000/file-000.mp4",
+      "episodes": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "frames_from_metadata": 600,
+      "duration_seconds_from_metadata": 20.0
+    },
+    {
+      "file": 1,
+      "path": "videos/observation.images.front/chunk-000/file-001.mp4",
+      "url": "https://huggingface.co/datasets/codywang/so101_pickup_test/resolve/ecef85bc07005f771ad86deeff1427f9d72953ed/videos/observation.images.front/chunk-000/file-001.mp4",
+      "episodes": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "frames_from_metadata": 600,
+      "duration_seconds_from_metadata": 20.0
+    },
+    {
+      "file": 2,
+      "path": "videos/observation.images.front/chunk-000/file-002.mp4",
+      "url": "https://huggingface.co/datasets/codywang/so101_pickup_test/resolve/ecef85bc07005f771ad86deeff1427f9d72953ed/videos/observation.images.front/chunk-000/file-002.mp4",
+      "episodes": [
+        8,
+        9,
+        10,
+        11
+      ],
+      "frames_from_metadata": 600,
+      "duration_seconds_from_metadata": 20.0
+    },
+    {
+      "file": 3,
+      "path": "videos/observation.images.front/chunk-000/file-003.mp4",
+      "url": "https://huggingface.co/datasets/codywang/so101_pickup_test/resolve/ecef85bc07005f771ad86deeff1427f9d72953ed/videos/observation.images.front/chunk-000/file-003.mp4",
+      "episodes": [
+        12,
+        13,
+        14,
+        15
+      ],
+      "frames_from_metadata": 600,
+      "duration_seconds_from_metadata": 20.0
+    },
+    {
+      "file": 4,
+      "path": "videos/observation.images.front/chunk-000/file-004.mp4",
+      "url": "https://huggingface.co/datasets/codywang/so101_pickup_test/resolve/ecef85bc07005f771ad86deeff1427f9d72953ed/videos/observation.images.front/chunk-000/file-004.mp4",
+      "episodes": [
+        16,
+        17,
+        18,
+        19
+      ],
+      "frames_from_metadata": 600,
+      "duration_seconds_from_metadata": 20.0
+    },
+    {
+      "file": 5,
+      "path": "videos/observation.images.front/chunk-000/file-005.mp4",
+      "url": "https://huggingface.co/datasets/codywang/so101_pickup_test/resolve/ecef85bc07005f771ad86deeff1427f9d72953ed/videos/observation.images.front/chunk-000/file-005.mp4",
+      "episodes": [
+        20,
+        21,
+        22,
+        23
+      ],
+      "frames_from_metadata": 600,
+      "duration_seconds_from_metadata": 20.0
+    },
+    {
+      "file": 6,
+      "path": "videos/observation.images.front/chunk-000/file-006.mp4",
+      "url": "https://huggingface.co/datasets/codywang/so101_pickup_test/resolve/ecef85bc07005f771ad86deeff1427f9d72953ed/videos/observation.images.front/chunk-000/file-006.mp4",
+      "episodes": [
+        24,
+        25,
+        26,
+        27
+      ],
+      "frames_from_metadata": 600,
+      "duration_seconds_from_metadata": 20.0
+    },
+    {
+      "file": 7,
+      "path": "videos/observation.images.front/chunk-000/file-007.mp4",
+      "url": "https://huggingface.co/datasets/codywang/so101_pickup_test/resolve/ecef85bc07005f771ad86deeff1427f9d72953ed/videos/observation.images.front/chunk-000/file-007.mp4",
+      "episodes": [
+        28,
+        29
+      ],
+      "frames_from_metadata": 300,
+      "duration_seconds_from_metadata": 10.0
+    }
+  ]
+}

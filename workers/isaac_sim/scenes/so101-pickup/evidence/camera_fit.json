@@ -1,0 +1,47 @@
+{
+  "dataset_frame": 0,
+  "image_size": [
+    1920,
+    1080
+  ],
+  "method": "Approximate pinhole fit to shelf corners, followed by visual placement review",
+  "measured_intrinsics": false,
+  "lens_distortion": "not calibrated",
+  "scale_anchor": "assumed 1.0 m shelf width; not a measurement",
+  "original_fit_rms_pixels": 13.9234,
+  "correspondences_image_pixels": [
+    [
+      386,
+      729
+    ],
+    [
+      1733,
+      760
+    ],
+    [
+      463,
+      605
+    ],
+    [
+      1590,
+      621
+    ],
+    [
+      325,
+      90
+    ],
+    [
+      1838,
+      103
+    ],
+    [
+      393,
+      932
+    ],
+    [
+      1711,
+      964
+    ]
+  ],
+  "note": "Shelf height and robot/box placement refined after first render; scene_config.json is authoritative."
+}

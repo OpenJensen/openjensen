@@ -1,0 +1,15 @@
+allowed_clouds: [gcp]
+
+gcp:
+  vpc_name: sim-network
+  subnet_names: [sim-us-east4]
+  use_internal_ips: true
+  # Egress uses an external IP; SSH still enters through IAP.
+  force_enable_external_ips: true
+  remote_identity: SERVICE_ACCOUNT
+  capabilities: [compute]
+  ssh_proxy_command:
+    us-east4: >-
+      gcloud compute start-iap-tunnel %h %p --listen-on-stdin
+      --project=CHANGE_ME_PROJECT_ID
+      --region=us-east4 --network=sim-network --dest-group=sim-ssh

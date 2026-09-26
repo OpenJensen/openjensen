@@ -1,0 +1,13 @@
+*
+!Dockerfile
+!build.sh
+!requirements.txt
+!sim_worker/
+!sim_worker/**
+!scenes/
+!scenes/**
+!tests/
+!tests/**
+!demo.yaml
+**/__pycache__
+**/*.pyc
