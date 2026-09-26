@@ -248,6 +248,13 @@ class Lifecycle:
                 else:
                     process.kill()
                 await process.wait()
+            if os.name == "posix":
+                # A leader can exit on SIGTERM while a native descendant ignores it.
+                # Reap the remaining group even when waiting for the leader succeeded.
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
 
     async def native(
         self, job, operation, artifact, output, result, *, final=False, precision=None
@@ -426,6 +433,15 @@ class Lifecycle:
                 )
                 await self.event(job, f"candidate-{index}", f"Candidate failed: {exc}")
                 await self.publish(job, result)
+        if len(measured) < 2:
+            result.decision = "diagnostics_only"
+            await self.event(
+                job,
+                "selection",
+                "Insufficient comparison evidence: at least two runnable configurations required",
+            )
+            await self.publish(job, result)
+            return result
         if request.evaluation.mode == "engine" or request.limits is None:
             result.decision = "diagnostics_only"
             await self.event(

@@ -1,7 +1,10 @@
 """Application integration with real subprocess fixtures, not ML/quality claims."""
 
+import asyncio
 import io
 import json
+import os
+import signal
 import sys
 import tarfile
 import time
@@ -177,6 +180,60 @@ def test_cancellation_stops_native_worker_and_never_publishes_late_result(config
         assert response.json()["status"] == "cancelled"
         assert wait(client, jid)["result"] is None
         assert not (started.parent / "result.json").exists()
+
+
+def test_failed_conversions_cannot_promote_the_only_runnable_reference(configured):
+    set_label(configured, "failed packed candidates fixture")
+    with TestClient(create_app(configured)) as client:
+        jid = submit(client, project(client), evaluation={"mode": "libero"}, limits={})
+        job = wait(client, jid)
+        assert job["status"] == "succeeded", job
+        assert job["result"]["decision"] == "diagnostics_only"
+        assert job["result"]["selected_artifact_id"] is None
+        assert len(job["result"]["artifacts"]) == 1
+        assert not any(x["stage"] == "final-evaluation" for x in job["result"]["reports"])
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process-group cleanup")
+def test_stop_kills_descendant_when_leader_exits_on_term(tmp_path):
+    from vla_platform.lifecycle.service import Lifecycle
+
+    ready, survived = tmp_path / "ready", tmp_path / "survived"
+    child = (
+        "import signal,time; from pathlib import Path; "
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        f"Path({str(ready)!r}).touch(); time.sleep(1); Path({str(survived)!r}).touch(); "
+        "time.sleep(60)"
+    )
+    leader = (
+        "import subprocess,sys,time; "
+        f"subprocess.Popen([sys.executable, '-c', {child!r}]); time.sleep(60)"
+    )
+
+    async def exercise():
+        process = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-c",
+            leader,
+            start_new_session=True,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        try:
+            async with asyncio.timeout(10):
+                while not ready.exists():
+                    await asyncio.sleep(0.01)
+            await Lifecycle.__new__(Lifecycle).stop(process, None)
+            await asyncio.sleep(1.1)
+            assert not survived.exists(), "Cancelled worker left a native descendant running"
+        finally:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            await process.wait()
+
+    asyncio.run(exercise())
 
 
 def test_corrupt_registered_manifest_is_rejected(configured):

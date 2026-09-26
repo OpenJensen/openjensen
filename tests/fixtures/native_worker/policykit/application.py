@@ -22,9 +22,13 @@ if op in {"policy.import", "policy.quantize", "policy.run"}:
     precision = "float" if op == "policy.import" else job["parameters"]["precision"]
     size = 100 if precision == "float" else 50 if precision["language"] == "Q8_0" else 25
     if (
-        job["runtime"]["label"] == "failed q4 fixture"
+        op == "policy.quantize"
+        and job["runtime"]["label"] in {"failed q4 fixture", "failed packed candidates fixture"}
         and precision != "float"
-        and precision["language"] == "Q4_0"
+        and (
+            precision["language"] == "Q4_0"
+            or job["runtime"]["label"] == "failed packed candidates fixture"
+        )
     ):
         result["error"] = "Intentional candidate failure"
     else:
