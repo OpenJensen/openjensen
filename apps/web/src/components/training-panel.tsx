@@ -142,6 +142,15 @@ function modelDatasetIssue(model: TrainingModel | undefined, profile: DatasetPro
   }
   return null;
 }
+function modelStatusLabel(model: TrainingModel, supported: boolean): string | null {
+  switch (model.status) {
+    case "connect_account": return "Connect Google Cloud";
+    case "setup_required": return "Setup required";
+    case "coming_soon": return "Coming soon";
+    default: return supported ? null : "Compute unavailable";
+  }
+}
+
 export function TrainingPanel({
   projectId,
   preferredDatasetId,
@@ -789,7 +798,9 @@ export function TrainingPanel({
             </div>
             <fieldset className="training-model-grid">
               <legend className="visually-hidden">Base model</legend>
-              {models.map((item) => (
+              {models.map((item) => {
+                const statusLabel = modelStatusLabel(item, modelSupported(item));
+                return (
                 <label
                   key={item.id}
                   className={`training-model-tile model-${item.id}`}
@@ -824,16 +835,17 @@ export function TrainingPanel({
                   <span className="training-model-copy">
                     <span>
                       <strong>{item.label}</strong>
-                      {!modelSupported(item) && (
+                      {statusLabel && (
                         <small className="training-model-status">
-                          Coming soon
+                          {statusLabel}
                         </small>
                       )}
                     </span>
                     <small title={item.description}>{item.description}</small>
                   </span>
                 </label>
-              ))}
+                );
+              })}
             </fieldset>
             <fieldset className="training-methods">
               <legend>Method</legend>

@@ -168,7 +168,7 @@ for (const theme of ['Light', 'Dark']) {
 
 // These fixtures exercise admission and the exact submitted recipe only. They
 // never invoke a provider or claim policy/model execution evidence.
-async function trainingAdmission(page: Page, { format = 'lerobot_v3', dimensions = 6 } = {}) {
+async function trainingAdmission(page: Page, { format = 'lerobot_v3', dimensions = 6, cloudConnected = true } = {}) {
   const timestamp = '2026-09-26T12:00:00Z';
   const project = { id: 'admission', name: 'Admission fixture', created_at: timestamp };
   const state = { projectStatus: 200, projects: [project], projectReads: 0, submitted: [] as Record<string, any>[] };
@@ -200,8 +200,12 @@ async function trainingAdmission(page: Page, { format = 'lerobot_v3', dimensions
       '/api/v1/health': { status: 'ok', version: 'admission-fixture' }, '/api/v1/capabilities': [],
       '/api/v1/projects/admission/jobs': [dataset], '/api/v1/projects/admission/artifacts': [],
       '/api/v1/jobs/admission-dataset/episodes': { episodes: [], total: 10, offset: 0, limit: 6 },
-      '/api/v1/policy-options': { runtimes: [runtime], sources: [],
-        training_models: profiles.map(model => ({ ...model, model_revision: 'c'.repeat(40), description: 'Fixture profile', backend: 'lerobot', methods: ['full'], runtime_ids: [runtime.id] })),
+      '/api/v1/policy-options': { runtimes: cloudConnected ? [runtime] : [], sources: [],
+        training_models: [...profiles.map((model, index) => ({ ...model, model_revision: 'c'.repeat(40), description: 'Fixture profile', backend: 'lerobot', methods: ['full'], runtime_ids: cloudConnected ? [runtime.id] : [],
+          // Include a stale ready record with no matching runtime: the client must
+          // retain its own compute gate while accurately labeling the API state.
+          ...(!cloudConnected ? { status: ['connect_account', 'setup_required', 'ready'][index] } : {}),
+        })), ...(!cloudConnected ? [{ id: 'smolvla', label: 'SmolVLA', model_id: 'lerobot/smolvla_base', model_revision: 'a'.repeat(40), description: 'Fixture preflight-selectable adapter', backend: 'smolvla', methods: ['lora'], runtime_ids: [], status: 'connect_account' }] : [])],
         training_methods: [{ id: 'lora', label: 'LoRA', description: 'Adapter training' }, { id: 'full', label: 'Full training', description: 'Native policy training' }], default_training_method: 'lora',
         compute: { local: { enabled: false, label: 'Local' }, gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 } },
         quantization_defaults: { cuda: { language: 'Q8_0', vision: null }, cpu: { language: 'Q8_0', vision: null }, note: '' } },
@@ -276,5 +280,28 @@ test('GR00T rejects vectors exceeding its architecture bound before any submissi
   await fixture.chooseModel('GR00T N1.7');
   await expect(fixture.start).toBeDisabled();
   await expect(page.getByText('GR00T N1.7 supports at most 132 observation.state dimensions.')).toBeVisible();
+  expect(fixture.state.submitted).toEqual([]);
+});
+
+
+test('disconnected cloud labels implemented trainers separately from planned adapters without enabling launch', async ({ page }) => {
+  const fixture = await trainingAdmission(page, { cloudConnected: false });
+  await fixture.setup.getByRole('button', { name: 'Model', exact: true }).click();
+  for (const [model, label] of [
+    ['ACT', 'Connect Google Cloud'],
+    ['GR00T N1.7', 'Setup required'],
+    ['EVO-1', 'Compute unavailable'],
+    ['OpenVLA', 'Coming soon'],
+  ]) {
+    const radio = page.getByRole('radio', { name: model, exact: true });
+    await expect(radio).toBeDisabled();
+    await expect(radio.locator('..').locator('.training-model-status')).toHaveText(label);
+  }
+  // SmolVLA can still be selected before cloud preparation, but this cannot launch.
+  const smol = page.getByRole('radio', { name: 'SmolVLA', exact: true });
+  await expect(smol).toBeEnabled();
+  await expect(smol.locator('..').locator('.training-model-status')).toHaveText('Connect Google Cloud');
+  await fixture.setup.getByRole('button', { name: 'Compute', exact: true }).click();
+  await expect(fixture.start).toBeDisabled();
   expect(fixture.state.submitted).toEqual([]);
 });
