@@ -11,14 +11,15 @@ from sim_worker.adapters.manifest import load
 
 
 _DEMO = Path(__file__).resolve().parents[1] / "demo.yaml"
-_PATH_TRACING = "PathTracing"
-_AA_DISABLED = 0
-_SAMPLES_PER_PIXEL = 64
-_DENOISER_BLEND = "/rtx/pathtracing/optixDenoiser/blendFactor"
+_REALTIME = "RealTimePathTracing"
+_DLSS_AA = 3
+_DLSS_QUALITY = 2
+_RESPONSIVE_DENOISING = "/rtx/dldenoiser/responsiveDenoising"
+_DLSS_MODE = "/rtx/post/dlss/execMode"
 
 
 class RenderTests(unittest.TestCase):
-    def test_recording_avoids_dlss(self):
+    def test_recording_uses_realtime(self):
         app = MagicMock()
         sdk = SimpleNamespace(SimulationApp=MagicMock(return_value=app))
         with (
@@ -29,12 +30,10 @@ class RenderTests(unittest.TestCase):
             with isaac.frames(load(_DEMO)) as capture:
                 list(capture)
 
-        # Offline capture needs its own sampling and denoising, without NGX.
+        # Use the real-time renderer and its supported antialiasing pipeline.
         config = sdk.SimulationApp.call_args.args[0]
-        self.assertEqual(config.get("renderer"), _PATH_TRACING)
-        self.assertEqual(config.get("anti_aliasing"), _AA_DISABLED)
-        self.assertEqual(config.get("samples_per_pixel_per_frame"), _SAMPLES_PER_PIXEL)
-        self.assertIs(config.get("denoiser"), True)
+        self.assertEqual(config.get("renderer"), _REALTIME)
+        self.assertEqual(config.get("anti_aliasing"), _DLSS_AA)
 
     def test_stage_keeps_quality(self):
         names = ("isaacsim", "carb", "carb.settings", "omni", "omni.replicator",
@@ -52,7 +51,8 @@ class RenderTests(unittest.TestCase):
         rep = modules["omni.replicator.core"]
         events = []
         context.open_stage.side_effect = lambda scene: events.append("opened") or True
-        app.reset_render_settings.side_effect = lambda: events.append("configured")
+        settings = modules["carb.settings"].get_settings.return_value
+        settings.set.side_effect = lambda key, value: events.append(key)
         rep.orchestrator.step.side_effect = lambda **kwargs: events.append("rendered")
         pixels = MagicMock(ndim=3, shape=(spec.height, spec.width, 4), dtype="uint8")
         pixels.__getitem__.return_value.tobytes.return_value = b"\xff" * spec.frame_bytes
@@ -62,17 +62,20 @@ class RenderTests(unittest.TestCase):
             with isaac.frames(spec) as capture:
                 recorded = list(capture)
 
-        # Stage loading must not replace the recording profile before capture.
-        self.assertEqual(events[:3], ["opened", "configured", "rendered"])
-        settings = modules["carb.settings"].get_settings.return_value
-        settings.set.assert_any_call(_DENOISER_BLEND, 0.0)
+        # Restore quality before capture without resetting the renderer after loading.
+        app.reset_render_settings.assert_not_called()
+        self.assertEqual(events[0], "opened")
+        self.assertLess(events.index(_RESPONSIVE_DENOISING), events.index("rendered"))
+        self.assertLess(events.index(_DLSS_MODE), events.index("rendered"))
+        settings.set.assert_any_call(_RESPONSIVE_DENOISING, False)
+        settings.set.assert_any_call(_DLSS_MODE, _DLSS_QUALITY)
         self.assertEqual(len(recorded), spec.frames)
         steps = [call.kwargs for call in rep.orchestrator.step.call_args_list]
         self.assertEqual(len(steps), spec.frames + 1)
         self.assertEqual(steps[0]["delta_time"], 0.0)
         for step in steps[1:]:
             self.assertEqual(step["delta_time"], 1.0 / spec.fps)
-            self.assertGreater(step.get("rt_subframes", 0), 1)
+            self.assertEqual(step.get("rt_subframes"), 1)
             self.assertIs(step.get("wait_for_render", True), True)
 
 

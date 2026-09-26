@@ -1,8 +1,8 @@
 # Isaac recording worker
 
-**Experimental:** the current path-tracing profile produced an all-black MP4
-on an L4. The worker now rejects entirely black builtin-demo output before
-publishing success. The renderer correction and motion remain unverified.
+Records simulations with Isaac's RTX real-time renderer (RT2). The bundled
+falling-cube scene produced a verified recording on GCP L4. Offline path
+tracing is not required.
 
 ```text
 YAML -> service -> Isaac adapter -> USD physics + RGB frames
@@ -40,9 +40,13 @@ Consumers require a final `succeeded` result. Uploads are create-only; completio
 is written last, before Isaac shutdown. Failures attempt to publish a failure
 record. VM loss can leave no terminal record. Retries create new UUIDs.
 
-The renderer currently uses path tracing, 64 samples per pixel, OptiX denoising
-and four capture subframes. These settings failed visual acceptance. The black
-frame guard applies only to the lit builtin demo; custom scenes may be dark.
+The renderer uses `RealTimePathTracing` (RT2), DLSS quality mode, one capture
+subframe, and disabled responsive denoising to avoid speckled output. An
+eight-subframe warmup runs at simulation time zero before recording. Startup
+and warmup took about eight minutes on the tested L4 host.
+
+The worker rejects entirely black builtin-demo output before publishing
+success. This guard does not validate motion or custom scenes, which may be dark.
 
 ## Build
 
@@ -119,7 +123,13 @@ verify adapter contracts and failure publication, not rendering or physics.
 
 GPU acceptance requires visible falling motion, nonblack frames, a six-second
 MP4 at 1280×720/30 fps, matching GCS checksum and terminal result, and verified
-VM cleanup. Keep the black-rendering issue open until that check passes.
+VM cleanup. Repeat acceptance after renderer, driver or simulator changes.
+
+On 2026-09-26, Isaac 6.1.0 with driver 580.159.04 on GCP L4 produced all 180
+visible frames at 1280×720/30 fps with cube motion. The downloaded GCS MP4
+matched the terminal result's SHA-256. All 22 worker tests passed in the worker
+container, including FFmpeg encoding; all 41 launcher tests passed locally.
+Container removal was verified. Full VM teardown remains unverified.
 
 References: [Isaac container setup](https://docs.isaacsim.omniverse.nvidia.com/6.1.0/installation/install_container.html),
 [Replicator troubleshooting](https://docs.isaacsim.omniverse.nvidia.com/6.1.0/replicator_tutorials/troubleshooting.html),

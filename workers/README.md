@@ -10,8 +10,8 @@ LeRobot and native OpenVLA-OFT are reserved isolated environments. Their candida
 
 [`isaac_sim`](isaac_sim/README.md) contains the YAML-driven Isaac worker;
 [`skypilot`](skypilot/README.md) launches it on GCP L4 VMs. It records MP4s and result manifests in
-GCS. Its latest GPU recording failed visual acceptance with black frames;
-the demo now rejects entirely black output. Rendering acceptance remains open.
+GCS. The RT2 renderer passed a six-second, 720p falling-cube recording on GCP
+L4. The demo rejects entirely black output.
 
 Native projects under `workers/*` are excluded from the application uv workspace.
 Use the worker's separate environment. This transfer adds no application API,

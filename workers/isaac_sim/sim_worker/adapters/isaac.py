@@ -9,11 +9,12 @@ from sim_worker.contracts import BUILTIN_SCENE, RGB_CHANNELS, RunSpec
 
 _SCENE_DIR = Path(__file__).resolve().parents[2] / "scenes"
 _WARMUP_SUBFRAMES = 8
-_CAPTURE_SUBFRAMES = 4
-_RENDERER = "PathTracing"
-_SAMPLES_PER_PIXEL = 64
-_AA_DISABLED = 0
-_FULL_DENOISING = 0.0
+_CAPTURE_SUBFRAMES = 1
+_RENDERER = "RealTimePathTracing"
+_AA_DLSS = 3
+_DLSS_QUALITY = 2
+_DLSS_MODE = "/rtx/post/dlss/execMode"
+_RESPONSIVE_DENOISING = "/rtx/dldenoiser/responsiveDenoising"
 _RGBA_CHANNELS = 4
 _START_SECONDS = 0.0
 _END_PADDING_FRAMES = 1
@@ -30,15 +31,17 @@ def frames(spec: RunSpec) -> Iterator[Iterator[bytes]]:
     from isaacsim import SimulationApp
 
     logging.info("Starting Isaac")
-    # Offline recording uses sampled lighting and OptiX, without DLSS/NGX.
+    # RT2 records motion without offline path-tracing accumulation.
     app = SimulationApp({
         "headless": True,
         "width": spec.width,
         "height": spec.height,
         "renderer": _RENDERER,
-        "samples_per_pixel_per_frame": _SAMPLES_PER_PIXEL,
-        "denoiser": True,
-        "anti_aliasing": _AA_DISABLED,
+        "anti_aliasing": _AA_DLSS,
+        "extra_args": [
+            f"--{_RESPONSIVE_DENOISING}=false",
+            f"--{_DLSS_MODE}={_DLSS_QUALITY}",
+        ],
     })
     exit_code = _SUCCESS_EXIT
     try:
@@ -66,11 +69,12 @@ def _capture(spec: RunSpec, app) -> Iterator[bytes]:
     if not context.open_stage(scene):
         raise RuntimeError(f"Cannot open USD scene: {scene}")
 
-    # USD loading can overwrite render settings; restore the recording profile.
-    app.reset_render_settings()
-    carb.settings.get_settings().set("/rtx/pathtracing/optixDenoiser/blendFactor", _FULL_DENOISING)
-    logging.info("Renderer=%s, samples=%d, subframes=%d, OptiX denoising=full",
-                 _RENDERER, _SAMPLES_PER_PIXEL, _CAPTURE_SUBFRAMES)
+    # Restore quality after stage loading without resetting the renderer.
+    settings = carb.settings.get_settings()
+    settings.set(_RESPONSIVE_DENOISING, False)
+    settings.set(_DLSS_MODE, _DLSS_QUALITY)
+    logging.info("Renderer=%s, DLSS quality=%d, subframes=%d",
+                 _RENDERER, _DLSS_QUALITY, _CAPTURE_SUBFRAMES)
     stage = context.get_stage()
     camera = stage.GetPrimAtPath(spec.camera)
     if not camera or not camera.IsA(UsdGeom.Camera):
@@ -92,7 +96,7 @@ def _capture(spec: RunSpec, app) -> Iterator[bytes]:
         logging.info("Renderer ready; capturing %d frames", spec.frames)
         has_visible_rgb = False
         for index in range(spec.frames):
-            # Subframes refine the image while physics stays at this frame's time.
+            # Capture each simulation instant once so motion keeps its cadence.
             rep.orchestrator.step(delta_time=1.0 / spec.fps, rt_subframes=_CAPTURE_SUBFRAMES,
                                   pause_timeline=False, wait_for_render=True)
             pixels = annotator.get_data()

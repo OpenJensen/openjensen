@@ -5,9 +5,9 @@ This launcher has **no integration with the repository's API or job database**.
 Related to [SKY-001 (#26)](https://github.com/sobhanb-eth/firebird-hackathon-codebase/issues/26);
 application recipe integration and acceptance remain open.
 
-**Known limitation:** a GPU run produced an all-black MP4. The worker rejects
-black builtin-demo frames, but the rendering cause remains unresolved. Passing
-host checks and unit tests does not establish successful rendering.
+**Known limitation:** startup and renderer warmup took about eight minutes on
+the tested L4 host. Host checks and unit tests do not establish rendering or
+physics correctness; validate the resulting video after runtime changes.
 
 ```text
 Local task + simulation manifest
@@ -106,10 +106,12 @@ Download logs before cleanup if GCS publication fails:
 bash sky.sh logs isaac-sim --sync-down
 ```
 
-`probe.example.yaml` is an **experimental** renderer diagnostic for an existing
+`probe.example.yaml` is a renderer diagnostic for an existing
 cluster. Copy it to `probe.yaml`, fill its image placeholders, then submit with
 `bash sky.sh exec isaac-sim probe.yaml --env ACCEPT_EULA=Y`. It writes PNGs and
 statistics under `~/sim-debug/` on the VM, not worker results or MP4s in GCS.
+It checks the production adapter's frame count, visibility, timeline, physics
+clock and cube motion. Preserve those files before cluster cleanup.
 
 ## Validation
 
@@ -117,7 +119,7 @@ statistics under `~/sim-debug/` on the VM, not worker results or MP4s in GCS.
 python3 -m unittest discover -s tests -v
 ```
 
-GPU acceptance still requires a visible falling-cube MP4, correct frame count
+GPU acceptance requires a visible falling-cube MP4, correct frame count
 and checksum, and confirmed teardown. L4 quota does not guarantee capacity.
 
 References: [task YAML](https://docs.skypilot.ai/en/v0.13.0/reference/yaml-spec.html),
