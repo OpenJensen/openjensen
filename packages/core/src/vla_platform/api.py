@@ -56,7 +56,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 finally:
                     lock.release()
 
-    app = FastAPI(title="Firebird local VLA application", version=__version__, lifespan=lifespan)
+    app = FastAPI(
+        title="Firebird local VLA application",
+        version=__version__,
+        lifespan=lifespan,
+        # The web app owns /docs so the reference shares the product's design system.
+        # Keep /openapi.json available as the runtime source of truth.
+        docs_url=None,
+        redoc_url=None,
+    )
     app.add_middleware(
         TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]", "testserver"]
     )

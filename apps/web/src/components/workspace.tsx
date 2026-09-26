@@ -1,9 +1,10 @@
 'use client';
 
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { api, apiReferenceUrl, isActive, type DatasetProfile, type Job, type Project } from '@/lib/api';
-import { ThemeToggle } from '@/components/theme-toggle';
+import { useEffect, useState, type FormEvent } from 'react';
+import { api, isActive, type DatasetProfile, type Job, type Project } from '@/lib/api';
+import { Icon } from '@/components/icon';
+import { WorkspaceShell } from '@/components/workspace-shell';
 
 const candidate = 'codywang/so101_pickup_test';
 const candidateRevision = 'ecef85bc07005f771ad86deeff1427f9d72953ed';
@@ -15,26 +16,6 @@ const stages = [
   { name: 'Evaluate', icon: 'chart', description: 'Measure policy behavior before taking it to your robot.' },
   { name: 'Run', icon: 'play', description: 'Put a tested policy to work on your target hardware.' },
 ] as const;
-
-function Icon({ name, size = 20 }: { name: 'arrow' | 'plus' | 'database' | 'folder' | 'check' | 'clock' | 'spark' | 'external' | 'sliders' | 'layers' | 'compress' | 'chart' | 'play' | 'book'; size?: number }) {
-  const paths: Record<typeof name, ReactNode> = {
-    arrow: <><path d="M5 12h14M13 6l6 6-6 6" /></>,
-    plus: <><path d="M12 5v14M5 12h14" /></>,
-    database: <><ellipse cx="12" cy="5" rx="8" ry="3" /><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" /></>,
-    folder: <><path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Z" /></>,
-    check: <path d="m5 12 4 4L19 6" />,
-    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
-    spark: <><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z" /></>,
-    external: <><path d="M14 3h7v7M21 3l-9 9M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5" /></>,
-    sliders: <><path d="M4 7h7m4 0h5M4 17h3m4 0h9" /><circle cx="13" cy="7" r="2" /><circle cx="9" cy="17" r="2" /></>,
-    layers: <><path d="m12 3 9 5-9 5-9-5 9-5ZM3 12l9 5 9-5M3 16l9 5 9-5" /></>,
-    compress: <><path d="M4 9h5V4M20 9h-5V4M4 15h5v5M20 15h-5v5M9 9 3 3M15 9l6-6M9 15l-6 6M15 15l6 6" /></>,
-    chart: <><path d="M4 3v17h17M8 15v-4M13 15V7M18 15V5" /></>,
-    play: <path d="m8 4 12 8-12 8V4Z" />,
-    book: <><path d="M12 5v16M3 3h5a4 4 0 0 1 4 2 4 4 0 0 1 4-2h5v16h-5a4 4 0 0 0-4 2 4 4 0 0 0-4-2H3V3Z" /></>,
-  };
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
-}
 
 function ErrorNotice({ error }: { error: Error | null }) {
   return error ? <p className="error-notice" role="alert">{error.message}</p> : null;
@@ -219,10 +200,9 @@ function Workbench() {
 
   const stage = stages[activeStage];
 
-  return <div className="workspace">
-    <a href="#main" className="skip-link">Skip to workspace</a>
-    <aside className="sidebar" aria-label="Workspace navigation">
-      <a className="brand" href="/" aria-label="Firebird workspace home"><span className="brand-mark"><Icon name="layers" size={21} /></span><span>Firebird<span className="brand-subtitle">Robotics workspace</span></span></a>
+  return <WorkspaceShell
+    breadcrumb={<><Icon name={stage.icon} size={18} /><strong>{stage.name}</strong><span className="breadcrumb-divider">/</span><span className="breadcrumb-project">{project?.name ?? 'No project selected'}</span></>}
+    navigation={<>
       <nav className="stage-navigation" aria-label="Policy lifecycle">
         <p className="sidebar-section-label">Workspace</p>
         <ul className="stage-list">{stages.map((item, index) => <li key={item.name}>
@@ -245,12 +225,8 @@ function Workbench() {
           <ErrorNotice error={projectMutation.error} />
         </form>
       </section>
-      <div className="sidebar-bottom"><a className="sidebar-link" href={apiReferenceUrl} target="_blank" rel="noreferrer"><Icon name="book" size={18} /> API reference <Icon name="external" size={13} /></a><div className="workspace-identity"><span className="workspace-avatar">F</span><div><strong>Local workspace</strong><span>Firebird · v0.1</span></div></div></div>
-    </aside>
-
-    <div className="main-shell">
-      <header className="topbar"><div className="breadcrumb"><Icon name={stage.icon} size={18} /><strong>{stage.name}</strong><span className="breadcrumb-divider">/</span><span className="breadcrumb-project">{project?.name ?? 'No project selected'}</span></div><ThemeToggle /></header>
-      <main id="main" className="main-content" tabIndex={-1}>
+    </>}
+  >
         <div className="page-heading"><div><p className="eyebrow">Step {String(activeStage + 1).padStart(2, '0')}</p><h1>{stage.name}</h1><p>{stage.description}</p></div><div className={`connection ${connected ? 'connected' : ''}`} role="status"><span />{health.isPending ? 'Connecting' : connected ? 'Connected' : 'Offline'}</div></div>
         {!connected && !health.isPending && <div className="connection-notice"><ErrorNotice error={health.error} /><button className="text-button" onClick={() => { void health.refetch(); void projects.refetch(); void capabilities.refetch(); }}>Retry connection</button></div>}
         {capabilities.error && connected && <div className="connection-notice"><ErrorNotice error={capabilities.error} /><button className="text-button" onClick={() => void capabilities.refetch()} disabled={capabilities.isFetching}>Retry capabilities</button></div>}
@@ -271,9 +247,7 @@ function Workbench() {
           <footer className="workspace-footer"><span>Inspect first. Build on what you know.</span><span>Metadata intake</span></footer>
         </div>
         {activeStage > 0 && <section className="planned-panel" aria-labelledby="planned-title"><span className="empty-icon"><Icon name={stage.icon} size={28} /></span><span className="planned-badge">Planned</span><h2 id="planned-title">{stage.name} is on the roadmap</h2><p>{capabilities.data?.find(item => item.stage.toLowerCase() === stage.name.toLowerCase())?.description ?? 'This stage is not available in the current application.'}</p><p className="planned-note">You can start by inspecting your dataset. Your project and inspection history will be here when this stage is ready.</p><button className="secondary-button" onClick={() => setActiveStage(0)}>Go to Dataset <Icon name="arrow" size={15} /></button></section>}
-      </main>
-    </div>
-  </div>;
+  </WorkspaceShell>;
 }
 
 export function Workspace() {

@@ -8,16 +8,17 @@ export type IntakeRequest = components['schemas']['IntakeRequest'];
 
 // Static production builds use the Python host's origin. Development uses its
 // loopback API unless the developer explicitly provides an alternative origin.
-const origin = (process.env.NEXT_PUBLIC_API_URL ??
+export const apiOrigin = (process.env.NEXT_PUBLIC_API_URL ??
   (process.env.NODE_ENV === 'development' ? 'http://127.0.0.1:8000' : '')).replace(/\/$/, '');
 
-export const apiReferenceUrl = `${origin}/docs`;
+export const apiReferenceUrl = '/docs/';
+export const openApiUrl = `${apiOrigin}/openapi.json`;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
   try {
-    const response = await fetch(`${origin}/api/v1${path}`, {
+    const response = await fetch(`${apiOrigin}/api/v1${path}`, {
       ...init,
       cache: 'no-store',
       headers: { 'Content-Type': 'application/json', ...init?.headers },
