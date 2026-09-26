@@ -21,6 +21,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cloud-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cloud Runs
+         * @description Read bounded operator snapshots; never connect to or control a cloud host.
+         */
+        get: operations["cloud_runs_api_v1_cloud_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/health": {
         parameters: {
             query?: never;
@@ -356,6 +376,80 @@ export interface components {
              * @enum {string}
              */
             os: "linux" | "windows" | "macos";
+        };
+        /** CloudFeedIssue */
+        CloudFeedIssue: {
+            /** Message */
+            message: string;
+            /** Run Id */
+            run_id?: string | null;
+        };
+        /** CloudRunLogs */
+        CloudRunLogs: {
+            /** Isaac */
+            isaac: string;
+            /** Vla */
+            vla: string;
+        };
+        /** CloudRunOutcomes */
+        CloudRunOutcomes: {
+            /**
+             * Calibration
+             * @default unknown
+             * @enum {string}
+             */
+            calibration: "unknown" | "unverified" | "verified";
+            /** Pickup Success */
+            pickup_success?: boolean | null;
+            /** Rollout Completed */
+            rollout_completed?: boolean | null;
+        };
+        /** CloudRunView */
+        CloudRunView: {
+            /** Age Seconds */
+            age_seconds: number | null;
+            /** Cluster */
+            cluster: string;
+            /** Collected At */
+            collected_at: string | null;
+            /** Collection Error */
+            collection_error?: string | null;
+            /** Job Id */
+            job_id?: string | null;
+            /** Label */
+            label: string;
+            logs: components["schemas"]["CloudRunLogs"];
+            outcomes: components["schemas"]["CloudRunOutcomes"];
+            /** Run Id */
+            run_id: string;
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: 1;
+            /** Stale */
+            stale: boolean;
+            /** Status */
+            status: string;
+        };
+        /** CloudRunsFeed */
+        CloudRunsFeed: {
+            /** Enabled */
+            enabled: boolean;
+            /** Errors */
+            errors?: components["schemas"]["CloudFeedIssue"][];
+            /** Runs */
+            runs?: components["schemas"]["CloudRunView"][];
+            /**
+             * Server Time
+             * Format: date-time
+             */
+            server_time: string;
+            /**
+             * Stale After Seconds
+             * @default 90
+             */
+            stale_after_seconds: number;
         };
         /** DatasetProfile */
         DatasetProfile: {
@@ -884,6 +978,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Capability"][];
+                };
+            };
+        };
+    };
+    cloud_runs_api_v1_cloud_runs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudRunsFeed"];
                 };
             };
         };
