@@ -21,3 +21,5 @@ The Python application must run separately during development. The development c
 Local dataset paths refer to the computer running the API, not necessarily the browser's computer. Server-configured allowed roots govern access; the local source option is disabled until the API reports `dataset.inspect.local` as available. Inspections are metadata-only; the UI does not infer successful training, video decoding, action semantics, or simulator compatibility from metadata.
 
 Styling uses local CSS for this foundation. Tailwind and shadcn remain optional selected tools in the plan and are not installed by this client.
+
+The workspace uses a neutral light theme by default. The appearance control switches between light and dark, remembers the choice in `firebird.theme`, and applies it before the page paints. The six lifecycle stages live in the sidebar; planned stages show their current availability while the dataset form remains mounted so navigation preserves an unfinished intake. On small screens, navigation and project controls move above the workspace.
