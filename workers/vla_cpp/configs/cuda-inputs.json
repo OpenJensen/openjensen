@@ -1,0 +1,35 @@
+{
+  "source": {
+    "repository": "HuggingFaceVLA/smolvla_libero",
+    "revision": "6721902bc4d61e50a3bfdb11dfb4cb626f05d102",
+    "model_sha256": "71d9563c8295284acba8fc2d5c19de000d6fe9ba58a406832af7ef3d221ed52f"
+  },
+  "runtime_commit": "52439f7c6c362d7bee218b400b9080cc32d75cc3",
+  "results": [
+    {
+      "preset": "float_reference",
+      "artifact": "/workspace/artifacts/docker/runs/smolvla-screen-v1/models/smolvla-float.gguf",
+      "sha256": "ed2c28e16ca6bb0d312483b6a57d306f6bb09360fc9a99e37a3a30f1beaa90c3"
+    },
+    {
+      "preset": "lm_q8",
+      "artifact": "/workspace/artifacts/docker/runs/smolvla-screen-v1/models/lm_q8.gguf",
+      "sha256": "d702cc52c89a1a8f1caa00f49df8c14f4633673b6c36d27cb887643edb1daf76"
+    },
+    {
+      "preset": "lm_q4",
+      "artifact": "/workspace/artifacts/docker/runs/smolvla-screen-v1/models/lm_q4.gguf",
+      "sha256": "5d9706af2f1f305a0bdb939ddd57f74164ad931cd335bec43487758ec1991037"
+    },
+    {
+      "preset": "lm_q8_vision_q8",
+      "artifact": "/workspace/artifacts/docker/runs/smolvla-screen-v1/models/lm_q8_vision_q8.gguf",
+      "sha256": "1da7e8031e5b8821aaf40c03f9b00dba3bbe42d572a4ddc7a8d2f91d566b6a66"
+    },
+    {
+      "preset": "lm_q4_vision_q8",
+      "artifact": "/workspace/artifacts/docker/runs/smolvla-screen-v1/models/lm_q4_vision_q8.gguf",
+      "sha256": "b36a44d3c46c3925308e9c1cce88c4411aff696592fb4b7f04dba32f5a06a133"
+    }
+  ]
+}

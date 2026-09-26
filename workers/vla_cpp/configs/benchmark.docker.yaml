@@ -1,0 +1,41 @@
+version: 1
+run_id: docker-linux-cpu-v1
+runtime:
+  repository: https://github.com/VinRobotics/vla.cpp.git
+  tag: v0.3.0
+  patches: [policykit/patches/vla-cpp-smolvla-packed.patch]
+  source_dir: artifacts/docker/vendor/vla.cpp
+  build_dir: artifacts/docker/vendor/vla.cpp/build
+  cache_dir: artifacts/docker/cache
+machine_label: Docker Linux CPU lane on Intel Mac host
+models:
+  smolvla:
+    source: HuggingFaceVLA/smolvla_libero
+    revision: main
+    arch: smolvla
+    converter: scripts/convert_smolvla_to_gguf.py
+    action_steps: 4
+  pi0:
+    source: lerobot/pi0_libero_finetuned_v044
+    revision: main
+    arch: pi0
+    converter: scripts/convert_pi0_to_gguf.py
+    action_steps: 50
+presets:
+  bf16: null
+  q8_0: Q8_0
+  q4_0: Q4_0
+  q8_0_vision: {type: Q8_0, vision: true}
+  q4_0_vision: {type: Q4_0, vision: true}
+evaluation:
+  task: libero_object
+  task_ids: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+  seeds: [42, 314]
+  smoke_task_ids: [0, 1, 2, 3, 4]
+  smoke_seed: 42
+  smoke_episodes: 1
+  timeout_seconds: 7200
+  benchmark_repetitions: 20
+  benchmark_warmups: 3
+selection:
+  max_success_drop_pp: 5.0

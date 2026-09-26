@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "policykit"
+version = "0.1.0"
+description = "SmolVLA quantization worker and CPU experiment harness"
+requires-python = ">=3.11,<3.13"
+dependencies = ["PyYAML>=6.0"]
+
+[project.optional-dependencies]
+prepare = ["cmake>=3.22", "huggingface_hub>=0.30,<1.0"]
+quantize = ["gguf==0.17.1", "numpy==2.2.6"]
+test = ["pytest==8.4.2"]
+
+[project.scripts]
+policykit = "policykit.cli:main"
+policykit-quantize = "policykit.quantization:main"
+policykit-worker = "policykit.worker:main"
+
+[tool.setuptools.packages.find]
+include = ["policykit*"]
+
+[tool.setuptools.package-data]
+policykit = ["patches/*.patch"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

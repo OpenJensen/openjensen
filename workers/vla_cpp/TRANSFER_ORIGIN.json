@@ -1,0 +1,27 @@
+{
+  "source_repository": "https://github.com/sobhanb-eth/firebird-hackathon-prep",
+  "source_commit": "edd9fb00d234bd350b566ad66d1a92551bf67a35",
+  "target_repository": "https://github.com/sobhanb-eth/firebird-hackathon-codebase",
+  "target_base": "89fa8ea7b8458b3874a5f14b9abd9d78383a10d1",
+  "path_mapping": {
+    "workers/vla_cpp": "workers/vla_cpp"
+  },
+  "source_files_sha256": {
+    "workers/vla_cpp/.dockerignore": "edae0dc79d466da1ba789665546ce0e8e3732f98663197709959e476b51f2c0b",
+    "workers/vla_cpp/.gitignore": "9ba747888c61c9f15ca30eef479f138ff843793aec2bb4168ed1b376993339ae",
+    "workers/vla_cpp/.python-version": "49a506dd32096b010d75205acf3430c9ae6c40351888129499e5a5e487126c93",
+    "workers/vla_cpp/Dockerfile": "59864abb12f4ec6d850875750546258ceacd5d78e31503291a2ca5a816d2522a",
+    "workers/vla_cpp/MODULE_ORIGIN.json": "7a84357313fd35ba08da8be3225fe6e4feb453a2678440eb5571eb99609c5396",
+    "workers/vla_cpp/README.md": "79e65912dae138eb5d9b5e31157c24bc73035b09987ae9f111632e0271b4ad7e",
+    "workers/vla_cpp/patches/README.md": "d2137f64eed032042e4ee7e9e0d4388377e46c01106ec0862d7092aea4145308",
+    "workers/vla_cpp/policykit/__init__.py": "00cb5fb0badccdac6aa3f17f00e7b8aaa584376536665f67a6574c69f959c5ed",
+    "workers/vla_cpp/policykit/patches/vla-cpp-smolvla-packed.patch": "b1ebe5bee36be84b843b5f140f97fe26ca66d36f4514331cf80b0fd4b8dbc36c",
+    "workers/vla_cpp/policykit/quantization.py": "dfd73e4053059b289612a6651592b9422602a90d23924e726b9af8a70094e2f0",
+    "workers/vla_cpp/policykit/worker.py": "5d602314c709a67aa003b7a819105365847a4671a6d98b02182f0d12805b766f",
+    "workers/vla_cpp/pyproject.toml": "0e61259c26aa0274c68fa0f5f9a6b9edf84eab44b0262ee0c5022116d9c7fbda",
+    "workers/vla_cpp/tests/test_wheel_install.py": "55c16130c24f499b86ad49e8e085f064338ef2f05210093ccf082d02f1a00244",
+    "workers/vla_cpp/tests/test_worker_contract.py": "ebe9ed0289c0547d3578e0d88fa7198786567d3ae5d7a0404784609304c7e882",
+    "workers/vla_cpp/uv.lock": "9a7a6efef47d9f65844e36ad547aff657377444baea4709cf26a2a82232fea0f"
+  },
+  "transfer_changes": "Worker placement, README and documentation links, and transfer provenance only; executable source and tests preserved. Training catalog protocol becomes a pinned prep URL."
+}
