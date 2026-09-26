@@ -4,9 +4,10 @@ import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { api, apiReferenceUrl, isActive, type DatasetProfile, type Job, type Project } from '@/lib/api';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { DatasetExplorer } from '@/components/dataset-explorer';
+import { DatasetStarters } from '@/components/dataset-starters';
+import { datasetStarters, type DatasetStarter } from '@/lib/dataset-starters';
 
-const candidate = 'codywang/so101_pickup_test';
-const candidateRevision = 'ecef85bc07005f771ad86deeff1427f9d72953ed';
 const stages = [
   { name: 'Dataset', icon: 'database', description: 'Bring in your robotics data. Understand it before you train.' },
   { name: 'Fine-tune', icon: 'sliders', description: 'Adapt a base policy to your dataset and your task.' },
@@ -54,38 +55,25 @@ function displayDate(value: string) {
 }
 
 function DatasetResult({ profile }: { profile: DatasetProfile }) {
-  const features = Object.entries(profile.features);
-  return <section className="result" aria-labelledby="result-title">
+  return <section className="result inspection-overview" aria-labelledby="result-title">
     <div className="result-heading">
-      <div><p className="eyebrow">Dataset profile</p><h3 id="result-title">Inspection complete</h3></div>
-      <span className="metadata-badge"><Icon name="check" size={14} /> Metadata only</span>
+      <div><p className="eyebrow">Dataset overview</p><h3 id="result-title">{profile.repo_id || 'Local dataset'}</h3></div>
+      <span className="metadata-badge"><Icon name="check" size={14} /> {profile.format.replace('_', ' ')}</span>
     </div>
-    <p className="result-explainer">This inspection reads metadata. It does not decode videos, validate trajectories, or establish training or simulator compatibility.</p>
+    <p className="result-explainer">Source-declared metadata from the inspected revision. Load the visual preview below to explore episodes and sample data.</p>
     <dl className="metric-grid">
       <div><dt>Episodes</dt><dd>{formatNumber(profile.total_episodes)}</dd></div>
       <div><dt>Frames</dt><dd>{formatNumber(profile.total_frames)}</dd></div>
       <div><dt>Frame rate</dt><dd>{profile.fps}<span> fps</span></dd></div>
       <div><dt>Robot type</dt><dd className="metric-text">{profile.robot_type || 'Not declared'}</dd></div>
     </dl>
-    <div className="profile-facts">
-      <div><span>Native format</span><strong>{profile.format}</strong></div>
-      <div><span>Declared license</span><strong>{profile.license || 'Not declared'}</strong></div>
-      <div><span>Source</span><strong>{profile.source === 'huggingface' ? 'Hugging Face' : 'Local directory'}</strong></div>
-    </div>
-    {profile.warnings.length > 0 && <div className="warning-box">
-      <h4>Before you use this dataset</h4>
-      <ul>{profile.warnings.map((warning, index) => <li key={`${index}-${warning}`}>{warning}</li>)}</ul>
-    </div>}
-    <div className="feature-heading"><h4>Observation & action schema</h4><span>{features.length} features</span></div>
-    {features.length ? <div className="table-scroll"><table className="feature-table">
-      <caption className="visually-hidden">Declared dataset feature metadata</caption>
-      <thead><tr><th scope="col">Feature</th><th scope="col">Declared metadata</th></tr></thead>
-      <tbody>{features.map(([name, value]) => <tr key={name}><th scope="row">{name}</th><td><code>{JSON.stringify(value)}</code></td></tr>)}</tbody>
-    </table></div> : <p className="muted">No feature declarations found.</p>}
-    <details className="provenance">
-      <summary>Source & provenance</summary>
+    <details className="provenance inspection-provenance">
+      <summary>Inspection notes & source provenance</summary>
+      <p className="field-help">These notes describe the original metadata-only inspection. Loading a visual preview is a separate operation.</p>
+      {profile.warnings.length > 0 && <div className="warning-box"><h4>Original inspection notes</h4><ul>{profile.warnings.map((warning, index) => <li key={`${index}-${warning}`}>{warning}</li>)}</ul></div>}
       <dl>
-        <div><dt>Repository</dt><dd>{profile.repo_id || 'Local metadata snapshot'}</dd></div>
+        <div><dt>Source</dt><dd>{profile.repo_id || 'Local metadata snapshot'}</dd></div>
+        <div><dt>Declared license</dt><dd>{profile.license || 'Not declared'}</dd></div>
         <div><dt>Resolved revision</dt><dd><code>{profile.revision}</code></dd></div>
         <div><dt>Metadata SHA-256</dt><dd><code>{profile.metadata_sha256}</code></dd></div>
         <div><dt>Inspected</dt><dd>{displayDate(profile.inspected_at)}</dd></div>
@@ -95,11 +83,11 @@ function DatasetResult({ profile }: { profile: DatasetProfile }) {
   </section>;
 }
 
-function IntakeForm({ project, localAvailable, onCreated }: { project: Project | undefined; localAvailable: boolean; onCreated: (job: Job) => void }) {
+function IntakeForm({ project, localAvailable, onCreated, starter, onSourceEdited }: { project: Project | undefined; localAvailable: boolean; onCreated: (job: Job) => void; starter: DatasetStarter; onSourceEdited: () => void }) {
   const queryClient = useQueryClient();
   const [source, setSource] = useState<'huggingface' | 'local'>('huggingface');
-  const [repoId, setRepoId] = useState(candidate);
-  const [revision, setRevision] = useState(candidateRevision);
+  const [repoId, setRepoId] = useState(starter.repoId);
+  const [revision, setRevision] = useState(starter.revision);
   const [path, setPath] = useState('');
   useEffect(() => {
     if (!localAvailable && source === 'local') setSource('huggingface');
@@ -113,6 +101,7 @@ function IntakeForm({ project, localAvailable, onCreated }: { project: Project |
         : { source, path: path.trim(), revision: 'main' });
     },
     onSuccess: (job) => {
+      queryClient.setQueryData<Job[]>(['jobs', job.project_id], previous => [job, ...(previous ?? []).filter(item => item.id !== job.id)]);
       void queryClient.invalidateQueries({ queryKey: ['jobs', job.project_id] });
       onCreated(job);
     },
@@ -126,19 +115,20 @@ function IntakeForm({ project, localAvailable, onCreated }: { project: Project |
     <form onSubmit={submit}>
       <fieldset className="source-options">
         <legend className="visually-hidden">Dataset source</legend>
-        <label className={source === 'huggingface' ? 'source-option selected' : 'source-option'}><input type="radio" name="source" value="huggingface" checked={source === 'huggingface'} onChange={() => { setSource('huggingface'); mutation.reset(); }} /><span>Hugging Face</span><span className="source-detail">Public dataset</span></label>
-        <label className={`source-option${source === 'local' ? ' selected' : ''}${!localAvailable ? ' unavailable' : ''}`}><input type="radio" name="source" value="local" checked={source === 'local'} disabled={!localAvailable} aria-describedby={!localAvailable ? 'local-source-help' : undefined} onChange={() => { setSource('local'); mutation.reset(); }} /><span>Local directory</span><span className="source-detail">{localAvailable ? 'On the API host' : 'Not enabled'}</span></label>
+        <label className={source === 'huggingface' ? 'source-option selected' : 'source-option'}><input type="radio" name="source" value="huggingface" checked={source === 'huggingface'} onChange={() => { setSource('huggingface'); mutation.reset(); onSourceEdited(); }} /><span>Hugging Face</span><span className="source-detail">Public dataset</span></label>
+        <label className={`source-option${source === 'local' ? ' selected' : ''}${!localAvailable ? ' unavailable' : ''}`}><input type="radio" name="source" value="local" checked={source === 'local'} disabled={!localAvailable} aria-describedby={!localAvailable ? 'local-source-help' : undefined} onChange={() => { setSource('local'); mutation.reset(); onSourceEdited(); }} /><span>Local directory</span><span className="source-detail">{localAvailable ? 'On the API host' : 'Not enabled'}</span></label>
       </fieldset>
       {!localAvailable && <p id="local-source-help" className="field-help local-source-help">Local sources are not configured for this workspace.</p>}
       {source === 'huggingface' ? <>
         <label className="field-label" htmlFor="repo-id">Dataset repository</label>
         <input id="repo-id" name="repo_id" value={repoId} onChange={event => {
           setRepoId(event.target.value);
-          if (revision === candidateRevision) setRevision('main');
+          onSourceEdited();
+          if (revision === starter.revision) setRevision('main');
         }} required placeholder="owner/dataset-name" autoCapitalize="none" autoCorrect="off" spellCheck={false} aria-describedby="repo-help" />
         <p id="repo-help" className="field-help">A public LeRobot v2 or v3 dataset.</p>
         <label className="field-label" htmlFor="revision">Revision</label>
-        <input id="revision" className="mono-input" name="revision" value={revision} onChange={event => setRevision(event.target.value)} required autoCapitalize="none" autoCorrect="off" spellCheck={false} aria-describedby="revision-help" />
+        <input id="revision" className="mono-input" name="revision" value={revision} onChange={event => { setRevision(event.target.value); onSourceEdited(); }} required autoCapitalize="none" autoCorrect="off" spellCheck={false} aria-describedby="revision-help" />
         <p id="revision-help" className="field-help">A branch, tag, or commit. The resolved revision is saved with the result.</p>
       </> : <>
         <label className="field-label" htmlFor="local-path">Dataset directory</label>
@@ -175,6 +165,10 @@ function Workbench() {
   const [projectName, setProjectName] = useState('');
   const [selectedJobId, setSelectedJobId] = useState('');
   const [activeStage, setActiveStage] = useState(0);
+  const [datasetView, setDatasetView] = useState<'sources' | 'inspection'>('sources');
+  const [starter, setStarter] = useState(datasetStarters[0]);
+  const [starterSelection, setStarterSelection] = useState(0);
+  const [activeStarterId, setActiveStarterId] = useState(datasetStarters[0].id);
   const health = useQuery({ queryKey: ['health'], queryFn: api.health, refetchInterval: 15_000, retry: false });
   const projects = useQuery({ queryKey: ['projects'], queryFn: api.projects, retry: false });
   const capabilities = useQuery({ queryKey: ['capabilities'], queryFn: api.capabilities, retry: false });
@@ -202,6 +196,7 @@ function Workbench() {
   function selectProject(id: string) {
     setProjectId(id);
     setSelectedJobId('');
+    setDatasetView('sources');
     try { localStorage.setItem('firebird.project', id); } catch { /* Session selection still works. */ }
   }
   const projectMutation = useMutation({
@@ -255,20 +250,25 @@ function Workbench() {
         {!connected && !health.isPending && <div className="connection-notice"><ErrorNotice error={health.error} /><button className="text-button" onClick={() => { void health.refetch(); void projects.refetch(); void capabilities.refetch(); }}>Retry connection</button></div>}
         {capabilities.error && connected && <div className="connection-notice"><ErrorNotice error={capabilities.error} /><button className="text-button" onClick={() => void capabilities.refetch()} disabled={capabilities.isFetching}>Retry capabilities</button></div>}
         <div className="dataset-view" hidden={activeStage !== 0}>
-          <div className="section-tabs"><span className="section-tab active">Dataset intake</span><span className="section-note">LeRobot v2 / v3</span></div>
-          <div className="content-grid">
-            <div className="intake-column"><IntakeForm key={projectId} project={project} localAvailable={capabilities.data?.some(item => item.operation === 'dataset.inspect.local' && item.status === 'available') ?? false} onCreated={job => setSelectedJobId(job.id)} /><div className="source-note"><Icon name="database" size={16} /><p>Start with the included SO-101 example, or enter your own dataset repository.</p></div></div>
-            <section className="panel activity-panel" aria-labelledby="activity-title">
-              <div className="activity-heading"><div><h2 id="activity-title">Inspection</h2><p>{project ? 'Metadata and history for this project.' : 'Your dataset profile will appear here.'}</p></div><span className="quiet-icon"><Icon name="clock" size={18} /></span></div>
+          <div className="section-tabs"><nav className="dataset-tab-buttons" aria-label="Dataset views"><button type="button" className={`section-tab${datasetView === 'sources' ? ' active' : ''}`} aria-pressed={datasetView === 'sources'} onClick={() => setDatasetView('sources')}>Sources</button><button type="button" className={`section-tab${datasetView === 'inspection' ? ' active' : ''}`} aria-pressed={datasetView === 'inspection'} disabled={!selectedJob} onClick={() => setDatasetView('inspection')}>Inspection{sortedJobs.length > 0 && <span className="tab-count">{sortedJobs.length}</span>}</button></nav><span className="section-note">LeRobot v2 / v3</span></div>
+          <div className="content-grid source-grid" hidden={datasetView !== 'sources'}>
+            <div className="intake-column"><IntakeForm key={`${projectId}-${starterSelection}`} project={project} starter={starter} onSourceEdited={() => setActiveStarterId('')} localAvailable={capabilities.data?.some(item => item.operation === 'dataset.inspect.local' && item.status === 'available') ?? false} onCreated={job => { setSelectedJobId(job.id); setDatasetView('inspection'); }} /><div className="source-note"><Icon name="database" size={16} /><p>Inspect metadata first. Camera media and sample rows load when you open a visual preview.</p></div></div>
+            <DatasetStarters selected={activeStarterId} onSelect={item => { setStarter(item); setActiveStarterId(item.id); setStarterSelection(previous => previous + 1); }} />
+          </div>
+          <div className="inspection-view" hidden={datasetView !== 'inspection'}>
+            <section className="inspection-record" aria-labelledby="activity-title">
+              <div className="activity-heading"><div><h2 id="activity-title">Dataset inspection</h2><p>Explore the source, then look inside an episode.</p></div><button type="button" className="secondary-button" onClick={() => setDatasetView('sources')}>Change source</button></div>
               <ErrorNotice error={jobs.error} />
               {jobs.isPending && projectId && <p className="loading-note" role="status">Loading inspections…</p>}
-              {selectedJob ? <>
-                {sortedJobs.length > 1 && <div className="history-control"><label htmlFor="inspection-history">History</label><select id="inspection-history" value={selectedJob.id} onChange={event => setSelectedJobId(event.target.value)}>{sortedJobs.map(job => <option key={job.id} value={job.id}>{displayDate(job.created_at)} · {job.status}</option>)}</select></div>}
+              {selectedJob && <>
+                {sortedJobs.length > 1 && <div className="history-control"><label htmlFor="inspection-history">History</label><select id="inspection-history" value={selectedJob.id} onChange={event => setSelectedJobId(event.target.value)}>{sortedJobs.map(job => <option key={job.id} value={job.id}>{job.request.repo_id || 'Local dataset'} · {displayDate(job.created_at)} · {job.status}</option>)}</select></div>}
                 <JobDetail key={selectedJob.id} job={selectedJob} projectId={projectId} />
-              </> : !jobs.isFetching && <div className="empty-state"><span className="empty-icon"><Icon name="database" size={25} /></span><h3>No dataset inspected yet</h3><p>{project ? 'Choose a source and run an inspection to explore its structure, features, and provenance.' : 'Create a project in the sidebar, then inspect a dataset to explore what is inside.'}</p><div className="empty-metrics" aria-hidden="true"><div><span>Episodes</span><strong>—</strong></div><div><span>Frames</span><strong>—</strong></div><div><span>Features</span><strong>—</strong></div></div><div className="empty-caption"><Icon name="check" size={14} /> Source metadata, without the full download.</div></div>}
+                {selectedJob.result && <DatasetExplorer key={`explorer-${selectedJob.id}`} job={selectedJob} active={activeStage === 0 && datasetView === 'inspection'} />}
+              </>}
             </section>
           </div>
-          <footer className="workspace-footer"><span>Inspect first. Build on what you know.</span><span>Metadata intake</span></footer>
+          {jobs.error && datasetView === 'sources' && <ErrorNotice error={jobs.error} />}
+          <footer className="workspace-footer"><span>Inspect first. Build on what you know.</span><span>Dataset workspace</span></footer>
         </div>
         {activeStage > 0 && <section className="planned-panel" aria-labelledby="planned-title"><span className="empty-icon"><Icon name={stage.icon} size={28} /></span><span className="planned-badge">Planned</span><h2 id="planned-title">{stage.name} is on the roadmap</h2><p>{capabilities.data?.find(item => item.stage.toLowerCase() === stage.name.toLowerCase())?.description ?? 'This stage is not available in the current application.'}</p><p className="planned-note">You can start by inspecting your dataset. Your project and inspection history will be here when this stage is ready.</p><button className="secondary-button" onClick={() => setActiveStage(0)}>Go to Dataset <Icon name="arrow" size={15} /></button></section>}
       </main>

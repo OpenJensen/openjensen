@@ -207,6 +207,50 @@ class Capability(Record):
         return self
 
 
+class EpisodeSummary(Record):
+    episode_index: int = Field(ge=0)
+    frame_count: int = Field(ge=0)
+    duration_seconds: float = Field(ge=0, allow_inf_nan=False)
+    tasks: list[str]
+
+
+class EpisodePage(Record):
+    repo_id: str
+    revision: str
+    total_episodes: int = Field(ge=0)
+    offset: int = Field(ge=0)
+    limit: int = Field(ge=1, le=24)
+    episodes: list[EpisodeSummary]
+    warnings: list[str]
+
+
+class CameraPreview(Record):
+    key: str
+    url: str
+    start_seconds: float = Field(ge=0, allow_inf_nan=False)
+    end_seconds: float = Field(ge=0, allow_inf_nan=False)
+    width: int | None
+    height: int | None
+    fps: float = Field(gt=0, allow_inf_nan=False)
+
+
+class FrameSample(Record):
+    frame_index: int = Field(ge=0)
+    timestamp: float = Field(ge=0, allow_inf_nan=False)
+    action: list[float] | None
+    state: list[float] | None
+
+
+class EpisodePreview(EpisodeSummary):
+    repo_id: str
+    revision: str
+    cameras: list[CameraPreview]
+    action_names: list[str]
+    state_names: list[str]
+    samples: list[FrameSample]
+    warnings: list[str]
+
+
 class WorkerRequest(Record):
     schema_version: Literal[1] = 1
     operation: Literal["dataset.inspect"] = "dataset.inspect"

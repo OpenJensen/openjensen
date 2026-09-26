@@ -23,3 +23,10 @@ Local dataset paths refer to the computer running the API, not necessarily the b
 Styling uses local CSS for this foundation. Tailwind and shadcn remain optional selected tools in the plan and are not installed by this client.
 
 The workspace uses a neutral light theme by default. The appearance control switches between light and dark, remembers the choice in `firebird.theme`, and applies it before the page paints. The six lifecycle stages live in the sidebar; planned stages show their current availability while the dataset form remains mounted so navigation preserves an unfinished intake. On small screens, navigation and project controls move above the workspace.
+
+
+## Visual dataset explorer
+
+Sources provides real, attributed stills for two pinned starters. Inspection opens a full-width dataset overview and an explicit visual-preview action. The explorer uses generated episode API types, retains selected-episode state across workspace views, and pauses hidden media. Videos use source camera dimensions and episode-relative shared controls; v3 endpoints are treated as exclusive to avoid showing the following episode. Native source codec support is required in the browser.
+
+The first-frame table shows a bounded sample of actual selected-episode state/action values, with source channel names and display rounding. The original metadata-only warnings are retained under inspection provenance and distinguished from the additional preview operation.

@@ -2,7 +2,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+import httpx
+import pyarrow as pa
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -11,7 +13,16 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from vla_platform import __version__
 from vla_platform.capabilities import registry
-from vla_platform.contracts import Capability, IntakeRequest, Job, Project, ProjectCreate
+from vla_platform.contracts import (
+    Capability,
+    EpisodePage,
+    EpisodePreview,
+    IntakeRequest,
+    Job,
+    Project,
+    ProjectCreate,
+)
+from vla_platform.datasets.explore import DatasetExplorer, ExplorationError
 from vla_platform.execution import Execution
 from vla_platform.projects import Projects
 from vla_platform.settings import Settings
@@ -39,12 +50,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise RuntimeError("Another application already owns this workspace") from exc
         storage = Storage(settings.data_dir)
         execution = Execution(storage, settings)
+        explorer = DatasetExplorer()
         initialized = False
         try:
             await storage.initialize()
             initialized = True
             await execution.reconcile()
             app.state.projects, app.state.execution = Projects(storage), execution
+            app.state.explorer = explorer
             yield
         finally:
             try:
@@ -52,7 +65,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     await execution.close()
             finally:
                 try:
-                    await storage.close()
+                    try:
+                        await explorer.close()
+                    finally:
+                        await storage.close()
                 finally:
                     lock.release()
 
@@ -85,6 +101,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     ProjectsDep = Annotated[Projects, Depends(projects_service)]
     ExecutionDep = Annotated[Execution, Depends(execution_service)]
+
+    @app.exception_handler(ExplorationError)
+    async def exploration_error(_: Request, exc: ExplorationError) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=exc.status_code)
+
+    async def explore(request: Request, job: Job, **kwargs):
+        explorer = request.app.state.explorer
+        try:
+            if "episode_index" in kwargs:
+                return await explorer.preview(job, **kwargs)
+            return await explorer.page(job, **kwargs)
+        except ExplorationError:
+            raise
+        except TimeoutError as exc:
+            raise HTTPException(504, "Dataset preview timed out; try again") from exc
+        except httpx.HTTPError as exc:
+            raise HTTPException(502, "Hugging Face could not serve this dataset preview") from exc
+        except (ValueError, pa.ArrowException) as exc:
+            raise HTTPException(422, "Dataset preview metadata or Parquet data is invalid") from exc
 
     @app.get("/api/v1/health")
     async def health() -> dict[str, str]:
@@ -142,6 +177,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if job is None:
             raise HTTPException(404, "Job not found")
         return job
+
+    @app.get("/api/v1/jobs/{job_id}/episodes", response_model=EpisodePage)
+    async def list_episodes(
+        job_id: str,
+        request: Request,
+        execution: ExecutionDep,
+        offset: Annotated[int, Query(ge=0)] = 0,
+        limit: Annotated[int, Query(ge=1, le=24)] = 12,
+    ) -> EpisodePage:
+        job = await get_job(job_id, execution)
+        return await explore(request, job, offset=offset, limit=limit)
+
+    @app.get("/api/v1/jobs/{job_id}/episodes/{episode_index}", response_model=EpisodePreview)
+    async def get_episode(
+        job_id: str,
+        episode_index: int,
+        request: Request,
+        execution: ExecutionDep,
+    ) -> EpisodePreview:
+        job = await get_job(job_id, execution)
+        return await explore(request, job, episode_index=episode_index)
 
     @app.post("/api/v1/jobs/{job_id}/cancel", response_model=Job)
     async def cancel_job(job_id: str, execution: ExecutionDep) -> Job:

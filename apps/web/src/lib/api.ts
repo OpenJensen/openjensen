@@ -5,6 +5,10 @@ export type Job = components['schemas']['Job'];
 export type DatasetProfile = components['schemas']['DatasetProfile'];
 export type Capability = components['schemas']['Capability'];
 export type IntakeRequest = components['schemas']['IntakeRequest'];
+export type EpisodePage = components['schemas']['EpisodePage'];
+export type EpisodePreview = components['schemas']['EpisodePreview'];
+export type CameraPreview = components['schemas']['CameraPreview'];
+export type FrameSample = components['schemas']['FrameSample'];
 
 // Static production builds use the Python host's origin. Development uses its
 // loopback API unless the developer explicitly provides an alternative origin.
@@ -13,9 +17,9 @@ const origin = (process.env.NEXT_PUBLIC_API_URL ??
 
 export const apiReferenceUrl = `${origin}/docs`;
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, timeoutMs = 15_000): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15_000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(`${origin}/api/v1${path}`, {
       ...init,
@@ -37,7 +41,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     return await response.json() as T;
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new Error('The API did not respond within 15 seconds. Check that the local application is running.');
+      throw new Error(`The API did not respond within ${timeoutMs / 1000} seconds. Check the connection and try again.`);
     }
     if (error instanceof TypeError) {
       throw new Error('Cannot reach the application API. Start the Python application and check its address.');
@@ -60,6 +64,12 @@ export const api = {
     `/projects/${encodeURIComponent(projectId)}/intakes`, { method: 'POST', body: JSON.stringify(body) },
   ),
   cancel: (jobId: string) => request<Job>(`/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' }),
+  episodes: (jobId: string, offset = 0, limit = 6) => request<EpisodePage>(
+    `/jobs/${encodeURIComponent(jobId)}/episodes?offset=${offset}&limit=${limit}`, undefined, 60_000,
+  ),
+  episode: (jobId: string, episodeIndex: number) => request<EpisodePreview>(
+    `/jobs/${encodeURIComponent(jobId)}/episodes/${episodeIndex}`, undefined, 60_000,
+  ),
 };
 
 export function isActive(job: Job): boolean {
