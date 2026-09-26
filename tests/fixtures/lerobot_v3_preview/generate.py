@@ -96,13 +96,15 @@ def generate():
             "sha256": hashlib.sha256(raw).hexdigest(),
         }
     target = ROOT / "meta/info.json"
-    target.write_text(json.dumps(info, indent=2) + "\n")
+    target.write_text(json.dumps(info, indent=2) + "\n", encoding="utf-8", newline="\n")
     raw = target.read_bytes()
     manifest["files"]["meta/info.json"] = {
         "bytes": len(raw),
         "sha256": hashlib.sha256(raw).hexdigest(),
     }
-    (ROOT / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    (ROOT / "manifest.json").write_text(
+        json.dumps(manifest, indent=2) + "\n", encoding="utf-8", newline="\n"
+    )
 
 
 if __name__ == "__main__":
