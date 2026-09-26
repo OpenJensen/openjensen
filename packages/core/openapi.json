@@ -1305,7 +1305,7 @@
               "$ref": "#/components/schemas/Precision"
             },
             "maxItems": 4,
-            "minItems": 2,
+            "minItems": 1,
             "title": "Candidates",
             "type": "array"
           },
