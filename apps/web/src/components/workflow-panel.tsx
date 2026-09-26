@@ -560,12 +560,12 @@ export function WorkflowPanel({
                               <td>
                                 {typeof report.peak_device_mib === "number"
                                   ? report.peak_device_mib.toFixed(1)
-                                  : "Unavailable"}
+                                  : "—"}
                               </td>
                               <td>
                                 {typeof report.success_rate === "number"
                                   ? `${(report.success_rate * 100).toFixed(0)}% · ${report.complete_episodes} episodes`
-                                  : "Not measured"}
+                                  : "—"}
                               </td>
                             </tr>
                           ))}

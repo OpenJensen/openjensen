@@ -33,7 +33,7 @@ async function policy(request: APIRequestContext, id: string) {
 
 test('shows complete reference numbers with separate hardware and honest missing values', async ({ page, request }, testInfo) => {
   await openDiagnostics(page, await project(request));
-  const table = page.getByRole('table', { name: /dedicated rental/ });
+  const table = page.getByRole('table', { name: /NVIDIA L4 · 8 vCPUs/ });
   const native = table.getByRole('row').filter({ has: page.getByRole('rowheader', { name: 'native-bf16', exact: true }) });
   await expect(native).toContainText('342.59');
   await expect(native).toContainText('37.96');
@@ -47,13 +47,14 @@ test('shows complete reference numbers with separate hardware and honest missing
   await expect(page.getByText('No execution target is configured.', { exact: false })).toBeVisible();
   await expect(page.getByRole('link', { name: 'View source report' })).toHaveAttribute('href', /e5866f0.*dedicated-l4\/REPORT.md$/);
   await page.getByRole('combobox', { name: 'Reference hardware' }).selectOption('existingL4');
-  await expect(page.getByRole('table', { name: /existing host/ })).toContainText('348.80');
+  await expect(page.getByRole('table', { name: /NVIDIA L4 · 12 vCPUs/ })).toContainText('348.80');
   await expect(page.getByRole('columnheader', { name: 'Process to first action (s)', exact: true })).toHaveCount(0);
   await page.getByRole('combobox', { name: 'Reference hardware' }).selectOption('rtx3070');
-  const rtx = page.getByRole('table', { name: /shared WSL/ });
+  const rtx = page.getByRole('table', { name: /NVIDIA RTX 3070/ });
   await expect(rtx.getByRole('row').filter({ has: page.getByRole('rowheader', { name: 'cpp-Q4_0', exact: true }) })).toContainText('8/20');
-  await expect(rtx).toContainText('Deferred: insufficient disk space');
-  await expect(rtx).toContainText('Not recorded');
+  await expect(rtx).not.toContainText(/Not recorded|Not collected|Deferred|host failed/);
+  const missing = rtx.getByRole('row').filter({ has: page.getByRole('rowheader', { name: 'trtllm-fp16', exact: true }) });
+  await expect(missing.getByRole('cell')).toHaveText(['—', '—', '—', '—', '—']);
   await page.getByRole('combobox', { name: 'Reference hardware' }).selectOption('dedicatedL4');
   const sizes = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
   expect(sizes.scroll).toBeLessThanOrEqual(sizes.width + 1);
@@ -122,5 +123,5 @@ test('keeps reference results visible and blocks launch when target discovery fa
   await openDiagnostics(page, id);
   await expect(page.getByRole('alert').filter({ hasText: 'Target discovery unavailable' })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole('button', { name: 'Start diagnostics', exact: true })).toBeDisabled();
-  await expect(page.getByRole('table', { name: /dedicated rental/ })).toBeVisible();
+  await expect(page.getByRole('table', { name: /NVIDIA L4 · 8 vCPUs/ })).toBeVisible();
 });

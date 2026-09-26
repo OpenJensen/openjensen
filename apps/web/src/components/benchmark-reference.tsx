@@ -6,7 +6,7 @@ import reference from '@/lib/benchmark-reference.json';
 // Recorded examples are pinned to evidence, never inserted into project jobs.
 const source = `https://github.com/sobhanb-eth/firebird-hackathon-codebase/tree/${reference.sourceCommit}/${reference.sourcePath}`;
 const worker = `https://github.com/sobhanb-eth/firebird-hackathon-codebase/blob/${reference.sourceCommit}/workers/benchmark_gpu/README.md`;
-const number = (value: number | null) => value === null ? 'Not recorded' : value.toFixed(2);
+const number = (value: number | null) => value === null ? '—' : value.toFixed(2);
 
 export function BenchmarkReference() {
   const [target, setTarget] = useState<keyof typeof reference.hosts>('dedicatedL4');
@@ -16,7 +16,7 @@ export function BenchmarkReference() {
       <div><p className="eyebrow">Reference results · {reference.recordedOn}</p><h2 id="benchmark-reference-title">Recorded benchmark comparison</h2></div>
       <a className="text-link" href={`${source}/${selected.reportPath}`} target="_blank" rel="noreferrer">View source report ↗</a>
     </div>
-    <p className="muted">Measured SmolVLA examples from our benchmark hosts. Your project’s own measurements appear above under Diagnostic runs.</p>
+    <p className="muted">Measured SmolVLA reference examples. Your project’s own measurements appear above under Diagnostic runs.</p>
     <label className="reference-hardware">Reference hardware
       <select value={target} onChange={event => setTarget(event.target.value as keyof typeof reference.hosts)}>
         {Object.entries(reference.hosts).map(([id, item]) => <option key={id} value={id}>{item.label}</option>)}
@@ -34,12 +34,12 @@ export function BenchmarkReference() {
           <th scope="col">Reference successes lost / new successes gained</th>
         </tr></thead>
         <tbody>{selected.rows.map(row => <tr key={row.candidate}>
-          <th scope="row"><code>{row.candidate}</code>{row.note && <p className="muted">{row.note}</p>}</th>
+          <th scope="row"><code>{row.candidate}</code></th>
           <td>{number(row.medianP50Ms)}</td>
           {selected.fullStartup && <td>{number(row.firstActionSeconds)}</td>}
-          <td>{number(row.runtimeInitSeconds)}</td><td>{row.processPeakMiB ?? 'Not recorded'}</td>
-          <td>{row.quality ? `${row.quality.succeeded}/${row.quality.total}` : 'Not recorded'}</td>
-          <td>{row.quality ? `${row.quality.lost} lost / ${row.quality.gained} gained` : 'Not recorded'}</td>
+          <td>{number(row.runtimeInitSeconds)}</td><td>{row.processPeakMiB ?? '—'}</td>
+          <td>{row.quality ? `${row.quality.succeeded}/${row.quality.total}` : '—'}</td>
+          <td>{row.quality ? `${row.quality.lost} lost / ${row.quality.gained} gained` : '—'}</td>
         </tr>)}</tbody>
       </table>
     </div>

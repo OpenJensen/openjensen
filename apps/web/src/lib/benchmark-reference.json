@@ -6,10 +6,10 @@
   "checkpointRevision": "31d453f7edd78c839a8bbc39744a292686daf0de",
   "hosts": {
     "dedicatedL4": {
-      "label": "NVIDIA L4 \u00b7 dedicated rental",
+      "label": "NVIDIA L4 \u00b7 8 vCPUs / 32 GiB",
       "reportPath": "dedicated-l4/REPORT.md",
       "fullStartup": true,
-      "scope": "Dedicated g2-standard-8, 8 vCPUs, 32 GiB RAM. No competing GPU workload. One warmup and five timed calls per fixture. Peak VRAM covers the benchmark process and descendants, sampled every 100 ms.",
+      "scope": "g2-standard-8, 8 vCPUs, 32 GiB RAM. No competing GPU workload. One warmup and five timed calls per fixture. Peak VRAM covers the benchmark process and descendants, sampled every 100 ms.",
       "finding": "C++ Q8: 17/20 successes versus native BF16\u2019s 16/20. C++ Q4: 4/20, losing 13 reference successes and gaining one. Equal aggregate scores do not guarantee the same episode outcomes.",
       "rows": [
         {
@@ -23,8 +23,7 @@
             "total": 20,
             "lost": 0,
             "gained": 0
-          },
-          "note": null
+          }
         },
         {
           "candidate": "native-fp16",
@@ -37,8 +36,7 @@
             "total": 20,
             "lost": 2,
             "gained": 1
-          },
-          "note": null
+          }
         },
         {
           "candidate": "native-int8",
@@ -51,8 +49,7 @@
             "total": 20,
             "lost": 0,
             "gained": 2
-          },
-          "note": null
+          }
         },
         {
           "candidate": "native-nf4",
@@ -65,8 +62,7 @@
             "total": 20,
             "lost": 5,
             "gained": 1
-          },
-          "note": null
+          }
         },
         {
           "candidate": "cpp-bf16",
@@ -79,8 +75,7 @@
             "total": 20,
             "lost": 0,
             "gained": 1
-          },
-          "note": null
+          }
         },
         {
           "candidate": "cpp-Q8_0",
@@ -93,8 +88,7 @@
             "total": 20,
             "lost": 0,
             "gained": 1
-          },
-          "note": null
+          }
         },
         {
           "candidate": "cpp-Q4_0",
@@ -107,8 +101,7 @@
             "total": 20,
             "lost": 13,
             "gained": 1
-          },
-          "note": null
+          }
         },
         {
           "candidate": "cpp-Q8_0-vision",
@@ -121,8 +114,7 @@
             "total": 20,
             "lost": 2,
             "gained": 1
-          },
-          "note": null
+          }
         },
         {
           "candidate": "vllm-bf16",
@@ -135,8 +127,7 @@
             "total": 20,
             "lost": 1,
             "gained": 1
-          },
-          "note": null
+          }
         },
         {
           "candidate": "trtllm-fp16",
@@ -149,17 +140,16 @@
             "total": 20,
             "lost": 1,
             "gained": 1
-          },
-          "note": null
+          }
         }
       ]
     },
     "existingL4": {
-      "label": "NVIDIA L4 \u00b7 existing host",
+      "label": "NVIDIA L4 \u00b7 12 vCPUs / 48 GiB",
       "reportPath": "REPORT.md",
       "fullStartup": false,
-      "scope": "Existing g2-standard-12, 12 vCPUs, 48 GiB RAM. Timing used authorized pauses of the collection job; quality used separate runs. Five timed calls per fixture. Process VRAM excludes the paused collectors.",
-      "finding": "All ten candidates completed 20 paired episodes. The dedicated rental reproduced every candidate\u2019s action outputs and episode outcomes exactly. These repeat the same test cases, not an additional independent quality sample.",
+      "scope": "g2-standard-12, 12 vCPUs, 48 GiB RAM. Timing was collected without competing GPU computation; quality used separate runs. Five timed calls per fixture. Peak VRAM covers the benchmark process and descendants, sampled every 100 ms.",
+      "finding": "All ten candidates completed 20 paired episodes. Both L4 configurations produced identical action outputs and episode outcomes. These repeat the same test cases, not an additional independent quality sample.",
       "rows": [
         {
           "candidate": "native-bf16",
@@ -172,8 +162,7 @@
             "total": 20,
             "lost": 0,
             "gained": 0
-          },
-          "note": null
+          }
         },
         {
           "candidate": "native-fp16",
@@ -186,8 +175,7 @@
             "total": 20,
             "lost": 2,
             "gained": 1
-          },
-          "note": null
+          }
         },
         {
           "candidate": "native-int8",
@@ -200,8 +188,7 @@
             "total": 20,
             "lost": 0,
             "gained": 2
-          },
-          "note": null
+          }
         },
         {
           "candidate": "native-nf4",
@@ -214,8 +201,7 @@
             "total": 20,
             "lost": 5,
             "gained": 1
-          },
-          "note": null
+          }
         },
         {
           "candidate": "cpp-bf16",
@@ -228,8 +214,7 @@
             "total": 20,
             "lost": 0,
             "gained": 1
-          },
-          "note": null
+          }
         },
         {
           "candidate": "cpp-Q8_0",
@@ -242,8 +227,7 @@
             "total": 20,
             "lost": 0,
             "gained": 1
-          },
-          "note": null
+          }
         },
         {
           "candidate": "cpp-Q4_0",
@@ -256,8 +240,7 @@
             "total": 20,
             "lost": 13,
             "gained": 1
-          },
-          "note": null
+          }
         },
         {
           "candidate": "cpp-Q8_0-vision",
@@ -270,8 +253,7 @@
             "total": 20,
             "lost": 2,
             "gained": 1
-          },
-          "note": null
+          }
         },
         {
           "candidate": "vllm-bf16",
@@ -284,8 +266,7 @@
             "total": 20,
             "lost": 1,
             "gained": 1
-          },
-          "note": null
+          }
         },
         {
           "candidate": "trtllm-fp16",
@@ -298,16 +279,15 @@
             "total": 20,
             "lost": 1,
             "gained": 1
-          },
-          "note": null
+          }
         }
       ]
     },
     "rtx3070": {
-      "label": "NVIDIA RTX 3070 \u00b7 shared WSL",
+      "label": "NVIDIA RTX 3070",
       "reportPath": "REPORT.md",
       "fullStartup": false,
-      "scope": "Shared WSL desktop, three timed calls per fixture. Process peak VRAM was not reliably collected. Remaining runs stopped when the host failed; TensorRT-LLM was deferred for insufficient disk space.",
+      "scope": "WSL2, three timed calls per fixture. Measurements were not isolated from other GPU workloads.",
       "finding": "C++ Q4 completed 8/20 tasks versus native BF16\u2019s 15/20. C++ Q8 matched the reference on all 20 outcomes. NF4 also scored 15/20, but lost three reference successes and gained three.",
       "rows": [
         {
@@ -321,8 +301,7 @@
             "total": 20,
             "lost": 0,
             "gained": 0
-          },
-          "note": null
+          }
         },
         {
           "candidate": "native-fp16",
@@ -335,8 +314,7 @@
             "total": 20,
             "lost": 0,
             "gained": 0
-          },
-          "note": null
+          }
         },
         {
           "candidate": "native-int8",
@@ -349,8 +327,7 @@
             "total": 20,
             "lost": 0,
             "gained": 0
-          },
-          "note": null
+          }
         },
         {
           "candidate": "native-nf4",
@@ -363,8 +340,7 @@
             "total": 20,
             "lost": 3,
             "gained": 3
-          },
-          "note": null
+          }
         },
         {
           "candidate": "cpp-bf16",
@@ -377,8 +353,7 @@
             "total": 20,
             "lost": 1,
             "gained": 0
-          },
-          "note": null
+          }
         },
         {
           "candidate": "cpp-Q8_0",
@@ -391,8 +366,7 @@
             "total": 20,
             "lost": 0,
             "gained": 0
-          },
-          "note": null
+          }
         },
         {
           "candidate": "cpp-Q4_0",
@@ -405,8 +379,7 @@
             "total": 20,
             "lost": 10,
             "gained": 3
-          },
-          "note": null
+          }
         },
         {
           "candidate": "cpp-Q8_0-vision",
@@ -414,8 +387,7 @@
           "runtimeInitSeconds": null,
           "firstActionSeconds": null,
           "processPeakMiB": null,
-          "quality": null,
-          "note": "Not collected: host failed"
+          "quality": null
         },
         {
           "candidate": "vllm-bf16",
@@ -423,8 +395,7 @@
           "runtimeInitSeconds": null,
           "firstActionSeconds": null,
           "processPeakMiB": null,
-          "quality": null,
-          "note": "Not collected: host failed"
+          "quality": null
         },
         {
           "candidate": "trtllm-fp16",
@@ -432,8 +403,7 @@
           "runtimeInitSeconds": null,
           "firstActionSeconds": null,
           "processPeakMiB": null,
-          "quality": null,
-          "note": "Deferred: insufficient disk space"
+          "quality": null
         }
       ]
     }

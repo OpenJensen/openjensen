@@ -16,12 +16,13 @@ Settings also hold advanced recipes and acceptance constraints. Browser preferen
 are per project; each job preserves the submitted recipe on the server.
 
 Diagnostics also shows the completed GPU benchmark comparison as labelled reference
-results, even before a project has policy runs. Dedicated L4, existing L4 and RTX
-3070 have separate views, pinned to evidence commit `e5866f0`. The dedicated L4 view
+results, even before a project has policy runs. NVIDIA L4 (8 vCPUs / 32 GiB), NVIDIA
+L4 (12 vCPUs / 48 GiB) and RTX 3070 have separate views, pinned to evidence commit
+`e5866f0`. The L4 (8 vCPUs / 32 GiB) view
 includes all ten candidates, process-to-first-action startup, cached runtime
 initialization, sampled process VRAM, and paired success changes. Missing RTX runs
-and VRAM remain unscored. These examples do not populate project jobs or establish
-results for a new policy.
+and VRAM appear as dashes. Labels contain only hardware details. These examples do
+not populate project jobs or establish results for a new policy.
 
 To run project diagnostics, select **Settings & diagnostics → Diagnostics**, choose
 an execution target and a project GGUF policy, choose **Engine checks** or **LIBERO
