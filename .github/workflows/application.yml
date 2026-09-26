@@ -20,11 +20,16 @@ jobs:
           python-version: '3.14.7'
       - run: npm install --global pnpm@12.6.0
       - run: uv sync --frozen
-      - name: Install isolated CPU preview reader
+      - name: Install isolated CPU preview reader (POSIX)
         if: runner.os != 'Windows'
         run: |
           uv venv --python 3.14.7 workers/_cpu_readers/.venv
           uv pip install --python workers/_cpu_readers/.venv/bin/python --no-deps pyarrow==25.0.1
+      - name: Install isolated CPU preview reader (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          uv venv --python 3.14.7 workers/_cpu_readers/.venv
+          uv pip install --python workers/_cpu_readers/.venv/Scripts/python.exe --no-deps pyarrow==25.0.1
       - run: uv run --frozen ruff check packages/core scripts tests
       - run: uv run --frozen ruff format --check packages/core scripts tests
       - run: uv run --frozen pytest -q
