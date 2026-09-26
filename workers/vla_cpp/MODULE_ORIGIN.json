@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "source_commit": "89c96405ec5cd07755eb849ee4038e3a3dca712c",
+  "source_branch": "feat/core-integration",
+  "scope": "Standalone quantization implementation extracted without core orchestration, training or benchmark harnesses.",
+  "files_sha256": {
+    ".gitignore": "10de7e8c5e8e9835db9d21692ed757762d173f928dc4263c23d596ac4ba940c0",
+    "workers/vla_cpp/.gitignore": "9ba747888c61c9f15ca30eef479f138ff843793aec2bb4168ed1b376993339ae",
+    "workers/vla_cpp/.dockerignore": "edae0dc79d466da1ba789665546ce0e8e3732f98663197709959e476b51f2c0b",
+    "workers/vla_cpp/.python-version": "49a506dd32096b010d75205acf3430c9ae6c40351888129499e5a5e487126c93",
+    "workers/vla_cpp/policykit/__init__.py": "00cb5fb0badccdac6aa3f17f00e7b8aaa584376536665f67a6574c69f959c5ed",
+    "workers/vla_cpp/policykit/quantization.py": "ddab713d83f1605dcedbbcf86b1e4c241d614b22a45410bbfa0110bda02ab902",
+    "workers/vla_cpp/policykit/worker.py": "e6522de2c111d0aa0ed5d8ea811a06dfc7d85614ac799490600a51ae9250b1d0",
+    "workers/vla_cpp/patches/vla-cpp-smolvla-packed.patch": "b1ebe5bee36be84b843b5f140f97fe26ca66d36f4514331cf80b0fd4b8dbc36c"
+  }
+}

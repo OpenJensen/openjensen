@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "policykit"
+version = "0.1.0"
+description = "Standalone packed SmolVLA quantization worker"
+requires-python = ">=3.11,<3.13"
+dependencies = []
+
+[project.optional-dependencies]
+quantize = ["gguf==0.17.1", "numpy==2.2.6"]
+test = ["pytest==8.4.2"]
+
+[project.scripts]
+policykit-quantize = "policykit.quantization:main"
+policykit-worker = "policykit.worker:main"
+
+[tool.setuptools.packages.find]
+include = ["policykit*"]
+
+[tool.setuptools.package-data]
+policykit = ["patches/*.patch"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
