@@ -241,7 +241,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def job_events(job_id: str, execution: ExecutionDep, after: int = 0):
         if await execution.get(job_id) is None:
             raise HTTPException(404, "Job not found")
-        return execution.lifecycle.events(job_id, after)
+        try:
+            return execution.lifecycle.events(job_id, after)
+        except ValueError as exc:
+            raise HTTPException(
+                422, "Job event history is corrupt; preserve it for inspection"
+            ) from exc
 
     @app.get("/api/v1/jobs/{job_id}", response_model=Job)
     async def get_job(job_id: str, execution: ExecutionDep) -> Job:

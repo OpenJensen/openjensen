@@ -483,9 +483,10 @@ def test_interior_or_completed_event_corruption_is_not_hidden(configured, tail):
     valid = path.read_bytes()
     # Even an unterminated fragment becomes interior corruption when more records follow.
     path.write_bytes(valid + tail + valid.splitlines(keepends=True)[-1])
-    with TestClient(create_app(configured)) as client:
-        with pytest.raises(ValueError):
-            client.get(f"/api/v1/jobs/{jid}/events")
+    with TestClient(create_app(configured), raise_server_exceptions=False) as client:
+        response = client.get(f"/api/v1/jobs/{jid}/events")
+        assert response.status_code == 422
+        assert "corrupt" in response.json()["detail"].lower()
     assert path.read_bytes() == valid + tail + valid.splitlines(keepends=True)[-1]
 
 
