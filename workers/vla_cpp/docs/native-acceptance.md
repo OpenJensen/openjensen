@@ -92,19 +92,19 @@ simulator success, or L4 performance. No cloud/GPU job was launched.
 
 ## Spatial integration boundary (EVAL-003)
 
-The current application rollout remains the legacy LIBERO Object adapter. NATIVE-001
-does not enable the newer Spatial model merely because its 112 matrices pass shape
-validation. The next integration must package the pinned processor, tokenizer,
+NATIVE-001 retains the legacy LIBERO Object adapter. The separate
+[Spatial application integration](spatial-application.md) adds the newer model
+without treating its 112 matrices as sufficient compatibility evidence. It packages the pinned processor, tokenizer,
 normalization statistics and derived observation configuration alongside weights;
 record the 6-to-8 observation-state correction as explicit lineage; and validate
 camera names, state/action layouts, action chunk replay and task instructions.
 
-Use a separate Spatial adapter with an explicit protocol identity: suite/task IDs,
+The Spatial adapter uses an explicit protocol identity: suite/task IDs,
 asset revision and task/state hashes, episode horizon, action replay length,
 observation preprocessing, seed/noise schedule, and separate development/final
 initial states. That protocol is the comparison key between native PyTorch BF16
 and CPP float/Q8/experimental Q4. Their runtime identities must remain distinct.
 For repeats of the same backend/package, require the full runtime identity to
-match. Reuse `artifact_contract`, complete `memory_coverage`, runtime source
-fingerprints and `evaluate_package` after integrating the adapter. Actual L4
+match. It reuses `artifact_contract`, complete `memory_coverage`, runtime source
+fingerprints and `evaluate_package`, with process-tree GPU measurements. Actual L4
 packed quality and final package reruns remain required gates.
