@@ -72,11 +72,55 @@ class Job(Record):
     error: str | None = None
 
 
+class CapabilityTarget(Record):
+    operating_system: Literal["linux", "windows", "macos"]
+    device: Literal["cpu", "cuda", "mps"]
+    support: Literal["supported", "untested", "unsupported"] = "untested"
+    evidence_state: Literal["untested", "fixture", "live_source"] = "untested"
+    evidence_refs: list[str] = Field(default_factory=list)
+    reason: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def evidence_matches_support(self) -> CapabilityTarget:
+        tested = self.evidence_state != "untested"
+        if tested != bool(self.evidence_refs) or any(not ref.strip() for ref in self.evidence_refs):
+            raise ValueError("Tested capability evidence requires nonempty record references")
+        if (self.support == "supported") != tested:
+            raise ValueError("Supported targets require scoped run evidence")
+        return self
+
+
 class Capability(Record):
     stage: str
     operation: str
     status: Literal["available", "planned"]
     description: str
+    backend: str | None = None
+    implementation: Literal["registered", "planned"] = "planned"
+    runnable: bool = False
+    targets: list[CapabilityTarget] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def runnable_requires_adapter(self) -> Capability:
+        if self.implementation == "planned" and (
+            self.status == "available"
+            or self.runnable
+            or any(target.support == "supported" for target in self.targets)
+        ):
+            raise ValueError("Planned operations cannot be available, runnable or supported")
+        if self.runnable and (
+            self.status != "available"
+            or self.implementation != "registered"
+            or not self.backend
+            or not any(target.support != "unsupported" for target in self.targets)
+        ):
+            raise ValueError(
+                "Runnable capability requires an available registered backend and target"
+            )
+        keys = [(target.operating_system, target.device) for target in self.targets]
+        if len(keys) != len(set(keys)):
+            raise ValueError("Capability targets must have unique operating-system/device pairs")
+        return self
 
 
 class WorkerRequest(Record):

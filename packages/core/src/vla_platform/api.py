@@ -99,19 +99,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/v1/capabilities", response_model=list[Capability])
     async def capabilities() -> list[Capability]:
-        return [
-            *registry(),
-            Capability(
-                stage="Dataset",
-                operation="dataset.inspect.local",
-                status="available" if settings.local_root else "planned",
-                description=(
-                    "Local metadata intake is enabled within the configured dataset root."
-                    if settings.local_root
-                    else "Local intake is disabled; configure FIREBIRD_LOCAL_DATA_ROOT."
-                ),
-            ),
-        ]
+        return registry(local_root=settings.local_root)
 
     @app.get("/api/v1/projects", response_model=list[Project])
     async def list_projects(service: ProjectsDep) -> list[Project]:

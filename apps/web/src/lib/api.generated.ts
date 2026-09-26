@@ -130,10 +130,23 @@ export interface components {
     schemas: {
         /** Capability */
         Capability: {
+            /** Backend */
+            backend?: string | null;
             /** Description */
             description: string;
+            /**
+             * Implementation
+             * @default planned
+             * @enum {string}
+             */
+            implementation: "registered" | "planned";
             /** Operation */
             operation: string;
+            /**
+             * Runnable
+             * @default false
+             */
+            runnable: boolean;
             /** Stage */
             stage: string;
             /**
@@ -141,6 +154,37 @@ export interface components {
              * @enum {string}
              */
             status: "available" | "planned";
+            /** Targets */
+            targets?: components["schemas"]["CapabilityTarget"][];
+        };
+        /** CapabilityTarget */
+        CapabilityTarget: {
+            /**
+             * Device
+             * @enum {string}
+             */
+            device: "cpu" | "cuda" | "mps";
+            /** Evidence Refs */
+            evidence_refs?: string[];
+            /**
+             * Evidence State
+             * @default untested
+             * @enum {string}
+             */
+            evidence_state: "untested" | "fixture" | "live_source";
+            /**
+             * Operating System
+             * @enum {string}
+             */
+            operating_system: "linux" | "windows" | "macos";
+            /** Reason */
+            reason: string;
+            /**
+             * Support
+             * @default untested
+             * @enum {string}
+             */
+            support: "supported" | "untested" | "unsupported";
         };
         /** DatasetProfile */
         DatasetProfile: {

@@ -4,13 +4,38 @@
       "Capability": {
         "additionalProperties": false,
         "properties": {
+          "backend": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backend"
+          },
           "description": {
             "title": "Description",
+            "type": "string"
+          },
+          "implementation": {
+            "default": "planned",
+            "enum": [
+              "registered",
+              "planned"
+            ],
+            "title": "Implementation",
             "type": "string"
           },
           "operation": {
             "title": "Operation",
             "type": "string"
+          },
+          "runnable": {
+            "default": false,
+            "title": "Runnable",
+            "type": "boolean"
           },
           "stage": {
             "title": "Stage",
@@ -23,6 +48,13 @@
             ],
             "title": "Status",
             "type": "string"
+          },
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilityTarget"
+            },
+            "title": "Targets",
+            "type": "array"
           }
         },
         "required": [
@@ -32,6 +64,68 @@
           "description"
         ],
         "title": "Capability",
+        "type": "object"
+      },
+      "CapabilityTarget": {
+        "additionalProperties": false,
+        "properties": {
+          "device": {
+            "enum": [
+              "cpu",
+              "cuda",
+              "mps"
+            ],
+            "title": "Device",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "evidence_state": {
+            "default": "untested",
+            "enum": [
+              "untested",
+              "fixture",
+              "live_source"
+            ],
+            "title": "Evidence State",
+            "type": "string"
+          },
+          "operating_system": {
+            "enum": [
+              "linux",
+              "windows",
+              "macos"
+            ],
+            "title": "Operating System",
+            "type": "string"
+          },
+          "reason": {
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "support": {
+            "default": "untested",
+            "enum": [
+              "supported",
+              "untested",
+              "unsupported"
+            ],
+            "title": "Support",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operating_system",
+          "device",
+          "reason"
+        ],
+        "title": "CapabilityTarget",
         "type": "object"
       },
       "DatasetProfile": {
