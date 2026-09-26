@@ -612,3 +612,28 @@ def test_completed_invalid_final_event_is_rejected(configured):
             stream.write(b'{"sequence":99,"stage":\n')
         with pytest.raises(ValueError, match="Corrupt event record"):
             client.get(f"/api/v1/jobs/{jid}/events")
+
+
+@pytest.mark.parametrize("schema", [True, 1.0, "1"])
+def test_resume_checkpoint_requires_integer_schema_version(configured, schema):
+    from vla_platform.lifecycle.contracts import PolicyRequest
+
+    app = create_app(configured)
+    with TestClient(app) as client:
+        pid = project(client)
+        jid = submit(client, pid, operation="policy.import")
+        wait(client, jid)
+        execution = app.state.execution
+        job = client.portal.call(execution.get, jid)
+        job.status, job.kind, job.result = "interrupted", "policy.finetune", None
+        job.request = PolicyRequest(
+            operation="policy.finetune", runtime_id="fixture", dataset_job_id="fixture-intake"
+        )
+        client.portal.call(execution.save, job)
+        directory = configured.data_dir / "jobs" / jid / "operation/training"
+        verified = completed_checkpoint(directory, 1)
+        invalid = completed_checkpoint(directory, 2) / "manifest.json"
+        manifest = json.loads(invalid.read_text())
+        manifest["schema_version"] = schema
+        invalid.write_text(json.dumps(manifest))
+        assert client.portal.call(execution.lifecycle.resume_checkpoint, pid, jid) == verified

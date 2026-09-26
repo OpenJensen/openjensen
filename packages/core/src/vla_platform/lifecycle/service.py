@@ -158,7 +158,8 @@ class Lifecycle:
                 try:
                     manifest, _, _ = validate_bundle(checkpoint, directory)
                     if (
-                        manifest.get("schema_version") != 1
+                        type(manifest.get("schema_version")) is not int
+                        or manifest["schema_version"] != 1
                         or type(manifest.get("step")) is not int
                         or manifest["step"] != step
                         or step <= 0
