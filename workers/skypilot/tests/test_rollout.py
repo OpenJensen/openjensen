@@ -142,6 +142,106 @@ class RolloutLaunchTests(unittest.TestCase):
         self.assertEqual(result[1]["envs"]["ROLLOUT_ID"], result[2]["envs"]["ROLLOUT_ID"])
         self.assertIn("--validate-only", self.dispatch.call_args.args[0])
 
+    def _select(self, steps=None, mode=launcher._Mode.EXPERIMENTAL):
+        self.task.write_text(yaml.safe_dump_all(self.documents))
+        return launcher._select_checkpoint(self.task, self.checkpoint, mode, steps)
+
+    def test_select_policy_export(self):
+        manifest_path = self.worker / "manifest.yaml"
+        self.manifest["control"]["execute_steps"] = 100
+        manifest_path.write_text(yaml.safe_dump(self.manifest))
+        original = manifest_path.read_bytes()
+        config_path = self.checkpoint / "config.json"
+        config = json.loads(config_path.read_text())
+        for kind, chunk, action_steps in (("act", 100, 100), ("smolvla", 50, 25)):
+            config.update(type=kind, chunk_size=chunk, n_action_steps=action_steps)
+            config_path.write_text(json.dumps(config))
+            info = inspect_checkpoint(self.checkpoint)
+            with self.subTest(kind=kind), self._select() as selected:
+                result = launcher._prepare(selected, launcher._Mode.EXPERIMENTAL)
+                isaac, policy = result[1:]
+                snapshot = self.worker / isaac["envs"]["SIM_MANIFEST"]
+                data = yaml.safe_load(snapshot.read_text())
+                self.assertEqual(data["policy"]["model_id"], info.model_id)
+                self.assertEqual(data["control"]["execute_steps"], action_steps)
+                self.assertEqual(policy["envs"]["POLICY_ACTION_STEPS"], str(action_steps))
+                self.assertEqual(policy["envs"]["MODEL_ID"], info.model_id)
+                self.assertEqual(data["calibration"], self.manifest["calibration"])
+                self.assertEqual(manifest_path.read_bytes(), original)
+                self.assertTrue(result[0]["name"].startswith(f"isaac-{kind}-test-"))
+                remote = f"~/sky_workdir/{snapshot.relative_to(self.worker)}"
+                self.assertEqual(isaac["file_mounts"][remote], str(snapshot))
+            self.assertFalse(snapshot.exists())
+            self.assertFalse(selected.exists())
+
+    def test_select_capture_and_camera(self):
+        path = self.checkpoint / "config.json"
+        config = json.loads(path.read_text())
+        camera = config["input_features"].pop("observation.images.front")
+        camera["shape"] = [3, 480, 640]
+        config["input_features"]["observation.images.overhead"] = camera
+        path.write_text(json.dumps(config))
+        with self._select(10) as selected:
+            result = launcher._prepare(selected, launcher._Mode.EXPERIMENTAL)
+            data = yaml.safe_load((self.worker / result[1]["envs"]["SIM_MANIFEST"]).read_text())
+            self.assertEqual(data["capture"], {"width": 640, "height": 480})
+            self.assertEqual(data["control"]["execute_steps"], 10)
+            self.assertEqual(result[2]["envs"]["POLICY_CAMERA_KEY"], "observation.images.overhead")
+
+    def test_select_horizon_limits(self):
+        for steps in (0, True, 101):
+            with self.subTest(steps=steps), self.assertRaisesRegex(ValueError, "execute.steps"):
+                with self._select(steps):
+                    self.fail("Invalid horizon accepted")
+        self.dispatch.assert_not_called()
+
+    def test_select_joint_mismatch(self):
+        self.manifest["scene"]["joints"].append("unexpected")
+        (self.worker / "manifest.yaml").write_text(yaml.safe_dump(self.manifest))
+        with self.assertRaisesRegex(ValueError, "joint"):
+            with self._select():
+                self.fail("Incompatible robot accepted")
+        self.dispatch.assert_not_called()
+
+    def test_select_failure_cleanup(self):
+        original = (self.worker / "manifest.yaml").read_bytes()
+        with self.assertRaisesRegex(RuntimeError, "cancelled"):
+            with self._select() as selected:
+                task = list(yaml.safe_load_all(selected.read_text()))
+                snapshot = self.worker / task[1]["envs"]["SIM_MANIFEST"]
+                raise RuntimeError("cancelled")
+        self.assertFalse(selected.exists())
+        self.assertFalse(snapshot.exists())
+        self.assertEqual((self.worker / "manifest.yaml").read_bytes(), original)
+
+    def test_isolated_snapshots(self):
+        with self._select(1) as first, self._select(10) as second:
+            files = []
+            for selected, steps in ((first, 1), (second, 10)):
+                docs = list(yaml.safe_load_all(selected.read_text()))
+                snapshot = self.worker / docs[1]["envs"]["SIM_MANIFEST"]
+                data = yaml.safe_load(snapshot.read_text())
+                self.assertEqual(data["control"]["execute_steps"], steps)
+                files.append(snapshot)
+            self.assertNotEqual(first, second)
+            self.assertNotEqual(*files)
+
+    def test_model_placeholders(self):
+        self.documents[2]["envs"]["MODEL_ID"] = "CHANGE_ME_MODEL_ID"
+        self.documents[2]["file_mounts"]["~/vla-checkpoint"] = "CHANGE_ME_CHECKPOINT"
+        with self._select() as selected:
+            launcher._prepare(selected, launcher._Mode.EXPERIMENTAL)
+
+    def test_select_readiness(self):
+        with self._select(mode=launcher._Mode.READINESS) as selected:
+            result = launcher._prepare(selected, launcher._Mode.READINESS)
+            self.assertIn("check_ready.sh", result[1]["run"])
+
+    def test_horizon_needs_checkpoint(self):
+        with self.assertRaisesRegex(ValueError, "checkpoint"):
+            with launcher._select_checkpoint(self.task, None, launcher._Mode.ROLLOUT, 10):
+                self.fail("Missing checkpoint accepted")
+
     def test_readiness_no_robot(self):
         result = self._prepare(launcher._Mode.READINESS)
         self.assertTrue(result[0]["name"].startswith("isaac-ready-"))

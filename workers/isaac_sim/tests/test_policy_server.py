@@ -266,6 +266,22 @@ class PolicyServerTests(unittest.TestCase):
 
 
 class CheckpointTests(unittest.TestCase):
+    def test_saved_action_horizon(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory)
+            _write_export(path, "smolvla")
+            config = json.loads((path / "config.json").read_text())
+            config.update(chunk_size=50, n_action_steps=25)
+            (path / "config.json").write_text(json.dumps(config))
+            info = inspect_checkpoint(path)
+            self.assertEqual((info.chunk_size, info.action_steps), (50, 25))
+
+            for value in (0, True, 51):
+                config["n_action_steps"] = value
+                (path / "config.json").write_text(json.dumps(config))
+                with self.subTest(value=value), self.assertRaises(ValueError):
+                    inspect_checkpoint(path)
+
     def test_postprocess_each_action(self):
         policy = LeRobotPolicy.__new__(LeRobotPolicy)
         policy._torch = MagicMock()
@@ -388,6 +404,7 @@ class CheckpointTests(unittest.TestCase):
             self.assertEqual(
                 (original.state_dim, original.action_dim, original.chunk_size), (6, 6, 100)
             )
+            self.assertEqual(original.action_steps, 100)
             self.assertEqual(original, inspect_checkpoint(path))
             (path / "train_config.json").write_text('{"unrelated": true}')
             self.assertEqual(original, inspect_checkpoint(path))
