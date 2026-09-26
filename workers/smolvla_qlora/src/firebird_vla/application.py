@@ -115,6 +115,11 @@ def main():
                 checkpoint.parent / (checkpoint.name + "-verification.json"),
                 bundle / "verification.json",
             )
+            shutil.copyfile(output / "training/metrics.jsonl", bundle / "training-metrics.jsonl")
+            last_metrics = {}
+            with (bundle / "training-metrics.jsonl").open() as stream:
+                for line in stream:
+                    last_metrics = json.loads(line)
             metadata = {
                 "method": method,
                 "architecture": "smolvla",
@@ -132,6 +137,7 @@ def main():
                 "scope": "native_training_and_reload",
                 "method": method,
                 "steps": cfg.steps,
+                "final_optimizer_metrics": last_metrics,
                 "task_success": None,
             }
         elif job["operation"] == "policy.export":

@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import time
+from importlib.util import find_spec
 from pathlib import Path
 
 from .cuda_bench import measure, percentile
@@ -93,6 +94,10 @@ def import_policy(job):
         original = verify(source)
         if artifact["format"] != "native_checkpoint":
             raise ValueError("Only a native floating checkpoint can be converted to GGUF")
+        if any(find_spec(name) is None for name in ("torch", "safetensors")):
+            raise ValueError(
+                "Install the vla_cpp convert extra in the configured conversion environment"
+            )
         converter = (
             Path(job["runtime"].get("conversion_vendor") or job["runtime"]["vendor"])
             / "scripts/convert_smolvla_to_gguf.py"

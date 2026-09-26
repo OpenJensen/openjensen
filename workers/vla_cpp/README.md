@@ -15,8 +15,10 @@ and a versioned subprocess worker. It has no dependency on the Firebird core.
 The implementation branches target `main` in `firebird-hackathon-codebase`.
 `feat/quantization_module` provides the shared worker; CPU benchmarking and RTX 3070
 experiments depend on it. Training lives in `workers/smolvla_qlora` on
-`feat/qlora_module`. Application adapters and capability registration remain pending;
-the standalone worker protocol is not yet wired into `vla_platform.contracts`.
+`feat/qlora_module`. The integration branch connects these workers through `vla_platform.lifecycle`
+and shared project jobs; see the [application workflow](../../docs/policy-workflow.md)
+and [integration evidence](../../docs/workflow-validation.md). The standalone
+quantization protocol remains available for experiments.
 
 Related task: [QUANT-001 (#24)](https://github.com/sobhanb-eth/firebird-hackathon-codebase/issues/24).
 
@@ -37,6 +39,11 @@ source import; `GPU_ORIGIN.json` records the import changes. Broader quality,
 packed ModelOpt execution and verified deployment packages remain open.
 
 ## Testing and benchmarking
+
+The [application workflow diagram](../../docs/policy-workflow.md#defaults-and-selection)
+shows the connected training, reference/candidate measurement, final evaluation and
+package reload path. The historical branch evidence below has its own scope; it
+must not be confused with the new [integration checks](../../docs/workflow-validation.md).
 
 We validate the implementation first, then measure actual model artifacts. These
 are separate evidence stages: passing code tests does not establish model quality,

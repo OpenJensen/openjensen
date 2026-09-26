@@ -460,6 +460,55 @@ export function WorkflowPanel({
                     ))}
                   </select>
                 </label>
+                {!!data?.reports?.some(
+                  (report) => typeof report.p95_ms === "number",
+                ) && (
+                  <div className="table-scroll">
+                    <table className="feature-table workflow-metrics">
+                      <caption>Recorded policy measurements</caption>
+                      <thead>
+                        <tr>
+                          <th>Stage</th>
+                          <th>p50 (ms)</th>
+                          <th>p95 (ms)</th>
+                          <th>Peak target memory (MiB)</th>
+                          <th>Task success</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.reports
+                          .filter((report) => typeof report.p95_ms === "number")
+                          .map((report, index) => (
+                            <tr key={index}>
+                              <th>
+                                {String(report.stage).replaceAll("-", " ")}
+                              </th>
+                              <td>
+                                {typeof report.p50_ms === "number"
+                                  ? report.p50_ms.toFixed(1)
+                                  : "—"}
+                              </td>
+                              <td>
+                                {typeof report.p95_ms === "number"
+                                  ? report.p95_ms.toFixed(1)
+                                  : "—"}
+                              </td>
+                              <td>
+                                {typeof report.peak_device_mib === "number"
+                                  ? report.peak_device_mib.toFixed(1)
+                                  : "Unavailable"}
+                              </td>
+                              <td>
+                                {typeof report.success_rate === "number"
+                                  ? `${(report.success_rate * 100).toFixed(0)}% · ${report.complete_episodes} episodes`
+                                  : "Not measured"}
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
                 {data?.reports?.map((report, index) => (
                   <details className="provenance" key={index}>
                     <summary>

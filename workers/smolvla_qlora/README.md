@@ -1,13 +1,15 @@
-# Isolated SmolVLA QLoRA worker
+# Isolated SmolVLA LoRA / QLoRA worker
 
 Native SmolVLA quantized fine-tuning, adapter verification, and diagnostics for
 multiple native model runtimes. This project uses its own Python 3.11 environment;
 ML dependencies are separate from the application's Python 3.14 environment.
 
 Related task: [TRAIN-001 (#41)](https://github.com/sobhanb-eth/firebird-hackathon-codebase/issues/41).
-The branch targets codebase `main`. Application fine-tuning adapters, data/base
-lineage integration, resource preflight and resume acceptance remain pending. This
-standalone package does not change the application's advertised capabilities.
+The branch targets codebase `main`. The integration branch exposes LoRA and QLoRA
+as methods under the same application fine-tuning operation, with pinned dataset
+lineage, resource preflight, checkpoint resume and native export. See the
+[workflow guide](../../docs/policy-workflow.md) and [integration evidence](../../docs/workflow-validation.md).
+Capabilities appear only when the operator configures a training environment.
 
 ## Install and test
 

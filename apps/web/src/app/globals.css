@@ -302,3 +302,5 @@ input::placeholder { color: var(--muted); opacity: .8; }
 .workflow-check { display: flex !important; align-items: center; }
 .workflow-json { max-height: 32rem; overflow: auto; white-space: pre-wrap; word-break: break-word; padding: 1rem; font-size: .78rem; }
 .workflow-events { padding: 1rem 1.5rem; font-size: .85rem; }
+.workflow-metrics caption { text-align: left; padding: 12px; font-size: 13px; font-weight: 550; }
+.workflow-metrics td { min-width: 90px; }

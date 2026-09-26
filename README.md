@@ -1,6 +1,8 @@
 # Firebird application
 
-The first application slice of a local VLA lifecycle platform: **persistent projects and real robotics dataset metadata intake**, through one Python application and shared web/CLI operations. Dataset → Fine-tune → Distill → Quantize → Evaluate → Run remains the product scope. Training, compression, simulator evaluation and policy execution are **planned**, not working features in this scaffold.
+A local VLA lifecycle application with persistent projects, dataset intake, selectable LoRA/QLoRA fine-tuning, native quantization, evaluation and reload-verified packages through shared web/CLI jobs. Native operations require configured worker environments. Distillation remains planned.
+
+Start with the [policy workflow and setup guide](docs/policy-workflow.md). Recommended quantization defaults depend on the execution target; detailed metrics and advanced controls live under **Settings & diagnostics**. See [validation evidence](docs/workflow-validation.md) for the scope of actual hardware checks.
 
 Application Git root: this directory. The nested `firebird-hackathon-prep/` directory remains a separate, ignored Git repository. Its [accepted plan](firebird-hackathon-prep/docs/idea/18_stack-and-phased-build-plan.md) and [task register](firebird-hackathon-prep/docs/tasks/README.md) hold planning and coordination records; they are not included in an application-only clone.
 
@@ -47,7 +49,7 @@ Local metadata intake is disabled by default. Set `FIREBIRD_LOCAL_DATA_ROOT` to 
 
 - `apps/web`: static Next/React client; generated API types under `src/lib`.
 - `packages/core`: GPU-independent Python modular monolith, API, CLI, async SQLite records and versioned migrations.
-- `workers`: native environment boundaries and contracts. The lightweight metadata worker runs as a supervised subprocess; GPU environments are not installed yet.
+- `workers`: native environment boundaries and contracts. Metadata and native policy workers run as supervised subprocesses; GPU environments are installed separately.
 - `apps/desktop`: reserved later Tauri shell.
 - `tests`: persistence, subprocess intake, bounded reads, cancellation, failure and access-boundary checks.
 
