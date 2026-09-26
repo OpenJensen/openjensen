@@ -1,0 +1,145 @@
+{
+  "calibration_verified": false,
+  "export_files": {
+    "config.json": {
+      "bytes": 1320,
+      "sha256": "58af753633e3722f945388e157129c8bc26cb56964fc25d20bc1577edca18270"
+    },
+    "manifest.json": {
+      "bytes": 1585,
+      "sha256": "05ffede87d74e3fdd6cd1fe6003f0931980f327f209f351aad06f2ac80caf54c"
+    },
+    "model.safetensors": {
+      "bytes": 136991456,
+      "sha256": "ea7f0d365389507e738678e8f0003c9a3adb121b64d5d5dfab7415fc451e5b14"
+    },
+    "parity.json": {
+      "bytes": 3457,
+      "sha256": "688b9d9475a01ec3baf980ba3794552b3b8647beea6c0095da17bacccecc67cd"
+    },
+    "policy_postprocessor.json": {
+      "bytes": 660,
+      "sha256": "648b415125a183dfd6cbc47c1dc04ab3f2d912654ef22a12ca5e8b93d7d85cdd"
+    },
+    "policy_postprocessor_step_0_unnormalizer_processor.safetensors": {
+      "bytes": 6560,
+      "sha256": "c0888f490010c463b319496a9219802576fdf3fb40c44c07d8c2043dc2c636c9"
+    },
+    "policy_preprocessor.json": {
+      "bytes": 1154,
+      "sha256": "9f334e79f5ab63ae6e1d7ffe31343b181db7a6ed2c837c5bfa4745b586045a67"
+    },
+    "policy_preprocessor_step_3_normalizer_processor.safetensors": {
+      "bytes": 6568,
+      "sha256": "b201aad77f8b4b7801115647bd6e6a861dfb0585cb8c77386304af5c02544679"
+    },
+    "recipe.json": {
+      "bytes": 24670,
+      "sha256": "a10020edc5a8278e9a3054ccddb46f1df4547f630d71e978410cd4ffecf80ce9"
+    },
+    "train_config.json": {
+      "bytes": 5825,
+      "sha256": "75dbcc42296a8d9f90083ce3b28fc7be94a15431fc25fcf527cc2097c71d16a1"
+    }
+  },
+  "gpu_memory_bytes": null,
+  "implementation_sha256": {
+    "src/firebird_act/__init__.py": "ac0649533d7ddbaf9f1722d4828481a85963e7944d6a6082ce2e3a44587faefa",
+    "src/firebird_act/bundle.py": "ca9f7b87a08787d69c756c7633cde54c9e99e0ea499d29d65503604d52240eb3",
+    "src/firebird_act/export.py": "ee7d08b9ffffabb52e51cee5b884a416c5651f556833216218f1041d426e117f",
+    "src/firebird_act/probe.py": "089406e6ffcfcb97587dd0d4077db112c8a147ee1578f6f924c95902a7c69524"
+  },
+  "inference_speedup": null,
+  "parity": {
+    "action_dim": 6,
+    "action_steps": 100,
+    "device": "cpu",
+    "dtype": "float32",
+    "exact_equal": true,
+    "final_location_reload_from_built_wheel": true,
+    "fixture_count": 2,
+    "fixtures": [
+      {
+        "chunk_sha256": "3e28336671ee89d5d98e4833052f253273f25efa33e407d1828126c69ca347f9",
+        "input_sha256": "7cffd7cb51cd9d218cf647251bf3a90fb3fef1a74f520acbdba56a79238adb4c",
+        "postprocessed_sha256": "1f16fde101609550f258cd9687b60206f8ac9b6f7182aa3c7e3b8d3684fc373b",
+        "queue_and_reset_exact": true,
+        "seed": 171
+      },
+      {
+        "chunk_sha256": "5e0c03eb6929753479c793b996e0c0c6819f1092821dcd5da8fe686e099b571e",
+        "input_sha256": "f145c569d81579e7d4ccb265a23e4a65331855e30fd7e49e1f07422459a3fbf0",
+        "postprocessed_sha256": "f04ed9a503e18f84021e29fa78869f75dce14e1ca0a24a64656d1adbaf3706f6",
+        "queue_and_reset_exact": true,
+        "seed": 902
+      }
+    ],
+    "maximum_absolute_error": 0.0,
+    "original_source_reads_blocked_by_python_audit": true,
+    "platform": "macOS arm64",
+    "python": "3.12.14",
+    "queue_and_reset_exact": true,
+    "runtime_versions": {
+      "lerobot": "0.6.1",
+      "safetensors": "0.8.0",
+      "torch": "2.11.0",
+      "torchvision": "0.26.0"
+    },
+    "source_unchanged": true,
+    "timeout_seconds_per_process": 120
+  },
+  "recorded_utc": "2026-09-26T21:05:45.634883+00:00",
+  "runtime_lock_sha256": "4b0dfb132636547631115fb4c5c8c422ecd22615176dcd0e30d54a993066dfb7",
+  "schema_version": 1,
+  "scope": "ACT inference-only VAE extraction; synthetic CPU parity, not calibration or task quality",
+  "sizes": {
+    "export_model_bytes": 136991456,
+    "export_tensor_payload_bytes": 136972568,
+    "original_tensor_payload_bytes": 206674456,
+    "package_bytes": 137043255,
+    "removed_tensors": 56,
+    "source_model_bytes": 206699736
+  },
+  "source_files": {
+    "config.json": {
+      "bytes": 1526,
+      "sha256": "8af7d3652bf1b807ab254462a1c1a78618e6311b85580cd3756e19af012c7959"
+    },
+    "model.safetensors": {
+      "bytes": 206699736,
+      "sha256": "d90ae86d912a0cb35650e547ae6c39094b9ebd34253f6d7af39636cb0225c80c"
+    },
+    "policy_postprocessor.json": {
+      "bytes": 660,
+      "sha256": "648b415125a183dfd6cbc47c1dc04ab3f2d912654ef22a12ca5e8b93d7d85cdd"
+    },
+    "policy_postprocessor_step_0_unnormalizer_processor.safetensors": {
+      "bytes": 6560,
+      "sha256": "c0888f490010c463b319496a9219802576fdf3fb40c44c07d8c2043dc2c636c9"
+    },
+    "policy_preprocessor.json": {
+      "bytes": 1154,
+      "sha256": "9f334e79f5ab63ae6e1d7ffe31343b181db7a6ed2c837c5bfa4745b586045a67"
+    },
+    "policy_preprocessor_step_3_normalizer_processor.safetensors": {
+      "bytes": 6568,
+      "sha256": "b201aad77f8b4b7801115647bd6e6a861dfb0585cb8c77386304af5c02544679"
+    },
+    "train_config.json": {
+      "bytes": 5825,
+      "sha256": "75dbcc42296a8d9f90083ce3b28fc7be94a15431fc25fcf527cc2097c71d16a1"
+    }
+  },
+  "source_label": "act_step29000",
+  "task_success": null,
+  "verification": {
+    "linux_ci": "pending",
+    "mypy_strict": "passed",
+    "native_windows": "unverified",
+    "pytest_passed": 73,
+    "pytest_skipped": 0,
+    "ruff": "passed",
+    "ruff_format": "passed",
+    "subprocess_inclusive_line_coverage_percent": 92
+  }
+}

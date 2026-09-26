@@ -49,14 +49,18 @@ checks completion and the video checksum.
 
 The documented falling-cube acceptance run produced six seconds of visible
 720p video on GCP L4. The
-[SO101 scene](isaac_sim/scenes/so101-pickup/README.md) separately records an
-approximate reconstruction with GPU evidence for rendering, joint lookup and
-passive stability. It includes no pickup controller and does not establish policy
-task success or replay fidelity.
+[SO101 scene](isaac_sim/scenes/so101-pickup/README.md) records an approximate
+reconstruction. A later experimental ACT/Isaac run completed 150 control steps
+and produced five seconds of 640×360 video using an H100 policy server and L4
+simulator. Calibration remains unverified, with recorded action extrapolation,
+joint-limit clipping and speed-limit clipping. This is motion evidence; it does
+not establish successful pickup or replay fidelity. See the
+[verified run and cleanup receipt](https://github.com/sobhanb-eth/firebird-hackathon-prep/blob/d4ec5e8c48573e0735a3f61223ce4bdb8e9cd3da/docs/tasks/evidence/2026-09-27-cloud-runner-verification.md).
 
-These are standalone tools. They register no application API/CLI operation,
-capability, or job-database integration. They do not connect SO101 training to
-LIBERO evaluation.
+These remain standalone execution tools with no application job submission,
+execution capability or job-database integration. The application now has a
+separate [read-only cloud status/log monitor](../docs/cloud-runs.md), fed by an
+isolated observer. They do not connect SO101 training to LIBERO evaluation.
 
 The launcher template manages disposable clusters: it requests deletion after
 15 minutes of job inactivity and installs a guest watchdog requesting deletion
@@ -64,3 +68,15 @@ The launcher template manages disposable clusters: it requests deletion after
 deletion was not validated in the recorded acceptance run. The template is not a
 default setup path for a persistent shared L4 host; review its
 [lifecycle and cleanup behavior](skypilot/README.md#results-and-cleanup) before use.
+
+## Standalone ACT inference export
+
+The [ACT optimizer worker](act_optimizer/README.md) is a separate Python 3.12
+environment. Its first recipe removes verified training-only VAE tensors while
+preserving retained FP32 weights and saved processors. Strict loading, required
+normalization statistics, complete action-chunk parity and a separate full-package
+reload gate publication. This is inference-only compression, not quantization.
+
+It does not yet register an application optimizer operation or verify calibration,
+pickup quality, GPU memory or inference speed. Existing GGUF recipes do not apply
+to ACT. Keep original checkpoints and generated policy packages outside Git.
