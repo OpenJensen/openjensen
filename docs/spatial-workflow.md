@@ -57,8 +57,9 @@ Publication refuses any existing destination, including one created during
 preparation, and failure removes only its own staging directory. Inputs and other
 staging directories remain unchanged. Atomic no-replace publication uses the
 platform's native operation on Linux, macOS and Windows; unavailable operations
-fail closed. This change has local macOS coverage. Linux CI is pending; native Windows
-publication is implemented but unverified.
+fail closed. Atomic no-replace publication passed the macOS regression suite and
+the Linux native-worker CI for PR #70 (`d8af68ab3f89d8736fe344cce3592960f229952c`).
+Native Windows publication is implemented but unverified.
 
 `static_assets_verified` is deliberately limited to hashes, declared GGUF layout,
 normalization and fixture arrays. The receipt marks **GPU, runtime, episodes,

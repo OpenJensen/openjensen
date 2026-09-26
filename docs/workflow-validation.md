@@ -72,6 +72,45 @@ and deliberately slow jobs are explicitly cleaned up. These are software test
 receipts only; Linux/native Windows CI for this repair and coordinator review remain
 required before TEST-001 completion. No GPU, cloud or user workspace was used.
 
+### WEB-004: project preference readiness
+
+[Windows run 36263941876](https://github.com/sobhanb-eth/firebird-hackathon-codebase/actions/runs/36263941876)
+exposed a separate product race during the TEST-001 checks. Both failed attempts
+opened Settings before project loading finished. Spatial settings were written
+under the empty project key, then a project-specific remount restored the default
+Object/engine/500 recipe. A controlled delayed-project probe reproduced that exact
+submitted request; the new disabled-control regression also failed on the old UI.
+
+Workflow controls now require a project present in successfully loaded project
+data and restoration of that project's preferences. Empty project keys are never
+read or written. Settings, job controls and submission stay unavailable while
+loading, after a load error, or if the selected project disappears. Navigation,
+diagnostics guidance and recorded benchmark comparisons remain accessible.
+Project switching and reload preserve each project's saved recipe. If browser
+storage is unavailable, editing works for the current mounted view only; settings
+do not persist across stage changes or reloads.
+
+Final local checks include the merged offline-preflight change from main
+`9c925e5db3c1f2137353fbf7ace30b82e8aaa5c3`, using Node **24.21.0**, pnpm **12.6.0**,
+application Python **3.14.7** and the existing native Python **3.11.14** environment:
+
+- Production build and TypeScript checks passed.
+- Application: **391 passed, 1 skipped**, with the existing Starlette deprecation
+  warning. Native CPU worker: **252 passed, 4 skipped** for conditional platform or
+  vendor checks. Ruff checks and formatting passed.
+- Browser suite: **64 passed**; diagnostics suite: **18 passed**, both with
+  **zero retries**. The delayed-project test checks the actual Spatial request;
+  additional checks cover saved A/B recipes and submitted requests, empty/error
+  recovery, removed-project refetch, invalid JSON and unavailable browser storage.
+- An independent reviewer passed all **14** focused desktop/mobile readiness
+  checks. The refetch test advances Playwright's clock past the application's
+  five-second cache freshness period, without a wall-clock sleep.
+
+These are application and synthetic-worker checks, not GPU performance or
+closed-loop policy acceptance. Exact-head Linux/native Windows CI and coordinator
+review remain required before WEB-004 completion. The existing application on port
+8000, cloud resources and real policy assets were not touched.
+
 ### Existing application checks
 
 - Application: **113 passed**, including the new native subprocess workflow,

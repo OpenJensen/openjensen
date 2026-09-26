@@ -331,8 +331,8 @@ test('shared workspace shell preserves training, defaults, and separate diagnost
   await expect(page.getByRole('heading', { name: 'Fine-tune a policy' })).toBeVisible();
   const method = page.getByLabel('Fine-tuning method');
   await expect(method).toHaveValue('lora');
-  await method.selectOption('qlora');
-  await expect(method).toHaveValue('qlora');
+  await expect(method).toBeDisabled();
+  await expect(method.locator('option[value=qlora]')).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Start fine-tuning' })).toBeDisabled();
   await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
   await expect(page.getByLabel('Quantization recipe')).toHaveValue('recommended');
@@ -432,7 +432,12 @@ test('quantization submits Q4 only after an explicit experimental choice', async
 
 test('Spatial settings require explicit task and parity choices in the submitted request', async ({ page }) => {
   const submitted: { evaluation: Record<string, unknown> }[] = [];
-  await page.route('**/api/v1/projects', route => route.fulfill({ json: [{ id: 'spatial-review', name: 'Spatial fixture', created_at: '2026-09-26T12:00:00Z' }] }));
+  let releaseProjects!: () => void;
+  const projectsReady = new Promise<void>(resolve => { releaseProjects = resolve; });
+  await page.route('**/api/v1/projects', async route => {
+    await projectsReady;
+    await route.fulfill({ json: [{ id: 'spatial-review', name: 'Spatial fixture', created_at: '2026-09-26T12:00:00Z' }] });
+  });
   await page.route('**/api/v1/projects/spatial-review/jobs', route => route.fulfill({ json: [] }));
   await page.route('**/api/v1/projects/spatial-review/artifacts', route => route.fulfill({ json: [] }));
   await page.route('**/api/v1/policy-options', route => route.fulfill({ json: {
@@ -446,7 +451,23 @@ test('Spatial settings require explicit task and parity choices in the submitted
     return route.fulfill({ status: 422, json: { detail: 'Captured request; no worker started' } });
   });
   await page.goto('/');
+  try {
+    await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+    await expect(page.getByLabel('Task suite')).toBeDisabled();
+    await expect(page.getByLabel('Quantization recipe')).toBeDisabled();
+    await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
+    await expect(page.getByLabel('Diagnostic mode')).toBeDisabled();
+    await expect(page.getByRole('heading', { name: 'Recorded benchmark comparison' })).toBeVisible();
+    await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+    await expect(page.getByLabel('Input policy')).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toBeDisabled();
+    expect(await page.evaluate(() => localStorage.getItem('firebird.workflow.'))).toBeNull();
+    expect(submitted).toEqual([]);
+  } finally {
+    releaseProjects();
+  }
   await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+  await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
   await page.getByLabel('Task suite').selectOption('libero_spatial');
   await expect(page.getByLabel('Spatial task IDs')).toHaveValue('0,1,2,3,4,5,6,7,8,9');
   await expect(page.getByLabel('Approved parity profile')).toHaveValue('');
@@ -480,4 +501,163 @@ test('Spatial settings require explicit task and parity choices in the submitted
   await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(2);
   expect(submitted[1].evaluation).toEqual(submitted[0].evaluation);
+});
+
+// These tests inspect actual browser requests, with explicit fixture responses.
+// They exercise preference ownership, not a worker or model-quality result.
+async function workflowPreferenceFixture(page: Page) {
+  const requests: { projectId: string; body: { evaluation: Record<string, unknown>; candidates: unknown[] } }[] = [];
+  const projects = [
+    { id: 'preferences-a', name: 'Project A', created_at: '2026-09-26T12:00:00Z' },
+    { id: 'preferences-b', name: 'Project B', created_at: '2026-09-26T12:00:00Z' },
+  ];
+  await page.route('**/api/v1/projects/*/jobs', route => route.fulfill({ json: [] }));
+  await page.route('**/api/v1/projects/*/artifacts', route => route.fulfill({ json: [] }));
+  await page.route('**/api/v1/policy-options', route => route.fulfill({ json: {
+    runtimes: [{ id: 'fixture', label: 'Synthetic target', device: 'cpu', training: false, simulation: true }],
+    sources: [{ id: 'source', label: 'Synthetic policy', task: 'fixture' }],
+    training_methods: [], default_training_method: 'lora',
+    quantization_defaults: { cpu: { language: 'Q8_0', vision: null }, cuda: { language: 'Q8_0', vision: null }, note: 'Fixture only' },
+  } }));
+  await page.route('**/api/v1/projects/*/policy-jobs', route => {
+    requests.push({ projectId: route.request().url().split('/').at(-2)!, body: route.request().postDataJSON() });
+    return route.fulfill({ status: 422, json: { detail: 'Captured request; no worker started' } });
+  });
+  async function submit() {
+    const count = requests.length;
+    await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+    await page.getByLabel('Input policy').selectOption('source:source');
+    await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
+    await expect.poll(() => requests.length).toBe(count + 1);
+    return requests.at(-1)!;
+  }
+  return { projects, requests, submit };
+}
+
+test('restored workflow preferences and submitted requests stay isolated when switching projects', async ({ page }) => {
+  const fixture = await workflowPreferenceFixture(page);
+  await page.route('**/api/v1/projects', route => route.fulfill({ json: fixture.projects }));
+  await page.addInitScript(() => {
+    // Seed once so reload verifies the user's changes, rather than resetting them.
+    if (localStorage.getItem('firebird.project')) return;
+    localStorage.setItem('firebird.project', 'preferences-a');
+    localStorage.setItem('firebird.workflow.preferences-a', JSON.stringify({
+      suite: 'libero_spatial', mode: 'engine', steps: 1, taskIds: '0,2',
+      parityProfile: 'synthetic-project-a', parityRmse: '0', parityMaxError: '0', repetitions: 4,
+    }));
+    localStorage.setItem('firebird.workflow.preferences-b', JSON.stringify({
+      suite: 'libero_object', mode: 'engine', steps: 500, repetitions: 6, precision: 'Q4_0',
+    }));
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+  await expect(page.getByLabel('Spatial task IDs')).toHaveValue('0,2');
+  await expect(page.getByLabel('Episode step limit')).toHaveValue('280');
+  await page.getByLabel('Spatial task IDs').fill('1,3');
+  await page.getByRole('combobox', { name: 'Current project', exact: true }).selectOption('preferences-b');
+  await expect(page.getByLabel('Task suite')).toHaveValue('libero_object');
+  await expect(page.getByLabel('Timed predictions')).toHaveValue('6');
+  await page.getByLabel('Timed predictions').fill('9');
+  const projectB = await fixture.submit();
+  expect(projectB.projectId).toBe('preferences-b');
+  expect(projectB.body.evaluation).toMatchObject({ mode: 'engine', suite: 'libero_object', steps: 500, repetitions: 9 });
+  expect(projectB.body.evaluation).not.toHaveProperty('parity_limits');
+  expect(projectB.body.candidates).toEqual([{ language: 'Q4_0', vision: null }]);
+  await page.getByRole('combobox', { name: 'Current project', exact: true }).selectOption('preferences-a');
+  const projectA = await fixture.submit();
+  expect(projectA.projectId).toBe('preferences-a');
+  expect(projectA.body.evaluation).toMatchObject({
+    mode: 'libero', suite: 'libero_spatial', steps: 280, repetitions: 4, task_ids: [1, 3],
+    parity_limits: { profile: 'synthetic-project-a', max_rmse: 0, max_abs_error: 0 },
+  });
+  expect(projectA.body.candidates).toEqual([{ language: 'Q8_0', vision: null }]);
+  await page.reload();
+  expect(await fixture.submit()).toEqual(projectA);
+  const stored = await page.evaluate(() => ({
+    empty: localStorage.getItem('firebird.workflow.'),
+    a: JSON.parse(localStorage.getItem('firebird.workflow.preferences-a')!),
+    b: JSON.parse(localStorage.getItem('firebird.workflow.preferences-b')!),
+  }));
+  expect(stored.empty).toBeNull();
+  expect(stored.a.taskIds).toBe('1,3');
+  expect(stored.b.repetitions).toBe(9);
+});
+
+for (const state of ['empty', 'error'] as const) {
+  test(`workflow controls stay disabled with ${state} projects and recover after loading succeeds`, async ({ page }) => {
+    const fixture = await workflowPreferenceFixture(page);
+    let recovered = false;
+    await page.route('**/api/v1/projects', route => route.fulfill(recovered
+      ? { json: fixture.projects }
+      : state === 'empty' ? { json: [] } : { status: 503, json: { detail: 'Project fixture unavailable' } }));
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+    await expect(page.getByLabel('Task suite')).toBeDisabled();
+    await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
+    await expect(page.getByLabel('Diagnostic mode')).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Start diagnostics', exact: true })).toBeDisabled();
+    await page.getByLabel('Reference hardware').selectOption('rtx3070');
+    await expect(page.getByRole('table', { name: 'NVIDIA RTX 3070 · recorded reference results' })).toBeVisible();
+    await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+    await expect(page.getByLabel('Input policy')).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toBeDisabled();
+    // Programmatic submission must also respect readiness, not just disabled UI.
+    await page.getByLabel('Input policy').evaluate(element => element.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+    expect(fixture.requests).toEqual([]);
+    expect(await page.evaluate(() => localStorage.getItem('firebird.workflow.'))).toBeNull();
+    recovered = true;
+    if (state === 'error') await page.getByRole('button', { name: 'Retry projects', exact: true }).click();
+    else await page.reload();
+    const submitted = await fixture.submit();
+    expect(submitted.projectId).toBe('preferences-a');
+    expect(submitted.body.evaluation).toMatchObject({ mode: 'engine', suite: 'libero_object', steps: 500 });
+  });
+}
+
+for (const storage of ['invalid JSON', 'unavailable'] as const) {
+  test(`workflow settings remain usable with ${storage} browser storage`, async ({ page }) => {
+    const fixture = await workflowPreferenceFixture(page);
+    await page.route('**/api/v1/projects', route => route.fulfill({ json: fixture.projects }));
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.addInitScript(mode => {
+      if (mode === 'invalid JSON') localStorage.setItem('firebird.workflow.preferences-a', '{');
+      else {
+        Storage.prototype.getItem = () => { throw new DOMException('Storage unavailable', 'SecurityError'); };
+        Storage.prototype.setItem = () => { throw new DOMException('Storage unavailable', 'SecurityError'); };
+      }
+    }, storage);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+    await expect(page.getByLabel('Quantization recipe')).toHaveValue('recommended');
+    await page.getByLabel('Quantization recipe').selectOption('Q4_0');
+    await expect(page.getByLabel('Quantization recipe')).toHaveValue('Q4_0');
+    // Unavailable storage supports the current mount; persistence is not claimed.
+    expect(errors).toEqual([]);
+  });
+}
+
+test('a project removed during refetch cannot submit with its stale selection', async ({ page }) => {
+  await page.clock.install();
+  const fixture = await workflowPreferenceFixture(page);
+  let removed = false;
+  let emptyResponses = 0;
+  await page.route('**/api/v1/projects', route => {
+    if (removed) emptyResponses += 1;
+    return route.fulfill({ json: removed ? [] : fixture.projects });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByLabel('Input policy').selectOption('source:source');
+  await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toBeEnabled();
+  removed = true;
+  // Advance beyond the configured 5s freshness period without a wall-clock sleep.
+  await page.clock.fastForward(6_000);
+  // React Query refetches stale project data when the browser regains visibility.
+  await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
+  await expect.poll(() => emptyResponses).toBeGreaterThan(0);
+  await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toBeDisabled();
+  await expect(page.getByLabel('Input policy')).toBeDisabled();
+  expect(fixture.requests).toEqual([]);
+  expect(await page.evaluate(() => localStorage.getItem('firebird.workflow.'))).toBeNull();
 });
