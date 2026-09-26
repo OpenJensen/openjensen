@@ -130,3 +130,14 @@ Real acceptance still requires the pinned worker environment on the dedicated L4
 validated preprocessing/normalization, approved parity/quality thresholds, measured
 resource coverage, and the final exact-package rerun. No hardware result is inferred
 from these tests or copied from historical benchmark reports.
+
+## Combined coordinator validation
+
+After integrating the core, worker and independent-review corrections on top of
+the phase-2 repair revision `7154a4d`, the coordinator ran the complete combined
+suite: **391 core tests passed, 1 expected skip; 204 native worker tests passed,
+4 prepared-vendor/Linux integration skips; production build and 52 browser tests
+passed** on macOS arm64. OpenAPI and the TypeScript client were regenerated from
+these contracts. The final three real-process cancellation/timeout regressions
+also passed independently. No simulator episode or GPU inference was executed.
+Cross-platform CI and real L4 acceptance remain separate gates.
