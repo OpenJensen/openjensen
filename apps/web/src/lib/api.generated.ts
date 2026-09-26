@@ -242,13 +242,14 @@ export interface components {
             /**
              * Inspection Scope
              * @default metadata_only
-             * @constant
+             * @enum {string}
              */
-            inspection_scope: "metadata_only";
+            inspection_scope: "metadata_only" | "bounded_parquet_rows";
             /** License */
             license?: string | null;
             /** Metadata Sha256 */
             metadata_sha256: string;
+            preview?: components["schemas"]["LocalDatasetPreview"] | null;
             /** Repo Id */
             repo_id?: string | null;
             /** Revision */
@@ -328,6 +329,116 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        JsonValue: unknown;
+        /** LocalDatasetPreview */
+        LocalDatasetPreview: {
+            /** Columns */
+            columns: string[];
+            /** Declared Decoded Bytes */
+            declared_decoded_bytes: number;
+            file: components["schemas"]["LocalPreviewFile"];
+            /**
+             * Format
+             * @default lerobot_v3
+             * @constant
+             */
+            format: "lerobot_v3";
+            /**
+             * Inspection Scope
+             * @default bounded_parquet_rows
+             * @constant
+             */
+            inspection_scope: "bounded_parquet_rows";
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "frames" | "episodes";
+            limits: components["schemas"]["LocalPreviewLimits"];
+            /** Metadata Sha256 */
+            metadata_sha256: string;
+            /** Omitted Columns */
+            omitted_columns: string[];
+            /**
+             * Preview Schema Version
+             * @default 1
+             * @constant
+             */
+            preview_schema_version: 1;
+            /** Read Bytes */
+            read_bytes: number;
+            /**
+             * Reader
+             * @constant
+             */
+            reader: "pyarrow==25.0.1";
+            /** Returned Rows */
+            returned_rows: number;
+            /**
+             * Row Offset
+             * @default 0
+             * @constant
+             */
+            row_offset: 0;
+            /** Rows */
+            rows: {
+                [key: string]: components["schemas"]["JsonValue"];
+            }[];
+            /**
+             * Source
+             * @default local
+             * @constant
+             */
+            source: "local";
+            /** Total File Rows */
+            total_file_rows: number;
+            /** Truncated */
+            truncated: boolean;
+            /** Warnings */
+            warnings: string[];
+        };
+        /** LocalPreviewFile */
+        LocalPreviewFile: {
+            /** Path */
+            path: string;
+            /** Sha256 */
+            sha256: string;
+            /** Size Bytes */
+            size_bytes: number;
+        };
+        /** LocalPreviewLimits */
+        LocalPreviewLimits: {
+            /**
+             * Max Decoded Bytes
+             * @default 8388608
+             */
+            max_decoded_bytes: number;
+            /**
+             * Max File Bytes
+             * @default 4194304
+             */
+            max_file_bytes: number;
+            /**
+             * Max Output Bytes
+             * @default 65536
+             */
+            max_output_bytes: number;
+            /**
+             * Max Read Bytes
+             * @default 16777216
+             */
+            max_read_bytes: number;
+            /**
+             * Max Rows
+             * @default 10
+             */
+            max_rows: number;
+            /**
+             * Timeout Seconds
+             * @default 10
+             */
+            timeout_seconds: number;
         };
         /** Project */
         Project: {

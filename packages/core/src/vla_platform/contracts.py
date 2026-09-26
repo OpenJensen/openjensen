@@ -1,5 +1,6 @@
 """Public application records. No native ML framework imports belong here."""
 
+import json
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
@@ -8,6 +9,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    JsonValue,
     StringConstraints,
     model_validator,
 )
@@ -71,6 +73,113 @@ class IntakeRequest(Record):
         return self
 
 
+class LocalPreviewLimits(Record):
+    max_rows: int = Field(default=10, ge=1, le=100, strict=True)
+    max_file_bytes: int = Field(default=4194304, ge=1, le=67108864, strict=True)
+    max_read_bytes: int = Field(default=16777216, ge=1, le=134217728, strict=True)
+    max_decoded_bytes: int = Field(default=8388608, ge=1, le=67108864, strict=True)
+    max_output_bytes: int = Field(default=65536, ge=1024, le=1048576, strict=True)
+    timeout_seconds: float = Field(default=10.0, gt=0, le=30, strict=True, allow_inf_nan=False)
+
+
+class LocalPreviewRequest(Record):
+    source: Literal["local"] = "local"
+    path: NonEmptyString = Field(max_length=4096)
+    kind: Literal["frames", "episodes"] = "frames"
+    parquet_path: NonEmptyString | None = Field(default=None, max_length=4096)
+    limits: LocalPreviewLimits = Field(default_factory=LocalPreviewLimits)
+
+
+class LocalPreviewFile(Record):
+    path: NonEmptyString = Field(max_length=4096)
+    size_bytes: int = Field(ge=0, strict=True)
+    sha256: Sha256
+
+
+class LocalDatasetPreview(Record):
+    # Preserve source row text; never normalize task strings in the result.
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=False, allow_inf_nan=False)
+    preview_schema_version: Literal[1] = 1
+    inspection_scope: Literal["bounded_parquet_rows"] = "bounded_parquet_rows"
+    source: Literal["local"] = "local"
+    format: Literal["lerobot_v3"] = "lerobot_v3"
+    kind: Literal["frames", "episodes"]
+    metadata_sha256: Sha256
+    file: LocalPreviewFile
+    reader: Literal["pyarrow==25.0.1"]
+    total_file_rows: int = Field(ge=0, strict=True)
+    row_offset: Literal[0] = 0
+    rows: list[dict[str, JsonValue]] = Field(max_length=100)
+    returned_rows: int = Field(ge=0, le=100, strict=True)
+    truncated: bool = Field(strict=True)
+    columns: list[NonEmptyString] = Field(min_length=1, max_length=7)
+    omitted_columns: list[NonEmptyString]
+    read_bytes: int = Field(ge=0, strict=True)
+    declared_decoded_bytes: int = Field(ge=0, strict=True)
+    limits: LocalPreviewLimits
+    warnings: list[NonEmptyString] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_preview(self) -> LocalDatasetPreview:
+        if self.returned_rows != len(self.rows):
+            raise ValueError("returned_rows must match rows")
+        if self.returned_rows > min(self.total_file_rows, self.limits.max_rows):
+            raise ValueError("Preview exceeds its row budget or declared file rows")
+        if self.truncated != (self.returned_rows < self.total_file_rows):
+            raise ValueError("truncated must reflect this file's returned rows")
+        if self.file.size_bytes > self.limits.max_file_bytes:
+            raise ValueError("Preview exceeds its stored file byte budget")
+        if self.read_bytes > self.limits.max_read_bytes:
+            raise ValueError("Preview exceeds its aggregate read byte budget")
+        if self.declared_decoded_bytes > self.limits.max_decoded_bytes:
+            raise ValueError("Preview exceeds its declared decode byte budget")
+        columns = set(self.columns)
+        if len(columns) != len(self.columns) or columns.intersection(self.omitted_columns):
+            raise ValueError("Invalid preview column selection")
+        if any(set(row) != columns for row in self.rows):
+            raise ValueError("Rows must match the selected columns")
+        parts = self.file.path.split("/")
+        prefix = ["data"] if self.kind == "frames" else ["meta", "episodes"]
+        if (
+            parts[: len(prefix)] != prefix
+            or any(p in ("", ".", "..") for p in parts)
+            or "\\" in self.file.path
+            or not self.file.path.endswith(".parquet")
+        ):
+            raise ValueError("Expected a contained relative Parquet file path")
+        # This is the helper's canonical UTF-8 JSON encoding, not pretty JSON.
+        encoded = json.dumps(
+            self.model_dump(mode="json"), ensure_ascii=True, allow_nan=False, separators=(",", ":")
+        ).encode()
+        if len(encoded) > self.limits.max_output_bytes:
+            raise ValueError("Preview exceeds its serialized JSON byte budget")
+        return self
+
+
+class LocalPreviewFailure(Record):
+    code: Literal[
+        "invalid_limits",
+        "local_disabled",
+        "invalid_request",
+        "unsafe_path",
+        "reader_unavailable",
+        "reader_version",
+        "reader_failed",
+        "timeout",
+        "output_limit",
+        "unsupported_platform",
+        "missing_file",
+        "read_limit",
+        "file_limit",
+        "file_changed",
+        "invalid_metadata",
+        "decoded_limit",
+        "unsupported_columns",
+        "corrupt_payload",
+    ]
+    message: NonEmptyString = Field(max_length=300)
+
+
 class DatasetProfile(Record):
     schema_version: Literal[1] = 1
     source: Literal["huggingface", "local"]
@@ -86,7 +195,11 @@ class DatasetProfile(Record):
     metadata_sha256: Sha256
     inspected_at: Timestamp
     warnings: list[str]
-    inspection_scope: Literal["metadata_only"] = "metadata_only"
+    inspection_scope: Literal["metadata_only", "bounded_parquet_rows"] = "metadata_only"
+    # Keep existing v1 metadata-only JSON unchanged when there is no preview.
+    preview: LocalDatasetPreview | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def validate_provenance(self) -> DatasetProfile:
@@ -100,6 +213,16 @@ class DatasetProfile(Record):
             raise ValueError(
                 "Local profiles require no repo_id and a matching metadata-sha256 revision"
             )
+        if self.inspection_scope == "metadata_only":
+            if self.preview is not None:
+                raise ValueError("Metadata-only profiles cannot carry a row preview")
+        elif (
+            self.preview is None
+            or self.source != "local"
+            or self.format != "lerobot_v3"
+            or self.preview.metadata_sha256 != self.metadata_sha256
+        ):
+            raise ValueError("Bounded previews require matching local v3 metadata identity")
         return self
 
 
