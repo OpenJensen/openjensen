@@ -11,6 +11,9 @@ from vla_platform.contracts import TERMINAL, IntakeRequest, Job, WorkerRequest, 
 from vla_platform.settings import Settings
 from vla_platform.storage import Storage, jobs
 
+# Recovery state machine: terminal states are absorbing; retries require a new job ID.
+RECOVERY_TRANSITIONS = {"queued": "interrupted", "running": "interrupted"}
+
 
 class Execution:
     def __init__(self, storage: Storage, settings: Settings):
@@ -151,21 +154,52 @@ class Execution:
                     pass
 
     async def reconcile(self) -> None:
-        async with self.storage.engine.connect() as connection:
-            values = (
-                (
-                    await connection.execute(
-                        select(jobs.c.record).where(jobs.c.status.in_(["queued", "running"]))
+        """Fence abandoned work before serving requests, or after shutdown drains tasks.
+
+        SIGKILL cannot run the supervisor's child cleanup. An orphan metadata worker
+        may still write its job's result.json; recovery neither adopts that result nor
+        reruns the request. Preserve those files as evidence. No persisted PID is safe
+        to signal after restart (PID reuse): orphan cleanup requires an operator to
+        verify process identity. A blocked orphan may need explicit termination; the
+        old supervisor's 90-second timeout no longer exists. This policy is scoped to
+        metadata-only workers, which cannot write application records.
+        """
+        # Serialize with cancel/finish and commit the entire recovery batch atomically.
+        # A crash before commit rolls back; after commit, repeated recovery is a no-op.
+        async with self.lock:
+            async with self.storage.engine.begin() as connection:
+                values = (
+                    (
+                        await connection.execute(
+                            select(jobs.c.record).where(jobs.c.status.in_(RECOVERY_TRANSITIONS))
+                        )
                     )
+                    .scalars()
+                    .all()
                 )
-                .scalars()
-                .all()
-            )
-        for value in values:
-            job = Job.model_validate(value)
-            job.status = "interrupted"
-            job.error = "Application stopped before completion. Submit a new inspection to retry."
-            await self.save(job)
+                for value in values:
+                    job = Job.model_validate(value)
+                    previous_status, previous_update = job.status, job.updated_at
+                    job.status = RECOVERY_TRANSITIONS[previous_status]
+                    job.updated_at = now()
+                    evidence = (
+                        f"Application stopped before completion; recovered {previous_status} "
+                        f"job (last update {previous_update}) as interrupted at {job.updated_at}. "
+                        "No result was published or work retried. Submit a new inspection to retry."
+                    )
+                    if previous_status == "running":
+                        evidence += (
+                            " An orphan metadata worker may still be running; late result files "
+                            "are not adopted. Verify process identity before manual cleanup."
+                        )
+                    job.error = f"{job.error}\n{evidence}" if job.error else evidence
+                    job.result = None
+                    # Compare-and-swap keeps the indexed state and public record in sync.
+                    await connection.execute(
+                        update(jobs)
+                        .where(jobs.c.id == job.id, jobs.c.status == previous_status)
+                        .values(status=job.status, record=job.model_dump())
+                    )
 
     async def close(self) -> None:
         tasks = list(self.tasks.values())
