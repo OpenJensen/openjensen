@@ -39,11 +39,21 @@ def reject_nonfinite(value: str):
     raise ValueError("Worker response contains a non-finite number: " + value)
 
 
+def finite_json_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        reject_nonfinite(value)
+    return parsed
+
+
 def complete_measurement(report: dict, episodes: int) -> bool:
     """Quality decisions require complete, finite evidence from every stage."""
     if type(report.get("complete_episodes")) is not int or report["complete_episodes"] != episodes:
         return False
     if not isinstance(report.get("runtime"), dict) or not report["runtime"]:
+        return False
+    coverage = report.get("memory_coverage")
+    if not isinstance(coverage, dict) or coverage.get("complete") is not True:
         return False
     for key in ("success_rate", "p95_ms", "peak_device_mib"):
         value = report.get(key)
@@ -494,7 +504,11 @@ class Lifecycle:
             await self.stop(process, container_name if image else None)
         if not result_path.exists() or result_path.stat().st_size > 4 * 1024 * 1024:
             raise ValueError("Worker did not produce a bounded result")
-        response = json.loads(result_path.read_text(), parse_constant=reject_nonfinite)
+        response = json.loads(
+            result_path.read_text(),
+            parse_constant=reject_nonfinite,
+            parse_float=finite_json_float,
+        )
         if response.get("schema_version") != 1 or response.get("job_id") != job.id:
             raise ValueError("Worker response identity mismatch")
         if process.returncode or response.get("error"):

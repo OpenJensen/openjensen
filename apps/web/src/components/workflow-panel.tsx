@@ -28,6 +28,7 @@ type Preferences = {
   maxMemory: number;
   precision: "recommended" | "Q4_0" | "Q8_0";
   vision: boolean;
+  compareQ4: boolean;
 };
 const initial: Preferences = {
   mode: "engine",
@@ -45,6 +46,7 @@ const initial: Preferences = {
   maxMemory: 8192,
   precision: "recommended",
   vision: false,
+  compareQ4: false,
 };
 function states(text: string) {
   const values = text.split(",").map((x) => Number(x.trim()));
@@ -207,8 +209,12 @@ export function WorkflowPanel({
         if (stage === "Quantize") {
           body.candidates = [
             { language, vision: preferences.vision ? "Q8_0" : null },
-            { language: language === "Q4_0" ? "Q8_0" : "Q4_0", vision: null },
           ];
+          if (preferences.compareQ4)
+            body.candidates.push({
+              language: language === "Q4_0" ? "Q8_0" : "Q4_0",
+              vision: null,
+            });
           if (preferences.select && preferences.mode === "libero")
             body.limits = {
               min_success_rate: preferences.minSuccess / 100,
@@ -282,6 +288,14 @@ export function WorkflowPanel({
                 <option value="Q4_0">LM Q4 (experimental)</option>
                 <option value="Q8_0">LM Q8</option>
               </select>
+            </label>
+            <label className="workflow-check">
+              <input
+                type="checkbox"
+                checked={preferences.compareQ4}
+                onChange={(e) => update("compareQ4", e.target.checked)}
+              />
+              Compare Q8 and Q4 (experimental)
             </label>
             <label className="workflow-check">
               <input

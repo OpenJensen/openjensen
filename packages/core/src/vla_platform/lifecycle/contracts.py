@@ -60,8 +60,8 @@ class PolicyRequest(StrictRecord):
     training: dict[str, Any] | None = None
     precision: Precision | None = None
     candidates: list[Precision] = Field(
-        default_factory=lambda: [Precision(language="Q8_0"), Precision(language="Q4_0")],
-        min_length=2,
+        default_factory=lambda: [Precision(language="Q8_0")],
+        min_length=1,
         max_length=4,
     )
     evaluation: Evaluation = Field(default_factory=Evaluation)

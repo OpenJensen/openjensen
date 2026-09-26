@@ -85,7 +85,7 @@ def set_label(settings, label):
 def test_workflow_persists_artifacts_lineage_events_and_defaults(configured):
     with TestClient(create_app(configured)) as client:
         pid = project(client)
-        jid = submit(client, pid)
+        jid = submit(client, pid, candidates=[{"language": "Q8_0"}, {"language": "Q4_0"}])
         job = wait(client, jid)
         assert job["status"] == "succeeded", job
         assert job["result"]["decision"] == "diagnostics_only"
@@ -158,7 +158,13 @@ def test_default_recipe_requires_validation_and_training_is_a_method_choice(conf
 def test_quality_selection_requires_unused_final_evaluation(configured, label, decision):
     set_label(configured, label)
     with TestClient(create_app(configured)) as client:
-        jid = submit(client, project(client), evaluation={"mode": "libero"}, limits={})
+        jid = submit(
+            client,
+            project(client),
+            evaluation={"mode": "libero"},
+            limits={},
+            candidates=[{"language": "Q8_0"}, {"language": "Q4_0"}],
+        )
         job = wait(client, jid)
         assert job["status"] == "succeeded", job
         assert job["result"]["decision"] == decision
@@ -678,3 +684,50 @@ def test_nonfinite_worker_json_fails_without_corrupting_persisted_job(configured
         assert "non-finite number" in job["error"]
         assert job["result"]["selected_artifact_id"] is None
         assert not any(x["stage"] == "package-and-reload" for x in job["result"]["reports"])
+
+
+def test_workflow_starts_with_q8_only_and_keeps_explicit_comparisons():
+    from vla_platform.lifecycle.contracts import PolicyRequest
+
+    fields = {"operation": "policy.workflow", "runtime_id": "fixture", "source_id": "source"}
+    request = PolicyRequest(**fields)
+    assert [candidate.language for candidate in request.candidates] == ["Q8_0"]
+    assert len(PolicyRequest(**fields, candidates=[{"language": "Q8_0"}]).candidates) == 1
+    explicit = PolicyRequest(**fields, candidates=[{"language": "Q8_0"}, {"language": "Q4_0"}])
+    assert [candidate.language for candidate in explicit.candidates] == ["Q8_0", "Q4_0"]
+
+
+@pytest.mark.parametrize(
+    "stage", ["baseline", "final-reference", "final-evaluation", "package-and-reload"]
+)
+def test_incomplete_memory_coverage_never_qualifies(configured, stage):
+    set_label(
+        configured,
+        "invalid-report:"
+        + json.dumps(
+            {
+                "stage": stage,
+                "field": "memory_coverage",
+                "value": {"complete": False},
+            }
+        ),
+    )
+    with TestClient(create_app(configured)) as client:
+        job = wait(
+            client, submit(client, project(client), evaluation={"mode": "libero"}, limits={})
+        )
+        assert job["status"] == "succeeded", job
+        assert job["result"]["decision"] == "no_feasible_candidate"
+        assert job["result"]["selected_artifact_id"] is None
+
+
+def test_overflow_worker_json_fails_before_publishing_report(configured):
+    set_label(configured, "overflow-json:final-evaluation")
+    with TestClient(create_app(configured)) as client:
+        job = wait(
+            client, submit(client, project(client), evaluation={"mode": "libero"}, limits={})
+        )
+        assert job["status"] == "failed", job
+        assert "non-finite number" in job["error"]
+        assert job["result"]["selected_artifact_id"] is None
+        assert not any(x["stage"] == "final-evaluation" for x in job["result"]["reports"])
