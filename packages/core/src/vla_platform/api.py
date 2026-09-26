@@ -205,7 +205,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "cuda": {"language": "Q8_0", "vision": None},
                 "cpu": {"language": "Q8_0", "vision": None},
                 "note": (
-                    "Q8 is the initial comparison candidate on CPU and CUDA, not a quality guarantee. "
+                    "Q8 is the initial comparison candidate on CPU and CUDA, "
+                    "not a quality guarantee. "
                     "Q4 and vision packing are experimental; validate every policy on its target."
                 ),
             },
