@@ -1,7 +1,12 @@
 from vla_platform.contracts import Capability
 
 
-def registry() -> list[Capability]:
+def registry(
+    native_configured: bool = False, training_configured: bool = False
+) -> list[Capability]:
+    available = {"Quantize", "Evaluate", "Run"} if native_configured else set()
+    if training_configured:
+        available.add("Fine-tune")
     return [
         Capability(
             stage="Dataset",
@@ -13,7 +18,16 @@ def registry() -> list[Capability]:
             ),
         ),
         *[
-            Capability(stage=stage, operation=operation, status="planned", description=description)
+            Capability(
+                stage=stage,
+                operation=operation,
+                status="available" if stage in available else "planned",
+                description=(
+                    "Native worker configured; each job performs runtime preflight."
+                    if stage in available
+                    else description
+                ),
+            )
             for stage, operation, description in [
                 ("Fine-tune", "policy.finetune", "Native training recipe integration is planned."),
                 (

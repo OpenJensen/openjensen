@@ -95,7 +95,11 @@ def save_checkpoint(
                 "schema_version": 1,
                 "step": step,
                 "files": files,
-                "representation": "pinned-base+nf4-double-quant-bf16-storage+peft-adapter",
+                "representation": (
+                    "pinned-base+nf4-double-quant-bf16-storage+peft-adapter"
+                    if cfg.method == "qlora"
+                    else "pinned-base+peft-adapter"
+                ),
                 "quantized_modules": quantized,
                 "versions": {
                     name: version(name)

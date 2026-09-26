@@ -70,11 +70,13 @@ def quantize_linears(policy, roots=QUANT_ROOTS):
 def build_policy(cfg, features=None, policy_config_dir=None, adapter_dir=None, trainable=True):
     import torch
     from huggingface_hub import snapshot_download
+    from lerobot.configs.policies import PreTrainedConfig
     from lerobot.configs.types import FeatureType
     from lerobot.datasets.utils import dataset_to_policy_features
     from lerobot.policies.smolvla.configuration_smolvla import SmolVLAConfig
     from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy
     from peft import LoraConfig, PeftModel, get_peft_model
+    from safetensors.torch import load_file
 
     base = snapshot_download(
         cfg.model_id,
@@ -86,7 +88,10 @@ def build_policy(cfg, features=None, policy_config_dir=None, adapter_dir=None, t
         revision=cfg.backbone_revision,
         allow_patterns=["*.json", "*.txt", "*.model", "*.jinja"],
     )
-    config = SmolVLAConfig.from_pretrained(policy_config_dir or base)
+    # The registry base dispatches the serialized `type` before subclass decoding.
+    config = PreTrainedConfig.from_pretrained(policy_config_dir or base)
+    if not isinstance(config, SmolVLAConfig):
+        raise ValueError("The pinned checkpoint must contain a SmolVLA configuration")
     config.device = "cpu"  # Never materialize an unquantized model on the target GPU.
     config.vlm_model_name = backbone  # Config/tokenizer are also pinned, no moving main ref.
     config.load_vlm_weights = False  # Full VLA checkpoint below supplies ALL pretrained weights.
@@ -101,9 +106,16 @@ def build_policy(cfg, features=None, policy_config_dir=None, adapter_dir=None, t
         if config.output_features["action"].type != FeatureType.ACTION:
             raise ValueError("Dataset has no action feature")
     # Strict loading is essential: an adapter over randomly initialized missing weights is invalid.
-    policy = SmolVLAPolicy.from_pretrained(base, config=config, strict=True)
+    policy = SmolVLAPolicy(config)
+    # Preserve the checkpoint's mixed F32/BF16 dtypes while requiring every key/shape.
+    # safetensors.load_model(strict=True) also rejects intentional constructor dtype differences.
+    from pathlib import Path
+
+    policy.load_state_dict(
+        load_file(str(Path(base) / "model.safetensors")), strict=True, assign=True
+    )
     policy.requires_grad_(False)
-    quantized = quantize_linears(policy)
+    quantized = quantize_linears(policy) if cfg.method == "qlora" else []
     policy.model.vlm_with_expert.vlm.model.vision_model.to(dtype=torch.bfloat16)
     policy.to("cuda:0")  # Device only; never cast packed weights after quantization.
     config.device = "cuda:0"

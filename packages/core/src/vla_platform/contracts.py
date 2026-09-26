@@ -5,6 +5,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from vla_platform.lifecycle.contracts import LifecycleResult, PolicyRequest
+
 
 def now() -> str:
     return datetime.now(UTC).isoformat()
@@ -63,13 +65,14 @@ TERMINAL = {"succeeded", "failed", "cancelled", "interrupted"}
 class Job(Record):
     id: str
     project_id: str
-    kind: Literal["dataset.inspect"] = "dataset.inspect"
+    kind: str = "dataset.inspect"
     status: JobStatus = "queued"
-    request: IntakeRequest
+    request: IntakeRequest | PolicyRequest
     created_at: str
     updated_at: str
-    result: DatasetProfile | None = None
+    result: DatasetProfile | LifecycleResult | None = None
     error: str | None = None
+    stage: str | None = None
 
 
 class Capability(Record):

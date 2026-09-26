@@ -153,6 +153,75 @@
         "title": "DatasetProfile",
         "type": "object"
       },
+      "Evaluation": {
+        "additionalProperties": false,
+        "properties": {
+          "final_states": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Final States",
+            "type": "array"
+          },
+          "initial_states": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Initial States",
+            "type": "array"
+          },
+          "mode": {
+            "default": "engine",
+            "enum": [
+              "engine",
+              "libero"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "repetitions": {
+            "default": 10,
+            "maximum": 1000.0,
+            "minimum": 2.0,
+            "title": "Repetitions",
+            "type": "integer"
+          },
+          "seed": {
+            "default": 42,
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Seed",
+            "type": "integer"
+          },
+          "steps": {
+            "default": 500,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Steps",
+            "type": "integer"
+          },
+          "task_id": {
+            "default": 0,
+            "maximum": 9.0,
+            "minimum": 0.0,
+            "title": "Task Id",
+            "type": "integer"
+          },
+          "warmups": {
+            "default": 3,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Warmups",
+            "type": "integer"
+          }
+        },
+        "title": "Evaluation",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -237,7 +306,6 @@
             "type": "string"
           },
           "kind": {
-            "const": "dataset.inspect",
             "default": "dataset.inspect",
             "title": "Kind",
             "type": "string"
@@ -247,7 +315,15 @@
             "type": "string"
           },
           "request": {
-            "$ref": "#/components/schemas/IntakeRequest"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IntakeRequest"
+              },
+              {
+                "$ref": "#/components/schemas/PolicyRequest"
+              }
+            ],
+            "title": "Request"
           },
           "result": {
             "anyOf": [
@@ -255,9 +331,24 @@
                 "$ref": "#/components/schemas/DatasetProfile"
               },
               {
+                "$ref": "#/components/schemas/LifecycleResult"
+              },
+              {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Result"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
           },
           "status": {
             "default": "queued",
@@ -285,6 +376,342 @@
           "updated_at"
         ],
         "title": "Job",
+        "type": "object"
+      },
+      "JobEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          },
+          "timestamp": {
+            "title": "Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "stage",
+          "message",
+          "timestamp"
+        ],
+        "title": "JobEvent",
+        "type": "object"
+      },
+      "LifecycleResult": {
+        "additionalProperties": false,
+        "properties": {
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/PolicyArtifact"
+            },
+            "title": "Artifacts",
+            "type": "array"
+          },
+          "decision": {
+            "default": "completed",
+            "enum": [
+              "completed",
+              "diagnostics_only",
+              "no_feasible_candidate",
+              "validated"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "reports": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Reports",
+            "type": "array"
+          },
+          "selected_artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Artifact Id"
+          }
+        },
+        "title": "LifecycleResult",
+        "type": "object"
+      },
+      "Limits": {
+        "additionalProperties": false,
+        "properties": {
+          "max_p95_ms": {
+            "default": 1000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Max P95 Ms",
+            "type": "number"
+          },
+          "max_peak_device_mib": {
+            "default": 8192.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Max Peak Device Mib",
+            "type": "number"
+          },
+          "max_success_drop": {
+            "default": 0.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Max Success Drop",
+            "type": "number"
+          },
+          "min_success_rate": {
+            "default": 1.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Min Success Rate",
+            "type": "number"
+          }
+        },
+        "title": "Limits",
+        "type": "object"
+      },
+      "PolicyArtifact": {
+        "additionalProperties": false,
+        "properties": {
+          "file_bytes": {
+            "minimum": 0.0,
+            "title": "File Bytes",
+            "type": "integer"
+          },
+          "format": {
+            "enum": [
+              "gguf",
+              "training_checkpoint",
+              "native_checkpoint",
+              "deployment_package"
+            ],
+            "title": "Format",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "manifest_sha256": {
+            "title": "Manifest Sha256",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "parent_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Parent Ids",
+            "type": "array"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "job_id",
+          "label",
+          "format",
+          "path",
+          "manifest_sha256",
+          "file_bytes"
+        ],
+        "title": "PolicyArtifact",
+        "type": "object"
+      },
+      "PolicyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Id"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/Precision"
+            },
+            "maxItems": 4,
+            "minItems": 2,
+            "title": "Candidates",
+            "type": "array"
+          },
+          "dataset_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Job Id"
+          },
+          "evaluation": {
+            "$ref": "#/components/schemas/Evaluation"
+          },
+          "limits": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Limits"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "operation": {
+            "enum": [
+              "policy.import",
+              "policy.finetune",
+              "policy.export",
+              "policy.quantize",
+              "policy.evaluate",
+              "policy.run",
+              "policy.workflow"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "precision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Precision"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resume_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Job Id"
+          },
+          "runtime_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w-]+$",
+            "title": "Runtime Id",
+            "type": "string"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "pattern": "^[\\w-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "timeout_seconds": {
+            "default": 7200,
+            "maximum": 86400.0,
+            "minimum": 30.0,
+            "title": "Timeout Seconds",
+            "type": "integer"
+          },
+          "training": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Training"
+          },
+          "training_method": {
+            "default": "lora",
+            "pattern": "^[\\w-]+$",
+            "title": "Training Method",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "runtime_id"
+        ],
+        "title": "PolicyRequest",
+        "type": "object"
+      },
+      "Precision": {
+        "additionalProperties": false,
+        "properties": {
+          "language": {
+            "default": "Q4_0",
+            "enum": [
+              "Q4_0",
+              "Q8_0"
+            ],
+            "title": "Language",
+            "type": "string"
+          },
+          "vision": {
+            "anyOf": [
+              {
+                "const": "Q8_0",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vision"
+          }
+        },
+        "title": "Precision",
         "type": "object"
       },
       "Project": {
@@ -499,6 +926,79 @@
         "summary": "Cancel Job"
       }
     },
+    "/api/v1/jobs/{job_id}/events": {
+      "get": {
+        "operationId": "job_events_api_v1_jobs__job_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "After",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/JobEvent"
+                  },
+                  "title": "Response Job Events Api V1 Jobs  Job Id  Events Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Job Events"
+      }
+    },
+    "/api/v1/policy-options": {
+      "get": {
+        "operationId": "policy_options_api_v1_policy_options_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Policy Options Api V1 Policy Options Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Policy Options"
+      }
+    },
     "/api/v1/projects": {
       "get": {
         "operationId": "list_projects_api_v1_projects_get",
@@ -555,6 +1055,95 @@
           }
         },
         "summary": "Create Project"
+      }
+    },
+    "/api/v1/projects/{project_id}/artifacts": {
+      "get": {
+        "operationId": "artifacts_api_v1_projects__project_id__artifacts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PolicyArtifact"
+                  },
+                  "title": "Response Artifacts Api V1 Projects  Project Id  Artifacts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Artifacts"
+      }
+    },
+    "/api/v1/projects/{project_id}/artifacts/{artifact_id}/download": {
+      "get": {
+        "operationId": "download_artifact_api_v1_projects__project_id__artifacts__artifact_id__download_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Artifact"
       }
     },
     "/api/v1/projects/{project_id}/intakes": {
@@ -647,6 +1236,55 @@
           }
         },
         "summary": "List Jobs"
+      }
+    },
+    "/api/v1/projects/{project_id}/policy-jobs": {
+      "post": {
+        "operationId": "policy_job_api_v1_projects__project_id__policy_jobs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Policy Job"
       }
     }
   }

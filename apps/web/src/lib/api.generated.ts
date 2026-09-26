@@ -72,6 +72,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/jobs/{job_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Job Events */
+        get: operations["job_events_api_v1_jobs__job_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/policy-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Policy Options */
+        get: operations["policy_options_api_v1_policy_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects": {
         parameters: {
             query?: never;
@@ -84,6 +118,40 @@ export interface paths {
         put?: never;
         /** Create Project */
         post: operations["create_project_api_v1_projects_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/artifacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Artifacts */
+        get: operations["artifacts_api_v1_projects__project_id__artifacts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/artifacts/{artifact_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Artifact */
+        get: operations["download_artifact_api_v1_projects__project_id__artifacts__artifact_id__download_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -118,6 +186,23 @@ export interface paths {
         get: operations["list_jobs_api_v1_projects__project_id__jobs_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/policy-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Policy Job */
+        post: operations["policy_job_api_v1_projects__project_id__policy_jobs_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -191,6 +276,44 @@ export interface components {
             /** Warnings */
             warnings: string[];
         };
+        /** Evaluation */
+        Evaluation: {
+            /** Final States */
+            final_states?: number[];
+            /** Initial States */
+            initial_states?: number[];
+            /**
+             * Mode
+             * @default engine
+             * @enum {string}
+             */
+            mode: "engine" | "libero";
+            /**
+             * Repetitions
+             * @default 10
+             */
+            repetitions: number;
+            /**
+             * Seed
+             * @default 42
+             */
+            seed: number;
+            /**
+             * Steps
+             * @default 500
+             */
+            steps: number;
+            /**
+             * Task Id
+             * @default 0
+             */
+            task_id: number;
+            /**
+             * Warmups
+             * @default 3
+             */
+            warmups: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -225,13 +348,16 @@ export interface components {
             /**
              * Kind
              * @default dataset.inspect
-             * @constant
              */
-            kind: "dataset.inspect";
+            kind: string;
             /** Project Id */
             project_id: string;
-            request: components["schemas"]["IntakeRequest"];
-            result?: components["schemas"]["DatasetProfile"] | null;
+            /** Request */
+            request: components["schemas"]["IntakeRequest"] | components["schemas"]["PolicyRequest"];
+            /** Result */
+            result?: components["schemas"]["DatasetProfile"] | components["schemas"]["LifecycleResult"] | null;
+            /** Stage */
+            stage?: string | null;
             /**
              * Status
              * @default queued
@@ -240,6 +366,133 @@ export interface components {
             status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted";
             /** Updated At */
             updated_at: string;
+        };
+        /** JobEvent */
+        JobEvent: {
+            /** Message */
+            message: string;
+            /** Sequence */
+            sequence: number;
+            /** Stage */
+            stage: string;
+            /** Timestamp */
+            timestamp: string;
+        };
+        /** LifecycleResult */
+        LifecycleResult: {
+            /** Artifacts */
+            artifacts?: components["schemas"]["PolicyArtifact"][];
+            /**
+             * Decision
+             * @default completed
+             * @enum {string}
+             */
+            decision: "completed" | "diagnostics_only" | "no_feasible_candidate" | "validated";
+            /** Reports */
+            reports?: {
+                [key: string]: unknown;
+            }[];
+            /** Selected Artifact Id */
+            selected_artifact_id?: string | null;
+        };
+        /** Limits */
+        Limits: {
+            /**
+             * Max P95 Ms
+             * @default 1000
+             */
+            max_p95_ms: number;
+            /**
+             * Max Peak Device Mib
+             * @default 8192
+             */
+            max_peak_device_mib: number;
+            /**
+             * Max Success Drop
+             * @default 0
+             */
+            max_success_drop: number;
+            /**
+             * Min Success Rate
+             * @default 1
+             */
+            min_success_rate: number;
+        };
+        /** PolicyArtifact */
+        PolicyArtifact: {
+            /** File Bytes */
+            file_bytes: number;
+            /**
+             * Format
+             * @enum {string}
+             */
+            format: "gguf" | "training_checkpoint" | "native_checkpoint" | "deployment_package";
+            /** Id */
+            id: string;
+            /** Job Id */
+            job_id: string;
+            /** Label */
+            label: string;
+            /** Manifest Sha256 */
+            manifest_sha256: string;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Parent Ids */
+            parent_ids?: string[];
+            /** Path */
+            path: string;
+            /** Project Id */
+            project_id: string;
+        };
+        /** PolicyRequest */
+        PolicyRequest: {
+            /** Artifact Id */
+            artifact_id?: string | null;
+            /** Candidates */
+            candidates?: components["schemas"]["Precision"][];
+            /** Dataset Job Id */
+            dataset_job_id?: string | null;
+            evaluation?: components["schemas"]["Evaluation"];
+            limits?: components["schemas"]["Limits"] | null;
+            /**
+             * Operation
+             * @enum {string}
+             */
+            operation: "policy.import" | "policy.finetune" | "policy.export" | "policy.quantize" | "policy.evaluate" | "policy.run" | "policy.workflow";
+            precision?: components["schemas"]["Precision"] | null;
+            /** Resume Job Id */
+            resume_job_id?: string | null;
+            /** Runtime Id */
+            runtime_id: string;
+            /** Source Id */
+            source_id?: string | null;
+            /**
+             * Timeout Seconds
+             * @default 7200
+             */
+            timeout_seconds: number;
+            /** Training */
+            training?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Training Method
+             * @default lora
+             */
+            training_method: string;
+        };
+        /** Precision */
+        Precision: {
+            /**
+             * Language
+             * @default Q4_0
+             * @enum {string}
+             */
+            language: "Q4_0" | "Q8_0";
+            /** Vision */
+            vision?: "Q8_0" | null;
         };
         /** Project */
         Project: {
@@ -381,6 +634,61 @@ export interface operations {
             };
         };
     };
+    job_events_api_v1_jobs__job_id__events_get: {
+        parameters: {
+            query?: {
+                after?: number;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobEvent"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    policy_options_api_v1_policy_options_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
     list_projects_api_v1_projects_get: {
         parameters: {
             query?: never;
@@ -421,6 +729,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    artifacts_api_v1_projects__project_id__artifacts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PolicyArtifact"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_artifact_api_v1_projects__project_id__artifacts__artifact_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -487,6 +858,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Job"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    policy_job_api_v1_projects__project_id__policy_jobs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PolicyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"];
                 };
             };
             /** @description Validation Error */

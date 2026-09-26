@@ -10,6 +10,7 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class TrainConfig:
+    method: str = "qlora"
     model_id: str = "lerobot/smolvla_base"
     model_revision: str = "d9f33c94a60fb382c90dea2164c96845bd955e28"
     backbone_id: str = "HuggingFaceTB/SmolVLM2-500M-Video-Instruct"
@@ -38,6 +39,8 @@ class TrainConfig:
     seed: int = 42
 
     def validate(self):
+        if self.method not in {"lora", "qlora"}:
+            raise ValueError("Supported training methods: lora, qlora")
         for name in ("model_revision", "backbone_revision", "dataset_revision"):
             if not isinstance(getattr(self, name), str) or not re.fullmatch(
                 r"[0-9a-f]{40}", getattr(self, name)

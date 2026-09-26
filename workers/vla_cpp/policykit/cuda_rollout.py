@@ -14,6 +14,7 @@ from .worker import sha256 as file_hash
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--preset', required=True)
+    parser.add_argument('--lane', type=Path, help='Prepared simulator/vendor lane configured by the application')
     parser.add_argument('--task-id', type=int, default=0)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--init-state-id', type=int, default=0)
@@ -40,7 +41,7 @@ def main():
         parser.error('Initial state index must be nonnegative')
     if not 1 <= args.steps <= 500 or not 1 <= args.action_steps <= 50:
         parser.error('Use 1..500 environment steps and 1..50 replayed actions')
-    lane = Path.cwd()/'artifacts/docker'
+    lane = args.lane or Path.cwd()/'artifacts/docker'
     vendor = lane/'vendor/vla.cpp'
     manifest_path = args.manifest or lane/'runs/smolvla-packed-v2/results.json'
     manifest = json.loads(manifest_path.read_text())
@@ -96,6 +97,8 @@ def main():
         else:
             provenance = json.loads((lane/'LIBERO-source.json').read_text())
             archive = Path(provenance['archive'])
+            if not archive.exists() and str(archive).startswith('/workspace/'):
+                archive = lane.parent.parent / archive.relative_to('/workspace')
             if file_hash(archive) != provenance['archive_sha256']:
                 raise RuntimeError('LIBERO source archive differs from its recorded hash')
             result['simulator_commit'] = provenance['revision']
