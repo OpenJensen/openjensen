@@ -1,0 +1,175 @@
+{
+  "dataset": "codywang/so101_pickup_test@ecef85bc07005f771ad86deeff1427f9d72953ed",
+  "units": "meters; all environment dimensions estimated from RGB",
+  "room": {
+    "backdrop_y": 0.215
+  },
+  "shelf": {
+    "width": 1.0,
+    "depth": 0.32,
+    "height": 1.15,
+    "beam_width": 0.022,
+    "board_thickness": 0.019,
+    "boards": [
+      0.2,
+      0.67,
+      1.14
+    ]
+  },
+  "robot": {
+    "position": [
+      -0.475,
+      -0.005,
+      0.202401
+    ],
+    "yaw_degrees": 0,
+    "pose_note": "Visual fit; shoulder and wrist differ from uncalibrated dataset state."
+  },
+  "cup": {
+    "position": [
+      -0.165,
+      -0.045,
+      0.2005
+    ],
+    "height": 0.105,
+    "radius_bottom": 0.025,
+    "radius_top": 0.037,
+    "thickness": 0.0012,
+    "mass": 0.012
+  },
+  "box": {
+    "position": [
+      -0.23,
+      -0.315,
+      0
+    ],
+    "size": [
+      0.29,
+      0.235,
+      0.2
+    ],
+    "thickness": 0.003
+  },
+  "camera": {
+    "position": [
+      -0.09390186,
+      -1.57220823,
+      0.84390062
+    ],
+    "target": [
+      -0.08200925,
+      -0.62587867,
+      0.5209161999999999
+    ],
+    "focal": 38.98979793,
+    "roll_degrees": 1.18
+  },
+  "materials": {
+    "Wood": {
+      "color": [
+        0.42,
+        0.16,
+        0.045
+      ],
+      "roughness": 0.38,
+      "texture": "wood"
+    },
+    "WoodEdge": {
+      "color": [
+        0.38,
+        0.13,
+        0.041
+      ],
+      "roughness": 0.42
+    },
+    "Frame": {
+      "color": [
+        0.35,
+        0.36,
+        0.3
+      ],
+      "roughness": 0.3
+    },
+    "Fabric": {
+      "color": [
+        0.12,
+        0.12,
+        0.11
+      ],
+      "roughness": 0.95,
+      "texture": "fabric"
+    },
+    "FabricBase": {
+      "color": [
+        0.12,
+        0.12,
+        0.11
+      ],
+      "roughness": 0.95
+    },
+    "Carpet": {
+      "color": [
+        0.22,
+        0.23,
+        0.23
+      ],
+      "roughness": 1.0,
+      "texture": "carpet"
+    },
+    "CarpetBase": {
+      "color": [
+        0.22,
+        0.23,
+        0.23
+      ],
+      "roughness": 1.0
+    },
+    "Cardboard": {
+      "color": [
+        0.5,
+        0.3,
+        0.13
+      ],
+      "roughness": 0.95,
+      "texture": "cardboard"
+    },
+    "BoxPrint": {
+      "color": [
+        0.5,
+        0.3,
+        0.13
+      ],
+      "roughness": 0.95,
+      "texture": "box_front"
+    },
+    "Paper": {
+      "color": [
+        0.82,
+        0.75,
+        0.61
+      ],
+      "roughness": 0.75
+    },
+    "CupPrint": {
+      "color": [
+        0.82,
+        0.75,
+        0.61
+      ],
+      "roughness": 0.75,
+      "texture": "cup_label"
+    },
+    "Cable": {
+      "color": [
+        0.012,
+        0.015,
+        0.018
+      ],
+      "roughness": 0.6
+    }
+  },
+  "lighting": {
+    "fill_intensity": 1200,
+    "key_intensity": 5600
+  }
+}

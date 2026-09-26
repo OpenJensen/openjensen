@@ -1,0 +1,107 @@
+[
+  {
+    "path": "robot/meshes/base_motor_holder_so101_v1.usdc",
+    "bytes": 799142,
+    "sha256": "16b2532ee49d0e23fccf93823690660b17b0c169345c949e10f0d5357131d2c0"
+  },
+  {
+    "path": "robot/meshes/base_so101_v2.usdc",
+    "bytes": 199877,
+    "sha256": "3f8ef780a6046b2219a293d6b18b999421e4d2f2461c7d8e8f4cc89fbbbc688a"
+  },
+  {
+    "path": "robot/meshes/motor_holder_so101_base_v1.usdc",
+    "bytes": 468149,
+    "sha256": "a7c93f00a1c37ba81ef7923cf9da4fdaa7a93bf99cbcd16467151e992b6dac08"
+  },
+  {
+    "path": "robot/meshes/motor_holder_so101_wrist_v1.usdc",
+    "bytes": 436250,
+    "sha256": "6c24fbcdb80e232d11631eb3e15fe74d075c6f64eed56ee846fba4fc981ded37"
+  },
+  {
+    "path": "robot/meshes/moving_jaw_so101_v1.usdc",
+    "bytes": 602083,
+    "sha256": "31c929aea174757a5e53a18b02db5886df550f4322df190d5c2b0be905047d19"
+  },
+  {
+    "path": "robot/meshes/rotation_pitch_so101_v1.usdc",
+    "bytes": 364561,
+    "sha256": "79d409a2332d0f037873c695dc73d917686b1ec42c74cb081b7aaff9b9c769bc"
+  },
+  {
+    "path": "robot/meshes/sts3215_03a_no_horn_v1.usdc",
+    "bytes": 357505,
+    "sha256": "3cd1b7d4d2b94590ddbace52ebe8668ea057e39327e458a5c249b101b876e23d"
+  },
+  {
+    "path": "robot/meshes/sts3215_03a_v1.usdc",
+    "bytes": 394738,
+    "sha256": "3fb63f50ba5963fa0886549ad27891c14b62b9cef8e44c57d202ea2d03cb02b4"
+  },
+  {
+    "path": "robot/meshes/under_arm_so101_v1.usdc",
+    "bytes": 836038,
+    "sha256": "fec4babcd2514cbaf22fe2da5a1e11f621b83c181bd8035682aded66ceb638ce"
+  },
+  {
+    "path": "robot/meshes/upper_arm_so101_v1.usdc",
+    "bytes": 532569,
+    "sha256": "5821befcca3c9035a2f30274d317bbb5d0c2092b9c94023b44a78afc5d4be7ee"
+  },
+  {
+    "path": "robot/meshes/waveshare_mounting_plate_so101_v2.usdc",
+    "bytes": 26217,
+    "sha256": "73d2d2a6f903813c36eff20f82ed7243eafb297bfde40c3352f4f15e202a74e4"
+  },
+  {
+    "path": "robot/meshes/wrist_roll_follower_so101_v1.usdc",
+    "bytes": 609271,
+    "sha256": "29e0263cdf888019e6f3cebbac885ebcde7d3508e4fde64fd42bcb2422a0ca40"
+  },
+  {
+    "path": "robot/meshes/wrist_roll_pitch_so101_v2.usdc",
+    "bytes": 1142681,
+    "sha256": "f266c1da46f389640de68d7b39dedbc940f140fbd665afba59b2c3b2fbf722f4"
+  },
+  {
+    "path": "robot/so101.usda",
+    "bytes": 33797,
+    "sha256": "d3db504a37c1cd04bdf38528aa930fe137d2902a2209aab0acf61a661819370f"
+  },
+  {
+    "path": "scene.usda",
+    "bytes": 116306,
+    "sha256": "d6c286dc816825a6ca4a4dd05e8aa6989777da6a8144a0ab2a6c0133f9fd3dcd"
+  },
+  {
+    "path": "textures/box_front.png",
+    "bytes": 96507,
+    "sha256": "5e1de2ae5c3cf8a4f9bf334ce84e96f0bd25f7e72d123e774c99a55e6207797f"
+  },
+  {
+    "path": "textures/cardboard.png",
+    "bytes": 12054,
+    "sha256": "fa6826c9cb5df05068c21d419277bacaa45aa2a1856cc3e4b2f57395cc149091"
+  },
+  {
+    "path": "textures/carpet.png",
+    "bytes": 75062,
+    "sha256": "46ad54e514c39891d80fb03c2daf3ea64d30d03b44e05bfe80861f535ddb7ec1"
+  },
+  {
+    "path": "textures/cup_label.png",
+    "bytes": 7300,
+    "sha256": "362fe5289d4fe6738497278963c225bc674aed471440a5f2802d912d7cd451c6"
+  },
+  {
+    "path": "textures/fabric.png",
+    "bytes": 20669,
+    "sha256": "934ce22b06818933abb0c04e60ba3d405bba747a4177101823f68368161ea37e"
+  },
+  {
+    "path": "textures/wood.png",
+    "bytes": 44838,
+    "sha256": "1dd851900de644949c39de0780d3f0102d6afdf5ac3290d2dd916c8bd38c667d"
+  }
+]

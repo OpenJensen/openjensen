@@ -1,0 +1,11 @@
+api_version: simulation.worker/v1alpha1
+scene:
+  uri: scene.usda
+  camera: /World/Cameras/Front
+capture:
+  width: 1920
+  height: 1080
+  fps: 30
+  frames: 150
+outputs:
+  uri: gs://example-sim-results/runs
