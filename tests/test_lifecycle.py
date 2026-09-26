@@ -641,3 +641,40 @@ def test_resume_checkpoint_requires_integer_schema_version(configured, schema):
         manifest["schema_version"] = schema
         invalid.write_text(json.dumps(manifest))
         assert client.portal.call(execution.lifecycle.resume_checkpoint, pid, jid) == verified
+
+
+@pytest.mark.parametrize(
+    "stage", ["baseline", "final-reference", "final-evaluation", "package-and-reload"]
+)
+@pytest.mark.parametrize(
+    "field,value",
+    [("complete_episodes", 1), ("p95_ms", 0), ("peak_device_mib", -1), ("success_rate", 1.2)],
+)
+def test_incomplete_or_invalid_measurements_never_qualify(configured, stage, field, value):
+    set_label(
+        configured, "invalid-report:" + json.dumps({"stage": stage, "field": field, "value": value})
+    )
+    with TestClient(create_app(configured)) as client:
+        job = wait(
+            client, submit(client, project(client), evaluation={"mode": "libero"}, limits={})
+        )
+        assert job["status"] == "succeeded", job
+        assert job["result"]["decision"] == "no_feasible_candidate"
+        assert job["result"]["selected_artifact_id"] is None
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_nonfinite_worker_json_fails_without_corrupting_persisted_job(configured, value):
+    set_label(
+        configured,
+        "invalid-report:"
+        + json.dumps({"stage": "final-evaluation", "field": "p95_ms", "value": value}),
+    )
+    with TestClient(create_app(configured)) as client:
+        job = wait(
+            client, submit(client, project(client), evaluation={"mode": "libero"}, limits={})
+        )
+        assert job["status"] == "failed", job
+        assert "non-finite number" in job["error"]
+        assert job["result"]["selected_artifact_id"] is None
+        assert not any(x["stage"] == "package-and-reload" for x in job["result"]["reports"])

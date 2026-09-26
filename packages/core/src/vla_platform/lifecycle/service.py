@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import math
 import os
 import re
 import signal
@@ -32,6 +33,28 @@ logger = logging.getLogger(__name__)
 def digest(path: Path) -> str:
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def reject_nonfinite(value: str):
+    raise ValueError("Worker response contains a non-finite number: " + value)
+
+
+def complete_measurement(report: dict, episodes: int) -> bool:
+    """Quality decisions require complete, finite evidence from every stage."""
+    if type(report.get("complete_episodes")) is not int or report["complete_episodes"] != episodes:
+        return False
+    if not isinstance(report.get("runtime"), dict) or not report["runtime"]:
+        return False
+    for key in ("success_rate", "p95_ms", "peak_device_mib"):
+        value = report.get(key)
+        if type(value) not in (int, float) or not math.isfinite(value):
+            return False
+        if key == "success_rate":
+            if not 0 <= value <= 1:
+                return False
+        elif value <= 0:
+            return False
+    return True
 
 
 def validate_bundle(directory: Path, job_dir: Path):
@@ -471,7 +494,7 @@ class Lifecycle:
             await self.stop(process, container_name if image else None)
         if not result_path.exists() or result_path.stat().st_size > 4 * 1024 * 1024:
             raise ValueError("Worker did not produce a bounded result")
-        response = json.loads(result_path.read_text())
+        response = json.loads(result_path.read_text(), parse_constant=reject_nonfinite)
         if response.get("schema_version") != 1 or response.get("job_id") != job.id:
             raise ValueError("Worker response identity mismatch")
         if process.returncode or response.get("error"):
@@ -579,14 +602,13 @@ class Lifecycle:
             return result
         limits = request.limits
         eligible = []
-        if reference.get("success_rate") is None:
+        if not complete_measurement(reference, len(request.evaluation.initial_states)):
             result.decision = "no_feasible_candidate"
             await self.publish(job, result)
             return result
         for candidate, measurement in measured:
             if (
-                measurement.get("complete_episodes") == len(request.evaluation.initial_states)
-                and measurement.get("success_rate") is not None
+                complete_measurement(measurement, len(request.evaluation.initial_states))
                 and measurement["success_rate"] >= limits.min_success_rate
                 and measurement["success_rate"]
                 >= reference["success_rate"] - limits.max_success_drop
@@ -612,9 +634,8 @@ class Lifecycle:
                 job, "policy.evaluate", chosen, "final-evaluation", result, final=True
             )
             if (
-                final_reference.get("complete_episodes") != len(request.evaluation.final_states)
-                or final_reference.get("success_rate") is None
-                or final.get("success_rate") is None
+                not complete_measurement(final_reference, len(request.evaluation.final_states))
+                or not complete_measurement(final, len(request.evaluation.final_states))
                 or final.get("runtime") != reference.get("runtime")
                 or final_reference.get("runtime") != reference.get("runtime")
                 or final.get("complete_episodes") != len(request.evaluation.final_states)
@@ -635,7 +656,8 @@ class Lifecycle:
                     job, "policy.run", chosen, "package-and-reload", result, final=True
                 )
                 if (
-                    reloaded.get("runtime") != reference.get("runtime")
+                    not complete_measurement(reloaded, len(request.evaluation.final_states))
+                    or reloaded.get("runtime") != reference.get("runtime")
                     or reloaded.get("complete_episodes") != len(request.evaluation.final_states)
                     or reloaded.get("success_rate", -1)
                     < final_reference["success_rate"] - limits.max_success_drop

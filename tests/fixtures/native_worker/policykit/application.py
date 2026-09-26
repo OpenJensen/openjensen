@@ -61,6 +61,10 @@ if op in {"policy.evaluate", "policy.run"}:
         and out.name != "final-reference"
     ):
         result["report"]["success_rate"] = 0
+    if job["runtime"]["label"].startswith("invalid-report:"):
+        invalid = json.loads(job["runtime"]["label"].split(":", 1)[1])
+        if out.name == invalid["stage"]:
+            result["report"][invalid["field"]] = invalid["value"]
 elif op not in {"policy.import", "policy.quantize"}:
     result["error"] = "Unsupported fixture operation"
 print(json.dumps({"step": 1}), flush=True)
