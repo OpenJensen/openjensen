@@ -48,7 +48,7 @@ export function BenchmarkReference() {
     <details className="provenance">
       <summary>Measurement scope &amp; reproduction</summary>
       <p id="benchmark-reference-method">Latency is the median of 14 fixture p50 values for a complete 50 × 7 action chunk, including preprocessing and transfers, excluding simulator stepping. Cached runtime initialization excludes preceding backend imports and first inference. Process-to-first-action includes both; model assets are cached. VRAM sampling may miss short peaks. Twenty paired episodes are a small behavior-retention sample, not general robot acceptance.</p>
-      <p>Project diagnostics evaluate one native policy with your configured settings. The application's simulator uses LIBERO Object; the reference comparison uses LIBERO Spatial. To reproduce this full ten-candidate comparison, use the <a className="text-link" href={worker} target="_blank" rel="noreferrer">GPU benchmark setup and commands ↗</a>. Its fixtures, timing and memory scope also differ from the application's engine checks.</p>
+      <p>Project diagnostics evaluate one native policy with your configured settings and selected Object or Spatial suite. This reference comparison uses LIBERO Spatial. To reproduce the full ten-candidate comparison, use the <a className="text-link" href={worker} target="_blank" rel="noreferrer">GPU benchmark setup and commands ↗</a>. Its fixtures, timing and memory scope also differ from the application's engine checks.</p>
       <dl>
         <div><dt>Checkpoint</dt><dd><code>{reference.checkpoint}</code></dd></div>
         <div><dt>Checkpoint revision</dt><dd><code>{reference.checkpointRevision}</code></dd></div>
