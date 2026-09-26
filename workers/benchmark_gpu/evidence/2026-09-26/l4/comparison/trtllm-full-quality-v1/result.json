@@ -1,0 +1,368 @@
+{
+  "status": "passed",
+  "contract": "Raw CPU observations/task plus explicit FP32 noise to complete unnormalized CPU 50x7 actions; chunk replay 50; preprocessing and RPC included; simulator excluded.",
+  "startup_s": 61.12586758799989,
+  "backend": "trtllm-fp16",
+  "checkpoint": "lerobot/smolvla_libero",
+  "revision": "31d453f7edd78c839a8bbc39744a292686daf0de",
+  "integration": "Custom engine orchestration with native PyTorch SmolVLA kernels",
+  "startup_peak_allocated_bytes": 0,
+  "fixtures": [
+    {
+      "name": "synthetic-0.npz",
+      "sha256": "0a36d9054126412db8dcd4079f509094a4a311640cea96ee2e736548a433f1b0",
+      "p50_ms": 1304.9958819992753,
+      "samples_ms": [
+        1304.9958819992753
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "synthetic-1.npz",
+      "sha256": "13fd98cc37376709b1d7921d4a24878b518445c331a67c1f8a245eb3d04d089a",
+      "p50_ms": 670.6725269996241,
+      "samples_ms": [
+        670.6725269996241
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "task0-init0-chunk0.npz",
+      "sha256": "8ca68b94c9d0cdc60e6e7aad98453044be64936d40bb8050a2311ff186ad79c5",
+      "p50_ms": 668.6987140001293,
+      "samples_ms": [
+        668.6987140001293
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "task0-init0-chunk1.npz",
+      "sha256": "004567fab1fe16f3aad61ed285343b53fcc6848b5945dbc433eb32adb08fe1d5",
+      "p50_ms": 797.7398780003568,
+      "samples_ms": [
+        797.7398780003568
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "task1-init0-chunk0.npz",
+      "sha256": "43e09f840449d886871b8a848d80d69fa09412c143f2280b7c34e41d512476b0",
+      "p50_ms": 689.3841809996957,
+      "samples_ms": [
+        689.3841809996957
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "task1-init0-chunk1.npz",
+      "sha256": "0070068548f2f022e75600686150721011e0ee042dc2ef14bcb6e50e696124df",
+      "p50_ms": 766.0542850007914,
+      "samples_ms": [
+        766.0542850007914
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "task1-init0-chunk2.npz",
+      "sha256": "c59aeb4755e2f00d291a3f4ef46b5cd914679195541d035fda0d331184f39573",
+      "p50_ms": 645.7770220004022,
+      "samples_ms": [
+        645.7770220004022
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "task2-init0-chunk0.npz",
+      "sha256": "fcb2711b38639a75737b0bdca05e263559f8d27027b3987cc21764916d3de455",
+      "p50_ms": 714.5640529997763,
+      "samples_ms": [
+        714.5640529997763
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "task2-init0-chunk1.npz",
+      "sha256": "50e105671a03cc4038adec11052c8f4b5812cea444975ea98d31984e53228a50",
+      "p50_ms": 580.0050649995683,
+      "samples_ms": [
+        580.0050649995683
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "task3-init0-chunk0.npz",
+      "sha256": "b4804eccc03e8a51b900a8fed6c875429a5d5854c1602bce619a0c158482e3ac",
+      "p50_ms": 678.6397939995368,
+      "samples_ms": [
+        678.6397939995368
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "task3-init0-chunk1.npz",
+      "sha256": "c17f4ee3ecd2c7ebd334e879cd67737444c1bbed489ae5b410dcef0a45f7d078",
+      "p50_ms": 699.2285060005088,
+      "samples_ms": [
+        699.2285060005088
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "task4-init0-chunk0.npz",
+      "sha256": "98cea3c7c9263b02c9b9cba5a1621b056322e3103d436e14bf7e4e51b8faa4fd",
+      "p50_ms": 679.9005869997927,
+      "samples_ms": [
+        679.9005869997927
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "task4-init0-chunk1.npz",
+      "sha256": "a18904c97f4b7c838cb2200ce624f4700a87d14ae635f6f6acf8cf22885aadeb",
+      "p50_ms": 682.878581001205,
+      "samples_ms": [
+        682.878581001205
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "task4-init0-chunk2.npz",
+      "sha256": "6ed01fafec11c61eb9d99b9ad171f725112d20ae49642800396476413d1bd538",
+      "p50_ms": 642.747159999999,
+      "samples_ms": [
+        642.747159999999
+      ],
+      "repeat_exact": true
+    }
+  ],
+  "episodes": [
+    {
+      "task": 0,
+      "init_state": 0,
+      "seed": 42,
+      "noise_seed": 42,
+      "success": true,
+      "steps": 82
+    },
+    {
+      "task": 0,
+      "init_state": 1,
+      "seed": 43,
+      "noise_seed": 1042,
+      "success": true,
+      "steps": 83
+    },
+    {
+      "task": 1,
+      "init_state": 0,
+      "seed": 42,
+      "noise_seed": 42,
+      "success": true,
+      "steps": 112
+    },
+    {
+      "task": 1,
+      "init_state": 1,
+      "seed": 43,
+      "noise_seed": 1042,
+      "success": false,
+      "steps": 280
+    },
+    {
+      "task": 2,
+      "init_state": 0,
+      "seed": 42,
+      "noise_seed": 42,
+      "success": true,
+      "steps": 109
+    },
+    {
+      "task": 2,
+      "init_state": 1,
+      "seed": 43,
+      "noise_seed": 1042,
+      "success": true,
+      "steps": 93
+    },
+    {
+      "task": 3,
+      "init_state": 0,
+      "seed": 42,
+      "noise_seed": 42,
+      "success": true,
+      "steps": 85
+    },
+    {
+      "task": 3,
+      "init_state": 1,
+      "seed": 43,
+      "noise_seed": 1042,
+      "success": true,
+      "steps": 81
+    },
+    {
+      "task": 4,
+      "init_state": 0,
+      "seed": 42,
+      "noise_seed": 42,
+      "success": true,
+      "steps": 127
+    },
+    {
+      "task": 4,
+      "init_state": 1,
+      "seed": 43,
+      "noise_seed": 1042,
+      "success": true,
+      "steps": 131
+    },
+    {
+      "task": 5,
+      "init_state": 0,
+      "seed": 42,
+      "noise_seed": 42,
+      "success": false,
+      "steps": 280
+    },
+    {
+      "task": 5,
+      "init_state": 1,
+      "seed": 43,
+      "noise_seed": 1042,
+      "success": false,
+      "steps": 280
+    },
+    {
+      "task": 6,
+      "init_state": 0,
+      "seed": 42,
+      "noise_seed": 42,
+      "success": true,
+      "steps": 108
+    },
+    {
+      "task": 6,
+      "init_state": 1,
+      "seed": 43,
+      "noise_seed": 1042,
+      "success": true,
+      "steps": 112
+    },
+    {
+      "task": 7,
+      "init_state": 0,
+      "seed": 42,
+      "noise_seed": 42,
+      "success": true,
+      "steps": 127
+    },
+    {
+      "task": 7,
+      "init_state": 1,
+      "seed": 43,
+      "noise_seed": 1042,
+      "success": true,
+      "steps": 121
+    },
+    {
+      "task": 8,
+      "init_state": 0,
+      "seed": 42,
+      "noise_seed": 42,
+      "success": true,
+      "steps": 94
+    },
+    {
+      "task": 8,
+      "init_state": 1,
+      "seed": 43,
+      "noise_seed": 1042,
+      "success": false,
+      "steps": 280
+    },
+    {
+      "task": 9,
+      "init_state": 0,
+      "seed": 42,
+      "noise_seed": 42,
+      "success": true,
+      "steps": 121
+    },
+    {
+      "task": 9,
+      "init_state": 1,
+      "seed": 43,
+      "noise_seed": 1042,
+      "success": true,
+      "steps": 120
+    }
+  ],
+  "quality_chunk_ms": [
+    654.2060870015121,
+    666.3036390000343,
+    628.2008160014811,
+    628.0968370010669,
+    698.2881769999949,
+    652.1464430006745,
+    647.2364870005549,
+    643.0045319993951,
+    653.3668110005237,
+    760.1100410010986,
+    598.8726779996796,
+    695.4842879986245,
+    655.5412469988369,
+    667.0310999998037,
+    533.4451549988444,
+    632.7589609991264,
+    640.989539999282,
+    582.9239539998525,
+    493.7412529998255,
+    436.8047629995999,
+    602.2199180006282,
+    664.8165400001744,
+    528.0638300009741,
+    627.9136789999029,
+    472.54339900064224,
+    461.3094810010807,
+    625.1515499989182,
+    586.7196470007912,
+    494.9140240005363,
+    458.19460500024434,
+    443.3475660007389,
+    449.05905300038285,
+    634.5724099992367,
+    629.4708790010191,
+    631.0435449995566,
+    640.209192999464,
+    623.3987420000631,
+    613.2566519991087,
+    509.38979999955336,
+    625.4390560006868,
+    624.9919720012258,
+    642.966917999729,
+    478.2255909995001,
+    415.20833799950196,
+    433.24852400110103,
+    407.5193920016318,
+    428.1278170001315,
+    444.84298700081126,
+    415.9626689997822,
+    408.2919070006028,
+    409.48020099858695,
+    419.90723900016746,
+    429.6400139992329,
+    409.07712599982915,
+    414.0893090007012,
+    400.74174599976686,
+    400.2949980003905,
+    401.41629800018563,
+    406.11148700008926,
+    403.94241499961936,
+    412.7393259987002,
+    408.0303869995987,
+    409.1489359998377,
+    407.1701529992424,
+    402.2453139987192,
+    405.8870709995972
+  ]
+}

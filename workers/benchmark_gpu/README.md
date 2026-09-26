@@ -19,8 +19,11 @@ private connection configuration, or credentials belong in this directory.
 - Timing includes checkpoint preprocessing, CPU/GPU copies, all ten denoising
   steps, postprocessing, and C++ RPC or custom engine dispatch where used. It
   excludes simulator stepping and camera acquisition.
-- Startup is cached, in-process model/processor setup, including quantization;
-  imports, downloads, first-inference warmup and subprocess launch are excluded.
+- Startup is cached runtime initialization timed inside the harness process. It
+  includes model/processor setup, quantization, C++ server launch and engine-worker
+  initialization where applicable. Top-level Python imports, downloads and the
+  harness's first-inference warmup are excluded; engine-internal profiling is
+  included. This is not process-start-to-first-action time.
 - Each candidate gets a fresh process. NVIDIA memory sampling tracks the process
   and its children at 100 ms intervals. This is a sampled peak, not an exact
   allocator maximum. PyTorch allocator counters are recorded separately.
