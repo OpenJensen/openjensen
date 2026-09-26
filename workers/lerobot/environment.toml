@@ -1,0 +1,19 @@
+# Candidate environment only. Not installed, resolved or verified on the Windows GPU.
+schema_version = 1
+backend = "lerobot"
+status = "planned"
+python = "3.12.14"
+lerobot = "0.6.1"
+torch = "2.11.0"
+torchvision = "0.26.0"
+transformers = "5.5.4"
+huggingface_hub = "1.33.0"
+torchcodec = "0.11.1"
+cuda_wheel_variant = "cu128"
+model = "lerobot/smolvla_libero"
+model_revision = "31d453f7edd78c839a8bbc39744a292686daf0de"
+
+[linux_simulation]
+status = "requires_supported_target_and_validation"
+hf_libero = "0.1.4"
+mujoco = "3.8.1"

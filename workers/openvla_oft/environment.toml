@@ -1,0 +1,13 @@
+# Native backend candidate, not a LeRobot adapter and not installed.
+schema_version = 1
+backend = "openvla_oft"
+status = "planned"
+python = "3.10.21"
+repository = "https://github.com/moojink/openvla-oft"
+revision = "e4287e94541f459edc4feabc4e181f537cd569a8"
+torch = "2.2.0"
+torchvision = "0.17.0"
+torchaudio = "2.2.0"
+tensorflow = "2.15.0"
+transformers_fork = "moojink/transformers-openvla-oft"
+# Resolve an immutable Transformers fork commit and all native dependencies in OFT-001.
