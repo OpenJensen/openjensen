@@ -14,9 +14,12 @@ promotes evidence. Planned policy operations have no backend and cannot run.
 
 The metadata adapter uses CPU only. Historical macOS live public HF metadata
 intake and synthetic local fixture checks have separate target evidence.
-Windows local fixture evidence does not establish Windows live HF intake,
-Linux behavior, media validation, native policy execution or GPU support.
-Linux CPU metadata remains untested until native evidence is recorded.
+Windows local fixture evidence is separate from pinned public-HF live metadata
+intake at `f7f9a41`, verified through the web transport, CLI and a fresh process.
+The latter does not establish interactive-browser rendering or media validation.
+Linux local CPU metadata has fixture CI evidence at `6319c09`; later Parquet
+preview and local-hardening revisions have no Linux verification. Linux public-HF
+intake remains untested. None of these records establish native policy/GPU support.
 No hardware probing or ML imports occur when retrieving capabilities.
 
 Local intake is disabled unless a root is configured. Enabling it does not prove

@@ -43,13 +43,22 @@ def test_evidence_is_scoped_to_os_device_and_source():
     local, hub = items["dataset.inspect.local"], items["dataset.inspect"]
     assert target(local, "windows").evidence_state == "fixture"
     assert "API-001.md" in target(local, "windows").evidence_refs[0]
-    assert target(hub, "windows").support == "untested"
-    assert target(hub, "windows").evidence_state == "untested"
+    assert target(hub, "windows").support == "supported"
+    assert target(hub, "windows").evidence_state == "live_source"
+    assert "INT-001.md" in target(hub, "windows").evidence_refs[0]
+    assert "f7f9a41" in target(hub, "windows").reason
+    assert "No interactive-browser" in target(hub, "windows").reason
     assert target(hub, "macos").evidence_state == "live_source"
     assert target(local, "macos").evidence_state == "fixture"
+    assert target(local, "linux").support == "supported"
+    assert target(local, "linux").evidence_state == "fixture"
+    assert "FND-003.md" in target(local, "linux").evidence_refs[0]
+    assert "6319c09" in target(local, "linux").reason
+    assert "unverified on Linux" in target(local, "linux").reason
+    assert target(hub, "linux").support == "untested"
+    assert target(hub, "linux").evidence_state == "untested"
+    assert target(hub, "linux").evidence_refs == []
     for item in [local, hub]:
-        assert target(item, "linux").support == "untested"
-        assert target(item, "linux").evidence_refs == []
         for row in item.targets:
             if row.device != "cpu":
                 assert row.support == "unsupported"

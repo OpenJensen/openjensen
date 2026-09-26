@@ -7,6 +7,8 @@ from vla_platform.contracts import Capability, CapabilityTarget
 
 BASELINE = "prep:docs/tasks/evidence/2026-09-26-foundation-intake.md"
 WINDOWS_API = "prep:docs/tasks/evidence/2026-09-26-windows-phase1-API-001.md"
+WINDOWS_INTAKE = "prep:docs/tasks/evidence/2026-09-26-windows-phase1-INT-001.md"
+APPLICATION_CI = "prep:docs/tasks/evidence/2026-09-26-windows-phase1-FND-003.md"
 OPERATING_SYSTEMS = ("linux", "windows", "macos")
 DEVICES = ("cpu", "cuda", "mps")
 HOST_SYSTEMS = {"Linux", "Windows", "Darwin"}
@@ -33,6 +35,20 @@ def _targets(*, metadata: bool, local: bool = False) -> list[CapabilityTarget]:
                 elif operating_system == "windows" and local:
                     support, evidence, refs = "supported", "fixture", [WINDOWS_API]
                     reason = "Windows CPU metadata worker ran with synthetic local fixture data."
+                elif operating_system == "windows":
+                    support, evidence, refs = "supported", "live_source", [WINDOWS_INTAKE]
+                    reason = (
+                        "Pinned public HF metadata intake on Windows CPU at f7f9a41; "
+                        "web transport, CLI and fresh-process persistence verified. "
+                        "No interactive-browser, media, policy or GPU validation."
+                    )
+                elif operating_system == "linux" and local:
+                    support, evidence, refs = "supported", "fixture", [APPLICATION_CI]
+                    reason = (
+                        "Linux CPU local metadata fixture passed CI at 6319c09. "
+                        "Later Parquet preview/local-hardening revisions are unverified on Linux; "
+                        "no public-HF, policy or GPU validation."
+                    )
             targets.append(
                 CapabilityTarget(
                     operating_system=operating_system,
