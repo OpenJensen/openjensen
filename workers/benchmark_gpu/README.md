@@ -155,6 +155,11 @@ patch tests run without GPU dependencies. Keep raw result JSON, action arrays,
 logs, dependency freezes, hashes and measurement commands alongside each report.
 
 Latest committed measurements: [September 26 evidence](evidence/2026-09-26/REPORT.md).
+Each host's `actions.tar.gz` contains the saved FP32 action arrays beside the
+corresponding result paths. Extract it into that host's evidence directory to
+rerun `compare_results.py` without loading a model. Input fixtures and complete
+execution logs remain in the local run archive; their hashes identify the paired
+inputs. The action archives contain no model weights.
 
 RTX 3070 TensorRT-LLM setup is deferred by user decision: the host drive had
 2.2 GiB free and WSL 6.6 GiB before cleaning this task's temporary transfer
