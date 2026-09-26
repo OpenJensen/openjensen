@@ -43,6 +43,9 @@ packed ModelOpt execution and verified deployment packages remain open.
 The [native acceptance contract](docs/native-acceptance.md) describes the repaired
 GGUF checks, complete memory coverage, Linux runtime fingerprints and fresh-process
 package verification. Its CPU regressions are separate from hardware/model evidence.
+The separate [LIBERO Spatial adapter](docs/spatial-application.md) shares the
+native/CPP observation implementation, verifies offline policy assets and uses
+paired native BF16/floating controls. Hardware acceptance remains a required run.
 
 ## Testing and benchmarking
 

@@ -35,6 +35,10 @@ with TemporaryDirectory(prefix="firebird-browser-tests-") as data_dir:
                     }
                     for ident, label in [
                         ("browser-success", "Synthetic CPU fixture — not model evidence"),
+                        (
+                            "browser-delayed-success",
+                            "Delayed synthetic fixture — not model evidence",
+                        ),
                         ("browser-slow", "slow fixture"),
                         ("browser-failure", "Synthetic failure fixture"),
                     ]

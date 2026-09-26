@@ -14,6 +14,11 @@ import {
 
 type Preferences = {
   mode: "engine" | "libero";
+  suite: "libero_object" | "libero_spatial";
+  taskIds: string;
+  parityProfile: string;
+  parityRmse: string;
+  parityMaxError: string;
   repetitions: number;
   steps: number;
   warmup: number;
@@ -32,6 +37,11 @@ type Preferences = {
 };
 const initial: Preferences = {
   mode: "engine",
+  suite: "libero_object",
+  taskIds: "0,1,2,3,4,5,6,7,8,9",
+  parityProfile: "",
+  parityRmse: "",
+  parityMaxError: "",
   repetitions: 10,
   steps: 500,
   warmup: 3,
@@ -95,12 +105,15 @@ export function WorkflowPanel({
   useEffect(() => {
     setLoaded(false);
     try {
-      setPreferences({
+      const restored: Preferences = {
         ...initial,
         ...JSON.parse(
           localStorage.getItem(`firebird.workflow.${projectId}`) ?? "{}",
         ),
-      });
+      };
+      // Restore saved Spatial preferences from before the protocol was restricted.
+      setPreferences(restored.suite === "libero_spatial"
+        ? { ...restored, mode: "libero", steps: 280 } : restored);
     } catch {
       setPreferences(initial);
     }
@@ -155,6 +168,10 @@ export function WorkflowPanel({
         throw new Error("Select a project and a configured execution target.");
       const evaluation: NonNullable<PolicyRequest["evaluation"]> = {
         mode: preferences.mode,
+        suite: preferences.suite,
+        ...(preferences.suite === "libero_spatial"
+          ? { task_ids: states(preferences.taskIds) }
+          : {}),
         repetitions: preferences.repetitions,
         warmups: preferences.warmup,
         task_id: preferences.task,
@@ -163,6 +180,17 @@ export function WorkflowPanel({
         steps: preferences.steps,
         seed: 42,
       };
+      if (preferences.suite === "libero_spatial") {
+        if (!preferences.parityProfile.trim() || !preferences.parityRmse.trim() || !preferences.parityMaxError.trim())
+          throw new Error("Set your approved floating-policy parity profile and tolerances in Settings & diagnostics.");
+        const rmse = Number(preferences.parityRmse);
+        const maximum = Number(preferences.parityMaxError);
+        if (!Number.isFinite(rmse) || !Number.isFinite(maximum) || rmse < 0 || maximum < 0)
+          throw new Error("Parity tolerances must be finite, non-negative numbers.");
+        evaluation.parity_limits = {
+          profile: preferences.parityProfile.trim(), max_rmse: rmse, max_abs_error: maximum,
+        };
+      }
       const body: PolicyRequest = {
         operation:
           stage === "Fine-tune"
@@ -307,9 +335,47 @@ export function WorkflowPanel({
             </label>
             <h2>Evaluation</h2>
             <label>
+              Task suite
+              <select
+                value={preferences.suite}
+                onChange={(e) => {
+                  const suite = e.target.value as Preferences["suite"];
+                  setPreferences((old) => ({ ...old, suite,
+                    mode: suite === "libero_spatial" ? "libero" : old.mode,
+                    steps: suite === "libero_spatial" ? 280 : 500 }));
+                }}
+              >
+                <option value="libero_object">LIBERO Object (legacy policy)</option>
+                <option value="libero_spatial">LIBERO Spatial (pinned SmolVLA policy)</option>
+              </select>
+            </label>
+            {preferences.suite === "libero_spatial" && (
+              <>
+                <label>
+                  Spatial task IDs
+                  <input value={preferences.taskIds} onChange={(e) => update("taskIds", e.target.value)} />
+                </label>
+                <p className="muted">Use unique task IDs 0–9. Every task uses the same paired search and final states. Hardware acceptance is still required.</p>
+                <label>
+                  Approved parity profile
+                  <input value={preferences.parityProfile} onChange={(e) => update("parityProfile", e.target.value)} placeholder="Name your reviewed tolerance profile" />
+                </label>
+                <label>
+                  Maximum action RMSE
+                  <input type="number" min="0" step="any" value={preferences.parityRmse} onChange={(e) => update("parityRmse", e.target.value)} />
+                </label>
+                <label>
+                  Maximum absolute action error
+                  <input type="number" min="0" step="any" value={preferences.parityMaxError} onChange={(e) => update("parityMaxError", e.target.value)} />
+                </label>
+                <p className="muted">Declare reviewed tolerances before running. Native and floating C++ actions must pass this check before compression starts; no universal tolerance is assumed.</p>
+              </>
+            )}
+            <label>
               Protocol
               <select
                 value={preferences.mode}
+                disabled={preferences.suite === "libero_spatial"}
                 onChange={(e) =>
                   update("mode", e.target.value as Preferences["mode"])
                 }
@@ -319,9 +385,9 @@ export function WorkflowPanel({
               </select>
             </label>
             <p className="muted">
-              Engine diagnostics check loading, finite actions and timing.
-              Task-quality selection requires compatible LIBERO episodes and
-              your acceptance limits.
+              {preferences.suite === "libero_spatial"
+                ? "Spatial uses paired LIBERO episodes and the full 280-step benchmark horizon."
+                : "Engine diagnostics check loading, finite actions and timing. Task-quality selection requires compatible LIBERO episodes and your acceptance limits."}
             </p>
             <label>
               Timed predictions
@@ -345,16 +411,13 @@ export function WorkflowPanel({
             </label>
             {preferences.mode === "libero" && (
               <>
-                <label>
-                  LIBERO object task
-                  <input
-                    type="number"
-                    min="0"
-                    max="9"
-                    value={preferences.task}
-                    onChange={(e) => update("task", Number(e.target.value))}
-                  />
-                </label>
+                {preferences.suite === "libero_object" && (
+                  <label>
+                    LIBERO object task
+                    <input type="number" min="0" max="9" value={preferences.task}
+                      onChange={(e) => update("task", Number(e.target.value))} />
+                  </label>
+                )}
                 <label>
                   Search initial states
                   <input
@@ -376,6 +439,7 @@ export function WorkflowPanel({
                     min="1"
                     max="500"
                     value={preferences.steps}
+                    disabled={preferences.suite === "libero_spatial"}
                     onChange={(e) => update("steps", Number(e.target.value))}
                   />
                 </label>

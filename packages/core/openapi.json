@@ -640,6 +640,16 @@
             "title": "Mode",
             "type": "string"
           },
+          "parity_limits": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ParityLimits"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "repetitions": {
             "default": 10,
             "maximum": 1000.0,
@@ -661,12 +671,37 @@
             "title": "Steps",
             "type": "integer"
           },
+          "suite": {
+            "default": "libero_object",
+            "enum": [
+              "libero_object",
+              "libero_spatial"
+            ],
+            "title": "Suite",
+            "type": "string"
+          },
           "task_id": {
             "default": 0,
             "maximum": 9.0,
             "minimum": 0.0,
             "title": "Task Id",
             "type": "integer"
+          },
+          "task_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "maxItems": 10,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Ids"
           },
           "warmups": {
             "default": 3,
@@ -1216,6 +1251,35 @@
           }
         },
         "title": "LocalPreviewLimits",
+        "type": "object"
+      },
+      "ParityLimits": {
+        "additionalProperties": false,
+        "description": "Operator-declared tolerances; no unmeasured universal default.",
+        "properties": {
+          "max_abs_error": {
+            "minimum": 0.0,
+            "title": "Max Abs Error",
+            "type": "number"
+          },
+          "max_rmse": {
+            "minimum": 0.0,
+            "title": "Max Rmse",
+            "type": "number"
+          },
+          "profile": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Profile",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile",
+          "max_rmse",
+          "max_abs_error"
+        ],
+        "title": "ParityLimits",
         "type": "object"
       },
       "PolicyArtifact": {

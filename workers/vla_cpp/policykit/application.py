@@ -113,6 +113,24 @@ def import_policy(job):
     if reader.fields["general.architecture"].contents() != "smolvla":
         raise ValueError("Only SmolVLA is supported by this worker")
     validate_master(reader)
+    if metadata.get("task") == "libero_spatial":
+        from .spatial_protocol import copy_assets
+
+        configured = job.get("source") or {}
+        bundle = configured.get("evaluation_bundle")
+        expected = configured.get("evaluation_bundle_sha256")
+        if not bundle or not expected or sha256(Path(bundle) / "spatial-assets.json") != expected:
+            raise ValueError(
+                "Spatial import requires its configured, hash-pinned evaluation bundle"
+            )
+        assets = copy_assets(Path(bundle), output, reference=True)
+        if assets.get("floating_gguf_sha256") != sha256(output / "model.gguf"):
+            raise ValueError("Spatial source GGUF differs from the prepared reference binding")
+        metadata.update(
+            native_model_sha256=assets["checkpoint"]["weights_sha256"],
+            model_sha256=sha256(output / "model.gguf"),
+            floating_model_sha256=sha256(output / "model.gguf"),
+        )
     tokenizer = job["runtime"].get("tokenizer")
     if tokenizer:
         source = Path(tokenizer)
@@ -179,10 +197,15 @@ def quantize_policy(job):
     (bundle / "manifest.json").rename(bundle / "conversion-manifest.json")
     if (source / "tokenizer").exists():
         shutil.copytree(source / "tokenizer", bundle / "tokenizer")
+    if manifest["metadata"].get("task") == "libero_spatial":
+        from .spatial_protocol import copy_assets
+
+        copy_assets(source, bundle, reference=False)
     metadata = {
         **manifest["metadata"],
         "precision": precision,
         "weight_bytes": converted["deployed_weight_bytes"],
+        "model_sha256": sha256(bundle / "model.gguf"),
         "deployment_verified": False,
     }
     return {
@@ -342,6 +365,10 @@ def engine(job):
 
 
 def evaluate_policy(job):
+    if job["parameters"]["evaluation"].get("suite") == "libero_spatial":
+        from .spatial_application import evaluate_policy as spatial_evaluate
+
+        return spatial_evaluate(job)
     report = engine(job)
     evaluation = job["parameters"]["evaluation"]
     if evaluation["mode"] == "libero":
@@ -465,8 +492,13 @@ def evaluate_package(job, package):
         + repr(str(Path(__file__).resolve().parents[1]))
         + "); from policykit.application import main; raise SystemExit(main())"
     )
+    run_child = subprocess.run
+    if job["parameters"]["evaluation"].get("suite") == "libero_spatial":
+        from .spatial_application import run_package_process
+
+        run_child = run_package_process
     with (output / "worker.log").open("w") as log:
-        completed = subprocess.run(
+        completed = run_child(
             [sys.executable, "-c", bootstrap, str(request.resolve()), str(result.resolve())],
             cwd=output,
             env={**os.environ, "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"},
@@ -505,6 +537,18 @@ def run_policy(job):
     if reserved.intersection(manifest["files"]):
         raise ValueError("Artifact contains reserved export evidence names")
     output = copied(source, Path(job["output_dir"]) / "package-pending")
+    spatial = job["parameters"]["evaluation"].get("suite") == "libero_spatial"
+    if spatial:
+        from .spatial_protocol import REFERENCE_FILE, verify_assets
+
+        assets = verify_assets(output)
+        if assets["reference_weights"]:
+            (output / REFERENCE_FILE).unlink()
+            assets["files"].pop(REFERENCE_FILE)
+            assets["reference_weights"] = False
+            atomic_json(output / "spatial-assets.json", assets)
+            publish(output, manifest["metadata"], "Spatial candidate payload")
+            manifest = verify(output)
     tested_manifest_sha = sha256(output / "manifest.json")
     report = evaluate_package(job, output)
     # The evaluator may add reports outside the package, never mutate its input.
@@ -523,11 +567,40 @@ def run_policy(job):
             or isinstance(reference.get("success_rate"), bool)
             or not math.isfinite(reference["success_rate"])
             or not 0 <= reference["success_rate"] <= 1
-            or report["runtime"] != reference["runtime"]
-            or report["complete_episodes"] != len(job["parameters"]["evaluation"]["final_states"])
+            or (not spatial and report["runtime"] != reference["runtime"])
+            or (
+                not spatial
+                and report["complete_episodes"]
+                != len(job["parameters"]["evaluation"]["final_states"])
+            )
             or report["success_rate"] < reference["success_rate"] - limits["max_success_drop"]
         ):
             raise ValueError("Final package rerun no longer matches the paired reference")
+        if spatial:
+            from .spatial_application import paired
+
+            selected = next(
+                (x for x in job.get("prior_reports", []) if x.get("stage") == "final-evaluation"),
+                None,
+            )
+            if (
+                not paired(report, reference, job["parameters"]["evaluation"])
+                or reference.get("backend") != "native-bf16"
+                or report.get("backend") != "cpp"
+                or not selected
+                or report["runtime"] != selected.get("runtime")
+            ):
+                raise ValueError("Spatial package protocol or backend runtime changed")
+            control = next(
+                (x for x in job.get("prior_reports", []) if x.get("stage") == "final-control"), None
+            )
+            if (
+                not paired(report, control, job["parameters"]["evaluation"])
+                or control.get("backend") != "cpp"
+                or control.get("backend_configuration") != "cpp-bf16"
+                or report["success_rate"] < control["success_rate"] - limits["max_success_drop"]
+            ):
+                raise ValueError("Spatial package no longer retains floating-control quality")
     atomic_json(output / "reload-verification.json", report)
     atomic_json(output / "runtime-lock.json", report["runtime"])
     atomic_json(

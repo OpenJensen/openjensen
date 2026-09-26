@@ -7,7 +7,12 @@ vLLM and TensorRT-LLM adapters execute the full policy using native PyTorch
 kernels inside those engines. They do not establish optimized engine-kernel or
 quantized-engine support.
 
-This worker is independent of the application workspace and training worker.
+The benchmark CLI remains separate from the application workflow and training worker.
+Native/CPP observation-to-action execution is shared with the
+[Spatial application adapter](../vla_cpp/docs/spatial-application.md) through
+`policykit.spatial_runtime`. CLI arguments remain unchanged; its model snapshots
+must already be cached locally. The application adapter adds strict package,
+protocol and acceptance gates; historical benchmark evidence is not promoted.
 Use Python 3.11 for native/vLLM and a separate Python 3.12 environment for
 TensorRT-LLM. Do not install these dependency sets together. No model weights,
 private connection configuration, or credentials belong in this directory.

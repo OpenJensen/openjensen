@@ -84,3 +84,32 @@ performed. Windows/Linux browser execution remains a CI check, not a result from
 this macOS run. Actual policy training, closed-loop simulation, target-hardware
 limits, deployment-package policy execution and UI model-quality acceptance
 remain outside this fixture evidence.
+
+## Bounded worker completion waits — Spatial integration follow-up
+
+Windows CI at Spatial head `ecca784bb4115ae4c19faa5fefd4c14b7ec1dc0b`
+exposed Playwright's implicit five-second assertion limit in the real subprocess
+journeys: the success/retry assertions observed `running` when the limit expired.
+The push run finished with 51 passed / 1 failed; the PR run finished with 50 passed
+/ 2 failed at the same success-completion waits. Those logs show premature test
+completion checks, not an observed terminal worker error. They do not establish
+whether either original interrupted job would eventually have succeeded.
+
+A deterministic seven-second import delay was added to the test-only success
+runtime used after an intentional failure. Before the wait repair, this reproduced
+`Timeout 5000ms` with `Received: running` locally. With the repair, all four real
+workflow tests passed without retries (12.0 seconds total). The delayed retry took
+10.5 seconds and retained its API/CLI equality, UI result, and historical-failure
+assertions. The same test checks that asking a known failed job to succeed rejects
+with its terminal-state diagnostic rather than waiting for a timeout.
+
+All intake, worker-start, success, failure and cancellation observations now use
+a shared 45-second API observer. Unexpected terminal results fail immediately;
+timeouts include the job ID, status, stage, error and last update. Individual
+HTTP reads are bounded by five seconds or the remaining observation budget.
+CLI assertions still read the real final records, without repeatedly starting
+Python during status polling. The workflow-only test budget is 120 seconds so a
+failure/retry or start/cancel pair can each receive its full observation bound.
+Application execution deadlines and other browser-test deadlines are unchanged.
+Focused Python fixture lint/format checks passed. New Windows CI remains required;
+no hardware, model-quality or real-policy acceptance follows from this fixture.

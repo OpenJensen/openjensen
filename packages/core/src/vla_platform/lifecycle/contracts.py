@@ -14,8 +14,19 @@ class Precision(StrictRecord):
     vision: Literal["Q8_0"] | None = None
 
 
+class ParityLimits(StrictRecord):
+    """Operator-declared tolerances; no unmeasured universal default."""
+
+    profile: str = Field(min_length=1, max_length=120)
+    max_rmse: float = Field(ge=0, allow_inf_nan=False)
+    max_abs_error: float = Field(ge=0, allow_inf_nan=False)
+
+
 class Evaluation(StrictRecord):
     mode: Literal["engine", "libero"] = "engine"
+    suite: Literal["libero_object", "libero_spatial"] = "libero_object"
+    task_ids: list[int] | None = Field(default=None, min_length=1, max_length=10)
+    parity_limits: ParityLimits | None = None
     warmups: int = Field(default=3, ge=1, le=100)
     repetitions: int = Field(default=10, ge=2, le=1000)
     task_id: int = Field(default=0, ge=0, le=9)
@@ -26,6 +37,21 @@ class Evaluation(StrictRecord):
 
     @model_validator(mode="after")
     def disjoint(self):
+        if self.suite == "libero_object" and self.task_ids is not None:
+            raise ValueError("Object evaluation uses task_id, not task_ids")
+        if self.suite == "libero_spatial":
+            if self.mode != "libero":
+                raise ValueError("Spatial evaluation requires paired LIBERO episodes (mode=libero)")
+            if "steps" not in self.model_fields_set:
+                self.steps = 280
+            if self.steps != 280:
+                raise ValueError("Spatial evaluation requires the full 280-step benchmark horizon")
+            if self.task_ids is None:
+                self.task_ids = list(range(10))
+            if len(self.task_ids) != len(set(self.task_ids)) or any(
+                task < 0 or task > 9 for task in self.task_ids
+            ):
+                raise ValueError("Spatial task IDs must be unique integers in 0..9")
         for states in (self.initial_states, self.final_states):
             if len(states) != len(set(states)) or any(x < 0 or x > 999 for x in states):
                 raise ValueError("Evaluation state IDs must be unique integers in 0..999")
@@ -84,6 +110,8 @@ class PolicyRequest(StrictRecord):
             if not self.dataset_job_id:
                 raise ValueError("Fine-tuning requires a completed dataset intake")
         elif self.operation == "policy.workflow":
+            if self.evaluation.suite == "libero_spatial" and self.evaluation.parity_limits is None:
+                raise ValueError("Spatial workflows require an explicit parity tolerance profile")
             if sum((bool(self.source_id), bool(self.artifact_id), self.training is not None)) != 1:
                 raise ValueError("Choose one workflow input: source, artifact, or training recipe")
             if self.training is not None and not self.dataset_job_id:
