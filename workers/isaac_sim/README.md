@@ -4,6 +4,9 @@ Records simulations with Isaac's RTX real-time renderer (RT2). The bundled
 falling-cube scene produced a verified recording on GCP L4. Offline path
 tracing is not required.
 
+For calibrated ACT/SmolVLA control through a separate inference VM, see
+[the rollout adapter](ROLLOUT.md).
+
 ```text
 YAML -> service -> Isaac adapter -> USD physics + RGB frames
                -> video adapter -> FFmpeg -> MP4

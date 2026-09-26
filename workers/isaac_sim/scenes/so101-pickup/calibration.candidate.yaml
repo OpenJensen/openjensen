@@ -1,0 +1,11 @@
+# Diagnostic candidate. Validation failed; do not enable robot control.
+api_version: simulation.joints/v1alpha1
+status: unverified
+source: evidence/calibration/report.json
+joints:
+  shoulder_pan: {sim_rad: [-0.29536340675449985, 1.0671441617081006], policy: [-16.923076629638672, 61.14285659790039]}
+  shoulder_lift: {sim_rad: [-1.9653970466592738, 0.4941746325681947], policy: [-105.31867980957031, 35.60439682006836]}
+  elbow_flex: {sim_rad: [-0.8191916921987373, 1.589746237329436], policy: [-41.4505500793457, 96.57142639160156]}
+  wrist_flex: {sim_rad: [0.3114748110076232, 1.51594377577171], policy: [16.30769157409668, 85.31867980957031]}
+  wrist_roll: {sim_rad: [1.5186673948649405, 3.5163981552904504], policy: [-12.879120826721191, 101.5824203491211]}
+  gripper: {sim_rad: [0.04732619903995551, 0.6368405981943722], policy: [0.0, 44.0230827331543]}

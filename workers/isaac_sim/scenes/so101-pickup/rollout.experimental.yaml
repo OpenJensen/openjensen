@@ -1,0 +1,26 @@
+api_version: simulation.rollout/v1alpha1
+scene:
+  uri: scene.experimental.usda
+  camera: /World/Cameras/Front
+  articulation: /World/Robot/joints/root_joint
+  joints:
+  - shoulder_pan
+  - shoulder_lift
+  - elbow_flex
+  - wrist_flex
+  - wrist_roll
+  - gripper
+capture:
+  width: 640
+  height: 360
+control:
+  fps: 30
+  physics_hz: 120
+  steps: 150
+  execute_steps: 100
+policy:
+  endpoint: http://127.0.0.1:8080
+  model_id: sha256:6312d47c28ffac8c2412deeb2d5327e15fb639b25e91f7e17329fc31f4a0ba50
+  task: Pick up the cube and place it in the box
+  timeout_seconds: 120
+calibration: calibration.experimental.yaml

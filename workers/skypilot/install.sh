@@ -12,4 +12,4 @@ PY
 
 "$SIM_PYTHON" -m venv "$SIM_DIR/.venv"
 "$SIM_DIR/.venv/bin/python" -m pip install -r "$SIM_DIR/requirements.txt"
-printf 'SkyPilot installed. Authenticate GCP, then run bash sky.sh configure.\n'
+printf 'SkyPilot installed. Follow README.md, or RUNNER.md for the shared account.\n'

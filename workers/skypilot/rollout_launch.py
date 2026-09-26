@@ -1,0 +1,346 @@
+"""Validate local rollout inputs before submitting a managed GPU Job Group."""
+
+import argparse
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import uuid
+from enum import Enum
+from pathlib import Path
+from urllib.parse import urlsplit
+
+import yaml
+
+_ROOT = Path(__file__).resolve().parent
+_WORKER = (_ROOT / "../isaac_sim").resolve()
+_REGION = "us-central1"
+_IMAGE_PATTERN = r"[^\s]+@sha256:[0-9a-f]{64}"
+_READY_RUN_SECONDS = 1800
+_TEST_WALL_SECONDS = 7200
+_EXPERIMENTAL_MAX_STEPS = 300
+_EXPERIMENTAL_L4_TYPES = {"g2-standard-12", "g2-standard-16", "g2-standard-32"}
+_EXPERIMENTAL_ZONES = {f"{_REGION}-{suffix}" for suffix in ("a", "b", "c", "f")}
+_CANCEL_SECONDS = 120
+_RESOURCE_TYPES = {
+    "isaac": ("g2-standard-16", "L4:1", False),
+    "vla": ("a3-highgpu-1g", "H100:1", True),
+}
+
+
+class _Mode(Enum):
+    ROLLOUT = "rollout"
+    READINESS = "readiness"
+    EXPERIMENTAL = "experimental"
+
+
+def _read(path):
+    text = path.read_text()
+    if "CHANGE_ME" in text:
+        raise ValueError(f"Replace CHANGE_ME placeholders in {path}")
+    return list(yaml.safe_load_all(text))
+
+
+def _inside(value, root, label):
+    path = Path(value)
+    if path.is_absolute() or ".." in path.parts:
+        raise ValueError(f"{label} must be relative to the worker directory")
+    path = (root / path).resolve()
+    if not path.is_relative_to(root) or not path.is_file():
+        raise ValueError(f"{label} is not a worker file: {value}")
+    return path
+
+
+def _network(path):
+    documents = _read(path)
+    if len(documents) != 1 or not isinstance(documents[0], dict):
+        raise ValueError("config.yaml must contain one mapping")
+    gcp = documents[0].get("gcp", {})
+    proxy = gcp.get("ssh_proxy_command", {})
+    if (
+        not gcp.get("vpc_name")
+        or not gcp.get("subnet_names")
+        or gcp.get("use_internal_ips") is not True
+        or not isinstance(proxy, dict)
+        or _REGION not in proxy
+    ):
+        raise ValueError(
+            "Configure the shared VPC, central subnet, internal IPs and us-central1 IAP proxy first"
+        )
+    jobs = documents[0].get("jobs", {})
+    controller = jobs.get("controller", {}).get("resources", {})
+    if (
+        controller.get("infra") != f"gcp/{_REGION}"
+        or jobs.get("force_disable_cloud_bucket") is not True
+    ):
+        raise ValueError(
+            "Pin jobs.controller.resources.infra to gcp/us-central1 and set "
+            "jobs.force_disable_cloud_bucket: true"
+        )
+
+
+def _variants(resources, name, mode):
+    if "any_of" in resources:
+        raise ValueError("Use experimental ordered L4 instance_type fallbacks")
+    if "ordered" not in resources:
+        return [resources]
+    if name != "isaac" or mode != _Mode.EXPERIMENTAL:
+        raise ValueError("Ordered resources require experimental Isaac motion")
+    ordered = resources["ordered"]
+    if not isinstance(ordered, list) or not ordered:
+        raise ValueError("Ordered resources must list instance_type fallbacks")
+    if any(not isinstance(item, dict) or set(item) != {"instance_type"} for item in ordered):
+        raise ValueError("Ordered L4 fallbacks may override only instance_type")
+    return [resources | item for item in ordered]
+
+
+def _valid_infra(value, name, mode):
+    region = f"gcp/{_REGION}"
+    if value == region:
+        return True
+    if name != "isaac" or mode != _Mode.EXPERIMENTAL or not isinstance(value, str):
+        return False
+    parts = value.split("/")
+    return len(parts) == 3 and "/".join(parts[:2]) == region and parts[2] in _EXPERIMENTAL_ZONES
+
+
+def _tasks(documents, mode=_Mode.ROLLOUT):
+    if len(documents) != 3 or any(not isinstance(doc, dict) for doc in documents):
+        raise ValueError("Expected a Job Group header and two task mappings")
+    header = documents[0]
+    if header.get("execution") != "parallel" or header.get("primary_tasks") != ["isaac"]:
+        raise ValueError("The Job Group must run in parallel with primary_tasks: [isaac]")
+    tasks = {doc.get("name"): doc for doc in documents[1:]}
+    if set(tasks) != set(_RESOURCE_TYPES):
+        raise ValueError("Expected tasks named isaac and vla")
+    for name, (machine, accelerator, spot) in _RESOURCE_TYPES.items():
+        task = tasks[name]
+        resources = task.get("resources", {})
+        if "zone" in resources:
+            raise ValueError("Encode the zone in infra instead of setting both infra and zone")
+        machines = (
+            _EXPERIMENTAL_L4_TYPES if name == "isaac" and mode == _Mode.EXPERIMENTAL else {machine}
+        )
+        for resource in _variants(resources, name, mode):
+            if (
+                resource.get("instance_type") not in machines
+                or resource.get("accelerators") != accelerator
+                or resource.get("use_spot") is not spot
+                or not _valid_infra(resource.get("infra"), name, mode)
+            ):
+                raise ValueError(f"{name} must use its configured {_REGION} GPU resource")
+        if resources.get("ports"):
+            raise ValueError("Do not expose the policy server through public SkyPilot ports")
+        if Path(task.get("workdir", "")).resolve() != _WORKER:
+            raise ValueError(f"{name}.workdir must point to ../isaac_sim")
+    return tasks
+
+
+def _manifest(task, mode):
+    envs = task["envs"]
+    if envs.get("SIM_EXPERIMENTAL") and mode != _Mode.EXPERIMENTAL:
+        raise ValueError("SIM_EXPERIMENTAL requires --experimental")
+    image = envs.get("SIM_IMAGE", "")
+    if not re.fullmatch(_IMAGE_PATTERN, image):
+        raise ValueError("SIM_IMAGE must use an immutable @sha256 digest")
+    destination = urlsplit(envs.get("SIM_RESULTS_URI", ""))
+    if (
+        destination.scheme != "gs"
+        or not destination.netloc
+        or destination.query
+        or destination.fragment
+    ):
+        raise ValueError("SIM_RESULTS_URI must name a gs:// bucket prefix")
+    acceptance = os.environ.get("ACCEPT_EULA", envs.get("ACCEPT_EULA"))
+    if acceptance != "Y":
+        raise ValueError("Set ACCEPT_EULA=Y after accepting NVIDIA's container license")
+    envs["ACCEPT_EULA"] = acceptance
+    manifest = _inside(envs.get("SIM_MANIFEST", ""), _WORKER, "SIM_MANIFEST")
+    data = yaml.safe_load(manifest.read_text())
+    if not isinstance(data, dict):
+        raise ValueError("The rollout manifest must be a mapping")
+    # Paths must remain valid after syncing the worker into the container.
+    _inside(str(manifest.parent.relative_to(_WORKER) / data["calibration"]), _WORKER, "calibration")
+    _inside(str(manifest.parent.relative_to(_WORKER) / data["scene"]["uri"]), _WORKER, "scene.uri")
+    environment = os.environ | {"PYTHONPATH": str(_WORKER)}
+    command = [
+        sys.executable,
+        "-m",
+        "sim_worker.rollout",
+        "--manifest",
+        str(manifest),
+        "--validate-only",
+    ]
+    if mode == _Mode.EXPERIMENTAL:
+        steps = data["control"]["steps"]
+        if type(steps) is not int or not 0 < steps <= _EXPERIMENTAL_MAX_STEPS:
+            raise ValueError(f"Experimental steps must be within 1..{_EXPERIMENTAL_MAX_STEPS}")
+        command.append("--experimental")
+    if mode == _Mode.READINESS:
+        # Readiness validates schema and exports without authorizing robot motion.
+        evidence = manifest.parent / "evidence"
+        for name in ("dataset.json", "front-frame-000.jpg"):
+            _inside(str(evidence.relative_to(_WORKER) / name), _WORKER, "readiness evidence")
+        command = [
+            sys.executable,
+            "-c",
+            "from pathlib import Path; import sys; "
+            "from sim_worker.rollout.config import load; load(Path(sys.argv[1]))",
+            str(manifest),
+        ]
+    subprocess.run(command, env=environment, check=True)
+    return data
+
+
+def _checkpoint(task, manifest):
+    # Inspect exports with the shared CPU-only artifact validator.
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "../isaac_sim"))
+    from sim_worker.rollout.checkpoint import inspect_checkpoint
+
+    source = task.get("file_mounts", {}).get("~/vla-checkpoint")
+    if not isinstance(source, str):
+        raise ValueError("Mount a local exported checkpoint at ~/vla-checkpoint")
+    checkpoint = Path(source).expanduser().resolve()
+    if not checkpoint.is_dir():
+        raise ValueError(f"Checkpoint directory does not exist: {checkpoint}")
+    artifact = inspect_checkpoint(checkpoint)
+    envs = task["envs"]
+    if envs.get("MODEL_ID") != manifest["policy"]["model_id"]:
+        raise ValueError("VLA MODEL_ID must match the rollout policy.model_id")
+    if envs["MODEL_ID"] != artifact.model_id:
+        raise ValueError(
+            f"MODEL_ID must match the exported checkpoint fingerprint: {artifact.model_id}"
+        )
+    state_dim = int(envs.get("POLICY_STATE_DIM", 0))
+    if state_dim != len(manifest["scene"]["joints"]) or (
+        artifact.state_dim,
+        artifact.action_dim,
+    ) != (state_dim, state_dim):
+        raise ValueError("POLICY_STATE_DIM, checkpoint state/actions and rollout joints must match")
+    if envs.get("POLICY_CAMERA_KEY") != artifact.camera_key:
+        raise ValueError("POLICY_CAMERA_KEY must match the checkpoint camera")
+    if (manifest["capture"]["width"], manifest["capture"]["height"]) != (
+        artifact.width,
+        artifact.height,
+    ):
+        raise ValueError(
+            f"Rollout capture must match checkpoint dimensions: {artifact.width}x{artifact.height}"
+        )
+    action_steps = int(envs.get("POLICY_ACTION_STEPS", 0))
+    if not manifest["control"]["execute_steps"] <= action_steps <= artifact.chunk_size:
+        raise ValueError(
+            "POLICY_ACTION_STEPS must cover execute_steps "
+            "without exceeding the checkpoint chunk size"
+        )
+    print(
+        f"Checkpoint: {artifact.policy_type}, {artifact.width}x{artifact.height}, "
+        f"{artifact.model_id}"
+    )
+
+
+def _prepare(path, mode=_Mode.ROLLOUT):
+    if not os.environ.get("SIM_PROJECT_ID"):
+        raise ValueError("Set SIM_PROJECT_ID before launching")
+    _network(_ROOT / "config.yaml")
+    documents = _read(path)
+    tasks = _tasks(documents, mode)
+    manifest = _manifest(tasks["isaac"], mode)
+    _checkpoint(tasks["vla"], manifest)
+    # Discovery uses this submission's labels, never another experiment's server.
+    run_id = uuid.uuid4().hex
+    for name, task in tasks.items():
+        task["resources"].setdefault("labels", {}).update(
+            {"rollout-id": run_id, "rollout-role": name}
+        )
+        task["envs"]["ROLLOUT_ID"] = run_id
+    if mode == _Mode.READINESS:
+        documents[0]["name"] = f"isaac-ready-{run_id[:8]}"
+        tasks["isaac"]["envs"]["SIM_READY_TIMEOUT"] = str(_READY_RUN_SECONDS)
+        tasks["isaac"]["run"] = (
+            "set -euo pipefail\n"
+            'timeout --signal=TERM --kill-after=60 "$SIM_READY_TIMEOUT" '
+            "bash ~/sim-control/check_ready.sh\n"
+        )
+    if mode == _Mode.EXPERIMENTAL:
+        documents[0]["name"] = f"isaac-act-test-{run_id[:8]}"
+        tasks["isaac"]["envs"]["SIM_EXPERIMENTAL"] = "1"
+    if mode != _Mode.ROLLOUT:
+        for task in tasks.values():
+            task["resources"]["job_recovery"] = {"max_restarts_on_errors": 0}
+    return documents
+
+
+def _launch(documents, path, mode, options=()):
+    command = ["bash", str(_ROOT / "sky.sh"), "jobs", "launch", str(path), *options]
+    timeout = _TEST_WALL_SECONDS if mode != _Mode.ROLLOUT else None
+    if mode != _Mode.ROLLOUT and "--detach-run" in options:
+        name = documents[0]["name"]
+        print(
+            f"Detached {mode.value} requires monitoring: "
+            f"bash sky.sh jobs cancel --name {name} --yes",
+            flush=True,
+        )
+    try:
+        return subprocess.run(command, check=False, timeout=timeout).returncode
+    except (subprocess.TimeoutExpired, KeyboardInterrupt):
+        if mode != _Mode.ROLLOUT:
+            name = documents[0]["name"]
+            print(f"Cancelling {mode.value} group {name} after timeout/interruption.", flush=True)
+            subprocess.run(
+                ["bash", str(_ROOT / "sky.sh"), "jobs", "cancel", "--name", name, "--yes"],
+                check=True,
+                timeout=_CANCEL_SECONDS,
+            )
+        raise
+
+
+def _main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("task", nargs="?", type=Path, default=Path("rollout.local.yaml"))
+    parser.add_argument("--validate-only", action="store_true")
+    parser.add_argument("--yes", action="store_true", help="Skip SkyPilot's launch confirmation")
+    parser.add_argument("--detach-run", action="store_true", help="Return after submitting the job")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument(
+        "--check-ready",
+        dest="mode",
+        action="store_const",
+        const=_Mode.READINESS,
+        default=_Mode.ROLLOUT,
+        help="Test actual model inference across VMs without moving the robot",
+    )
+    modes.add_argument(
+        "--experimental",
+        dest="mode",
+        action="store_const",
+        const=_Mode.EXPERIMENTAL,
+        help="Allow candidate calibration for an experimental rollout of at most 300 steps",
+    )
+    args = parser.parse_args()
+    os.chdir(_ROOT)
+    try:
+        documents = _prepare(args.task, args.mode)
+        if args.validate_only:
+            print(
+                "Local rollout inputs validated. Cloud network, quota and capacity are not checked."
+            )
+            return 0
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", prefix=".rollout-", dir=_ROOT
+        ) as task:
+            yaml.safe_dump_all(documents, task, sort_keys=False)
+            task.flush()
+            options = tuple(
+                flag
+                for enabled, flag in ((args.yes, "--yes"), (args.detach_run, "--detach-run"))
+                if enabled
+            )
+            return _launch(documents, task.name, args.mode, options)
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
+        print(f"Rollout launch refused: {error}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main())

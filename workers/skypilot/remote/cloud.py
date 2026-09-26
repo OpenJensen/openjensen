@@ -1,13 +1,15 @@
 """GCE identity and create-only diagnostics storage."""
 
 import argparse
-from datetime import datetime, timedelta, timezone
-from http import HTTPStatus
+import ipaddress
 import json
 import mimetypes
-from pathlib import Path
+import re
 import subprocess
 import time
+from datetime import datetime, timedelta, timezone
+from http import HTTPStatus
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urlsplit
 from urllib.request import Request, urlopen
@@ -18,6 +20,10 @@ _API_TIMEOUT = 60
 _RETRY_DELAYS = (1, 3, 10)
 _LIFETIME_HOURS = 48
 _CREATE_ONLY = 0
+_POLICY_POLL_SECONDS = 5
+_ROLLOUT_FILES = {"worker.log", "container.log", "cleanup.log", "result.json",
+                  "result.pending.json", "trajectory.jsonl", "video.mp4", "final.ppm",
+                  "job-result.json"}
 
 
 def _send(request):
@@ -101,18 +107,96 @@ def _publish(directory, destination):
     print(f"Job report: {destination}/job-result.json", flush=True)
 
 
+def _publish_tree(directory, destination):
+    root = directory.resolve()
+    files = sorted(path for path in root.rglob("*") if path.is_file())
+    for path in root.rglob("*"):
+        if path.is_symlink():
+            raise ValueError("Rollout publication refuses symlinks")
+    for path in files:
+        if path.name not in _ROLLOUT_FILES:
+            raise ValueError(f"Unexpected rollout artifact: {path.name}")
+    if not (root / "job-result.json").is_file():
+        raise ValueError("Rollout job-result.json is missing")
+    # Publish completion only after every trace, video and diagnostic is durable.
+    files.sort(key=lambda path: path == root / "job-result.json")
+    for path in files:
+        parent = path.parent.relative_to(root).as_posix()
+        prefix = destination.rstrip("/")
+        if parent != ".":
+            prefix += "/" + parent
+        _upload(path, prefix)
+    print(f"Rollout artifacts: {destination}", flush=True)
+
+
+def _policy_addresses(project, run_id, network):
+    query = {
+        "filter": f"labels.rollout-id = {run_id} AND labels.rollout-role = vla AND status = RUNNING"
+    }
+    addresses = []
+    while True:
+        url = (
+            f"https://compute.googleapis.com/compute/v1/projects/{quote(project, safe='')}"
+            f"/aggregated/instances?{urlencode(query)}"
+        )
+        response = json.loads(_send(Request(url, headers={"Authorization": "Bearer " + _token()})))
+        for scope in response.get("items", {}).values():
+            for instance in scope.get("instances", []):
+                for interface in instance.get("networkInterfaces", []):
+                    if interface.get("network") == network:
+                        addresses.append(interface["networkIP"])
+        if not response.get("nextPageToken"):
+            return addresses
+        query["pageToken"] = response["nextPageToken"]
+
+
+def _discover_policy(run_id, timeout):
+    if not re.fullmatch(r"[0-9a-f]{32}", run_id):
+        raise ValueError("ROLLOUT_ID must be the launcher's UUID hex label")
+    if not 0 < timeout <= 3600:
+        raise ValueError("Policy discovery timeout must be within one hour")
+    project = _metadata("project/project-id")
+    network = _compute("GET")["networkInterfaces"][0]["network"]
+    deadline = time.monotonic() + timeout
+    while True:
+        addresses = _policy_addresses(project, run_id, network)
+        if len(addresses) > 1:
+            raise ValueError("Multiple policy VMs match this rollout; refusing ambiguous discovery")
+        if addresses:
+            address = ipaddress.ip_address(addresses[0])
+            if not address.is_private or address.is_loopback:
+                raise ValueError("Policy VM must have a private VPC address")
+            return str(address)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("No running policy VM found for this rollout")
+        time.sleep(min(_POLICY_POLL_SECONDS, remaining))
+
+
 def _main():
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="action", required=True)
     commands.add_parser("deadline")
     commands.add_parser("delete")
     commands.add_parser("login").add_argument("image")
+    publication = commands.add_parser("publish-tree")
+    publication.add_argument("directory", type=Path)
+    publication.add_argument("destination")
+    discovery = commands.add_parser("discover-policy")
+    discovery.add_argument("run_id")
+    discovery.add_argument("--timeout", type=int, default=900)
     args = parser.parse_args()
     if args.action == "deadline":
         print(_deadline())
         return
     if args.action == "login":
         _login(args.image)
+        return
+    if args.action == "publish-tree":
+        _publish_tree(args.directory, args.destination)
+        return
+    if args.action == "discover-policy":
+        print(_discover_policy(args.run_id, args.timeout))
         return
     _delete()
 
