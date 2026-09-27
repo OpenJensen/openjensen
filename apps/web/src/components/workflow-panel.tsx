@@ -938,6 +938,10 @@ export function WorkflowPanel({
               {stage === "Quantize" && !!options.data?.sources.length && <optgroup label="Base policies">{options.data.sources.map(source => <option key={source.id} value={`source:${source.id}`}>{source.label}</option>)}</optgroup>}
               {inputs.filter(artifact => stage !== "Quantize" || !["training_checkpoint", "native_checkpoint"].includes(artifact.format)).map(artifact => <option key={artifact.id} value={artifact.id}>{artifact.label} · {artifact.id.slice(0, 8)}</option>)}
             </select></label>
+            {(stage === "Evaluate" || stage === "Run") && !artifacts.isPending && !artifacts.isError && !inputs.length && <div className="workflow-storage-note" role="status">
+              <p>Quantize a SmolVLA checkpoint first.</p>
+              <button type="button" className="text-link" onClick={onOpenQuantize}>Go to quantization</button>
+            </div>}
             {cloudCheckpoint && <p className="workflow-input-help">Stored on Google Cloud. Weights are loaded on the cloud worker.</p>}
             {stage === "Quantize" && <>
               {!checkpoints.length && !artifacts.isPending && <p className="muted">Saved training checkpoints will appear here.</p>}

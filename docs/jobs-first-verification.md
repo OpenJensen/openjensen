@@ -67,20 +67,31 @@ text. This change does not alter the worker or inference code used above.
 Upstream `018ade0` was integrated after the live checks above, including immutable
 local dataset training copies, ACT inference export and the Teaching view. The
 merge preserves saved-job landing pages, separate creation forms, training drafts,
-GPU-budget labels and the `/firebird` mount. No additional GPU execution is
-claimed for this integration.
+GPU-budget labels and the `/firebird` mount. Upstream `38c8d54` was subsequently
+merged with optional delivery interfaces and their selective CI checks; that
+second merge introduced no browser changes. No additional GPU execution is
+claimed for either integration.
 
-Post-merge checks:
+Checks recorded across the integration sequence:
 
-- Core: 1,122 passed, two optional/platform skips. The skipped checks require the
+- Final full core run: 1,162 passed, four skips. Two skips were Textual-dependent
+  test modules before the optional package was installed; the others require the
   optional GCS file-reader package or a Windows host.
-- Application browsers: 275 passed, including desktop/mobile jobs-first flows,
+- After installing Textual, 61 focused tests passed across `test_tui.py`,
+  `test_tui_integration.py`, `test_tui_cli.py` and `test_ci_scope.py`. This was a
+  focused follow-up, not another full core run.
+- Full application browser run after `018ade0`: 275 passed, including desktop/mobile jobs-first flows,
   local snapshot admission, ACT export controls, Teaching session conditions and
   preparation-progress checks.
-- Dedicated diagnostics: 18 passed; prefixed export smoke: one passed.
-- Ruff, formatting, TypeScript, generated API contracts and production builds passed.
+- A subsequent empty-input guidance fix for Evaluate/Run passed 28 focused
+  desktop/mobile workflow checks. The full 275-test browser suite was not repeated
+  after that small fix.
+- Dedicated diagnostics: 18 passed. The final rebuilt `/firebird` export passed
+  its prefixed smoke test, including the Teaching endpoint and disabled controls.
+- Ruff, formatting and generated contracts passed during integration. TypeScript
+  and both root and prefixed production builds passed on the final frontend source.
 
-Previously completed supporting checks, recorded before this upstream merge:
+Previously completed supporting checks, recorded before these upstream merges:
 
 - Native quantization/evaluation worker: 253 passed, four platform/vendor skips.
 

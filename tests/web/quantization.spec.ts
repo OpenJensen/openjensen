@@ -291,3 +291,22 @@ test('shows native build progress as a setup stage without presenting it as over
   await expect(stage.getByRole('progressbar')).not.toHaveAttribute('value');
   await expect(page.locator('.workflow-job-technical')).toHaveJSProperty('open', false);
 });
+
+
+for (const stage of ['Evaluate', 'Run']) {
+  test(`${stage} explains how to prepare a trained checkpoint when no GGUF is available`, async ({ page }) => {
+    const { submitted, unexpected } = await workspace(page, true, true);
+    await page.getByRole('button', { name: stage, exact: true }).click();
+    await page.getByRole('button', { name: stage === 'Evaluate' ? 'New evaluation' : 'New run', exact: true }).click();
+    await expect(page.getByLabel('Execution target', { exact: true })).toHaveValue('gcp');
+    await expect(page.getByText('Quantize a SmolVLA checkpoint first.', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: stage === 'Evaluate' ? 'Start evaluation' : 'Reload and run', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Go to quantization', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Quantization jobs', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'New quantization', exact: true }).click();
+    await expect(page.getByLabel('Checkpoint or policy', { exact: true })).toHaveValue('latest');
+    await expect(page.getByRole('button', { name: 'Start quantization', exact: true })).toBeEnabled();
+    expect(submitted).toEqual([]);
+    expect(unexpected).toEqual([]);
+  });
+}
