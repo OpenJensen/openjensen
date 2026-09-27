@@ -52,28 +52,6 @@ def main():
             data = job["dataset"]
             if data["source"] != "huggingface" or len(data["revision"]) != 40:
                 raise ValueError("Training needs an immutable Hub dataset intake")
-            from .model import require_runtime
-
-            require_runtime()
-            emit("preparing", "Checking available GPU memory")
-            import torch
-
-            free, total = torch.cuda.mem_get_info()
-            minimum = 2 * 1024**3 if method == "qlora" else 4 * 1024**3
-            if free < minimum:
-                raise RuntimeError(
-                    f"Insufficient free GPU memory for {method}: {free / 1024**3:.1f} GiB"
-                )
-            write_json(
-                output / "resource-preflight.json",
-                {
-                    "free_bytes": free,
-                    "total_bytes": total,
-                    "method": method,
-                    "minimum_free_bytes": minimum,
-                    "estimate_only": True,
-                },
-            )
             recipe = parameters.get("training") or {}
             if any(
                 key in recipe for key in ("method", "output_dir", "dataset_id", "dataset_revision")
@@ -107,7 +85,36 @@ def main():
                 if any(key in recipe for key in ("camera_key", "camera_keys")):
                     if cfg.selected_camera_keys != previous.selected_camera_keys:
                         raise ValueError("Resume must use the checkpoint's camera selection")
+                from .temporal import TEMPORAL_FIELDS
+
+                supplied_temporal = TEMPORAL_FIELDS.union({"chunk_size"}).intersection(recipe)
+                if supplied_temporal and any(
+                    cfg.temporal[key] != previous.temporal[key] for key in previous.temporal
+                ):
+                    raise ValueError("Resume must preserve the checkpoint temporal configuration")
                 cfg = replace(previous, output_dir=str(output / "training"))
+            from .model import require_runtime
+
+            require_runtime()
+            emit("preparing", "Checking available GPU memory")
+            import torch
+
+            free, total = torch.cuda.mem_get_info()
+            minimum = 2 * 1024**3 if method == "qlora" else 4 * 1024**3
+            if free < minimum:
+                raise RuntimeError(
+                    f"Insufficient free GPU memory for {method}: {free / 1024**3:.1f} GiB"
+                )
+            write_json(
+                output / "resource-preflight.json",
+                {
+                    "free_bytes": free,
+                    "total_bytes": total,
+                    "method": method,
+                    "minimum_free_bytes": minimum,
+                    "estimate_only": True,
+                },
+            )
             recipe_path = output / "recipe.json"
             write_json(recipe_path, cfg.to_dict())
             command = [sys.executable, "-m", "firebird_vla.train", "--config", str(recipe_path)]
@@ -140,7 +147,14 @@ def main():
             with (bundle / "training-metrics.jsonl").open() as stream:
                 for line in stream:
                     last_metrics = json.loads(line)
+            temporal = json.loads((checkpoint / "temporal-contract.json").read_text())
+            if (
+                json.loads((bundle / "verification.json").read_text()).get("temporal_contract")
+                != temporal
+            ):
+                raise ValueError("Fresh reload did not verify the checkpoint temporal contract")
             metadata = {
+                "temporal_contract": temporal,
                 "method": method,
                 "architecture": "smolvla",
                 "task": "unverified",
@@ -155,6 +169,7 @@ def main():
                 bundle, metadata, METHODS[method] + " checkpoint", "training_checkpoint"
             )
             result["report"] = {
+                "temporal_contract": temporal,
                 "scope": "native_training_and_reload",
                 "method": method,
                 "steps": cfg.steps,

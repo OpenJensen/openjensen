@@ -7,6 +7,8 @@ import re
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
+from .temporal import TEMPORAL_FIELDS, validate_temporal
+
 
 @dataclass(frozen=True)
 class TrainConfig:
@@ -31,6 +33,10 @@ class TrainConfig:
     lora_alpha: int = 32
     lora_dropout: float = 0.05
     chunk_size: int = 50
+    prediction_horizon: int | None = None
+    execution_horizon: int | None = None
+    observation_history: int | None = None
+    frame_stride: int | None = None
     validation_fraction: float = 0.2
     eval_every: int = 100
     eval_batches: int = 20
@@ -89,6 +95,7 @@ class TrainConfig:
             raise ValueError("learning_rate/max_grad_norm must be positive; weight_decay >= 0")
         if not 0 <= self.lora_dropout < 1 or not 0 < self.validation_fraction < 1:
             raise ValueError("Require dropout in [0,1) and validation_fraction in (0,1)")
+        validate_temporal(self.to_dict(), "smolvla")
         return self
 
     @property
@@ -108,11 +115,26 @@ class TrainConfig:
 
         return canonical(self) == canonical(previous)
 
+    @property
+    def temporal(self):
+        return validate_temporal(self.to_dict(), "smolvla")
+
     def to_dict(self):
-        return asdict(self)
+        data = asdict(self)
+        for key in TEMPORAL_FIELDS:
+            if data[key] is None:
+                data.pop(key)
+        if self.prediction_horizon is not None or self.execution_horizon is not None:
+            # The legacy dataclass default is not a second caller choice. Persist
+            # the new representation without a contradictory legacy alias.
+            if self.chunk_size != 50:
+                raise ValueError("Use either legacy chunk_size or independent horizons, not both")
+            data.pop("chunk_size")
+        return data
 
     @classmethod
     def from_dict(cls, data):
+        validate_temporal(data, "smolvla")
         unknown = set(data) - {f.name for f in fields(cls)}
         if unknown:
             raise ValueError(f"Unknown recipe fields: {sorted(unknown)}")

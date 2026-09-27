@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .checkpoint import verify_bundle, write_json
 from .lerobot_train import probe
+from .temporal import resolved_temporal
 
 
 def main():
@@ -18,6 +19,13 @@ def main():
     recipe = json.loads((checkpoint / "recipe.json").read_text())
     model_dir = checkpoint / "pretrained_model"
     config = PreTrainedConfig.from_pretrained(model_dir)
+    temporal_path = checkpoint / "temporal-contract.json"
+    temporal = None
+    if temporal_path.exists():
+        temporal = json.loads(temporal_path.read_text())
+        actual_temporal = resolved_temporal(config, temporal["action_fps"], recipe["policy_type"])
+        if actual_temporal != temporal:
+            raise ValueError("Reloaded policy temporal configuration differs from saved contract")
     config.device = "cuda"
     policy = get_policy_class(config.type).from_pretrained(model_dir, config=config, strict=True)
     preprocessor, postprocessor = make_pre_post_processors(config, pretrained_path=model_dir)
@@ -29,6 +37,7 @@ def main():
         report_path,
         {
             "reload_verified": True,
+            "temporal_contract": temporal,
             "max_abs_action_difference": (actual - expected).abs().max().item(),
             "task_success": None,
             "scope": "Fixed held-out observation numerical reload, not robot task success",

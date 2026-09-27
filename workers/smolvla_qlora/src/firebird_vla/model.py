@@ -141,6 +141,22 @@ def configure_policy_features(cfg, config, features=None, *, from_checkpoint=Fal
         config.empty_cameras = 0
 
 
+def configure_policy_temporal(cfg, config, *, from_checkpoint=False):
+    temporal = cfg.temporal
+    if from_checkpoint:
+        if (config.chunk_size, config.n_action_steps, config.n_obs_steps) != (
+            temporal["prediction_horizon"],
+            temporal["execution_horizon"],
+            1,
+        ):
+            raise ValueError("Checkpoint temporal configuration differs from the saved recipe")
+    else:
+        config.chunk_size = temporal["prediction_horizon"]
+        config.n_action_steps = temporal["execution_horizon"]
+        if config.n_obs_steps != 1:
+            raise ValueError("SmolVLA requires one observation step")
+
+
 def build_policy(
     cfg,
     features=None,
@@ -177,7 +193,7 @@ def build_policy(
     config.load_vlm_weights = False  # Full VLA checkpoint below supplies ALL pretrained weights.
     config.push_to_hub = False
     config.pretrained_path = base
-    config.chunk_size = config.n_action_steps = cfg.chunk_size
+    configure_policy_temporal(cfg, config, from_checkpoint=policy_config_dir is not None)
     config.freeze_vision_encoder = config.train_expert_only = True
     configure_policy_features(cfg, config, features, from_checkpoint=policy_config_dir is not None)
     # Strict loading is essential: an adapter over randomly initialized missing weights is invalid.

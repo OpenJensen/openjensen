@@ -17,8 +17,9 @@ from .checkpoint import verify_bundle, write_json
 from .local_dataset import bind_local_recipe, verify_local_snapshot
 from .native_profiles import LEROBOT_REVISION, native_profile_for_recipe, validate_native_dataset
 from .telemetry import emit
+from .temporal import TEMPORAL_FIELDS, validate_temporal
 
-SHARED_FIELDS = {
+SHARED_FIELDS = TEMPORAL_FIELDS | {
     "model_id",
     "model_revision",
     "checkpoint_subdirectory",
@@ -58,6 +59,7 @@ def resolve_recipe(job):
         raise ValueError("Native training must use the catalog's immutable model revision")
     if recipe.get("gradient_accumulation_steps", 1) != 1:
         raise ValueError("Native training currently requires gradient_accumulation_steps=1")
+    validate_temporal(recipe, profile["policy_type"])
     data = job["dataset"]
     if data.get("source") not in {"huggingface", "local"}:
         raise ValueError("Native training requires a pinned Hub dataset or verified local snapshot")
@@ -107,7 +109,9 @@ def resolve_recipe(job):
     return recipe, profile
 
 
-def cli_arguments(recipe, profile, *, output, dataset_root, model_root=None, features=None):
+def cli_arguments(
+    recipe, profile, *, output, dataset_root, model_root=None, features=None, resume=False
+):
     """Build arguments from an operator-owned profile, never user executable strings."""
     values = {
         "dataset.repo_id": recipe["dataset_id"],
@@ -152,13 +156,16 @@ def cli_arguments(recipe, profile, *, output, dataset_root, model_root=None, fea
         values["policy.optimizer_lr"] = recipe["learning_rate"]
     if "weight_decay" in recipe:
         values["policy.optimizer_weight_decay"] = recipe["weight_decay"]
-    if "chunk_size" in recipe and profile["policy_type"] not in {
-        "diffusion",
-        "multi_task_dit",
-        "vqbet",
-    }:
-        values["policy.chunk_size"] = recipe["chunk_size"]
-        values["policy.n_action_steps"] = recipe["chunk_size"]
+    # Resumes load the exact saved train_config; even historical ignored fields
+    # must not be reinterpreted as new architecture overrides.
+    if not resume:
+        temporal = validate_temporal(recipe, profile["policy_type"])
+        if temporal is not None:
+            values["policy.chunk_size"] = temporal["prediction_horizon"]
+            values["policy.n_action_steps"] = temporal["execution_horizon"]
+        elif "chunk_size" in recipe:
+            values["policy.chunk_size"] = recipe["chunk_size"]
+            values["policy.n_action_steps"] = recipe["chunk_size"]
     return [
         "--" + key + "=" + (value if isinstance(value, str) else json.dumps(value))
         for key, value in values.items()
@@ -244,7 +251,11 @@ def main():
             source = output / "training" / name
             if source.exists():
                 shutil.copyfile(source, bundle / name)
+        temporal = json.loads((checkpoint / "temporal-contract.json").read_text())
+        if json.loads(verification.read_text()).get("temporal_contract") != temporal:
+            raise ValueError("Fresh reload did not verify the checkpoint temporal contract")
         metadata = {
+            "temporal_contract": temporal,
             "method": "full",
             "architecture": profile["policy_type"],
             "training_backend": "lerobot",
@@ -261,6 +272,7 @@ def main():
             bundle, metadata, profile["label"] + " checkpoint", "training_checkpoint"
         )
         result["report"] = {
+            "temporal_contract": temporal,
             "scope": "native_training_and_reload",
             "method": "full",
             "steps": latest["step"],
