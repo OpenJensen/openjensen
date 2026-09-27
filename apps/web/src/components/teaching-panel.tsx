@@ -33,12 +33,13 @@ export function TeachingPanel() {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connection = useQuery({ queryKey: ["teaching-state"], queryFn: () => request<Connection>("/state"), refetchInterval: 1000, retry: false });
   const state = connection.data?.state;
-  const online = connection.data?.connected && !!state?.session_id;
+  const online = connection.isSuccess && connection.data?.connected && !!state?.session_id;
   const receipt = useQuery({ queryKey: ["teaching-receipt", receiptId], queryFn: () => request<Receipt>(`/commands/${receiptId}`), enabled: !!receiptId && !receiptExpired, refetchInterval: query => !receiptExpired && !query.state.error && ["queued", "executing"].includes(query.state.data?.status ?? "queued") ? 250 : false, retry: false });
   const command = useMutation({
     mutationFn: async ({ operation, args = {} }: { operation: string; args?: object }) => {
       const current = await request<Connection>("/state");
       if (!current.connected || !current.state) throw new Error("Teaching executor is disconnected.");
+      if (!state?.session_id || current.state.session_id !== state.session_id) { void connection.refetch(); throw new Error("The simulator session changed. Review its state before issuing another command."); }
       return request<Receipt>("/commands", { command_id: crypto.randomUUID(), session_id: current.state.session_id, episode_id: current.state.episode_id, expected_revision: current.state.revision, operation, arguments: args });
     },
     onSuccess: result => { setReceiptExpired(false); setReceiptId(result.command_id); void connection.refetch(); },
@@ -90,7 +91,7 @@ export function TeachingPanel() {
         media.current?.append(element);
       });
       current.on(RoomEvent.TrackUnsubscribed, track => track.detach().forEach(element => element.remove()));
-      current.on(RoomEvent.Disconnected, () => { if (room.current === current) { if (mounted.current) setVoiceState("Disconnected"); media.current?.replaceChildren(); room.current = null; } });
+      current.on(RoomEvent.Disconnected, () => { if (room.current === current) { if (timer.current) clearTimeout(timer.current); timer.current = null; voiceSession.current = null; if (mounted.current) setVoiceState("Disconnected"); media.current?.replaceChildren(); room.current = null; } });
       await current.connect(access.url, access.token);
       if (!live()) { await current.disconnect(); return; }
       await current.localParticipant.setMicrophoneEnabled(true);

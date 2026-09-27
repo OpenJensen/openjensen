@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 async function teaching(page: Page, connected = true) {
   const commands: any[] = [];
+  const changes = { failState: false, nextSession: false };
   const unexpected: string[] = [];
   const state = { mode: 'running', episode_id: 'episode-1', revision: 7, session_id: 'session-1', instruction: 'Move gripper', outcome: 'unknown', steps: 10, sim_time: .3, joints: ['gripper'], state_rad: [0], fault: null };
   await page.route('**/api/v1/**', async route => {
@@ -15,6 +16,12 @@ async function teaching(page: Page, connected = true) {
     }
     if (path === '/api/v1/teaching/voice/join') {
       await route.fulfill({ status: 503, json: { detail: 'Voice settings are incomplete.' } }); return;
+    }
+    if (path === '/api/v1/teaching/state' && changes.failState) {
+      await route.fulfill({ status: 503, json: { detail: 'Executor unavailable' } }); return;
+    }
+    if (path === '/api/v1/teaching/state' && changes.nextSession) {
+      await route.fulfill({ json: { connected: true, state: { ...state, session_id: 'new-session' }, voice_configured: true } }); return;
     }
     const replies: Record<string, unknown> = {
       '/api/v1/health': { status: 'ok', version: 'test' },
@@ -30,7 +37,7 @@ async function teaching(page: Page, connected = true) {
   await page.goto('/');
   await page.getByRole('button', { name: 'Teaching', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Teach in simulation' })).toBeVisible();
-  return { commands, unexpected };
+  return { commands, unexpected, changes };
 }
 
 test('disconnected executor disables recording and voice without pretending monitor is control', async ({ page }) => {
@@ -60,4 +67,23 @@ test('missing voice configuration does not claim microphone or agent is connecte
   await expect(page.getByText('Microphone connected', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Connect voice' })).toBeEnabled();
   expect(commands).toEqual([]); expect(unexpected).toEqual([]);
+});
+
+
+test('later connection failure disables cached teaching controls', async ({ page }) => {
+  const { changes, commands } = await teaching(page);
+  await expect(page.getByRole('button', { name: '+ 0.05 rad', exact: true })).toBeEnabled();
+  changes.failState = true;
+  await expect(page.getByRole('button', { name: '+ 0.05 rad', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Connect voice' })).toBeDisabled();
+  expect(commands).toEqual([]);
+});
+
+test('a command cannot silently switch to a restarted simulator', async ({ page }) => {
+  const { changes, commands } = await teaching(page);
+  await expect(page.getByRole('button', { name: '+ 0.05 rad', exact: true })).toBeEnabled();
+  changes.nextSession = true;
+  await page.getByRole('button', { name: '+ 0.05 rad', exact: true }).click();
+  await expect(page.getByText(/simulator session changed/)).toBeVisible();
+  expect(commands).toEqual([]);
 });

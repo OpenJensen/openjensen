@@ -1,8 +1,10 @@
 """Typed local teaching relay. Provider secrets and executor URLs stay server-owned."""
 
+import asyncio
 import base64
 import binascii
 import json
+import math
 import os
 import re
 import stat
@@ -18,6 +20,8 @@ from vla_platform.lifecycle.contracts import StrictRecord
 
 router = APIRouter(prefix="/api/v1/teaching", tags=["Teaching"])
 IDENTITY = r"^[A-Za-z0-9_-]{1,96}$"
+RELAY_DEADLINE = 4
+VOICE_DEADLINE = 12
 
 
 class TeachingCommand(StrictRecord):
@@ -78,25 +82,42 @@ def configuration(voice=False):
         ):
             raise ValueError("Invalid teaching origin")
         path = Path(token_path)
-        mode = path.lstat().st_mode
-        if not stat.S_ISREG(mode) or path.stat().st_size > 4096:
-            raise ValueError("Invalid token file")
-        if os.name == "posix" and mode & 0o077:
-            raise ValueError("Token file must be private")
-        token = path.read_text().strip()
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        if path.is_symlink():
+            raise ValueError("Token must not be a symlink")
+        with os.fdopen(os.open(path, flags), "rb") as handle:
+            info = os.fstat(handle.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_size > 4096:
+                raise ValueError("Invalid token file")
+            if os.name == "posix" and info.st_mode & 0o077:
+                raise ValueError("Token file must be private")
+            raw_token = handle.read(4097)
+        if len(raw_token) > 4096:
+            raise ValueError("Oversized token file")
+        token = raw_token.decode("ascii").strip()
         if len(token) < 32 or len(token) > 4096 or not re.fullmatch(r"[A-Za-z0-9_.-]+", token):
             raise ValueError("Invalid token")
-    except OSError, ValueError:
+    except OSError, ValueError, UnicodeError:
         raise HTTPException(503, "Teaching connection configuration is invalid.") from None
     return raw.rstrip("/"), token
+
+
+def finite_float(raw):
+    value = float(raw)
+    if not math.isfinite(value):
+        raise ValueError("Nonfinite response")
+    return value
 
 
 async def relay(path, payload=None, *, voice=False, maximum=65536):
     origin, token = configuration(voice)
     try:
-        async with httpx.AsyncClient(
-            timeout=12 if voice else 4, trust_env=False, follow_redirects=False
-        ) as client:
+        async with (
+            asyncio.timeout(VOICE_DEADLINE if voice else RELAY_DEADLINE),
+            httpx.AsyncClient(
+                timeout=12 if voice else 4, trust_env=False, follow_redirects=False
+            ) as client,
+        ):
             async with client.stream(
                 "POST" if payload is not None else "GET",
                 origin + path,
@@ -115,6 +136,7 @@ async def relay(path, payload=None, *, voice=False, maximum=65536):
                         raise ValueError("Oversized teaching response")
                 value = json.loads(
                     raw,
+                    parse_float=finite_float,
                     parse_constant=lambda _: (_ for _ in ()).throw(
                         ValueError("Nonfinite response")
                     ),
@@ -122,7 +144,7 @@ async def relay(path, payload=None, *, voice=False, maximum=65536):
                 if not isinstance(value, dict):
                     raise ValueError("Invalid teaching response")
                 return value
-    except httpx.HTTPError, ValueError:
+    except httpx.HTTPError, ValueError, TimeoutError:
         raise HTTPException(
             503, "Teaching executor is unavailable or returned an invalid response."
         ) from None
@@ -193,7 +215,11 @@ async def frame(response: Response):
         for key in ("step", "published_monotonic_ns"):
             if type(value[key]) is not int or value[key] < 0:
                 raise ValueError("Invalid frame timing")
-        if type(value["sim_time"]) not in (int, float) or value["sim_time"] < 0:
+        if (
+            type(value["sim_time"]) not in (int, float)
+            or not math.isfinite(value["sim_time"])
+            or value["sim_time"] < 0
+        ):
             raise ValueError("Invalid simulation time")
     except KeyError, TypeError, ValueError, binascii.Error:
         raise HTTPException(503, "Teaching frame is invalid.") from None
@@ -221,6 +247,9 @@ def public_receipt(value):
         raise HTTPException(503, "Teaching acknowledgement is invalid.")
     if value.get("status") not in {"queued", "executing", "acknowledged", "rejected"}:
         raise HTTPException(503, "Teaching acknowledgement is invalid.")
+    for key in ("received_monotonic_ns", "acknowledged_monotonic_ns"):
+        if key in value and (type(value[key]) is not int or not 0 <= value[key] < 2**63):
+            raise HTTPException(503, "Teaching acknowledgement timing is invalid.")
     result = {
         key: item
         for key, item in value.items()

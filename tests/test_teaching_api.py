@@ -2,6 +2,7 @@
 
 import json
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
@@ -43,6 +44,19 @@ def relay_app(tmp_path, monkeypatch):
             length = int(self.headers.get("Content-Length", "0"))
             if length:
                 record["body"] = json.loads(self.rfile.read(length))
+            if record.get("slow"):
+                self.send_response(200)
+                self.send_header("Content-Length", "1002")
+                self.end_headers()
+                try:
+                    for _ in range(1000):
+                        self.wfile.write(b" ")
+                        self.wfile.flush()
+                        time.sleep(0.02)
+                    self.wfile.write(b"{}")
+                except OSError:
+                    pass
+                return
             raw = json.dumps(record["reply"]).encode()
             self.send_response(record["status"])
             self.send_header("Content-Type", "application/json")
@@ -54,6 +68,7 @@ def relay_app(tmp_path, monkeypatch):
         do_POST = respond
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server.daemon_threads = True
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     monkeypatch.setenv("FIREBIRD_TEACHING_URL", f"http://127.0.0.1:{server.server_port}")
@@ -177,3 +192,31 @@ def test_private_token_required(relay_app):
     path.unlink()
     assert not client.get("/api/v1/teaching/state").json()["connected"]
     assert not record["requests"]
+
+
+def test_nonfinite_overflow_is_rejected(relay_app):
+    client, record, *_ = relay_app
+    record["reply"] = {**STATE, "sim_time": float("inf")}
+    assert not client.get("/api/v1/teaching/state").json()["connected"]
+    from vla_platform.teaching_api import finite_float
+
+    with pytest.raises(ValueError):
+        finite_float("1e309")
+
+
+def test_malformed_receipt_timestamp_is_rejected(relay_app):
+    client, record, *_ = relay_app
+    record["reply"] = {**RECEIPT, "received_monotonic_ns": {"private": "unexpected"}}
+    assert client.get("/api/v1/teaching/commands/command-1").status_code == 503
+
+
+def test_slow_trickle_obeys_total_deadline(relay_app, monkeypatch):
+    from vla_platform import teaching_api
+
+    client, record, *_ = relay_app
+    record["slow"] = True
+    monkeypatch.setattr(teaching_api, "RELAY_DEADLINE", 0.15)
+    start = time.monotonic()
+    response = client.get("/api/v1/teaching/state")
+    assert response.json()["connected"] is False
+    assert time.monotonic() - start < 1.5
