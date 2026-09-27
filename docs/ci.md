@@ -1,6 +1,6 @@
 # Local and hosted verification
 
-GitHub Actions minutes are currently exhausted. An unstarted hosted job is not a pass. Local macOS and isolated Linux results are recorded with each delivery; Windows execution, hosted cache behavior and cold/warm timing remain separate acceptance items.
+GitHub Actions minutes are currently exhausted. An unstarted hosted job is not a pass. Local macOS and isolated Linux results are recorded with each delivery; Windows is deliberately excluded from default hackathon runs; its optional manual execution, hosted cache behavior and cold/warm timing remain separate acceptance items.
 
 ## Affected checks
 
@@ -10,7 +10,7 @@ Application and native-worker workflows inspect the local Git diff with `.github
 - Worker changes run their matching isolated suite and application adapters. Native training changes additionally check ACT export and teaching data consumers.
 - New/unknown workers, shared CI changes and selector tests run every scope.
 - Documentation-only changes skip those application/native jobs. The independent simulation workflow keeps its existing behavior.
-- Linux runs core, optional terminal tests, generated API checks, type checking, production build, all browser tests and diagnostics. Windows retains core/terminal tests; a manual application run with **windows_browser** also runs the complete Windows web/build/browser checks. Native desktop packaging remains a separately recorded platform check.
+- Linux runs core, optional terminal tests, generated API checks, type checking, production build, all browser tests and diagnostics. Push, PR and merge-group application matrices contain Linux only. A manual application run defaults to Linux too; explicitly enabling **windows_browser** adds Windows core/terminal and complete web/build/browser checks. Native desktop packaging remains a separately recorded platform check.
 
 The teaching job checks the real CPU LeRobot recorder/readback and provider proposal contracts in one environment, and voice SDK contracts in another. A separate small decision-worker job runs contracts without installing Torch or downloading Muose; its opt-in real-model test is explicitly skipped. Actual model-scoring evidence remains a separate local receipt. It does not access voice providers, cloud credentials or GPUs. Dependencies are installed on every run; caches contain dependency downloads, not application workspaces, model weights, credentials or virtual environments.
 
@@ -44,4 +44,4 @@ The selector itself is exercised with real Git histories, including deletes/rena
 uv run --no-sync pytest -q tests/test_ci_scope.py
 ```
 
-If change selection is suspect, manually dispatch both workflows to request every scope (and enable Windows browser checks when needed). Revert the specific CI change to restore the prior unconditional matrix; do not relax tests, application admission or branch protection. Measure successful hosted runs before reporting a runtime or free-minute saving.
+If change selection is suspect, manually dispatch both workflows to request every scope (and explicitly enable **windows_browser** only when Windows verification is wanted). Revert the specific CI change to restore the prior unconditional matrix; do not relax tests, application admission or branch protection. Measure successful hosted runs before reporting a runtime or free-minute saving.

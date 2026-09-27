@@ -212,8 +212,8 @@ class FrameIdentity:
 class FrameInput:
     """Immutable RGB received on this process clock from a session-bound source.
 
-    The caller must obtain context and pixels atomically. The existing separate
-    teaching HTTP state/frame reads do not yet provide that guarantee.
+    Use frame_snapshot.admit_frame() for the atomic teaching HTTP envelope.
+    Source age plus full request elapsed time is retained across local polling.
     """
 
     context: SourceContext
@@ -222,12 +222,14 @@ class FrameInput:
     height: int
     rgb: bytes = field(repr=False)
     received_monotonic_ns: int
+    source_age_at_receipt_ns: int = 0
 
     def __post_init__(self) -> None:
         if not isinstance(self.context, SourceContext):
             raise ProviderError("invalid_input", "Expected validated source context.")
         _integer(self.step)
         _integer(self.received_monotonic_ns, 2**63 - 1)
+        _integer(self.source_age_at_receipt_ns, 2**63 - 1)
         if (
             not 1 <= _integer(self.width, 1920)
             or not 1 <= _integer(self.height, 1920)
@@ -500,8 +502,9 @@ class Providers:
         return DecisionProposal(answer["choice"], values, _number(answer["confidence"]), receipt)
 
     def _fresh(self, frame: FrameInput, current: Callable[[], FrameIdentity]) -> None:
-        age = (self._clock_ns() - frame.received_monotonic_ns) / 1e9
-        if age < 0 or age > self.settings.max_frame_age_seconds or current() != frame.identity:
+        elapsed = self._clock_ns() - frame.received_monotonic_ns
+        age = (elapsed + frame.source_age_at_receipt_ns) / 1e9
+        if elapsed < 0 or age > self.settings.max_frame_age_seconds or current() != frame.identity:
             raise ProviderError("stale_frame", "Perception frame is stale or its source changed.")
 
     async def perceive(
