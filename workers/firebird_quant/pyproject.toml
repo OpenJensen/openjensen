@@ -7,7 +7,7 @@ name = "firebird-quant"
 version = "0.1.0"
 description = "Architecture-independent packed weight quantization and portable PyTorch inference"
 requires-python = ">=3.11,<3.13"
-dependencies = ["torch>=2.2,<3", "safetensors>=0.6.2,<1", "numpy>=1.26,<2"]
+dependencies = ["torch>=2.2,<3", "safetensors>=0.6.2,<1", "numpy>=1.26,<3"]
 
 [project.optional-dependencies]
 test = ["pytest==8.4.2", "ruff==0.13.2"]

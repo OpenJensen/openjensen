@@ -188,3 +188,17 @@ def test_windows_matrix_requires_explicit_manual_opt_in(event, windows):
         "pnpm test:diagnostics",
     ):
         assert command in text
+
+
+def test_unified_quantization_keeps_two_explicit_compatible_dependency_pairs():
+    import re
+
+    workflow = (SCRIPT.parents[1] / "workflows/native-workers.yml").read_text()
+    job = workflow.split("  unified-quantization:\n", 1)[1].split("  training:\n", 1)[0]
+    pairs = re.findall(
+        r"^          - torch: '([^']+)'\n            numpy: '([^']+)'$", job, re.MULTILINE
+    )
+    assert pairs == [("2.2.2", "1.26.4"), ("2.11.0", "2.2.6")]
+    assert "matrix:\n        include:" in job
+    assert "numpy==${{ matrix.numpy }}" in job
+    assert "uv pip check --python .venv/bin/python" in job

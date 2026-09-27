@@ -5,6 +5,7 @@ import json
 from collections import OrderedDict
 from dataclasses import asdict, dataclass, field
 from fnmatch import fnmatchcase
+from math import prod
 from pathlib import Path
 
 import torch
@@ -209,13 +210,79 @@ def quantize_state_dict(state, recipe=Recipe(), *, parameter_names=None):
     return QuantizedState(tensors, aliases, audit, dict(getattr(state, "_metadata", {})))
 
 
+def _loaded_audit(declared, tensors, aliases):
+    """Rebuild observable coverage; imported provenance cannot establish quality."""
+    if not isinstance(declared, dict):
+        raise ValueError("Invalid source audit metadata")
+    declared_rows = declared.get("tensors", [])
+    hashes = (
+        {
+            row["name"]: row.get("source_sha256")
+            for row in declared_rows
+            if isinstance(row, dict) and isinstance(row.get("name"), str)
+        }
+        if isinstance(declared_rows, list)
+        else {}
+    )
+    rows, precisions = [], set()
+    for name, value in tensors.items():
+        packed = isinstance(value, PackedTensor)
+        shape = tuple(value.shape)
+        elements = prod(shape)
+        dtype = DTYPES[value.dtype] if packed else value.dtype
+        source_bytes = elements * torch.empty((), dtype=dtype).element_size()
+        digest = hashes.get(name)
+        if not (
+            isinstance(digest, str)
+            and len(digest) == 64
+            and all(char in "0123456789abcdef" for char in digest)
+        ):
+            digest = None
+        if packed:
+            precisions.add(value.bits)
+        rows.append(
+            {
+                "name": name,
+                "aliases": [alias for alias, target in aliases.items() if target == name],
+                "shape": list(shape),
+                "dtype": str(dtype),
+                "elements": elements,
+                "source_bytes": source_bytes,
+                "stored_bytes": value.nbytes if packed else source_bytes,
+                "source_sha256": digest,
+                "quantized": packed,
+                "retained_reason": None if packed else "retained_in_artifact",
+            }
+        )
+    precision = next(iter(precisions)) if len(precisions) == 1 else "mixed"
+    return {
+        "recipe": declared.get("recipe"),
+        "recipe_verified": False,
+        "runtime": "torch-dequantize-on-access",
+        "weight_format": f"firebird-symmetric-int{precision}-v1" if precisions else "unquantized",
+        "source_tensor_bytes": sum(row["source_bytes"] for row in rows),
+        "stored_tensor_bytes": sum(row["stored_bytes"] for row in rows),
+        "unique_elements": sum(row["elements"] for row in rows),
+        "quantized_elements": sum(row["elements"] for row in rows if row["quantized"]),
+        "tensors": rows,
+        "quality_verified": False,
+        "speedup_verified": False,
+        "source_hashes_verified": False,
+        "storage_checksums_verified": True,
+    }
+
+
 def load(path) -> QuantizedState:
     with safe_open(str(path), framework="pt", device="cpu") as reader:
         metadata = reader.metadata() or {}
         if "firebird_quant" not in metadata:
             raise ValueError("Not a Firebird Quant artifact")
         manifest = json.loads(metadata["firebird_quant"])
-        if manifest.get("format") != "firebird-quant" or manifest.get("version") != 1:
+        if (
+            manifest.get("format") != "firebird-quant"
+            or type(manifest.get("version")) is not int
+            or manifest["version"] != 1
+        ):
             raise ValueError("Unsupported Firebird Quant format version")
         if set(reader.keys()) != set(manifest["storage_hashes"]):
             raise ValueError("Storage inventory mismatch")
@@ -239,6 +306,8 @@ def load(path) -> QuantizedState:
             used.extend((key + ".codes", key + ".scales"))
         elif entry["kind"] == "retained":
             value = storage[key]
+            if value.is_floating_point() and not torch.isfinite(value).all():
+                raise ValueError(f"{name}: nonfinite retained tensor")
             used.append(key)
         else:
             raise ValueError("Unknown tensor storage kind")
@@ -248,4 +317,5 @@ def load(path) -> QuantizedState:
     aliases = manifest["aliases"]
     if set(aliases) & set(tensors) or any(target not in tensors for target in aliases.values()):
         raise ValueError("Invalid tied-tensor aliases")
-    return QuantizedState(tensors, aliases, manifest["audit"], manifest["metadata"])
+    audit = _loaded_audit(manifest["audit"], tensors, aliases)
+    return QuantizedState(tensors, aliases, audit, manifest["metadata"])

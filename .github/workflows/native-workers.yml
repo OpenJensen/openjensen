@@ -57,7 +57,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        torch: ['2.2.2', '2.11.0']
+        include:
+          - torch: '2.2.2'
+            numpy: '1.26.4'
+          - torch: '2.11.0'
+            numpy: '2.2.6'
     defaults:
       run:
         working-directory: workers/firebird_quant
@@ -72,7 +76,8 @@ jobs:
           cache-dependency-glob: workers/firebird_quant/pyproject.toml
       - run: uv venv --python 3.11
       - run: uv pip install --python .venv/bin/python --index-url https://download.pytorch.org/whl/cpu 'torch==${{ matrix.torch }}'
-      - run: uv pip install --python .venv/bin/python -e '.[test]'
+      - run: uv pip install --python .venv/bin/python -e '.[test]' 'numpy==${{ matrix.numpy }}'
+      - run: uv pip check --python .venv/bin/python
       - run: .venv/bin/python -m pytest -q -rs
         env:
           HF_HUB_OFFLINE: '1'

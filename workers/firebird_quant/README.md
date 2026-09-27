@@ -22,7 +22,10 @@ uv pip install --python .venv/bin/python -e '.[test]'
 ```
 
 On macOS use the ordinary PyPI Torch wheel instead of the CPU index. Intel macOS
-uses Torch 2.2.2. NumPy stays below 2 for compatibility with that wheel.
+uses Torch 2.2.2 with NumPy 1.26.4. The current Torch 2.11.0 verification uses
+NumPy 2.2.6. The library allows either NumPy major version; pin the documented pair
+for your Torch version instead of downgrading an existing isolated ACT environment.
+The CI matrix contains those two explicit pairs, with a dependency consistency check.
 
 ```python
 import torch
@@ -106,7 +109,11 @@ map, ties, source tensor hashes, and packed-storage checksums. Publication reloa
 and validates the file before making the destination visible and refuses to
 overwrite an existing path. The audit separates tensor bytes from actual file
 size (which also includes metadata). Checksums detect accidental corruption;
-they do not authenticate an untrusted producer. Architecture code, processors,
+they do not authenticate an untrusted producer. Reload reconstructs tensor-byte
+counts and precision coverage from the decoded inventory; imported audit claims
+cannot set `quality_verified` or `speedup_verified`. Source hashes and the declared
+recipe remain explicitly unverified provenance because the original floating
+checkpoint is not available to the loader. Architecture code, processors,
 tokenizers, normalization/configuration files and task evaluators remain owned
 by the original model package. Keep those with the `.fbq` artifact.
 
@@ -146,5 +153,7 @@ promote either claim.
 .venv/bin/ruff format --check src tests
 ```
 
-CI exercises Torch 2.2.2 and 2.11.0 on Linux CPU and participates in the required
-native worker verification gate.
+CI is configured for Torch 2.2.2 / NumPy 1.26.4 and Torch 2.11.0 / NumPy 2.2.6
+on Linux CPU and participates in the required native worker verification gate.
+The initial PR's hosted jobs did not start because of the account billing block;
+workflow configuration is not a completed hosted test result.

@@ -45,6 +45,15 @@ class PackedTensor:
             ).all()
         ):
             raise ValueError("Invalid packed tensor storage or scales")
+        # Symmetric quantization reserves the most negative signed code. Allowing
+        # it would exceed qmax and can overflow even when scales*qmax is finite.
+        reserved = (
+            ((self.codes & 15) == 0) | ((self.codes >> 4) == 0)
+            if self.bits == 4
+            else self.codes == 128
+        )
+        if reserved.any():
+            raise ValueError("Invalid reserved signed quantization code")
 
     def dequantize(self):
         return unpack(
