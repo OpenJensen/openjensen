@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { TeachingIntelligence } from "./teaching-intelligence";
 import { TeachingPreview } from "./teaching-preview";
 import { apiOrigin } from "@/lib/api";
 import type { Room } from "livekit-client";
@@ -32,6 +33,8 @@ export function TeachingPanel() {
   const voiceSession = useRef<string | null>(null);
   const [voiceState, setVoiceState] = useState("Disconnected");
   const [voiceError, setVoiceError] = useState("");
+  const [agentPresent, setAgentPresent] = useState(false);
+  const voiceReadiness = useQuery({ queryKey: ["teaching-voice-status"], queryFn: () => request<{ broker_reachable: boolean; configuration_present: boolean; dependencies_present: boolean; message: string }>("/voice/status"), refetchInterval: 3000, retry: false });
   const room = useRef<Room | null>(null);
   const joining = useRef(false);
   const generation = useRef(0);
@@ -66,7 +69,7 @@ export function TeachingPanel() {
     generation.current += 1; joining.current = false; voiceSession.current = null;
     if (timer.current) clearTimeout(timer.current);
     const previous = room.current; room.current = null;
-    void previous?.disconnect(); media.current?.replaceChildren(); setVoiceState("Disconnected");
+    void previous?.disconnect(); media.current?.replaceChildren(); setVoiceState("Disconnected"); setAgentPresent(false);
   }, [online, state?.session_id]);
   useEffect(() => {
     mounted.current = true;
@@ -80,7 +83,7 @@ export function TeachingPanel() {
     generation.current += 1; joining.current = false; voiceSession.current = null;
     if (timer.current) clearTimeout(timer.current);
     const current = room.current; room.current = null;
-    await current?.disconnect(); media.current?.replaceChildren(); setVoiceState("Disconnected");
+    await current?.disconnect(); media.current?.replaceChildren(); setVoiceState("Disconnected"); setAgentPresent(false);
   }
   async function join() {
     if (!state?.session_id || room.current || joining.current) return;
@@ -91,10 +94,14 @@ export function TeachingPanel() {
     let current: Room | null = null;
     try {
       const access = await request<{ url: string; token: string; expires_in_seconds: number }>("/voice/join", { session_id: state.session_id });
-      const { Room, RoomEvent } = await import("livekit-client");
+      const { Room, RoomEvent, ParticipantKind } = await import("livekit-client");
       if (!live()) return;
       current = new Room({ adaptiveStream: true, dynacast: true });
       room.current = current;
+      const updateAgent = () => { if (live() && current) setAgentPresent([...current.remoteParticipants.values()].some(participant => participant.kind === ParticipantKind.AGENT)); };
+      current.on(RoomEvent.ParticipantConnected, updateAgent);
+      current.on(RoomEvent.ParticipantDisconnected, updateAgent);
+      current.on(RoomEvent.ParticipantAttributesChanged, updateAgent);
       current.on(RoomEvent.TrackSubscribed, track => {
         if (!live()) return;
         const element = track.attach();
@@ -103,19 +110,19 @@ export function TeachingPanel() {
         media.current?.append(element);
       });
       current.on(RoomEvent.TrackUnsubscribed, track => track.detach().forEach(element => element.remove()));
-      current.on(RoomEvent.Disconnected, () => { if (room.current === current) { generation.current += 1; joining.current = false; if (timer.current) clearTimeout(timer.current); timer.current = null; voiceSession.current = null; if (mounted.current) { setVoiceState("Disconnected"); setVoiceError("Voice connection closed. Reconnect to continue."); } media.current?.replaceChildren(); room.current = null; } });
+      current.on(RoomEvent.Disconnected, () => { if (room.current === current) { generation.current += 1; joining.current = false; if (timer.current) clearTimeout(timer.current); timer.current = null; voiceSession.current = null; if (mounted.current) { setVoiceState("Disconnected"); setAgentPresent(false); setVoiceError("Voice connection closed. Reconnect to continue."); } media.current?.replaceChildren(); room.current = null; } });
       await current.connect(access.url, access.token);
       if (!live()) { await current.disconnect(); return; }
       await current.localParticipant.setMicrophoneEnabled(true);
       if (!live()) { await current.disconnect(); return; }
-      setVoiceState("Microphone connected");
+      updateAgent(); setVoiceState("Microphone connected");
       timer.current = setTimeout(() => void leave(), Math.min(access.expires_in_seconds, 300) * 1000);
     } catch {
       await current?.disconnect();
       if (!live()) return;
       if (room.current === current) room.current = null;
       voiceSession.current = null;
-      setVoiceState("Disconnected"); setVoiceError("Voice could not connect. Check microphone permission and the server's LiveKit/OpenRouter settings.");
+      setVoiceState("Disconnected"); setAgentPresent(false); setVoiceError("Voice could not connect. Check microphone permission and the server's LiveKit/OpenRouter settings.");
     } finally { if (generation.current === attempt) joining.current = false; }
   }
   return <section className="panel" aria-labelledby="teaching-title">
@@ -123,7 +130,7 @@ export function TeachingPanel() {
     <p>Record what the simulator actually does: camera, state, applied action, timing and corrections. Voice supplies instructions; recorded actions supply training data.</p>
     {!online && <p role="status">{connection.data?.message ?? "Checking teaching executor…"} The existing rollout monitor does not provide teaching control.</p>}
     <details className="teaching-setup"><summary>How to connect a simulator</summary><p>Teaching needs a running OPEN JENSEN teaching executor, its private control token and an operator-configured connection on the application host. Google Cloud readiness and previous rollout logs do not create this connection.</p><ol><li>Start the teaching executor with your reviewed scene and recording settings.</li><li>Have the application operator configure its loopback connection and private control token.</li><li>Wait for Executor reachable and a fresh camera observation before recording. Voice is optional and requires its separate configured teaching room.</li></ol><p>This page does not start a VM or simulator. See <code>workers/teaching/README.md</code> in the installed repository for the operator setup instructions.</p></details>
-    <dl className="cloud-run-facts"><div><dt>Executor connection</dt><dd>{online ? "Reachable" : connection.isPending ? "Checking" : "Not connected"}</dd></div><div><dt>Voice service</dt><dd>{connection.data?.voice_configured ? "Configured; connect explicitly below" : "Not configured"}</dd></div><div><dt>Last response from application</dt><dd>{connection.dataUpdatedAt ? new Date(connection.dataUpdatedAt).toLocaleTimeString() : "Not received"}</dd></div></dl>
+    <dl className="cloud-run-facts"><div><dt>Executor connection</dt><dd>{online ? "Reachable" : connection.isPending ? "Checking" : "Not connected"}</dd></div><div><dt>Voice service</dt><dd>{voiceReadiness.isSuccess && voiceReadiness.data?.broker_reachable && voiceReadiness.data.configuration_present && voiceReadiness.data.dependencies_present ? "Configured; access unverified" : "Not configured or broker unavailable"}</dd></div><div><dt>Last response from application</dt><dd>{connection.dataUpdatedAt ? new Date(connection.dataUpdatedAt).toLocaleTimeString() : "Not received"}</dd></div></dl>
     {connection.error && <p role="alert">Teaching connection could not be checked.</p>}
     {state?.fault && <p role="alert">The executor stopped after a fault. Inspect the worker before continuing.</p>}
     {previewState?.session_id && <TeachingPreview key={previewState.session_id} online={!!online} context={{ session_id: previewState.session_id, revision: previewState.revision, active_episode_id: previewState.episode_id, mode: previewState.mode }} />}
@@ -149,11 +156,12 @@ export function TeachingPanel() {
     {receiptExpired && <p role="alert">No final acknowledgement arrived. Execution is unverified; inspect the executor before retrying.</p>}
     {receipt.error && <p role="alert">Command acknowledgement unavailable. Execution is not confirmed.</p>}
     {state && <dl className="dataset-facts"><div><dt>Session</dt><dd>{state.session_id}</dd></div><div><dt>Executor mode</dt><dd>{state.mode}</dd></div><div><dt>Recorded steps</dt><dd>{state.steps}</dd></div><div><dt>Simulation time</dt><dd>{state.sim_time?.toFixed(2)} s</dd></div><div><dt>Outcome</dt><dd>{state.outcome || "Unverified"}</dd></div></dl>}
+    <TeachingIntelligence context={state?.session_id ? { session_id: state.session_id, episode_id: state.episode_id, revision: state.revision } : null} online={!!online} />
     <hr />
     <h3>Optional voice connection</h3>
     <p>Uses an isolated LiveKit teaching room and OpenRouter. Hosted speech/model services require their configured accounts. Joining enables your microphone for up to five minutes.</p>
-    <button className="primary-button" disabled={!online || !connection.data?.voice_configured || voiceState !== "Disconnected"} onClick={() => void join()}>Connect voice</button>{voiceState !== "Disconnected" && <button className="secondary-button" onClick={() => void leave()}>Disconnect microphone</button>}
-    <p role="status">{voiceState}</p>{voiceError && <p role="alert">{voiceError}</p>}
+    <button className="primary-button" disabled={!online || !(voiceReadiness.isSuccess && voiceReadiness.data?.broker_reachable && voiceReadiness.data.configuration_present && voiceReadiness.data.dependencies_present) || voiceState !== "Disconnected"} onClick={() => void join()}>Connect voice</button>{voiceState !== "Disconnected" && <button className="secondary-button" onClick={() => void leave()}>Disconnect microphone</button>}
+    <p role="status">{voiceState} · Voice agent {agentPresent ? "present in room" : "not observed"}</p>{voiceError && <p role="alert">{voiceError}</p>}
     <div ref={media} aria-label="Teaching room media" />
     <p className="field-help">Finalized demonstrations can be imported as an immutable training copy. Task success and physical robot calibration remain separate checks.</p>
   </section>;

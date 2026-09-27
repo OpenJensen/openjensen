@@ -31,6 +31,9 @@ async function teaching(page: Page, connected = true) {
       await route.fulfill({ json: { connected: true, state: { ...state, session_id: 'new-session' }, voice_configured: true } }); return;
     }
     const replies: Record<string, unknown> = {
+      '/api/v1/teaching/intelligence/status': { broker_reachable: false, configured: false, busy: false },
+      '/api/v1/teaching/intelligence/settings': { saved: false, revision: null, voice_model: null, message: 'Not saved' },
+      '/api/v1/teaching/voice/status': { broker_reachable: changes.voiceConfigured, configuration_present: changes.voiceConfigured, dependencies_present: changes.voiceConfigured, message: 'Fixture configuration only' },
       '/api/v1/health': { status: 'ok', version: 'test' },
       '/api/v1/capabilities': [],
       '/api/v1/projects': [{ id: 'teaching', name: 'Teaching test', created_at: '2026-09-27T00:00:00Z' }],
@@ -163,4 +166,104 @@ test('executor reconnect cannot revive the last capture after an explicit discon
   await expect(page.getByRole('img', { name: 'Fresh simulator camera', exact: true })).toHaveCount(0);
   changes.frameChanges = { capture_id: '1152921504606846978' };
   await expect(page.getByRole('img', { name: 'Fresh simulator camera', exact: true })).toBeVisible();
+});
+
+async function intelligence(page: Page, options: { fail?: boolean; hold?: boolean } = {}) {
+  const posts: { path: string; body: any }[] = [];
+  let release: (() => void) | undefined;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  const changes = { revision: 2 };
+  let saved = false;
+  await page.route('**/api/v1/teaching/**', async route => {
+    const request = route.request(), path = new URL(request.url()).pathname;
+    if (path === '/api/v1/teaching/state') return route.fulfill({ json: { connected: true, voice_configured: false, state: { mode: 'idle', episode_id: null, revision: changes.revision, session_id: 'session-advice', instruction: 'Review scene', outcome: 'unknown', steps: 0, sim_time: 0, joints: ['gripper'], state_rad: [0], fault: null } } });
+    if (!path.includes('/intelligence/')) return route.fallback();
+    if (request.method() !== 'GET') posts.push({ path, body: request.postData() ? request.postDataJSON() : undefined });
+    if (path.endsWith('/status')) return route.fulfill({ json: { broker_reachable: true, configured: true, busy: false, configuration_revision: null, credential_source: 'environment' } });
+    if (path.endsWith('/settings')) { if (request.method() === 'PUT') saved = true; if (request.method() === 'DELETE') saved = false; return route.fulfill({ json: { saved, revision: saved ? 'a'.repeat(32) : null, voice_model: saved ? 'provider/chat' : null, message: 'Saved locally; provider access is unverified.' } }); }
+    if (path.endsWith('/cancel')) return route.fulfill({ json: { schema_version: 1, request_id: request.postDataJSON().request_id, status: 'cancellation_requested', billing_verified: false } });
+    if (options.hold) await pending;
+    if (options.fail) return route.fulfill({ status: 503, json: { detail: 'The provider deadline expired. Completion and billing remain unverified; no automatic retry was made.' } });
+    const body = request.postDataJSON(), kind = path.endsWith('/decision') ? 'decision' : 'perception';
+    return route.fulfill({ json: { schema_version: 1, request_id: body.request_id, kind, advisory_only: true, current_at_return: true, choices: [{ id: 'review_instruction', description: 'Clarify the recorded instruction.' }], proposal: { ...(kind === 'decision' ? { choice: 'review_instruction', confidence: .8 } : { summary: 'Generated camera fixture.', uncertain: true }), receipt: { context: { revision: body.expected_revision, session_id: body.session_id, episode_id: body.episode_id }, requested_model: kind === 'decision' ? 'typesafe/jev-1.13' : 'perceptron/perceptron-mk1.5', returned_model: kind === 'decision' ? 'typesafe/jev-1.13' : 'perceptron/perceptron-mk1.5', elapsed_seconds: .02, reported_cost_usd: null, frame: kind === 'perception' ? { step: 1, rgb_sha256: 'a'.repeat(64) } : null } } } });
+  });
+  return { posts, changes, release: () => release?.() };
+}
+
+async function consentAdvice(page: Page) {
+  await page.getByLabel('Question for intelligence').fill('What should I review?');
+  await page.getByRole('checkbox', { name: /I consent to sending/ }).check();
+}
+
+test('optional intelligence requires consent and never dispatches a control command', async ({ page }) => {
+  const base = await teaching(page);
+  const fixture = await intelligence(page);
+  await page.reload(); await page.getByRole('button', { name: 'Teaching', exact: true }).click();
+  const ask = page.getByRole('button', { name: 'Ask Jev for a review suggestion' });
+  await expect(ask).toBeDisabled();
+  await consentAdvice(page); await ask.dblclick();
+  await expect(page.getByRole('article', { name: 'Intelligence suggestion' })).toContainText('Clarify the recorded instruction.');
+  expect(fixture.posts.filter(p => p.path.endsWith('/decision'))).toHaveLength(1);
+  expect(fixture.posts[0].body).toMatchObject({ session_id: 'session-advice', expected_revision: 2, episode_id: null, consent: true });
+  expect(base.commands).toEqual([]);
+  await expect(page.getByRole('checkbox', { name: /I consent to sending/ })).not.toBeChecked();
+  fixture.changes.revision = 3;
+  await expect(page.getByText('Historical suggestion · context changed')).toBeVisible();
+});
+
+test('camera advice displays captured scope and never sends browser pixels', async ({ page }) => {
+  await teaching(page);const fixture = await intelligence(page);
+  await page.reload(); await page.getByRole('button', { name: 'Teaching', exact: true }).click();
+  await consentAdvice(page);await page.getByRole('button', { name: 'Ask Mk1.5 about the camera' }).click();
+  await expect(page.getByRole('article', { name: 'Intelligence suggestion' })).toContainText('captured frame 1');
+  expect(Object.keys(fixture.posts[0].body).sort()).toEqual(['consent', 'episode_id', 'expected_revision', 'prompt', 'request_id', 'session_id']);
+  await expect(page.getByText(/not a live observation, calibrated confidence/)).toBeVisible();
+});
+
+test('private intelligence settings clear password without browser persistence or provider verification', async ({ page }) => {
+  await teaching(page);const fixture = await intelligence(page);
+  await page.reload(); await page.getByRole('button', { name: 'Teaching', exact: true }).click();
+  await page.getByText('Configure optional services', { exact: true }).click();
+  await page.getByLabel('OpenRouter API key').fill('fixture-private-key-not-real');
+  await page.getByLabel('Voice chat model', { exact: true }).fill('provider/chat');
+  await page.getByRole('button', { name: 'Save private settings' }).click();
+  await expect(page.getByLabel('OpenRouter API key')).toHaveValue('');
+  await expect(page.getByText('Saved voice model: provider/chat. Provider access is unverified.')).toBeVisible();
+  expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toContain('fixture-private-key');
+  expect(fixture.posts.map(p => p.path)).toEqual(['/api/v1/teaching/intelligence/settings']);
+});
+
+test('ambiguous intelligence failure never retries and requires renewed consent', async ({ page }) => {
+  await teaching(page);const fixture = await intelligence(page, { fail: true });
+  await page.reload(); await page.getByRole('button', { name: 'Teaching', exact: true }).click();
+  await consentAdvice(page);await page.getByRole('button', { name: 'Ask Jev for a review suggestion' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'provider deadline expired' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ask Jev for a review suggestion' })).toBeDisabled();
+  expect(fixture.posts.filter(p => p.path.endsWith('/decision'))).toHaveLength(1);
+  await expect(page.getByRole('article', { name: 'Intelligence suggestion' })).toHaveCount(0);
+});
+
+test('explicit intelligence cancel preserves request identity and withholds late response', async ({ page }) => {
+  await teaching(page);const fixture = await intelligence(page, { hold: true });
+  await page.reload(); await page.getByRole('button', { name: 'Teaching', exact: true }).click();
+  await consentAdvice(page);await page.getByRole('button', { name: 'Ask Jev for a review suggestion' }).click();
+  await expect.poll(() => fixture.posts.filter(p => p.path.endsWith('/decision')).length).toBe(1);
+  await page.getByRole('button', { name: 'Cancel intelligence request' }).click();
+  await expect.poll(() => fixture.posts.filter(p => p.path.endsWith('/cancel')).length).toBe(1);
+  expect(fixture.posts[1].body).toEqual({ request_id: fixture.posts[0].body.request_id, session_id: 'session-advice' });
+  fixture.release();
+  await expect(page.getByRole('alert').filter({ hasText: 'Cancellation requested' })).toBeVisible();
+  await expect(page.getByRole('article', { name: 'Intelligence suggestion' })).toHaveCount(0);
+});
+
+test('revision change cancels advice and cannot promote a late response', async ({ page }) => {
+  await teaching(page);const fixture = await intelligence(page, { hold: true });
+  await page.reload(); await page.getByRole('button', { name: 'Teaching', exact: true }).click();
+  await consentAdvice(page);await page.getByRole('button', { name: 'Ask Jev for a review suggestion' }).click();
+  await expect.poll(() => fixture.posts.length).toBe(1);
+  fixture.changes.revision = 3;
+  await expect.poll(() => fixture.posts.filter(p => p.path.endsWith('/cancel')).length).toBe(1);
+  fixture.release();
+  await expect(page.getByRole('alert').filter({ hasText: 'Teaching context changed' })).toBeVisible();
+  await expect(page.getByRole('article', { name: 'Intelligence suggestion' })).toHaveCount(0);
 });
