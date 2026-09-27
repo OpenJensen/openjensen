@@ -350,3 +350,18 @@ def test_non_utf8_base_registry_rejected(tmp_path):
     target.write_bytes('{"runtimes": []}'.encode("utf-16"))
     with pytest.raises(UnicodeError):
         m.read_json(target)
+
+
+def test_source_requirement_has_archive_filename_for_uv(fixture):
+    from urllib.parse import urlsplit
+
+    root, _ = fixture
+    plan = m.setup_plan(root / "new", root / "python", root / "uv")
+    requirement = plan["commands"][3][-1]
+    name, url = requirement.split(" @ ", 1)
+    parsed = urlsplit(url)
+    assert name == "lerobot"
+    assert parsed.scheme == "https" and parsed.netloc == "github.com"
+    # uv rejects the old codeload /tar.gz/<commit> endpoint before fetching it.
+    assert parsed.path.endswith("/" + m.UPSTREAM + ".tar.gz")
+    assert parsed.fragment == "sha256=" + m.UPSTREAM_SHA

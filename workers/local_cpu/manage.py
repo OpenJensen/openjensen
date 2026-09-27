@@ -21,7 +21,7 @@ UV_VERSION = "0.12.19"
 UPSTREAM = "e595b7902714ba51f91e47523f66f89c5181b649"
 UPSTREAM_SHA = "a750c65130a5ebf2cd72b98189f1ab5b5918c00b1713111ee93188b8065e8c77"
 UPSTREAM_URL = (
-    f"https://codeload.github.com/huggingface/lerobot/tar.gz/{UPSTREAM}#sha256={UPSTREAM_SHA}"
+    f"https://github.com/huggingface/lerobot/archive/{UPSTREAM}.tar.gz#sha256={UPSTREAM_SHA}"
 )
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
