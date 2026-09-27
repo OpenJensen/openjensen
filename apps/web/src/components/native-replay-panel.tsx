@@ -8,6 +8,10 @@ import { storedAttempt, storeAttempt, type PolicyJobAttempt } from '@/lib/policy
 import { cancelReplay, readReplay, replayDataset, replayJob, replayPolicy, replayReport, replayRuntime, replaySelection, startReplay, type ReplayJob, type ReplayRecipe } from '@/lib/native-replay';
 import { WorkbenchDisclosure } from './workbench-disclosure';
 
+class JournalUnavailable extends Error {
+  constructor() { super('Browser session storage is unavailable. Restore it and reload, then inspect recorded jobs before submitting again.'); }
+}
+
 function ActionTrace({ values, name, unit }: { values: number[]; name: string; unit: string }) {
   const low = Math.min(...values), high = Math.max(...values), extent = high - low;
   const points = values.map((value, index) => `${4 + index * 252 / 99},${extent ? 50 - (value - low) * 44 / extent : 28}`).join(' ');
@@ -50,7 +54,16 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, onDataset }:
   const preview = useQuery({ queryKey: ['native-replay-record', projectId, selected?.id, output?.id, output?.manifest_sha256], queryFn: () => readReplay(projectId, output!.id, selected!, report!), enabled: !!selected && !!output && !!report, retry: false });
   const observed = preview.data?.records[observationIndex];
   function selectJob(id: string) { currentId.current = id; setSelectedId(id); setCancelId(''); setObservationIndex(0); }
-  function saveAttempt(value: PolicyJobAttempt) { storeAttempt('policy.run.replay', projectId, value); client.setQueryData(attemptKey, value); }
+  function saveAttempt(value: PolicyJobAttempt) {
+    try { storeAttempt('policy.run.replay', projectId, value); }
+    catch {
+      const failure = new JournalUnavailable();
+      if (client.getQueryData<PolicyJobAttempt>(attemptKey)?.state === 'pending') client.setQueryData<PolicyJobAttempt>(attemptKey, (): PolicyJobAttempt => ({ state: 'uncertain', message: failure.message }));
+      if (mounted.current) setJournalReady(false);
+      throw failure;
+    }
+    client.setQueryData(attemptKey, value);
+  }
   let recipe: ReplayRecipe | undefined, invalid = '';
   try {
     const rows = replaySelection(selection), coordinates = units.split(',').map(item => item.trim());
@@ -71,12 +84,15 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, onDataset }:
     try {
       saveAttempt({ state: 'pending', message: 'Submitting one CPU observation replay…' });
       const job = await startReplay(projectId, { operation: 'policy.run', runtime_id: runtime!.id, artifact_id: policy!.id, dataset_job_id: dataset!.id, native_replay: recipe!, timeout_seconds: Number(timeout) });
-      saveAttempt(null); if (mounted.current) { setAccepted(job); selectJob(job.id); }
+      if (mounted.current) { setAccepted(job); selectJob(job.id); }
+      saveAttempt(null);
       await client.invalidateQueries({ queryKey: ['jobs', projectId] });
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'Replay could not be submitted.';
       attemptVersion.current += 1; if (mounted.current) { setReviewed(false); setError(message); }
-      try { saveAttempt(cause instanceof UncertainPolicyJob ? { state: 'uncertain', message } : null); } catch { if (mounted.current) setJournalReady(false); }
+      if (!(cause instanceof JournalUnavailable)) {
+        try { saveAttempt(cause instanceof UncertainPolicyJob ? { state: 'uncertain', message } : null); } catch { if (mounted.current) setJournalReady(false); }
+      }
     } finally { busy.current = false; }
   }
   async function cancel() {
@@ -107,7 +123,7 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, onDataset }:
     </article>}
     {history.length > 0 && <label className="distillation-history">Saved replay<select aria-label="Saved replay" value={selected?.id ?? ''} onChange={event => selectJob(event.target.value)}><option value="">Choose a recorded replay</option>{history.map(item => <option key={item.id} value={item.id}>{item.id.slice(0, 8)} · {item.status}</option>)}</select></label>}
     {jobs.isError && <p role="alert">Job updates are unavailable; displayed status may be stale.</p>}{options.isError && <p role="alert">Worker options are unavailable.</p>}{artifacts.isError && <p role="alert">Saved policies are unavailable.</p>}{error && <p role="alert">{error}</p>}
-    {attempt.data?.state === 'pending' && <p role="status">{attempt.data.message}</p>}
+    {journalReady && attempt.data?.state === 'pending' && <p role="status">{attempt.data.message}</p>}
     {attempt.data?.state === 'uncertain' && <div className="warning-box"><p>{attempt.data.message}</p><button className="secondary-button" disabled={!reviewed || jobs.isError} onClick={() => { try { saveAttempt(null); setReviewed(false); setError(''); } catch { setJournalReady(false); setError('Browser session storage is unavailable.'); } }}>I checked replay jobs; allow a new request</button></div>}
     <WorkbenchDisclosure key={selected ? 'another' : 'first'} title={selected ? 'Prepare another replay' : 'Choose policy and observations'} initiallyOpen={!selected}>
       {options.isSuccess && !runtimes.length && <p role="status">No local CPU replay worker is configured. Its isolated model environment and dataset reader must be registered first.</p>}

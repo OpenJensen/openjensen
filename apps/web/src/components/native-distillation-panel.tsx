@@ -13,6 +13,10 @@ function coordinateNames(value: unknown): string { return record(value) && Array
 type Attempt = PolicyJobAttempt;
 const size = (bytes: number) => `${(bytes / 1024 ** 2).toFixed(1)} MiB`;
 
+class JournalUnavailable extends Error {
+  constructor() { super('Browser session storage is unavailable. Restore it and reload, then inspect recorded jobs before submitting again.'); }
+}
+
 export function NativeDistillationPanel({ projectId, onDataset, onQuantize }: { projectId: string; onDataset: () => void; onQuantize: (artifactId: string) => void }) {
   const client = useQueryClient();
   const options = useQuery({ queryKey: ['policy-options'], queryFn: api.policyOptions, retry: false, refetchInterval: 10_000 });
@@ -36,7 +40,16 @@ export function NativeDistillationPanel({ projectId, onDataset, onQuantize }: { 
       setJournalReady(true);
     } catch { setError('Browser session storage is unavailable. Enable it before submitting a job so uncertain requests can be recovered after a reload.'); }
   }, [client, projectId]);
-  function saveAttempt(value: Attempt) { storeAttempt('policy.distill', projectId, value); client.setQueryData<Attempt>(attemptKey, value); }
+  function saveAttempt(value: Attempt) {
+    try { storeAttempt('policy.distill', projectId, value); }
+    catch {
+      const failure = new JournalUnavailable();
+      if (client.getQueryData<PolicyJobAttempt>(attemptKey)?.state === 'pending') client.setQueryData<PolicyJobAttempt>(attemptKey, (): PolicyJobAttempt => ({ state: 'uncertain', message: failure.message }));
+      if (mounted.current) setJournalReady(false);
+      throw failure;
+    }
+    client.setQueryData<Attempt>(attemptKey, value);
+  }
   const runtimes = (options.data?.runtimes ?? []).filter(studentRuntime);
   const runtime = runtimeId ? runtimes.find(item => item.id === runtimeId) : runtimes[0];
   const teachers = (artifacts.data ?? []).filter(item => studentTeacher(item, projectId));
@@ -79,14 +92,16 @@ export function NativeDistillationPanel({ projectId, onDataset, onQuantize }: { 
     try {
       saveAttempt({ state: 'pending', message: 'Submitting one local distillation job…' });
       const job = await startStudent(projectId, request);
-      saveAttempt(null);
       if (mounted.current) { setAccepted(job); selectJob(job.id); }
+      saveAttempt(null);
       await client.invalidateQueries({ queryKey: ['jobs', projectId] });
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'The request failed.';
       attemptVersion.current += 1;
       if (mounted.current) setReviewed(false);
-      try { saveAttempt(cause instanceof UncertainPolicyJob ? { state: 'uncertain', message } : null); } catch { if (mounted.current) setJournalReady(false); }
+      if (!(cause instanceof JournalUnavailable)) {
+        try { saveAttempt(cause instanceof UncertainPolicyJob ? { state: 'uncertain', message } : null); } catch { if (mounted.current) setJournalReady(false); }
+      }
       if (mounted.current) setError(message);
     } finally { busy.current = false; }
   }
@@ -120,7 +135,7 @@ export function NativeDistillationPanel({ projectId, onDataset, onQuantize }: { 
     {options.isError && <p role="alert">Worker options are unavailable. {options.error.message}</p>}
     {artifacts.isError && <p role="alert">Teacher policies are unavailable. {artifacts.error.message}</p>}
     {error && <p role="alert">{error}</p>}
-    {attempt.data?.state === 'pending' && <p role="status">{attempt.data.message}</p>}
+    {journalReady && attempt.data?.state === 'pending' && <p role="status">{attempt.data.message}</p>}
     {attempt.data?.state === 'uncertain' && <div className="warning-box"><p>{attempt.data.message}</p><button className="secondary-button" disabled={!reviewed || jobs.isError} onClick={() => { try { saveAttempt(null); setReviewed(false); setError(''); } catch { setJournalReady(false); setError('Browser session storage is unavailable.'); } }}>I checked recorded jobs; allow a new request</button></div>}
     <WorkbenchDisclosure key={selected ? 'another' : 'first'} title={selected ? 'Prepare another student' : 'Prepare a student'} initiallyOpen={!selected}>
       {!projectId && <p role="status">Select a project to prepare a student.</p>}

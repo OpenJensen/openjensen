@@ -143,3 +143,66 @@ test('switching project during admission never displays another project job', as
   await expect(page.getByRole('article', { name: 'Distillation job details' })).toHaveAttribute('data-job-id', 'student-001');
   expect(state.posts).toHaveLength(1);
 });
+
+
+test('journal write failure blocks submission even when removal still works', async ({ page }) => {
+  const state = await fixture(page); await prepare(page);
+  await page.evaluate(() => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (key.startsWith('firebird:job-attempt:')) throw new DOMException('Journal write denied', 'SecurityError');
+      return original.call(this, key, value);
+    };
+  });
+  await submit(page).click();
+  await expect(submit(page)).toBeDisabled();
+  expect(state.posts).toHaveLength(0);
+  await page.getByRole('button', { name: 'Refresh distillation jobs' }).click();
+  await expect(submit(page)).toBeDisabled();
+  expect(state.posts).toHaveLength(0);
+});
+
+test('acknowledged job remains visible when journal cleanup fails', async ({ page }) => {
+  const state = await fixture(page); await prepare(page);
+  await page.evaluate(() => {
+    const original = Storage.prototype.removeItem;
+    Storage.prototype.removeItem = function (key: string) {
+      if (key.startsWith('firebird:job-attempt:')) throw new DOMException('Journal removal denied', 'SecurityError');
+      return original.call(this, key);
+    };
+  });
+  await submit(page).click();
+  await expect(page.getByRole('article', { name: 'Distillation job details' })).toHaveAttribute('data-job-id', 'student-001');
+  expect(state.posts).toHaveLength(1);
+  await page.getByText('Prepare another student', { exact: true }).click();
+  await expect(submit(page)).toBeDisabled();
+  const pending = await page.evaluate(() => Object.keys(sessionStorage).filter(key => key.startsWith('firebird:job-attempt:')).map(key => JSON.parse(sessionStorage.getItem(key)!)));
+  expect(pending).toHaveLength(1);
+  expect(pending[0].state).toBe('pending');
+  await expect(page.getByText(/^Submitting one /)).toHaveCount(0);
+});
+
+
+test('journal cleanup failure after navigation preserves recovery guidance', async ({ page }) => {
+  const state = await fixture(page); await prepare(page);
+  let release!: () => void; state.postGate = new Promise<void>(resolve => { release = resolve; });
+  await page.evaluate(() => {
+    const original = Storage.prototype.removeItem;
+    Storage.prototype.removeItem = function (key: string) {
+      if (key.startsWith('firebird:job-attempt:')) {
+        (window as unknown as { journalCleanupFailures: number }).journalCleanupFailures = 1;
+        throw new DOMException('Journal removal denied', 'SecurityError');
+      }
+      return original.call(this, key);
+    };
+  });
+  await submit(page).click(); await expect.poll(() => state.posts.length).toBe(1);
+  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); release();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { journalCleanupFailures?: number }).journalCleanupFailures)).toBe(1);
+  await page.getByRole('button', { name: 'Distill', exact: true }).click();
+
+  await expect(page.getByRole('button', { name: 'I checked recorded jobs; allow a new request' })).toBeVisible();
+  await expect(page.getByText(/^Submitting one /)).toHaveCount(0);
+  await expect(submit(page)).toBeDisabled();
+  expect(state.posts).toHaveLength(1);
+});
