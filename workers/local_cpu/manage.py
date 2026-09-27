@@ -67,6 +67,7 @@ def write_new(path: Path, value: Any) -> None:
     raw = (json.dumps(value, indent=2, allow_nan=False) + "\n").encode()
     fd, name = tempfile.mkstemp(prefix=".local-cpu-", dir=path.parent)
     temporary = Path(name)
+    owned = os.fstat(fd)
     try:
         with os.fdopen(fd, "wb") as handle:
             handle.write(raw)
@@ -78,6 +79,17 @@ def write_new(path: Path, value: Any) -> None:
             os.fsync(directory)
         finally:
             os.close(directory)
+    except BaseException:
+        try:
+            current = path.stat(follow_symlinks=False)
+        except FileNotFoundError:
+            pass
+        else:
+            # Covers an interruption immediately after link, before Python could record it.
+            # Only roll back this inode, not an observed concurrent replacement.
+            if (current.st_dev, current.st_ino) == (owned.st_dev, owned.st_ino):
+                path.unlink(missing_ok=True)
+        raise
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -340,14 +352,8 @@ def verify(
     }
 
 
-def install(root: Path, python: Path, uv: Path, *, cache: Path | None = None) -> dict[str, Any]:
-    """Install only into a new explicitly selected persistent directory."""
-    plan = setup_plan(root, python, uv, cache=cache)
-    if root.exists() or not root.parent.is_dir():
-        raise ValueError("Installation root must be new; explicitly create its parent first")
-    if not python.is_file() or not uv.is_file():
-        raise ValueError("Provide existing Python3.12 and uv0.12.19 executables")
-    env = environment(root, offline=False, cache=cache)
+def check_tools(python: Path, uv: Path, env: dict[str, str]) -> None:
+    """Check only the explicitly selected existing tool executables."""
     uv_version = subprocess.check_output([str(uv), "--version"], env=env, text=True, timeout=5)
     if not uv_version.startswith(f"uv {UV_VERSION} "):
         raise ValueError(f"Use existing uv {UV_VERSION}; this command never installs tools")
@@ -359,6 +365,17 @@ def install(root: Path, python: Path, uv: Path, *, cache: Path | None = None) ->
     ).strip()
     if version != "3.12":
         raise ValueError("Use existing Python3.12; managed Python downloads are disabled")
+
+
+def install(root: Path, python: Path, uv: Path, *, cache: Path | None = None) -> dict[str, Any]:
+    """Install only into a new explicitly selected persistent directory."""
+    plan = setup_plan(root, python, uv, cache=cache)
+    if root.exists() or not root.parent.is_dir():
+        raise ValueError("Installation root must be new; explicitly create its parent first")
+    if not python.is_file() or not uv.is_file():
+        raise ValueError("Provide existing Python3.12 and uv0.12.19 executables")
+    env = environment(root, offline=False, cache=cache)
+    check_tools(python, uv, env)
     root.mkdir(mode=0o700)
     write_new(root / "installation-plan.json", plan)
     project = root / "act-project"
@@ -377,6 +394,78 @@ def install(root: Path, python: Path, uv: Path, *, cache: Path | None = None) ->
         "installation_root": str(root),
         "inputs": plan["inputs"],
         "cache": plan["cache"],
+    }
+    write_new(root / "installation.json", receipt)
+    return receipt
+
+
+def completion_plan(
+    root: Path, python: Path, uv: Path, *, cache: Path | None = None
+) -> dict[str, Any]:
+    """Validate a preserved partial attempt without executing its saved commands."""
+    root, python, uv = absolute(root), absolute(python), absolute(uv)
+    expected = setup_plan(root, python, uv, cache=cache)
+    if os.path.lexists(root / "installation.json"):
+        raise FileExistsError("Installation already has a receipt; use verify instead")
+    saved = read_json(root / "installation-plan.json")
+    # Canonical JSON comparison distinguishes true/1 and other JSON type changes.
+    if json.dumps(saved, sort_keys=True, allow_nan=False) != json.dumps(
+        expected, sort_keys=True, allow_nan=False
+    ):
+        raise ValueError("Preserved installation plan differs from the selected tools/source/root")
+    for name in ("pyproject.toml", "uv.lock"):
+        copied = root / "act-project" / name
+        no_links(copied)
+        if not copied.is_file() or copied.stat().st_size > 10 * 1024 * 1024:
+            raise ValueError("Missing or oversized copied ACT project input")
+        if digest(copied) != expected["inputs"][f"workers/act_optimizer/{name}"]:
+            raise ValueError("Copied ACT project input differs from the preserved plan")
+    base = [str(uv), "--no-config", "--no-python-downloads", "pip", "check", "--python"]
+    return {
+        "schema_version": 1,
+        "mode": "verify_existing_partial_installation",
+        "installation_root": str(root),
+        "installation_plan_sha256": digest(root / "installation-plan.json"),
+        "inputs": expected["inputs"],
+        "cache": expected["cache"],
+        "commands": [
+            base + [str(root / folder / "bin/python")] for folder in ("act-model", "dataset-reader")
+        ],
+        "probes": [
+            [str(root / folder / "bin/python"), "-I", str(HERE / "probe.py"), role, str(REPO)]
+            for role, folder in (("model", "act-model"), ("reader", "dataset-reader"))
+        ],
+        "network_required": False,
+        "publication": "Only complete --execute publishes a new installation.json after all checks",
+        "activation": "None; no package installation, repair or configuration activation",
+    }
+
+
+def complete(root: Path, python: Path, uv: Path, *, cache: Path | None = None) -> dict[str, Any]:
+    """Explicitly verify a coherent partial attempt; never install or repair it."""
+    root, python, uv = absolute(root), absolute(python), absolute(uv)
+    planned = completion_plan(root, python, uv, cache=cache)
+    env = environment(root, offline=True, cache=cache)
+    check_tools(python, uv, env)
+    descriptor, name = tempfile.mkstemp(prefix="completion-", suffix=".log", dir=root)
+    os.close(descriptor)
+    log = Path(name)
+    for command in planned["commands"]:
+        run(command, env=env, log=log)
+    checked = verify(root)
+    if completion_plan(root, python, uv, cache=cache) != planned:
+        raise ValueError("Preserved installation inputs changed during completion")
+    receipt = {
+        **checked,
+        "installation_root": str(root),
+        "inputs": planned["inputs"],
+        "cache": planned["cache"],
+        "completion": {
+            "mode": "verified_existing_partial_installation",
+            "installation_plan_sha256": planned["installation_plan_sha256"],
+            "log": log.name,
+            "packages_installed_or_repaired": False,
+        },
     }
     write_new(root / "installation.json", receipt)
     return receipt
@@ -438,12 +527,14 @@ def parser() -> argparse.ArgumentParser:
     cli = argparse.ArgumentParser(description=__doc__)
     cli.add_argument("--version", action="version", version=VERSION)
     sub = cli.add_subparsers(dest="action", required=True)
-    for action in ("plan", "install"):
+    for action in ("plan", "install", "complete"):
         cmd = sub.add_parser(
             action,
             help="Show commands only"
             if action == "plan"
-            else "Opt-in network installation into a NEW directory",
+            else "Opt-in network installation into a NEW directory"
+            if action == "install"
+            else "Verify a preserved partial installation; no package repair or activation",
         )
         cmd.add_argument("--root", type=Path, required=True)
         cmd.add_argument("--python", type=Path, required=True)
@@ -453,11 +544,13 @@ def parser() -> argparse.ArgumentParser:
             type=Path,
             help="Explicit existing uv cache to reuse; separate new environments still required",
         )
-        if action == "install":
+        if action in {"install", "complete"}:
             cmd.add_argument(
                 "--execute",
                 action="store_true",
-                help="Explicitly authorize downloads and isolated environment creation",
+                help="Explicitly authorize downloads and isolated environment creation"
+                if action == "install"
+                else "Run offline checks and publish a receipt; never install packages",
             )
     cmd = sub.add_parser("verify", help="Offline import/source verification; no model execution")
     cmd.add_argument("--root", type=Path, required=True)
@@ -478,6 +571,9 @@ def main(argv: list[str] | None = None) -> int:
             result = install(
                 absolute(args.root), absolute(args.python), absolute(args.uv), cache=args.cache
             )
+        elif args.action == "complete":
+            action = complete if args.execute else completion_plan
+            result = action(args.root, args.python, args.uv, cache=args.cache)
         elif args.action == "verify":
             result = verify(args.root)
         else:

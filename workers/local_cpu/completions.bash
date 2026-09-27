@@ -12,7 +12,7 @@ _openjensen_cpu_setup_complete() {
   COMPREPLY=()
   if [[ "$current" == -* || "$COMP_CWORD" == 1 ]]; then
     while IFS= read -r candidate; do COMPREPLY+=("$candidate"); done < <(
-      compgen -W 'plan install verify config --root --python --uv --cache --execute --output --base --help --version' -- "$current"
+      compgen -W 'plan install complete verify config --root --python --uv --cache --execute --output --base --help --version' -- "$current"
     )
   fi
 }
