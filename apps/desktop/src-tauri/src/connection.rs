@@ -101,7 +101,7 @@ fn check(backend: &Backend, timeout: Duration) -> Result<String, String> {
         .map_err(|_| "Could not construct the health-check address.".to_string())?;
     let response = client.get(health_url).send().map_err(|_| {
         format!(
-            "Cannot reach {}. Start Firebird locally, then retry.",
+            "Cannot reach {}. Start OPEN JENSEN locally, then retry.",
             backend.url
         )
     })?;
@@ -113,11 +113,11 @@ fn check(backend: &Backend, timeout: Duration) -> Result<String, String> {
     }
     let health: Health = serde_json::from_slice(&read_bounded(response, MAX_HEALTH_BYTES)?)
         .map_err(|_| {
-            "The local server did not return a valid Firebird health response.".to_string()
+            "The local server did not return a valid OPEN JENSEN health response.".to_string()
         })?;
     if health.status != "ok" || health.version != env!("CARGO_PKG_VERSION") {
         return Err(format!(
-            "This desktop requires Firebird {}. Check the local application version and retry.",
+            "This desktop requires OPEN JENSEN {}. Check the local application version and retry.",
             env!("CARGO_PKG_VERSION")
         ));
     }
@@ -131,11 +131,11 @@ fn check(backend: &Backend, timeout: Duration) -> Result<String, String> {
             .and_then(|value| value.to_str().ok())
             .is_some_and(|value| value.split(';').next() == Some("text/html"))
     {
-        return Err("The API is reachable, but the built Firebird web interface is missing. Build the web app and restart Firebird, then retry.".into());
+        return Err("The API is reachable, but the built OPEN JENSEN web interface is missing. Build the web app and restart OPEN JENSEN, then retry.".into());
     }
     let html = read_bounded(response, MAX_HTML_BYTES)?;
-    if !String::from_utf8_lossy(&html).contains("<title>Firebird") {
-        return Err("The local server is not serving the expected Firebird web interface.".into());
+    if !String::from_utf8_lossy(&html).contains("<title>OPEN JENSEN") {
+        return Err("The local server is not serving the expected OPEN JENSEN web interface.".into());
     }
     Ok(health.version)
 }
@@ -279,7 +279,7 @@ mod tests {
             response(
                 200,
                 "text/html; charset=utf-8",
-                "<title>Firebird · Dataset workspace</title>",
+                "<title>OPEN JENSEN · Dataset workspace</title>",
             ),
         ]);
         let result = probe(&backend, Duration::from_secs(1));

@@ -31,7 +31,7 @@ export function LocalComputeSettingsPanel() {
     <section className="local-compute-settings" aria-labelledby="local-compute-title">
       <div className="local-compute-heading">
         <Icon name="layers" size={22} />
-        <div><h2 id="local-compute-title">Local runs</h2><p>Use a GPU on the machine running Jensen.</p></div>
+        <div><h2 id="local-compute-title">Local runs</h2><p>Use a GPU on the machine running OPEN JENSEN.</p></div>
         <span className="cloud-status">{saved ? (current.enabled ? "Enabled" : "Disabled") : "Loading…"}</span>
       </div>
       <form onSubmit={(event) => { event.preventDefault(); save.mutate(); }}>

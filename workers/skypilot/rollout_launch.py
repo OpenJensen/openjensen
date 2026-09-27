@@ -1,12 +1,14 @@
 """Validate local rollout inputs before submitting a managed GPU Job Group."""
 
 import argparse
+import hashlib
 import os
 import re
 import subprocess
 import sys
 import tempfile
 import uuid
+from contextlib import contextmanager, nullcontext
 from enum import Enum
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -24,6 +26,8 @@ _EXPERIMENTAL_MAX_STEPS = 300
 _EXPERIMENTAL_L4_TYPES = {"g2-standard-12", "g2-standard-16", "g2-standard-32"}
 _EXPERIMENTAL_ZONES = {f"{_REGION}-{suffix}" for suffix in ("a", "b", "c", "f")}
 _CANCEL_SECONDS = 120
+_CHECKPOINT_MOUNT = "~/vla-checkpoint"
+_REMOTE_WORKDIR = "~/sky_workdir"
 _RESOURCE_TYPES = {
     "isaac": ("g2-standard-16", "L4:1", False),
     "vla": ("a3-highgpu-1g", "H100:1", True),
@@ -194,18 +198,86 @@ def _manifest(task, mode):
     return data
 
 
-def _checkpoint(task, manifest):
+def _inspect(source):
     # Inspect exports with the shared CPU-only artifact validator.
     sys.path.insert(0, str(Path(__file__).resolve().parent / "../isaac_sim"))
     from sim_worker.rollout.checkpoint import inspect_checkpoint
 
-    source = task.get("file_mounts", {}).get("~/vla-checkpoint")
+    return inspect_checkpoint(Path(source).expanduser().resolve())
+
+
+def _bind_model(tasks, data, checkpoint, execute_steps):
+    artifact = _inspect(checkpoint)
+    joints = len(data["scene"]["joints"])
+    if (artifact.state_dim, artifact.action_dim) != (joints, joints):
+        raise ValueError("Checkpoint state/actions must match the scene joint count")
+
+    steps = data["control"]["execute_steps"] if execute_steps is None else execute_steps
+    if type(steps) is not int or steps < 1:
+        raise ValueError("execute-steps must be a positive integer")
+    if execute_steps is None:
+        steps = min(steps, artifact.action_steps)
+    if steps > artifact.chunk_size:
+        raise ValueError("execute-steps exceeds the checkpoint chunk size")
+
+    # Keep robot geometry, joint order and calibration under scenario control.
+    data["policy"]["model_id"] = artifact.model_id
+    data["capture"].update(width=artifact.width, height=artifact.height)
+    data["control"]["execute_steps"] = steps
+    policy = tasks["vla"]
+    policy["file_mounts"][_CHECKPOINT_MOUNT] = str(checkpoint)
+    policy["envs"].update(
+        MODEL_ID=artifact.model_id,
+        POLICY_STATE_DIM=str(artifact.state_dim),
+        POLICY_CAMERA_KEY=artifact.camera_key,
+        POLICY_ACTION_STEPS=str(steps),
+    )
+
+
+@contextmanager
+def _select_checkpoint(path, checkpoint, mode, execute_steps=None):
+    if checkpoint is None:
+        if execute_steps is not None:
+            raise ValueError("--execute-steps requires --checkpoint")
+        yield path
+        return
+
+    # Replace model placeholders before the existing complete-input validation.
+    documents = list(yaml.safe_load_all(path.read_text()))
+    tasks = _tasks(documents, mode)
+    isaac = tasks["isaac"]
+    manifest = _inside(isaac["envs"]["SIM_MANIFEST"], _WORKER, "SIM_MANIFEST")
+    data = yaml.safe_load(manifest.read_text())
+    _bind_model(tasks, data, checkpoint.expanduser().resolve(), execute_steps)
+
+    # Unique snapshots preserve templates and isolate overlapping submissions.
+    with (
+        tempfile.NamedTemporaryFile(
+            mode="w", prefix=".rollout-", suffix=".local.yaml", dir=manifest.parent
+        ) as snapshot,
+        tempfile.NamedTemporaryFile(
+            mode="w", prefix=".rollout-", suffix=".yaml", dir=_ROOT
+        ) as task,
+    ):
+        yaml.safe_dump(data, snapshot, sort_keys=False)
+        snapshot.flush()
+        relative = Path(snapshot.name).relative_to(_WORKER).as_posix()
+        isaac["envs"]["SIM_MANIFEST"] = relative
+        # Explicit mounting includes the snapshot even when workdir ignores it.
+        isaac.setdefault("file_mounts", {})[f"{_REMOTE_WORKDIR}/{relative}"] = snapshot.name
+        yaml.safe_dump_all(documents, task, sort_keys=False)
+        task.flush()
+        yield Path(task.name)
+
+
+def _checkpoint(task, manifest):
+    source = task.get("file_mounts", {}).get(_CHECKPOINT_MOUNT)
     if not isinstance(source, str):
         raise ValueError("Mount a local exported checkpoint at ~/vla-checkpoint")
     checkpoint = Path(source).expanduser().resolve()
     if not checkpoint.is_dir():
         raise ValueError(f"Checkpoint directory does not exist: {checkpoint}")
-    artifact = inspect_checkpoint(checkpoint)
+    artifact = _inspect(checkpoint)
     envs = task["envs"]
     if envs.get("MODEL_ID") != manifest["policy"]["model_id"]:
         raise ValueError("VLA MODEL_ID must match the rollout policy.model_id")
@@ -238,6 +310,8 @@ def _checkpoint(task, manifest):
         f"Checkpoint: {artifact.policy_type}, {artifact.width}x{artifact.height}, "
         f"{artifact.model_id}"
     )
+    print(f"Execute {manifest['control']['execute_steps']} steps per policy request")
+    return artifact
 
 
 def _prepare(path, mode=_Mode.ROLLOUT):
@@ -247,7 +321,7 @@ def _prepare(path, mode=_Mode.ROLLOUT):
     documents = _read(path)
     tasks = _tasks(documents, mode)
     manifest = _manifest(tasks["isaac"], mode)
-    _checkpoint(tasks["vla"], manifest)
+    artifact = _checkpoint(tasks["vla"], manifest)
     # Discovery uses this submission's labels, never another experiment's server.
     run_id = uuid.uuid4().hex
     for name, task in tasks.items():
@@ -264,7 +338,7 @@ def _prepare(path, mode=_Mode.ROLLOUT):
             "bash ~/sim-control/check_ready.sh\n"
         )
     if mode == _Mode.EXPERIMENTAL:
-        documents[0]["name"] = f"isaac-act-test-{run_id[:8]}"
+        documents[0]["name"] = f"isaac-{artifact.policy_type}-test-{run_id[:8]}"
         tasks["isaac"]["envs"]["SIM_EXPERIMENTAL"] = "1"
     if mode != _Mode.ROLLOUT:
         for task in tasks.values():
@@ -282,8 +356,8 @@ def _run_sdk(command, *, timeout, check=False):
         return subprocess.CompletedProcess(command, error.returncode)
 
 
-def _launch(documents, path, mode, options=()):
-    receipt_dir = Path(tempfile.mkdtemp(prefix="firebird-rollout-"))
+def _launch(documents, path, mode, options=(), receipt_dir=None):
+    receipt_dir = receipt_dir or Path(tempfile.mkdtemp(prefix="firebird-rollout-"))
     receipt_path = receipt_dir / "submission.json"
     command = [
         "bash",
@@ -321,7 +395,7 @@ def _launch(documents, path, mode, options=()):
                 if receipt["group_name"] == name:
                     target = [str(receipt["job_id"])]
                     attempt["job_id"] = receipt["job_id"]
-            except (OSError, ValueError, TypeError, KeyError):
+            except (OSError, ValueError, TypeError, KeyError) as _error:
                 pass  # Submission may not yet have returned an ID; the unique name is best effort.
             cancellation_path = receipt_dir / "cancellation.json"
 
@@ -356,9 +430,84 @@ def _launch(documents, path, mode, options=()):
         raise
 
 
+def _submit(args, path):
+    documents = _prepare(path, args.mode)
+    expected_model = getattr(args, "expected_model_id", None)
+    if expected_model is not None:
+        tasks = {task["name"]: task for task in documents[1:]}
+        if (
+            not re.fullmatch(r"sha256:[a-f0-9]{64}", expected_model)
+            or tasks["vla"]["envs"]["MODEL_ID"] != expected_model
+        ):
+            raise ValueError("Checkpoint differs from the application accepted model fingerprint")
+    expected_prefix = getattr(args, "expected_results_prefix", None)
+    if expected_prefix is not None:
+        tasks = {task["name"]: task for task in documents[1:]}
+        if tasks["isaac"]["envs"]["SIM_RESULTS_URI"].rstrip("/") != expected_prefix:
+            raise ValueError("Result prefix differs from the application accepted profile")
+    if args.validate_only:
+        print("Local rollout inputs validated. Cloud network, quota and capacity are not checked.")
+        return 0
+    receipt_dir = getattr(args, "receipt_dir", None)
+    if receipt_dir is not None:
+        if args.mode != _Mode.EXPERIMENTAL:
+            raise ValueError("Persistent application receipts require experimental mode")
+        receipt_dir.mkdir(parents=True, exist_ok=False)
+        tasks = {task["name"]: task for task in documents[1:]}
+        env = tasks["isaac"]["envs"]
+        manifest = _inside(env["SIM_MANIFEST"], _WORKER, "SIM_MANIFEST")
+        data = yaml.safe_load(manifest.read_text())
+        # Each app job owns a distinct prefix even if the operator's template
+        # is shared. The remote runner adds its own episode UUID beneath it.
+        env["SIM_RESULTS_URI"] = env["SIM_RESULTS_URI"].rstrip("/") + "/" + env["ROLLOUT_ID"]
+        rollout_sdk.write_json(
+            receipt_dir / "launch-context.json",
+            {
+                "schema_version": 1,
+                "group_name": documents[0]["name"],
+                "rollout_id": env["ROLLOUT_ID"],
+                "results_prefix": env["SIM_RESULTS_URI"],
+                "model_id": data["policy"]["model_id"],
+                "manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
+            },
+        )
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".yaml", prefix=".rollout-", dir=_ROOT
+    ) as task:
+        yaml.safe_dump_all(documents, task, sort_keys=False)
+        task.flush()
+        options = tuple(
+            flag
+            for enabled, flag in ((args.yes, "--yes"), (args.detach_run, "--detach-run"))
+            if enabled
+        )
+        return _launch(documents, task.name, args.mode, options, receipt_dir)
+
+
 def _main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("task", nargs="?", type=Path, default=Path("rollout.local.yaml"))
+    checkpoints = parser.add_mutually_exclusive_group()
+    checkpoints.add_argument(
+        "--checkpoint", type=Path, help="Select a complete local ACT or SmolVLA export"
+    )
+    checkpoints.add_argument(
+        "--checkpoint-archive", type=Path, help="Select a bounded ACT or SmolVLA TAR package"
+    )
+    parser.add_argument(
+        "--execute-steps",
+        type=int,
+        help="Actions to execute before replanning; requires a checkpoint directory or archive",
+    )
+    parser.add_argument(
+        "--receipt-dir", type=Path, help="New private directory for application ownership receipts"
+    )
+    parser.add_argument(
+        "--expected-model-id", help="Require the accepted model fingerprint before submission"
+    )
+    parser.add_argument(
+        "--expected-results-prefix", help="Require the configured result prefix before submission"
+    )
     parser.add_argument("--validate-only", action="store_true")
     parser.add_argument("--yes", action="store_true", help="Skip SkyPilot's launch confirmation")
     parser.add_argument("--detach-run", action="store_true", help="Return after submitting the job")
@@ -379,25 +528,28 @@ def _main():
         help="Allow candidate calibration for an experimental rollout of at most 300 steps",
     )
     args = parser.parse_args()
+    source = args.checkpoint or args.checkpoint_archive
+    if source is not None:
+        # Resolve relative inputs before the historical task-directory change.
+        source = source.expanduser().absolute()
+    if args.receipt_dir is not None:
+        args.receipt_dir = args.receipt_dir.expanduser().resolve()
     os.chdir(_ROOT)
     try:
-        documents = _prepare(args.task, args.mode)
-        if args.validate_only:
-            print(
-                "Local rollout inputs validated. Cloud network, quota and capacity are not checked."
-            )
-            return 0
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", prefix=".rollout-", dir=_ROOT
-        ) as task:
-            yaml.safe_dump_all(documents, task, sort_keys=False)
-            task.flush()
-            options = tuple(
-                flag
-                for enabled, flag in ((args.yes, "--yes"), (args.detach_run, "--detach-run"))
-                if enabled
-            )
-            return _launch(documents, task.name, args.mode, options)
+        sys.path.insert(0, str(_WORKER))
+        from sim_worker.rollout.checkpoint_package import resolve_checkpoint
+
+        lifetime = (
+            resolve_checkpoint(source, archive=args.checkpoint_archive is not None)
+            if source is not None
+            else nullcontext(None)
+        )
+        with lifetime as resolved:
+            checkpoint = resolved.directory if resolved is not None else None
+            with _select_checkpoint(
+                args.task, checkpoint, args.mode, args.execute_steps
+            ) as selected:
+                return _submit(args, selected)
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
         print(f"Rollout launch refused: {error}", file=sys.stderr)
         return 1

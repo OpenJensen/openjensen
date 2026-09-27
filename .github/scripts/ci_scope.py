@@ -6,9 +6,19 @@ import re
 import subprocess
 from pathlib import Path
 
-SCOPES = ("application", "quantization", "training", "benchmark", "act", "teaching", "decision")
+SCOPES = (
+    "application",
+    "quantization",
+    "unified_quantization",
+    "training",
+    "benchmark",
+    "act",
+    "teaching",
+    "decision",
+)
 WORKERS = {
     "quantization": "workers/vla_cpp/",
+    "unified_quantization": "workers/firebird_quant/",
     "training": "workers/smolvla_qlora/",
     "benchmark": "workers/benchmark_gpu/",
     "act": "workers/act_optimizer/",

@@ -1,0 +1,15 @@
+{
+  "name": "Firebird.TeachingViewer.TestFixtures",
+  "references": [
+    "Firebird.TeachingViewer"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "includePlatforms": [],
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "Newtonsoft.Json.dll",
+    "nunit.framework.dll"
+  ]
+}

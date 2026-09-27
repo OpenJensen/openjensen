@@ -1,12 +1,12 @@
 # Google Cloud training through SkyPilot
 
 Connect Google Cloud once in Settings, choose a model and GPU, and click **Start
-fine-tuning**. Firebird accepts the job promptly and performs preparation in the
+fine-tuning**. OPEN JENSEN accepts the job promptly and performs preparation in the
 background. The application remains on xbox-360. SkyPilot starts an isolated GCP
 worker and downloads the pinned model and dataset there.
 
 The server needs SkyPilot 0.13 with GCP support, Google Cloud CLI and existing
-application-default credentials. Firebird verifies the selected project and
+application-default credentials. OPEN JENSEN verifies the selected project and
 creates or reuses its own SkyPilot workspace without overwriting unrelated
 settings. A queued run retains the selected project, region, GPU, machine type,
 disk size, idle teardown interval, server endpoint and workspace. All launch,
@@ -65,11 +65,11 @@ checkpoint steps, worker output and observed-speed ETA. Reaching 100% optimizer
 steps is followed by checkpoint publication, reload verification and cloud
 cleanup before the job is marked successful.
 
-Every run receives a unique Firebird-owned cluster. Its remote worker has the
+Every run receives a unique OPEN JENSEN-owned cluster. Its remote worker has the
 recorded deadline, and SkyPilot receives an idle autodown interval. Completion,
 failure and cancellation perform scoped cleanup; startup retries unfinished
 owned dispatches. `sky-state.json` records identity and cleanup status durably.
-Unconfirmed cleanup is reported visibly with the exact cluster command; Firebird
+Unconfirmed cleanup is reported visibly with the exact cluster command; OPEN JENSEN
 never treats a missing local acknowledgement as proof that billing stopped.
 
 Hugging Face tokens are optional for public models. Saved tokens are owner-only,
@@ -80,7 +80,7 @@ metadata.
 
 The separate [Cloud runs view](cloud-runs.md) reads operator-published snapshots
 for standalone cloud workloads, including upstream Isaac rollout runners. It does
-not replace the training monitor or control Firebird-managed jobs.
+not replace the training monitor or control OPEN JENSEN-managed jobs.
 
 ## Evaluate and Run on cloud GPUs
 

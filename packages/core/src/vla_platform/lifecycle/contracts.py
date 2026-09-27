@@ -45,6 +45,24 @@ class Precision(StrictRecord):
     vision: Literal["Q8_0"] | None = None
 
 
+class SimulationRequest(StrictRecord):
+    """A registered scenario selection; paths and commands belong to the operator."""
+
+    profile_id: str = Field(pattern=r"^[\w-]{1,100}$")
+    experimental: bool = Field(default=False, strict=True)
+
+
+class SimulationTarget(StrictRecord):
+    """The accepted multi-worker target, kept separate from single-GPU training."""
+
+    profile_id: str
+    profile_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    provider: Literal["gcp"] = "gcp"
+    accelerators: list[Literal["L4", "H100"]] = Field(default_factory=lambda: ["L4", "H100"])
+    source_manifest_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    model_id: str | None = Field(default=None, pattern=r"^sha256:[a-f0-9]{64}$")
+
+
 class ParityLimits(StrictRecord):
     """Operator-declared tolerances; no unmeasured universal default."""
 
@@ -98,6 +116,21 @@ class Limits(StrictRecord):
     max_peak_device_mib: float = Field(default=8192.0, gt=0, allow_inf_nan=False)
 
 
+class NativeQuantization(StrictRecord):
+    """Explicit local packed ACT recipe; separate from GGUF precision."""
+
+    format: Literal["firebird_quant"]
+    bits: Literal[4, 8]
+    group_size: Literal[64] = 64
+
+    @field_validator("bits", "group_size", mode="before")
+    @classmethod
+    def strict_integer(cls, value):
+        if type(value) is not int:
+            raise ValueError("Native quantization precision and group size must be integers")
+        return value
+
+
 class PolicyRequest(StrictRecord):
     operation: Literal[
         "policy.import",
@@ -124,9 +157,67 @@ class PolicyRequest(StrictRecord):
     evaluation: Evaluation = Field(default_factory=Evaluation)
     limits: Limits | None = None
     timeout_seconds: int = Field(default=7200, ge=30, le=86400)
+    simulation: SimulationRequest | None = None
+    native_quantization: NativeQuantization | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def native_deadline(cls, value):
+        if isinstance(value, dict) and value.get("native_quantization") is not None:
+            value = dict(value)
+            value.setdefault("timeout_seconds", 600)
+            if type(value["timeout_seconds"]) is not int:
+                raise ValueError("Native quantization deadline must be an integer")
+        return value
 
     @model_validator(mode="after")
     def input_contract(self):
+        if self.native_quantization is not None:
+            if (
+                self.operation != "policy.quantize"
+                or not self.artifact_id
+                or self.source_id is not None
+                or self.dataset_job_id is not None
+                or self.resume_job_id is not None
+                or self.training is not None
+                or self.training_method != "lora"
+                or self.precision is not None
+                or self.candidates != [Precision()]
+                or self.evaluation != Evaluation()
+                or self.limits is not None
+                or self.simulation is not None
+                or self.timeout_seconds > 600
+            ):
+                raise ValueError(
+                    "Native quantization requires one local policy artifact and its explicit "
+                    "packed recipe; training, GGUF, evaluation and simulation "
+                    "options are unsupported"
+                )
+            return self
+        if self.simulation is not None:
+            if self.operation not in {"policy.import", "policy.run"}:
+                raise ValueError(
+                    "Isaac supports native policy import and experimental Run; "
+                    "scored simulation evaluation is not yet available"
+                )
+            if self.runtime_id != self.simulation.profile_id:
+                raise ValueError("Simulation runtime and registered profile must match")
+            if (
+                self.training is not None
+                or self.dataset_job_id
+                or self.resume_job_id
+                or self.precision is not None
+                or self.limits is not None
+                or self.evaluation != Evaluation()
+                or self.timeout_seconds > 7200
+            ):
+                raise ValueError("Simulation uses the registered scenario and bounded run contract")
+            if self.operation == "policy.run" and (
+                not self.simulation.experimental or self.source_id
+            ):
+                raise ValueError(
+                    "Isaac Run requires explicit experimental selection and an artifact"
+                )
         training = self.operation == "policy.finetune" or (
             self.operation == "policy.workflow" and self.training is not None
         )
@@ -168,7 +259,13 @@ class PolicyArtifact(StrictRecord):
     job_id: str
     label: str
     format: Literal[
-        "gguf", "training_checkpoint", "native_checkpoint", "deployment_package", "inference_export"
+        "gguf",
+        "training_checkpoint",
+        "native_checkpoint",
+        "deployment_package",
+        "inference_export",
+        "simulation_record",
+        "native_quantized",
     ]
     path: str
     manifest_sha256: str

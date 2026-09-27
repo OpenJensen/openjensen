@@ -26,6 +26,10 @@ spec.loader.exec_module(ci_scope)
         (["workers/act_optimizer/src/firebird_act/application.py"], {"application", "act"}),
         (["workers/vla_cpp/src/quantize.py"], {"application", "quantization", "benchmark"}),
         (
+            ["workers/firebird_quant/src/firebird_quant/codec.py"],
+            {"application", "unified_quantization"},
+        ),
+        (
             ["workers/smolvla_qlora/src/firebird_vla/local_dataset.py"],
             {"application", "training", "act", "teaching"},
         ),
@@ -127,3 +131,74 @@ def test_stable_gate_does_not_hide_failed_or_missing_checks(workflow, case):
         timeout=5,
     )
     assert (completed.returncode == 0) == (case in {"pass", "skip"}), completed.stderr
+
+
+@pytest.mark.parametrize("event", ["push", "pull_request", "merge_group", "workflow_dispatch"])
+@pytest.mark.parametrize("windows", [False, True])
+def test_windows_matrix_requires_explicit_manual_opt_in(event, windows):
+    # Evaluate the exact workflow expression's limited boolean/string subset.
+    # This checks all automatic events even if an input is accidentally supplied.
+    import ast
+    import re
+
+    text = (SCRIPT.parents[1] / "workflows/application.yml").read_text()
+    expression = re.search(r"os: \$\{\{ fromJSON\((.+)\) \}\}", text)[1]
+    expression = (
+        expression.replace("github.event_name", "event")
+        .replace("inputs.windows_browser", "windows")
+        .replace("&&", "and")
+        .replace("||", "or")
+    )
+    parsed = ast.parse(expression, mode="eval")
+    allowed = (
+        ast.Expression,
+        ast.BoolOp,
+        ast.And,
+        ast.Or,
+        ast.Compare,
+        ast.Eq,
+        ast.Name,
+        ast.Load,
+        ast.Constant,
+    )
+    assert all(isinstance(node, allowed) for node in ast.walk(parsed))
+    assert {node.id for node in ast.walk(parsed) if isinstance(node, ast.Name)} == {
+        "event",
+        "windows",
+    }
+    matrix = json.loads(
+        eval(
+            compile(parsed, "<workflow-matrix>", "eval"),
+            {"__builtins__": {}},
+            {"event": event, "windows": windows},
+        )
+    )
+    expected = ["ubuntu-latest"]
+    if event == "workflow_dispatch" and windows:
+        expected.append("windows-latest")
+    assert matrix == expected
+    assert "windows_browser:" in text and "default: false" in text
+    for command in (
+        "pytest -q",
+        "scripts/export_openapi.py",
+        "pnpm generate:client",
+        "pnpm check:web",
+        "pnpm build:web",
+        "pnpm test:web",
+        "pnpm test:diagnostics",
+    ):
+        assert command in text
+
+
+def test_unified_quantization_keeps_two_explicit_compatible_dependency_pairs():
+    import re
+
+    workflow = (SCRIPT.parents[1] / "workflows/native-workers.yml").read_text()
+    job = workflow.split("  unified-quantization:\n", 1)[1].split("  training:\n", 1)[0]
+    pairs = re.findall(
+        r"^          - torch: '([^']+)'\n            numpy: '([^']+)'$", job, re.MULTILINE
+    )
+    assert pairs == [("2.2.2", "1.26.4"), ("2.11.0", "2.2.6")]
+    assert "matrix:\n        include:" in job
+    assert "numpy==${{ matrix.numpy }}" in job
+    assert "uv pip check --python .venv/bin/python" in job

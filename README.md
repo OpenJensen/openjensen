@@ -1,24 +1,69 @@
-# Firebird application
+# OPEN JENSEN
 
-A self-hosted VLA workspace with persistent projects, visual dataset exploration, cloud training adapters for all 15 policy choices observed in KiteML, and checkpoint-to-GGUF quantization for SmolVLA. SmolVLA supports LoRA/QLoRA; the other policies use isolated native training environments. Configured native workers provide evaluation, Spatial workflows and reload-verified packages through shared web/CLI jobs. Distillation remains planned.
+**Joint Embodied Neural Simulation & Execution Network**
 
-The application can run on Xbox while SkyPilot provisions GCP workers. Models and datasets download on the worker; checkpoints stay in private GCS. The UI shows live training metrics, labels checkpoints by model and step, and lets you quantize the latest or an earlier checkpoint. Quantization merges the trained weights, packs Q4/Q8 language tensors, and requires an actual native inference sanity check before reporting success. It does not establish robot task success.
+**Inspect robot data, train policies, and prepare models for native inference.**
 
-The optional [terminal workbench](docs/terminal.md) and [Tauri desktop shell](apps/desktop/README.md) use the same projects, intake and job records. The desktop shell connects to a separately running local backend; it is not yet a bundled Python installer. Optional [Muose decision scoring](workers/decision/README.md) and [Jev/Mk1.5 proposals](workers/teaching/PROVIDERS.md) have isolated worker interfaces and explicit integration/quality gates.
+OPEN JENSEN brings dataset exploration, training, quantization and simulation into one self-hosted workspace. The web app, CLI and optional terminal client share the same projects, jobs and artifacts. Training and simulation run in separate worker environments, locally or on configured cloud compute.
 
-Start with [cloud training and quantization](docs/skypilot-training.md), [model adapters](docs/native-training.md), or the [Xbox deployment guide](deploy/xbox/README.md). The [live verification record](docs/cloud-training-verification.md) separates completed GPU runs from configuration/dependency checks and pending validation. Local evaluation and robot execution require separately configured native workers; the UI exposes only compatible targets. See the [native policy workflow](docs/policy-workflow.md), [Spatial workflow](docs/spatial-workflow.md) and [upstream validation evidence](docs/workflow-validation.md) for their setup and acceptance scope.
+Built at the Firebird hackathon.
 
-Fine-tune, Quantize, Evaluate and Run open saved jobs first, with separate creation forms. SmolVLA cloud Evaluate and Run execute real CUDA engine checks and package verification; see the [workflow and live inference verification](docs/jobs-first-verification.md) for measured results and limits.
+[Get started](#run-locally) · [Product status](#current-status) · [Documentation](#documentation) · [Development](#development)
 
-**Dataset → Augmentation** supports Gemini Omni lighting, texture and custom appearance edits for selected camera clips, with before/after review and provenance exports. See the [augmentation setup and scope](docs/augmentation.md); this optional feature uses the saved Google Cloud login or a server-side Gemini API key, plus FFmpeg.
+![OPEN JENSEN dataset explorer showing recorded camera frames and episode data](docs/images/dataset-explorer.png)
 
-Application Git root: this directory. The nested `firebird-hackathon-prep/` directory remains a separate, ignored Git repository. Its [accepted plan](firebird-hackathon-prep/docs/idea/18_stack-and-phased-build-plan.md) and [task register](firebird-hackathon-prep/docs/tasks/README.md) hold planning and coordination records; they are not included in an application-only clone.
+*Browse recorded episodes and inspect their camera views, state and action samples.*
 
-**Dataset → Teaching** adds session-bound simulation controls and an optional LiveKit/OpenRouter voice connection. Finalized demonstrations can enter native LeRobot training through verified local copies. See [local training and teaching](docs/local-training.md) for setup and current acceptance limits.
+## What you can do
+
+| Stage | In the workspace |
+| --- | --- |
+| Explore | Inspect public LeRobot v2/v3 datasets, play camera recordings and review sampled state/action rows. Validate local v3 datasets into immutable training copies. |
+| Train | Choose a policy and compatible compute, follow loss and progress, resume supported runs, and download checkpoints with their recipes and provenance. |
+| Optimize | Convert SmolVLA checkpoints to GGUF with Q8 or experimental Q4 language-weight quantization. Export completed ACT checkpoints as FP32 inference packages. |
+| Check and run | Measure native inference, verify package reloads, run configured LIBERO evaluations, or launch an experimental ACT/SmolVLA Isaac simulation. |
+| Collect and review | Record demonstrations through the Teaching interface, connect optional voice services, or review appearance-augmentation candidates before reusing them. |
+
+Each operation has its own model, dataset and runtime requirements. The interface shows configured capabilities; a registered adapter does not mean every model has completed a GPU run.
+
+[OPEN JENSEN Quant](workers/firebird_quant/README.md) is a separate 4/8-bit quantization library and CLI for dense PyTorch models. It provides portable inference, tensor coverage reports and reloadable artifacts beyond the integrated SmolVLA workflow. Model quality and hardware speed need separate evaluation.
+
+## Inside the workspace
+
+![OPEN JENSEN showing a completed ACT training run, loss curves and checkpoint status](docs/images/training-workspace.png)
+
+*A saved ACT training run with reported losses and checkpoint status. Training completion and reload verification are separate from robot task performance.*
+
+![OPEN JENSEN Native Isaac setup for an ACT or SmolVLA policy package](docs/images/native-simulation.png)
+
+*Native Isaac setup uses an explicit policy package and configured runner. Cup-task scoring remains unavailable while calibration and success criteria are unresolved.*
+
+These are captures of the product interface, not generated mockups. Capture details are in the [screenshot notes](docs/images/README.md).
+
+## Current status
+
+OPEN JENSEN is a development preview. The repository includes real GPU execution records as well as software and integration tests. Their scope differs:
+
+| Area | Current evidence and limits |
+| --- | --- |
+| Training | **15 registered policy routes.** SmolVLA LoRA and ACT have completed recorded NVIDIA L4 training runs and fresh-process checkpoint reloads. Other routes have configuration, dependency or contract checks; GPU acceptance remains model-specific. |
+| SmolVLA quantization | A trained checkpoint has completed GGUF conversion, Q4 packing and native execution. **Q8 is the default; Q4 is experimental.** These checks do not establish retained task quality for a new policy. |
+| Evaluate and Run | Recorded cloud SmolVLA checks exercise real CUDA inference and package reloads with synthetic inputs. Configured LIBERO can measure benchmark outcomes; the newer integrated Spatial workflow still awaits hardware acceptance. |
+| ACT export | The supported final native checkpoint can be materialized and exported on CPU with action-chunk parity and reload checks. This is an inference export, not quantization. Local-dataset ACT export is not supported yet. |
+| Native Isaac | ACT/SmolVLA package import, job controls, status and output handling are implemented. The web workflow has fixture coverage; live rollout acceptance and scored cup-pickup evaluation are separate work. |
+| Teaching and augmentation | Recording and LeRobot writer/readback are implemented. Live voice-to-Isaac acceptance and live augmentation quality remain unverified. Local teaching captures can train native LeRobot adapters; the dedicated SmolVLA and Psi-Zero routes still require Hub datasets. |
+| Clients and extensions | The Textual client and Tauri desktop connector are implemented. Desktop requires a separately running backend. Unity is a receive-only viewer. Muose is advisory; Jev and Mk1.5 adapters are not connected to the control loop. |
+| Planned | Distillation, a bundled desktop backend, and verified physical-robot deployment. |
+
+See the [cloud training record](docs/cloud-training-verification.md), [native inference record](docs/jobs-first-verification.md), and [native simulation scope](docs/native-simulation.md) for the experiments, inputs and remaining checks. A completed job, lower training loss or successful model conversion does not by itself establish task success.
 
 ## Run locally
 
-Use Node **24.21.0**, pnpm **12.6.0**, Python **3.14.7** and uv **0.12.19**. GPU dependencies are separate and are not needed for metadata intake. Parquet episode previews use an isolated CPU reader. First installation requires network access; no remote application service or API key is required.
+Use the pinned toolchain: **Python 3.14.7**, **uv 0.12.19**, **Node 24.21.0** and **pnpm 12.6.0**. Node is needed to build or develop the frontend. The running application is served by Python.
+
+The product is named OPEN JENSEN. The CLI remains `firebird`, and existing `FIREBIRD_*` configuration keys and workspace paths continue to work.
+
+From the repository root:
 
 ```sh
 uv sync --frozen
@@ -29,74 +74,62 @@ pnpm build:web
 uv run --frozen firebird serve
 ```
 
-On Windows, use `workers/_cpu_readers/.venv/Scripts/python.exe` for the reader installation command. The [CPU reader guide](workers/_cpu_readers/README.md) covers a custom interpreter location and supported preview boundaries. A missing reader produces an explicit preview error; the application never installs one automatically.
+Open [localhost:8000](http://127.0.0.1:8000). On Windows, use `workers/_cpu_readers/.venv/Scripts/python.exe` in the reader installation command.
 
-Open **http://127.0.0.1:8000**. Python serves the static frontend and API; Node is only needed to build/develop it. The app binds to loopback. Hosted authentication and desktop installers are later tasks. `Ctrl+C` stops the server and reconciles active jobs.
+The core application and metadata intake need no GPU or provider key. Public Hub inspection needs network access. Training, native inference, simulation, voice and augmentation need their own configured workers or services. The server binds to loopback; hosted authentication is not implemented.
 
-If an older installed uv cannot locate Python 3.14.7, use `uvx --from uv==0.12.19 uv sync --frozen`. If your shell resolves an older pnpm, run `npx --yes pnpm@12.6.0 install --frozen-lockfile` and the same prefix for build/check scripts. These do not require changing your global tool versions.
+For tool-version fallbacks, development mode, local dataset configuration and CLI examples, see the [getting started guide](docs/getting-started.md).
 
-For frontend development, keep the API running and use `pnpm dev:web` in another terminal; open http://127.0.0.1:3000. The development UI calls port 8000. Exported builds use the same origin. `NEXT_PUBLIC_API_URL` can override the API base at build time.
+### Your first project
 
-## Real intake
+1. Create a project and open **Dataset → Sources**.
+2. Choose the pinned **SO-101 pickup** or **SO-100 pick & place** starter and select **Inspect dataset**.
+3. Open **Load visual preview** to browse episodes, camera recordings and sampled actions.
+4. Connect Google Cloud in **Settings → Compute**, or enable an [installed local worker](docs/policy-workflow.md), then choose a compatible model and recipe in **Fine-tune**. Cloud jobs use your configured account.
+5. Open the saved run to review progress, checkpoints and provenance. Use the supported export or quantization path for that model.
 
-Create a project in the UI, then inspect `codywang/so101_pickup_test` at revision `ecef85bc07005f771ad86deeff1427f9d72953ed`. The reader resolves an immutable Hub revision and reads at most 2 MiB per metadata response. It does not download videos or weights. Public LeRobot v2/v3 metadata is supported; other robotics formats are explicit future adapters.
+## Documentation
 
-The same operations are available in the terminal:
+| Topic | Guides |
+| --- | --- |
+| Setup and compute | [Getting started](docs/getting-started.md), [compute settings](docs/compute-settings.md), [cloud training](docs/skypilot-training.md) |
+| Datasets | [Local training and Teaching](docs/local-training.md), [appearance augmentation](docs/augmentation.md), [source provenance](apps/web/public/datasets/README.md) |
+| Policies and artifacts | [Training adapters](docs/native-training.md), [native policy workflow](docs/policy-workflow.md), [ACT export](docs/cloud-act-export.md), [cloud artifact storage](docs/cloud-artifact-storage.md) |
+| Evaluation and simulation | [Native Isaac](docs/native-simulation.md), [LIBERO Spatial](docs/spatial-workflow.md), [cloud inference](docs/cloud-inference.md), [cloud run monitoring](docs/cloud-runs.md) |
+| Other clients | [Terminal workbench](docs/terminal.md), [desktop connector](apps/desktop/README.md), [Unity viewer](apps/unity/com.firebird.teaching-viewer/README.md) |
+| Optional AI services | [Voice connections](docs/teaching-connections.md), [Muose decision worker](workers/decision/README.md), [Jev and Mk1.5 proposals](workers/teaching/PROVIDERS.md) |
+| Verification | [Cloud training](docs/cloud-training-verification.md), [inference and package reload](docs/jobs-first-verification.md), [application integration](docs/integration-journey-validation.md), [CI and local checks](docs/ci.md) |
 
-```sh
-uv run --frozen firebird projects create "My robotics project"
-uv run --frozen firebird projects list
-uv run --frozen firebird inspect PROJECT_ID --repo-id codywang/so101_pickup_test --revision ecef85bc07005f771ad86deeff1427f9d72953ed
-uv run --frozen firebird jobs list PROJECT_ID
-uv run --frozen firebird jobs show JOB_ID
-uv run --frozen firebird jobs cancel JOB_ID
-uv run --frozen firebird capabilities
+The running app serves its [API reference](http://127.0.0.1:8000/docs/) and [OpenAPI schema](http://127.0.0.1:8000/openapi.json).
+
+## Architecture
+
+The Python application owns persistent projects, job state and artifact records. Isolated workers own model-specific dependencies and execution. OPEN JENSEN adopts LeRobot, SkyPilot and native runtimes instead of maintaining a second implementation of each trainer or simulator.
+
+```text
+apps/web/          Next.js and React interface, exported as static files
+packages/core/     Python API, CLI, optional TUI, SQLite and job orchestration
+workers/           Isolated training, inference, simulation and data workers
+apps/desktop/      Tauri connector to a separately running local application
+apps/unity/        Receive-only simulation viewer
+tests/             Core, worker-contract and browser integration checks
+docs/              Setup guides, workflow boundaries and verification records
 ```
 
-Replace IDs with the returned values. CLI commands output JSON and call the same API. They do not open a second scheduler or write the database.
+Project data lives in `.firebird/` by default. Set `FIREBIRD_DATA_DIR` to change it. One application process owns each workspace. Cloud training stores checkpoints in private GCS; explicit downloads and export operations can materialize them locally.
 
-Metadata counts and schemas are **source-declared**. Intake preserves their provenance, hashes the metadata and warns that action units, calibration, controller semantics, media integrity and simulator compatibility have not been verified. It does not infer task success or a training recipe from a dataset name. On-demand episode previews can now show camera videos and a small set of recorded action/state rows. Full local LeRobot v3 validation is available through the explicit immutable training-copy workflow; ordinary inspection remains metadata-only.
+## Development
 
-Local metadata intake is disabled by default. Set `FIREBIRD_LOCAL_DATA_ROOT` to an explicitly permitted dataset directory before starting the server; paths must resolve within it. For example, if it contains `my-dataset/meta/info.json`, inspect with `--path my-dataset`. On PowerShell use `$env:FIREBIRD_LOCAL_DATA_ROOT = 'C:\robotics-data'`; on Linux/macOS use `export FIREBIRD_LOCAL_DATA_ROOT=/path/to/robotics-data`.
-
-## Explore a dataset visually
-
-The **Sources** view includes two revision-pinned starters: SO-101 pickup and SO-100 pick & place. Each card uses a real source-camera still; dataset counts and preview checks are recorded in [dataset provenance](apps/web/public/datasets/README.md). Create a project, select a starter or enter a public LeRobot repository, and click **Inspect dataset**. The **Inspection** view preserves metadata counts, warnings, and source provenance.
-
-Click **Load visual preview** to explicitly fetch the episode index and a small sample of recorded data. Select an episode, play or seek its camera views with the shared episode controls, and switch between joint/state and action sample tables. Camera playback uses the source's episode offsets and stops on the selected episode's last frame. Switching views pauses playback.
-
-This operation is separate from metadata-only inspection. Public Hugging Face LeRobot v2/v3 datasets with supported file layouts are supported; local datasets and embedded image columns still expose metadata only. Video URLs point at the inspected commit and stream directly from Hugging Face to the browser. A browser unable to decode the source codec shows a video error and retry control.
-
-The API exposes `GET /api/v1/jobs/{job_id}/episodes?offset=0&limit=6` and `GET /api/v1/jobs/{job_id}/episodes/{episode_index}` after a successful inspection. Preview downloads and Parquet parsing are bounded; large or unsupported sources return a readable limitation. At most five actual sample rows and eight camera references are returned per episode. Numeric values are source samples, not validated controller semantics or model-performance evidence.
-
-## Workspace and code boundaries
-
-- `apps/web`: static Next/React client; generated API types under `src/lib`.
-- `packages/core`: GPU-independent Python modular monolith, API, CLI, async SQLite records and versioned migrations.
-- `workers`: native environment boundaries and contracts. Metadata and native policy workers run as supervised subprocesses; GPU environments are installed separately.
-- `apps/desktop`: reserved later Tauri shell.
-- `tests`: persistence, subprocess intake, bounded reads, cancellation, failure and access-boundary checks.
-
-The default workspace is `.firebird/`, ignored by Git. Set `FIREBIRD_DATA_DIR` to choose a different directory. One application process owns it via an OS file lock. SQLite stores projects/job records; each job has its request/result files. Startup marks unfinished jobs interrupted and requires an explicit retry. Do not run multiple server workers on the same workspace. The API reference is at `/docs/` and the schema at `/openapi.json`. The reference shares the web workspace shell and theme, and loads its endpoint/model content from the live schema. Build the web client to serve the reference; the JSON schema remains available without a web build.
-
-`FIREBIRD_WEB_DIR` selects the static build directory (default `apps/web/out`). `FIREBIRD_API_URL` changes the CLI's server URL. Do not expose this initial local server to untrusted networks; hosted access control is not implemented.
-
-## Verify and contribute
+After installing the pinned dependencies:
 
 ```sh
 uv run --frozen pytest -q
 uv run --frozen ruff check packages/core scripts tests
 uv run --frozen ruff format --check packages/core scripts tests
-uv run --frozen python scripts/export_openapi.py
-pnpm generate:client
 pnpm check:web
 pnpm build:web
 pnpm exec playwright install chromium
 pnpm test:web
 ```
 
-Do not hand-edit generated API types. Claim a task card before parallel work, coordinate shared schema/manifest/migration changes, and provide evidence plus independent review. CI selects affected suites conservatively; Linux runs the full browser suite and Windows retains core/terminal checks, with full Windows browser checks available by manual dispatch. See [verification and local fallback](docs/ci.md). Full GPU workflows and Windows GPU acceptance remain separate validation gates.
-
-Connect Google Cloud once in **Settings → Compute**, then choose L4, T4, or A100 and click **Start fine-tuning**. Provider preparation and SkyPilot dispatch happen automatically. See [compute settings](docs/compute-settings.md) and [SkyPilot job lifecycle](docs/skypilot-training.md).
-
-The **Fine-tune** run monitor shows reported optimizer steps and percentage, training and validation loss, learning rate, duration, estimated remaining training time, checkpoints, activity and worker output. **Reproducibility** exposes pinned model/dataset inputs, the resolved recipe, seed, episode split and available runtime evidence as downloadable JSON. New runs record evidence from submission onward; older runs show only what their saved files establish. See [training comparison and monitoring](docs/training-comparison.md) for the Kite ML comparison, verification scope and remaining model support.
+Workers keep separate environments and checks. Do not hand-edit generated API types. Follow the [CI guide](docs/ci.md) for optional terminal checks, schema generation, platform requirements and the full verification sequence.

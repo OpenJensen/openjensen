@@ -1,0 +1,280 @@
+{
+  "status": "conditional_visual_fit",
+  "camera": "Frozen scene.usda shelf-fit camera",
+  "coordinate_convention": "world XYZ meters; front is negative Y",
+  "image_size": [
+    1920,
+    1080
+  ],
+  "manual_reference_rim_px": {
+    "rear_left": [
+      615.0,
+      777.0
+    ],
+    "rear_right": [
+      972.0,
+      765.0
+    ],
+    "front_right": [
+      966.0,
+      892.0
+    ],
+    "front_left": [
+      522.0,
+      890.0
+    ]
+  },
+  "label_note": "Rear right was adjusted to (972,765) after reviewing the visible side-wall junction; the tallest torn back-rim point is not a rectangle corner.",
+  "baseline": {
+    "position_m": [
+      -0.23,
+      -0.315,
+      0.0
+    ],
+    "size_m": [
+      0.29,
+      0.235,
+      0.2
+    ],
+    "yaw_degrees": 0.0,
+    "projected_rim_px_at_1920": {
+      "rear_left": [
+        543.270987727587,
+        761.5118209659495
+      ],
+      "rear_right": [
+        943.7701775950776,
+        767.6130315433378
+      ],
+      "front_right": [
+        943.2105818021228,
+        929.6912354038599
+      ],
+      "front_left": [
+        473.2987907201743,
+        922.968244152519
+      ]
+    },
+    "rim_error_xy_px_at_1920": {
+      "rear_left": [
+        -71.729012272413,
+        -15.488179034050518
+      ],
+      "rear_right": [
+        -28.229822404922402,
+        2.6130315433377973
+      ],
+      "front_right": [
+        -22.78941819787724,
+        37.69123540385988
+      ],
+      "front_left": [
+        -48.70120927982572,
+        32.96824415251899
+      ]
+    },
+    "rms_corner_error_px_at_640": 17.940786411376795,
+    "max_corner_error_px_at_640": 24.460705203259227,
+    "clearance_to_shelf_front_m": 0.024999999999999994,
+    "world_rim_m": {
+      "rear_left": [
+        -0.375,
+        -0.1975,
+        0.2
+      ],
+      "rear_right": [
+        -0.08500000000000002,
+        -0.1975,
+        0.2
+      ],
+      "front_right": [
+        -0.08500000000000002,
+        -0.4325,
+        0.2
+      ],
+      "front_left": [
+        -0.375,
+        -0.4325,
+        0.2
+      ]
+    }
+  },
+  "fit_axis_aligned": {
+    "position_m": [
+      -0.20384709742754953,
+      -0.2958188159734567,
+      0.0
+    ],
+    "size_m": [
+      0.27174282907342684,
+      0.191658088992405,
+      0.2
+    ],
+    "yaw_degrees": 0.0,
+    "projected_rim_px_at_1920": {
+      "rear_left": [
+        591.5377065350942,
+        763.716552182832
+      ],
+      "rear_right": [
+        967.2560283205981,
+        769.4370991592776
+      ],
+      "front_right": [
+        970.0267085002054,
+        897.996637039944
+      ],
+      "front_left": [
+        542.7780808906052,
+        891.8056211204334
+      ]
+    },
+    "rim_error_xy_px_at_1920": {
+      "rear_left": [
+        -23.46229346490577,
+        -13.283447817168053
+      ],
+      "rear_right": [
+        -4.743971679401852,
+        4.437099159277636
+      ],
+      "front_right": [
+        4.026708500205359,
+        5.996637039943948
+      ],
+      "front_left": [
+        20.778080890605224,
+        1.8056211204334431
+      ]
+    },
+    "rms_corner_error_px_at_640": 5.907352450432143,
+    "max_corner_error_px_at_640": 8.987208196745136,
+    "clearance_to_shelf_front_m": 0.027489771477254205,
+    "world_rim_m": {
+      "rear_left": [
+        -0.33971851196426295,
+        -0.19998977147725422,
+        0.2
+      ],
+      "rear_right": [
+        -0.06797568289083611,
+        -0.19998977147725422,
+        0.2
+      ],
+      "front_right": [
+        -0.06797568289083611,
+        -0.3916478604696592,
+        0.2
+      ],
+      "front_left": [
+        -0.33971851196426295,
+        -0.3916478604696592,
+        0.2
+      ]
+    }
+  },
+  "fit_with_yaw_diagnostic": {
+    "position_m": [
+      -0.20386795436221247,
+      -0.2958428366456067,
+      0.0
+    ],
+    "size_m": [
+      0.2727874279866247,
+      0.19078363228638962,
+      0.2
+    ],
+    "yaw_degrees": -2.8175045063844077,
+    "projected_rim_px_at_1920": {
+      "rear_left": [
+        598.8530652873274,
+        760.2197220222408
+      ],
+      "rear_right": [
+        974.3141450825383,
+        773.8587636914224
+      ],
+      "front_right": [
+        963.2717483994614,
+        902.6278216932869
+      ],
+      "front_left": [
+        536.914223566581,
+        886.2215540075229
+      ]
+    },
+    "rim_error_xy_px_at_1920": {
+      "rear_left": [
+        -16.146934712672646,
+        -16.78027797775917
+      ],
+      "rear_right": [
+        2.314145082538289,
+        8.858763691422382
+      ],
+      "front_right": [
+        -2.728251600538556,
+        10.627821693286933
+      ],
+      "front_left": [
+        14.914223566580972,
+        -3.7784459924771454
+      ]
+    },
+    "rms_corner_error_px_at_640": 5.226106636349455,
+    "max_corner_error_px_at_640": 7.762454005060959,
+    "clearance_to_shelf_front_m": 0.021361912031029967,
+    "world_rim_m": {
+      "rear_left": [
+        -0.3354078145519762,
+        -0.19386191203102998,
+        0.2
+      ],
+      "rear_right": [
+        -0.06295014112660671,
+        -0.20727075460571384,
+        0.2
+      ],
+      "front_right": [
+        -0.0723280941724487,
+        -0.3978237612601834,
+        0.2
+      ],
+      "front_left": [
+        -0.3447857675978182,
+        -0.3844149186854995,
+        0.2
+      ]
+    }
+  },
+  "sensitivity": {
+    "label_noise_sigma_px_at_1920": 5.0,
+    "trials": 200,
+    "parameters": [
+      "x_m",
+      "y_m",
+      "width_m",
+      "depth_m"
+    ],
+    "p05": [
+      -0.20685280002364656,
+      -0.3017205702546578,
+      0.2658785722942436,
+      0.18080139681982046
+    ],
+    "p95": [
+      -0.2011408180222942,
+      -0.289466090796513,
+      0.2775088438031837,
+      0.205364465679226
+    ],
+    "note": "Not confidence bounds; excludes camera, height, perspective, wall deformation and scale uncertainty."
+  },
+  "limits": [
+    "Actual rim is torn and deformed; one rigid rectangular opening cannot match all four corners.",
+    "Height is fixed at estimated 0.2 m and ground at zero; unseen bottom cannot validate box height.",
+    "Camera and shelf dimensions remain estimated; metric results are conditional.",
+    "Fits use wall centerlines; 3 mm thickness introduces several pixels of contour ambiguity.",
+    "Changing only X/Y position and size preserves floor contact and avoids moving the robot or camera."
+  ]
+}

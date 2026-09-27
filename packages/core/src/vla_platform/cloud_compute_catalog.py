@@ -275,8 +275,8 @@ async def _sky_workspace(
         )
     if result.get("status") == "mismatch":
         raise SetupCheckError(
-            "The Firebird SkyPilot workspace points to a different project. "
-            "Resolve it in SkyPilot before continuing; Firebird will not overwrite it."
+            "The OPEN JENSEN SkyPilot workspace points to a different project. "
+            "Resolve it in SkyPilot before continuing; OPEN JENSEN will not overwrite it."
         )
     if result.get("status") == "compute_access":
         raise SetupCheckError(
@@ -318,7 +318,7 @@ async def verify_sky_target(
 
 
 async def verify_sky_workspace(executable: str, project_id: str) -> str:
-    """Read the server's exact Firebird workspace; never create or modify it."""
+    """Read the server's exact OPEN JENSEN workspace; never create or modify it."""
     return (await verify_sky_target(executable, project_id))["workspace"]
 
 

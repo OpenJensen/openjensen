@@ -1,5 +1,9 @@
 # Dataset calibration
 
+The image scores below use the original jointly fitted camera and unclipped
+joint mapping. For the current scene audit and replay tools, see
+[offline calibration](CALIBRATION_OFFLINE.md).
+
 The SO101 candidate remains **unverified**. The rollout manifest still selects
 the unverified example, so learned control stays disabled.
 

@@ -1,6 +1,6 @@
 # Isaac + VLA Job Group
 
-For the configured ACT experiment and dedicated service account, start with
+For the configured ACT/SmolVLA experiment and dedicated service account, start with
 [runner setup](RUNNER.md).
 
 `launch-rollout.sh` submits two GPU tasks through SkyPilot 0.13.0:
@@ -131,7 +131,7 @@ bash launch-rollout.sh --validate-only
 bash launch-rollout.sh
 ```
 
-### Experimental ACT motion
+### Experimental policy motion
 
 Use a separate local task file selecting the candidate calibration and scene.
 Set `control.steps` to at most 300 in its simulation manifest:
@@ -145,6 +145,37 @@ bash launch-rollout.sh rollout.experimental.local.yaml --experimental
 simulation. The launcher forwards `SIM_EXPERIMENTAL=1` to the remote runner, which
 passes the adapter flag. Ordinary launches still require verified calibration.
 The mode cannot be combined with `--check-ready`.
+
+### Select a checkpoint
+
+Use the same scenario for either supported architecture:
+
+```bash
+bash launch-rollout.sh rollout.experimental.local.yaml \
+  --checkpoint ~/Downloads/act_step29000 --experimental --validate-only
+bash launch-rollout.sh rollout.experimental.local.yaml \
+  --checkpoint ~/Downloads/smolvla_step20000 --experimental --validate-only
+```
+
+Remove `--validate-only` to launch. `--checkpoint` also works with standard
+rollouts and `--check-ready`; their calibration and readiness checks still apply.
+It overrides the checkpoint mount, model fingerprint, camera key, capture size,
+state dimension and action horizon in an isolated manifest snapshot. It preserves
+the original scenario and task files, including calibration and joint order.
+Relative checkpoint paths resolve from the directory where the command is invoked.
+
+By default, execution uses the smaller of the scenario's `execute_steps` and the
+export's `n_action_steps` (or `chunk_size` when absent). Set `--execute-steps` with
+`--checkpoint` to choose a shared replanning interval for comparisons. The value
+must be positive and no larger than the model's chunk size.
+
+The included ACT and SmolVLA exports share their dataset and normalization
+statistics, but that does not verify the joint calibration. Compatible exports
+must still match the scenario's robot, action convention and camera view. Other
+architectures require an inference backend; matching dimensions alone is insufficient.
+
+SmolVLA's VLM configuration and tokenizer are fetched on first startup. The full
+export supplies the trained weights; keep its saved processors intact.
 
 For capacity fallback, replace Isaac's `instance_type` with:
 
@@ -160,7 +191,7 @@ mode accepts the single-L4 sizes `12`, `16` and `32`; each override may change o
 To pin an experimental Isaac zone, use `infra: gcp/us-central1/us-central1-c`;
 do not add a separate `zone` field alongside `infra`.
 
-Each test receives a unique `isaac-act-test-` group name, disables retries after
+Each test receives a unique `isaac-<policy-type>-test-` group name, disables retries after
 task errors, and inherits the group cleanup. Keep the launcher running for its
 two-hour provisioning and execution deadline; detached tests require manual
 monitoring and cancellation. Results remain experimental even if execution succeeds.
@@ -302,3 +333,63 @@ must opt in explicitly.
 
 References: [SkyPilot Job Groups](https://docs.skypilot.ai/en/latest/examples/job-groups.html),
 [LeRobot SmolVLA](https://huggingface.co/docs/lerobot/smolvla).
+
+### Import a complete policy folder or downloaded package
+
+`--checkpoint` now admits a private, byte-preserving snapshot of a complete ACT
+or SmolVLA export. Use `--checkpoint-archive` for a TAR (including gzip/bzip2/xz
+compression) instead. These flags are mutually exclusive:
+
+```bash
+bash launch-rollout.sh rollout.experimental.local.yaml \
+  --checkpoint-archive /path/to/ACT-inference-package.tar \
+  --experimental --validate-only
+```
+
+An OPEN JENSEN download contains an outer `policy/` envelope and an inner policy
+folder; the resolver locates exactly one checkpoint without rewriting config,
+weights or processors. External exports do **not** need an OPEN JENSEN manifest.
+When any `manifest.json` is present, its complete inventory and hashes must match.
+Imported parity, task-success or calibration claims never become verified merely
+because the file hashes match. Bare weights are insufficient: the config, saved
+processors and every required normalization statistic must accompany them.
+
+Admission is CPU-only and does not load Torch, unpickle data, import custom model
+code, download anything or start a cloud job. It verifies safetensors layout and
+required finite normalization statistics. A successful strict runtime reload is
+still required to prove that the tensor names/shapes form an executable model.
+Only the built-in ACT/SmolVLA processor registries are admitted. SmolVLA can still
+need its backbone config/tokenizer when the inference server starts, as described
+above; this import step does not establish offline inference readiness.
+
+Limits: 256 total members, 4 GiB archive/expanded payload, 2 GiB per file,
+2 MiB JSON/statistics files, 16 MiB tensor headers, eight path levels and 512
+characters per path. Links, devices, FIFOs, traversal, duplicate/case-colliding
+paths, sparse files and ambiguous multiple policies are rejected. Unknown ordinary
+extra files are retained but never executed. Directory snapshots require
+POSIX directory-FD support (tested on macOS; Linux validation is recorded
+separately). The private copy is removed after launcher submission/attached run,
+including errors; originals stay unchanged. Job imports use an exclusive new
+output directory and complete only after their receipt has been written.
+
+Inspect without launching:
+
+```bash
+PYTHONPATH=workers/isaac_sim python -m sim_worker.rollout.checkpoint_package \
+  --checkpoint-archive /path/to/package.tar --inspect-only
+```
+
+The fixed application bridge can persist an admitted copy using
+`--source PATH [--archive] --output-dir NEW_DIR --json-output NEW_RECEIPT`.
+Both output paths must be absent; the receipt is outside the payload. The JSON
+contains `schema_version: 1`, a relative `directory` below `NEW_DIR`, the existing
+`checkpoint` fields (`policy_type`, `model_id`, camera/dimensions/horizons), the
+archive `source_sha256` (null for folders), verified manifest hashes, and exact
+`files` with SHA-256/byte counts. `runtime_verified` and `calibration_verified`
+remain false, and `task_success` remains null. The caller must verify this receipt
+and inventory before registering or running the copied policy.
+
+The current scene object is a **cup**. Some historical dataset/task strings say
+“cube”; those recorded labels are preserved as evidence, not silently corrected.
+Changing the live task prompt or admitting another policy does not establish
+cup-pickup success or fix the still-unverified joint calibration.

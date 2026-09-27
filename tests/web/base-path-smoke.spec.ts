@@ -14,7 +14,7 @@ test('prefixed export loads bundles, API, dataset posters and docs without escap
     if (response.url().startsWith(origin) && response.status() >= 400) failures.push(`${response.status()} ${response.url()}`);
   });
   await page.goto(`${prefix}/`);
-  await expect(page.getByRole('link', { name: 'Jensen workspace home' })).toHaveAttribute('href', `${prefix}/`);
+  await expect(page.getByRole('link', { name: 'OPEN JENSEN workspace home' })).toHaveAttribute('href', `${prefix}/`);
   await expect(page.getByRole('button', { name: 'Fine-tune', exact: true })).toBeVisible();
   const posters = page.locator('.starter-image img');
   await expect(posters).toHaveCount(2);
@@ -24,10 +24,8 @@ test('prefixed export loads bundles, API, dataset posters and docs without escap
   }
   await expect.poll(() => page.locator('.connection-notice').count()).toBe(0);
   await page.getByRole('button', { name: 'Cloud runs', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Application cloud jobs', exact: true })).toBeVisible();
-  await page.getByText('External simulator monitor', { exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Cloud run monitor', exact: true })).toBeVisible();
-  await expect(page.getByText('External simulator monitoring is not configured.', { exact: false })).toBeVisible();
+  await expect(page.getByText('Cloud monitoring is not configured.', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: 'Dataset', exact: true }).click();
   const teachingState = page.waitForResponse(response => new URL(response.url()).pathname === `${prefix}/api/v1/teaching/state`);
   await page.getByRole('button', { name: 'Teaching', exact: true }).click();

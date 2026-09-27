@@ -1,0 +1,185 @@
+import { expect, test, type Page } from '@playwright/test';
+
+const timestamp = '2026-09-27T12:00:00Z';
+const runtime = { id: 'act-cpu', label: 'Generated CPU quantizer', device: 'cpu', provider: 'local', execution: 'native', enabled: true, launchable: true, native_quantization: true, native_quantization_only: true, training: false, simulation: false, engine_evaluation: false, run: false };
+const engine = { id: 'engine', label: 'Existing Smol engine', device: 'cpu', provider: 'local', execution: 'native', enabled: true, training: false, simulation: false, engine_evaluation: true, run: true };
+function artifact(id: string, format = 'inference_export', metadata: Record<string, unknown> = {}, project = 'alpha') {
+  return { id, project_id: project, job_id: 'source', label: `Generated ${id}`, format, path: 'fixture', manifest_sha256: 'a'.repeat(64), file_bytes: 4096, parent_ids: [], metadata: { architecture: 'act', inference_only: true, ...metadata } };
+}
+function job(id: string, status = 'running', bits = 8, source = 'act-export') {
+  return { id, project_id: 'alpha', kind: 'policy.quantize', status, stage: 'quantizing', created_at: timestamp, updated_at: timestamp, error: null as string | null, result: null as Record<string, unknown> | null,
+    request: { operation: 'policy.quantize', runtime_id: runtime.id, artifact_id: source, native_quantization: { format: 'firebird_quant', bits, group_size: 64 }, timeout_seconds: 600 } };
+}
+function report() {
+  return { stage: 'operation', operation: 'policy.quantize', architecture: 'act', format: 'firebird_quant', format_version: 1, inference_only: true, training_resume_supported: false, precision: 'int8', model_id: 'sha256:' + 'b'.repeat(64), source_artifact_id: 'act-export', source_artifact_manifest_sha256: 'a'.repeat(64), source_weight_bytes: 136991488, packed_weight_bytes: 36694284, policy_package_bytes: 36700000,
+    fresh_reload_verified: true, cpu_reload_verified: true, runtime_verified: false, isaac_runtime_verified: false, quality_verified: false, calibration_verified: false, speedup_verified: false, task_success: null, gpu_memory_bytes: null, inference_speedup: null,
+    drift_from_fp32: [171, 902].map(seed => ({ seed, input_sha256: String(seed === 171 ? 'c' : 'd').repeat(64), raw: { rmse: .0035, maximum_absolute_difference: .0065, coordinates: 600 }, postprocessed: { rmse: .09482, maximum_absolute_difference: .141285, coordinates: 600 } })) };
+}
+async function fixture(page: Page) {
+  const state = { runtimes: [runtime, engine] as Record<string, unknown>[], optionsError: false, jobsError: false, artifactsError: false, submit: 'ok', posts: [] as Record<string, any>[], jobs: [] as ReturnType<typeof job>[], events: [] as string[], cancels: [] as string[], gets: [] as string[],
+    artifacts: [artifact('act-export'), artifact('act-native', 'native_checkpoint'), artifact('smol', 'inference_export', { architecture: 'smolvla' }), artifact('training', 'training_checkpoint', { method: 'full' }), artifact('wrong-project', 'inference_export', {}, 'beta'), artifact('remote', 'inference_export', { storage: 'gcs', remote_uri: 'gs://fixture' }), artifact('packed', 'native_quantized'), artifact('vae', 'native_checkpoint', { use_vae: true }), artifact('full', 'native_checkpoint', { method: 'full', training_backend: 'lerobot' })] };
+  await page.route('**/api/v1/**', async route => {
+    const req = route.request(), path = new URL(req.url()).pathname;
+    if (req.method() === 'POST') {
+      if (path.endsWith('/policy-jobs')) {
+        const body = req.postDataJSON(); state.posts.push(body);
+        const created = job('submitted', 'running', body.native_quantization.bits, body.artifact_id); created.request = body;
+        if (state.submit === 'reject') return route.fulfill({ status: 422, json: { detail: 'ACT source still contains training-only VAE weights; create an inference export first.' } });
+        state.jobs.unshift(created);
+        if (state.submit === 'lost') return route.abort('failed');
+        if (state.submit === 'bad-json') return route.fulfill({ status: 202, contentType: 'application/json', body: '{' });
+        if (state.submit === 'wrong-project') return route.fulfill({ status: 202, json: { ...created, project_id: 'beta' } });
+        if (state.submit === 'wrong-source') return route.fulfill({ status: 202, json: { ...created, request: { ...body, artifact_id: 'other' } } });
+        if (state.submit === 'wrong-bits') return route.fulfill({ status: 202, json: { ...created, request: { ...body, native_quantization: { ...body.native_quantization, bits: 4 } } } });
+        return route.fulfill({ status: 202, json: created });
+      }
+      if (path.endsWith('/cancel')) { const id = path.split('/').at(-2)!; state.cancels.push(id); const current = state.jobs.find(item => item.id === id)!; current.status = 'cancelled'; return route.fulfill({ json: current }); }
+      return route.fulfill({ status: 405, json: { detail: 'Unexpected fixture mutation' } });
+    }
+    if (path === '/api/v1/projects') return route.fulfill({ json: [{ id: 'alpha', name: 'Generated ACT quantization', created_at: timestamp }, { id: 'beta', name: 'Second project', created_at: timestamp }] });
+    if (path === '/api/v1/policy-options') return route.fulfill(state.optionsError ? { status: 503, json: { detail: 'Generated capability outage' } } : { json: { runtimes: state.runtimes, sources: [], training_models: [], training_methods: [], default_training_method: 'lora', quantization_defaults: { cpu: { language: 'Q8_0', vision: null }, cuda: { language: 'Q8_0', vision: null }, note: '' } } });
+    if (path.endsWith('/jobs') && path.includes('/projects/')) return route.fulfill(state.jobsError ? { status: 503, json: { detail: 'Generated history outage' } } : { json: path.includes('/alpha/') ? state.jobs : [] });
+    if (path.endsWith('/artifacts')) return route.fulfill(state.artifactsError ? { status: 503, json: { detail: 'Generated artifact outage' } } : { json: path.includes('/alpha/') ? state.artifacts : [] });
+    if (path.endsWith('/events')) { const id = path.split('/').at(-2)!; state.events.push(id); return route.fulfill({ json: [{ sequence: 1, timestamp, stage: 'quantizing', message: `Generated activity for ${id}`, data: {} }] }); }
+    if (path.startsWith('/api/v1/jobs/')) { const id = path.split('/').at(-1)!; state.gets.push(id); const current = state.jobs.find(item => item.id === id); if (current) return route.fulfill({ json: current }); }
+    return route.continue();
+  });
+  await page.goto('/'); await expect(page.getByLabel('Current project')).toHaveValue('alpha');
+  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('button', { name: 'Native ACT · INT8 / INT4', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Native ACT quantization', exact: true })).toBeVisible();
+  return state;
+}
+const submit = (page: Page) => page.getByRole('button', { name: 'Create ACT quantized package', exact: true });
+const refresh = (page: Page) => page.getByRole('button', { name: 'Refresh ACT quantization jobs', exact: true }).click();
+
+test('capability is required and native-only workers cannot leak into the existing engine workflow', async ({ page }) => {
+  const state = await fixture(page); state.runtimes = [{ ...runtime, native_quantization: false }, engine]; await refresh(page);
+  await expect(page.getByText('No local ACT quantization worker is configured.', { exact: false })).toBeVisible();
+  await expect(submit(page)).toBeDisabled();
+  await page.getByRole('button', { name: 'SmolVLA · GGUF', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Quantization jobs', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'New quantization', exact: true }).click();
+  await expect(page.getByLabel('Execution target', { exact: true }).locator('option[value="act-cpu"]')).toHaveCount(0);
+  await expect(page.getByLabel('Execution target', { exact: true }).locator('option[value="engine"]')).toHaveCount(1);
+  expect(state.posts).toEqual([]);
+});
+
+for (const bits of [8, 4]) test(`INT${bits} requires an owned compatible source and submits exact bounded payload only once`, async ({ page }) => {
+  const state = await fixture(page); const picker = page.getByLabel('ACT inference policy', { exact: true });
+  await expect(picker.locator('option')).toHaveText(['Choose a complete local ACT policy', 'Generated act-export · act-expo', 'Generated act-native · act-nati']);
+  await expect(page.getByLabel('Native precision', { exact: true })).toHaveValue('8'); await expect(submit(page)).toBeDisabled();
+  await picker.selectOption('act-export'); if (bits === 4) await page.getByLabel('Native precision', { exact: true }).selectOption('4');
+  await submit(page).dblclick();
+  await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toHaveAttribute('data-job-id', 'submitted');
+  expect(state.posts).toEqual([{ operation: 'policy.quantize', runtime_id: 'act-cpu', artifact_id: 'act-export', native_quantization: { format: 'firebird_quant', bits, group_size: 64 }, timeout_seconds: 600 }]);
+  await expect(page.getByRole('region', { name: 'ACT quantization event log' })).toContainText('Generated activity for submitted');
+  await page.getByRole('button', { name: 'SmolVLA · GGUF', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Quantization jobs', exact: true })).not.toContainText('submitted');
+  expect(state.posts).toHaveLength(1);
+});
+
+test('admission rejection remains visible and does not retry or imply conversion', async ({ page }) => {
+  const state = await fixture(page); state.submit = 'reject'; await page.getByLabel('ACT inference policy', { exact: true }).selectOption('act-export'); await submit(page).click();
+  await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true }).getByRole('alert')).toContainText('create an inference export first'); await expect(submit(page)).toBeEnabled();
+  await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toHaveCount(0); expect(state.posts).toHaveLength(1);
+});
+
+for (const outcome of ['lost', 'bad-json', 'wrong-project', 'wrong-source', 'wrong-bits']) test(`${outcome} response pauses further submissions until an explicit history review`, async ({ page }) => {
+  const state = await fixture(page); state.submit = outcome; await page.getByLabel('ACT inference policy', { exact: true }).selectOption('act-export'); await submit(page).click();
+  await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true }).getByRole('alert')).toContainText('submission outcome is unverified'); await expect(submit(page)).toBeDisabled();
+  const allow = page.getByRole('button', { name: 'I checked the jobs; allow a new request' }); await expect(allow).toBeDisabled();
+  await refresh(page); await expect(allow).toBeEnabled(); expect(state.posts).toHaveLength(1);
+  await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption('submitted'); await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toBeVisible();
+  await allow.click(); await expect(submit(page)).toBeEnabled(); expect(state.posts).toHaveLength(1);
+});
+
+test('completed candidate shows measured storage and drift separately from exact reload with download only', async ({ page }) => {
+  const state = await fixture(page); const done = job('complete', 'succeeded'); done.result = { reports: [report()], artifacts: [{ ...artifact('packed-result', 'native_quantized'), job_id: done.id }, { ...artifact('other-project', 'native_quantized', {}, 'beta'), job_id: done.id }] }; state.jobs.push(done); state.artifacts.push(artifact('packed-result', 'native_quantized'));
+  await refresh(page); await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption(done.id);
+  const measured = page.getByRole('region', { name: 'Measured ACT quantization results' });
+  await expect(measured).toContainText('136,991,488 bytes'); await expect(measured).toContainText('36,694,284 bytes');
+  await expect(measured).toContainText('Exact agreement with the packed candidate'); await expect(measured).toContainText('0.0948200');
+  await expect(measured).toContainText('physical units are unverified');
+  await expect(page.getByRole('link', { name: 'Download INT8 package' })).toHaveCount(1);
+  await expect(page.getByRole('link', { name: 'Download INT8 package' })).toHaveAttribute('href', '/api/v1/projects/alpha/artifacts/packed-result/download');
+  await expect(page.getByLabel('ACT inference policy', { exact: true }).locator('option[value="packed-result"]')).toHaveCount(0);
+  await page.setViewportSize({ width: 320, height: 900 }); const widths = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth, offenders: [...document.querySelectorAll('body *')].filter(item => item.getBoundingClientRect().right > document.documentElement.clientWidth + 1).slice(-15).map(item => ({ tag: item.tagName, cls: item.className, right: item.getBoundingClientRect().right })) })); expect(widths.scroll, JSON.stringify(widths)).toBeLessThanOrEqual(widths.width + 1);
+  await page.getByRole('button', { name: 'Run', exact: true }).click(); await page.getByRole('button', { name: 'Native Isaac · ACT / SmolVLA', exact: true }).click();
+  await expect(page.getByLabel('Native policy', { exact: true }).locator('option[value="packed-result"]')).toHaveCount(0); expect(state.posts).toEqual([]);
+});
+
+test('missing or incomplete report never displays inferred reload or numeric acceptance', async ({ page }) => {
+  const state = await fixture(page); const done = job('incomplete', 'succeeded'); done.result = { reports: [{ ...report(), drift_from_fp32: [] }], artifacts: [] }; state.jobs.push(done);
+  await refresh(page); await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption(done.id);
+  await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true }).getByRole('alert')).toContainText('complete measured quantization report is unavailable');
+  await expect(page.getByRole('region', { name: 'Measured ACT quantization results' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Download INT8 package' })).toHaveCount(0);
+});
+
+test('cancellation requires confirmation bound to the freshly read selected job', async ({ page }) => {
+  const state = await fixture(page); state.jobs.push(job('one'), job('two')); await refresh(page); await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption('one');
+  await page.getByRole('button', { name: 'Cancel selected ACT quantization' }).click(); expect(state.cancels).toEqual([]);
+  await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption('two'); await expect(page.getByRole('group', { name: 'Confirm ACT quantization cancellation' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Cancel selected ACT quantization' }).click(); await page.getByRole('button', { name: 'Confirm cancellation', exact: true }).click();
+  await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toContainText('cancelled'); expect(state.gets).toContain('two'); expect(state.cancels).toEqual(['two']);
+});
+
+test('selection changing during cancellation preflight does not cancel the previous job', async ({ page }) => {
+  const state = await fixture(page); state.jobs.push(job('one'), job('two')); await refresh(page); await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption('one');
+  let entered!: () => void, release!: () => void; const enteredPromise = new Promise<void>(resolve => { entered = resolve; }); const barrier = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/v1/jobs/one', async route => { entered(); await barrier; await route.fulfill({ json: state.jobs.find(item => item.id === 'one') }); });
+  await page.getByRole('button', { name: 'Cancel selected ACT quantization' }).click(); await page.getByRole('button', { name: 'Confirm cancellation', exact: true }).click(); await enteredPromise;
+  await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption('two'); release();
+  await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true }).getByRole('alert')).toContainText('Selection changed; cancellation was not submitted'); expect(state.cancels).toEqual([]);
+});
+
+test('project switching resets precision/source and failed history blocks mutation', async ({ page }) => {
+  const state = await fixture(page); await page.getByLabel('ACT inference policy', { exact: true }).selectOption('act-export'); await page.getByLabel('Native precision', { exact: true }).selectOption('4');
+  state.jobsError = true; await refresh(page); await expect(page.getByText(/Job updates are unavailable/)).toBeVisible(); await expect(submit(page)).toBeDisabled();
+  state.jobsError = false; await page.getByLabel('Current project').selectOption('beta');
+  await expect(page.getByLabel('ACT inference policy', { exact: true })).toHaveValue(''); await expect(page.getByLabel('Native precision', { exact: true })).toHaveValue('8'); await expect(submit(page)).toBeDisabled(); expect(state.posts).toEqual([]);
+});
+
+test('disabled runtime and timeout bounds block submission without changing precision or source', async ({ page }) => {
+  const state = await fixture(page); await page.getByLabel('ACT inference policy', { exact: true }).selectOption('act-export');
+  for (const seconds of ['29', '601', '30.5', '']) { await page.getByLabel('Quantization timeout (seconds)', { exact: true }).fill(seconds); await expect(submit(page)).toBeDisabled(); }
+  await page.getByLabel('Quantization timeout (seconds)', { exact: true }).fill('30'); await expect(submit(page)).toBeEnabled();
+  state.runtimes = [{ ...runtime, enabled: false }, engine]; await refresh(page); await expect(page.getByText(/configured ACT quantization worker is unavailable/)).toBeVisible(); await expect(submit(page)).toBeDisabled(); expect(state.posts).toEqual([]);
+});
+
+test('a fast terminal transition refetches the final events after an empty active response', async ({ page }) => {
+  const state = await fixture(page); const quick = job('quick', 'queued'); state.jobs.push(quick);
+  let armed = false, terminal = false, finalReads = 0;
+  let emptyRead!: () => void; const empty = new Promise<void>(resolve => { emptyRead = resolve; });
+  await page.route('**/api/v1/jobs/quick/events', async route => {
+    if (terminal) { finalReads++; return route.fulfill({ json: [{ sequence: 1, timestamp, stage: 'verifying', message: 'Generated final packed reload receipt', data: {} }] }); }
+    await route.fulfill({ json: [] }); if (armed) emptyRead();
+  });
+  await page.route('**/api/v1/projects/alpha/jobs', async route => {
+    if (armed) { await empty; terminal = true; quick.status = 'succeeded'; }
+    await route.fulfill({ json: state.jobs });
+  });
+  await refresh(page); await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption('quick');
+  await expect(page.getByRole('region', { name: 'ACT quantization event log' })).toHaveText('No recorded events yet.'); armed = true;
+  await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toContainText('succeeded', { timeout: 7000 });
+  await expect(page.getByRole('region', { name: 'ACT quantization event log' })).toContainText('Generated final packed reload receipt'); expect(finalReads).toBeGreaterThan(0); expect(state.posts).toEqual([]);
+});
+
+test('failed worker output never becomes a successful download or rerun', async ({ page }) => {
+  const state = await fixture(page); const failed = job('failed', 'failed'); failed.error = 'Generated fresh reload mismatch'; failed.result = { reports: [report()], artifacts: [{ ...artifact('partial', 'native_quantized'), job_id: failed.id }] }; state.jobs.push(failed);
+  await refresh(page); await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption(failed.id);
+  await expect(page.getByRole('article', { name: 'ACT quantization job details' }).getByRole('alert')).toHaveText('Generated fresh reload mismatch');
+  await expect(page.getByRole('region', { name: 'Measured ACT quantization results' })).toHaveCount(0); await expect(page.getByRole('link', { name: 'Download INT8 package' })).toHaveCount(0); expect(state.posts).toEqual([]);
+});
+
+for (const invalid of ['model-id', 'duplicate-seeds', 'reversed-seeds']) test(`invalid model or fixture identity ${invalid} cannot promote a measured report`, async ({ page }) => {
+  const state = await fixture(page); const done = job('invalid-report', 'succeeded'); const value = report();
+  if (invalid === 'model-id') value.model_id = 'unbound-model';
+  else if (invalid === 'duplicate-seeds') value.drift_from_fp32[1].seed = value.drift_from_fp32[0].seed;
+  else value.drift_from_fp32.reverse();
+  done.result = { reports: [value], artifacts: [] }; state.jobs.push(done); await refresh(page);
+  await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption(done.id);
+  await expect(page.getByRole('region', { name: 'Measured ACT quantization results' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true }).getByRole('alert')).toContainText('complete measured quantization report is unavailable');
+});

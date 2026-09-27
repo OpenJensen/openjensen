@@ -4,6 +4,8 @@ import { publicDemo } from "@/lib/public-demo";
 import { useEffect, useState } from "react";
 import { CloudConnectionsPanel } from "@/components/cloud-connections";
 import { JobHistory } from "@/components/job-history";
+import { nativeQuantizationOf, nativeQuantizationOnly } from "@/lib/native-quantization";
+import { isSimulationJob } from "@/lib/native-simulation";
 import { conciseRunError, observedProgress, runLabel, runSummary } from "@/lib/run-summary";
 import { checkpointLabel, checkpointStep, isCloudArtifact, quantizationIssue, sortCheckpoints, trainingRunModelLabel } from "@/lib/checkpoints";
 import "./workflow-panel.css";
@@ -197,7 +199,7 @@ export function WorkflowPanel({
       }
   }, [projectId, preferences, ready]);
   const policyJobs = (jobs.data ?? [])
-    .filter((x) => x.kind.startsWith("policy."))
+    .filter((x) => x.kind.startsWith("policy.") && !isSimulationJob(x) && !nativeQuantizationOf(x))
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
   const stageJobs = stage === "settings" ? policyJobs : policyJobs.filter(job =>
     stage === "Quantize" ? ["policy.quantize", "policy.workflow"].includes(job.kind)
@@ -232,7 +234,7 @@ export function WorkflowPanel({
   const inputIssue = stage === "Quantize" ? quantizationIssue(inputArtifact) : null;
   const cloudCheckpoint = !!inputArtifact && isCloudArtifact(inputArtifact);
   const needsNativeExecution = stage === "settings";
-  const runtimes = (options.data?.runtimes ?? []).filter(item => item.enabled !== false &&
+  const runtimes = (options.data?.runtimes ?? []).filter(item => item.enabled !== false && !item.export_only && !nativeQuantizationOnly(item) &&
     (!needsNativeExecution || item.execution !== "skypilot") &&
     (stage !== "Evaluate" || item.engine_evaluation !== false) &&
     (stage !== "Run" || item.run !== false) &&

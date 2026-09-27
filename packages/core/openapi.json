@@ -1411,6 +1411,56 @@
         "title": "DatasetSnapshot",
         "type": "object"
       },
+      "DecisionStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "advisory_only": {
+            "const": true,
+            "default": true,
+            "title": "Advisory Only",
+            "type": "boolean"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "busy": {
+            "title": "Busy",
+            "type": "boolean"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "license": {
+            "default": "CC-BY-NC-SA-4.0",
+            "title": "License",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "model": {
+            "default": "muose/Muose-50M-Decision",
+            "title": "Model",
+            "type": "string"
+          },
+          "revision": {
+            "default": "5afb8eeff127621fea2d66fc63f56798ada12eda",
+            "title": "Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "configured",
+          "available",
+          "busy",
+          "message"
+        ],
+        "title": "DecisionStatus",
+        "type": "object"
+      },
       "EpisodePage": {
         "additionalProperties": false,
         "properties": {
@@ -2107,6 +2157,16 @@
             ],
             "title": "Result"
           },
+          "simulation_target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SimulationTarget"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "stage": {
             "anyOf": [
               {
@@ -2496,6 +2556,37 @@
         "title": "LocalPreviewLimits",
         "type": "object"
       },
+      "NativeQuantization": {
+        "additionalProperties": false,
+        "description": "Explicit local packed ACT recipe; separate from GGUF precision.",
+        "properties": {
+          "bits": {
+            "enum": [
+              4,
+              8
+            ],
+            "title": "Bits",
+            "type": "integer"
+          },
+          "format": {
+            "const": "firebird_quant",
+            "title": "Format",
+            "type": "string"
+          },
+          "group_size": {
+            "const": 64,
+            "default": 64,
+            "title": "Group Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "format",
+          "bits"
+        ],
+        "title": "NativeQuantization",
+        "type": "object"
+      },
       "ParityLimits": {
         "additionalProperties": false,
         "description": "Operator-declared tolerances; no unmeasured universal default.",
@@ -2539,7 +2630,9 @@
               "training_checkpoint",
               "native_checkpoint",
               "deployment_package",
-              "inference_export"
+              "inference_export",
+              "simulation_record",
+              "native_quantized"
             ],
             "title": "Format",
             "type": "string"
@@ -2641,6 +2734,16 @@
               }
             ]
           },
+          "native_quantization": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NativeQuantization"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "operation": {
             "enum": [
               "policy.import",
@@ -2681,6 +2784,16 @@
             "pattern": "^[\\w-]+$",
             "title": "Runtime Id",
             "type": "string"
+          },
+          "simulation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SimulationRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "source_id": {
             "anyOf": [
@@ -2846,6 +2959,11 @@
             "title": "Execution",
             "type": "string"
           },
+          "export_only": {
+            "default": false,
+            "title": "Export Only",
+            "type": "boolean"
+          },
           "gpu_memory_mib": {
             "anyOf": [
               {
@@ -2879,6 +2997,16 @@
           "launchable": {
             "default": true,
             "title": "Launchable",
+            "type": "boolean"
+          },
+          "native_quantization": {
+            "default": false,
+            "title": "Native Quantization",
+            "type": "boolean"
+          },
+          "native_quantization_only": {
+            "default": false,
+            "title": "Native Quantization Only",
             "type": "boolean"
           },
           "needs_preparation": {
@@ -2970,6 +3098,230 @@
         "title": "PublicRuntime",
         "type": "object"
       },
+      "Score": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "logit": {
+            "title": "Logit",
+            "type": "number"
+          },
+          "relative_weight": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Relative Weight",
+            "type": "number"
+          },
+          "tokens": {
+            "maximum": 512.0,
+            "minimum": 1.0,
+            "title": "Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "logit",
+          "relative_weight",
+          "tokens"
+        ],
+        "title": "Score",
+        "type": "object"
+      },
+      "ScoreResult": {
+        "additionalProperties": false,
+        "properties": {
+          "advisory_only": {
+            "const": true,
+            "title": "Advisory Only",
+            "type": "boolean"
+          },
+          "calibrated": {
+            "const": false,
+            "title": "Calibrated",
+            "type": "boolean"
+          },
+          "caveats": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Caveats",
+            "type": "array"
+          },
+          "device": {
+            "const": "cpu",
+            "title": "Device",
+            "type": "string"
+          },
+          "license": {
+            "const": "CC-BY-NC-SA-4.0",
+            "title": "License",
+            "type": "string"
+          },
+          "model": {
+            "const": "muose/Muose-50M-Decision",
+            "title": "Model",
+            "type": "string"
+          },
+          "model_sha256": {
+            "title": "Model Sha256",
+            "type": "string"
+          },
+          "prompt_template": {
+            "const": "firebird-experimental-sections-v1",
+            "title": "Prompt Template",
+            "type": "string"
+          },
+          "prompt_template_sha256": {
+            "title": "Prompt Template Sha256",
+            "type": "string"
+          },
+          "request_sha256": {
+            "title": "Request Sha256",
+            "type": "string"
+          },
+          "revision": {
+            "const": "5afb8eeff127621fea2d66fc63f56798ada12eda",
+            "title": "Revision",
+            "type": "string"
+          },
+          "runtime_versions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Runtime Versions",
+            "type": "object"
+          },
+          "schema_version": {
+            "const": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "scores": {
+            "items": {
+              "$ref": "#/components/schemas/Score"
+            },
+            "maxItems": 8,
+            "minItems": 2,
+            "title": "Scores",
+            "type": "array"
+          },
+          "selected_id": {
+            "title": "Selected Id",
+            "type": "string"
+          },
+          "threads": {
+            "const": 2,
+            "title": "Threads",
+            "type": "integer"
+          },
+          "timing_ms": {
+            "$ref": "#/components/schemas/Timing"
+          }
+        },
+        "required": [
+          "schema_version",
+          "model",
+          "revision",
+          "model_sha256",
+          "license",
+          "prompt_template",
+          "prompt_template_sha256",
+          "request_sha256",
+          "device",
+          "threads",
+          "runtime_versions",
+          "advisory_only",
+          "calibrated",
+          "selected_id",
+          "scores",
+          "timing_ms",
+          "caveats"
+        ],
+        "title": "ScoreResult",
+        "type": "object"
+      },
+      "SimulationRequest": {
+        "additionalProperties": false,
+        "description": "A registered scenario selection; paths and commands belong to the operator.",
+        "properties": {
+          "experimental": {
+            "default": false,
+            "title": "Experimental",
+            "type": "boolean"
+          },
+          "profile_id": {
+            "pattern": "^[\\w-]{1,100}$",
+            "title": "Profile Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile_id"
+        ],
+        "title": "SimulationRequest",
+        "type": "object"
+      },
+      "SimulationTarget": {
+        "additionalProperties": false,
+        "description": "The accepted multi-worker target, kept separate from single-GPU training.",
+        "properties": {
+          "accelerators": {
+            "items": {
+              "enum": [
+                "L4",
+                "H100"
+              ],
+              "type": "string"
+            },
+            "title": "Accelerators",
+            "type": "array"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "pattern": "^sha256:[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "profile_id": {
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "profile_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Profile Sha256",
+            "type": "string"
+          },
+          "provider": {
+            "const": "gcp",
+            "default": "gcp",
+            "title": "Provider",
+            "type": "string"
+          },
+          "source_manifest_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Manifest Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile_id",
+          "profile_sha256",
+          "source_manifest_sha256"
+        ],
+        "title": "SimulationTarget",
+        "type": "object"
+      },
       "TeachingCommand": {
         "additionalProperties": false,
         "properties": {
@@ -3027,6 +3379,27 @@
           "operation"
         ],
         "title": "TeachingCommand",
+        "type": "object"
+      },
+      "Timing": {
+        "additionalProperties": false,
+        "properties": {
+          "load": {
+            "minimum": 0.0,
+            "title": "Load",
+            "type": "number"
+          },
+          "score": {
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "load",
+          "score"
+        ],
+        "title": "Timing",
         "type": "object"
       },
       "TrainingCheckpoint": {
@@ -3391,7 +3764,7 @@
     }
   },
   "info": {
-    "title": "Firebird local VLA application",
+    "title": "OPEN JENSEN local VLA application",
     "version": "0.1.0"
   },
   "openapi": "3.1.0",
@@ -3714,6 +4087,113 @@
         "summary": "Prepare Gcp Compute",
         "tags": [
           "Compute settings"
+        ]
+      }
+    },
+    "/api/v1/decision/score": {
+      "post": {
+        "operationId": "score_api_v1_decision_score_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "criteria": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+                          "title": "Id",
+                          "type": "string"
+                        },
+                        "text": {
+                          "maxLength": 2000,
+                          "minLength": 1,
+                          "title": "Text",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "text"
+                      ],
+                      "title": "Criterion",
+                      "type": "object"
+                    },
+                    "maxItems": 8,
+                    "minItems": 2,
+                    "title": "Criteria",
+                    "type": "array"
+                  },
+                  "instructions": {
+                    "maxLength": 2000,
+                    "minLength": 1,
+                    "title": "Instructions",
+                    "type": "string"
+                  },
+                  "schema_version": {
+                    "const": 1,
+                    "title": "Schema Version",
+                    "type": "integer"
+                  },
+                  "state": {
+                    "maxLength": 8000,
+                    "minLength": 1,
+                    "title": "State",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "schema_version",
+                  "state",
+                  "instructions",
+                  "criteria"
+                ],
+                "title": "ScoreRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoreResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Score",
+        "tags": [
+          "Decision advisory"
+        ]
+      }
+    },
+    "/api/v1/decision/status": {
+      "get": {
+        "operationId": "status_api_v1_decision_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Status",
+        "tags": [
+          "Decision advisory"
         ]
       }
     },
@@ -4191,6 +4671,43 @@
         "summary": "Job Events"
       }
     },
+    "/api/v1/jobs/{job_id}/simulation-media/video": {
+      "get": {
+        "operationId": "simulation_video_api_v1_jobs__job_id__simulation_media_video_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Simulation Video"
+      }
+    },
     "/api/v1/jobs/{job_id}/training": {
       "get": {
         "operationId": "training_telemetry_api_v1_jobs__job_id__training_get",
@@ -4575,6 +5092,56 @@
         "summary": "List Jobs"
       }
     },
+    "/api/v1/projects/{project_id}/model-imports": {
+      "post": {
+        "description": "Upload a complete native ACT/SmolVLA TAR; import is an observable local job.",
+        "operationId": "import_native_policy_api_v1_projects__project_id__model_imports_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[\\w-]{1,100}$",
+              "title": "Profile Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Native Policy"
+      }
+    },
     "/api/v1/projects/{project_id}/policy-jobs": {
       "post": {
         "operationId": "policy_job_api_v1_projects__project_id__policy_jobs_post",
@@ -4622,6 +5189,26 @@
           }
         },
         "summary": "Policy Job"
+      }
+    },
+    "/api/v1/simulation-options": {
+      "get": {
+        "operationId": "simulation_options_api_v1_simulation_options_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Simulation Options Api V1 Simulation Options Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Simulation Options"
       }
     },
     "/api/v1/teaching/commands": {
@@ -4706,6 +5293,25 @@
     "/api/v1/teaching/frame": {
       "get": {
         "operationId": "frame_api_v1_teaching_frame_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9_-]{1,96}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -4714,6 +5320,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Frame",

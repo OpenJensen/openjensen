@@ -14,7 +14,7 @@ Changing source files requires a new inspection/copy. Existing jobs retain the o
 
 **Dataset → Teaching** relays explicit task, recording, pause/reset, named-joint correction, failure annotation and finish commands to an authenticated local executor. Each command binds to the exact executor session and state revision. A correction is acknowledged only after physics advances and the applied-action row is written. A timeout means execution is unverified; inspect the executor before retrying.
 
-Install and run the separate [teaching worker](../workers/teaching/README.md) using the existing Isaac runtime. Set these application-host variables before starting Firebird:
+Install and run the separate [teaching worker](../workers/teaching/README.md) using the existing Isaac runtime. Set these application-host variables before starting OPEN JENSEN:
 
 ```sh
 export FIREBIRD_TEACHING_URL=http://127.0.0.1:8768

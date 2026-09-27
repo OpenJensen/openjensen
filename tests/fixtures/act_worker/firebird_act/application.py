@@ -4,12 +4,16 @@ import hashlib
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 request, result = map(Path, sys.argv[1:])
 job = json.loads(request.read_text())
 assert job["operation"] == "policy.export"
 assert os.environ["CUDA_VISIBLE_DEVICES"] == ""
+if os.environ.get("FIREBIRD_TEST_EXPORT_HANG"):
+    Path(os.environ["FIREBIRD_TEST_EXPORT_HANG"]).write_text(str(os.getpid()))
+    time.sleep(300)
 source = job["artifact"]
 source_path = Path(source["path"])
 root = Path(job["output_dir"]) / "inference-export"
@@ -41,7 +45,9 @@ metadata = {
     "checkpoint_manifest_sha256": hashlib.sha256(
         (source_path / "checkpoint/manifest.json").read_bytes()
     ).hexdigest(),
-    "dataset": source["metadata"]["dataset"],
+    "dataset": {
+        key: source["metadata"]["dataset"][key] for key in ("source", "repo_id", "revision")
+    },
     "camera_keys": source["metadata"]["camera_keys"],
 }
 fault = os.getenv("FIXTURE_FAULT")

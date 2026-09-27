@@ -10,7 +10,7 @@ button.addEventListener('click', async () => {
     const result = await window.__TAURI__.core.invoke('probe_backend');
     if (result.status === 'ready') {
       heading.textContent = 'Connected';
-      message.textContent = `Opening Firebird ${result.version} at ${result.address}`;
+      message.textContent = `Opening OPEN JENSEN ${result.version} at ${result.address}`;
       window.location.replace(result.address);
       return;
     }

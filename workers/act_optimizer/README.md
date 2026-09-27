@@ -34,8 +34,10 @@ The first recipe supports a full, non-PEFT ACT checkpoint with ResNet18, one RGB
 camera, six state/action coordinates, one observation, a 100-step chunk and
 100 executed actions, MEAN_STD normalization, no temporal ensemble, no AMP,
 ReLU and post-normalized transformer blocks. Bounded transformer dimensions
-support the supplied checkpoint and a small real-policy test fixture. Other
-architectures/configurations are rejected explicitly.
+support the supplied checkpoint and a small real-policy test fixture. RGB dimensions
+must be integers from 32 through 2048, with at most 2,073,600 pixels (1920 × 1080)
+per image. The saved image shape is preserved exactly; export does not resize it.
+Other architectures/configurations are rejected explicitly.
 
 The checkpoint contains `config.json`, `model.safetensors`, saved pre/postprocessor
 JSON and their referenced statistics files. `train_config.json` is optional,
@@ -71,7 +73,7 @@ a bounded diagnostic tail. Temporary staging is cleaned on handled failure;
 force-killing the parent can leave a hidden `.act-export-*` directory for operator
 cleanup, but cannot publish a partial package.
 
-The supported Firebird loader explicitly overrides the device to CPU and
+The supported OPEN JENSEN loader explicitly overrides the device to CPU and
 `pretrained_backbone_weights=None`, and loads saved processors locally. A generic
 LeRobot loader without that override may request torchvision backbone weights.
 Verification sets Hugging Face offline flags and blocks Python socket connect/DNS
@@ -211,7 +213,7 @@ recipe. At native LeRobot0.6.2 revision
 a CPU optimizer update on seeded synthetic tensors, calls upstream
 `save_checkpoint`, then in a fresh process uses upstream two-phase resume with
 Accelerate1.14.0. Saved model, optimizer, RNG and the next optimizer update must
-match exactly. Its final mode uses the actual Firebird checkpoint bundler.
+match exactly. Its final mode uses the actual OPEN JENSEN checkpoint bundler.
 Run `generate`, `resume`, then `bundle` against the same new scratch directory
 in the isolated producer environment. The ACT exporter stays on its unchanged
 LeRobot0.6.1 lock and consumes only the resulting complete bundle.

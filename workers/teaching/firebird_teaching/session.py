@@ -11,6 +11,7 @@ from sim_worker.rollout.contracts import Observation, Simulation
 from sim_worker.rollout.experimental import MotionGuard
 
 from .contracts import Command, Settings
+from .frame_snapshot import ObservationSnapshot
 from .journal import Journal
 
 
@@ -26,6 +27,8 @@ class Session:
         self.instruction = ""
         self.outcome = "unknown"
         self.observation = None
+        self.observation_received_monotonic_ns = None
+        self.frame_snapshot = None
         self.target = None
         self.last_command = None
         self.target_command = None
@@ -38,7 +41,7 @@ class Session:
         if threading.get_ident() != self.owner:
             raise RuntimeError("Only the simulator thread may execute teaching operations")
 
-    def _observe(self, step: int) -> Observation:
+    def _observe(self, step: int) -> tuple[Observation, int]:
         obs = self.sim.observe()
         spec = self.settings.sim
         if (
@@ -54,7 +57,31 @@ class Session:
             obs.frame.rgb
         ) != spec.width * spec.height * 3:
             raise ValueError("Simulator RGB frame differs from the capture contract")
-        return obs
+        return obs, time.monotonic_ns()
+
+    def _freeze_observation(self) -> None:
+        self._owned()
+        obs = self.observation
+        if obs is None:
+            self.frame_snapshot = None
+            return
+        self.frame_snapshot = ObservationSnapshot(
+            self.journal.session_id,
+            self.revision,
+            self.episode_id,
+            self.mode,
+            obs.episode_id,
+            obs.step,
+            obs.sim_time,
+            "observation.images.front",
+            self.settings.sim.camera,
+            self.observation_received_monotonic_ns,
+            obs.frame.width,
+            obs.frame.height,
+            obs.frame.rgb,
+            tuple(self.settings.sim.joints),
+            tuple(obs.state),
+        )
 
     def prepare(self) -> None:
         """Validate scene/camera/joints and capture idle preview before advertising readiness."""
@@ -64,12 +91,13 @@ class Session:
         self.episode_id = "preview-" + uuid.uuid4().hex
         try:
             self.sim.reset(self.episode_id)
-            self.observation = self._observe(0)
+            self.observation, self.observation_received_monotonic_ns = self._observe(0)
         except BaseException as error:
             self.fail(error)
             raise
         finally:
             self.episode_id = None
+        self._freeze_observation()
 
     def snapshot(self) -> dict:
         return {
@@ -96,6 +124,7 @@ class Session:
             raise ValueError("Stale episode or command revision; refresh session state")
         if self.mode in {"faulted", "closed"}:
             raise ValueError("Session faulted; preserve capture and start a new process")
+        prior_observation = self.observation
         op = command.operation
         if self.journal.current is not None and len(self.journal.events) >= 512:
             error = RuntimeError("Episode intervention limit exceeded")
@@ -112,7 +141,7 @@ class Session:
                 self.episode_id = uuid.uuid4().hex
                 try:
                     self.sim.reset(self.episode_id)
-                    self.observation = self._observe(0)
+                    self.observation, self.observation_received_monotonic_ns = self._observe(0)
                     self.guard = MotionGuard(lambda: self.sim.joint_limits, self.settings.sim.fps)
                     self.journal.begin(self.episode_id, self.instruction)
                 except BaseException as error:
@@ -164,6 +193,8 @@ class Session:
             self.target_command = command.command_id
         if op not in {"finish", "reset"}:
             self._event(command)
+        if self.observation is not prior_observation:
+            self._freeze_observation()
         return self.snapshot()
 
     def _event(self, command: Command) -> None:
@@ -195,13 +226,14 @@ class Session:
                 self.mode = "idle"
                 self.episode_id = None
                 self.observation = None
+                self.frame_snapshot = None
                 self.revision += 1
                 return
             target = self.target if self.target is not None else obs.state
             limited = self.guard.constrain(target, obs.state)
             self.sim.apply(limited.target)
             self.sim.step()
-            following = self._observe(obs.step + 1)
+            following, received_ns = self._observe(obs.step + 1)
             self.journal.append(
                 {
                     "episode_id": self.episode_id,
@@ -222,6 +254,8 @@ class Session:
                 obs.frame.rgb,
             )
             self.observation = following
+            self.observation_received_monotonic_ns = received_ns
+            self._freeze_observation()
             self.last_applied_command_id = self.target_command
             self.last_applied_step = obs.step
         except BaseException as error:

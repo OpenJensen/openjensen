@@ -58,7 +58,9 @@ def configured(tmp_path):
 
 
 def wait(client, job_id):
-    deadline = time.monotonic() + (45 if os.name == "nt" else 15)
+    # This bounds test observation, not workflow performance or product timeouts.
+    # Multi-process fixtures need headroom on constrained and emulated CI hosts.
+    deadline = time.monotonic() + 60
     while time.monotonic() < deadline:
         job = client.get("/api/v1/jobs/" + job_id).json()
         if job["status"] not in {"queued", "running"}:
@@ -208,6 +210,9 @@ def test_training_options_expose_configured_gpu_specs_without_private_runtime_fi
         "device": "cuda",
         "training": True,
         "act_export": False,
+        "export_only": False,
+        "native_quantization": False,
+        "native_quantization_only": False,
         "training_model_ids": ["smolvla"],
         "simulation": True,
         "engine_evaluation": True,

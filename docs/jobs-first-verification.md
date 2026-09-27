@@ -37,7 +37,7 @@ These latency figures measure native predictions after warmup. They exclude
 provisioning, source compilation, artifact transfer and package publication.
 Fresh workers currently rebuild the CUDA runtime; that dominates startup and is
 a remaining performance limitation. These tests do not establish robot or
-simulator task success, and they do not compare Firebird with KiteML performance.
+simulator task success, and they do not compare OPEN JENSEN with KiteML performance.
 
 The selected GGUF SHA-256 remained
 `d64ebd5847efbbb8efbc7d166b4b50a202804a255f1204908e7a0407197fa19d`.

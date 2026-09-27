@@ -1,6 +1,6 @@
 # Cloud connections
 
-Settings can associate this Firebird workspace with a Google Cloud project.
+Settings can associate this OPEN JENSEN workspace with a Google Cloud project.
 Connection checks use credentials already managed by the provider CLI on the
 machine running the API. They verify account access only;
 they do not create GPU workers, check GPU quota, grant permissions, or start jobs.
@@ -8,7 +8,7 @@ they do not create GPU workers, check GPU quota, grant permissions, or start job
 ## Provider setup
 
 For Google Cloud, install the Google Cloud CLI and sign in with
-`gcloud auth login`. Firebird reads the active account and verifies access to the
+`gcloud auth login`. OPEN JENSEN reads the active account and verifies access to the
 selected project with `gcloud projects describe`. It does not change the CLI's
 default project or Application Default Credentials. See the
 [Google login reference](https://docs.cloud.google.com/sdk/gcloud/reference/auth/login)

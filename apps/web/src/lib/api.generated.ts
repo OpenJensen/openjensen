@@ -178,6 +178,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/decision/score": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Score */
+        post: operations["score_api_v1_decision_score_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/decision/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Status */
+        get: operations["status_api_v1_decision_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/health": {
         parameters: {
             query?: never;
@@ -326,6 +360,23 @@ export interface paths {
         };
         /** Job Events */
         get: operations["job_events_api_v1_jobs__job_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{job_id}/simulation-media/video": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Simulation Video */
+        get: operations["simulation_video_api_v1_jobs__job_id__simulation_media_video_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -488,6 +539,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/model-imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Native Policy
+         * @description Upload a complete native ACT/SmolVLA TAR; import is an observable local job.
+         */
+        post: operations["import_native_policy_api_v1_projects__project_id__model_imports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/policy-jobs": {
         parameters: {
             query?: never;
@@ -499,6 +570,23 @@ export interface paths {
         put?: never;
         /** Policy Job */
         post: operations["policy_job_api_v1_projects__project_id__policy_jobs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/simulation-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Simulation Options */
+        get: operations["simulation_options_api_v1_simulation_options_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1120,6 +1208,38 @@ export interface components {
             /** Warnings */
             warnings: string[];
         };
+        /** DecisionStatus */
+        DecisionStatus: {
+            /**
+             * Advisory Only
+             * @default true
+             * @constant
+             */
+            advisory_only: true;
+            /** Available */
+            available: boolean;
+            /** Busy */
+            busy: boolean;
+            /** Configured */
+            configured: boolean;
+            /**
+             * License
+             * @default CC-BY-NC-SA-4.0
+             */
+            license: string;
+            /** Message */
+            message: string;
+            /**
+             * Model
+             * @default muose/Muose-50M-Decision
+             */
+            model: string;
+            /**
+             * Revision
+             * @default 5afb8eeff127621fea2d66fc63f56798ada12eda
+             */
+            revision: string;
+        };
         /** EpisodePage */
         EpisodePage: {
             /** Episodes */
@@ -1370,6 +1490,7 @@ export interface components {
             request: components["schemas"]["IntakeRequest"] | components["schemas"]["PolicyRequest"] | components["schemas"]["AugmentationRequest"];
             /** Result */
             result?: components["schemas"]["DatasetProfile"] | components["schemas"]["LifecycleResult"] | components["schemas"]["AugmentationResult"] | null;
+            simulation_target?: components["schemas"]["SimulationTarget"] | null;
             /** Stage */
             stage?: string | null;
             /**
@@ -1563,6 +1684,28 @@ export interface components {
             timeout_seconds: number;
         };
         /**
+         * NativeQuantization
+         * @description Explicit local packed ACT recipe; separate from GGUF precision.
+         */
+        NativeQuantization: {
+            /**
+             * Bits
+             * @enum {integer}
+             */
+            bits: 4 | 8;
+            /**
+             * Format
+             * @constant
+             */
+            format: "firebird_quant";
+            /**
+             * Group Size
+             * @default 64
+             * @constant
+             */
+            group_size: 64;
+        };
+        /**
          * ParityLimits
          * @description Operator-declared tolerances; no unmeasured universal default.
          */
@@ -1582,7 +1725,7 @@ export interface components {
              * Format
              * @enum {string}
              */
-            format: "gguf" | "training_checkpoint" | "native_checkpoint" | "deployment_package" | "inference_export";
+            format: "gguf" | "training_checkpoint" | "native_checkpoint" | "deployment_package" | "inference_export" | "simulation_record" | "native_quantized";
             /** Id */
             id: string;
             /** Job Id */
@@ -1612,6 +1755,7 @@ export interface components {
             dataset_job_id?: string | null;
             evaluation?: components["schemas"]["Evaluation"];
             limits?: components["schemas"]["Limits"] | null;
+            native_quantization?: components["schemas"]["NativeQuantization"] | null;
             /**
              * Operation
              * @enum {string}
@@ -1622,6 +1766,7 @@ export interface components {
             resume_job_id?: string | null;
             /** Runtime Id */
             runtime_id: string;
+            simulation?: components["schemas"]["SimulationRequest"] | null;
             /** Source Id */
             source_id?: string | null;
             /**
@@ -1694,6 +1839,11 @@ export interface components {
              * @enum {string}
              */
             execution: "native" | "skypilot";
+            /**
+             * Export Only
+             * @default false
+             */
+            export_only: boolean;
             /** Gpu Memory Mib */
             gpu_memory_mib: number | null;
             /** Gpu Name */
@@ -1707,6 +1857,16 @@ export interface components {
              * @default true
              */
             launchable: boolean;
+            /**
+             * Native Quantization
+             * @default false
+             */
+            native_quantization: boolean;
+            /**
+             * Native Quantization Only
+             * @default false
+             */
+            native_quantization_only: boolean;
             /**
              * Needs Preparation
              * @default false
@@ -1737,6 +1897,117 @@ export interface components {
             /** Unavailable Reason */
             unavailable_reason?: string | null;
         };
+        /** Score */
+        Score: {
+            /** Id */
+            id: string;
+            /** Logit */
+            logit: number;
+            /** Relative Weight */
+            relative_weight: number;
+            /** Tokens */
+            tokens: number;
+        };
+        /** ScoreResult */
+        ScoreResult: {
+            /**
+             * Advisory Only
+             * @constant
+             */
+            advisory_only: true;
+            /**
+             * Calibrated
+             * @constant
+             */
+            calibrated: false;
+            /** Caveats */
+            caveats: string[];
+            /**
+             * Device
+             * @constant
+             */
+            device: "cpu";
+            /**
+             * License
+             * @constant
+             */
+            license: "CC-BY-NC-SA-4.0";
+            /**
+             * Model
+             * @constant
+             */
+            model: "muose/Muose-50M-Decision";
+            /** Model Sha256 */
+            model_sha256: string;
+            /**
+             * Prompt Template
+             * @constant
+             */
+            prompt_template: "firebird-experimental-sections-v1";
+            /** Prompt Template Sha256 */
+            prompt_template_sha256: string;
+            /** Request Sha256 */
+            request_sha256: string;
+            /**
+             * Revision
+             * @constant
+             */
+            revision: "5afb8eeff127621fea2d66fc63f56798ada12eda";
+            /** Runtime Versions */
+            runtime_versions: {
+                [key: string]: string;
+            };
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: 1;
+            /** Scores */
+            scores: components["schemas"]["Score"][];
+            /** Selected Id */
+            selected_id: string;
+            /**
+             * Threads
+             * @constant
+             */
+            threads: 2;
+            timing_ms: components["schemas"]["Timing"];
+        };
+        /**
+         * SimulationRequest
+         * @description A registered scenario selection; paths and commands belong to the operator.
+         */
+        SimulationRequest: {
+            /**
+             * Experimental
+             * @default false
+             */
+            experimental: boolean;
+            /** Profile Id */
+            profile_id: string;
+        };
+        /**
+         * SimulationTarget
+         * @description The accepted multi-worker target, kept separate from single-GPU training.
+         */
+        SimulationTarget: {
+            /** Accelerators */
+            accelerators?: ("L4" | "H100")[];
+            /** Model Id */
+            model_id?: string | null;
+            /** Profile Id */
+            profile_id: string;
+            /** Profile Sha256 */
+            profile_sha256: string;
+            /**
+             * Provider
+             * @default gcp
+             * @constant
+             */
+            provider: "gcp";
+            /** Source Manifest Sha256 */
+            source_manifest_sha256: string;
+        };
         /** TeachingCommand */
         TeachingCommand: {
             /** Arguments */
@@ -1756,6 +2027,13 @@ export interface components {
             operation: "task" | "start" | "pause" | "reset" | "correct" | "mark_failure" | "finish";
             /** Session Id */
             session_id: string;
+        };
+        /** Timing */
+        Timing: {
+            /** Load */
+            load: number;
+            /** Score */
+            score: number;
         };
         /** TrainingCheckpoint */
         TrainingCheckpoint: {
@@ -2131,6 +2409,67 @@ export interface operations {
             };
         };
     };
+    score_api_v1_decision_score_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Criteria */
+                    criteria: {
+                        /** Id */
+                        id: string;
+                        /** Text */
+                        text: string;
+                    }[];
+                    /** Instructions */
+                    instructions: string;
+                    /**
+                     * Schema Version
+                     * @constant
+                     */
+                    schema_version: 1;
+                    /** State */
+                    state: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScoreResult"];
+                };
+            };
+        };
+    };
+    status_api_v1_decision_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionStatus"];
+                };
+            };
+        };
+    };
     health_api_v1_health_get: {
         parameters: {
             query?: never;
@@ -2485,6 +2824,37 @@ export interface operations {
             };
         };
     };
+    simulation_video_api_v1_jobs__job_id__simulation_media_video_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     training_telemetry_api_v1_jobs__job_id__training_get: {
         parameters: {
             query?: never;
@@ -2786,6 +3156,39 @@ export interface operations {
             };
         };
     };
+    import_native_policy_api_v1_projects__project_id__model_imports_post: {
+        parameters: {
+            query: {
+                profile_id: string;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     policy_job_api_v1_projects__project_id__policy_jobs_post: {
         parameters: {
             query?: never;
@@ -2817,6 +3220,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    simulation_options_api_v1_simulation_options_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
@@ -2887,7 +3312,9 @@ export interface operations {
     };
     frame_api_v1_teaching_frame_get: {
         parameters: {
-            query?: never;
+            query?: {
+                session_id?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2901,6 +3328,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -6,8 +6,11 @@ def registry(
     training_configured: bool = False,
     act_export_configured: bool = False,
     cloud_configured: bool = False,
+    native_quantization_configured: bool = False,
 ) -> list[Capability]:
     configured = {"Quantize", "Evaluate", "Run"} if native_configured or cloud_configured else set()
+    if native_quantization_configured:
+        configured.add("Quantize")
     if training_configured or cloud_configured:
         configured.add("Fine-tune")
     return [
@@ -36,7 +39,10 @@ def registry(
                 operation=operation,
                 status="untested" if stage in configured else "planned",
                 description=(
-                    "Execution worker configured; target support evidence is unregistered. "
+                    "Native ACT 4/8-bit packing and fresh CPU reload are configured; "
+                    "generated action drift only, no simulation, quality or speedup claim."
+                    if stage == "Quantize" and native_quantization_configured
+                    else "Execution worker configured; target support evidence is unregistered. "
                     "Each job performs runtime preflight."
                     if stage in configured
                     else description

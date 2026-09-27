@@ -82,3 +82,5 @@ This suggestion does not raise the adapter's admission floor; smaller tested
 recipes remain usable on operator-configured workers. Batch size, cameras,
 precision and trainable layers change memory use. Models without an installed
 adapter show that their GPU budget is unverified.
+
+Completed native ACT checkpoints have an explicit [local CPU inference export](cloud-act-export.md) path from the Fine-tune checkpoint panel.

@@ -104,12 +104,12 @@ def ensure_bucket(project, region):
         except Conflict:
             bucket = service.get_bucket(name)
     if bucket.labels.get("firebird_project") != project:
-        raise ValueError("Cloud bucket is not owned by this Firebird project")
+        raise ValueError("Cloud bucket is not owned by this OPEN JENSEN project")
     if (
         not bucket.iam_configuration.uniform_bucket_level_access_enabled
         or bucket.iam_configuration.public_access_prevention != "enforced"
     ):
-        raise ValueError("Firebird artifact bucket must use private uniform access")
+        raise ValueError("OPEN JENSEN artifact bucket must use private uniform access")
     return "gs://" + name
 
 

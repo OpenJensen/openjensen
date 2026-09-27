@@ -77,7 +77,7 @@ test('theme selection survives home/reference navigation and direct reloads', as
   await page.reload();
   await expect(page.getByRole('button', { name: 'Dark', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: 'Light', exact: true }).click();
-  await page.getByRole('link', { name: 'Jensen workspace home' }).click();
+  await page.getByRole('link', { name: 'OPEN JENSEN workspace home' }).click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole('button', { name: 'Light', exact: true })).toHaveAttribute('aria-pressed', 'true');
   expect(await page.evaluate(() => localStorage.getItem('firebird.theme'))).toBe('light');
@@ -308,7 +308,7 @@ test('reports malformed schemas without crashing the shared page', async ({ page
   await page.goto('/docs/');
   await expect(page.getByText(/invalid OpenAPI document/i)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Retry loading schema' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Jensen workspace home' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'OPEN JENSEN workspace home' })).toBeVisible();
   expect(errors).toEqual([]);
 });
 

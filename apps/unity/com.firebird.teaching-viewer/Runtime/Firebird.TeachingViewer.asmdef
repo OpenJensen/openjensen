@@ -1,0 +1,9 @@
+{
+  "name": "Firebird.TeachingViewer",
+  "rootNamespace": "Firebird.TeachingViewer",
+  "references": [],
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "Newtonsoft.Json.dll"
+  ]
+}
