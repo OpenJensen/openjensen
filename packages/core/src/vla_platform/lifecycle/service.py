@@ -582,6 +582,10 @@ class Lifecycle:
         raise ValueError("Checkpoint lineage is too deep")
 
     async def validate(self, project_id: str, request: PolicyRequest):
+        if request.simulation is not None:
+            from vla_platform.lifecycle.simulation import validate
+
+            return await validate(self, project_id, request)
         runtime = self.runtime(request.runtime_id)
         if runtime is None:
             raise ValueError("Runtime is not configured on this application host")
@@ -1403,6 +1407,10 @@ class Lifecycle:
 
     async def run(self, job: Job):
         request = job.request
+        if request.simulation is not None:
+            from vla_platform.lifecycle.simulation import run
+
+            return await run(self, job)
         result = LifecycleResult()
         artifact = (
             await self.artifact(job.project_id, request.artifact_id)

@@ -3,17 +3,19 @@
 import asyncio
 import base64
 import binascii
+import hashlib
 import json
 import math
 import os
 import re
 import stat
+import time
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
 import httpx
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from vla_platform.lifecycle.contracts import StrictRecord
@@ -109,6 +111,15 @@ def finite_float(raw):
     return value
 
 
+def unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate response field")
+        result[key] = value
+    return result
+
+
 async def relay(path, payload=None, *, voice=False, maximum=65536):
     origin, token = configuration(voice)
     try:
@@ -135,7 +146,8 @@ async def relay(path, payload=None, *, voice=False, maximum=65536):
                     if len(raw) > maximum:
                         raise ValueError("Oversized teaching response")
                 value = json.loads(
-                    raw,
+                    raw.decode("utf-8"),
+                    object_pairs_hook=unique_object,
                     parse_float=finite_float,
                     parse_constant=lambda _: (_ for _ in ()).throw(
                         ValueError("Nonfinite response")
@@ -193,48 +205,135 @@ async def state(response: Response):
     }
 
 
+FRAME_CONTEXT = {"session_id", "revision", "active_episode_id", "mode"}
+FRAME_FIELDS = {
+    "schema_version",
+    "available",
+    *FRAME_CONTEXT,
+    "current_context",
+    "episode_id",
+    "step",
+    "sim_time",
+    "camera_key",
+    "camera_prim",
+    "observation_received_monotonic_ns",
+    "published_monotonic_ns",
+    "source_age_ns",
+    "width",
+    "height",
+    "rgb_base64",
+    "rgb_sha256",
+    "joints",
+    "state_rad",
+    "units",
+}
+FRAME_MAX_AGE_NS = 5_000_000_000
+
+
+def frame_integer(value, maximum=2**63 - 1):
+    if type(value) is not int or not 0 <= value <= maximum:
+        raise ValueError("Invalid frame integer")
+    return value
+
+
+def frame_context(value):
+    if not isinstance(value, dict) or set(value) != FRAME_CONTEXT:
+        raise ValueError("Invalid frame context")
+    if not isinstance(value["session_id"], str) or not re.fullmatch(IDENTITY, value["session_id"]):
+        raise ValueError("Invalid frame session")
+    frame_integer(value["revision"], 2**53 - 1)
+    episode = value["active_episode_id"]
+    if episode is not None and (
+        not isinstance(episode, str) or not re.fullmatch(IDENTITY, episode)
+    ):
+        raise ValueError("Invalid active episode")
+    if value["mode"] not in {"idle", "running", "paused"}:
+        raise ValueError("Unavailable frame context")
+    return value
+
+
+def public_frame(value, *, session_id, elapsed_ns):
+    """Validate the worker's atomic v1 envelope without importing simulator dependencies."""
+    if (
+        value == {"schema_version": 1, "available": False}
+        and type(value["schema_version"]) is int
+        and value["available"] is False
+    ):
+        return value
+    if set(value) != FRAME_FIELDS or type(value["schema_version"]) is not int:
+        raise ValueError("Missing or unsupported frame fields")
+    if value["schema_version"] != 1 or value["available"] is not True or value["units"] != "rad":
+        raise ValueError("Unsupported frame protocol")
+    frozen = frame_context({key: value[key] for key in FRAME_CONTEXT})
+    if frame_context(value["current_context"]) != frozen:
+        raise ValueError("Frame context changed")
+    if session_id is not None and frozen["session_id"] != session_id:
+        raise ValueError("Frame session changed")
+    episode = value["episode_id"]
+    if not isinstance(episode, str) or not re.fullmatch(IDENTITY, episode):
+        raise ValueError("Invalid observation identity")
+    if frozen["active_episode_id"] is None:
+        if frozen["mode"] != "idle" or not episode.startswith("preview-"):
+            raise ValueError("Invalid preview identity")
+    elif episode != frozen["active_episode_id"] or frozen["mode"] == "idle":
+        raise ValueError("Observation episode changed")
+    frame_integer(value["step"], 2**53 - 1)
+    if (
+        type(value["sim_time"]) not in (int, float)
+        or not math.isfinite(value["sim_time"])
+        or value["sim_time"] < 0
+    ):
+        raise ValueError("Invalid simulation time")
+    acquired = frame_integer(value["observation_received_monotonic_ns"])
+    published = frame_integer(value["published_monotonic_ns"])
+    age = frame_integer(value["source_age_ns"])
+    relay_age = age + frame_integer(elapsed_ns)
+    if acquired > published or age < published - acquired or relay_age > FRAME_MAX_AGE_NS:
+        raise ValueError("Stale or inconsistent observation time")
+    width, height = frame_integer(value["width"], 1920), frame_integer(value["height"], 1920)
+    if not width or not height or width * height > 1920**2:
+        raise ValueError("Invalid frame dimensions")
+    size = width * height * 3
+    encoded = value["rgb_base64"]
+    if not isinstance(encoded, str) or len(encoded) != 4 * ((size + 2) // 3):
+        raise ValueError("Invalid RGB encoding length")
+    rgb = base64.b64decode(encoded, validate=True)
+    if len(rgb) != size or hashlib.sha256(rgb).hexdigest() != value["rgb_sha256"]:
+        raise ValueError("RGB hash or length differs")
+    if (
+        value["camera_key"] != "observation.images.front"
+        or not isinstance(value["camera_prim"], str)
+        or not re.fullmatch(r"(/[A-Za-z_][A-Za-z_0-9]*)+", value["camera_prim"])
+    ):
+        raise ValueError("Invalid camera metadata")
+    joints, state = value["joints"], value["state_rad"]
+    if (
+        not isinstance(joints, list)
+        or not 1 <= len(joints) <= 32
+        or not isinstance(state, list)
+        or len(state) != len(joints)
+    ):
+        raise ValueError("Invalid joint dimensions")
+    if any(
+        not isinstance(name, str) or not name.isidentifier() or len(name) > 96 for name in joints
+    ) or len(set(joints)) != len(joints):
+        raise ValueError("Invalid native joint names")
+    if any(type(item) not in (int, float) or not math.isfinite(item) for item in state):
+        raise ValueError("Invalid native joint values")
+    # Keep source timestamps intact, but provide a decimal identity for JS clients
+    # whose number type cannot exactly represent every 64-bit monotonic timestamp.
+    return {**value, "relay_age_ns": relay_age, "capture_id": str(acquired)}
+
+
 @router.get("/frame")
-async def frame(response: Response):
+async def frame(response: Response, session_id: str | None = Query(default=None, pattern=IDENTITY)):
     response.headers["Cache-Control"] = "no-store"
+    started = time.monotonic_ns()
     value = await relay("/frame", maximum=16 * 1024**2)
-    if value.get("available") is False:
-        return {"available": False}
     try:
-        width, height = value["width"], value["height"]
-        if (
-            type(width) is not int
-            or type(height) is not int
-            or not (1 <= width <= 2048 and 1 <= height <= 2048)
-        ):
-            raise ValueError("Invalid frame size")
-        raw = base64.b64decode(value["rgb_base64"], validate=True)
-        if len(raw) != width * height * 3:
-            raise ValueError("Invalid RGB frame")
-        if not re.fullmatch(IDENTITY, value["episode_id"]):
-            raise ValueError("Invalid frame episode")
-        for key in ("step", "published_monotonic_ns"):
-            if type(value[key]) is not int or value[key] < 0:
-                raise ValueError("Invalid frame timing")
-        if (
-            type(value["sim_time"]) not in (int, float)
-            or not math.isfinite(value["sim_time"])
-            or value["sim_time"] < 0
-        ):
-            raise ValueError("Invalid simulation time")
-    except KeyError, TypeError, ValueError, binascii.Error:
-        raise HTTPException(503, "Teaching frame is invalid.") from None
-    return {
-        key: value[key]
-        for key in (
-            "episode_id",
-            "step",
-            "sim_time",
-            "published_monotonic_ns",
-            "width",
-            "height",
-            "rgb_base64",
-        )
-    }
+        return public_frame(value, session_id=session_id, elapsed_ns=time.monotonic_ns() - started)
+    except KeyError, TypeError, ValueError, OverflowError, binascii.Error:
+        raise HTTPException(503, "Teaching frame is unavailable, stale or invalid.") from None
 
 
 def public_receipt(value):

@@ -16,7 +16,12 @@ from pydantic import (
 )
 
 from vla_platform.augmentation.contracts import AugmentationRequest, AugmentationResult
-from vla_platform.lifecycle.contracts import CloudExecutionTarget, LifecycleResult, PolicyRequest
+from vla_platform.lifecycle.contracts import (
+    CloudExecutionTarget,
+    LifecycleResult,
+    PolicyRequest,
+    SimulationTarget,
+)
 
 NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 RepositoryId = Annotated[
@@ -290,6 +295,7 @@ class Job(Record):
     status: JobStatus = "queued"
     request: IntakeRequest | PolicyRequest | AugmentationRequest
     compute_target: CloudExecutionTarget | None = None
+    simulation_target: SimulationTarget | None = None
     created_at: Timestamp
     updated_at: Timestamp
     result: DatasetProfile | LifecycleResult | AugmentationResult | None = None

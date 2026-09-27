@@ -1,5 +1,7 @@
 """Real loopback relay tests; no simulator, microphone or cloud inference claims."""
 
+import base64
+import hashlib
 import json
 import threading
 import time
@@ -169,22 +171,128 @@ def test_invalid_voice_response_fails_closed(relay_app):
     )
 
 
-def test_frame_size_and_encoding_are_validated(relay_app):
-    client, record, *_ = relay_app
-    record["reply"] = {"available": False}
-    assert client.get("/api/v1/teaching/frame").json() == {"available": False}
-    record["reply"] = {
-        "width": 1,
-        "height": 1,
-        "rgb_base64": "AAAA",
+def frame_fixture():
+    # Same exact v1 envelope as the generated teaching worker, with unrelated
+    # remote and application monotonic clock epochs.
+    rgb = bytes([200, 20, 30] * 4)
+    context = {"session_id": "session-1", "revision": 7, "active_episode_id": None, "mode": "idle"}
+    return {
+        "schema_version": 1,
+        "available": True,
+        **context,
+        "current_context": dict(context),
+        "episode_id": "preview-first",
         "step": 0,
-        "episode_id": "episode-1",
-        "sim_time": 0.01,
-        "published_monotonic_ns": 1,
+        "sim_time": 0.0,
+        "camera_key": "observation.images.front",
+        "camera_prim": "/World/front",
+        "observation_received_monotonic_ns": 2**60,
+        "published_monotonic_ns": 2**60 + 100,
+        "source_age_ns": 1000,
+        "width": 2,
+        "height": 2,
+        "rgb_base64": base64.b64encode(rgb).decode(),
+        "rgb_sha256": hashlib.sha256(rgb).hexdigest(),
+        "joints": ["gripper"],
+        "state_rad": [0.25],
+        "units": "rad",
     }
+
+
+def test_atomic_frame_relay_preserves_identity_pixels_and_conservative_age(relay_app):
+    client, record, _, token = relay_app
+    record["reply"] = frame_fixture()
+    result = client.get("/api/v1/teaching/frame?session_id=session-1")
+    assert result.status_code == 200 and result.headers["cache-control"] == "no-store"
+    data = result.json()
+    assert {k: data[k] for k in record["reply"]} == record["reply"]
+    assert data["capture_id"] == str(2**60)
+    assert 1000 <= data["relay_age_ns"] <= 5_000_000_000
+    assert record["requests"] == [("/frame", "Bearer " + token)]
+    assert client.get("/api/v1/teaching/frame?session_id=other").status_code == 503
+    # Optional query preserves existing direct clients, with atomic validation.
     assert client.get("/api/v1/teaching/frame").status_code == 200
-    record["reply"]["width"] = 20
+    assert client.get("/api/v1/teaching/frame?session_id=bad%0A").status_code == 422
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"schema_version": True},
+        {"available": 1},
+        {"width": True},
+        {"height": 1921},
+        {"rgb_base64": "AAAA"},
+        {"rgb_sha256": "a" * 64},
+        {"units": "degrees"},
+        {"camera_prim": "/World/front\n"},
+        {"camera_key": "unexpected"},
+        {
+            "current_context": {
+                "session_id": "session-1",
+                "revision": 8,
+                "active_episode_id": None,
+                "mode": "idle",
+            }
+        },
+        {
+            "current_context": {
+                "session_id": "new",
+                "revision": 7,
+                "active_episode_id": None,
+                "mode": "idle",
+            }
+        },
+        {"episode_id": "recording-not-preview"},
+        {"joints": ["gripper", "gripper"], "state_rad": [0.0, 0.0]},
+        {"state_rad": []},
+        {"state_rad": [True]},
+        {"state_rad": [float("inf")]},
+        {"step": -1},
+        {"source_age_ns": 5_000_000_001},
+        {"source_age_ns": 99},
+        {"observation_received_monotonic_ns": 2**60 + 101},
+        {"private_path": "/secret"},
+    ],
+)
+def test_invalid_atomic_frames_fail_before_browser_render(relay_app, changes):
+    client, record, *_ = relay_app
+    record["reply"] = frame_fixture() | changes
+    result = client.get("/api/v1/teaching/frame?session_id=session-1")
+    assert result.status_code == 503
+    assert "secret" not in result.text
+
+
+def test_unavailable_and_legacy_frames_cannot_look_live(relay_app):
+    client, record, *_ = relay_app
+    record["reply"] = {"schema_version": 1, "available": False}
+    assert client.get("/api/v1/teaching/frame").json() == record["reply"]
+    record["reply"] = {"available": False}
     assert client.get("/api/v1/teaching/frame").status_code == 503
+    record["reply"] = {
+        k: v
+        for k, v in frame_fixture().items()
+        if k
+        in {
+            "episode_id",
+            "step",
+            "sim_time",
+            "published_monotonic_ns",
+            "width",
+            "height",
+            "rgb_base64",
+        }
+    }
+    assert client.get("/api/v1/teaching/frame").status_code == 503
+
+
+def test_relay_elapsed_counts_toward_frame_age():
+    from vla_platform.teaching_api import public_frame, unique_object
+
+    with pytest.raises(ValueError, match="Stale"):
+        public_frame(frame_fixture(), session_id="session-1", elapsed_ns=5_000_000_000)
+    with pytest.raises(ValueError, match="Duplicate"):
+        unique_object([("session_id", "old"), ("session_id", "new")])
 
 
 def test_private_token_required(relay_app):
@@ -220,3 +328,50 @@ def test_slow_trickle_obeys_total_deadline(relay_app, monkeypatch):
     response = client.get("/api/v1/teaching/state")
     assert response.json()["connected"] is False
     assert time.monotonic() - start < 1.5
+
+
+def test_frame_relay_accepts_actual_worker_generated_envelope():
+    import importlib.util
+    import sys
+    from pathlib import Path
+
+    from vla_platform.teaching_api import public_frame
+
+    name = "firebird_test_atomic_frame"
+    spec = importlib.util.spec_from_file_location(
+        name, Path(__file__).parents[1] / "workers/teaching/firebird_teaching/frame_snapshot.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+        capture = module.ObservationSnapshot(
+            session_id="real-protocol",
+            revision=3,
+            active_episode_id=None,
+            mode="idle",
+            episode_id="preview-generated",
+            step=0,
+            sim_time=0.0,
+            camera_key="observation.images.front",
+            camera_prim="/World/front",
+            observation_received_monotonic_ns=2**60,
+            width=2,
+            height=2,
+            rgb=bytes(range(12)),
+            joints=("gripper",),
+            state_rad=(0.2,),
+        )
+        source = capture.payload(capture.context, 2**60 + 100, 2**60 + 200)
+        result = public_frame(source, session_id="real-protocol", elapsed_ns=300)
+        assert {key: result[key] for key in source} == source
+        assert result["relay_age_ns"] == 500
+        assert result["capture_id"] == str(2**60)
+        for unavailable in (
+            {"schema_version": True, "available": False},
+            {"schema_version": 1, "available": 0},
+        ):
+            with pytest.raises(ValueError):
+                public_frame(unavailable, session_id="real-protocol", elapsed_ns=0)
+    finally:
+        del sys.modules[name]

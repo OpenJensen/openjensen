@@ -1,7 +1,11 @@
 import asyncio
+import hashlib
+import json
+import shutil
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated
+from uuid import uuid4
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
@@ -318,6 +322,107 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 ),
             },
         }
+
+    @app.get("/api/v1/simulation-options")
+    async def simulation_options(execution: ExecutionDep) -> dict:
+        from vla_platform.lifecycle.simulation import options
+
+        return await asyncio.to_thread(options, execution.settings)
+
+    @app.post("/api/v1/projects/{project_id}/model-imports", response_model=Job, status_code=202)
+    async def import_native_policy(
+        project_id: str,
+        request: Request,
+        projects: ProjectsDep,
+        execution: ExecutionDep,
+        profile_id: str = Query(pattern=r"^[\w-]{1,100}$"),
+    ) -> Job:
+        """Upload a complete native ACT/SmolVLA TAR; import is an observable local job."""
+        from vla_platform.lifecycle.simulation import MAX_ARCHIVE_BYTES, finish_owned, profile_for
+
+        if await projects.get(project_id) is None:
+            raise HTTPException(404, "Project not found")
+        try:
+            profile_for(execution.settings, profile_id)
+        except (OSError, ValueError) as exc:
+            raise HTTPException(422, "The selected native policy profile is unavailable") from exc
+        if request.headers.get("content-type", "").split(";")[0] not in {
+            "application/x-tar",
+            "application/octet-stream",
+            "application/gzip",
+        }:
+            raise HTTPException(415, "Send a TAR archive as the request body")
+        size_header = request.headers.get("content-length")
+        if size_header is not None and (
+            not size_header.isdigit() or not 0 < int(size_header) <= MAX_ARCHIVE_BYTES
+        ):
+            raise HTTPException(413, "Model archive exceeds the 4 GiB upload limit or is empty")
+        upload_id = uuid4().hex
+        directory = execution.settings.data_dir / "model-uploads" / upload_id
+        directory.mkdir(parents=True, mode=0o700)
+        accepted = False
+        try:
+            digest = hashlib.sha256()
+            total = 0
+            async with asyncio.timeout(300):
+                with (directory / "archive.tar").open("xb") as stream:
+                    async for chunk in request.stream():
+                        total += len(chunk)
+                        if total > MAX_ARCHIVE_BYTES:
+                            raise HTTPException(413, "Model archive exceeds the 4 GiB upload limit")
+                        await finish_owned(asyncio.to_thread(stream.write, chunk))
+                        digest.update(chunk)
+            if not total or (size_header is not None and total != int(size_header)):
+                raise HTTPException(422, "The uploaded model archive is incomplete")
+            (directory / "upload.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "upload_id": upload_id,
+                        "project_id": project_id,
+                        "profile_id": profile_id,
+                        "bytes": total,
+                        "sha256": digest.hexdigest(),
+                    }
+                )
+            )
+            payload = PolicyRequest.model_validate(
+                {
+                    "operation": "policy.import",
+                    "runtime_id": profile_id,
+                    "source_id": upload_id,
+                    "simulation": {"profile_id": profile_id},
+                    "timeout_seconds": 600,
+                }
+            )
+
+            async def submit_owned():
+                nonlocal accepted
+                job = await execution.submit(project_id, payload)
+                accepted = True
+                return job
+
+            return await finish_owned(submit_owned())
+        except TimeoutError as exc:
+            raise HTTPException(408, "Model upload timed out; no import job was submitted") from exc
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        finally:
+            if not accepted:
+                shutil.rmtree(directory)
+
+    @app.get("/api/v1/jobs/{job_id}/simulation-media/video")
+    async def simulation_video(job_id: str, execution: ExecutionDep):
+        from vla_platform.lifecycle.simulation import video_path
+
+        job = await execution.get(job_id)
+        if job is None:
+            raise HTTPException(404, "Job not found")
+        try:
+            path = await asyncio.to_thread(video_path, execution.settings, job)
+        except (OSError, ValueError) as exc:
+            raise HTTPException(422, "Verified simulation video is unavailable") from exc
+        return FileResponse(path, media_type="video/mp4")
 
     @app.post("/api/v1/projects/{project_id}/policy-jobs", response_model=Job, status_code=202)
     async def policy_job(

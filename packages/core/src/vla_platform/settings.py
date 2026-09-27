@@ -10,12 +10,16 @@ class Settings:
     static_dir: Path | None = None
     runtime_config: Path | None = None
     cloud_runs_dir: Path | None = None
+    simulation_config: Path | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
         local_root = os.getenv("FIREBIRD_LOCAL_DATA_ROOT")
         static = Path(os.getenv("FIREBIRD_WEB_DIR", "apps/web/out")).resolve()
         return cls(
+            simulation_config=Path(os.environ["FIREBIRD_SIMULATION_CONFIG"]).expanduser().resolve()
+            if os.getenv("FIREBIRD_SIMULATION_CONFIG")
+            else None,
             cloud_runs_dir=Path(os.environ["FIREBIRD_CLOUD_RUNS_DIR"]).expanduser().absolute()
             if os.getenv("FIREBIRD_CLOUD_RUNS_DIR")
             else None,
