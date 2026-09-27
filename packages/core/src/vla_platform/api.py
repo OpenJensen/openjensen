@@ -173,7 +173,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return [
             *registry(
                 native_configured=any(
-                    not (r.export_only or r.native_quantization_only or r.native_distillation_only)
+                    not (
+                        r.export_only
+                        or r.native_quantization_only
+                        or r.native_distillation_only
+                        or r.native_replay_only
+                    )
                     for r in execution.lifecycle.catalog.runtimes
                 ),
                 training_configured=any(
@@ -186,6 +191,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 ),
                 native_quantization_configured=any(
                     item["native_quantization"]
+                    for item in execution.lifecycle.catalog.public()["runtimes"]
+                ),
+                native_replay_configured=any(
+                    item["native_replay"]
                     for item in execution.lifecycle.catalog.public()["runtimes"]
                 ),
                 native_distillation_configured=any(
@@ -449,6 +458,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if await projects.get(project_id) is None:
             raise HTTPException(404, "Project not found")
         return await execution.lifecycle.artifacts(project_id)
+
+    @app.get("/api/v1/projects/{project_id}/artifacts/{artifact_id}/replay")
+    async def replay_record(
+        project_id: str,
+        artifact_id: str,
+        projects: ProjectsDep,
+        execution: ExecutionDep,
+        response: Response,
+    ) -> dict:
+        """Read verified saved CPU predictions; never execute a policy or simulator."""
+        from vla_platform.lifecycle.native_replay import read_record
+
+        if await projects.get(project_id) is None:
+            raise HTTPException(404, "Project not found")
+        try:
+            value = await read_record(execution.lifecycle, project_id, artifact_id)
+        except (ValueError, OSError) as exc:
+            raise HTTPException(422, "Saved replay record is unavailable or invalid") from exc
+        response.headers["Cache-Control"] = "no-store"
+        return value
 
     @app.get("/api/v1/projects/{project_id}/artifacts/{artifact_id}/download")
     async def download_artifact(project_id: str, artifact_id: str, execution: ExecutionDep):

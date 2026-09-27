@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-import os
 import sys
 from dataclasses import dataclass, field
 from urllib.parse import urlsplit
@@ -35,7 +34,10 @@ class VoiceSettings:
 
     @classmethod
     def from_env(cls):
-        mode = os.environ.get("FIREBIRD_VOICE_MODE", "openrouter")
+        from .intelligence_config import voice_environment
+
+        source = voice_environment()
+        mode = source.get("FIREBIRD_VOICE_MODE", "openrouter")
         if mode not in {"openrouter", "openrouter-custom-speech"}:
             raise ValueError("FIREBIRD_VOICE_MODE must be openrouter or openrouter-custom-speech")
         required = [
@@ -58,25 +60,25 @@ class VoiceSettings:
                 "FIREBIRD_TTS_API_KEY",
                 "FIREBIRD_TTS_VOICE",
             ]
-        missing = [name for name in required if not os.environ.get(name, "").strip()]
+        missing = [name for name in required if not source.get(name, "").strip()]
         if missing:
             raise VoiceConfigurationError("Voice configuration missing: " + ", ".join(missing))
         result = cls(
-            control_url=os.environ["FIREBIRD_TEACHING_CONTROL_URL"],
+            control_url=source["FIREBIRD_TEACHING_CONTROL_URL"],
             control_token=control_token(),
             mode=mode,
-            model=os.environ.get("FIREBIRD_VOICE_MODEL", cls.model),
-            stt_model=os.environ.get("FIREBIRD_STT_MODEL", cls.stt_model),
-            tts_model=os.environ.get("FIREBIRD_TTS_MODEL", cls.tts_model),
-            tts_voice=os.environ.get("FIREBIRD_TTS_VOICE", cls.tts_voice),
-            openrouter_key=os.environ.get("OPENROUTER_API_KEY", ""),
-            stt_url=os.environ.get("FIREBIRD_STT_BASE_URL", ""),
-            stt_key=os.environ.get("FIREBIRD_STT_API_KEY", ""),
-            tts_url=os.environ.get("FIREBIRD_TTS_BASE_URL", ""),
-            tts_key=os.environ.get("FIREBIRD_TTS_API_KEY", ""),
+            model=source.get("FIREBIRD_VOICE_MODEL", cls.model),
+            stt_model=source.get("FIREBIRD_STT_MODEL", cls.stt_model),
+            tts_model=source.get("FIREBIRD_TTS_MODEL", cls.tts_model),
+            tts_voice=source.get("FIREBIRD_TTS_VOICE", cls.tts_voice),
+            openrouter_key=source.get("OPENROUTER_API_KEY", ""),
+            stt_url=source.get("FIREBIRD_STT_BASE_URL", ""),
+            stt_key=source.get("FIREBIRD_STT_API_KEY", ""),
+            tts_url=source.get("FIREBIRD_TTS_BASE_URL", ""),
+            tts_key=source.get("FIREBIRD_TTS_API_KEY", ""),
         )
         Client(result.control_url, result.control_token)
-        livekit = urlsplit(os.environ["LIVEKIT_URL"])
+        livekit = urlsplit(source["LIVEKIT_URL"])
         if livekit.username or livekit.password or livekit.query or livekit.fragment:
             raise ValueError("LiveKit URL must not contain embedded credentials/query")
         if mode == "openrouter":
@@ -105,6 +107,22 @@ class VoiceSettings:
                     )
         if result.model.startswith(("typesafe/", "~typesafe/")):
             raise ValueError("Jev is a typed decision provider, not the voice chat model")
+        from .intelligence_config import valid_key, valid_model
+
+        valid_key(result.openrouter_key)
+        valid_model(result.model)
+        if any(
+            secret and secret in result.model
+            for secret in (
+                result.openrouter_key,
+                source.get("LIVEKIT_API_KEY"),
+                source.get("LIVEKIT_API_SECRET"),
+                result.control_token,
+                result.stt_key,
+                result.tts_key,
+            )
+        ):
+            raise ValueError("Voice model cannot contain credentials")
         return result
 
 

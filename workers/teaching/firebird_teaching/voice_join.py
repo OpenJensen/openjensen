@@ -17,6 +17,8 @@ from urllib.parse import urlsplit
 from .contracts import canonical, decode
 from .control import Client
 from .credentials import control_token
+from .intelligence import IntelligenceService
+from .providers import ProviderError
 
 
 class JoinBroker:
@@ -25,6 +27,7 @@ class JoinBroker:
         self.clock = clock
         self.lock = threading.Lock()
         self.current = None
+        self.intelligence = IntelligenceService(control)
 
     async def _create(self, state):
         from .livekit_agent import VoiceSettings
@@ -139,6 +142,46 @@ class JoinBroker:
             return result
 
 
+def voice_status():
+    """Local configuration/dependency inspection only: no room, microphone or provider call."""
+    from importlib.metadata import PackageNotFoundError, version
+
+    from .livekit_agent import VoiceSettings
+
+    configured, model = False, None
+    try:
+        settings = VoiceSettings.from_env()
+        configured, model = True, settings.model
+    except (ValueError, OSError):
+        pass
+    expected = {
+        "livekit-agents": "1.8.3",
+        "livekit": "1.1.18",
+        "livekit-api": "1.2.1",
+        "livekit-plugins-openai": "1.8.3",
+        "livekit-plugins-silero": "1.8.3",
+    }
+    try:
+        dependencies = all(version(name) == required for name, required in expected.items())
+    except PackageNotFoundError:
+        dependencies = False
+    return {
+        "schema_version": 1,
+        "broker_reachable": True,
+        "configuration_present": configured,
+        "dependencies_present": dependencies,
+        "voice_model": model,
+        "provider_access_verified": False,
+        "agent_connected": False,
+        "message": "Configured locally; connect explicitly to test the room and microphone."
+        if configured and dependencies
+        else (
+            "Voice requires its chat model, OpenRouter/LiveKit credentials "
+            "and pinned voice runtime."
+        ),
+    }
+
+
 def serve(broker: JoinBroker, token: str, port: int):
     if len(token) < 32:
         raise ValueError("Control token must contain at least32 characters")
@@ -147,24 +190,69 @@ def serve(broker: JoinBroker, token: str, port: int):
         def log_message(self, *_):
             pass
 
+        def authorized(self):
+            return not self.headers.get("Origin") and hmac.compare_digest(
+                self.headers.get("Authorization", ""), "Bearer " + token
+            )
+
+        def send(self, status, result):
+            raw = canonical(result)
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            try:
+                self.wfile.write(raw)
+            except OSError:
+                pass  # Disconnected callers must not produce an unsanitized server traceback.
+
+        def do_GET(self):
+            if not self.authorized():
+                self.send(401, {"error": "Unauthorized voice request"})
+                return
+            if self.path == "/intelligence/status":
+                self.send(200, broker.intelligence.status())
+            elif self.path == "/voice/status":
+                self.send(200, voice_status())
+            else:
+                self.send(404, {"error": "Unknown voice endpoint"})
+
         def do_POST(self):
             status = 200
             try:
-                if self.path != "/voice/join":
-                    raise ValueError("Unknown voice endpoint")
-                if self.headers.get("Origin") or not hmac.compare_digest(
-                    self.headers.get("Authorization", ""), "Bearer " + token
-                ):
+                if not self.authorized():
                     status = 401
                     raise ValueError("Unauthorized voice request")
+                if self.path not in {
+                    "/voice/join",
+                    "/intelligence/decision",
+                    "/intelligence/perception",
+                    "/intelligence/cancel",
+                }:
+                    raise ValueError("Unknown voice endpoint")
+                maximum = 1024 if self.path == "/voice/join" else 8192
                 length = int(self.headers.get("Content-Length", "0"))
-                if not 0 < length <= 1024 or self.headers.get("Transfer-Encoding"):
+                if not 0 < length <= maximum or self.headers.get("Transfer-Encoding"):
                     raise ValueError("Invalid voice request size")
                 self.connection.settimeout(2)
-                result = broker.join(decode(self.rfile.read(length), limit=1024))
-            except (ValueError, OSError, ImportError) as error:
+                payload = decode(self.rfile.read(length), limit=maximum)
+                if self.path == "/voice/join":
+                    result = broker.join(payload)
+                elif self.path == "/intelligence/cancel":
+                    result = broker.intelligence.cancel(payload)
+                else:
+                    result = broker.intelligence.run(self.path.rsplit("/", 1)[1], payload)
+            except ProviderError as error:
+                status = (
+                    409
+                    if error.code
+                    in {"busy", "duplicate_request", "cancelled", "stale_context", "stale_frame"}
+                    else 503
+                )
+                result = {"code": error.code, "error": str(error)}
+            except (ValueError, OSError, ImportError, RecursionError) as error:
                 status = status if status != 200 else 400
-                # Only the typed missing-variable error is safe to return verbatim.
                 from .livekit_agent import VoiceConfigurationError
 
                 detail = (
@@ -173,15 +261,15 @@ def serve(broker: JoinBroker, token: str, port: int):
                     else "Voice join unavailable; check executor and voice configuration"
                 )
                 result = {"error": detail}
-            raw = canonical(result)
-            self.send_response(status)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(raw)))
-            self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            self.wfile.write(raw)
+            self.send(status, result)
 
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    class BoundedServer(ThreadingHTTPServer):
+        def get_request(self):
+            connection, address = super().get_request()
+            connection.settimeout(2)
+            return connection, address
+
+    server = BoundedServer(("127.0.0.1", port), Handler)
     server.daemon_threads = True
     return server
 

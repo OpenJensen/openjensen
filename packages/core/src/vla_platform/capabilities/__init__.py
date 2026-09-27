@@ -8,10 +8,13 @@ def registry(
     cloud_configured: bool = False,
     native_quantization_configured: bool = False,
     native_distillation_configured: bool = False,
+    native_replay_configured: bool = False,
 ) -> list[Capability]:
     configured = {"Quantize", "Evaluate", "Run"} if native_configured or cloud_configured else set()
     if native_quantization_configured:
         configured.add("Quantize")
+    if native_replay_configured:
+        configured.add("Run")
     if native_distillation_configured:
         configured.add("Distill")
     if training_configured or cloud_configured:
@@ -47,6 +50,9 @@ def registry(
                     "and lineage partitions are required. Reload and imitation error do not "
                     "establish robot success, calibration or speedup."
                     if stage == "Distill" and native_distillation_configured
+                    else "Packed ACT CPU observation replay is configured; exact outputs and "
+                    "reset repeatability only, no environment advancement or task score."
+                    if stage == "Run" and native_replay_configured and not native_configured
                     else "Native ACT 4/8-bit packing and fresh CPU reload are configured; "
                     "generated action drift only, no simulation, quality or speedup claim."
                     if stage == "Quantize" and native_quantization_configured

@@ -1,0 +1,37 @@
+import { apiOrigin } from './api';
+
+export class UncertainPolicyJob extends Error {
+  constructor() { super('The request outcome is unverified. Refresh and inspect the recorded jobs before submitting again. No automatic retry was made.'); }
+}
+class RejectedPolicyJob extends Error {}
+export function record(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === 'object' && !Array.isArray(value); }
+
+// Lifecycle mutations must not silently replay after an ambiguous network result.
+export async function policyJobRequest(path: string, body?: unknown): Promise<unknown> {
+  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const response = await fetch(`${apiOrigin}/api/v1${path}`, { method: body === undefined ? 'GET' : 'POST', body: body === undefined ? undefined : JSON.stringify(body), signal: controller.signal, cache: 'no-store', headers: { 'Content-Type': 'application/json' } });
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('Application returned an empty response.');
+    const parts: Uint8Array[] = []; let bytes = 0;
+    try { for (;;) { const next = await reader.read(); if (next.done) break; bytes += next.value.length; if (bytes > 1024 * 1024) throw new Error('Application response is too large.'); parts.push(next.value); } }
+    finally { await reader.cancel(); }
+    const data = new Uint8Array(bytes); let offset = 0; for (const part of parts) { data.set(part, offset); offset += part.length; }
+    const value: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(data));
+    if (!response.ok) {
+      if (body !== undefined && response.status >= 500) throw new UncertainPolicyJob();
+      const detail = record(value) && typeof value.detail === 'string' ? value.detail : record(value) && Array.isArray(value.detail) ? value.detail.filter(record).map(item => typeof item.msg === 'string' ? item.msg : 'Invalid request').slice(0, 10).join('; ') : `Application returned HTTP ${response.status}.`;
+      throw new RejectedPolicyJob(detail.slice(0, 2000));
+    }
+    return value;
+  } catch (error) {
+    if (body !== undefined && !(error instanceof RejectedPolicyJob)) throw new UncertainPolicyJob();
+    throw error instanceof Error ? error : new Error('Application request failed.');
+  } finally { clearTimeout(timer); }
+}
+
+export function sameJson(left: unknown, right: unknown): boolean {
+  if (Array.isArray(left)) return Array.isArray(right) && left.length === right.length && left.every((item, index) => sameJson(item, right[index]));
+  if (record(left)) return record(right) && Object.keys(left).length === Object.keys(right).length && Object.keys(left).every(key => Object.hasOwn(right, key) && sameJson(left[key], right[key]));
+  return left === right;
+}
