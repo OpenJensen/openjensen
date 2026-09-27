@@ -37,7 +37,7 @@ function resultFor(body: Record<string, any>) {
   };
 }
 
-async function mockWorkspace(page: Page, config: { configured?: boolean; empty?: boolean; complete?: boolean; failFirst?: boolean; cloud?: boolean } = {}) {
+async function mockWorkspace(page: Page, config: { configured?: boolean; empty?: boolean; complete?: boolean; failFirst?: boolean; cloud?: boolean; projectsReady?: Promise<void>; jobsReady?: Promise<void>; failProjects?: () => boolean } = {}) {
   const submitted: Record<string, any>[] = [];
   const unexpected: string[] = [];
   const cancelled: string[] = [];
@@ -74,7 +74,15 @@ async function mockWorkspace(page: Page, config: { configured?: boolean; empty?:
       return;
     }
     if (request.method() === 'GET') {
-      if (path === '/api/v1/augmentation-options' && config.failFirst && ++optionsAttempts === 1) {
+      if (path === '/api/v1/projects') {
+        await config.projectsReady;
+        if (config.failProjects?.()) {
+          await route.fulfill({ status: 503, json: { detail: 'Projects temporarily unavailable.' } });
+          return;
+        }
+      }
+      if (path === `/api/v1/projects/${projectId}/jobs`) await config.jobsReady;
+      if (path === '/api/v1/augmentation-options' && ++optionsAttempts === 1 && config.failFirst) {
         await route.fulfill({ status: 503, json: { detail: 'Augmentation setup temporarily unavailable.' } });
         return;
       }
@@ -109,7 +117,7 @@ async function mockWorkspace(page: Page, config: { configured?: boolean; empty?:
   await page.goto('/');
   await page.getByRole('button', { name: 'Augmentation', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Augment dataset', exact: true })).toBeVisible();
-  return { submitted, unexpected, jobs, cancelled };
+  return { submitted, unexpected, jobs, cancelled, optionsAttempts: () => optionsAttempts };
 }
 
 async function noOverflow(page: Page) {
@@ -255,4 +263,51 @@ test('augmentation remains keyboard usable without horizontal overflow at 320px'
   await noOverflow(page);
   expect(submitted).toHaveLength(1);
   expect(unexpected).toEqual([]);
+});
+
+
+test('waits for confirmed project membership and preserves the first setup error until explicit retry', async ({ page }) => {
+  let releaseProjects!: () => void;
+  const projectsReady = new Promise<void>(resolve => { releaseProjects = resolve; });
+  const fixture = await mockWorkspace(page, { projectsReady, failFirst: true });
+  await expect(page.getByText('Loading projects…', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Additional instructions (optional)')).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeDisabled();
+  expect(fixture.optionsAttempts()).toBe(0);
+  releaseProjects();
+  await expect(page.getByLabel('Inspected dataset')).toHaveValue('inspected-video');
+  await expect(page.getByText('Augmentation setup temporarily unavailable.', { exact: true })).toBeVisible();
+  expect(fixture.optionsAttempts()).toBe(1);
+  await page.getByRole('button', { name: 'Retry augmentation setup', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeEnabled();
+  expect(fixture.optionsAttempts()).toBe(2);
+  expect(fixture.submitted).toEqual([]);
+  expect(fixture.unexpected).toEqual([]);
+});
+
+test('retains edit instructions when inspections arrive and disables cached controls after project lookup failure', async ({ page }) => {
+  let releaseJobs!: () => void;
+  const jobsReady = new Promise<void>(resolve => { releaseJobs = resolve; });
+  let failProjects = false;
+  const fixture = await mockWorkspace(page, { jobsReady, failProjects: () => failProjects });
+  const prompt = page.getByLabel('Additional instructions (optional)');
+  await expect(prompt).toBeEnabled();
+  await prompt.fill('Preserve this lighting instruction.');
+  releaseJobs();
+  await expect(page.getByLabel('Inspected dataset')).toHaveValue('inspected-video');
+  await expect(prompt).toHaveValue('Preserve this lighting instruction.');
+  // The application retries projects on window focus. Expire the real query's
+  // five-second freshness; no provider/model request is allowed by the fixture.
+  await page.waitForTimeout(5100);
+  failProjects = true;
+  await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
+  await expect(page.getByText('Projects temporarily unavailable.', { exact: true })).toBeVisible();
+  await expect(prompt).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeDisabled();
+  failProjects = false;
+  await page.getByRole('button', { name: 'Retry projects', exact: true }).click();
+  await expect(prompt).toBeEnabled();
+  await expect(prompt).toHaveValue('Preserve this lighting instruction.');
+  expect(fixture.submitted).toEqual([]);
+  expect(fixture.unexpected).toEqual([]);
 });
