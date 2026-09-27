@@ -4,11 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   api, ApiError, artifactDownloadUrl, isActive, trainingReproducibilityUrl,
-  type Job, type PolicyArtifact, type TrainingMetric, type TrainingTelemetry,
+  type Job, type PolicyArtifact, type PolicyOptions, type TrainingMetric, type TrainingTelemetry,
 } from "@/lib/api";
 import { conciseRunError, observedProgress, runSummary } from "@/lib/run-summary";
 import "./training-monitor.css";
 import { checkpointLabel, isCloudArtifact, quantizationIssue, sortCheckpoints } from "@/lib/checkpoints";
+import { ActExportControl } from "./act-export-control";
 import type { TrainingModel } from "@/lib/training-models";
 
 function finite(value: unknown): value is number {
@@ -91,7 +92,7 @@ function LossChart({ metrics }: { metrics: TrainingMetric[] }) {
   );
 }
 
-export function TrainingMonitor({ run, projectId, active, artifacts, onCancel, cancelling, cancelError, onResume, onQuantize, modelCatalog = [] }: {
+export function TrainingMonitor({ run, projectId, active, artifacts, onCancel, cancelling, cancelError, onResume, onQuantize, modelCatalog = [], exportRuntimes = [], exportJobs = [], exportArtifacts = [] }: {
   run: Job;
   projectId: string;
   active: boolean;
@@ -102,6 +103,9 @@ export function TrainingMonitor({ run, projectId, active, artifacts, onCancel, c
   onResume?: () => void;
   onQuantize?: (artifactId: string) => void;
   modelCatalog?: TrainingModel[];
+  exportRuntimes?: PolicyOptions["runtimes"];
+  exportJobs?: Job[];
+  exportArtifacts?: PolicyArtifact[];
 }) {
   const [now, setNow] = useState(() => Date.now());
   const [logFilter, setLogFilter] = useState("");
@@ -209,13 +213,16 @@ export function TrainingMonitor({ run, projectId, active, artifacts, onCancel, c
       {data?.metrics_truncated && <p className="training-monitor-note">Showing the most recent recorded metrics. Earlier samples remain in the run files.</p>}
       {lastCheckpoint !== null && <p className="training-latest-checkpoint">Latest checkpoint: step {lastCheckpoint.toLocaleString()}</p>}
       {!!savedCheckpoints.length && onQuantize && <section className="training-checkpoint-actions" aria-label="Use a trained checkpoint">
-        <div><h4>Use a trained checkpoint</h4><p>{chosenCheckpoint && isCloudArtifact(chosenCheckpoint) ? "Saved on Google Cloud. Quantization runs from the cloud copy." : "Choose a saved step to create a compressed policy."}</p></div>
+        <div><h4>Use a trained checkpoint</h4><p>{chosenCheckpoint?.metadata?.architecture === "act" ? "Create a separate ACT inference package while preserving the training checkpoint." : chosenCheckpoint && isCloudArtifact(chosenCheckpoint) ? "Saved on Google Cloud. Quantization runs from the cloud copy." : "Choose a saved step to create a compressed policy."}</p></div>
         <label>Checkpoint<select aria-label="Checkpoint" value={checkpointId} onChange={event => setCheckpointId(event.target.value)}>
           <option value="latest">Latest checkpoint · {checkpointLabel(savedCheckpoints[0], [run], modelCatalog)}</option>
           {savedCheckpoints.map(item => <option key={item.id} value={item.id}>{checkpointLabel(item, [run], modelCatalog)}</option>)}
         </select></label>
-        <button type="button" className="primary-button" disabled={!!checkpointIssue} onClick={() => chosenCheckpoint && onQuantize(chosenCheckpoint.id)}>Quantize checkpoint</button>
-        {checkpointIssue && <p className="training-monitor-note" role="status">{checkpointIssue}</p>}
+        {chosenCheckpoint?.metadata?.architecture === "act" ? <ActExportControl
+          projectId={projectId} checkpoint={chosenCheckpoint} runtimes={exportRuntimes}
+          jobs={exportJobs} artifacts={exportArtifacts} active={active}
+        /> : <><button type="button" className="primary-button" disabled={!!checkpointIssue} onClick={() => chosenCheckpoint && onQuantize(chosenCheckpoint.id)}>Quantize checkpoint</button>
+        {checkpointIssue && <p className="training-monitor-note" role="status">{checkpointIssue}</p>}</>}
       </section>}
       <details className="training-monitor-disclosure training-details" onToggle={event => setDetailsOpen(event.currentTarget.open)}>
         <summary>Training details<span>Activity, checkpoints and worker output</span></summary>

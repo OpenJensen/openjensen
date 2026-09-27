@@ -325,6 +325,8 @@ def test_cloud_rejects_unsupported_operations(cloud, operation):
     async def exercise():
         async with workspace() as execution:
             fields = {"operation": operation, "artifact_id": "unused", "training": None}
+            if operation == "policy.export":
+                fields["dataset_job_id"] = None
             with pytest.raises(ValueError, match="support fine-tuning and quantization"):
                 await execution.submit(PROJECT, request(**fields))
             assert [job.id for job in await execution.list(PROJECT)] == [DATASET]
