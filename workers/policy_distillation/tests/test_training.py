@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -130,3 +131,56 @@ def test_cross_split_duplicate_pixels_and_state_fail_in_real_worker(job):
     with pytest.raises(ValueError, match="leak across splits"):
         run_job(job)
     assert not (Path(job["output_dir"]) / "distilled-policy").exists()
+
+
+@pytest.mark.skipif(
+    os.environ.get("FIREBIRD_DISTILL_CONTROL_NATIVE") != "1",
+    reason="Explicit coordinated native 8/3 distillation proof only",
+)
+def test_native_8_3_preserves_semantics_and_normalized_teacher_targets(tmp_path):
+    """Generated model/corpus proof; does not claim genuine recording or Isaac quality."""
+    import torch
+    from conftest import make_job, make_teacher
+    from firebird_distill.contracts import load_sample
+    from firebird_distill.provenance import inherited_files, policy_metadata
+    from firebird_distill.runtime import batch_for, chunk, load_policy, processed, tensor_sha
+
+    teacher = make_teacher(tmp_path / "teacher", 8, 3, sidecars=True)
+    job = make_job(teacher, tmp_path)
+    before = inventory(teacher)
+    config = read(teacher / "config.json")
+    expected = policy_metadata(teacher, config)
+    preserved = inherited_files(teacher, config)
+    result = run_job(job)
+    root = Path(result["artifact"]["path"])
+    report = result["report"]
+    verified, manifest = read(root / "verification.json"), read(root / "manifest.json")
+    for claims in (report, verified, manifest["metadata"]):
+        for key, value in expected.items():
+            assert claims[key] == value
+    saved = read(root / "policy/config.json")
+    assert (saved["chunk_size"], saved["n_action_steps"]) == (8, 3)
+    for name in preserved:
+        assert (teacher / name).read_bytes() == (root / "policy" / name).read_bytes()
+    for prediction in verified["predictions"]:
+        assert prediction["prediction_horizon"] == 8
+        assert prediction["execution_horizon"] == 3
+        assert prediction["queue_refill_exact"] and prediction["queue_and_reset_exact"]
+    assert report["teacher_gradients_absent"] and report["action_head_changed"]
+    assert set(report["untuned_student"]) == {"train", "validation"}
+    assert set(report["trained_student"]) == {"train", "validation", "final"}
+
+    # A nonidentity normalizer makes this distinguish raw normalized targets from
+    # physical-coordinate actions or a second application of action normalization.
+    model, pre, post = load_policy(teacher)
+    data_root = Path(job["dataset"]["path"])
+    doc = read(data_root / "manifest.json")
+    sample = doc["samples"][0]
+    data = load_sample(data_root, sample, doc["image_shape"], 8)
+    with torch.no_grad():
+        raw = chunk(model, batch_for(data, pre, doc["camera"]))
+        physical = processed(raw, post)
+    assert tuple(raw.shape) == (1, 8, 6)
+    assert not torch.equal(raw[0], physical)
+    assert report["teacher_target_sha256"][sample["file"]] == tensor_sha(raw)
+    assert inventory(teacher) == before
