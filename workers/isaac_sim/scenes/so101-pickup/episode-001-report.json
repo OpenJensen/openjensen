@@ -1,0 +1,123 @@
+{
+  "status": "experimental_unverified",
+  "episode": 1,
+  "source": {
+    "dataset": "codywang/so101_pickup_test",
+    "revision": "ecef85bc07005f771ad86deeff1427f9d72953ed",
+    "episode": 1,
+    "frame_index": 0,
+    "data_index": 150,
+    "video": "videos/observation.images.front/chunk-000/file-000.mp4",
+    "source_video_sha256": "3fb0a0229116a22da246e91b6f144289138e2da2e56719804af66d3decaf1599"
+  },
+  "profile_sha256": "e74a13543fe9669cd682dbd3a5a83222d7e428abf0764576213f13aed3c2b4d9",
+  "source_scene_sha256": "d6c286dc816825a6ca4a4dd05e8aa6989777da6a8144a0ab2a6c0133f9fd3dcd",
+  "calibration_sha256": "f30af28c1fa64bd90ca2ec8297aca404126407b692e6649bac588e1dbb764e14",
+  "urdf_sha256": "3a65d2d35e68a8d2f0c2cc176d19b884506543c93ba72980145b80abe276022c",
+  "initial_joints": {
+    "shoulder_pan": {
+      "policy_state": 4.351648330688477,
+      "requested_rad": 0.07595059125942893,
+      "applied_rad": 0.07595059125942893,
+      "applied_degrees": 4.3516483306884775,
+      "limit_rad": [
+        -1.91986,
+        1.91986
+      ],
+      "clipped": false
+    },
+    "shoulder_lift": {
+      "policy_state": -104.13186645507812,
+      "requested_rad": -1.9446832460167465,
+      "applied_rad": -1.74533,
+      "applied_degrees": -100.00004285756798,
+      "limit_rad": [
+        -1.74533,
+        1.74533
+      ],
+      "clipped": true
+    },
+    "elbow_flex": {
+      "policy_state": 90.5054931640625,
+      "requested_rad": 1.4838757303027532,
+      "applied_rad": 1.4838757303027532,
+      "applied_degrees": 85.01981666824055,
+      "limit_rad": [
+        -1.69,
+        1.69
+      ],
+      "clipped": false
+    },
+    "wrist_flex": {
+      "policy_state": 75.82417297363281,
+      "requested_rad": 1.3502333706314915,
+      "applied_rad": 1.3502333706314915,
+      "applied_degrees": 77.36267349490791,
+      "limit_rad": [
+        -1.65806,
+        1.65806
+      ],
+      "clipped": false
+    },
+    "wrist_roll": {
+      "policy_state": 4.263736248016357,
+      "requested_rad": 1.8178666940179145,
+      "applied_rad": 1.8178666940179145,
+      "applied_degrees": 104.15608928462632,
+      "limit_rad": [
+        -2.74385,
+        2.84121
+      ],
+      "clipped": false
+    },
+    "gripper": {
+      "policy_state": 1.3577733039855957,
+      "requested_rad": 0.06550818139541116,
+      "applied_rad": 0.06550818139541116,
+      "applied_degrees": 3.7533423175344796,
+      "limit_rad": [
+        -0.174533,
+        1.74533
+      ],
+      "clipped": false
+    }
+  },
+  "cup": {
+    "position": [
+      -0.2247814,
+      -0.0291302,
+      0.2005
+    ],
+    "height": 0.1021984,
+    "radius_bottom": 0.0276523,
+    "radius_top": 0.0415697,
+    "thickness": 0.0012,
+    "mass": 0.012
+  },
+  "control": {
+    "fps": 30,
+    "physics_hz": 120,
+    "steps": 150,
+    "execute_steps": 50
+  },
+  "camera_source": "scene.usda; unchanged shelf-fit camera",
+  "urdf_limits_changed": false,
+  "limitations": [
+    "Metric dimensions depend on an assumed shelf width, not measured scale.",
+    "Initial joints use the unverified map; clipped joints are reported explicitly.",
+    "Mass, friction, contact surfaces, and lighting remain estimates."
+  ],
+  "box": {
+    "position": [
+      -0.20384709742754953,
+      -0.2958188159734567,
+      0
+    ],
+    "size": [
+      0.27174282907342684,
+      0.191658088992405,
+      0.2
+    ],
+    "thickness": 0.003
+  }
+}

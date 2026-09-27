@@ -1,0 +1,6 @@
+-r calibration.requirements.txt
+PyYAML==6.0.3
+usd-core==26.8
+pyarrow==25.0.1
+av==18.1.0
+Pillow==12.3.0

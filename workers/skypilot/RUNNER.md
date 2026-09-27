@@ -108,6 +108,12 @@ autostops after 10 idle minutes; its disk remains. Delete your idle controller w
 | `skypilot-v1` service account | Service Account User, to attach the VM identity |
 | `sim-ssh` IAP groups in `us-central1` and `us-east4` | IAP tunnel access |
 | Simulation results bucket | Storage Object Viewer |
+| `firebird-artifacts-project-5693e83a-db3a-43e1-98c` bucket | Storage Legacy Bucket Reader + [`firebirdCheckpointObjects`](checkpoint-object-role.json): bucket metadata read; object read/list/create and metadata update |
+
+The checkpoint grant cannot overwrite or delete existing objects. Use unique
+checkpoint names; cleanup requires an administrator. Effective permissions and
+bucket metadata reads passed as the runner on 2026-09-27. Private bucket settings
+and simulation configuration are unchanged. No training launch was tested.
 
 SkyPilot 0.13 uses the existing `skypilot-v1` VM identity. Its jobs inherit Compute
 Admin, Storage Admin and project-wide Service Account User access. This account
