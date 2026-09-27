@@ -12,11 +12,29 @@ import os
 import re
 import stat
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import patch
 
 from .contracts import IDENTITY, LINEAGE, decode, finite, integer, text
 from .journal import atomic_new
+
+MAX_EPISODES = 100
+MAX_CAPTURE_ENTRIES = 50000
+MAX_CAPTURE_BYTES = 8 * 1024**3
+
+
+@dataclass(frozen=True)
+class CaptureSelection:
+    root: Path
+    episodes: tuple[str, ...]
+
+
+@dataclass
+class InventoryBudget:
+    entries: int = 0
+    size: int = 0
+
 
 FLOAT32_MAX = 3.4028234663852886e38
 
@@ -85,21 +103,20 @@ def _read(path: Path, limit: int) -> bytes:
         return raw
 
 
-def _inventory(root: Path) -> dict:
+def _inventory(root: Path, budget: InventoryBudget | None = None) -> dict:
     result = {}
-    total = 0
-    entries = 0
+    budget = budget if budget is not None else InventoryBudget()
     for path in root.rglob("*"):
-        entries += 1
-        if entries > 50000:
+        budget.entries += 1
+        if budget.entries > MAX_CAPTURE_ENTRIES:
             raise ValueError("Capture inventory exceeds entry limit")
         if path.is_symlink() or (not path.is_dir() and not path.is_file()):
             raise ValueError("Capture contains a symlink or special file")
         if path.is_file():
             with _open_regular(path) as stream:
                 before = os.fstat(stream.fileno())
-                total += before.st_size
-                if before.st_size > 2 * 1024**3 or total > 8 * 1024**3:
+                budget.size += before.st_size
+                if before.st_size > 2 * 1024**3 or budget.size > MAX_CAPTURE_BYTES:
                     raise ValueError("Capture exceeds file or total byte bound")
                 digest = hashlib.sha256()
                 remaining = before.st_size
@@ -115,12 +132,14 @@ def _inventory(root: Path) -> dict:
     return result
 
 
-def inspect_capture(root: Path, episodes: list[str]) -> tuple[dict, list[dict], dict]:
+def inspect_capture(
+    root: Path, episodes: list[str], *, budget: InventoryBudget | None = None
+) -> tuple[dict, list[dict], dict]:
     if root.is_symlink() or not root.is_dir():
         raise ValueError("Capture must be a real directory")
-    if not episodes or len(set(episodes)) != len(episodes) or len(episodes) > 100:
+    if not episodes or len(set(episodes)) != len(episodes) or len(episodes) > MAX_EPISODES:
         raise ValueError("Select 1..100 distinct finalized episodes explicitly")
-    before = _inventory(root)
+    before = _inventory(root) if budget is None else _inventory(root, budget)
 
     def read(path, limit):
         raw = _read(path, limit)
@@ -150,6 +169,10 @@ def inspect_capture(root: Path, episodes: list[str]) -> tuple[dict, list[dict], 
         raise ValueError("Invalid native joint order")
     width, height = (integer(meta.get(k), k, 2, 1920) for k in ("width", "height"))
     fps = integer(meta.get("fps"), "fps", 1, 60)
+    integer(meta.get("physics_hz"), "physics_hz", fps, 1000)
+    if meta.get("camera_key") != "observation.images.front":
+        raise ValueError("Unsupported capture camera key")
+    text(meta.get("camera_prim"), "camera_prim")
     lineage = text(meta.get("lineage_group"), "lineage_group", 128)
     if not LINEAGE.fullmatch(lineage):
         raise ValueError("Invalid lineage group identifier")
@@ -314,12 +337,97 @@ def read_local_dataset(repo_id: str, root: Path):
 def convert(
     root: Path, output: Path, episodes: list[str], *, repo_id: str = "local/teaching"
 ) -> dict:
+    return convert_captures([CaptureSelection(root, tuple(episodes))], output, repo_id=repo_id)
+
+
+def additional_captures(manifest: Path) -> list[CaptureSelection]:
+    """Explicit operator-owned manifest; paths are never accepted from the web client."""
+    value = decode(_read(manifest, 64 * 1024), limit=64 * 1024)
+    if (
+        set(value) != {"schema_version", "captures"}
+        or type(value["schema_version"]) is not int
+        or value["schema_version"] != 1
+    ):
+        raise ValueError("Additional captures manifest must use exact schema_version 1")
+    entries = value["captures"]
+    if not isinstance(entries, list) or not 1 <= len(entries) < MAX_EPISODES:
+        raise ValueError("Select 1..99 additional captures explicitly")
+    result = []
+    for entry in entries:
+        if not isinstance(entry, dict) or set(entry) != {"path", "episodes"}:
+            raise ValueError("Each additional capture needs only path and episodes")
+        path = Path(text(entry["path"], "capture path", 4096))
+        episodes = entry["episodes"]
+        if (
+            not isinstance(episodes, list)
+            or not episodes
+            or any(not isinstance(e, str) or not IDENTITY.fullmatch(e) for e in episodes)
+        ):
+            raise ValueError("Additional capture episode identities must be explicit")
+        # Lexical normalization permits relative operator paths without following links.
+        root = Path(os.path.abspath(manifest.parent / path))
+        result.append(CaptureSelection(root, tuple(episodes)))
+    return result
+
+
+def _admit_captures(selections: list[CaptureSelection], output: Path):
+    if (
+        not selections
+        or len(selections) > MAX_EPISODES
+        or sum(len(s.episodes) for s in selections) > MAX_EPISODES
+    ):
+        raise ValueError("Select 1..100 distinct finalized episodes across all captures")
     if os.path.lexists(output):
         raise FileExistsError("Dataset output already exists")
-    if output.resolve().is_relative_to(root.resolve()):
-        raise ValueError("Dataset output must be outside capture storage")
+    roots = [Path(os.path.abspath(s.root)) for s in selections]
+    resolved_roots = [root.resolve() for root in roots]
+    for index, root in enumerate(resolved_roots):
+        if output.resolve().is_relative_to(root):
+            raise ValueError("Dataset output must be outside every capture storage directory")
+        if any(
+            root.is_relative_to(other) or other.is_relative_to(root)
+            for other in resolved_roots[:index]
+        ):
+            raise ValueError("Capture roots must be distinct and non-overlapping")
+    budget = InventoryBudget()
+    sources, selected = [], []
+    sessions, episodes = set(), set()
+    common = None
+    schema_keys = (
+        "joint_names",
+        "camera_key",
+        "camera_prim",
+        "width",
+        "height",
+        "fps",
+        "physics_hz",
+        "controller",
+        "state_units",
+        "action_units",
+        "timebase",
+    )
+    for selection, root in zip(selections, roots, strict=True):
+        meta, items, before = inspect_capture(root, list(selection.episodes), budget=budget)
+        if meta["session_id"] in sessions or episodes.intersection(selection.episodes):
+            raise ValueError("Capture session and episode identities must be globally unique")
+        sessions.add(meta["session_id"])
+        episodes.update(selection.episodes)
+        schema = {key: meta[key] for key in schema_keys}
+        if common is not None and schema != common:
+            raise ValueError("Capture joint/camera/rate/action schemas differ")
+        common = schema
+        source = {"root": root, "meta": meta, "files": before}
+        sources.append(source)
+        selected.extend({**item, "source": source} for item in items)
+    return sources, selected
+
+
+def convert_captures(
+    selections: list[CaptureSelection], output: Path, *, repo_id: str = "local/teaching"
+) -> dict:
+    sources, selected = _admit_captures(selections, output)
     verify_writer()
-    meta, selected, before = inspect_capture(root, episodes)
+    meta = sources[0]["meta"]
     # Lazy heavy imports: the control/Isaac process never imports the writer stack.
     import numpy as np
     from lerobot.configs.video import RGBEncoderConfig
@@ -379,7 +487,8 @@ def convert(
                 }
                 for row in episode["rows"]:
                     pixels = _read(
-                        root / episode["id"] / row["frame"], meta["width"] * meta["height"] * 3
+                        episode["source"]["root"] / episode["id"] / row["frame"],
+                        meta["width"] * meta["height"] * 3,
                     )
                     if hashlib.sha256(pixels).hexdigest() != row["rgb_sha256"]:
                         raise ValueError("Capture frame changed during conversion")
@@ -408,7 +517,7 @@ def convert(
                 lineage.append(
                     {
                         "episode_index": index,
-                        "origin": meta["origin"],
+                        "origin": episode["source"]["meta"]["origin"],
                         "lineage_group": episode["lineage_group"],
                     }
                 )
@@ -416,6 +525,7 @@ def convert(
                     {
                         "episode_index": index,
                         "capture_episode_id": episode["id"],
+                        "source_session_id": episode["source"]["meta"]["session_id"],
                         "reset_id": episode["id"],
                         "outcome": receipt["outcome"],
                         "termination": receipt["termination"],
@@ -470,25 +580,34 @@ def convert(
                 "schema_version": 1,
                 "writer_upstream_revision": UPSTREAM,
                 "lerobot_version": "0.6.2",
-                "source_session_id": meta["session_id"],
                 "controller": meta["controller"],
                 "state_units": meta["state_units"],
                 "action_units": meta["action_units"],
                 "joint_order": meta["joint_names"],
                 "timebase": meta["timebase"],
-                "scene_sha256": meta["scene_sha256"],
                 "scene_hash_scope": "root USD bytes; referenced assets not inventoried",
                 "camera_prim": meta["camera_prim"],
                 "action_column": "action",
                 "requested_action_column": "teaching.requested_action",
                 "task_success_verified": False,
                 "episodes": details,
-                "source_files": before,
+                "sources": [
+                    {
+                        "capture_path": str(source["root"]),
+                        "source_session_id": source["meta"]["session_id"],
+                        "scene_sha256": source["meta"]["scene_sha256"],
+                        "lineage_group": source["meta"]["lineage_group"],
+                        "origin": source["meta"]["origin"],
+                        "source_files": source["files"],
+                    }
+                    for source in sources
+                ],
                 "video_encoding": {"codec": "h264", "crf": 18, "lossless_source_preserved": True},
             },
         )
-        if _inventory(root) != before:
-            raise ValueError("Capture changed during conversion/readback")
+        for source in sources:
+            if _inventory(source["root"]) != source["files"]:
+                raise ValueError("Capture changed during conversion/readback")
         if os.path.lexists(output):
             raise FileExistsError("Dataset output appeared during conversion")
         # Output parent is operator-owned; one converter owns this output name.
@@ -501,6 +620,8 @@ def convert(
         "readback_verified": True,
         "task_success_verified": False,
         "source_preserved": True,
+        "sources": len(sources),
+        "lineage_groups": len({e["lineage_group"] for e in selected}),
     }
 
 
@@ -510,10 +631,12 @@ def main():
     parser.add_argument("output", type=Path)
     parser.add_argument("--episode", action="append", required=True)
     parser.add_argument("--repo-id", default="local/teaching")
+    parser.add_argument("--additional-captures", type=Path, help="Explicit operator JSON manifest")
     args = parser.parse_args()
-    print(
-        json.dumps(convert(args.capture, args.output, args.episode, repo_id=args.repo_id), indent=2)
-    )
+    selections = [CaptureSelection(args.capture, tuple(args.episode))]
+    if args.additional_captures:
+        selections.extend(additional_captures(args.additional_captures))
+    print(json.dumps(convert_captures(selections, args.output, repo_id=args.repo_id), indent=2))
 
 
 if __name__ == "__main__":
