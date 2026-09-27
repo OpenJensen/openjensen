@@ -557,3 +557,11 @@ input::placeholder { color: var(--muted); opacity: .8; }
 .native-import { border-block: 1px solid var(--border, #dce1e8); padding-block: 16px; }
 .native-simulation fieldset:disabled { opacity: .65; }
 .native-simulation progress { max-width: 100%; }
+
+.native-quantization-drift { max-width: 100%; overflow-x: auto; }
+.native-quantization-drift table { width: 100%; border-collapse: collapse; }
+.native-quantization-drift th, .native-quantization-drift td { padding: 8px; text-align: left; border-bottom: 1px solid var(--border, #dce1e8); }
+.native-quantization-drift caption { text-align: left; padding-block: 8px; }
+
+.native-quantization .native-simulation-result { grid-template-columns: minmax(0, 1fr); }
+.native-quantization .native-simulation-result > * { min-width: 0; }

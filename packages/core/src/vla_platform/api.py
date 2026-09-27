@@ -173,7 +173,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return [
             *registry(
                 native_configured=any(
-                    not r.export_only for r in execution.lifecycle.catalog.runtimes
+                    not (r.export_only or r.native_quantization_only)
+                    for r in execution.lifecycle.catalog.runtimes
                 ),
                 training_configured=any(
                     r.training_python and r.training_root
@@ -182,6 +183,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 act_export_configured=any(
                     r.act_export_python and r.act_export_root
                     for r in execution.lifecycle.catalog.runtimes
+                ),
+                native_quantization_configured=any(
+                    item["native_quantization"]
+                    for item in execution.lifecycle.catalog.public()["runtimes"]
                 ),
                 cloud_configured=bool(execution.lifecycle.compute.cloud_runtimes()),
             ),

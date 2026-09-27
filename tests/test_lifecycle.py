@@ -211,6 +211,8 @@ def test_training_options_expose_configured_gpu_specs_without_private_runtime_fi
         "training": True,
         "act_export": False,
         "export_only": False,
+        "native_quantization": False,
+        "native_quantization_only": False,
         "training_model_ids": ["smolvla"],
         "simulation": True,
         "engine_evaluation": True,
