@@ -213,6 +213,8 @@ def test_training_options_expose_configured_gpu_specs_without_private_runtime_fi
         "export_only": False,
         "native_quantization": False,
         "native_quantization_only": False,
+        "native_replay": False,
+        "native_replay_only": False,
         "native_distillation": False,
         "native_distillation_only": False,
         "training_model_ids": ["smolvla"],

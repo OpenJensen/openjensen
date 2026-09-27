@@ -582,6 +582,10 @@ class Lifecycle:
         raise ValueError("Checkpoint lineage is too deep")
 
     async def validate(self, project_id: str, request: PolicyRequest):
+        if request.native_replay is not None:
+            from vla_platform.lifecycle.native_replay import validate
+
+            return await validate(self, project_id, request)
         if request.native_distillation is not None:
             from vla_platform.lifecycle.native_distillation import validate
 
@@ -598,6 +602,8 @@ class Lifecycle:
         if runtime is None:
             raise ValueError("Runtime is not configured on this application host")
         self.compute.require_enabled(runtime)
+        if runtime.native_replay_only:
+            raise ValueError("This runtime supports explicit native observation replay only")
         if runtime.native_distillation_only:
             raise ValueError("This runtime supports the explicit native distillation recipe only")
         if runtime.native_quantization_only:
@@ -1430,6 +1436,10 @@ class Lifecycle:
 
     async def run(self, job: Job):
         request = job.request
+        if request.native_replay is not None:
+            from vla_platform.lifecycle.native_replay import run
+
+            return await run(self, job)
         if request.native_distillation is not None:
             from vla_platform.lifecycle.native_distillation import run
 
