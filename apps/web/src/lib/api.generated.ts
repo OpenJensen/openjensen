@@ -1240,6 +1240,15 @@ export interface components {
              */
             revision: string;
         };
+        /** DistillationSplits */
+        DistillationSplits: {
+            /** Final */
+            final: number[];
+            /** Train */
+            train: number[];
+            /** Validation */
+            validation: number[];
+        };
         /** EpisodePage */
         EpisodePage: {
             /** Episodes */
@@ -1684,6 +1693,38 @@ export interface components {
             timeout_seconds: number;
         };
         /**
+         * NativeDistillation
+         * @description Recorded-data selection and a fixed ACT teacher/student recipe; no paths.
+         */
+        NativeDistillation: {
+            /**
+             * Adapter
+             * @constant
+             */
+            adapter: "act-act-v1";
+            /**
+             * Coordinate Attestation
+             * @enum {string}
+             */
+            coordinate_attestation: "teacher_recorded_coordinates" | "generated_fixture";
+            /** Frame Stride */
+            frame_stride: number;
+            /** Learning Rate */
+            learning_rate: number;
+            /** Seed */
+            seed: number;
+            splits: components["schemas"]["DistillationSplits"];
+            /** Steps */
+            steps: number;
+            /**
+             * Student
+             * @constant
+             */
+            student: "act-256";
+            /** Units */
+            units: string[];
+        };
+        /**
          * NativeQuantization
          * @description Explicit local packed ACT recipe; separate from GGUF precision.
          */
@@ -1755,12 +1796,13 @@ export interface components {
             dataset_job_id?: string | null;
             evaluation?: components["schemas"]["Evaluation"];
             limits?: components["schemas"]["Limits"] | null;
+            native_distillation?: components["schemas"]["NativeDistillation"] | null;
             native_quantization?: components["schemas"]["NativeQuantization"] | null;
             /**
              * Operation
              * @enum {string}
              */
-            operation: "policy.import" | "policy.finetune" | "policy.export" | "policy.quantize" | "policy.evaluate" | "policy.run" | "policy.workflow";
+            operation: "policy.import" | "policy.finetune" | "policy.distill" | "policy.export" | "policy.quantize" | "policy.evaluate" | "policy.run" | "policy.workflow";
             precision?: components["schemas"]["Precision"] | null;
             /** Resume Job Id */
             resume_job_id?: string | null;
@@ -1857,6 +1899,16 @@ export interface components {
              * @default true
              */
             launchable: boolean;
+            /**
+             * Native Distillation
+             * @default false
+             */
+            native_distillation: boolean;
+            /**
+             * Native Distillation Only
+             * @default false
+             */
+            native_distillation_only: boolean;
             /**
              * Native Quantization
              * @default false

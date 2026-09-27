@@ -153,3 +153,13 @@ Native SmolVLA is a follow-on adapter: it needs a genuine complete checkpoint,
 offline VLM config/processor/tokenizer assets, exact dtype/tie handling and the
 same explicit flow-matching noise for FP32/candidate/reload measurements. A packed
 file alone does not satisfy those gates. The existing GGUF lane remains separate.
+
+## Local CPU serving consumer
+
+The complete packed policy now has a strict optional consumer in
+`firebird_quant.native_consumer`, used by the existing
+[simulation policy HTTP server](../isaac_sim/PACKED_ACT.md).
+It preserves the producer model identity and saved processors, rejects unsupported
+devices and runtime versions, and loads a private verified byte snapshot.
+CPU serving acceptance does not change the bundle's historical quality,
+calibration, GPU or simulator verification flags.

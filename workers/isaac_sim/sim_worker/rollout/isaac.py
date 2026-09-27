@@ -6,6 +6,7 @@ import os
 import threading
 
 from sim_worker.rollout.contracts import RGB_CHANNELS, Frame, Observation, SimSpec
+from sim_worker.rollout.evaluation import EvaluationSpec
 
 _RENDERER = "RealTimePathTracing"
 _AA_DLSS = 3
@@ -59,7 +60,7 @@ def _target_buffers(values, reference):
 
 
 class IsaacSim:
-    def __init__(self, spec: SimSpec):
+    def __init__(self, spec: SimSpec, evaluation: EvaluationSpec | None = None):
         if any(
             type(value) is not int or value <= 0
             for value in (spec.width, spec.height, spec.fps, spec.physics_hz)
@@ -71,6 +72,8 @@ class IsaacSim:
             raise ValueError("Configured joints must be nonempty and unique")
 
         self._spec = spec
+        self._evaluation = evaluation
+        self._object_probe = None
         self._app = None
         self._timeline = None
         self._manager = None
@@ -159,6 +162,10 @@ class IsaacSim:
         self._manager.setup_simulation(dt=1.0 / self._spec.physics_hz)
         self._manager.initialize_physics()
         self._bind_robot()
+        if self._evaluation is not None:
+            from sim_worker.rollout.ground_truth import ObjectProbe
+
+            self._object_probe = ObjectProbe(stage, self._view, self._evaluation)
         logging.info("Physics ready; warming renderer")
 
         self._product = self._rep.create.render_product(
@@ -221,7 +228,10 @@ class IsaacSim:
         frame = Frame(
             self._spec.width, self._spec.height, pixels[:, :, :RGB_CHANNELS].tobytes(order="C")
         )
-        return Observation(self._episode, self._step, self._time() - self._origin, positions, frame)
+        object_state = self._object_probe.read() if self._object_probe is not None else None
+        return Observation(
+            self._episode, self._step, self._time() - self._origin, positions, frame, object_state
+        )
 
     def apply(self, targets: tuple[float, ...]) -> None:
         self._require_episode()
@@ -283,6 +293,7 @@ class IsaacSim:
 
     def _release(self) -> None:
         self._episode = None
+        self._object_probe = None
         if self._annotator is not None:
             self._annotator.detach()
             self._annotator = None

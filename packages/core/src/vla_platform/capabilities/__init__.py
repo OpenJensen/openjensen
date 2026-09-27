@@ -7,10 +7,13 @@ def registry(
     act_export_configured: bool = False,
     cloud_configured: bool = False,
     native_quantization_configured: bool = False,
+    native_distillation_configured: bool = False,
 ) -> list[Capability]:
     configured = {"Quantize", "Evaluate", "Run"} if native_configured or cloud_configured else set()
     if native_quantization_configured:
         configured.add("Quantize")
+    if native_distillation_configured:
+        configured.add("Distill")
     if training_configured or cloud_configured:
         configured.add("Fine-tune")
     return [
@@ -39,7 +42,12 @@ def registry(
                 operation=operation,
                 status="untested" if stage in configured else "planned",
                 description=(
-                    "Native ACT 4/8-bit packing and fresh CPU reload are configured; "
+                    "Local ACT teacher to ACT256 student distillation is configured; "
+                    "explicit recorded-coordinate compatibility and three disjoint episode "
+                    "and lineage partitions are required. Reload and imitation error do not "
+                    "establish robot success, calibration or speedup."
+                    if stage == "Distill" and native_distillation_configured
+                    else "Native ACT 4/8-bit packing and fresh CPU reload are configured; "
                     "generated action drift only, no simulation, quality or speedup claim."
                     if stage == "Quantize" and native_quantization_configured
                     else "Execution worker configured; target support evidence is unregistered. "
@@ -54,7 +62,7 @@ def registry(
                 (
                     "Distill",
                     "policy.distill",
-                    "A supported teacher/student pair is not selected yet.",
+                    "ACT to ACT256 distillation requires a separately configured local worker.",
                 ),
                 (
                     "Quantize",
