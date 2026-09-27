@@ -7,6 +7,7 @@ import re
 import shutil
 import tempfile
 import threading
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -97,6 +98,7 @@ class ComputeSettings:
         self._gcp_checked_config: GcpConnectionConfig | None = None
         self._gcp_checked_stamp: tuple[int, int, int, int, int, str | None] | None = None
         self._gcp_revision = 0
+        self._gcp_connection_updates = 0
         self._gcp_offerings: set[str] = set()
         self._preferences = ComputePreferences()
         if self.path.exists():
@@ -198,6 +200,7 @@ class ComputeSettings:
         commands = ['uv tool install --with pip "skypilot[gcp]"'] if not installed else []
         if (
             config
+            and not self._gcp_connection_updates
             and (installed or self._gcp_status and self._gcp_status.status != "ready")
             and config == self._gcp_checked_config
             and self._gcp_connection_stamp() == self._gcp_checked_stamp
@@ -404,6 +407,8 @@ class ComputeSettings:
             sky = cloud_catalog.sky_executable()
             gcloud = shutil.which("gcloud")
             try:
+                if self._gcp_connection_updates:
+                    raise SetupCheckError("The cloud connection is changing. Wait and check again.")
                 if config is None:
                     raise SetupCheckError("Connect Google Cloud in Settings first.")
                 if expected_config is not None and config != expected_config:
@@ -544,6 +549,8 @@ class ComputeSettings:
             state.setup_commands = []
             self._gcp_offerings = set()
             try:
+                if self._gcp_connection_updates:
+                    raise SetupCheckError("The cloud connection is changing. Wait and check again.")
                 if config is None:
                     raise SetupCheckError("Connect Google Cloud in Settings first.")
                 if expected_config is not None and config != expected_config:
@@ -571,6 +578,17 @@ class ComputeSettings:
         return await self.check_gcp(
             sky_api_endpoint=sky_target["sky_api_endpoint"], expected_config=config
         )
+
+    @contextmanager
+    def cloud_connection_update(self):
+        """Keep readiness revoked for the entire awaited connection operation."""
+        self._gcp_connection_updates += 1
+        self.invalidate_cloud_check()
+        try:
+            yield
+        finally:
+            self._gcp_connection_updates -= 1
+            self.invalidate_cloud_check()
 
     def invalidate_cloud_check(self) -> None:
         """Revoke cached and in-flight checks when an operator changes connection state."""

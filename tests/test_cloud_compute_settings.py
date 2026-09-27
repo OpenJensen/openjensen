@@ -642,3 +642,50 @@ def test_connection_mutation_during_readiness_probe_cannot_finish_ready(
     assert state.status == "setup_required"
     assert "changed during the check" in state.message
     assert not any(option.available for option in compute.gpu_options())
+
+
+def test_probe_started_during_failed_connection_recheck_never_claims_ready(
+    tmp_path, probes, monkeypatch
+):
+    from types import SimpleNamespace
+
+    from vla_platform.cloud_api import recheck_cloud_provider
+    from vla_platform.cloud_connections import CloudConnections, _CheckFailed
+
+    save_connection(tmp_path)
+    compute = ComputeSettings(tmp_path)
+    service = CloudConnections(tmp_path)
+    request = SimpleNamespace(
+        app=SimpleNamespace(
+            state=SimpleNamespace(
+                execution=SimpleNamespace(lifecycle=SimpleNamespace(compute=compute))
+            )
+        )
+    )
+
+    async def scenario():
+        started, finish = asyncio.Event(), asyncio.Event()
+
+        async def failed(*args):
+            started.set()
+            await finish.wait()
+            raise _CheckFailed("setup_required", "Sign in again.")
+
+        monkeypatch.setattr(service, "_verify", failed)
+        assert (await compute.check_gcp()).status == "ready"
+        pending = asyncio.create_task(recheck_cloud_provider("gcp", service, request))
+        await started.wait()
+        try:
+            probe_count = len(probes[0])
+            assert compute.gcp_status().status == "unchecked"
+            assert (await compute.check_gcp()).status == "setup_required"
+            assert len(probes[0]) == probe_count  # No CLI probe overlaps the connection edit.
+            assert not any(option.available for option in compute.gpu_options())
+        finally:
+            finish.set()
+        assert (await pending).status == "setup_required"
+        assert compute.gcp_status().status == "unchecked"
+        assert not any(option.available for option in compute.gpu_options())
+        assert (await compute.check_gcp()).status == "ready"  # Explicit retry remains usable.
+
+    asyncio.run(scenario())
