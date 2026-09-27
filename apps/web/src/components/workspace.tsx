@@ -9,6 +9,7 @@ import { storedSimulationAttempt } from '@/lib/native-simulation-recovery';
 import { storedAttempt, type PolicyJobAttempt } from '@/lib/policy-job-attempt';
 import { replayRuntime } from '@/lib/native-replay';
 import { simulationOptions } from '@/lib/native-simulation';
+import type { SimulationHandoff } from '@/lib/native-simulation-handoff';
 import { NativeQuantizationPanel } from '@/components/native-quantization-panel';
 import { NativeReplayPanel } from '@/components/native-replay-panel';
 import { DistillationPanel, type DistillationModel } from '@/components/distillation-panel';
@@ -16,6 +17,8 @@ import { NativeSimulationPanel } from '@/components/native-simulation-panel';
 import { CloudRuns } from '@/components/cloud-runs';
 import { WorkflowPanel } from '@/components/workflow-panel';
 import { TeachingPanel } from '@/components/teaching-panel';
+import { ManagedTeachingPanel } from '@/components/managed-teaching-panel';
+import type { ManagedPublishedCapture } from '@/lib/managed-teaching';
 import { RecordingPreparationPanel } from '@/components/recording-preparation-panel';
 import { DecisionPanel } from '@/components/decision-panel';
 import { TrainingPanel } from '@/components/training-panel';
@@ -216,6 +219,9 @@ function Workbench() {
   const [quantizeArtifact, setQuantizeArtifact] = useState<{ projectId: string; artifactId: string } | null>(null);
   const [distillTeacher, setDistillTeacher] = useState<{ projectId: string; artifactId: string } | null>(null);
   const [replayArtifact, setReplayArtifact] = useState<{ projectId: string; artifactId: string } | null>(null);
+  const [simulationArtifact, setSimulationArtifact] = useState<SimulationHandoff | null>(null);
+  const [teachingMode, setTeachingMode] = useState<'manual' | 'managed'>('manual');
+  const [teachingCapture, setTeachingCapture] = useState<ManagedPublishedCapture | null>(null);
   const [trainingNavigation, setTrainingNavigation] = useState(0);
   const [openTrainingRun, setOpenTrainingRun] = useState<{ projectId: string; id: string } | null>(null);
   const [workflowNavigation, setWorkflowNavigation] = useState(0);
@@ -255,6 +261,8 @@ function Workbench() {
     setQuantizeArtifact(null);
     setDistillTeacher(null);
     setReplayArtifact(null);
+    setSimulationArtifact(null);
+    setTeachingCapture(null);
     setWorkflowNavigation(value => value + 1);
     if (index === 1) {
       setStartTraining(undefined);
@@ -274,6 +282,8 @@ function Workbench() {
     setQuantizeArtifact(null);
     setDistillTeacher(null);
     setReplayArtifact(null);
+    setSimulationArtifact(null);
+    setTeachingCapture(null); setTeachingMode('manual');
     setStartTraining(undefined);
     setProjectId(id);
     setSelectedJobId('');
@@ -291,6 +301,13 @@ function Workbench() {
   const project = projects.data?.find(item => item.id === projectId);
   // Only confirmed membership may enable project-scoped workflow controls.
   const workflowProjectId = projects.isSuccess ? project?.id ?? '' : '';
+  const teachingContext = useRef({ project: workflowProjectId, stage: activeStage, mode: teachingMode });
+  teachingContext.current = { project: workflowProjectId, stage: activeStage, mode: teachingMode };
+  function reviewTeachingCapture(capture: ManagedPublishedCapture) {
+    const context = teachingContext.current;
+    if (context.project !== capture.project_id || context.stage !== 9 || context.mode !== 'managed') return;
+    setTeachingCapture(capture);
+  }
   const choosingWorkflow = [3, 4, 5].includes(activeStage);
   const options = useQuery({ queryKey: ['policy-options'], queryFn: api.policyOptions, enabled: choosingWorkflow, retry: false, refetchInterval: choosingWorkflow ? 10_000 : false });
   const simulation = useQuery({ queryKey: ['simulation-options'], queryFn: simulationOptions, enabled: activeStage === 4 || activeStage === 5, retry: false, refetchInterval: activeStage === 4 || activeStage === 5 ? 10_000 : false });
@@ -406,7 +423,14 @@ function Workbench() {
           {jobs.error && datasetView === 'sources' && <ErrorNotice error={jobs.error} />}
         </div>
         {activeStage === 8 && <AugmentationPanel key={projectId} projectId={workflowProjectId} preferredDatasetId={selectedJob?.id} onOpenSettings={() => { setSettingsTab('compute'); navigateStage(6); }} onChooseDataset={() => { navigateStage(0); setDatasetView('sources'); }} />}
-        {activeStage === 9 && <><TeachingPanel /><RecordingPreparationPanel key={workflowProjectId} projectId={workflowProjectId} onInspect={job => { navigateStage(0); setSelectedJobId(job.id); setDatasetView('inspection'); }} onTrain={job => startTrainingOnDataset(job.id)} /></>}
+        {activeStage === 9 && <>
+          <section className="panel" aria-label="Teaching connection"><h2>Choose a teaching connection</h2><div className="workbench-actions" role="group" aria-label="Teaching mode">
+            <button type="button" className={teachingMode === 'manual' ? 'primary-button' : 'secondary-button'} aria-pressed={teachingMode === 'manual'} onClick={() => { setTeachingCapture(null); setTeachingMode('manual'); }}>Existing executor</button>
+            <button type="button" className={teachingMode === 'managed' ? 'primary-button' : 'secondary-button'} aria-pressed={teachingMode === 'managed'} disabled={!workflowProjectId} onClick={() => { setTeachingCapture(null); setTeachingMode('managed'); }}>Managed session</button>
+          </div><p>Use an existing teaching connection, or explicitly start a configured session for this project. Switching views does not stop a managed session.</p></section>
+          {teachingMode === 'managed' ? <ManagedTeachingPanel key={workflowProjectId} projectId={workflowProjectId} onPublishedCapture={reviewTeachingCapture} /> : <TeachingPanel key={`manual:${workflowProjectId}`} />}
+          <RecordingPreparationPanel key={workflowProjectId} projectId={workflowProjectId} teachingCapture={teachingCapture?.project_id === workflowProjectId ? teachingCapture : undefined} onTeachingCaptureConsumed={() => setTeachingCapture(null)} onInspect={job => { navigateStage(0); setSelectedJobId(job.id); setDatasetView('inspection'); }} onTrain={job => startTrainingOnDataset(job.id)} />
+        </>}
         {activeStage === 10 && <DecisionPanel />}
         {(activeStage === 1 || activeStage === 6) && <div className="training-view" hidden={activeStage !== 1}><TrainingPanel active={activeStage === 1} key={projectId} projectId={workflowProjectId} startNew={startTraining} showJobsRequest={trainingNavigation} preferredRunId={openTrainingRun?.projectId === projectId ? openTrainingRun.id : undefined} preferredDatasetId={selectedJob?.id} onChooseDataset={() => { setActiveStage(0); setDatasetView('sources'); }} onDiagnostics={() => { setSettingsTab('diagnostics'); setActiveStage(6); }} onComputeSettings={() => { setSettingsTab('compute'); setActiveStage(6); }} onQuantize={artifactId => { chooseQuantize('gguf', 'handoff'); setQuantizeArtifact({ projectId, artifactId }); setWorkflowNavigation(value => value + 1); setActiveStage(3); }} onNativeQuantize={artifactId => { navigateStage(3); setQuantizeArtifact({ projectId: workflowProjectId, artifactId }); chooseQuantize('native', 'handoff'); }} onNativeDistill={artifactId => { if (!workflowProjectId) return; navigateStage(2); setDistillTeacher({ projectId: workflowProjectId, artifactId }); setDistillationModels(previous => ({ ...previous, [workflowProjectId]: 'act' })); }} /></div>}
         {activeStage === 7 && <CloudRuns key={workflowProjectId} projectId={workflowProjectId} onOpenSimulation={id => { setOpenSimulation({ projectId: workflowProjectId, id }); chooseRun('native', 'handoff', id); setActiveStage(5); }} onOpenTraining={id => { setStartTraining(undefined); setOpenTrainingRun({ projectId: workflowProjectId, id }); setActiveStage(1); }} />}
@@ -418,7 +442,7 @@ function Workbench() {
           </div>
         </section>}
         {entryPending && (!workflowProjectId || jobs.isPending || entryFailed || recoveryError) && <section className="panel" aria-label="Workflow selection status"><p role={entryFailed || recoveryError ? 'alert' : 'status'}>{!workflowProjectId ? 'Select a project to see its workflow history.' : recoveryError ?? (entryFailed ? 'Workflow availability or history could not be loaded. Choose a mode to inspect it, or retry these reads.' : 'Loading this project’s workflow history and configured workers…')}</p>{entryFailed && <button className="secondary-button" onClick={() => { void jobs.refetch(); void options.refetch(); if (activeStage === 5) void simulation.refetch(); }}>Retry workflow context</button>}</section>}
-        {activeStage === 3 && quantizeMode === 'native' && <NativeQuantizationPanel key={workflowProjectId} projectId={workflowProjectId} preferredJobId={context?.quantize?.jobId} onJobSelected={id => chooseQuantize('native', 'manual', id)} preferredArtifactId={quantizeArtifact?.projectId === workflowProjectId ? quantizeArtifact.artifactId : undefined} onPrepare={() => navigateStage(1)} onReplay={artifactId => { navigateStage(5); setReplayArtifact({ projectId: workflowProjectId, artifactId }); chooseRun('replay', 'handoff'); }} />}
+        {activeStage === 3 && quantizeMode === 'native' && <NativeQuantizationPanel key={workflowProjectId} projectId={workflowProjectId} preferredJobId={context?.quantize?.jobId} onJobSelected={id => chooseQuantize('native', 'manual', id)} preferredArtifactId={quantizeArtifact?.projectId === workflowProjectId ? quantizeArtifact.artifactId : undefined} onPrepare={() => navigateStage(1)} onReplay={artifactId => { navigateStage(5); setReplayArtifact({ projectId: workflowProjectId, artifactId }); chooseRun('replay', 'handoff'); }} onPrepareSimulation={source => { if (source.projectId !== workflowProjectId) return; navigateStage(5); setSimulationArtifact(source); chooseRun('native', 'handoff'); }} />}
         {activeStage === 4 && <section className="workflow-context" aria-label="Evaluation purpose"><WorkbenchDisclosure title="Evaluation details"><p>Engine checks measure loading, finite actions and runtime performance. LIBERO measures closed-loop task success with a configured benchmark runtime. Observation replay and experimental Isaac rollouts do not establish task success; scored ACT / Isaac evaluation is not configured.</p></WorkbenchDisclosure>
           {options.isPending ? <p role="status">Checking evaluation targets…</p> : options.isError ? <p role="alert">Evaluation targets could not be loaded. Availability is unknown.</p> : <p role="status">{engineConfigured ? 'Engine evaluation is configured.' : 'No engine evaluation target is configured.'} {options.data?.runtimes.some(item => engineRuntime(item, 'Evaluate') && item.simulation) ? 'A LIBERO target is configured; its policy and protocol still require validation.' : 'No LIBERO evaluation target is configured.'}</p>}
           {simulation.isError && <p role="alert">Isaac profile availability could not be loaded.</p>}
@@ -431,13 +455,13 @@ function Workbench() {
         {activeStage === 5 && <section className="workflow-choices" aria-label="Run workflow">
           <h2 className="workflow-choice-title">Workflows</h2>
           <div className="mode-card-grid" role="group" aria-label="Run mode">
-            <ModeCard title="3D simulation" detail="Isaac Sim · ACT or SmolVLA" icon="play" selected={runMode === 'native'} disabled={!workflowProjectId} onClick={() => { if (runMode !== 'native') { setOpenSimulation(null); setReplayArtifact(null); } chooseRun('native'); }} />
-            <ModeCard title="Replay observations" detail="Offline replay · ACT" icon="database" selected={runMode === 'replay'} disabled={!workflowProjectId} onClick={() => { if (runMode !== 'replay') { setOpenSimulation(null); setReplayArtifact(null); } chooseRun('replay'); }} />
-            <ModeCard title="Check inference" detail="Inference engine · GGUF" icon="chart" selected={runMode === 'engine'} disabled={!workflowProjectId} onClick={() => { if (runMode !== 'engine') { setOpenSimulation(null); setReplayArtifact(null); } chooseRun('engine'); }} />
+            <ModeCard title="3D simulation" detail="Isaac Sim · ACT or SmolVLA" icon="play" selected={runMode === 'native'} disabled={!workflowProjectId} onClick={() => { setSimulationArtifact(null); if (runMode !== 'native') { setOpenSimulation(null); setReplayArtifact(null); } chooseRun('native'); }} />
+            <ModeCard title="Replay observations" detail="Offline replay · ACT" icon="database" selected={runMode === 'replay'} disabled={!workflowProjectId} onClick={() => { setSimulationArtifact(null); if (runMode !== 'replay') { setOpenSimulation(null); setReplayArtifact(null); } chooseRun('replay'); }} />
+            <ModeCard title="Check inference" detail="Inference engine · GGUF" icon="chart" selected={runMode === 'engine'} disabled={!workflowProjectId} onClick={() => { setSimulationArtifact(null); if (runMode !== 'engine') { setOpenSimulation(null); setReplayArtifact(null); } chooseRun('engine'); }} />
           </div>
         </section>}
         {activeStage === 5 && runMode === 'replay' && <NativeReplayPanel key={workflowProjectId} projectId={workflowProjectId} preferredJobId={context?.run?.mode === 'replay' ? context.run.jobId : undefined} onJobSelected={id => chooseRun('replay', 'manual', id)} preferredArtifactId={replayArtifact?.projectId === workflowProjectId ? replayArtifact.artifactId : undefined} onDataset={() => { setDatasetView('sources'); navigateStage(0); }} />}
-        {activeStage === 5 && runMode === 'native' && <NativeSimulationPanel key={workflowProjectId} projectId={workflowProjectId} onJobSelected={id => { setOpenSimulation(null); chooseRun('native', 'manual', id); }} preferredJobId={openSimulation?.projectId === workflowProjectId ? openSimulation.id : context?.run?.mode === 'native' ? context.run.jobId : undefined} onTraining={() => navigateStage(1)} />}
+        {activeStage === 5 && runMode === 'native' && <NativeSimulationPanel key={workflowProjectId} projectId={workflowProjectId} onJobSelected={id => { setOpenSimulation(null); setSimulationArtifact(null); chooseRun('native', 'manual', id); }} preferredArtifact={simulationArtifact?.projectId === workflowProjectId ? simulationArtifact : undefined} preferredJobId={openSimulation?.projectId === workflowProjectId ? openSimulation.id : context?.run?.mode === 'native' ? context.run.jobId : undefined} onTraining={() => navigateStage(1)} />}
         {[3, 4, 5, 6].includes(activeStage) && (activeStage !== 3 || quantizeMode === 'gguf') && (activeStage !== 5 || runMode === 'engine') && <WorkflowPanel key={`${workflowProjectId}-${activeStage}-${workflowNavigation}`} projectId={workflowProjectId} tab={settingsTab} onTabChange={setSettingsTab} onOpenQuantize={() => { navigateStage(3); chooseQuantize('gguf', 'handoff'); }} stage={activeStage === 6 ? 'settings' : stage.name} preferredArtifactId={activeStage === 3 && quantizeArtifact?.projectId === projectId ? quantizeArtifact.artifactId : undefined} onViewTraining={() => navigateStage(1)} />}
         {activeStage === 2 && <DistillationPanel key={workflowProjectId} projectId={workflowProjectId} model={distillationModels[workflowProjectId]} preferredTeacherArtifactId={distillTeacher?.projectId === workflowProjectId ? distillTeacher.artifactId : undefined} onSelectModel={model => { setDistillTeacher(null); if (workflowProjectId) setDistillationModels(previous => ({ ...previous, [workflowProjectId]: model })); }} onDataset={() => { setDatasetView('sources'); navigateStage(0); }} onQuantize={artifactId => { navigateStage(3); setQuantizeArtifact({ projectId, artifactId }); chooseQuantize('native', 'handoff'); }} />}
   </WorkspaceShell>;

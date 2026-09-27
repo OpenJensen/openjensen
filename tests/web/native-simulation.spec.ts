@@ -51,6 +51,26 @@ async function fixture(page: Page) {
 }
 const acknowledge = (page: Page) => page.getByRole('checkbox', { name: /experimental, paid cloud rollout/ }).check();
 
+test('a packed CPU profile is never selected automatically on direct Run entry', async ({ page }) => {
+  const state = await fixture(page);
+  const cpu = { ...profile, id: 'packed-cpu', label: 'Generated packed CPU profile', architectures: ['act'], policy_runtime: 'packed-act-cpu', policy_device: 'cpu', policy_formats: ['firebird_quant'], provider: 'gcp', accelerators: ['L4'] };
+  state.profiles = [cpu];
+  state.artifacts.push(artifact('packed-policy', 'act', 'native_quantized', { format: 'firebird_quant' }));
+  await page.reload(); await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await page.getByRole('button', { name: '3D simulation', exact: true }).click();
+  const profiles = page.getByRole('radiogroup', { name: 'Isaac profile', exact: true });
+  const policies = page.getByRole('radiogroup', { name: 'Native policy', exact: true });
+  await expect(profiles.getByRole('radio', { name: cpu.label, exact: true })).toBeEnabled();
+  await expect(profiles.locator('input:checked')).toHaveCount(0);
+  await expect(policies.getByRole('radio')).toHaveCount(0);
+  await expect(page.getByRole('checkbox', { name: /experimental, paid cloud rollout/ })).toBeDisabled();
+  await profiles.getByRole('radio', { name: cpu.label, exact: true }).check();
+  await expect(policies.getByRole('radio', { name: 'Generated packed-policy', exact: true })).toBeVisible();
+  await expect(policies.locator('input:checked')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Start experimental simulation', exact: true })).toBeDisabled();
+  expect(state.posts).toEqual([]);
+});
+
 test('native Run preserves engine navigation and fails closed when profiles are missing', async ({ page }) => {
   const state = await fixture(page); state.profiles = [];
   await page.reload(); await page.getByRole('button', { name: 'Run', exact: true }).click();

@@ -7,7 +7,9 @@ import { useDurableSubmission, submissionOf, submissionStorageKey, type Submissi
 import { intakeAcknowledgement, reviewedIntakeHistory } from '@/lib/dataset-submission';
 import { DatasetSubmissionRecovery } from './dataset-submission-recovery';
 import { type PolicyJobAttempt } from '@/lib/policy-job-attempt';
-import { UncertainPolicyJob } from '@/lib/policy-job-mutation';
+import { UncertainPolicyJob, sameJson } from '@/lib/policy-job-mutation';
+import type { ManagedPublishedCapture } from '@/lib/managed-teaching';
+import { teachingRecordingRecipe } from '@/lib/teaching-recording-handoff';
 import {
   beginRecordingAttempt, clearRecordingAttempt, failRecordingAttempt, finishRecordingAttempt, ownsRecordingAttempt,
   cancelRecording, emptyRecordingState, readRecordingAttempt, readRecordingContext, readRecordingJob,
@@ -22,8 +24,9 @@ const active = (job: RecordingJob) => job.status === 'queued' || job.status === 
 const message = (cause: unknown) => cause instanceof Error ? cause.message : 'Recording preparation is unavailable.';
 
 /** Mount with key=projectId. This owns no live Teaching executor or microphone state. */
-export function RecordingPreparationPanel({ projectId, onInspect, onTrain }: {
+export function RecordingPreparationPanel({ projectId, onInspect, onTrain, teachingCapture, onTeachingCaptureConsumed }: {
   projectId: string; onInspect: (job: RecordingJob) => void; onTrain: (job: RecordingJob) => void;
+  teachingCapture?: ManagedPublishedCapture; onTeachingCaptureConsumed?: () => void;
 }) {
   const client = useQueryClient();
   const submission = useDurableSubmission({ project: projectId, operation: 'dataset.inspect' });
@@ -35,6 +38,7 @@ export function RecordingPreparationPanel({ projectId, onInspect, onTrain }: {
   const [state, setState] = useState<RecordingState>(() => emptyRecordingState(projectId));
   const stateRef = useRef(state), mounted = useRef(false), currentProject = useRef(projectId);
   currentProject.current = projectId;
+  const captureRef = useRef(teachingCapture); captureRef.current = teachingCapture;
   const busy = useRef(false), generation = useRef(0), attemptVersion = useRef(0), reviewedToken = useRef<string | null | undefined>(undefined);
   const [storageReady, setStorageReady] = useState(false), [pending, setPending] = useState(false);
   const [attempt, setAttempt] = useState<PolicyJobAttempt>(null), [reviewed, setReviewed] = useState(false);
@@ -96,6 +100,29 @@ export function RecordingPreparationPanel({ projectId, onInspect, onTrain }: {
   function changeSelection(next: RecordingState['recipe']) {
     generation.current += 1; setConsent(false); setError(''); setCancelId('');
     try { persist({ ...stateRef.current, recipe: next }); } catch { /* Failure visibly latches requests off. */ }
+  }
+  async function selectTeachingCapture() {
+    const original = captureRef.current;
+    if (!original || original.project_id !== projectId || busy.current || !storageReady || !submission.available || submission.busy || submission.attempt || attempt || !timeoutValid) return;
+    const version = generation.current, limit = Number(timeout);
+    busy.current = true; setPending(true); setConsent(false); setError('');
+    try {
+      const before = readRecordingState(projectId);
+      const fresh = await readRecordingContext(projectId);
+      if (!live() || captureRef.current !== original || version !== generation.current) return;
+      const shared = client.getQueryData<SubmissionRecovery>(sharedKey);
+      const saved = readRecordingState(projectId);
+      if (!shared?.available || shared.busy || shared.attempt || saved.pending || readRecordingAttempt(projectId) ||
+          sessionStorage.getItem(submissionStorageKey({ project: projectId, operation: 'dataset.inspect' })) !== null || !sameJson(before, saved))
+        throw new Error('Recording selection or recovery changed during review. Inspect it before selecting the teaching capture.');
+      if (!fresh.catalog) throw new Error('The published capture is not available in this project’s configured recording catalog.');
+      const recipe = teachingRecordingRecipe(original, projectId, fresh.catalog, limit);
+      client.setQueryData(['recording-context', projectId], fresh);
+      generation.current += 1; setCancelId('');
+      persist({ ...saved, recipe, selected_job_id: '' });
+      onTeachingCaptureConsumed?.();
+    } catch (cause) { if (live()) { if (cause instanceof RecordingStorageUnavailable) storageFailure(); else setError(message(cause)); } }
+    finally { busy.current = false; if (live()) setPending(false); }
   }
   function toggle(session: string, episode: string, checked: boolean) {
     if (!catalog || stale || !storageReady || attempt || submission.attempt || submission.busy || busy.current) return;
@@ -239,6 +266,12 @@ export function RecordingPreparationPanel({ projectId, onInspect, onTrain }: {
     {context.isError && <p role="alert">Recording availability is unverified. {context.error.message}</p>}
     {context.data && <p role="status">{context.data.options.setup_message}</p>}
     {context.data?.options.configured === false && <p>Remote Isaac captures need an operator-published copy on this application host. This panel does not transfer captures or configure the simulator.</p>}
+    {teachingCapture?.project_id === projectId && <aside className="warning-box" aria-label="Published teaching capture">
+      <p>Teaching session {teachingCapture.session_id.slice(0, 8)} published {teachingCapture.episodes.length} episodes. Review them for a dataset; nothing is selected or submitted automatically.</p>
+      <p>Selecting these episodes replaces the current draft selection and clears preparation consent. It preserves saved jobs and still requires the normal source verification before preparation.</p>
+      <div className="native-result-actions"><button type="button" className="secondary-button" disabled={pending || !storageReady || !submission.available || submission.busy || !!submission.attempt || !!attempt || !timeoutValid} onClick={() => void selectTeachingCapture()}>Select these recorded episodes</button>
+        <button type="button" className="text-link" disabled={pending} onClick={() => onTeachingCaptureConsumed?.()}>Dismiss teaching selection</button></div>
+    </aside>}
     {jobs.isError && <p role="alert">Saved preparation history is unavailable; displayed status may be stale.</p>}
     {error && <p role="alert">{error}</p>}
     <DatasetSubmissionRecovery submission={submission} onReconcile={() => prepare('reconcile')} onRetry={() => prepare('retry')} onReviewHistory={reviewSubmissionHistory} />

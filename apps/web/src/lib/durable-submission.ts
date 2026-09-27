@@ -16,7 +16,7 @@ export type SubmissionRecovery = {
 };
 export const initialSubmissionRecovery: SubmissionRecovery = { hydrated: false, available: false, attempt: null, receipt: null, error: '', busy: false, notFoundKey: null };
 export type SubmissionCache = { get(): SubmissionRecovery; set(value: SubmissionRecovery): void };
-const paths: Record<SubmissionOperation, string> = { 'dataset.inspect': 'intakes', 'dataset.augment': 'augmentations', 'policy.finetune': 'policy-jobs' };
+const paths: Record<SubmissionOperation, string> = { 'dataset.inspect': 'intakes', 'dataset.augment': 'augmentations', 'policy.finetune': 'policy-jobs', 'teaching.capture': 'teaching/sessions' };
 const identifier = (value: unknown): value is string => typeof value === 'string' && value.length > 0 && value.length <= 256 && !/[\x00-\x1f\x7f]/.test(value);
 const keyPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const maxBody = 1024 * 1024, maxJournal = maxBody + 8192;

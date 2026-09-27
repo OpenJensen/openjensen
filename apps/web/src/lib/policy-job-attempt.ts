@@ -1,6 +1,6 @@
 import { record } from './policy-job-mutation';
 
-export type SubmissionOperation = 'dataset.inspect' | 'dataset.augment' | 'policy.finetune';
+export type SubmissionOperation = 'dataset.inspect' | 'dataset.augment' | 'policy.finetune' | 'teaching.capture';
 export type SubmissionIdentity = { version: 1; key: string; project: string; operation: SubmissionOperation; body: Record<string, unknown> };
 // Optional identity is additive: legacy journals and other policy panels keep their behavior.
 export type PolicyJobAttempt = { state: 'pending' | 'uncertain'; message: string; submission?: SubmissionIdentity } | null;

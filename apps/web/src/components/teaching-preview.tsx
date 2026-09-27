@@ -14,8 +14,8 @@ const maximumAge = 5000;
 const maximumBody = 16 * 1024 * 1024;
 const matches = (left: Context, right: Context) => left.session_id === right.session_id && left.revision === right.revision && left.active_episode_id === right.active_episode_id && left.mode === right.mode;
 
-async function readFrame(signal: AbortSignal, session: string): Promise<Frame> {
-  const response = await fetch(`${apiOrigin}/api/v1/teaching/frame?session_id=${encodeURIComponent(session)}`, { signal, cache: "no-store" });
+async function readFrame(signal: AbortSignal, session: string, frameUrl?: string): Promise<Frame> {
+  const response = await fetch(frameUrl ?? `${apiOrigin}/api/v1/teaching/frame?session_id=${encodeURIComponent(session)}`, { signal, cache: "no-store" });
   if (!response.ok || !response.body || Number(response.headers.get("content-length")) > maximumBody) throw new Error("Preview unavailable");
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -52,7 +52,7 @@ async function pixels(frame: Frame, expected: Context): Promise<Uint8ClampedArra
   return rgba;
 }
 
-export function TeachingPreview({ context, online }: { context: Context; online: boolean }) {
+export function TeachingPreview({ context, online, frameUrl }: { context: Context; online: boolean; frameUrl?: string }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const expected = useRef(context);
   expected.current = context;
@@ -85,7 +85,7 @@ export function TeachingPreview({ context, online }: { context: Context; online:
       const started = performance.now();
       let observedId: bigint | null = null;
       try {
-        const frame = await readFrame(controller.signal, context.session_id);
+        const frame = await readFrame(controller.signal, context.session_id, frameUrl);
         if (typeof frame.capture_id === "string" && /^\d{1,19}$/.test(frame.capture_id)) observedId = BigInt(frame.capture_id);
         const rgba = await pixels(frame, context);
         const received = performance.now();
@@ -117,7 +117,7 @@ export function TeachingPreview({ context, online }: { context: Context; online:
     return () => { disposed = true; clearTimeout(next); clearInterval(expire); controller?.abort(); };
     // Session changes remount this component; other context changes retire pixels.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [online, context.session_id, context.revision, context.active_episode_id, context.mode]);
+  }, [online, context.session_id, context.revision, context.active_episode_id, context.mode, frameUrl]);
   const visibleFresh = fresh && online && observation && matches(observation, context);
   return <section className={`teaching-preview${visibleFresh ? "" : " teaching-preview-stale"}`} aria-label="Simulator preview">
     <h3>Simulator camera and joints</h3>
