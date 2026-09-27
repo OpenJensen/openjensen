@@ -448,7 +448,7 @@ input::placeholder { color: var(--muted); opacity: .8; }
 }
 
 /* Dataset sources and full-width inspection workspace. */
-.dataset-tab-buttons { display: flex; align-items: center; gap: 25px; }
+.dataset-tab-buttons { display: flex; flex-wrap: wrap; align-items: center; min-width: 0; gap: 12px 25px; }
 .dataset-tab-buttons .section-tab { display: inline-flex; align-items: center; gap: 7px; padding-top: 0; background: transparent; color: var(--muted); border: 0; border-bottom: 2px solid transparent; }
 .dataset-tab-buttons .section-tab.active { color: var(--ink); border-bottom-color: var(--ink); }
 .tab-count { min-width: 18px; padding: 0 4px; border-radius: 4px; background: var(--subtle); color: var(--muted); font-size: 10px; }
