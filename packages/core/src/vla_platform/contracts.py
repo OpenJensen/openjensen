@@ -23,6 +23,7 @@ from vla_platform.lifecycle.contracts import (
     PolicyRequest,
     SimulationTarget,
 )
+from vla_platform.teaching_sessions.contracts import TeachingCaptureRequest, TeachingCaptureResult
 
 NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 RepositoryId = Annotated[
@@ -314,12 +315,14 @@ class Job(Record):
     project_id: NonEmptyString
     kind: NonEmptyString = "dataset.inspect"
     status: JobStatus = "queued"
-    request: IntakeRequest | PolicyRequest | AugmentationRequest
+    request: IntakeRequest | PolicyRequest | AugmentationRequest | TeachingCaptureRequest
     compute_target: CloudExecutionTarget | None = None
     simulation_target: SimulationTarget | None = None
     created_at: Timestamp
     updated_at: Timestamp
-    result: DatasetProfile | LifecycleResult | AugmentationResult | None = None
+    result: DatasetProfile | LifecycleResult | AugmentationResult | TeachingCaptureResult | None = (
+        None
+    )
     error: str | None = None
     stage: str | None = None
 
@@ -327,13 +330,17 @@ class Job(Record):
     def validate_operation(self):
         expected = (
             self.request.operation
-            if isinstance(self.request, (PolicyRequest, AugmentationRequest))
+            if isinstance(
+                self.request, (PolicyRequest, AugmentationRequest, TeachingCaptureRequest)
+            )
             else "dataset.inspect"
         )
         if self.kind != expected:
             raise ValueError("Job kind must match its registered request operation")
         result_type = (
-            AugmentationResult
+            TeachingCaptureResult
+            if isinstance(self.request, TeachingCaptureRequest)
+            else AugmentationResult
             if isinstance(self.request, AugmentationRequest)
             else LifecycleResult
             if isinstance(self.request, PolicyRequest)

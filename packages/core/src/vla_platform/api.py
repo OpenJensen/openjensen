@@ -60,6 +60,8 @@ from vla_platform.submissions import (
     lookup as submission_lookup,
 )
 from vla_platform.teaching_api import router as teaching_router
+from vla_platform.teaching_sessions.config import TeachingError
+from vla_platform.teaching_sessions_api import router as teaching_sessions_router
 
 LOCAL_ORIGINS = {
     "http://127.0.0.1:3000",
@@ -144,6 +146,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         redoc_url=None,
     )
 
+    @app.exception_handler(TeachingError)
+    async def teaching_error(_request: Request, exc: TeachingError):
+        return JSONResponse({"detail": str(exc)}, status_code=exc.status)
+
     @app.exception_handler(SubmissionConflict)
     async def submission_conflict(_request: Request, exc: SubmissionConflict):
         return JSONResponse({"detail": str(exc)}, status_code=409)
@@ -156,6 +162,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(compute_settings_router)
     app.include_router(huggingface_router)
     app.include_router(teaching_router)
+    app.include_router(teaching_sessions_router)
     app.include_router(decision_router)
     app.include_router(recordings_router)
     app.add_middleware(
