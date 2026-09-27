@@ -437,7 +437,7 @@ def _validate_policy(path):
         or max(info.state_dim, info.action_dim, info.chunk_size) > 4096
     ):
         raise ValueError("Checkpoint dimensions exceed serving bounds")
-    _tensor_header(path / "model.safetensors")
+    _tensor_header(path / ("model.fbq" if (path / "model.fbq").exists() else "model.safetensors"))
     allowed = _PROCESSORS | (_SMOL_PROCESSORS if info.policy_type == "smolvla" else set())
     for name, normalizer, required in (
         ("policy_preprocessor.json", "normalizer_processor", config["input_features"]),
@@ -491,7 +491,8 @@ def resolve_checkpoint(source: Path, *, archive: bool = False):
     """Yield an owned immutable copy; keep this context open until sync/use completes."""
     source = Path(source).expanduser().absolute()
     with tempfile.TemporaryDirectory(prefix="firebird-policy-") as temporary:
-        root = Path(temporary)
+        # Canonicalize only our newly-created private directory, never caller paths.
+        root = Path(temporary).resolve()
         if archive:
             inventory, source_sha = _snapshot_archive(source, root)
         else:
@@ -505,7 +506,7 @@ def resolve_checkpoint(source: Path, *, archive: bool = False):
         candidates = [
             root / str(PurePosixPath(name).parent)
             for name in inventory
-            if PurePosixPath(name).name == "model.safetensors"
+            if PurePosixPath(name).name in {"model.safetensors", "model.fbq"}
             and (root / str(PurePosixPath(name).parent) / "config.json").is_file()
         ]
         if len(candidates) != 1:
