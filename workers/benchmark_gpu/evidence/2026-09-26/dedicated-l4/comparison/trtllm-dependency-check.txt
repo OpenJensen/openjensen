@@ -1,0 +1,5 @@
+Using Python 3.12.13 environment at: .venv-trtllm
+Checked 220 packages in 3ms
+Found 2 incompatibilities
+The package `tensorrt-llm` requires `numpy<2`, but `2.5.3` is installed
+The package `tensorrt-llm` requires `datasets==3.1.0`, but `4.8.5` is installed

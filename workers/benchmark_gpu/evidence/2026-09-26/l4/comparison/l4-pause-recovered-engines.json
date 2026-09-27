@@ -1,0 +1,142 @@
+{
+  "started": 1790434548.7685738,
+  "deadline": 1790435448.768574,
+  "processes": [
+    {
+      "pid": 18055,
+      "created": 1790423631.75
+    },
+    {
+      "pid": 18161,
+      "created": 1790423655.31
+    },
+    {
+      "pid": 111248,
+      "created": 1790434546.81
+    },
+    {
+      "pid": 111259,
+      "created": 1790434547.19
+    },
+    {
+      "pid": 111260,
+      "created": 1790434547.28
+    },
+    {
+      "pid": 111271,
+      "created": 1790434547.67
+    },
+    {
+      "pid": 111277,
+      "created": 1790434547.87
+    },
+    {
+      "pid": 111283,
+      "created": 1790434547.96
+    },
+    {
+      "pid": 111290,
+      "created": 1790434548.21
+    }
+  ],
+  "command": [
+    "--",
+    "sudo",
+    "-H",
+    "-u",
+    "aayrapetyan",
+    "/usr/bin/python3",
+    "-u",
+    "/home/aayrapetyan/firebird-gpu-tests/20260926/transferred/recovery-20260926/run_isolated_engines.py"
+  ],
+  "stopped": [
+    {
+      "pid": 18055,
+      "status": "stopped"
+    },
+    {
+      "pid": 18161,
+      "status": "stopped"
+    },
+    {
+      "pid": 111248,
+      "status": "stopped"
+    },
+    {
+      "pid": 111259,
+      "status": "stopped"
+    },
+    {
+      "pid": 111260,
+      "status": "stopped"
+    },
+    {
+      "pid": 111271,
+      "status": "stopped"
+    },
+    {
+      "pid": 111277,
+      "status": "stopped"
+    },
+    {
+      "pid": 111283,
+      "status": "stopped"
+    },
+    {
+      "pid": 111290,
+      "status": "stopped"
+    }
+  ],
+  "idle_samples": [
+    "0, 0",
+    "0, 0",
+    "0, 0",
+    "0, 0",
+    "0, 0",
+    "0, 0",
+    "0, 0",
+    "0, 0",
+    "0, 0",
+    "0, 0"
+  ],
+  "returncode": 0,
+  "resumed_at": 1790435037.5658634,
+  "post_resume_states": [
+    {
+      "pid": 18055,
+      "state": "sleeping"
+    },
+    {
+      "pid": 18161,
+      "state": "sleeping"
+    },
+    {
+      "pid": 111248,
+      "state": "sleeping"
+    },
+    {
+      "pid": 111259,
+      "state": "sleeping"
+    },
+    {
+      "pid": 111260,
+      "state": "sleeping"
+    },
+    {
+      "pid": 111271,
+      "state": "sleeping"
+    },
+    {
+      "pid": 111277,
+      "state": "sleeping"
+    },
+    {
+      "pid": 111283,
+      "state": "sleeping"
+    },
+    {
+      "pid": 111290,
+      "state": "running"
+    }
+  ]
+}

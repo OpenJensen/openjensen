@@ -1,0 +1,189 @@
+[
+  {
+    "name": "native-bf16",
+    "command": [
+      "/home/xbox-363-i9mac/smolvla-benchmark/.venv-native/bin/python",
+      "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/measure_startup.py",
+      "--backend",
+      "native-bf16",
+      "--root",
+      "/home/xbox-363-i9mac/smolvla-benchmark",
+      "--fixture",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures/task0-init0-chunk0.npz",
+      "--output",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/startup/native-bf16"
+    ],
+    "returncode": 0,
+    "wall_s": 40.46273970603943
+  },
+  {
+    "name": "cpp-bf16",
+    "command": [
+      "/home/xbox-363-i9mac/smolvla-benchmark/.venv-native/bin/python",
+      "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/measure_startup.py",
+      "--backend",
+      "cpp-bf16",
+      "--root",
+      "/home/xbox-363-i9mac/smolvla-benchmark",
+      "--fixture",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures/task0-init0-chunk0.npz",
+      "--output",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/startup/cpp-bf16"
+    ],
+    "returncode": 0,
+    "wall_s": 14.148554801940918
+  },
+  {
+    "name": "native-fp16",
+    "command": [
+      "/home/xbox-363-i9mac/smolvla-benchmark/.venv-native/bin/python",
+      "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/measure_startup.py",
+      "--backend",
+      "native-fp16",
+      "--root",
+      "/home/xbox-363-i9mac/smolvla-benchmark",
+      "--fixture",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures/task0-init0-chunk0.npz",
+      "--output",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/startup/native-fp16"
+    ],
+    "returncode": 0,
+    "wall_s": 40.36942148208618
+  },
+  {
+    "name": "cpp-Q8_0",
+    "command": [
+      "/home/xbox-363-i9mac/smolvla-benchmark/.venv-native/bin/python",
+      "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/measure_startup.py",
+      "--backend",
+      "cpp-Q8_0",
+      "--root",
+      "/home/xbox-363-i9mac/smolvla-benchmark",
+      "--fixture",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures/task0-init0-chunk0.npz",
+      "--output",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/startup/cpp-Q8_0"
+    ],
+    "returncode": 0,
+    "wall_s": 13.797091960906982
+  },
+  {
+    "name": "native-int8",
+    "command": [
+      "/home/xbox-363-i9mac/smolvla-benchmark/.venv-native/bin/python",
+      "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/measure_startup.py",
+      "--backend",
+      "native-int8",
+      "--root",
+      "/home/xbox-363-i9mac/smolvla-benchmark",
+      "--fixture",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures/task0-init0-chunk0.npz",
+      "--output",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/startup/native-int8"
+    ],
+    "returncode": 0,
+    "wall_s": 41.594029903411865
+  },
+  {
+    "name": "cpp-Q4_0",
+    "command": [
+      "/home/xbox-363-i9mac/smolvla-benchmark/.venv-native/bin/python",
+      "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/measure_startup.py",
+      "--backend",
+      "cpp-Q4_0",
+      "--root",
+      "/home/xbox-363-i9mac/smolvla-benchmark",
+      "--fixture",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures/task0-init0-chunk0.npz",
+      "--output",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/startup/cpp-Q4_0"
+    ],
+    "returncode": 0,
+    "wall_s": 13.942931175231934
+  },
+  {
+    "name": "native-nf4",
+    "command": [
+      "/home/xbox-363-i9mac/smolvla-benchmark/.venv-native/bin/python",
+      "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/measure_startup.py",
+      "--backend",
+      "native-nf4",
+      "--root",
+      "/home/xbox-363-i9mac/smolvla-benchmark",
+      "--fixture",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures/task0-init0-chunk0.npz",
+      "--output",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/startup/native-nf4"
+    ],
+    "returncode": 0,
+    "wall_s": 41.44526171684265
+  },
+  {
+    "name": "cpp-Q8_0-vision",
+    "command": [
+      "/home/xbox-363-i9mac/smolvla-benchmark/.venv-native/bin/python",
+      "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/measure_startup.py",
+      "--backend",
+      "cpp-Q8_0-vision",
+      "--root",
+      "/home/xbox-363-i9mac/smolvla-benchmark",
+      "--fixture",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures/task0-init0-chunk0.npz",
+      "--output",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/startup/cpp-Q8_0-vision"
+    ],
+    "returncode": 0,
+    "wall_s": 13.849528551101685
+  },
+  {
+    "name": "vllm-bf16",
+    "command": [
+      "/home/xbox-363-i9mac/smolvla-benchmark/.venv-vllm/bin/python",
+      "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/measure_startup.py",
+      "--backend",
+      "vllm-bf16",
+      "--root",
+      "/home/xbox-363-i9mac/smolvla-benchmark",
+      "--fixture",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures/task0-init0-chunk0.npz",
+      "--output",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/startup/vllm-bf16"
+    ],
+    "returncode": 0,
+    "wall_s": 27.68268585205078
+  },
+  {
+    "name": "trtllm-fp16",
+    "command": [
+      "/home/xbox-363-i9mac/smolvla-benchmark/.venv-trtllm/bin/python",
+      "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/measure_startup.py",
+      "--backend",
+      "trtllm-fp16",
+      "--root",
+      "/home/xbox-363-i9mac/smolvla-benchmark",
+      "--fixture",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures/task0-init0-chunk0.npz",
+      "--output",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/startup/trtllm-fp16"
+    ],
+    "returncode": 0,
+    "wall_s": 58.91442561149597
+  },
+  {
+    "name": "native-bf16-repeat",
+    "command": [
+      "/home/xbox-363-i9mac/smolvla-benchmark/.venv-native/bin/python",
+      "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/measure_startup.py",
+      "--backend",
+      "native-bf16",
+      "--root",
+      "/home/xbox-363-i9mac/smolvla-benchmark",
+      "--fixture",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures/task0-init0-chunk0.npz",
+      "--output",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/startup/native-bf16-repeat"
+    ],
+    "returncode": 0,
+    "wall_s": 40.21764397621155
+  }
+]

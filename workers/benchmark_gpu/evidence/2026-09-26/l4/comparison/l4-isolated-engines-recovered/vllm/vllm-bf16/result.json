@@ -1,0 +1,194 @@
+{
+  "status": "passed",
+  "contract": "Raw CPU observations/task plus explicit FP32 noise to complete unnormalized CPU 50x7 actions; chunk replay 50; preprocessing and RPC included; simulator excluded.",
+  "startup_s": 12.335925265999322,
+  "backend": "vllm-bf16",
+  "checkpoint": "lerobot/smolvla_libero",
+  "revision": "31d453f7edd78c839a8bbc39744a292686daf0de",
+  "integration": "Custom engine orchestration with native PyTorch SmolVLA kernels",
+  "startup_peak_allocated_bytes": 919213568,
+  "fixtures": [
+    {
+      "name": "synthetic-0.npz",
+      "sha256": "0a36d9054126412db8dcd4079f509094a4a311640cea96ee2e736548a433f1b0",
+      "p50_ms": 372.32474599841225,
+      "samples_ms": [
+        363.9580279996153,
+        372.945424000136,
+        396.9155819995649,
+        361.64649600141274,
+        372.32474599841225
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "synthetic-1.npz",
+      "sha256": "13fd98cc37376709b1d7921d4a24878b518445c331a67c1f8a245eb3d04d089a",
+      "p50_ms": 356.92394400030025,
+      "samples_ms": [
+        358.66148400054954,
+        360.8248900000035,
+        355.9676599998056,
+        356.92394400030025,
+        355.1576780009782
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "task0-init0-chunk0.npz",
+      "sha256": "8ca68b94c9d0cdc60e6e7aad98453044be64936d40bb8050a2311ff186ad79c5",
+      "p50_ms": 357.08215399972687,
+      "samples_ms": [
+        356.30994999883114,
+        355.5973530001211,
+        357.08215399972687,
+        357.52757099908195,
+        357.5624279983458
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "task0-init0-chunk1.npz",
+      "sha256": "004567fab1fe16f3aad61ed285343b53fcc6848b5945dbc433eb32adb08fe1d5",
+      "p50_ms": 357.19315399910556,
+      "samples_ms": [
+        357.19315399910556,
+        358.8041990005877,
+        362.1742089999316,
+        355.4924980016949,
+        354.46661400055746
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "task1-init0-chunk0.npz",
+      "sha256": "43e09f840449d886871b8a848d80d69fa09412c143f2280b7c34e41d512476b0",
+      "p50_ms": 355.5267140000069,
+      "samples_ms": [
+        355.5267140000069,
+        354.90455600120185,
+        356.1892159996205,
+        356.7875639982958,
+        354.8785200000566
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "task1-init0-chunk1.npz",
+      "sha256": "0070068548f2f022e75600686150721011e0ee042dc2ef14bcb6e50e696124df",
+      "p50_ms": 354.5181329991465,
+      "samples_ms": [
+        354.31698100001086,
+        356.2613850008347,
+        354.4678099988232,
+        355.635687999893,
+        354.5181329991465
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "task1-init0-chunk2.npz",
+      "sha256": "c59aeb4755e2f00d291a3f4ef46b5cd914679195541d035fda0d331184f39573",
+      "p50_ms": 354.4547430010425,
+      "samples_ms": [
+        352.70161900007224,
+        355.2114939993771,
+        353.6594529996364,
+        354.6409489990765,
+        354.4547430010425
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "task2-init0-chunk0.npz",
+      "sha256": "fcb2711b38639a75737b0bdca05e263559f8d27027b3987cc21764916d3de455",
+      "p50_ms": 355.51443100121105,
+      "samples_ms": [
+        353.711600000679,
+        354.23611999976856,
+        355.95573499995226,
+        357.63945000144304,
+        355.51443100121105
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "task2-init0-chunk1.npz",
+      "sha256": "50e105671a03cc4038adec11052c8f4b5812cea444975ea98d31984e53228a50",
+      "p50_ms": 360.39624600016396,
+      "samples_ms": [
+        358.5096459992201,
+        360.1028109987965,
+        360.39624600016396,
+        361.2907630013069,
+        361.522633000277
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "task3-init0-chunk0.npz",
+      "sha256": "b4804eccc03e8a51b900a8fed6c875429a5d5854c1602bce619a0c158482e3ac",
+      "p50_ms": 359.24164399875735,
+      "samples_ms": [
+        356.9792519992916,
+        356.68516000077943,
+        359.30580999956874,
+        359.24164399875735,
+        359.7667079993698
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "task3-init0-chunk1.npz",
+      "sha256": "c17f4ee3ecd2c7ebd334e879cd67737444c1bbed489ae5b410dcef0a45f7d078",
+      "p50_ms": 359.4826850003301,
+      "samples_ms": [
+        359.4826850003301,
+        358.2567569992534,
+        359.7327840016078,
+        362.2381539989874,
+        355.43267499997455
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "task4-init0-chunk0.npz",
+      "sha256": "98cea3c7c9263b02c9b9cba5a1621b056322e3103d436e14bf7e4e51b8faa4fd",
+      "p50_ms": 352.9020819987636,
+      "samples_ms": [
+        352.7086750000308,
+        352.9020819987636,
+        353.4647219985345,
+        352.8351349996228,
+        353.2283250006003
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "task4-init0-chunk1.npz",
+      "sha256": "a18904c97f4b7c838cb2200ce624f4700a87d14ae635f6f6acf8cf22885aadeb",
+      "p50_ms": 352.91656399931526,
+      "samples_ms": [
+        352.81867000048805,
+        352.91656399931526,
+        352.8865030002635,
+        354.17464099919016,
+        356.07718500068586
+      ],
+      "repeat_exact": true
+    },
+    {
+      "name": "task4-init0-chunk2.npz",
+      "sha256": "6ed01fafec11c61eb9d99b9ad171f725112d20ae49642800396476413d1bd538",
+      "p50_ms": 354.71802599931834,
+      "samples_ms": [
+        356.74115900110337,
+        354.71802599931834,
+        354.44139200080826,
+        366.73000100017816,
+        352.62944599890034
+      ],
+      "repeat_exact": true
+    }
+  ]
+}

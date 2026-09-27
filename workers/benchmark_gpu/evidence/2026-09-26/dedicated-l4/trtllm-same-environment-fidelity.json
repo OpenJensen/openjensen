@@ -1,0 +1,82 @@
+{
+  "reference": "native-fp16",
+  "candidate": "trtllm-fp16",
+  "fixture_count": 14,
+  "mae": 0.0,
+  "rmse": 0.0,
+  "max_abs": 0.0,
+  "gripper_sign_agreement": 1.0,
+  "median_fixture_p50_ms": 406.911599999944,
+  "fixtures": [
+    {
+      "fixture": "synthetic-0.npz",
+      "mae": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "fixture": "synthetic-1.npz",
+      "mae": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "fixture": "task0-init0-chunk0.npz",
+      "mae": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "fixture": "task0-init0-chunk1.npz",
+      "mae": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "fixture": "task1-init0-chunk0.npz",
+      "mae": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "fixture": "task1-init0-chunk1.npz",
+      "mae": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "fixture": "task1-init0-chunk2.npz",
+      "mae": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "fixture": "task2-init0-chunk0.npz",
+      "mae": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "fixture": "task2-init0-chunk1.npz",
+      "mae": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "fixture": "task3-init0-chunk0.npz",
+      "mae": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "fixture": "task3-init0-chunk1.npz",
+      "mae": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "fixture": "task4-init0-chunk0.npz",
+      "mae": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "fixture": "task4-init0-chunk1.npz",
+      "mae": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "fixture": "task4-init0-chunk2.npz",
+      "mae": 0.0,
+      "max_abs": 0.0
+    }
+  ]
+}
