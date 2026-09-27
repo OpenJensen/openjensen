@@ -80,6 +80,33 @@ PyArrow and the PyAV decoder. They do not load model weights or evaluate a task.
 python3 workers/local_cpu/manage.py verify --root /absolute/persistent/cpu-20260927
 ```
 
+## Reuse downloaded packages explicitly
+
+A later fresh installation may reuse an existing **uv download cache**. Add the
+same `--cache /absolute/existing/uv-cache` argument to `plan` and `install --execute`.
+For example, the `cache/` directory retained by an earlier incomplete attempt can
+be reused while choosing a different, new installation root. This is an operator
+choice; the installer never searches for old environments or retries automatically.
+
+The cache must be an existing directory with a valid `CACHEDIR.TAG`, without
+symlinked ancestors. It must be separate from the new installation root, and cannot
+be a Python environment or a directory inside one. Planning validates the cache
+without writing to it. An explicit installation allows uv to update that cache.
+
+Only dependency download/build artifacts are reused: frozen locks, distribution
+hash requirements, the exact source archive hash, and final offline probes remain
+unchanged. uv copies files into the new environments (`UV_LINK_MODE=copy`), so
+installed runtimes do not import packages from that cache or an old environment.
+The Hugging Face cache stays inside the new root; policy weights are not reused or
+downloaded by setup. A cache does not guarantee an offline installation: missing
+packages or source archives still require their original public URLs.
+
+The selected cache path and copy mode are recorded in the plan and successful
+installation receipt. Configuration is still a separate, inactive output. Failed
+roots and their logs are not modified or removed, apart from the explicitly chosen
+uv cache if it is inside a preserved attempt. Do not use an untrusted shared cache;
+operator-owned executables, source and cache directories remain a trust boundary.
+
 ## Generate a new configuration; preserve the old one
 
 ```sh

@@ -121,11 +121,36 @@ def read_json(path: Path) -> dict[str, Any]:
     return value
 
 
-def environment(root: Path, *, offline: bool) -> dict[str, str]:
+def cache_path(root: Path, cache: Path | None) -> Path:
+    """Admit an explicit existing uv cache without treating a venv as a cache."""
+    if cache is None:
+        return root / "cache"
+    cache = absolute(cache)
+    no_links(cache)
+    if root == cache or root.is_relative_to(cache) or cache.is_relative_to(root):
+        raise ValueError("Shared cache and new installation root must be disjoint")
+    if not cache.is_dir():
+        raise ValueError("Shared cache must be an existing uv cache directory")
+    if any((part / "pyvenv.cfg").exists() for part in (cache, *cache.parents)):
+        raise ValueError("An installed Python environment cannot be used as a shared cache")
+    tag = cache / "CACHEDIR.TAG"
+    no_links(tag)
+    if not tag.is_file():
+        raise ValueError("Shared cache must contain the existing uv CACHEDIR.TAG")
+    with tag.open("rb") as handle:
+        content = handle.read(1025)
+    if len(content) > 1024 or not content.startswith(
+        b"Signature: 8a477f597d28d172789f06886806bc55"
+    ):
+        raise ValueError("Shared cache has an invalid cache directory marker")
+    return cache
+
+
+def environment(root: Path, *, offline: bool, cache: Path | None = None) -> dict[str, str]:
     """Do not forward credentials, arbitrary Python paths or user package indexes."""
     env = {key: os.environ[key] for key in ("PATH", "TMPDIR", "LANG") if key in os.environ}
     env.update(
-        UV_CACHE_DIR=str(root / "cache"),
+        UV_CACHE_DIR=str(cache_path(root, cache)),
         UV_PYTHON_DOWNLOADS="never",
         UV_PROJECT_ENVIRONMENT=str(root / "act-model"),
         UV_NO_CONFIG="1",
@@ -135,6 +160,9 @@ def environment(root: Path, *, offline: bool) -> dict[str, str]:
         OPENBLAS_NUM_THREADS="1",
         HF_HOME=str(root / "cache/huggingface"),
     )
+    if cache is not None:
+        # Copies remain usable independently of a later cache cleanup.
+        env["UV_LINK_MODE"] = "copy"
     if offline:
         env.update(UV_OFFLINE="1", HF_HUB_OFFLINE="1", HF_DATASETS_OFFLINE="1")
     return env
@@ -195,10 +223,11 @@ def run(command: list[str], *, env: dict[str, str], log: Path, timeout: float = 
     return ""
 
 
-def setup_plan(root: Path, python: Path, uv: Path) -> dict[str, Any]:
+def setup_plan(root: Path, python: Path, uv: Path, *, cache: Path | None = None) -> dict[str, Any]:
     """Return exact commands and manifests; never execute tools or create directories."""
     root, python, uv = absolute(root), absolute(python), absolute(uv)
     no_links(root)
+    selected_cache = cache_path(root, cache)
     key = platform_key()
     act = REPO / "workers/act_optimizer"
     reader = HERE / f"reader-{key}.lock"
@@ -253,6 +282,12 @@ def setup_plan(root: Path, python: Path, uv: Path) -> dict[str, Any]:
         "installation_root": str(root),
         "repository": str(REPO),
         "uv_version": UV_VERSION,
+        "cache": {
+            "path": str(selected_cache),
+            "shared": cache is not None,
+            "scope": "uv_distribution_artifacts_only",
+            "link_mode": "copy" if cache is not None else "uv-default",
+        },
         "python": str(python),
         "inputs": {str(p.relative_to(REPO)): digest(p) for p in required},
         "commands": commands,
@@ -305,14 +340,14 @@ def verify(
     }
 
 
-def install(root: Path, python: Path, uv: Path) -> dict[str, Any]:
+def install(root: Path, python: Path, uv: Path, *, cache: Path | None = None) -> dict[str, Any]:
     """Install only into a new explicitly selected persistent directory."""
-    plan = setup_plan(root, python, uv)
+    plan = setup_plan(root, python, uv, cache=cache)
     if root.exists() or not root.parent.is_dir():
         raise ValueError("Installation root must be new; explicitly create its parent first")
     if not python.is_file() or not uv.is_file():
         raise ValueError("Provide existing Python3.12 and uv0.12.19 executables")
-    env = environment(root, offline=False)
+    env = environment(root, offline=False, cache=cache)
     uv_version = subprocess.check_output([str(uv), "--version"], env=env, text=True, timeout=5)
     if not uv_version.startswith(f"uv {UV_VERSION} "):
         raise ValueError(f"Use existing uv {UV_VERSION}; this command never installs tools")
@@ -337,7 +372,12 @@ def install(root: Path, python: Path, uv: Path) -> dict[str, Any]:
     checked = verify(root)
     if any(digest(REPO / name) != value for name, value in plan["inputs"].items()):
         raise ValueError("Setup source changed during installation")
-    receipt = {**checked, "installation_root": str(root), "inputs": plan["inputs"]}
+    receipt = {
+        **checked,
+        "installation_root": str(root),
+        "inputs": plan["inputs"],
+        "cache": plan["cache"],
+    }
     write_new(root / "installation.json", receipt)
     return receipt
 
@@ -408,6 +448,11 @@ def parser() -> argparse.ArgumentParser:
         cmd.add_argument("--root", type=Path, required=True)
         cmd.add_argument("--python", type=Path, required=True)
         cmd.add_argument("--uv", type=Path, required=True)
+        cmd.add_argument(
+            "--cache",
+            type=Path,
+            help="Explicit existing uv cache to reuse; separate new environments still required",
+        )
         if action == "install":
             cmd.add_argument(
                 "--execute",
@@ -428,9 +473,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
         if args.action == "plan" or (args.action == "install" and not args.execute):
-            result = setup_plan(args.root, args.python, args.uv)
+            result = setup_plan(args.root, args.python, args.uv, cache=args.cache)
         elif args.action == "install":
-            result = install(absolute(args.root), absolute(args.python), absolute(args.uv))
+            result = install(
+                absolute(args.root), absolute(args.python), absolute(args.uv), cache=args.cache
+            )
         elif args.action == "verify":
             result = verify(args.root)
         else:
