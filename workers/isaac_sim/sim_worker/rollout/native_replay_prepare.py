@@ -170,6 +170,7 @@ def prepare(value):
         "manifest_sha256": sha(manifest_raw),
         "files": files,
         "observations": len(pairs),
+        "episode_lengths": [{"episode_index": e, "length": offsets[e][1]} for e in episodes],
         "source": doc["source"],
         "scope": (
             "Original immutable inputs; policy-coordinate compatibility "
