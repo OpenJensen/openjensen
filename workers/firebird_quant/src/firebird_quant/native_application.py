@@ -13,6 +13,8 @@ import time
 from pathlib import Path
 
 from .native_package import (
+    EVIDENCE_LIMIT,
+    JSON_LIMIT,
     RUNTIME,
     SHA,
     admit_source,
@@ -220,7 +222,7 @@ def _probe(owner, mode, source, result, *, destination=None, bits=None):
             raise ValueError(
                 f"{error}\nOffline worker diagnostic (last 4 KiB):\n{detail}"
             ) from error
-    return read_json(result)
+    return read_json(result, limit=EVIDENCE_LIMIT)
 
 
 def _fixtures(value, prediction=100):
@@ -409,7 +411,8 @@ def run_job(job):
             files = {"policy/" + name: item["sha256"] for name, item in info["files"].items()}
             for path in bundle.iterdir():
                 if path.is_file():
-                    files[path.name] = sha(read(path))
+                    limit = EVIDENCE_LIMIT if path.name == "verification.json" else JSON_LIMIT
+                    files[path.name] = sha(read(path, limit))
             write_new(
                 bundle / "manifest.json",
                 canonical({"schema_version": 1, "metadata": metadata, "files": files}),

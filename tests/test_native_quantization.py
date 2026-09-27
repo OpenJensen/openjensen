@@ -534,3 +534,35 @@ def test_custom_temporal_config_rejects_unsupported_execution(change):
 
     with pytest.raises(ValueError, match="temporal admission"):
         temporal_info({"chunk_size": 8, "n_action_steps": 3, "n_obs_steps": 1} | change)
+
+
+def test_large_max_horizon_verification_inventory_and_read(tmp_path):
+    from vla_platform.lifecycle import native_quantization as nq
+
+    row = {
+        "raw": [[-0.12345679104328156] * 6 for _ in range(1024)],
+        "postprocessed": [[0.12345679104328156] * 6 for _ in range(1024)],
+    }
+    value = {"floating": [row, row], "packed": [row, row]}
+    raw = (json.dumps(value, sort_keys=True, indent=2) + "\n").encode()
+    assert nq.JSON_LIMIT < len(raw) < 8 * 1024**2
+    proof = tmp_path / "verification.json"
+    proof.write_bytes(raw)
+    assert nq.hash_file(proof) == {"sha256": hashlib.sha256(raw).hexdigest(), "bytes": len(raw)}
+    assert nq.strict_json(proof, 8 * 1024**2) == value
+    save_manifest(tmp_path, {})
+    assert nq.bundle(tmp_path)[1]["verification.json"]["bytes"] == len(raw)
+
+
+@pytest.mark.parametrize(
+    "name,limit",
+    [("verification.json", 8 * 1024**2), ("config.json", 1024**2), ("manifest.json", 1024**2)],
+)
+def test_evidence_and_metadata_hash_bounds_still_refuse_oversize(tmp_path, name, limit):
+    from vla_platform.lifecycle import native_quantization as nq
+
+    path = tmp_path / name
+    with path.open("wb") as stream:
+        stream.truncate(limit + 1)
+    with pytest.raises(ValueError, match="oversized"):
+        nq.hash_file(path)
