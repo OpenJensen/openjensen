@@ -81,3 +81,15 @@ export function measuredNativeReport(value: unknown, job: Job): QuantizationRepo
         !object(item) || item.seed !== [171, 902][index] || typeof item.input_sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(item.input_sha256) || !drift(item.raw) || !drift(item.postprocessed))) return null;
   return value as unknown as QuantizationReport;
 }
+
+/** Navigation only: the destination must still admit its worker, dataset and explicit recipe. */
+export function replayableNativeOutput(artifact: PackedArtifact, job: Job, report: QuantizationReport | null): boolean {
+  const metadata = artifact.metadata;
+  return !!report && job.status === 'succeeded' && typeof artifact.id === 'string' && artifact.id.length > 0 &&
+    artifact.project_id === job.project_id && artifact.job_id === job.id && artifact.format === 'native_quantized' &&
+    metadata?.architecture === 'act' && metadata.format === 'firebird_quant' && metadata.format_version === 1 &&
+    metadata.model_id === report.model_id && metadata.precision === report.precision && metadata.inference_only === true &&
+    metadata.fresh_reload_verified === true && metadata.cpu_reload_verified === true &&
+    metadata.source_artifact_id === report.source_artifact_id && metadata.source_artifact_manifest_sha256 === report.source_artifact_manifest_sha256 &&
+    metadata.storage !== 'gcs' && !metadata.remote && !metadata.remote_uri;
+}

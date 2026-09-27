@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
+import { measuredNativeReport, replayableNativeOutput, type PackedArtifact } from '../../apps/web/src/lib/native-quantization';
+import type { Job } from '../../apps/web/src/lib/api';
 
 const timestamp = '2026-09-27T12:00:00Z';
 const runtime = { id: 'act-cpu', label: 'Generated CPU quantizer', device: 'cpu', provider: 'local', execution: 'native', enabled: true, launchable: true, native_quantization: true, native_quantization_only: true, training: false, simulation: false, engine_evaluation: false, run: false };
@@ -311,4 +313,38 @@ test('journal cleanup after navigation exposes recovery instead of a permanent p
   const allow = page.getByRole('button', { name: 'I checked the jobs; allow a new request' }); await expect(allow).toBeDisabled();
   await refresh(page); await expect(allow).toBeEnabled(); await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption('submitted');
   await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toHaveAttribute('data-job-id', 'submitted'); expect(state.posts).toHaveLength(1);
+});
+
+
+function replayCandidate(id = 'ready-packed') {
+  const proof = report();
+  return { ...artifact(id, 'native_quantized', { format: 'firebird_quant', format_version: 1, model_id: proof.model_id, precision: proof.precision, fresh_reload_verified: true, cpu_reload_verified: true, source_artifact_id: proof.source_artifact_id, source_artifact_manifest_sha256: proof.source_artifact_manifest_sha256 }), job_id: 'ready-job' };
+}
+
+test('replay eligibility binds a completed packed artifact to its job and measured report', () => {
+  const done = job('ready-job', 'succeeded') as unknown as Job;
+  const measured = measuredNativeReport(report(), done);
+  expect(measured).not.toBeNull();
+  expect(replayableNativeOutput(replayCandidate() as PackedArtifact, done, measured)).toBe(true);
+  expect(replayableNativeOutput(replayCandidate() as PackedArtifact, { ...done, status: 'running' }, measured)).toBe(false);
+  expect(replayableNativeOutput(replayCandidate() as PackedArtifact, done, null)).toBe(false);
+});
+
+test('replay eligibility rejects remote, incomplete and mismatched packed artifact identities', () => {
+  const done = job('ready-job', 'succeeded') as unknown as Job;
+  const measured = measuredNativeReport(report(), done);
+  const invalid = [
+    { ...replayCandidate(), id: '' },
+    { ...replayCandidate(), project_id: 'beta' },
+    { ...replayCandidate(), job_id: 'other-job' },
+    { ...replayCandidate(), format: 'inference_export' },
+    ...[
+      { architecture: 'smolvla' }, { format: 'other' }, { format_version: 2 },
+      { inference_only: false }, { fresh_reload_verified: false }, { cpu_reload_verified: false },
+      { model_id: 'sha256:' + 'f'.repeat(64) }, { precision: 'int4' },
+      { source_artifact_id: 'another-source' }, { source_artifact_manifest_sha256: 'f'.repeat(64) },
+      { storage: 'gcs' }, { remote_uri: 'gs://generated' }, { remote: true }
+    ].map(change => ({ ...replayCandidate(), metadata: { ...replayCandidate().metadata, ...change } }))
+  ];
+  for (const candidate of invalid) expect(replayableNativeOutput(candidate as PackedArtifact, done, measured), JSON.stringify(candidate)).toBe(false);
 });

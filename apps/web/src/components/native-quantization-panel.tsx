@@ -5,13 +5,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, artifactDownloadUrl, isActive, type Job } from '@/lib/api';
 import { storeAttempt, storedAttempt, type PolicyJobAttempt } from '@/lib/policy-job-attempt';
 import { WorkbenchDisclosure } from './workbench-disclosure';
-import { availableNativeQuantizer, cancelNativeQuantization, nativeQuantizationInput, nativeQuantizationOf, measuredNativeReport, object, startNativeQuantization, UncertainQuantization, type NativeQuantizationRuntime, type PackedArtifact } from '@/lib/native-quantization';
+import { availableNativeQuantizer, cancelNativeQuantization, nativeQuantizationInput, nativeQuantizationOf, measuredNativeReport, replayableNativeOutput, object, startNativeQuantization, UncertainQuantization, type NativeQuantizationRuntime, type PackedArtifact } from '@/lib/native-quantization';
 
 class QuantizationJournalUnavailable extends Error {
   constructor() { super('Browser session storage is unavailable. Restore it and reload, then inspect recorded jobs before submitting again.'); }
 }
 
-export function NativeQuantizationPanel({ projectId, preferredArtifactId, onPrepare }: { projectId: string; preferredArtifactId?: string; onPrepare: () => void }) {
+export function NativeQuantizationPanel({ projectId, preferredArtifactId, onPrepare, onReplay }: { projectId: string; preferredArtifactId?: string; onPrepare: () => void; onReplay?: (artifactId: string) => void }) {
   const client = useQueryClient();
   const options = useQuery({ queryKey: ['policy-options'], queryFn: api.policyOptions, retry: false, refetchInterval: 10_000 });
   const jobs = useQuery({ queryKey: ['jobs', projectId], queryFn: () => api.jobs(projectId), enabled: !!projectId, retry: false, refetchInterval: 2_000 });
@@ -123,7 +123,7 @@ export function NativeQuantizationPanel({ projectId, preferredArtifactId, onPrep
           <p>Postprocessed differences use saved processor output coordinates; physical units are unverified. No accepted quality threshold or GPU memory/latency improvement is established.</p></WorkbenchDisclosure>
         </section> : <p role="alert">A complete measured quantization report is unavailable. Do not infer reload or quality acceptance from the job status alone.</p>)}
 
-      {selected.status === 'succeeded' && <><p>Generated-input checks do not establish robot task quality or calibration. Smaller stored weights can still expand during execution.</p>{downloads.map(item => <p key={item.id}><a className="secondary-button" href={artifactDownloadUrl(projectId, item.id)}>Download INT{nativeQuantizationOf(selected)?.bits} package</a></p>)}</>}
+      {selected.status === 'succeeded' && <><p>Generated-input checks do not establish robot task quality or calibration. Smaller stored weights can still expand during execution.</p>{downloads.map(item => <div key={item.id}><p><a className="secondary-button" href={artifactDownloadUrl(projectId, item.id)}>Download INT{nativeQuantizationOf(selected)?.bits} package</a></p>{onReplay && replayableNativeOutput(item, selected, measured ?? null) && <p><button className="text-link" onClick={() => onReplay(item.id)}>Replay recorded observations</button></p>}</div>)}</>}
       {isActive(selected) && <><progress aria-label="ACT quantization in progress" /><button className="secondary-button" disabled={pending !== null || jobs.isError} onClick={() => setConfirmCancel(selected.id)}>Cancel selected ACT quantization</button></>}
       {confirmCancel === selected.id && isActive(selected) && <div role="group" aria-label="Confirm ACT quantization cancellation" className="warning-box"><p>Stop this job and its owned local processes?</p><button className="secondary-button" disabled={pending !== null || jobs.isError} onClick={() => void mutate('cancel')}>Confirm cancellation</button><button className="text-link" disabled={pending !== null} onClick={() => setConfirmCancel(null)}>Keep running</button></div>}
       {events.isError && <p role="alert">Activity updates are unavailable; previously received activity may be stale. {events.error.message}</p>}
