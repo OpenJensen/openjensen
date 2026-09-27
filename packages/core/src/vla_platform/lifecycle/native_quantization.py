@@ -16,6 +16,7 @@ from .simulation import finish_owned, strict_json
 TOTAL_LIMIT = 768 * 1024**2
 WEIGHT_LIMIT = 512 * 1024**2
 JSON_LIMIT = 1024**2
+EVIDENCE_LIMIT = 8 * 1024**2
 NAME = re.compile(r"[A-Za-z0-9_.-]{1,120}\Z")
 RUNTIME = {"lerobot": "0.6.1", "torch": "2.11.0", "torchvision": "0.26.0", "safetensors": "0.8.0"}
 SCOPE = "generated observations; no calibration or task-quality acceptance"
@@ -44,6 +45,8 @@ def hash_file(path):
     finally:
         os.close(parent)
     limit = WEIGHT_LIMIT if path.name in {"model.safetensors", "model.fbq"} else JSON_LIMIT
+    if path.name == "verification.json":
+        limit = EVIDENCE_LIMIT
     with os.fdopen(fd, "rb") as stream:
         before = os.fstat(stream.fileno())
         if not stat.S_ISREG(before.st_mode) or not 0 < before.st_size <= limit:
@@ -453,7 +456,7 @@ def check_result(response, job, source, admitted, directory):
             raise ValueError("Packed source manifest changed")
     if set(files) != expected_files:
         raise ValueError("Unexpected packed package payload")
-    proof = strict_json(directory / "verification.json", JSON_LIMIT)
+    proof = strict_json(directory / "verification.json", EVIDENCE_LIMIT)
     check_proof(
         proof,
         expected["model_id"],

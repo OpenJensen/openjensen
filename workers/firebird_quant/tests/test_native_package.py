@@ -463,3 +463,29 @@ def test_changed_horizons_preserved_and_drift_uses_actual_coordinates(
     assert result["report"]["execution_horizon"] == 3
     assert result["report"]["drift_from_fp32"][0]["raw"]["coordinates"] == 48
     assert result["report"]["drift_from_fp32"][0]["raw"]["rmse"] == (0.25**2 / 48) ** 0.5
+
+
+def test_max_horizon_large_evidence_is_published(source, tmp_path, stub_probes, monkeypatch):
+    config = package.read_json(source / "config.json")
+    (source / "config.json").write_bytes(
+        package.canonical(config | {"chunk_size": 1024, "n_action_steps": 3})
+    )
+    original = app._probe
+
+    def large_probe(*args, **kwargs):
+        report = original(*args, **kwargs)
+        for key in ("baseline", "packed"):
+            for row in report.get(key, []):
+                for field in ("raw", "postprocessed"):
+                    row[field] = [[-0.12345679104328156] * 6 for _ in range(1024)]
+        return report
+
+    monkeypatch.setattr(app, "_probe", large_probe)
+    result = app.run_job(request(source, tmp_path / "output"))
+    root = Path(result["artifact"]["path"])
+    raw = (root / "verification.json").read_bytes()
+    assert package.JSON_LIMIT < len(raw) < 8 * 1024**2
+    assert package.read_json(root / "manifest.json")["files"]["verification.json"] == package.sha(
+        raw
+    )
+    assert result["report"]["drift_from_fp32"][0]["raw"]["coordinates"] == 6144

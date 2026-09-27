@@ -12,6 +12,7 @@ SCHEMA = 1
 FORMAT = "firebird_quant"
 MODEL_DOMAIN = b"firebird-native-packed-policy-v1\0"
 JSON_LIMIT = 1024 * 1024
+EVIDENCE_LIMIT = 8 * 1024 * 1024
 WEIGHT_LIMIT = 512 * 1024 * 1024
 TOTAL_LIMIT = 768 * 1024 * 1024
 NAME = re.compile(r"[A-Za-z0-9_.-]{1,120}\Z")
@@ -85,8 +86,8 @@ def read(path, limit=JSON_LIMIT):
         return value
 
 
-def read_json(path):
-    return decode(read(path))
+def read_json(path, *, limit=JSON_LIMIT):
+    return decode(read(path, limit))
 
 
 def sha(raw):
