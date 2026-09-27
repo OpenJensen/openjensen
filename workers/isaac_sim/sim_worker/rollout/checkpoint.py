@@ -5,6 +5,9 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from .control_schema import FILE as CONTROL_FILE
+from .control_schema import optional as control_optional
+
 _EXPORT_FILES = (
     "config.json",
     "model.safetensors",
@@ -30,12 +33,16 @@ class Checkpoint:
     action_dim: int
     chunk_size: int
     action_steps: int
+    control_contract: dict | None = None
+    control_contract_sha256: str | None = None
 
 
 def inspect_checkpoint(path: Path) -> Checkpoint:
     """Validate metadata and fingerprint weights plus their saved processors."""
     # Packed admission retains lexical paths so symlink ancestry is not erased.
     if (path / "encoding.json").exists() or (path / "model.fbq").exists():
+        if (path / CONTROL_FILE).exists() or (path / CONTROL_FILE).is_symlink():
+            raise ValueError("Packed simulator control contracts are not yet supported")
         from firebird_quant.native_package import decode, inspect_policy, read, sha
 
         packed = inspect_policy(path.absolute())
@@ -87,6 +94,13 @@ def inspect_checkpoint(path: Path) -> Checkpoint:
     if action_steps > chunk_size:
         raise ValueError("Checkpoint n_action_steps exceeds its chunk size")
 
+    control, control_sha = control_optional(root, config)
+    if control is not None:
+        files.add(CONTROL_FILE)
+        temporal = root / "temporal-contract.json"
+        if temporal.exists() and _json(temporal).get("action_fps") != control["action_fps"]:
+            raise ValueError("Temporal action FPS differs from simulator control contract")
+
     # Saved statistics affect policy behavior and belong in its identity.
     for name in _PROCESSOR_FILES:
         files.update(_state_files(root, _json(root / name)))
@@ -100,6 +114,8 @@ def inspect_checkpoint(path: Path) -> Checkpoint:
         with item.open("rb") as stream:
             while block := stream.read(_HASH_BLOCK_SIZE):
                 digest.update(block)
+    if control_optional(root, config) != (control, control_sha):
+        raise ValueError("Simulator contract changed during checkpoint inspection")
     return Checkpoint(
         f"sha256:{digest.hexdigest()}",
         policy_type,
@@ -110,6 +126,8 @@ def inspect_checkpoint(path: Path) -> Checkpoint:
         action[0],
         chunk_size,
         action_steps,
+        control,
+        control_sha,
     )
 
 

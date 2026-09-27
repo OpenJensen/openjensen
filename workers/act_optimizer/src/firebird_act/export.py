@@ -16,6 +16,7 @@ from typing import Any
 from .bundle import (
     CORE_FILES,
     canonical,
+    control_files,
     decode,
     inventory,
     publish_new_directory,
@@ -28,6 +29,7 @@ from .bundle import (
     validate_processors,
     validate_temporal_contract,
 )
+from .control_schema import metadata as control_metadata
 from .probe import FIXTURE_SEEDS, VERSIONS
 
 RECIPE = "act-vae-removal-fp32-v1"
@@ -183,7 +185,12 @@ def export_policy(
     source_files = inventory(source)
     config = read_json(source / "config.json")
     validate_config(config, source=True)
-    names = CORE_FILES | validate_processors(source, config) | temporal_files(source, config)
+    names = (
+        CORE_FILES
+        | validate_processors(source, config)
+        | temporal_files(source, config)
+        | control_files(source, config)
+    )
     temporal_bytes = None
     if temporal_source is not None:
         temporal_bytes = safe_file(temporal_source, 1024 * 1024)
@@ -226,6 +233,12 @@ def export_policy(
         for proof in (original_probe, candidate_probe):
             if any(proof.get(k, 100) != v for k, v in temporal_dimensions(config).items()):
                 raise ValueError("Probe temporal dimensions differ from saved config")
+        expected_control = control_metadata(original, config)
+        for key in ("control_contract", "control_contract_sha256"):
+            if original_probe.get(key) != expected_control.get(key) or candidate_probe.get(
+                key
+            ) != expected_control.get(key):
+                raise ValueError("Fresh export probes differ in simulator control provenance")
         parity = compare_probes(original_probe, candidate_probe)
         if inventory(candidate) != before or inventory(source) != source_files:
             raise ValueError("Source or export changed during verification")
@@ -269,6 +282,11 @@ def export_policy(
             candidate, root / "final-result.json", timeout, forbidden_sources=(source, original)
         )
         compare_probes(original_probe, final_probe)
+        if any(
+            final_probe.get(k) != expected_control.get(k)
+            for k in ("control_contract", "control_contract_sha256")
+        ):
+            raise ValueError("Final package reload lost simulator control provenance")
         if (
             final_probe["checkpoint_files"] != complete_files
             or inventory(candidate) != complete_files

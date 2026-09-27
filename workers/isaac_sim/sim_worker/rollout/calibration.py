@@ -110,3 +110,37 @@ class JointMap:
             not min(curve.policy) <= number(value, curve.name) <= max(curve.policy)
             for value, curve in zip(action, self._curves)
         )
+
+
+class SimulatorJointMap:
+    """Radian identity for an explicitly admitted simulator policy; always guarded."""
+
+    def __init__(self, spec):
+        from .control_contract import admit
+
+        self.record = admit(spec.control_contract, spec.sim)
+        self.digest = spec.control_contract["sha256"]
+        self.status = "not_applicable_simulator"
+        self.use = CalibrationUse.EXPERIMENTAL
+        self.control_metadata = {
+            "control_contract_sha256": self.digest,
+            "physical_calibration_verified": False,
+            "coordinate_mapping": "simulator_native_radians",
+        }
+
+    def to_policy(self, values):
+        if len(values) != len(self.record["joint_order"]):
+            raise ValueError("Simulator vector dimension differs from policy contract")
+        return tuple(number(value, name) for value, name in zip(values, self.record["joint_order"]))
+
+    to_sim = to_policy
+
+    def action_outside(self, action):
+        self.to_sim(action)
+        return (False,) * len(action)
+
+
+def mapping_for(spec, use=CalibrationUse.VERIFIED):
+    if spec.control_contract is not None:
+        return SimulatorJointMap(spec)
+    return JointMap(spec.calibration, spec.sim.joints, use)
