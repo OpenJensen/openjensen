@@ -206,28 +206,34 @@ def test_duplicate_json_rejected(tmp_path):
         m.read_json(p)
 
 
-def test_actual_timeout_reaps_owned_group_and_restores_signal_handlers(tmp_path):
+def test_actual_timeout_reaps_owned_group_and_restores_signal_handlers(tmp_path, monkeypatch):
     import os
     import signal
     import subprocess
 
     previous = {s: signal.getsignal(s) for s in (signal.SIGINT, signal.SIGTERM)}
-    pidfile = tmp_path / "pid"
-    source = (
-        "import os,time,pathlib;pathlib.Path("
-        + repr(str(pidfile))
-        + ").write_text(str(os.getpid()));time.sleep(30)"
-    )
+    # Observe the real process at creation, without assuming its Python startup
+    # writes a receipt before the deliberately short timeout expires under load.
+    processes = []
+    popen = subprocess.Popen
+
+    def capture(*args, **kwargs):
+        process = popen(*args, **kwargs)
+        processes.append(process)
+        return process
+
+    monkeypatch.setattr(m.subprocess, "Popen", capture)
     with pytest.raises(subprocess.TimeoutExpired):
         m.run(
-            [sys.executable, "-c", source],
+            [sys.executable, "-c", "import time; time.sleep(30)"],
             env=m.environment(tmp_path, offline=True),
             log=tmp_path / "run.log",
             timeout=0.3,
         )
-    pid = int(pidfile.read_text())
+    assert len(processes) == 1
+    assert processes[0].returncode is not None
     with pytest.raises(ProcessLookupError):
-        os.kill(pid, 0)
+        os.kill(processes[0].pid, 0)
     assert all(signal.getsignal(s) == h for s, h in previous.items())
 
 
