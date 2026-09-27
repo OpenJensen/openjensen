@@ -135,6 +135,69 @@ class RolloutLaunchTests(unittest.TestCase):
         self.dispatch = self.stack.enter_context(patch.object(launcher.subprocess, "run"))
         self.stack.enter_context(patch.object(launcher, "_run_sdk", self.dispatch))
 
+    def test_persistent_app_receipts_bind_model_and_result_prefix_before_launch(self):
+        from types import SimpleNamespace
+
+        original_prefix = self.documents[1]["envs"]["SIM_RESULTS_URI"]
+        self.task.write_text(yaml.safe_dump_all(self.documents))
+        destination = self.receipt_dir.parent / "app-receipts"
+        args = SimpleNamespace(
+            mode=launcher._Mode.EXPERIMENTAL,
+            validate_only=False,
+            yes=True,
+            detach_run=True,
+            receipt_dir=destination,
+            expected_model_id=self.model_id,
+        )
+
+        def launch(documents, path, mode, options, receipt_dir):
+            context = json.loads((receipt_dir / "launch-context.json").read_text())
+            self.assertEqual(context["model_id"], self.model_id)
+            self.assertEqual(context["group_name"], documents[0]["name"])
+            self.assertEqual(
+                context["results_prefix"], original_prefix + "/" + context["rollout_id"]
+            )
+            self.assertEqual(documents[1]["envs"]["SIM_RESULTS_URI"], context["results_prefix"])
+            self.assertEqual(options, ("--yes", "--detach-run"))
+            self.assertEqual(len(context["manifest_sha256"]), 64)
+            return 0
+
+        with patch.object(launcher, "_launch", side_effect=launch) as dispatch:
+            self.assertEqual(launcher._submit(args, self.task), 0)
+            self.assertEqual(dispatch.call_count, 1)
+            with self.assertRaises(FileExistsError):
+                launcher._submit(args, self.task)
+            self.assertEqual(dispatch.call_count, 1)
+        self.assertEqual(self.documents[1]["envs"]["SIM_RESULTS_URI"], original_prefix)
+
+    def test_expected_model_mismatch_prevents_paid_submission(self):
+        from types import SimpleNamespace
+
+        self.task.write_text(yaml.safe_dump_all(self.documents))
+        args = SimpleNamespace(
+            mode=launcher._Mode.EXPERIMENTAL,
+            validate_only=False,
+            expected_model_id="sha256:" + "f" * 64,
+        )
+        with patch.object(launcher, "_launch") as launch:
+            with self.assertRaisesRegex(ValueError, "accepted model fingerprint"):
+                launcher._submit(args, self.task)
+            launch.assert_not_called()
+
+    def test_result_prefix_mismatch_prevents_paid_submission(self):
+        from types import SimpleNamespace
+
+        self.task.write_text(yaml.safe_dump_all(self.documents))
+        args = SimpleNamespace(
+            mode=launcher._Mode.EXPERIMENTAL,
+            validate_only=False,
+            expected_results_prefix="gs://different/results",
+        )
+        with patch.object(launcher, "_launch") as launch:
+            with self.assertRaisesRegex(ValueError, "accepted profile"):
+                launcher._submit(args, self.task)
+            launch.assert_not_called()
+
     def _prepare(self, mode=launcher._Mode.ROLLOUT):
         self.task.write_text(yaml.safe_dump_all(self.documents))
         return launcher._prepare(self.task, mode)
