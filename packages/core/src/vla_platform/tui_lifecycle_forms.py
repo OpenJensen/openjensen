@@ -8,7 +8,7 @@ from textual import on
 from textual.app import ComposeResult
 from textual.containers import HorizontalScroll, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Button, Checkbox, Label, Select, Static, TextArea
+from textual.widgets import Button, Checkbox, Collapsible, Label, Select, Static, TextArea
 
 from vla_platform.cli_client import validate_acknowledgment
 from vla_platform.tui_client import ApiError, plain, segment
@@ -20,6 +20,7 @@ from vla_platform.tui_lifecycle import (
     artifact_allowed,
     canonical,
     dataset_allowed,
+    parse_recipe,
     runtime_allowed,
     template,
 )
@@ -28,6 +29,7 @@ from vla_platform.tui_policy_modes import (
     resume_context,
     visible_resume_recipe,
 )
+from vla_platform.tui_recipe_fields import RecipeFields
 
 
 class LifecycleForm(ModalScreen):
@@ -110,7 +112,9 @@ class LifecycleForm(ModalScreen):
                 "are inferred. Changing selectors does not overwrite your draft.",
                 markup=False,
             )
-            yield TextArea("{}", id="recipe-editor", show_line_numbers=True)
+            yield Button("Edit with labelled fields", id="recipe-fields")
+            with Collapsible(title="Advanced: complete JSON recipe", collapsed=True):
+                yield TextArea("{}", id="recipe-editor", show_line_numbers=True)
             yield Button("Review exact recipe", id="recipe-review", variant="primary")
             yield Static("", id="accepted-receipt", markup=False)
             yield Static("", id="lifecycle-error", markup=False)
@@ -214,6 +218,7 @@ class LifecycleForm(ModalScreen):
             "recipe-resume",
             "recipe-protocol",
             "recipe-editor",
+            "recipe-fields",
         ):
             self.query_one("#" + name).disabled = (
                 self.busy
@@ -326,7 +331,42 @@ class LifecycleForm(ModalScreen):
             if source:
                 value["training_method"] = source["metadata"].get("method")
         self.query_one("#recipe-editor", TextArea).load_text(json.dumps(value, indent=2))
-        self.message("Draft replaced. Fill required values before review.")
+        self.message("Draft replaced. Open labelled fields to choose settings, then review.")
+        self.query_one("#recipe-fields", Button).focus()
+
+    @on(Button.Pressed, "#recipe-fields")
+    def edit_fields(self):
+        if self.busy:
+            return
+        mode = str(self.query_one("#lifecycle-mode", Select).value)
+        raw = self.query_one("#recipe-editor", TextArea).text
+
+        def unchanged():
+            return (
+                self.still_current()
+                and mode == str(self.query_one("#lifecycle-mode", Select).value)
+                and raw == self.query_one("#recipe-editor", TextArea).text
+            )
+
+        def applied(value):
+            if value is None:
+                return
+            if not unchanged():
+                self.message(
+                    "Project or draft changed. Reopen the composer; no fields were applied."
+                )
+                return
+            self.edited()
+            self.query_one("#recipe-editor", TextArea).load_text(json.dumps(value, indent=2))
+            self.message("Fields applied to the draft. Review the exact recipe before submitting.")
+            self.query_one("#recipe-review", Button).focus()
+
+        try:
+            editor = RecipeFields(mode, parse_recipe(raw), self.context, unchanged)
+        except ApiError as exc:
+            self.message(str(exc))
+            return
+        self.app.push_screen(editor, applied)
 
     @on(Button.Pressed, "#recipe-copy")
     def copy(self):

@@ -76,6 +76,7 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
     dataset: { source: exportMode === 'local-dataset' ? 'local' : 'huggingface' },
     ...(exportMode?.startsWith('remote') ? { storage: 'gcs', reload_verified: exportMode === 'remote-complete', step: 20 } : {}) };
   const artifacts: Record<string, any>[] = [artifact];
+  const extraRuntimes: Record<string, any>[] = [];
   if (exportMode === 'remote-complete') {
     job.status = 'succeeded';
     telemetry.status = 'succeeded';
@@ -121,7 +122,7 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
         [`/api/v1/projects/${projectId}/artifacts`]: artifacts,
         '/api/v1/jobs/dataset/episodes': { repo_id: 'fixture/robot', revision, episodes: [], total_episodes: 10, offset: 0, limit: 6, warnings: [] },
         '/api/v1/policy-options': {
-          runtimes: [...(exportMode && exportMode !== 'unconfigured' ? [{ id: 'act-cpu', label: 'Local CPU export', provider: 'local', execution: 'native', device: 'cpu', enabled: true, training: false, act_export: true, export_only: true, engine_evaluation: false, run: false, simulation: false }] : []), { id: 'skypilot-gcp-A100', label: 'A100', accelerator: 'A100', execution: 'skypilot', provider: 'gcp', device: 'cuda', enabled: true, training: true, simulation: false, training_model_ids: localDataset ? ['smolvla', 'act'] : ['smolvla'] }],
+          runtimes: [...extraRuntimes, ...(exportMode && exportMode !== 'unconfigured' ? [{ id: 'act-cpu', label: 'Local CPU export', provider: 'local', execution: 'native', device: 'cpu', enabled: true, training: false, act_export: true, export_only: true, engine_evaluation: false, run: false, simulation: false }] : []), { id: 'skypilot-gcp-A100', label: 'A100', accelerator: 'A100', execution: 'skypilot', provider: 'gcp', device: 'cuda', enabled: true, training: true, simulation: false, training_model_ids: localDataset ? ['smolvla', 'act'] : ['smolvla'] }],
           compute: { local: { enabled: false, label: 'Local' }, gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 } },
           training_models: [
             { id: 'smolvla', label: 'SmolVLA', description: 'Compact policy', model_id: 'lerobot/smolvla_base', model_revision: revision, methods: ['lora'], suggested_gpu_memory_gb: 16 },
@@ -154,7 +155,7 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
     await page.locator('.job-history-entry[data-job-id="run-001"]').click();
     await expect(monitor).toBeVisible();
   }
-  return { telemetry, job, jobs, artifacts, monitor, submitted, unexpected, cancelled, telemetryRequests };
+  return { telemetry, job, jobs, artifacts, extraRuntimes, monitor, submitted, unexpected, cancelled, telemetryRequests };
 }
 
 async function noOverflow(page: Page) {
@@ -978,4 +979,132 @@ test('ACT export recovery at another checkpoint cannot clear a known active proj
   await expect(recovery).toContainText('Wait for active project exports to finish');
   await expect(page.getByRole('button', { name: 'I checked the export jobs; allow a new request' })).toBeDisabled();
   await expect(exportButton(page)).toBeDisabled(); expect(state.submitted).toHaveLength(1);
+});
+
+
+async function exportedPackageFixture(page: Page, configured = true) {
+  const state = await workspace(page, 'running', true, 'remote-complete');
+  if (configured) state.extraRuntimes.push({ id: 'native-act', label: 'Generated native ACT CPU worker', provider: 'local', execution: 'native', device: 'cpu', enabled: true, launchable: true, native_quantization: true, native_quantization_only: true, act_export: false, training: false, simulation: false, engine_evaluation: false, run: false });
+  const packages = ['first', 'second'].map((suffix, index) => ({
+    id: `export-${suffix}:operation`, project_id: projectId, job_id: `export-${suffix}`,
+    format: 'inference_export', label: 'ACT inference export', file_bytes: 100,
+    path: `private/${suffix}`, manifest_sha256: (index ? 'd' : 'e').repeat(64), parent_ids: ['checkpoint-artifact'],
+    metadata: { architecture: 'act', inference_only: true, use_vae: false },
+  }));
+  state.artifacts.push(...packages);
+  state.jobs.push(...packages.map(item => ({ ...state.job, id: item.job_id, kind: 'policy.export', status: 'succeeded', stage: 'operation', request: { operation: 'policy.export', runtime_id: 'act-cpu', artifact_id: 'checkpoint-artifact', training_method: 'full', timeout_seconds: 600 }, result: { decision: 'completed', artifacts: [structuredClone(item)], reports: [] } })));
+  await page.reload(); await reopenExport(page);
+  return { ...state, packages };
+}
+const exportedPackage = (page: Page, id: string) => page.getByRole('region', { name: `ACT inference package ${id}`, exact: true });
+
+test('ACT exported packages show distinct identities and hand the exact second package to native quantization', async ({ page }, testInfo) => {
+  const state = await exportedPackageFixture(page);
+  for (const item of state.packages) {
+    const card = exportedPackage(page, item.id);
+    await expect(card).toContainText(`Export ${item.job_id.slice(0, 8)}`);
+    await expect(card.getByRole('link', { name: 'Download ACT inference package' })).toHaveAttribute('href', `/api/v1/projects/${projectId}/artifacts/${encodeURIComponent(item.id)}/download`);
+    await expect(card.getByRole('button', { name: 'Quantize this package' })).toBeEnabled();
+  }
+  await noOverflow(page);
+  const exportSection = page.getByRole('region', { name: 'ACT inference export', exact: true });
+  await exportSection.screenshot({ path: testInfo.outputPath('act-export-next-actions-light.png') });
+  await page.getByRole('button', { name: 'Dark', exact: true }).click();
+  await exportSection.screenshot({ path: testInfo.outputPath('act-export-next-actions-dark.png') });
+  await page.getByRole('button', { name: 'Light', exact: true }).click();
+  await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
+  await expect(page.getByRole('button', { name: 'Native ACT · INT8 / INT4', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByLabel('ACT inference policy', { exact: true })).toHaveValue(state.packages[1].id);
+  expect(state.submitted).toEqual([]);
+  await noOverflow(page);
+  await page.screenshot({ path: testInfo.outputPath('act-export-quantization-handoff.png'), fullPage: true });
+  await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => {
+    const request = route.request().postDataJSON(); state.submitted.push(request);
+    await route.fulfill({ status: 202, json: { ...state.job, id: 'explicit-quantization', kind: 'policy.quantize', status: 'queued', request } });
+  });
+  await page.getByRole('button', { name: 'Create ACT quantized package', exact: true }).click();
+  await expect.poll(() => state.submitted.length).toBe(1);
+  expect(state.submitted).toEqual([{ operation: 'policy.quantize', runtime_id: 'native-act', artifact_id: state.packages[1].id, native_quantization: { format: 'firebird_quant', bits: 8, group_size: 64 }, timeout_seconds: 600 }]);
+  expect(state.unexpected).toEqual([]);
+});
+
+test('ACT export handoff keeps a later manual source choice through a refresh', async ({ page }) => {
+  const state = await exportedPackageFixture(page);
+  await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
+  const selected = page.getByLabel('ACT inference policy', { exact: true });
+  await expect(selected).toHaveValue(state.packages[1].id);
+  await selected.selectOption(state.packages[0].id);
+  state.artifacts.reverse();
+  await page.getByRole('button', { name: 'Refresh ACT quantization jobs', exact: true }).click();
+  await expect(selected).toHaveValue(state.packages[0].id);
+  expect(state.submitted).toEqual([]); expect(state.unexpected).toEqual([]);
+});
+
+test('ACT exported package does not fall back to an engine when the native worker is unavailable', async ({ page }) => {
+  const state = await exportedPackageFixture(page, false);
+  const card = exportedPackage(page, state.packages[0].id);
+  await expect(card.getByRole('button', { name: 'Quantize this package' })).toBeDisabled();
+  await expect(card).toContainText('A local native ACT quantization worker is not available');
+  await expect(card.getByRole('link', { name: 'Download ACT inference package' })).toBeVisible();
+  expect(state.submitted).toEqual([]);
+});
+
+for (const fault of ['remote', 'incompatible', 'unrecorded', 'manifest', 'pending'] as const) test(`ACT exported package blocks ${fault} quantization handoff without hiding its download`, async ({ page }) => {
+  const state = await exportedPackageFixture(page); const item = state.packages[0];
+  const saved = state.jobs.find(job => job.id === item.job_id)!;
+  if (fault === 'remote') Object.assign(item.metadata, { storage: 'gcs' });
+  if (fault === 'incompatible') Object.assign(item.metadata, { use_vae: true });
+  if (fault === 'unrecorded') saved.result.artifacts = [];
+  if (fault === 'manifest') saved.result.artifacts[0].manifest_sha256 = 'f'.repeat(64);
+  if (fault === 'pending') saved.status = 'running';
+  await page.reload(); await reopenExport(page);
+  const card = exportedPackage(page, item.id);
+  await expect(card.getByRole('button', { name: 'Quantize this package' })).toBeDisabled();
+  await expect(card.getByRole('status')).toContainText(fault === 'pending' ? 'Wait for this export' : fault === 'unrecorded' || fault === 'manifest' ? 'not recorded in the completed export result' : 'not a supported local ACT');
+  await expect(card.getByRole('link', { name: 'Download ACT inference package' })).toBeVisible();
+  expect(state.submitted).toEqual([]);
+});
+
+test('ACT export handoff waits for its completed history record without automatically navigating', async ({ page }) => {
+  const state = await exportedPackageFixture(page); const item = state.packages[0];
+  const original = structuredClone(state.jobs);
+  await page.route(`**/api/v1/projects/${projectId}/jobs`, route => route.fulfill({ json: original.filter(job => job.id !== item.job_id) }));
+  await page.reload(); await reopenExport(page);
+  const action = exportedPackage(page, item.id).getByRole('button', { name: 'Quantize this package' });
+  await expect(action).toBeDisabled();
+  await page.route(`**/api/v1/projects/${projectId}/jobs`, route => route.fulfill({ json: original }));
+  await page.getByRole('button', { name: 'Refresh export jobs', exact: true }).click();
+  await expect(action).toBeEnabled();
+  await expect(page.getByRole('article', { name: 'Training run monitor' })).toBeVisible();
+  expect(state.submitted).toEqual([]);
+});
+
+test('ACT export preferred package stays within its owning project', async ({ page }) => {
+  const state = await exportedPackageFixture(page);
+  await page.route('**/api/v1/projects', route => route.fulfill({ json: [{ id: projectId, name: 'Training visibility', created_at: timestamp() }, { id: 'other-project', name: 'Other project', created_at: timestamp() }] }));
+  await page.route('**/api/v1/projects/other-project/*', route => route.fulfill({ json: [] }));
+  await page.reload(); await reopenExport(page);
+  await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
+  await expect(page.getByLabel('ACT inference policy', { exact: true })).toHaveValue(state.packages[1].id);
+  await page.getByLabel('Current project', { exact: true }).selectOption('other-project');
+  await page.getByRole('button', { name: 'Native ACT · INT8 / INT4', exact: true }).click();
+  await expect(page.getByLabel('ACT inference policy', { exact: true })).toHaveValue('');
+  await expect(page.getByLabel('ACT inference policy', { exact: true }).locator(`option[value="${state.packages[1].id}"]`)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Create ACT quantized package', exact: true })).toBeDisabled();
+  expect(state.submitted).toEqual([]);
+});
+
+
+test('ACT export handoff preserves an unresolved quantization request without retrying it', async ({ page }) => {
+  const state = await exportedPackageFixture(page);
+  const key = `firebird:job-attempt:policy.quantize:${projectId}`;
+  const stored = JSON.stringify({ state: 'uncertain', message: 'Earlier ACT request has an unverified outcome.' });
+  await page.evaluate(({ key, stored }) => sessionStorage.setItem(key, stored), { key, stored });
+  await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
+  await expect(page.getByLabel('ACT inference policy', { exact: true })).toHaveValue(state.packages[1].id);
+  await expect(page.getByText('Earlier ACT request has an unverified outcome. Further submissions are paused.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Create ACT quantized package', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toBeDisabled();
+  expect(await page.evaluate(key => sessionStorage.getItem(key), key)).toBe(stored);
+  expect(state.submitted).toEqual([]);
 });

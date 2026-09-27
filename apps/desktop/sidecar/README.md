@@ -84,3 +84,62 @@ location with no repository or system Python/Node access. No freezer was install
 this slice. The complete one-directory payload, including `_internal`, must be shipped
 as a Tauri resource; copying just the executable is insufficient. Model runtimes stay
 separate. Native start/stop UI and capability changes are deliberately a later review.
+
+## Opt-in macOS ARM64 frozen experiment
+
+The packaging tools in this directory are an experimental verification path. The
+production Rust payload pin remains absent, and the desktop Start control remains
+disabled. A prepared spec or a passed harness unit test is not a frozen-package result.
+
+`requirements-build-macos-arm64.txt` pins six prebuilt build-tool wheels by exact public
+URL and SHA256. Use a new isolated CPython 3.14 build environment, `--require-hashes`,
+`--no-deps`, and the exact macOS ARM64 production core dependency closure selected from
+`uv.lock`. Do not use the development/TUI/ML extras or modify an existing environment.
+The spec makes core source discoverable before dynamic hook collection and explicitly
+targets ARM64 on macOS; no other platform build is established by this experiment.
+
+Prepare a resource directory from the independently verified static-export inputs.
+When an existing export retains older hashed assets, copy only the files in its verified
+build manifest first. Record the source input hashes, static output hashes, tool wheel
+hashes, installed versions, spec hash and build log separately. The manifest build ID
+identifies the core/static source; packaging-source changes must have their own binding.
+
+Run PyInstaller's fixed `firebird-sidecar.spec` with `FIREBIRD_DESKTOP_RESOURCES` pointing
+to that absolute directory and fresh scratch work/dist directories. Keep the complete
+one-directory output. `payload_inventory.py PAYLOAD OUTPUT_JSON` records every regular
+file's bytes, SHA256, permissions and Mach-O CPU types, all directories, and literal
+safe relative symlink targets. It rejects escaping, absolute, dangling or cyclic links
+and special entries. Limits are 20,000 entries and 2 GiB. This is evidence for a trusted
+same-user build tree, not a hostile-writer sandbox or a production payload pin.
+
+The opt-in acceptance command is:
+
+```text
+python apps/desktop/sidecar/verify_frozen.py \
+  --payload /absolute/frozen/firebird-sidecar \
+  --output /absolute/new/experiment \
+  --build-id EXACT_SOURCE_COMMIT \
+  --resource-sha256 EXACT_RESOURCES_JSON_SHA256
+```
+
+It copies the complete payload to a new location preserving links, checks every native
+file with the fixed system `otool`, and rejects unresolved/private absolute dependencies.
+It runs the executable from outside the repository with only disposable HOME/TMPDIR and
+a PATH containing no executables; no PYTHONPATH, provider configuration or credentials
+are inherited. Actual HTTP checks cover every recorded static file, health, migrations,
+SQLite integrity, a generated metadata-only intake, duplicate workspace-owner refusal,
+normal stop, parent EOF and same-build restart preserving the project/job. Negative checks
+cover static tampering, a wrong control nonce and generic Python invocation. This does
+not decode robotics video or execute a model.
+
+The harness has a 600-second outer deadline, 90-second readiness/intake observer bounds,
+30-second orderly child-exit bounds and bounded TERM/KILL cleanup. It reconciles its owned
+process group even when the direct child already exited; only kernel-confirmed absence
+is cleanup success. An unresolved cleanup error prevents a successful receipt. These
+are bounded experiment limits, not startup or latency guarantees.
+
+A receipt is written only after all checks and final original/relocated inventory checks
+pass. Retain initial failures and the complete logs. Even a passing local experiment does
+not establish Tauri-owned packaged lifecycle, upgrades, existing workspace adoption,
+clean-machine installation, notarization, other platforms or separate model runtimes.
+Those gates remain open before production payload activation.

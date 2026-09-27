@@ -56,7 +56,15 @@ choice; the terminal never installs a runtime or invents connectivity.
 Choose the workflow and inputs, then use **Build / replace draft**. Fixed adapter
 identifiers come from the API; required budgets, training method/model, episodes,
 frames, coordinate units and attestations remain null/empty until explicitly
-chosen. Edit the complete JSON in the terminal without creating a recipe file.
+chosen. Use **Edit with labelled fields** for the supported settings. It offers
+registered model/method choices, dataset cameras, explicit budgets, episode/frame
+selections, coordinate units and evaluation thresholds. The **Advanced: complete
+JSON recipe** section remains available for adapter-specific settings without a
+separate recipe file. Applying fields validates the draft locally; it sends no
+request, invalidates any previous consent and still requires fresh review. Escape
+keeps the original draft and review unchanged. Saved settings are preserved;
+changing a model/method with advanced training settings requires an explicit new
+draft so incompatible settings are not carried silently between adapters.
 The model catalog lists registered repository IDs and methods. The application
 still enforces model-specific camera, dataset and hardware requirements. **Copy
 selected job recipe** copies the entire saved request for editing; it neither
@@ -120,8 +128,10 @@ it again. Closing the terminal does not cancel an accepted application job.
 
 These recipe paths expose existing backend adapters. CPU replay is not an
 Isaac rollout or task-success evaluation. Quantization reports drift/reload evidence,
-not calibration, hardware performance or robot quality. Complete structured recipe
-editors remain follow-up work; the editable JSON form exposes the current contracts.
+not calibration, hardware performance or robot quality. The labelled editors cover
+the nine workflows above; adapter-specific options remain in the advanced recipe.
+Resume and Export expose only the execution timeout in the labelled editor,
+preserving their source identities and saved training method.
 
 ## Save an artifact from the terminal
 
