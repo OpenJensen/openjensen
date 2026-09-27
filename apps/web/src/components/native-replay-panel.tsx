@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, artifactDownloadUrl, isActive, isDatasetJob } from '@/lib/api';
 import { record, UncertainPolicyJob } from '@/lib/policy-job-mutation';
 import { storedAttempt, storeAttempt, type PolicyJobAttempt } from '@/lib/policy-job-attempt';
+import { useNativeCancellation } from '@/lib/native-cancellation-attempt';
 import { cancelReplay, readReplay, replayDataset, replayJob, replayPolicy, replayReport, replayRuntime, replaySelection, startReplay, type ReplayJob, type ReplayRecipe } from '@/lib/native-replay';
 import { Icon } from '@/components/icon';
 import './simulation-workspace.css';
@@ -36,6 +37,8 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, preferredJob
   const [error, setError] = useState(''), [cancelId, setCancelId] = useState(''), [cancelling, setCancelling] = useState(false), [observationIndex, setObservationIndex] = useState(0);
   const mounted = useRef(true), busy = useRef(false), currentId = useRef(preferredArtifactId ? '' : preferredJobId ?? ''), attemptVersion = useRef(0), preferred = useRef('');
   const policyChosenManually = useRef(false);
+  const selectionGeneration = useRef(0);
+  const cancellation = useNativeCancellation({ project: projectId, workflow: 'replay' });
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
     try { if (!client.getQueryData(attemptKey)) client.setQueryData(attemptKey, storedAttempt('policy.run.replay', projectId)); setJournalReady(true); }
@@ -58,7 +61,7 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, preferredJob
   const output = outputs[0];
   const preview = useQuery({ queryKey: ['native-replay-record', projectId, selected?.id, output?.id, output?.manifest_sha256], queryFn: () => readReplay(projectId, output!.id, selected!, report!), enabled: !!selected && !!output && !!report, retry: false });
   const observed = preview.data?.records[observationIndex];
-  function selectJob(id: string) { onJobSelected?.(id); currentId.current = id; setSelectedId(id); setCancelId(''); setObservationIndex(0); }
+  function selectJob(id: string) { selectionGeneration.current += 1; cancellation.selectionChanged(); onJobSelected?.(id); currentId.current = id; setSelectedId(id); setCancelId(''); setObservationIndex(0); }
   function saveAttempt(value: PolicyJobAttempt) {
     try { storeAttempt('policy.run.replay', projectId, value); }
     catch {
@@ -77,7 +80,7 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, preferredJob
     if (!/^\d+$/.test(timeout) || !Number.isSafeInteger(Number(timeout)) || Number(timeout) < 30 || Number(timeout) > 600) throw new Error('Choose a whole-number timeout from 30 to 600 seconds.');
     recipe = { adapter: 'act-packed-observation-v1', selection: rows, units: coordinates, coordinate_attestation: generated ? 'generated_fixture' : 'policy_recorded_coordinates' };
   } catch (cause) { invalid = cause instanceof Error ? cause.message : 'Review the observations.'; }
-  const ready = journalReady && !!projectId && options.isSuccess && !options.isError && jobs.isSuccess && !jobs.isError && artifacts.isSuccess && !artifacts.isError && !!runtime && !!policy && !!dataset && !!recipe && attested && !attempt.data && !cancelling;
+  const ready = journalReady && !!projectId && options.isSuccess && !options.isError && jobs.isSuccess && !jobs.isError && artifacts.isSuccess && !artifacts.isError && !!runtime && !!policy && !!dataset && !!recipe && attested && !attempt.data && !cancelling && cancellation.attempt?.state !== 'pending';
   async function refresh() {
     const version = attemptVersion.current, canReview = attempt.data?.state === 'uncertain';
     const response = await jobs.refetch(); void options.refetch(); void artifacts.refetch();
@@ -101,17 +104,27 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, preferredJob
     } finally { busy.current = false; }
   }
   async function cancel() {
-    if (!selected || selected.id !== cancelId || !isActive(selected) || jobs.isError || busy.current) return;
+    if (!selected || selected.id !== cancelId || !isActive(selected) || jobs.isError || busy.current || !cancellation.available || cancellation.attempt) return;
+    const generation = selectionGeneration.current;
+    const stillSelected = () => mounted.current && currentId.current === selected.id && selectionGeneration.current === generation;
     busy.current = true; setCancelling(true); setError('');
     try {
-      const job = await cancelReplay(selected, () => mounted.current && currentId.current === selected.id);
-      if (mounted.current && currentId.current === selected.id) { setAccepted(job); selectJob(job.id); }
-      await client.invalidateQueries({ queryKey: ['jobs', projectId] });
-    } catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : 'Cancellation outcome is unverified; refresh this job.'); }
-    finally { busy.current = false; if (mounted.current) { setCancelling(false); setCancelId(''); } }
+      const job = await cancellation.run(selected, stillSelected, guard => cancelReplay(selected, guard));
+      if (job && stillSelected()) { setAccepted(job as ReplayJob); selectJob(job.id); }
+    } finally { busy.current = false; if (mounted.current) { setCancelling(false); setCancelId(''); } }
   }
   return <section className="panel native-simulation native-replay native-workflow" aria-label="CPU observation replay">
     <div className="native-workflow-toolbar"><span className="native-model-badge">ACT · CPU replay</span><button className="text-link" aria-label="Refresh replay jobs" disabled={!projectId || jobs.isFetching} onClick={() => void refresh()}>Refresh</button></div>
+    {cancellation.error && <p role="alert">{cancellation.error}</p>}
+    {cancellation.receipt && <p role="status">Cancellation response for {cancellation.receipt.jobId}: {cancellation.receipt.status}. Recorded job history remains authoritative.</p>}
+    {cancellation.attempt && <section className="warning-box" aria-label="Cancellation recovery">
+      <p>{cancellation.attempt.state === 'pending' ? 'Cancellation request pending' : 'Cancellation outcome is unverified'} for {cancellation.attempt.jobId}. No automatic retry was made. Recovery is limited to this browser tab.</p>
+      {cancellation.attempt.state === 'uncertain' && <>
+        {cancellation.reviewedTarget && <p role="status">Fresh cancellation history for {cancellation.reviewedTarget.jobId}: {cancellation.reviewedTarget.status}. This is the status returned by your recovery refresh.</p>}
+        <button className="secondary-button" disabled={!cancellation.available || cancellation.refreshing} onClick={() => { const generation = selectionGeneration.current; void cancellation.refresh(generation, () => mounted.current && selectionGeneration.current === generation); }}>Refresh cancellation history</button>
+        <button className="secondary-button" disabled={!cancellation.available || !cancellation.canAcknowledge || cancellation.refreshing || jobs.isError} onClick={() => { if (!jobs.isError) cancellation.acknowledge(selectionGeneration.current); }}>I reviewed cancellation history; allow another cancellation</button>
+      </>}
+    </section>}
     {selected && <article className="native-simulation-result" aria-label="Observation replay details" data-job-id={selected.id}>
       <div className="native-result-header"><h3>CPU observation replay</h3><span className={`status status-${selected.status}`}>{selected.status}</span></div><p className="native-result-summary">{isActive(selected) ? selected.stage ?? selected.status : 'Recorded job'} · {selected.id}</p>
       {selected.error && <p role="alert">{selected.error}</p>}
@@ -121,8 +134,8 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, preferredJob
       {report && preview.isPending && output && <p role="status">Verifying the saved action record…</p>}
       {observed && preview.data && !preview.isError && <section aria-label="Predicted action chunks"><label className="distillation-history">Recorded observation<select aria-label="Recorded observation" value={observationIndex} onChange={event => setObservationIndex(Number(event.target.value))}>{preview.data.records.map((row, index) => <option key={`${row.episode_index}:${row.frame_index}`} value={index}>Episode {row.episode_index} · frame {row.frame_index}</option>)}</select></label><p>Saved processor output coordinates. Each chart has its own vertical scale.</p><div className="replay-action-grid">{preview.data.coordinate_names.map((name, index) => <ActionTrace key={`${index}-${name}`} name={name} unit={preview.data!.units[index]} values={observed.actions.map(action => action[index])} />)}</div></section>}
       {selected.status === 'succeeded' && report && outputs.map(item => <p key={item.id}><a className="secondary-button" href={artifactDownloadUrl(projectId, item.id)}>Download verified replay record</a></p>)}
-      {isActive(selected) && <><progress aria-label="Observation replay in progress" /><button className="secondary-button" disabled={cancelling || jobs.isError} onClick={() => setCancelId(selected.id)}>Cancel selected replay</button></>}
-      {cancelId === selected.id && isActive(selected) && <div className="warning-box" role="group" aria-label="Confirm replay cancellation"><p>Stop this job and its owned CPU worker?</p><button className="secondary-button" disabled={cancelling || jobs.isError} onClick={() => void cancel()}>Confirm cancellation</button><button className="text-link" disabled={cancelling} onClick={() => setCancelId('')}>Keep running</button></div>}
+      {isActive(selected) && <><progress aria-label="Observation replay in progress" /><button className="secondary-button" disabled={cancelling || jobs.isError || !cancellation.available || !!cancellation.attempt} onClick={() => setCancelId(selected.id)}>Cancel selected replay</button></>}
+      {cancelId === selected.id && isActive(selected) && <div className="warning-box" role="group" aria-label="Confirm replay cancellation"><p>Stop this job and its owned CPU worker?</p><button className="secondary-button" disabled={cancelling || jobs.isError || !cancellation.available || !!cancellation.attempt} onClick={() => void cancel()}>Confirm cancellation</button><button className="text-link" disabled={cancelling} onClick={() => setCancelId('')}>Keep running</button></div>}
       <WorkbenchDisclosure title="Replay activity and provenance">{events.isError && <p role="alert">Activity is unavailable.</p>}<pre className="cloud-log-tail">{events.data?.map(item => `${item.timestamp} · ${item.stage} · ${item.message}`).join('\n') || 'No recorded activity yet.'}</pre>{result && <pre className="cloud-log-tail">{JSON.stringify(result.reports, null, 2)}</pre>}</WorkbenchDisclosure>
     </article>}
     {history.length > 0 && <label className="distillation-history">Saved replay<select aria-label="Saved replay" value={selected?.id ?? ''} onChange={event => selectJob(event.target.value)}><option value="">Choose a recorded replay</option>{history.map(item => <option key={item.id} value={item.id}>{item.id.slice(0, 8)} · {item.status}</option>)}</select></label>}
@@ -135,7 +148,7 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, preferredJob
         <a className="text-link" href={publicPath('/guide/#run')}>Set up replay</a>
         <button className="primary-button" disabled>Run CPU observation replay</button>
       </div> : <>
-      <fieldset className="native-simulation-form simulation-setup" disabled={!projectId || !!attempt.data || cancelling}><legend className="visually-hidden">Explicit observation selection</legend>
+      <fieldset className="native-simulation-form simulation-setup" disabled={!projectId || !!attempt.data || cancelling || cancellation.attempt?.state === 'pending'}><legend className="visually-hidden">Explicit observation selection</legend>
         <section className="simulation-step" aria-labelledby="replay-policy-title">
           <h3 id="replay-policy-title">Policy</h3>
           <div className="simulation-choice-grid" role="radiogroup" aria-label="Packed ACT policy">

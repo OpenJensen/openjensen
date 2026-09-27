@@ -16,6 +16,7 @@ import { NativeSimulationPanel } from '@/components/native-simulation-panel';
 import { CloudRuns } from '@/components/cloud-runs';
 import { WorkflowPanel } from '@/components/workflow-panel';
 import { TeachingPanel } from '@/components/teaching-panel';
+import { RecordingPreparationPanel } from '@/components/recording-preparation-panel';
 import { DecisionPanel } from '@/components/decision-panel';
 import { TrainingPanel } from '@/components/training-panel';
 import { AugmentationPanel } from '@/components/augmentation-panel';
@@ -311,8 +312,8 @@ function Workbench() {
   const entryPending = (activeStage === 3 && !quantizeMode) || (activeStage === 5 && !runMode);
   const entryFailed = jobs.isError || options.isError || (activeStage === 5 && simulation.isError);
   const recoveryError = entryError?.projectId === workflowProjectId && entryError.stage === activeStage ? entryError.message : null;
-  const sortedJobs = [...(jobs.data ?? [])].filter(isDatasetJob).sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const selectedJob = sortedJobs.find(job => job.id === selectedJobId) ?? sortedJobs[0];
+  const sortedJobs = [...(jobs.data ?? [])].filter(job => job.project_id === workflowProjectId).filter(isDatasetJob).sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const selectedJob = selectedJobId ? sortedJobs.find(job => job.id === selectedJobId) : sortedJobs[0];
   const connected = health.isSuccess && !health.isError;
 
   const stage = stages[activeStage] ?? stages[0];
@@ -361,6 +362,7 @@ function Workbench() {
               <div className="activity-heading"><div><h2 id="activity-title">Dataset inspection</h2></div><button type="button" className="secondary-button" onClick={() => setDatasetView('sources')}>Change source</button></div>
               <ErrorNotice error={jobs.error} />
               {jobs.isPending && projectId && <p className="loading-note" role="status">Loading inspections…</p>}
+              {selectedJobId && !selectedJob && !jobs.isPending && <p className="warning-box" role="alert">Selected inspection {selectedJobId} is unavailable in this project. Another dataset has not been substituted. Refresh or choose a source explicitly.</p>}
               {selectedJob && <>
                 {sortedJobs.length > 1 && <div className="history-control"><label htmlFor="inspection-history">History</label><select id="inspection-history" value={selectedJob.id} onChange={event => setSelectedJobId(event.target.value)}>{sortedJobs.map(job => <option key={job.id} value={job.id}>{job.request.repo_id || 'Local dataset'} · {displayDate(job.created_at)} · {job.status}</option>)}</select></div>}
                 <JobDetail key={selectedJob.id} job={selectedJob} projectId={projectId} />
@@ -372,7 +374,7 @@ function Workbench() {
           {jobs.error && datasetView === 'sources' && <ErrorNotice error={jobs.error} />}
         </div>
         {activeStage === 8 && <AugmentationPanel key={projectId} projectId={workflowProjectId} preferredDatasetId={selectedJob?.id} onOpenSettings={() => { setSettingsTab('compute'); navigateStage(6); }} onChooseDataset={() => { navigateStage(0); setDatasetView('sources'); }} />}
-        {activeStage === 9 && <TeachingPanel />}
+        {activeStage === 9 && <><TeachingPanel /><RecordingPreparationPanel key={workflowProjectId} projectId={workflowProjectId} onInspect={job => { navigateStage(0); setSelectedJobId(job.id); setDatasetView('inspection'); }} onTrain={job => startTrainingOnDataset(job.id)} /></>}
         {activeStage === 10 && <DecisionPanel />}
         {(activeStage === 1 || activeStage === 6) && <div className="training-view" hidden={activeStage !== 1}><TrainingPanel active={activeStage === 1} key={projectId} projectId={workflowProjectId} startNew={startTraining} showJobsRequest={trainingNavigation} preferredRunId={openTrainingRun?.projectId === projectId ? openTrainingRun.id : undefined} preferredDatasetId={selectedJob?.id} onChooseDataset={() => { setActiveStage(0); setDatasetView('sources'); }} onDiagnostics={() => { setSettingsTab('diagnostics'); setActiveStage(6); }} onComputeSettings={() => { setSettingsTab('compute'); setActiveStage(6); }} onQuantize={artifactId => { chooseQuantize('gguf', 'handoff'); setQuantizeArtifact({ projectId, artifactId }); setWorkflowNavigation(value => value + 1); setActiveStage(3); }} onNativeQuantize={artifactId => { navigateStage(3); setQuantizeArtifact({ projectId: workflowProjectId, artifactId }); chooseQuantize('native', 'handoff'); }} /></div>}
         {activeStage === 7 && <CloudRuns key={workflowProjectId} projectId={workflowProjectId} onOpenSimulation={id => { setOpenSimulation({ projectId: workflowProjectId, id }); chooseRun('native', 'handoff', id); setActiveStage(5); }} onOpenTraining={id => { setStartTraining(undefined); setOpenTrainingRun({ projectId: workflowProjectId, id }); setActiveStage(1); }} />}
