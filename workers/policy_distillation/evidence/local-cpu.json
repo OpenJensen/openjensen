@@ -1,0 +1,190 @@
+{
+  "schema_version": 1,
+  "source_base": "55f5da0bf1911e5f722204c28d67e5a61bc20953",
+  "platform": "macOS Apple Silicon CPU",
+  "source_files_sha256": {
+    "workers/policy_distillation/README.md": "a825b16fa611b603b38ed5b6d9f3c136e767ed1c4a6904d96b848d6cf56b4427",
+    "workers/policy_distillation/pyproject.toml": "b965cbd580e1c2deea220e8ac1238834e28b1d284e069e4cf750837b4576dc1d",
+    "workers/policy_distillation/src/firebird_distill/__init__.py": "6e692853220b6a5d748bfc3f86cdf452441839efa0a853528d484be469141cae",
+    "workers/policy_distillation/src/firebird_distill/application.py": "dbe20d4fca39c7c097f6f98b46cac22f36505f1d8414b6548a7ece7a2b417a73",
+    "workers/policy_distillation/src/firebird_distill/contracts.py": "de16f7998ed223e33224e6d4850ef09676545c9ce87d4bccbf7a7ee04c4e972f",
+    "workers/policy_distillation/src/firebird_distill/prepare.py": "35aedaa3d5c85e0468ea86f2199139664dada82ada78ca6d0a6dbbaa7b52e4ab",
+    "workers/policy_distillation/src/firebird_distill/runtime.py": "e2dee8698f9712f82e20ef3f78ba16d640439068bfebc8fe198ebc1121ca1a36",
+    "workers/policy_distillation/tests/conftest.py": "6523c164cce4c306dfcff0ae004ee719a6b5c2e4fb53a7d5f5f01b6bc765dd93",
+    "workers/policy_distillation/tests/test_contracts.py": "f2d98a0ed09cd8f433119b4a43124de6b42305e63412e1f3061d49285b7f8568",
+    "workers/policy_distillation/tests/test_owner.py": "5b493b2c40afa7577805ef4ebc4782a0a8ef695cf6d9dccbb838026b190602f5",
+    "workers/policy_distillation/tests/test_training.py": "1992f2af178806a97926c04fe8ebe37f78c68b7470cba747ac44fee25abd8e47"
+  },
+  "runtime_versions": {
+    "lerobot": "0.6.1",
+    "safetensors": "0.8.0",
+    "torch": "2.11.0",
+    "torchvision": "0.26.0"
+  },
+  "runtime_source": {
+    "cpu_threads": 1,
+    "files": {
+      "configuration_act.py": "35a60c0dd3c811b137b5eb035bdbd40d40e2c24ba0cda61756052e6e1c829282",
+      "modeling_act.py": "a6c1a49c5daafa513b9abee9b986205d327e25c70ed13623ab2e6c0ab6b1f577",
+      "processor_act.py": "247d3b13c93568c1fb35349716f8c3b6a53c2e7a5c8b098928471172b0bf0ef2"
+    },
+    "python": "3.12.14"
+  },
+  "tests": {
+    "passed": 41,
+    "failures": 0,
+    "skips": 0,
+    "duration_seconds": 29.32,
+    "command": "OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PYTHONPATH=workers/policy_distillation/src:workers/act_optimizer/src ACT_PYTHON -m pytest workers/policy_distillation/tests -q -p no:cacheprovider"
+  },
+  "supplied_teacher": {
+    "identity": "user-supplied act_step29000",
+    "files": {
+      "config.json": {
+        "bytes": 1526,
+        "sha256": "8af7d3652bf1b807ab254462a1c1a78618e6311b85580cd3756e19af012c7959"
+      },
+      "model.safetensors": {
+        "bytes": 206699736,
+        "sha256": "d90ae86d912a0cb35650e547ae6c39094b9ebd34253f6d7af39636cb0225c80c"
+      },
+      "policy_postprocessor.json": {
+        "bytes": 660,
+        "sha256": "648b415125a183dfd6cbc47c1dc04ab3f2d912654ef22a12ca5e8b93d7d85cdd"
+      },
+      "policy_postprocessor_step_0_unnormalizer_processor.safetensors": {
+        "bytes": 6560,
+        "sha256": "c0888f490010c463b319496a9219802576fdf3fb40c44c07d8c2043dc2c636c9"
+      },
+      "policy_preprocessor.json": {
+        "bytes": 1154,
+        "sha256": "9f334e79f5ab63ae6e1d7ffe31343b181db7a6ed2c837c5bfa4745b586045a67"
+      },
+      "policy_preprocessor_step_3_normalizer_processor.safetensors": {
+        "bytes": 6568,
+        "sha256": "b201aad77f8b4b7801115647bd6e6a861dfb0585cb8c77386304af5c02544679"
+      },
+      "train_config.json": {
+        "bytes": 5825,
+        "sha256": "75dbcc42296a8d9f90083ce3b28fc7be94a15431fc25fcf527cc2097c71d16a1"
+      }
+    },
+    "source_unchanged": true,
+    "observations": "Six generated RGB/state observations in three generated episode/lineage groups; not recorded data",
+    "recipe": {
+      "adapter": "act-act-v1",
+      "learning_rate": 0.0001,
+      "seed": 1729,
+      "steps": 4,
+      "student": "act-256"
+    },
+    "metrics": {
+      "steps": 4,
+      "student_parameters": 13969606,
+      "trainable_parameters": 2802694,
+      "teacher_weights_bytes": 206699736,
+      "teacher_inference_tensor_bytes": 136972568,
+      "student_weights_bytes": 55971416,
+      "untuned_student": {
+        "train": {
+          "demonstration_per_coordinate_l1": [
+            5.95170783996582,
+            57.65245246887207,
+            67.84381357828777,
+            61.96719233194987,
+            23.145472526550293,
+            16.10746494928996
+          ],
+          "teacher_normalized_l1": 0.6207174857457479,
+          "teacher_normalized_rmse": 0.7870001705319755,
+          "valid_action_coordinates": 36
+        },
+        "validation": {
+          "demonstration_per_coordinate_l1": [
+            6.478569269180298,
+            54.72154744466146,
+            67.39066823323567,
+            62.23096466064453,
+            18.82355848948161,
+            16.602665901184082
+          ],
+          "teacher_normalized_l1": 0.6127055750952827,
+          "teacher_normalized_rmse": 0.7803470394903071,
+          "valid_action_coordinates": 36
+        }
+      },
+      "trained_student": {
+        "final": {
+          "demonstration_per_coordinate_l1": [
+            12.980233669281006,
+            50.72132682800293,
+            39.061360677083336,
+            33.07804775238037,
+            22.550058364868164,
+            18.156134605407715
+          ],
+          "teacher_normalized_l1": 0.3902670542399089,
+          "teacher_normalized_rmse": 0.5691733399833553,
+          "valid_action_coordinates": 36
+        },
+        "train": {
+          "demonstration_per_coordinate_l1": [
+            12.302674929300943,
+            51.870033264160156,
+            39.04830106099447,
+            33.46202532450358,
+            23.208550771077473,
+            18.485370953877766
+          ],
+          "teacher_normalized_l1": 0.3673204051123725,
+          "teacher_normalized_rmse": 0.5316623882292956,
+          "valid_action_coordinates": 36
+        },
+        "validation": {
+          "demonstration_per_coordinate_l1": [
+            12.583917935689291,
+            50.59974988301595,
+            38.8882942199707,
+            33.95646095275879,
+            20.706910451253254,
+            18.85554854075114
+          ],
+          "teacher_normalized_l1": 0.33858611848619247,
+          "teacher_normalized_rmse": 0.4890188859227909,
+          "valid_action_coordinates": 36
+        }
+      },
+      "fresh_reload_verified": true,
+      "elapsed_seconds": 11.357684582995716
+    },
+    "native_model_id": "sha256:3226311318bb555f31c40b3854950a5121a86c2b766ce0de998a9b4341f8e062",
+    "artifact_manifest_sha256": "dd9889f0c765b77878b77134b60971ec091bd3604ddc653910af77f6cb2f57d2",
+    "artifact_payload_files_verified": 9,
+    "queue_reset_full_chunks_verified": 6
+  },
+  "native_dataset_reader_proof": {
+    "scope": "Genuine native LeRobot0.6.2 writer\u2192snapshot\u2192reader of generated scenes; no recorded-data quality",
+    "frames": 24,
+    "episodes": 6,
+    "groups": 3,
+    "prepared_samples": 12,
+    "source_snapshot_sha256": "4a698269e1858e233268c2776f637ee9e6ff1e0d0a1be5b389c9d93811a88c31",
+    "prepared_corpus_sha256": "8ccdc300707f126fe2a734d05909f7e820f96eab1fff57dde0a974dd2cdd33e3",
+    "limitation": "Preparation proof preceded the sampling-loop optimization; final model identity/config-type compatibility comes from the final41 suite and supplied-teacher proof, not the earlier generated policy artifact."
+  },
+  "limitations": [
+    "Generated observations; no recorded-data policy generalization",
+    "No robot/Isaac rollout, task success, calibration, speedup or GPU claim",
+    "Inference student only, not resumable optimizer checkpoint",
+    "No app/API/UI integration yet",
+    "No remote/GitHub/cloud action or environment dependency change",
+    "Preparation has bounded data but no wall-clock supervisor",
+    "Teacher training data overlap and redistribution terms remain unknown"
+  ],
+  "historical_diagnostics": [
+    "Initial35 passed; later38/1 test-only PIDfile startup assumption under contention fixed using actual owned Popen handle",
+    "Native saved ACT bool became int0 through upstream annotation; final student explicitly writes unchangedFalse and shared native identity regression passes",
+    "Optional supplied-teacher proof deliberately cancelled to free UI resources, then same source/request rerun successfully alone"
+  ],
+  "independent_source_review": "independent-review.json: all11 hashes bound and independently executed41 passed,0failed,0skipped"
+}

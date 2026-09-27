@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=71,<82"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "firebird-policy-distillation"
+version = "0.1.0"
+description = "Offline ACT action-chunk teacher/student distillation"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[project.optional-dependencies]
+cpu = ["lerobot==0.6.1", "torch==2.11.0", "torchvision==0.26.0", "safetensors==0.8.0"]
+
+[project.scripts]
+firebird-distill = "firebird_distill.application:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "../act_optimizer/src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
