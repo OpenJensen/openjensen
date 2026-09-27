@@ -1,0 +1,188 @@
+{
+  "completed_at": "2026-09-27T00:27:19.615240+00:00",
+  "status": "offline_diagnostics_complete_calibration_unverified",
+  "dataset": "codywang/so101_pickup_test",
+  "dataset_revision": "ecef85bc07005f771ad86deeff1427f9d72953ed",
+  "data_sha256": "49bb7229183d5a3c89052a61a7a57d425fb6c3a6c78ae758c1f03f6f1531e729",
+  "simulation_started": false,
+  "cloud_jobs_started": false,
+  "runtime_inputs_unchanged": true,
+  "runtime_sha256": {
+    "workers/isaac_sim/scenes/so101-pickup/calibration.experimental.yaml": "f30af28c1fa64bd90ca2ec8297aca404126407b692e6649bac588e1dbb764e14",
+    "workers/isaac_sim/scenes/so101-pickup/scene.usda": "d6c286dc816825a6ca4a4dd05e8aa6989777da6a8144a0ab2a6c0133f9fd3dcd",
+    "workers/isaac_sim/scenes/so101-pickup/scene.episode-001.usda": "fad74343f872c34cfb0c545e305218a93703a99a65140763a914387413a8dc9f",
+    "workers/isaac_sim/scenes/so101-pickup/rollout.episode-001.yaml": "2fff3d43eb260bb19408b878941ef64eabb4a5815a520476ae39225345b0af1e",
+    "workers/isaac_sim/scenes/so101-pickup/robot/source/so101_new_calib.urdf": "3a65d2d35e68a8d2f0c2cc176d19b884506543c93ba72980145b80abe276022c"
+  },
+  "visual_split": {
+    "train_episodes": [
+      0,
+      2
+    ],
+    "train_frames": 9,
+    "train_points": 50,
+    "heldout_episodes": [
+      1,
+      3
+    ],
+    "heldout_frames": 10,
+    "heldout_points": 51,
+    "candidate_selection": "training_objective_only"
+  },
+  "current_camera_map_heldout": {
+    "requested": {
+      "points": 51,
+      "rms_px": 24.56670048452223,
+      "median_px": 22.606274278113943,
+      "p95_px": 39.58353919214423,
+      "max_px": 42.8743835265256
+    },
+    "clipped": {
+      "points": 51,
+      "rms_px": 25.860522600252892,
+      "median_px": 25.181759237603384,
+      "p95_px": 39.978102620959305,
+      "max_px": 42.8743835265256
+    }
+  },
+  "candidates": [
+    {
+      "name": "fixed_current_camera_roll_positive",
+      "train_rms_px_at_1920": 21.302581479173174,
+      "heldout_rms_px_at_1920": 23.359522243697125,
+      "heldout_max_px_at_1920": 50.29104636909152,
+      "shelf_rms_px_at_1920": 19.35334330967352,
+      "accepted": false,
+      "state_rows_requiring_clipping": 0,
+      "action_rows_requiring_clipping": 0
+    },
+    {
+      "name": "free_camera_roll_positive",
+      "train_rms_px_at_1920": 10.500238989258557,
+      "heldout_rms_px_at_1920": 12.013649155669468,
+      "heldout_max_px_at_1920": 27.253703157437364,
+      "shelf_rms_px_at_1920": 200.02939624565127,
+      "accepted": false,
+      "state_rows_requiring_clipping": 0,
+      "action_rows_requiring_clipping": 0
+    },
+    {
+      "name": "fixed_current_camera_roll_negative",
+      "train_rms_px_at_1920": 20.874160451928077,
+      "heldout_rms_px_at_1920": 23.23572302443729,
+      "heldout_max_px_at_1920": 52.64775211559529,
+      "shelf_rms_px_at_1920": 19.35334330967352,
+      "accepted": false,
+      "state_rows_requiring_clipping": 0,
+      "action_rows_requiring_clipping": 0
+    },
+    {
+      "name": "free_camera_roll_negative",
+      "train_rms_px_at_1920": 8.602665172622833,
+      "heldout_rms_px_at_1920": 13.056490716857873,
+      "heldout_max_px_at_1920": 46.88690449998565,
+      "shelf_rms_px_at_1920": 183.00776417903697,
+      "accepted": false,
+      "state_rows_requiring_clipping": 0,
+      "action_rows_requiring_clipping": 0
+    },
+    {
+      "name": "jaw_geometry_sensitivity",
+      "train_rms_px_at_1920": 7.865760853092566,
+      "heldout_rms_px_at_1920": 12.459294735194387,
+      "heldout_max_px_at_1920": 44.44152498036914,
+      "shelf_rms_px_at_1920": 197.1050926654754,
+      "accepted": false,
+      "state_rows_requiring_clipping": 0,
+      "action_rows_requiring_clipping": 0
+    }
+  ],
+  "selected_candidate": "free_camera_roll_negative",
+  "candidate_acceptance": {
+    "status": "unverified",
+    "accepted": false,
+    "checks": {
+      "heldout_rms": false,
+      "heldout_max": false,
+      "solver_converged": true,
+      "no_active_bounds": false,
+      "offset_uncertainty": false,
+      "gripper_uncertainty": false,
+      "full_support_inside_urdf": true,
+      "independent_geometry": false,
+      "independent_sign_evidence": false
+    },
+    "failures": [
+      "heldout_rms",
+      "heldout_max",
+      "no_active_bounds",
+      "offset_uncertainty",
+      "gripper_uncertainty",
+      "independent_geometry",
+      "independent_sign_evidence"
+    ],
+    "thresholds": {
+      "heldout_rms_px": 9.0,
+      "heldout_max_px": 24.0,
+      "angle_std_deg": 2.0
+    },
+    "conditional_offset_std_deg": {
+      "shoulder_lift_offset": 4.678608984936712,
+      "elbow_flex_offset": 0.8309416430032034,
+      "wrist_flex_offset": 1.4401064279675126,
+      "wrist_roll_offset": 3.1047961877388643
+    },
+    "conditional_gripper_endpoint_std_deg": [
+      {
+        "policy": 0.0,
+        "std_deg": 6.994788807020235
+      },
+      {
+        "policy": 44.0230827331543,
+        "std_deg": 5.398987354134656
+      }
+    ],
+    "uncertainty_warning": "Local covariance conditions on chosen signs and assumed geometry. Active bounds and imposed priors prevent independent physical confidence."
+  },
+  "decision": "Do not replace the active map or camera; no candidate satisfies validation.",
+  "action_audit_episode_1": {
+    "action_extrapolated": 0,
+    "state_outside_limits": 84,
+    "joint_limit_clipped": 80,
+    "guard_offset_clipped": 261
+  },
+  "action_audit_all_episodes": {
+    "action_extrapolated": 0,
+    "state_outside_limits": 2312,
+    "joint_limit_clipped": 2220,
+    "guard_offset_clipped": 7320
+  },
+  "action_audit_note": "Counts are joint components, not distinct frames. Guards use recorded states offline; physics tracking remains untested.",
+  "recorded_actions_adapter": "sim_worker/calibration_fit/recorded_policy.py; tested through existing Rollout with a fake driver only",
+  "checks": {
+    "repo_tests_passed": 51,
+    "export_roundtrip_vectors_checked": 9000,
+    "cli_reproduced_all_candidates_exactly": true,
+    "overlay_video": {
+      "decoded_frames": 150,
+      "fps": 30.0,
+      "sizes": [
+        [
+          1920,
+          604
+        ]
+      ],
+      "duration_seconds": 5.0,
+      "continuous_timestamps": true
+    },
+    "ruff_passed": true,
+    "git_diff_check_passed": true,
+    "independent_code_review": "No consequential findings"
+  },
+  "remaining_validation": [
+    "Independent camera/base and jaw geometry evidence",
+    "Joint sign/unit convention and limit consistency",
+    "Recorded-action physics tracking/contact replay (not started)",
+    "Learned policy rerun (not started)"
+  ]
+}

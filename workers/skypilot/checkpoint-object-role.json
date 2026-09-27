@@ -1,0 +1,11 @@
+{
+  "title": "Firebird checkpoint objects",
+  "description": "Read and create checkpoint objects; update metadata. No deletion or overwrite.",
+  "stage": "GA",
+  "includedPermissions": [
+    "storage.objects.create",
+    "storage.objects.get",
+    "storage.objects.list",
+    "storage.objects.update"
+  ]
+}

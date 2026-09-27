@@ -12,6 +12,23 @@ _PROJECT = "simulation-test-project"
 
 
 class LauncherTests(unittest.TestCase):
+    def test_caller_checkpoint_path(self):
+        # Relative checkpoints must resolve from the caller, not the script directory.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            worker = root / "launcher"
+            binary = worker / ".venv/bin/python"
+            binary.parent.mkdir(parents=True)
+            binary.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$PWD" "$1"\n')
+            binary.chmod(0o755)
+            shutil.copy(_ROOT / "launch-rollout.sh", worker)
+            result = subprocess.run(
+                ["bash", str(worker / "launch-rollout.sh"), "--checkpoint", "model"],
+                cwd=root, capture_output=True, text=True, check=True,
+            )
+            expected = [str(root), str(worker / "rollout_launch.py")]
+            self.assertEqual(result.stdout.splitlines(), expected)
+
     def _run(self, args, files=None, missing=None, environment_probe=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

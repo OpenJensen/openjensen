@@ -1,4 +1,4 @@
-name: isaac-act-motion
+name: isaac-policy-motion
 execution: parallel
 primary_tasks:
 - isaac
@@ -23,7 +23,7 @@ envs:
   ACCEPT_EULA: null
   SIM_IMAGE: us-east4-docker.pkg.dev/project-5693e83a-db3a-43e1-98c/simulation/isaac-worker@sha256:3c3203e337e45f45ab9537b29927e50b750944f981cc069275842233ad069f82
   SIM_MANIFEST: scenes/so101-pickup/rollout.experimental.yaml
-  SIM_RESULTS_URI: gs://project-5693e83a-db3a-43e1-98c-sim-results/act-motion-tests
+  SIM_RESULTS_URI: gs://project-5693e83a-db3a-43e1-98c-sim-results/policy-motion-tests
   SIM_SETUP_TIMEOUT: '2400'
   SIM_SETUP_KILL_GRACE: '60'
   SIM_JOB_TIMEOUT: '1800'

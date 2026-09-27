@@ -30,6 +30,47 @@ First-video episodes 0–3 and the first frame of video 7 were visually inspecte
 all 30 episode metadata records were checked. This scene represents episode 0,
 not every episode's changing cup position.
 
+### Episode 1 profile
+
+`scene.episode-001.usda` matches the successful episode 1 starting arrangement.
+`episode-001.json` records its source frame, initial joint state, fitted props,
+and **5-second rollout (150 steps at 30 Hz)**. The baseline scene is unchanged.
+
+| Cup measurement | Baseline | Episode 1 fit |
+| --- | --- | --- |
+| Height | 10.50 cm | 10.22 cm |
+| Upper body diameter | 7.40 cm | 8.31 cm |
+| Bottom diameter | 5.00 cm | 5.53 cm |
+| Horizontal distance from robot base | 31.26 cm | 25.14 cm |
+
+The cup bottom is at `(-0.2247814, -0.0291302, 0.2005)` m. Its visual mesh,
+open wall colliders, label surface, center of mass, and inertia are rebuilt
+together. The box opening is fitted to 27.17 × 19.17 cm; its estimated height
+stays 20 cm. Camera and shelf geometry retain the original shelf fit.
+
+Cup contour error on held-out stationary frames is 0.98 px at 1920×1080
+(0.33 px at policy resolution). Box corner RMS improves from 17.94 to 5.91 px
+at policy resolution. Measurements and limitations are in `evidence/episode-001/`.
+These image fits do **not** establish physical scale: shelf width remains an
+assumed 1 m. The rolled cup lip, torn box rim, lighting, and contact properties
+remain approximate. The unverified joint map still clips the initial shoulder
+lift by 11.42°; matching prop geometry does not validate robot calibration.
+
+Rebuild and validate:
+
+```sh
+python build_episode.py
+python validate.py scene.episode-001.usda
+python -m unittest discover -s . -p test_episode.py
+```
+
+For SkyPilot, copy `workers/skypilot/rollout.experimental.example.yaml` to a local
+task file and set its Isaac `SIM_MANIFEST` to
+`scenes/so101-pickup/rollout.episode-001.yaml`. Launch with `--checkpoint` to select
+ACT or SmolVLA and `--experimental`. The selector updates model identity and
+action horizon while preserving the 150-step duration. No GPU validation of
+this profile is claimed by the local structure tests or Blender preview.
+
 The robot is a fixed-base articulation with six position drives. The cup is
 dynamic with separate wall colliders; the box and shelving are static colliders.
 The cup and box remain open. The stage holds the reconstructed starting pose;

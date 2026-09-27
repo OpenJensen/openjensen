@@ -1,0 +1,112 @@
+{
+  "record_type": "historical_simulation",
+  "run_id": "3c5956faf983408da406e0752f75a12e",
+  "started_at": "2026-09-27T00:47:39.794990+00:00",
+  "finished_at": "2026-09-27T00:55:54.108409+00:00",
+  "dataset": {
+    "id": "codywang/so101_pickup_test",
+    "revision": "ecef85bc07005f771ad86deeff1427f9d72953ed",
+    "episode": 1
+  },
+  "policy": {
+    "type": "SmolVLA",
+    "model_id": "sha256:8151bbe697c2d8190fcdcb3e820d596d5bf04f6a15998f086e217d9c2db5efa1"
+  },
+  "control": {
+    "fps": 30,
+    "physics_hz": 120,
+    "steps": 300,
+    "seconds": 10,
+    "policy_requests": 6
+  },
+  "candidate": {
+    "name": "free_camera_roll_negative",
+    "status": "unverified",
+    "accepted": false,
+    "failures": [
+      "heldout_rms",
+      "heldout_max",
+      "no_active_bounds",
+      "offset_uncertainty",
+      "gripper_uncertainty",
+      "independent_geometry",
+      "independent_sign_evidence"
+    ],
+    "paired_camera_and_map": true,
+    "input_sha256": {
+      "scene_layer": "271ec5db23901d7ca65cfc67f5edd07f92831d742d522db982944aa4ad40584e",
+      "joint_map": "4b03b4ab0b58bdf209cb268f9ae50ba8470b8854aa1f8f1dc9f1ab4450dc28d5",
+      "rollout_manifest": "8e4ad877aa03d88489b35c0fa4430196e98c974e60d77c57fe709c6bffaadb45",
+      "episode_profile": "b9e4c7b15af0518b66d69f08e50deaac6002db4f8b56f47bbf6fa538cbda2303"
+    },
+    "camera": {
+      "world_position_m": [
+        0.7684940557257608,
+        -3.80936560779158,
+        1.367268997913137
+      ],
+      "focal_mm": 112.49999999999824,
+      "focal_pixels_at_1920": 5999.999999999906
+    }
+  },
+  "camera_comparison": {
+    "shelf_rms_px_at_640": {
+      "default_shelf_fit": 6.45111443655784,
+      "trial_candidate": 61.00258805967899
+    },
+    "heldout_robot_rms_px_at_1920": {
+      "default_map_with_urdf_clipping": 25.860522600252892,
+      "trial_candidate": 13.056490716857873
+    },
+    "heldout_robot_max_px_at_1920": 46.88690449998565,
+    "acceptance_thresholds_px_at_1920": {
+      "heldout_rms": 9.0,
+      "heldout_max": 24.0
+    },
+    "limitations": [
+      "Shelf references are diagnostic, from episode 0, and use an assumed 1 m shelf width.",
+      "Robot scores compare paired camera/map systems, not camera changes alone.",
+      "The candidate focal length reached its fit bound; neither camera is measured calibration."
+    ],
+    "decision": "Keep the default shelf-fit camera; do not promote the rejected candidate camera or map."
+  },
+  "outcome": {
+    "scenario_success": false,
+    "calibration_validated": false,
+    "validation_status": "partial",
+    "description": "The cup tipped onto its side on the shelf; no sampled lift or box placement.",
+    "sampled_lift_met": false,
+    "maximum_whole_cup_clearance_m": 6.130711430696323e-05,
+    "required_lift_clearance_m": 0.01,
+    "required_lift_duration_s": 0.2,
+    "whole_cup_inside_box_samples": 0,
+    "placement_geometry_met": false,
+    "final_cup_tilt_deg": 82.3060937688435,
+    "shoulder_action_extrapolations": 43,
+    "shoulder_joint_limit_clips": 43,
+    "measured_joint_limit_violations": 0,
+    "execution_checks_passed": 41,
+    "contacts": {
+      "status": "unavailable",
+      "missing_samples": 301,
+      "cause": "Probe bundle discovery searched only two directory levels and failed for the nested scene.",
+      "analysis": "Recovered geometry from saved live poses and frozen profile dimensions; contact forces, grasp and release remain unvalidated."
+    }
+  },
+  "execution": {
+    "simulation_launches": 1,
+    "additional_simulations": 0,
+    "infrastructure_recoveries": 0,
+    "managed_group_status": "SUCCEEDED",
+    "isaac_status": "SUCCEEDED",
+    "vla_status": "CANCELLED",
+    "vla_cancellation": "Supporting task cancelled automatically after the primary Isaac task finished."
+  },
+  "cleanup": {
+    "verified_at": "2026-09-27T00:58:34.920155+00:00",
+    "gpu_workers_remaining": 0,
+    "managed_jobs_in_progress": 0,
+    "single_start_claim_retained": true
+  },
+  "configuration_note": "This historical run remains 10 seconds. The 5-second default applies to future runs and has not been simulated."
+}
