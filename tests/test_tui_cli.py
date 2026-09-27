@@ -6,9 +6,19 @@ import sys
 
 import httpx
 from typer.testing import CliRunner
-from vla_platform import cli
+from vla_platform import cli, cli_client
 
 runner = CliRunner()
+
+
+def mock_api(monkeypatch, handler):
+    from vla_platform.tui_client import ApiClient
+
+    monkeypatch.setattr(
+        cli_client,
+        "client",
+        lambda: ApiClient("http://127.0.0.1", transport=httpx.MockTransport(handler)),
+    )
 
 
 def test_help_version_and_no_textual_import():
@@ -28,7 +38,7 @@ def test_help_version_and_no_textual_import():
 
 
 def test_json_stdout_and_transport_error_stderr(monkeypatch):
-    monkeypatch.setattr(httpx, "request", lambda *a, **kw: httpx.Response(200, json=[{"id": "p"}]))
+    mock_api(monkeypatch, lambda request: httpx.Response(200, json=[{"id": "p"}]))
     result = runner.invoke(cli.app, ["projects", "list"])
     assert result.exit_code == 0 and json.loads(result.stdout) == [{"id": "p"}]
     assert not result.stderr
@@ -36,14 +46,14 @@ def test_json_stdout_and_transport_error_stderr(monkeypatch):
     def offline(*a, **kw):
         raise httpx.ConnectError("fixture offline")
 
-    monkeypatch.setattr(httpx, "request", offline)
+    mock_api(monkeypatch, offline)
     result = runner.invoke(cli.app, ["projects", "list"])
     assert result.exit_code == 1 and not result.stdout
     assert "Cannot reach" in result.stderr
 
 
 def test_bad_json_and_recipe_are_actionable_without_tracebacks(tmp_path, monkeypatch):
-    monkeypatch.setattr(httpx, "request", lambda *a, **kw: httpx.Response(200, text="not json"))
+    mock_api(monkeypatch, lambda request: httpx.Response(200, text="not json"))
     result = runner.invoke(cli.app, ["jobs", "list", "p"])
     assert result.exit_code == 1 and "invalid JSON" in result.stderr
     for raw in ("{", "[]"):

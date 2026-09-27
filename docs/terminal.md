@@ -41,10 +41,67 @@ Cancellation requires an explicit confirmation whose safe default is “Keep job
 
 The noninteractive CLI continues to emit JSON to stdout and errors to stderr. `firebird --version` and command help work without the extra. `firebird inspect PROJECT --path DATASET --snapshot-for-training` exposes the same local snapshot request. Recipe files must be regular JSON objects of at most 1 MiB; reads are bounded and named pipes are rejected.
 
+## Follow lifecycle jobs from the CLI
+
+Existing commands remain noninteractive and emit JSON. The application remains the
+only scheduler: `policy submit` can submit the current fine-tuning, native ACT
+distillation/quantization/replay, or supported engine recipe; the server validates
+the complete recipe and configured capability. A successful submission is a job
+receipt, not completed training or robot-task acceptance.
+
+```sh
+firebird policy options
+firebird policy submit PROJECT recipe.json
+firebird jobs wait JOB --timeout 600 --interval 2
+firebird jobs events JOB
+firebird policy artifacts PROJECT
+firebird policy download PROJECT ARTIFACT --output ./new-policy.tar
+```
+
+Replace `PROJECT`, `JOB` and `ARTIFACT` with the IDs in the actual API records.
+Waiting sends only GET requests. It prints the final job record and exits `0` for
+`succeeded`, `1` for `failed`, `cancelled` or `interrupted`, and `124` when its
+observation deadline expires. The timeout range is 1–86400 seconds; polling is
+0.1–30 seconds. An unavailable/invalid API response stops the wait with an error.
+Ctrl+C exits the client (`130`) without cancelling the job. Cancellation remains a
+separate explicit `firebird jobs cancel JOB` command.
+
+Downloads use an explicit **new file on the CLI computer**, never a server path.
+The parent directory must exist. The command resolves the project-owned registry
+record, streams a TAR response to a private temporary file, and rechecks that the
+registered artifact is unchanged before publishing without replacement. Existing
+files and symlinks are rejected, including a destination created during transfer.
+Failures/cancellation remove only the command's own partial file. No archive is
+extracted and no registered source is modified.
+
+The default byte limit is 4 GiB and the deadline is 600 seconds. Adjust them explicitly
+with `--max-bytes BYTES` (1 byte through 100 GiB) and `--timeout SECONDS` (1–3600).
+Both declared and actual response lengths are checked; redirects, compressed HTTP
+responses and unexpected media types are refused. An independently known archive
+checksum can be required with `--expected-sha256 HEX`. The deadline bounds async
+network observation; synchronous local writes and filesystem flushes can take
+longer before control returns. It is not a hard filesystem-operation time limit.
+
+The receipt reports received bytes, their SHA256 and the unchanged registered
+manifest identity. The archive checksum and registered manifest checksum are
+**different identities**. Without `--expected-sha256`, the receipt's checksum is a
+measurement of received bytes, not comparison against an independent source. The
+CLI does not independently certify archive contents, runtime compatibility,
+calibration or task quality.
+
+All CLI JSON requests now share the terminal transport's endpoint validation,
+15-second total request deadline and 8 MiB response cap, and ignore proxy environment
+variables. HTTP redirects are not successful responses. A lost/invalid response or
+server error after a POST reports an unknown outcome and never automatically
+repeats that POST; inspect the recorded jobs/projects before making another request.
+Successful write acknowledgments must match the project/job, operation and stable
+input identities. The server may resolve dataset branches/local paths or restore
+checkpoint-owned training settings; the CLI does not invent those identities.
+
 ## Verification
 
 ```sh
-uv run --frozen --extra tui pytest tests/test_tui.py tests/test_tui_cli.py tests/test_tui_integration.py -q
+uv run --frozen --extra tui pytest tests/test_tui.py tests/test_tui_cli.py tests/test_tui_integration.py tests/test_cli_client.py tests/test_cli_workflow.py -q
 ```
 
 Pilot tests exercise keyboard navigation, forms, 48×18 terminal resizing, stale/invalid responses, selection changes, offline recovery, explicit cancellation and non-retried ambiguous writes. The integration test starts a disposable loopback API on an ephemeral port, creates a real project, runs actual local metadata intake and a supervised slow protocol fixture, cancels that fixture, reads the same records with the CLI, and restarts the API to verify persistence. It never contacts a model provider or cloud service. Fixture evidence is not training, robot-quality or hardware evidence.
