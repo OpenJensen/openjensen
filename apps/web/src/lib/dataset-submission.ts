@@ -1,3 +1,4 @@
+import { recordingRecipe, recordingReceipt, recordingRequest } from './recording-preparation';
 import type { AugmentationRequest, IntakeRequest, Job } from './api';
 import { record, sameJson, UncertainPolicyJob } from './policy-job-mutation';
 
@@ -16,6 +17,14 @@ function acknowledgement(value: unknown, project: string, operation: string): Re
 export function intakeAcknowledgement(value: unknown, project: string, original: unknown): Job {
   const job = acknowledgement(value, project, 'dataset.inspect');
   if (!record(original)) throw new UncertainPolicyJob();
+  if (original.recordings != null) {
+    // Recording intake deliberately has a null host path. Its exact normalized
+    // recipe is shared with the recording panel, and the full accepted job stays intact.
+    const recipe = recordingRecipe(original.recordings);
+    if (!sameJson(recordingRequest(recipe), original)) throw new UncertainPolicyJob();
+    recordingReceipt(job, project, recipe);
+    return job as unknown as Job;
+  }
   const body = original as IntakeRequest;
   const request = job.request as Record<string, unknown>;
   if (request.source !== body.source || (request.snapshot_for_training ?? false) !== (body.snapshot_for_training ?? false) ||
@@ -53,4 +62,16 @@ export function validatedProjectHistory(value: unknown, project: string): Job[] 
     acknowledgement(job, project, job.kind);
   }
   return value as Job[];
+}
+
+/** An unkeyed intake cannot be replaced while a known intake may still be running. */
+export function reviewedIntakeHistory(value: unknown, project: string): Job[] {
+  const history = validatedProjectHistory(value, project);
+  if (history.length > 10000) throw new Error('Project history exceeds its review limit.');
+  for (const job of history) {
+    if (job.kind !== 'dataset.inspect') continue;
+    if ('recordings' in job.request && job.request.recordings != null) recordingReceipt(job, project);
+    if (job.status === 'queued' || job.status === 'running') throw new Error(`Dataset intake ${job.id} is still ${job.status}. Inspect its saved job before clearing legacy recovery.`);
+  }
+  return history;
 }
