@@ -582,6 +582,10 @@ class Lifecycle:
         raise ValueError("Checkpoint lineage is too deep")
 
     async def validate(self, project_id: str, request: PolicyRequest):
+        if request.native_quantization is not None:
+            from vla_platform.lifecycle.native_quantization import validate
+
+            return await validate(self, project_id, request)
         if request.simulation is not None:
             from vla_platform.lifecycle.simulation import validate
 
@@ -590,6 +594,8 @@ class Lifecycle:
         if runtime is None:
             raise ValueError("Runtime is not configured on this application host")
         self.compute.require_enabled(runtime)
+        if runtime.native_quantization_only:
+            raise ValueError("This runtime supports the explicit native quantization recipe only")
         if runtime.export_only and request.operation != "policy.export":
             raise ValueError("This runtime supports ACT inference export only")
         cloud_target = None
@@ -633,6 +639,10 @@ class Lifecycle:
             await self.resume_checkpoint(project_id, request.resume_job_id)
         if request.artifact_id:
             artifact = await self.artifact(project_id, request.artifact_id)
+            if artifact.format == "native_quantized":
+                raise ValueError(
+                    "Packed ACT packages are download-only; Run and evaluation are unverified"
+                )
             if artifact.format == "inference_export":
                 raise ValueError(
                     "Inference exports are downloadable policies, not training or evaluation inputs"
@@ -952,7 +962,7 @@ class Lifecycle:
             else:
                 raise asyncio.CancelledError
 
-    async def stop(self, process, container_name: str | None):
+    async def stop(self, process, container_name: str | None, *, grace_seconds=5):
         if container_name:
             cleanup = await asyncio.create_subprocess_exec(
                 "docker",
@@ -987,7 +997,7 @@ class Lifecycle:
             else:
                 process.terminate()
             try:
-                await asyncio.wait_for(process.wait(), 5)
+                await asyncio.wait_for(process.wait(), grace_seconds)
             except TimeoutError:
                 if os.name == "posix":
                     try:
@@ -1005,9 +1015,13 @@ class Lifecycle:
                 except ProcessLookupError:
                     pass
 
-    async def act_stop_owned(self, process):
+    async def act_stop_owned(self, process, *, grace_seconds=5):
         """Finish ACT child cleanup despite repeated cancellation, then propagate it."""
-        finish = asyncio.create_task(self.stop(process, None))
+        finish = asyncio.create_task(
+            self.stop(process, None)
+            if grace_seconds == 5
+            else self.stop(process, None, grace_seconds=grace_seconds)
+        )
         interrupted = False
         while not finish.done():
             try:
@@ -1018,7 +1032,7 @@ class Lifecycle:
         if interrupted:
             raise asyncio.CancelledError
 
-    async def act_spawn_owned(self, *args, **kwargs):
+    async def act_spawn_owned(self, *args, grace_seconds=5, **kwargs):
         """Register an ACT copy/export child before honouring cancellation."""
         spawning = asyncio.create_task(asyncio.create_subprocess_exec(*args, **kwargs))
         interrupted = False
@@ -1029,7 +1043,10 @@ class Lifecycle:
                 interrupted = True
         process = spawning.result()
         if interrupted:
-            await self.act_stop_owned(process)
+            if grace_seconds == 5:
+                await self.act_stop_owned(process)
+            else:
+                await self.act_stop_owned(process, grace_seconds=grace_seconds)
             raise asyncio.CancelledError
         return process
 
@@ -1407,6 +1424,10 @@ class Lifecycle:
 
     async def run(self, job: Job):
         request = job.request
+        if request.native_quantization is not None:
+            from vla_platform.lifecycle.native_quantization import run
+
+            return await run(self, job)
         if request.simulation is not None:
             from vla_platform.lifecycle.simulation import run
 

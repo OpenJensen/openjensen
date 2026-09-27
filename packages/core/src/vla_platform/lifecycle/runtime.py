@@ -24,6 +24,9 @@ class Runtime(StrictRecord):
     python: str = "python"
     worker_root: str | None = None
     export_only: bool = False
+    native_quantization_only: bool = False
+    native_quantization_python: str | None = Field(default=None, min_length=1)
+    native_quantization_root: str | None = Field(default=None, min_length=1)
     conversion_python: str | None = None
     conversion_image: str | None = None
     evaluation_python: str | None = None
@@ -55,7 +58,26 @@ class Runtime(StrictRecord):
 
     @model_validator(mode="after")
     def registered_training_models(self):
-        if self.export_only:
+        if bool(self.native_quantization_python) != bool(self.native_quantization_root):
+            raise ValueError("Native quantization interpreter and worker root must be paired")
+        if self.native_quantization_python and (
+            self.execution != "native" or self.provider != "local" or self.device != "cpu"
+        ):
+            raise ValueError("Native quantization requires a local CPU runtime")
+        if self.native_quantization_only:
+            if (
+                not self.native_quantization_python
+                or self.export_only
+                or self.act_export_python
+                or self.act_export_root
+                or self.training_python
+                or self.training_root
+                or self.simulator_lane
+                or self.image
+                or self.training_image
+            ):
+                raise ValueError("Packed-only runtime requires a CPU worker without other backends")
+        elif self.export_only:
             if (
                 not self.act_export_python
                 or self.device != "cpu"
@@ -126,6 +148,8 @@ class PublicRuntime(StrictRecord):
     device: Literal["cpu", "cuda"]
     training: bool
     act_export: bool = False
+    native_quantization: bool = False
+    native_quantization_only: bool = False
     export_only: bool = False
     training_model_ids: list[str]
     simulation: bool
@@ -179,12 +203,14 @@ class RuntimeCatalog(StrictRecord):
                     "training": bool(x.training_python and x.training_root),
                     "act_export": bool(x.act_export_python and x.act_export_root),
                     "export_only": x.export_only,
+                    "native_quantization": native_quantization_ready(x),
+                    "native_quantization_only": x.native_quantization_only,
                     "training_model_ids": (
                         x.training_model_ids if x.training_python and x.training_root else []
                     ),
                     "simulation": bool(x.simulator_lane),
-                    "engine_evaluation": not x.export_only,
-                    "run": not x.export_only,
+                    "engine_evaluation": not (x.export_only or x.native_quantization_only),
+                    "run": not (x.export_only or x.native_quantization_only),
                     "gpu_name": x.gpu_name,
                     "gpu_memory_mib": x.gpu_memory_mib,
                     # The current native trainer uses one device per run. This
@@ -197,6 +223,23 @@ class RuntimeCatalog(StrictRecord):
             ],
             "sources": [{"id": x.id, "label": x.label, "task": x.task} for x in self.sources],
         }
+
+
+def native_quantization_ready(runtime: Runtime) -> bool:
+    """Configured files permit an attempt; this is not validation of model weights."""
+    if not runtime.native_quantization_python or not runtime.native_quantization_root:
+        return False
+    python = Path(runtime.native_quantization_python)
+    root = Path(runtime.native_quantization_root)
+    return (
+        os.name == "posix"
+        and python.is_absolute()
+        and python.is_file()
+        and os.access(python, os.X_OK)
+        and root.is_absolute()
+        and (root / "src/firebird_quant/native_application.py").is_file()
+        and (root.parent / "act_optimizer/src/firebird_act/application.py").is_file()
+    )
 
 
 def command(
@@ -212,6 +255,8 @@ def command(
 ):
     if runtime.execution != "native":
         raise ValueError("SkyPilot targets must execute through the cloud runner")
+    if runtime.native_quantization_only:
+        raise ValueError("This runtime supports native ACT quantization only")
     if runtime.export_only and not act_export:
         raise ValueError("This runtime supports ACT inference export only")
     if act_export:
