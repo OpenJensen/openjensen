@@ -157,3 +157,12 @@ CI is configured for Torch 2.2.2 / NumPy 1.26.4 and Torch 2.11.0 / NumPy 2.2.6
 on Linux CPU and participates in the required native worker verification gate.
 The initial PR's hosted jobs did not start because of the account billing block;
 workflow configuration is not a completed hosted test result.
+
+## Optional native ACT package worker
+
+The [native ACT package operation](NATIVE_ACT.md) preserves complete saved
+processors and source lineage around packed weights, measures full-chunk drift
+from FP32, and verifies an independent packed-only CPU reload before publication.
+It accepts the existing bounded ACT inference recipe. It does not, by itself,
+enable app Quantize or Isaac loading, qualify native SmolVLA, or establish
+hardware/task quality. It reuses the existing isolated ACT environment unchanged.
