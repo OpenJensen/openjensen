@@ -38,6 +38,7 @@ async function teaching(page: Page, connected = true) {
       '/api/v1/capabilities': [],
       '/api/v1/projects': [{ id: 'teaching', name: 'Teaching test', created_at: '2026-09-27T00:00:00Z' }],
       '/api/v1/projects/teaching/jobs': [],
+      '/api/v1/projects/teaching/recordings/options': { configured: false, runtime_verified: false, configuration_sha256: null, max_episodes: 100, max_source_bytes: 8589934592, setup_message: 'Recording preparation is not configured in this fixture.' },
       '/api/v1/teaching/state': { connected, state: connected ? state : null, message: connected ? null : 'Connect a teaching executor in the application host configuration.', voice_configured: changes.voiceConfigured },
     };
     if (request.method() === 'GET' && path in replies) { await route.fulfill({ json: replies[path] }); return; }
