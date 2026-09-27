@@ -98,19 +98,24 @@ at this demonstration export, then restart only `firebird-public`.
 
 The link opens the real fine-tuning history. Visitors can view projects, saved
 jobs, training metrics, loss curves, checkpoints and policy results. The gateway
-allows only explicit read routes without authentication. Creating, cancelling or
-changing jobs, account settings, external cloud inventory, and artifact downloads
-still require the existing owner credentials. New API routes remain private by
-default. The public export disables owner actions and does not send mutations.
+allows explicit read routes and public Hugging Face metadata inspection without
+authentication. Inspection accepts a bounded, validated request and uses the
+existing metadata worker and revision cache; local files and full dataset copies
+remain private. Cloud runs shows the application’s recorded GCP jobs and events,
+with the optional external simulator feed shown separately. Starting or cancelling
+cloud compute, changing account settings, and downloading artifacts still require
+owner access. New API routes remain private by default.
 This is a view of the live application, not simulated training data.
 
 The default remains authenticated access when `public_readonly` is omitted or
 false. Restore the prior config and public export path to roll back; keep a
 private backup of both the gateway code and config before switching. Verify an
 anonymous GET to `/firebird/` and `/firebird/api/v1/projects` succeeds, a saved
-job's training telemetry loads, and anonymous writes and account reads return
+job's training telemetry loads, public Hub inspection returns its job, and
+anonymous cloud-job launches and account reads return
 403 without a browser authentication challenge.
 
 Focused checks: `pytest tests/test_public_gateway.py`; after building the demo
 export, run `playwright test -c tests/web/public-demo.config.ts`. The latter covers
-desktop and mobile history, actual returned metrics, and disabled owner actions.
+desktop and mobile history, inspection submission, cloud-job events, navigation
+to training results, and disabled owner actions.

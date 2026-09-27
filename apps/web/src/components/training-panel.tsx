@@ -164,6 +164,7 @@ export function TrainingPanel({
   onQuantize,
   startNew,
   showJobsRequest,
+  openRunId,
   active = true,
 }: {
   projectId: string;
@@ -174,10 +175,11 @@ export function TrainingPanel({
   onQuantize?: (artifactId: string) => void;
   startNew?: { id: number; datasetId?: string };
   showJobsRequest?: number;
+  openRunId?: string;
   active?: boolean;
 }) {
   const client = useQueryClient();
-  const [view, setView] = useState<"jobs" | "new" | "run">(startNew ? "new" : "jobs");
+  const [view, setView] = useState<"jobs" | "new" | "run">(openRunId ? "run" : startNew ? "new" : "jobs");
   const [step, setStep] = useState(0);
   const [datasetId, setDatasetId] = useState(preferredDatasetId ?? "");
   const [cameraSelections, setCameraSelections] = useState<
@@ -194,7 +196,7 @@ export function TrainingPanel({
   const [resumeId, setResumeId] = useState("");
   const [recipe, setRecipe] = useState(defaults);
   const [loaded, setLoaded] = useState(false);
-  const [selectedRunId, setSelectedRunId] = useState("");
+  const [selectedRunId, setSelectedRunId] = useState(openRunId ?? "");
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (!active) return;
@@ -568,7 +570,7 @@ export function TrainingPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startNew?.id]);
   useEffect(() => {
-    if (!startNew) setView("jobs");
+    if (!startNew && !openRunId) setView("jobs");
     // Sidebar navigation changes the view while preserving the creation draft.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showJobsRequest]);

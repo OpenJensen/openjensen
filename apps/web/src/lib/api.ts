@@ -96,8 +96,9 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit, timeoutMs = 15_000): Promise<T> {
-  if (publicDemo && init?.method && !["GET", "HEAD"].includes(init.method.toUpperCase())) {
-    throw new ApiError("This public demo is read-only. New jobs and changes are available in the owner workspace.", 403);
+  const publicInspection = init?.method === "POST" && /^\/projects\/[A-Za-z0-9_-]+\/intakes$/.test(path);
+  if (publicDemo && init?.method && !["GET", "HEAD"].includes(init.method.toUpperCase()) && !publicInspection) {
+    throw new ApiError("Starting cloud jobs and changing settings require the owner workspace.", 403);
   }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);

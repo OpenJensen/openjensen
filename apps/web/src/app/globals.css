@@ -536,3 +536,7 @@ input::placeholder { color: var(--muted); opacity: .8; }
 
 .public-demo-banner { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 0 0 24px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
 .public-demo-banner span { color: var(--muted); }
+.managed-cloud-jobs { margin-bottom: 24px; }
+.managed-cloud-jobs > h3 { margin: 18px 0 10px; }
+.external-cloud-observations > summary { cursor: pointer; font-weight: 600; }
+.external-cloud-observations[open] > summary { margin-bottom: 20px; }

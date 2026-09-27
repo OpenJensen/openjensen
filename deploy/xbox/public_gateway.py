@@ -21,6 +21,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response, StreamingResponse
 from starlette.routing import Route
 from starlette.staticfiles import StaticFiles
+from vla_platform.contracts import IntakeRequest
 
 PREFIX = "/firebird"
 UPSTREAM = httpx.URL("http://127.0.0.1:8096")
@@ -207,6 +208,7 @@ def public_read_allowed(path):
         "/api/v1/projects",
         "/api/v1/capabilities",
         "/api/v1/policy-options",
+        "/api/v1/cloud-runs",
     }:
         return True
     return (
@@ -215,6 +217,14 @@ def public_read_allowed(path):
             r"jobs/[A-Za-z0-9_-]+(?:/(?:events|training|episodes(?:/[0-9]+)?))?)",
             path,
         )
+        is not None
+    )
+
+
+def public_inspection(scope):
+    return (
+        scope["method"] == "POST"
+        and re.fullmatch(PREFIX + r"/api/v1/projects/[A-Za-z0-9_-]+/intakes", scope["path"])
         is not None
     )
 
@@ -326,14 +336,18 @@ class PublicGateway:
             response = self.error(scope, 404, "Not found")
         elif (
             self.config.public_readonly
-            and not (scope["method"] in {"GET", "HEAD"} and public_read_allowed(scope["path"]))
+            and not (
+                scope["method"] in {"GET", "HEAD"}
+                and public_read_allowed(scope["path"])
+                or public_inspection(scope)
+            )
             and not await self.authenticated(scope)
         ):
             # Do not trigger a browser login dialog while someone explores the demo.
             response = JSONResponse(
                 {
                     "detail": (
-                        "This public demo is read-only. Cloud jobs, downloads "
+                        "This action requires owner access. Cloud jobs, downloads "
                         "and account settings require owner access."
                     )
                 },
@@ -361,6 +375,39 @@ class PublicGateway:
 
     async def handle(self, request: Request):
         path = request.scope["path"][len(PREFIX) :] or "/"
+        content = request.stream()
+        if (
+            self.config.public_readonly
+            and public_inspection(request.scope)
+            and not await self.authenticated(request.scope)
+        ):
+            # Public intake only reads bounded public Hub metadata. Local paths,
+            # snapshots and lifecycle operations never cross this exception.
+            raw = bytearray()
+            try:
+                async with asyncio.timeout(10):
+                    async for chunk in request.stream():
+                        raw.extend(chunk)
+                        if len(raw) > 8192:
+                            return self.error(request.scope, 413, "Inspection request is too large")
+                payload = IntakeRequest.model_validate_json(bytes(raw))
+            except ValueError, TimeoutError:
+                return JSONResponse(
+                    {"detail": "Provide a valid public Hugging Face dataset and revision."},
+                    status_code=422,
+                    headers=SECURITY_HEADERS,
+                )
+            if (
+                payload.source != "huggingface"
+                or payload.path is not None
+                or payload.snapshot_for_training
+            ):
+                return JSONResponse(
+                    {"detail": "Public inspection supports Hugging Face datasets only."},
+                    status_code=403,
+                    headers=SECURITY_HEADERS,
+                )
+            content = payload.model_dump_json().encode()
         if request.scope["path"] == PREFIX:
             response = RedirectResponse(PREFIX + "/", status_code=307)
         elif path == "/api" or path.startswith("/api/") or path == "/openapi.json":
@@ -375,7 +422,7 @@ class PublicGateway:
             try:
                 upstream = await self.client.send(
                     self.client.build_request(
-                        request.method, url, headers=headers, content=request.stream()
+                        request.method, url, headers=headers, content=content
                     ),
                     stream=True,
                 )

@@ -40,7 +40,7 @@ export function WorkspaceShell({
     <div className="main-shell">
       <header className="topbar"><div className="breadcrumb">{breadcrumb}</div><div className="topbar-actions"><a className="mobile-api-link" href={apiReferenceUrl} aria-label="API reference"><Icon name="book" size={18} /></a><ThemeToggle /></div></header>
       <main id="main" className={`main-content${contentClassName ? ` ${contentClassName}` : ''}`} tabIndex={-1}>
-        {publicDemo && <p className="public-demo-banner" role="status"><strong>Public demo</strong><span>Real training jobs and results · View only</span></p>}
+        {publicDemo && <p className="public-demo-banner" role="status"><strong>Public demo</strong><span>Inspect datasets and explore real training runs</span></p>}
         {children}
       </main>
     </div>

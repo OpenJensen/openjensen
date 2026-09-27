@@ -15,16 +15,18 @@ function feed(runs: ReturnType<typeof run>[], errors: { run_id: string | null; m
 async function openCloud(page: Page) {
   await page.goto('/');
   await page.getByRole('button', { name: 'Cloud runs', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Application cloud jobs' })).toBeVisible();
+  await page.getByText('External simulator monitor', { exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Cloud run monitor' })).toBeVisible();
 }
 
-test('cloud monitor is disabled by default and never launches a job', async ({ page, request }) => {
+test('external cloud monitor is disabled by default and never launches a job', async ({ page, request }) => {
   // Read the real test application, not an invented enabled response.
   expect((await (await request.get('/api/v1/cloud-runs')).json()).enabled).toBe(false);
   const posts: string[] = [];
   page.on('request', req => { if (req.method() === 'POST') posts.push(req.url()); });
   await openCloud(page);
-  await expect(page.getByText('Cloud monitoring is not configured.', { exact: false })).toBeVisible();
+  await expect(page.getByText('External simulator monitoring is not configured.', { exact: false })).toBeVisible();
   await expect(page.getByLabel('Cloud run', { exact: true })).toHaveCount(0);
   expect(posts).toEqual([]);
 });

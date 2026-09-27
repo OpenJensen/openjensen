@@ -111,6 +111,7 @@ def test_public_demo_serves_real_history_metrics_and_assets_without_login(config
             "/api/v1/projects",
             "/api/v1/policy-options",
             "/api/v1/capabilities",
+            "/api/v1/cloud-runs",
             "/api/v1/projects/project-1/jobs",
             "/api/v1/projects/project-1/artifacts",
             "/api/v1/jobs/job-1",
@@ -137,7 +138,6 @@ def test_public_demo_serves_real_history_metrics_and_assets_without_login(config
         ("PUT", "/api/v1/huggingface-connection"),
         ("DELETE", "/api/v1/cloud-connections/gcp"),
         ("GET", "/api/v1/cloud-connections"),
-        ("GET", "/api/v1/cloud-runs"),
         ("GET", "/api/v1/compute-settings"),
         ("GET", "/api/v1/huggingface-connection"),
         ("GET", "/api/v1/projects/p/artifacts/a/download"),
@@ -156,7 +156,7 @@ def test_public_demo_blocks_writes_accounts_downloads_and_unknown_apis(config, m
     ) as client:
         response = client.request(method, "/firebird" + path, headers={"Origin": ORIGIN})
         assert response.status_code == 403
-        assert "read-only" in response.json()["detail"]
+        assert "owner access" in response.json()["detail"]
         assert "www-authenticate" not in response.headers
 
 
@@ -188,6 +188,77 @@ def test_public_demo_preserves_authenticated_owner_writes_and_origin_checks(conf
 def test_public_access_requires_explicit_boolean(config, value):
     with pytest.raises(ValueError, match="Invalid gateway configuration"):
         gateway.GatewayConfig.from_value({**config[1], "public_readonly": value})
+
+
+def test_public_dataset_inspection_reaches_existing_metadata_worker_api(config):
+    received = []
+
+    async def upstream(request):
+        received.append((request, json.loads(await request.aread())))
+        return httpx.Response(202, stream=Chunks(b'{"id":"inspection-job"}'))
+
+    public = gateway.GatewayConfig.from_value({**config[1], "public_readonly": True})
+    with TestClient(
+        gateway.PublicGateway(public, transport=httpx.MockTransport(upstream)), base_url=ORIGIN
+    ) as client:
+        response = client.post(
+            "/firebird/api/v1/projects/project-1/intakes",
+            headers={"Origin": ORIGIN},
+            json={"source": "huggingface", "repo_id": "lerobot/pusht", "revision": "main"},
+        )
+        assert response.status_code == 202
+        assert response.json()["id"] == "inspection-job"
+        request, body = received[0]
+        assert request.url.path == "/api/v1/projects/project-1/intakes"
+        assert body["source"] == "huggingface" and body["repo_id"] == "lerobot/pusht"
+        assert body["path"] is None and body["snapshot_for_training"] is False
+        assert "authorization" not in request.headers
+
+
+@pytest.mark.parametrize(
+    "body,status",
+    [
+        ({"source": "local", "path": "/private/dataset"}, 403),
+        ({"source": "huggingface", "repo_id": "owner/dataset", "snapshot_for_training": True}, 422),
+        ({"source": "huggingface", "repo_id": "owner/dataset", "runtime_id": "paid-gpu"}, 422),
+        ({"source": "huggingface", "repo_id": "../../private"}, 422),
+    ],
+)
+def test_public_inspection_rejects_local_paths_snapshots_and_extra_operations(config, body, status):
+    def forbidden(_request):
+        raise AssertionError("Invalid public intake reached the backend")
+
+    public = gateway.GatewayConfig.from_value({**config[1], "public_readonly": True})
+    with TestClient(
+        gateway.PublicGateway(public, transport=httpx.MockTransport(forbidden)), base_url=ORIGIN
+    ) as client:
+        response = client.post(
+            "/firebird/api/v1/projects/p/intakes", headers={"Origin": ORIGIN}, json=body
+        )
+        assert response.status_code == status
+        assert "www-authenticate" not in response.headers
+
+
+def test_public_inspection_keeps_origin_and_payload_bounds(config):
+    def forbidden(_request):
+        raise AssertionError("Rejected request reached the backend")
+
+    public = gateway.GatewayConfig.from_value({**config[1], "public_readonly": True})
+    with TestClient(
+        gateway.PublicGateway(public, transport=httpx.MockTransport(forbidden)), base_url=ORIGIN
+    ) as client:
+        path = "/firebird/api/v1/projects/p/intakes"
+        for headers in [
+            {},
+            {"Origin": "https://elsewhere.example"},
+            {"Origin": ORIGIN, "Sec-Fetch-Site": "cross-site"},
+        ]:
+            assert (
+                client.post(path, headers=headers, json={"repo_id": "owner/dataset"}).status_code
+                == 403
+            )
+        assert client.post(path, headers={"Origin": ORIGIN}, content=b"x" * 8193).status_code == 413
+        assert client.post(path, headers={"Origin": ORIGIN}, content=b"not json").status_code == 422
 
 
 @pytest.mark.parametrize(
