@@ -31,6 +31,7 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, onDataset }:
   const [timeout, setTimeoutValue] = useState('600'), [selectedId, setSelectedId] = useState(''), [accepted, setAccepted] = useState<ReplayJob | null>(null);
   const [error, setError] = useState(''), [cancelId, setCancelId] = useState(''), [cancelling, setCancelling] = useState(false), [observationIndex, setObservationIndex] = useState(0);
   const mounted = useRef(true), busy = useRef(false), currentId = useRef(''), attemptVersion = useRef(0), preferred = useRef('');
+  const policyChosenManually = useRef(false);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
     try { if (!client.getQueryData(attemptKey)) client.setQueryData(attemptKey, storedAttempt('policy.run.replay', projectId)); setJournalReady(true); }
@@ -42,7 +43,7 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, onDataset }:
   const policy = policies.find(item => item.id === policyId);
   const datasets = (jobs.data ?? []).filter(isDatasetJob).filter(item => replayDataset(item, projectId));
   const dataset = datasets.find(item => item.id === datasetId);
-  useEffect(() => { if (preferredArtifactId && preferred.current !== preferredArtifactId && policies.some(item => item.id === preferredArtifactId)) { preferred.current = preferredArtifactId; setPolicy(preferredArtifactId); setAttested(false); } }, [preferredArtifactId, artifacts.data, projectId]);
+  useEffect(() => { if (!policyChosenManually.current && preferredArtifactId && preferred.current !== preferredArtifactId && policies.some(item => item.id === preferredArtifactId)) { preferred.current = preferredArtifactId; setPolicy(preferredArtifactId); setAttested(false); } }, [preferredArtifactId, artifacts.data, projectId]);
   const history = (jobs.data ?? []).filter(replayJob).filter(item => item.project_id === projectId).sort((a, b) => b.created_at.localeCompare(a.created_at));
   const picked = history.find(item => item.id === selectedId) ?? (accepted?.id === selectedId ? accepted : undefined);
   const selected = picked?.project_id === projectId ? picked : undefined;
@@ -129,7 +130,7 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, onDataset }:
       {options.isSuccess && !runtimes.length && <p role="status">No local CPU replay worker is configured. Its isolated model environment and dataset reader must be registered first.</p>}
       <fieldset className="native-simulation-form" disabled={!projectId || !!attempt.data || cancelling}><legend>Explicit observation selection</legend>
         <label>Replay worker<select aria-label="Replay worker" value={runtime?.id ?? ''} onChange={event => setRuntime(event.target.value)}><option value="">Choose a local worker</option>{runtimes.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
-        <label>Packed ACT policy<select aria-label="Packed ACT policy" value={policyId} onChange={event => { setPolicy(event.target.value); setAttested(false); }}><option value="">Choose a complete local INT8 or INT4 policy</option>{policies.map(item => <option key={item.id} value={item.id}>{item.label} · {item.id.slice(0, 8)}</option>)}</select></label>
+        <label>Packed ACT policy<select aria-label="Packed ACT policy" value={policyId} onChange={event => { policyChosenManually.current = true; setPolicy(event.target.value); setAttested(false); }}><option value="">Choose a complete local INT8 or INT4 policy</option>{policies.map(item => <option key={item.id} value={item.id}>{item.label} · {item.id.slice(0, 8)}</option>)}</select></label>
         <label>Observation dataset<select aria-label="Observation dataset" value={datasetId} onChange={event => { setDataset(event.target.value); setSelection(''); setAttested(false); }}><option value="">Choose a complete dataset snapshot</option>{datasets.map(item => <option key={item.id} value={item.id}>{item.result!.repo_id ?? 'Local robotics dataset'} · {item.result!.total_episodes} episodes · {item.id.slice(0, 8)}</option>)}</select></label>
         <button className="text-link" type="button" onClick={onDataset}>Open Dataset intake</button>
         <label>Episode and frame pairs<input value={selection} onChange={event => setSelection(event.target.value)} placeholder="For example: 0:3, 2:1" /></label><p>Choose 1–32 distinct observations. Original camera resolution, raw states, exact frame identity, and a 128 MiB input limit are verified before execution.</p>

@@ -304,7 +304,14 @@ def test_capability_rejects_invalid_claims(field: str, value: Any) -> None:
         ("Distill", "policy.distill"),
     ],
 )
-def test_catalog_operations_cannot_advertise_execution(stage: str, operation: str) -> None:
+def test_catalog_operations_cannot_advertise_unregistered_execution(
+    stage: str, operation: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from vla_platform import contracts
+
+    monkeypatch.setattr(
+        contracts, "IMPLEMENTED_OPERATIONS", contracts.IMPLEMENTED_OPERATIONS - {operation}
+    )
     data = {
         "stage": stage,
         "operation": operation,
@@ -321,6 +328,20 @@ def test_catalog_operations_cannot_advertise_execution(stage: str, operation: st
     native.update(backend="lerobot", os="windows", device="cuda")
     with pytest.raises(ValidationError, match="not registered"):
         Capability.model_validate({**data, "support": [native]})
+
+
+def test_integrated_distillation_still_requires_target_evidence() -> None:
+    data = {
+        "stage": "Distill",
+        "operation": "policy.distill",
+        "status": "available",
+        "description": "ACT to ACT256 CPU execution; task quality remains unverified.",
+        "support": [],
+    }
+    with pytest.raises(ValidationError, match="nonempty support"):
+        Capability.model_validate(data)
+    target = {**support_data(), "backend": "lerobot", "os": "linux", "device": "cpu"}
+    assert Capability.model_validate({**data, "support": [target]}).status == "available"
 
 
 @pytest.mark.parametrize(
