@@ -12,7 +12,20 @@ import tempfile
 import time
 from pathlib import Path
 
-from .checkpoint import commit_checkpoint_directory, sha256, write_json
+from .accumulation import (
+    CONTRACT_FILE,
+    STATE_FILE,
+    NativeAccumulation,
+    accumulation_steps,
+    bind_resumed_sampler_epoch,
+    checkpoint_optimization,
+    native_loop_values,
+    progress_record,
+    read_record,
+    resolve_contract,
+    validate_progress,
+)
+from .checkpoint import commit_checkpoint_directory, sha256, verify_bundle, write_json
 from .lerobot_application import cli_arguments
 from .local_dataset import (
     load_operation_snapshot,
@@ -136,10 +149,10 @@ def apply_optimizer_overrides(cfg, recipe):
         elif cfg.scheduler is not None:
             cfg.scheduler.num_warmup_steps = warmup
             if hasattr(cfg.scheduler, "num_decay_steps"):
-                cfg.scheduler.num_decay_steps = cfg.steps
+                cfg.scheduler.num_decay_steps = recipe.get("steps", cfg.steps)
 
 
-def probe(policy, raw_batch, preprocessor, postprocessor, seed):
+def probe(policy, raw_batch, preprocessor, postprocessor, seed, *, rng_devices=None):
     import torch
     from lerobot.scripts.lerobot_train import _preprocess_dataset_batch
 
@@ -158,7 +171,10 @@ def probe(policy, raw_batch, preprocessor, postprocessor, seed):
     torch.backends.cudnn.benchmark = False
     cameras = [key for key in policy.config.image_features if key in raw_batch]
     try:
-        with torch.random.fork_rng(devices=[0]), torch.inference_mode():
+        with (
+            torch.random.fork_rng(devices=[0] if rng_devices is None else rng_devices),
+            torch.inference_mode(),
+        ):
             torch.manual_seed(seed)
             processed = _preprocess_dataset_batch(
                 copy.deepcopy(raw_batch), cameras, {}, preprocessor
@@ -179,14 +195,286 @@ def probe(policy, raw_batch, preprocessor, postprocessor, seed):
 
 
 class ValidationLog(logging.Handler):
-    def __init__(self, record):
+    def __init__(self, record, accumulation=1):
         super().__init__()
         self.record = record
+        self.accumulation = accumulation
 
     def emit(self, record):
         match = re.search(r"step (\d+): eval_loss=([-+\d.eE]+)", record.getMessage())
         if match:
-            self.record(int(match[1]), validation_loss=metric_value(match[2]))
+            microstep = int(match[1])
+            if microstep % self.accumulation:
+                raise ValueError("Validation ran inside an incomplete accumulation window")
+            self.record(microstep // self.accumulation, validation_loss=metric_value(match[2]))
+
+
+def install_training_hooks(
+    trainer,
+    recipe,
+    profile,
+    training,
+    *,
+    resume=None,
+    local_root=None,
+    started=None,
+    probe_devices=None,
+    runtime_environment=None,
+):
+    """Bind the same versioned worker hooks to an upstream training invocation.
+
+    The application entrypoint still requires CUDA. An explicit CPU fixture may
+    exercise these hooks through LeRobot's supported CPU configuration without
+    pretending that the application GPU route ran.
+    """
+    import torch
+    from torch.utils.data import default_collate
+
+    started = time.monotonic() if started is None else started
+    accumulation = accumulation_steps(recipe, profile["policy_type"])
+    optimization = None
+    if resume:
+        verify_bundle(resume)
+        checkpoint_optimization(resume, native=True)
+    if profile["policy_type"] == "act":
+        optimization = resolve_contract(
+            recipe["batch_size"], accumulation, resume=resume, native=True
+        )
+    state = {
+        "step": json.loads((resume / "manifest.json").read_text())["step"] if resume else 0,
+        "validation": None,
+    }
+
+    def record(step, **metrics):
+        measurement = {
+            "step": step,
+            "total_steps": recipe["steps"],
+            "elapsed_seconds": time.monotonic() - started,
+            **metrics,
+        }
+        if optimization is not None and "frames" in state:
+            measurement["optimization_state"] = progress_record(
+                optimization, frames=state["frames"], updates=step, consumed=step * accumulation
+            )
+        with (training / "metrics.jsonl").open("a") as stream:
+            stream.write(json.dumps(measurement, allow_nan=False) + "\n")
+        emit(
+            "validating" if "validation_loss" in metrics else "training",
+            "Held-out imitation loss"
+            if "validation_loss" in metrics
+            else "Optimizing native policy",
+            **measurement,
+        )
+
+    original_data = trainer.make_train_eval_datasets
+
+    def make_data(cfg):
+        datasets = make_local_datasets(cfg, recipe) if local_root else original_data(cfg)
+        temporal = resolved_temporal(
+            cfg.policy,
+            datasets[0].meta.fps,
+            profile["policy_type"],
+            None if resume else recipe,
+        )
+        for dataset in datasets:
+            if dataset is not None:
+                check_dataset_temporal(temporal, dataset)
+        if resume and (resume / "temporal-contract.json").exists():
+            if json.loads((resume / "temporal-contract.json").read_text()) != temporal:
+                raise ValueError("Resume temporal contract differs from the saved checkpoint")
+        state["temporal"] = temporal
+        write_json(training / "temporal-contract.json", temporal)
+        state["validation"] = datasets[1]
+        if state["validation"] is None or len(state["validation"]) == 0:
+            raise ValueError("The selected dataset has no held-out evaluation frames")
+        splits = {"train": list(datasets[0].episodes), "validation": list(datasets[1].episodes)}
+        if set(splits["train"]) & set(splits["validation"]):
+            raise ValueError("Training and held-out episodes overlap")
+        if local_root:
+            expected = recipe["dataset_splits"]
+            if any(splits[key] != expected[key] for key in ("train", "validation")):
+                raise ValueError("Native dataset selection differs from the saved lineage split")
+            splits.update({key: value for key, value in expected.items() if key not in splits})
+        write_json(training / "splits.json", splits)
+        emit(
+            "preparing",
+            "Dataset split prepared; loading native policy",
+            step=0,
+            total_steps=recipe["steps"],
+            splits=splits,
+        )
+        return datasets
+
+    original_loaders = trainer.make_dataloaders
+
+    def make_loaders(cfg, dataset, eval_dataset, step, parallel_dims):
+        loaders = original_loaders(cfg, dataset, eval_dataset, step, parallel_dims)
+        if optimization is None:
+            return loaders
+        if parallel_dims.dp_world_size != 1 or cfg.dataset.streaming:
+            raise ValueError("ACT optimization contract requires one map-style data worker")
+        expected = native_loop_values(recipe, "act")
+        actual = {
+            "steps": cfg.steps,
+            "save_freq": cfg.save_freq,
+            "eval_steps": cfg.eval_steps,
+            "log_freq": cfg.log_freq,
+            "accelerator.gradient_accumulation.steps": cfg.accelerator.gradient_accumulation.steps,
+        }
+        from .accumulation import exact_json
+
+        if not exact_json(actual, expected) or cfg.batch_size != recipe["batch_size"]:
+            raise ValueError("Native loop configuration differs from the saved update contract")
+        frames = len(loaders[0].sampler)
+        state["frames"] = frames
+        if resume:
+            if (resume / CONTRACT_FILE).exists() != (resume / STATE_FILE).exists():
+                raise ValueError("Incomplete native optimization checkpoint")
+            if (resume / STATE_FILE).exists():
+                validate_progress(
+                    read_record(resume / STATE_FILE),
+                    optimization,
+                    frames=frames,
+                    updates=state["step"],
+                    consumed=step,
+                )
+            elif step != state["step"] or accumulation != 1:
+                raise ValueError("Legacy native optimization cursor differs from the checkpoint")
+        if accumulation > 1:
+            if resume:
+                bind_resumed_sampler_epoch(
+                    loaders[0].sampler,
+                    consumed=step,
+                    frames=frames,
+                    batch_size=recipe["batch_size"],
+                )
+            state["accumulator"] = NativeAccumulation(
+                optimization, frames, updates=state["step"], consumed=step
+            )
+        write_json(training / CONTRACT_FILE, optimization)
+        return loaders
+
+    trainer.make_dataloaders = make_loaders
+    original_optimizer = trainer.make_optimizer_and_scheduler
+
+    def make_optimizer(cfg, policy):
+        apply_optimizer_overrides(cfg, recipe)
+        write_json(training / "resolved-config.json", cfg.to_dict())
+        write_json(
+            training / "environment.json",
+            {
+                **(
+                    runtime_environment
+                    if runtime_environment is not None
+                    else environment_report(torch, getattr(cfg.policy, "dtype", "policy_default"))
+                ),
+                "upstream_revision": LEROBOT_REVISION,
+                "training_backend": "lerobot",
+                "initialization": profile["initialization"],
+            },
+        )
+        optimizer_cfg = copy.copy(cfg)
+        if accumulation > 1:
+            optimizer_cfg.steps = recipe["steps"]
+        return original_optimizer(optimizer_cfg, policy)
+
+    trainer.make_optimizer_and_scheduler = make_optimizer
+    original_update = trainer.update_policy
+
+    def update(*args, **kwargs):
+        accumulator = state.get("accumulator")
+        if accumulator is not None:
+            previous = accumulator.updates
+            result = accumulator.update(*args, **kwargs)
+            if accumulator.updates == previous:
+                return result
+            state["step"] = accumulator.updates
+        else:
+            result = original_update(*args, **kwargs)
+            state["step"] += 1
+        accelerator = kwargs["accelerator"]
+        if accelerator.optimizer_step_was_skipped:
+            raise FloatingPointError(
+                "Native optimizer skipped an update due to non-finite gradients"
+            )
+        if state["step"] == 1 or state["step"] % recipe["log_every"] == 0:
+            metrics = result[0]
+            record(
+                state["step"],
+                train_loss=metric_value(metrics.loss),
+                learning_rate=metric_value(metrics.lr),
+                grad_norm=metric_value(metrics.grad_norm),
+            )
+        return result
+
+    original_save = trainer.save_checkpoint
+
+    def save(*args, **kwargs):
+        microstep = kwargs["step"]
+        if microstep % accumulation or microstep // accumulation != state["step"]:
+            raise ValueError("Refusing a partial or inconsistent native update checkpoint")
+        step = state["step"]
+        optimization_state = None
+        if optimization is not None:
+            optimization_state = progress_record(
+                optimization, frames=state["frames"], updates=step, consumed=microstep
+            )
+            accumulator = state.get("accumulator")
+            if accumulator is not None and accumulator.record() != optimization_state:
+                raise ValueError("Native update and data cursors differ")
+        result = original_save(*args, **kwargs)
+        directory = Path(kwargs["checkpoint_dir"])
+        raw_batch = default_collate([state["validation"][0]])
+        raw_batch = {
+            key: value
+            for key, value in raw_batch.items()
+            if not key.startswith("observation.images.") or key in recipe["camera_keys"]
+        }
+        policy = kwargs["accelerator"].unwrap_model(kwargs["policy"])
+        action = probe(
+            policy,
+            raw_batch,
+            kwargs["preprocessor"],
+            kwargs["postprocessor"],
+            recipe["seed"],
+            rng_devices=probe_devices,
+        )
+        if optimization is not None:
+            write_json(directory / CONTRACT_FILE, optimization)
+            write_json(directory / STATE_FILE, optimization_state)
+        write_json(directory / "temporal-contract.json", state["temporal"])
+        torch.save(raw_batch, directory / "probe-batch.pt")
+        torch.save(action, directory / "probe-action.pt")
+        destination = commit_checkpoint(
+            directory, training / f"checkpoint-{step:06d}", recipe, step=step
+        )
+        emit(
+            "checkpoint",
+            "Native checkpoint committed",
+            step=step,
+            total_steps=recipe["steps"],
+            checkpoint=destination.name,
+        )
+        return result
+
+    trainer.make_train_eval_datasets = make_data
+    trainer.update_policy = update
+    trainer.save_checkpoint = save
+    original_last_checkpoint = trainer.update_last_checkpoint
+
+    def update_last_checkpoint(directory):
+        original_last_checkpoint(directory)
+        prune_native_working_checkpoints(Path(directory))
+
+    trainer.update_last_checkpoint = update_last_checkpoint
+    original_logging = trainer.init_logging
+
+    def init_logging(*args, **kwargs):
+        original_logging(*args, **kwargs)
+        logging.getLogger().addHandler(ValidationLog(record, accumulation))
+
+    trainer.init_logging = init_logging
+    return state
 
 
 def main():
@@ -196,6 +484,12 @@ def main():
     profile = native_profile_for_recipe(recipe)
     if profile is None or recipe.get("upstream_revision") != LEROBOT_REVISION:
         raise ValueError("Unregistered native worker recipe or upstream revision")
+    accumulation = accumulation_steps(recipe, profile["policy_type"])
+    if resume:
+        verify_bundle(resume)
+        checkpoint_optimization(resume, native=True)
+    if profile["policy_type"] == "act":
+        resolve_contract(recipe["batch_size"], accumulation, resume=resume, native=True)
     local_root = None
     if recipe.get("dataset_source") == "local":
         local_root, _ = load_operation_snapshot(operation, recipe)
@@ -204,7 +498,6 @@ def main():
     from lerobot.datasets.lerobot_dataset import LeRobotDatasetMetadata
     from lerobot.scripts import lerobot_train as trainer
     from lerobot.utils.feature_utils import dataset_to_policy_features
-    from torch.utils.data import default_collate
 
     if not torch.cuda.is_available():
         raise RuntimeError("Native policy training requires a CUDA GPU")
@@ -285,153 +578,9 @@ def main():
             "--config_path=" + str(resume / "pretrained_model/train_config.json"),
         ]
     write_json(operation / "native-arguments.json", arguments)
-    state = {
-        "step": json.loads((resume / "manifest.json").read_text())["step"] if resume else 0,
-        "validation": None,
-    }
-
-    def record(step, **metrics):
-        measurement = {
-            "step": step,
-            "total_steps": recipe["steps"],
-            "elapsed_seconds": time.monotonic() - started,
-            **metrics,
-        }
-        with (training / "metrics.jsonl").open("a") as stream:
-            stream.write(json.dumps(measurement, allow_nan=False) + "\n")
-        emit(
-            "validating" if "validation_loss" in metrics else "training",
-            "Held-out imitation loss"
-            if "validation_loss" in metrics
-            else "Optimizing native policy",
-            **measurement,
-        )
-
-    original_data = trainer.make_train_eval_datasets
-
-    def make_data(cfg):
-        datasets = make_local_datasets(cfg, recipe) if local_root else original_data(cfg)
-        temporal = resolved_temporal(
-            cfg.policy,
-            datasets[0].meta.fps,
-            profile["policy_type"],
-            None if resume else recipe,
-        )
-        for dataset in datasets:
-            if dataset is not None:
-                check_dataset_temporal(temporal, dataset)
-        if resume and (resume / "temporal-contract.json").exists():
-            if json.loads((resume / "temporal-contract.json").read_text()) != temporal:
-                raise ValueError("Resume temporal contract differs from the saved checkpoint")
-        state["temporal"] = temporal
-        write_json(training / "temporal-contract.json", temporal)
-        state["validation"] = datasets[1]
-        if state["validation"] is None or len(state["validation"]) == 0:
-            raise ValueError("The selected dataset has no held-out evaluation frames")
-        splits = {"train": list(datasets[0].episodes), "validation": list(datasets[1].episodes)}
-        if set(splits["train"]) & set(splits["validation"]):
-            raise ValueError("Training and held-out episodes overlap")
-        if local_root:
-            expected = recipe["dataset_splits"]
-            if any(splits[key] != expected[key] for key in ("train", "validation")):
-                raise ValueError("Native dataset selection differs from the saved lineage split")
-            splits.update({key: value for key, value in expected.items() if key not in splits})
-        write_json(training / "splits.json", splits)
-        emit(
-            "preparing",
-            "Dataset split prepared; loading native policy",
-            step=0,
-            total_steps=recipe["steps"],
-            splits=splits,
-        )
-        return datasets
-
-    original_optimizer = trainer.make_optimizer_and_scheduler
-
-    def make_optimizer(cfg, policy):
-        apply_optimizer_overrides(cfg, recipe)
-        write_json(training / "resolved-config.json", cfg.to_dict())
-        write_json(
-            training / "environment.json",
-            {
-                **environment_report(torch, getattr(cfg.policy, "dtype", "policy_default")),
-                "upstream_revision": LEROBOT_REVISION,
-                "training_backend": "lerobot",
-                "initialization": profile["initialization"],
-            },
-        )
-        return original_optimizer(cfg, policy)
-
-    trainer.make_optimizer_and_scheduler = make_optimizer
-    original_update = trainer.update_policy
-
-    def update(*args, **kwargs):
-        result = original_update(*args, **kwargs)
-        accelerator = kwargs["accelerator"]
-        if accelerator.optimizer_step_was_skipped:
-            raise FloatingPointError(
-                "Native optimizer skipped an update due to non-finite gradients"
-            )
-        state["step"] += 1
-        if state["step"] == 1 or state["step"] % recipe["log_every"] == 0:
-            metrics = result[0]
-            record(
-                state["step"],
-                train_loss=metric_value(metrics.loss),
-                learning_rate=metric_value(metrics.lr),
-                grad_norm=metric_value(metrics.grad_norm),
-            )
-        return result
-
-    original_save = trainer.save_checkpoint
-
-    def save(*args, **kwargs):
-        result = original_save(*args, **kwargs)
-        step = kwargs["step"]
-        state["step"] = step
-        directory = Path(kwargs["checkpoint_dir"])
-        raw_batch = default_collate([state["validation"][0]])
-        raw_batch = {
-            key: value
-            for key, value in raw_batch.items()
-            if not key.startswith("observation.images.") or key in recipe["camera_keys"]
-        }
-        policy = kwargs["accelerator"].unwrap_model(kwargs["policy"])
-        action = probe(
-            policy, raw_batch, kwargs["preprocessor"], kwargs["postprocessor"], recipe["seed"]
-        )
-        write_json(directory / "temporal-contract.json", state["temporal"])
-        torch.save(raw_batch, directory / "probe-batch.pt")
-        torch.save(action, directory / "probe-action.pt")
-        destination = commit_checkpoint(
-            directory, training / f"checkpoint-{step:06d}", recipe, step=step
-        )
-        emit(
-            "checkpoint",
-            "Native checkpoint committed",
-            step=step,
-            total_steps=recipe["steps"],
-            checkpoint=destination.name,
-        )
-        return result
-
-    trainer.make_train_eval_datasets = make_data
-    trainer.update_policy = update
-    trainer.save_checkpoint = save
-    original_last_checkpoint = trainer.update_last_checkpoint
-
-    def update_last_checkpoint(directory):
-        original_last_checkpoint(directory)
-        prune_native_working_checkpoints(Path(directory))
-
-    trainer.update_last_checkpoint = update_last_checkpoint
-    original_logging = trainer.init_logging
-
-    def init_logging(*args, **kwargs):
-        original_logging(*args, **kwargs)
-        logging.getLogger().addHandler(ValidationLog(record))
-
-    trainer.init_logging = init_logging
+    state = install_training_hooks(
+        trainer, recipe, profile, training, resume=resume, local_root=local_root, started=started
+    )
     sys.argv = ["lerobot-train", *arguments]
     trainer.main()
     emit(

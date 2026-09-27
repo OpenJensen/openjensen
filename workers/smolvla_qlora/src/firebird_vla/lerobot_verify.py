@@ -4,6 +4,7 @@ import json
 import sys
 from pathlib import Path
 
+from .accumulation import checkpoint_optimization
 from .checkpoint import verify_bundle, write_json
 from .lerobot_train import probe
 from .temporal import resolved_temporal
@@ -12,6 +13,7 @@ from .temporal import resolved_temporal
 def main():
     checkpoint, report_path = map(Path, sys.argv[1:])
     verify_bundle(checkpoint)
+    optimization = checkpoint_optimization(checkpoint, native=True)
     import torch
     from lerobot.configs.policies import PreTrainedConfig
     from lerobot.policies.factory import get_policy_class, make_pre_post_processors
@@ -37,6 +39,7 @@ def main():
         report_path,
         {
             "reload_verified": True,
+            "optimization": optimization,
             "temporal_contract": temporal,
             "max_abs_action_difference": (actual - expected).abs().max().item(),
             "task_success": None,

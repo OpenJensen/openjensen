@@ -228,6 +228,8 @@ def save_checkpoint(
     scaler=None,
     compute_dtype=None,
     temporal_contract=None,
+    optimization_contract=None,
+    optimization_state=None,
 ):
     import random
     from importlib.metadata import version
@@ -247,6 +249,21 @@ def save_checkpoint(
         write_json(staging / "recipe.json", cfg.to_dict())
         if temporal_contract is not None:
             write_json(staging / "temporal-contract.json", temporal_contract)
+        if (optimization_contract is None) != (optimization_state is None):
+            raise ValueError("Optimization contract and state must be saved together")
+        if optimization_contract is not None:
+            from .accumulation import CONTRACT_FILE, STATE_FILE, validate_progress
+
+            validate_progress(
+                optimization_state,
+                optimization_contract,
+                frames=optimization_state.get("training_frames"),
+                updates=step,
+                consumed=consumed_batches,
+                skipped=consumed_batches // cfg.gradient_accumulation_steps - step,
+            )
+            write_json(staging / CONTRACT_FILE, optimization_contract)
+            write_json(staging / STATE_FILE, optimization_state)
         write_json(staging / "stats.json", stats)
         write_json(staging / "splits.json", splits)
         save_file({"action": probe_action.contiguous()}, str(staging / "probe.safetensors"))
