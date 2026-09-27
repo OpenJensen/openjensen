@@ -69,6 +69,7 @@ test('native import sends exact TAR bytes once and does not start a GPU run', as
   await page.getByRole('button', { name: 'Upload and validate policy' }).dblclick();
   await expect(page.getByRole('article', { name: 'Native simulation job details' })).toContainText('The native package is saved');
   expect(state.uploaded).toEqual(bytes); expect(state.posts).toHaveLength(1);
+  await page.getByText('Prepare another run', { exact: true }).click();
   await expect(page.getByLabel('Native policy', { exact: true })).toHaveValue('');
   await expect(page.getByLabel('Native policy', { exact: true }).locator('option[value="uploaded-policy"]')).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Start experimental simulation' })).toBeDisabled();
@@ -85,6 +86,7 @@ for (const architecture of ['act', 'smol']) test(`native ${architecture} launch 
   await page.getByRole('button', { name: 'Start experimental simulation' }).dblclick();
   await expect(page.getByRole('article', { name: 'Native simulation job details' })).toHaveAttribute('data-job-id', 'submitted');
   expect(state.posts).toEqual([{ path: '/api/v1/projects/alpha/policy-jobs', body: { operation: 'policy.run', runtime_id: profile.id, artifact_id: `${architecture}-export`, simulation: { profile_id: profile.id, experimental: true }, timeout_seconds: 600 } }]);
+  await page.getByText('Activity and technical details', { exact: true }).click();
   await expect(page.getByRole('region', { name: 'Native simulation event log' })).toContainText('Generated event for submitted');
   await expect(page.getByText('Cup pickup success', { exact: true }).locator('..')).toContainText('Not measured');
 });
@@ -151,6 +153,7 @@ test('failed run and project changes cannot reuse selected source or expose succ
   await page.getByRole('button', { name: 'Refresh simulation jobs' }).click(); await page.getByLabel('Saved simulation job').selectOption('failed');
   await expect(page.locator('.native-simulation').getByRole('alert')).toHaveText('Synthetic worker failure');
   await expect(page.getByRole('link', { name: 'Download simulation record' })).toHaveCount(0);
+  await page.getByText('Prepare another run', { exact: true }).click();
   await page.getByLabel('Native policy', { exact: true }).selectOption('smol-export'); await acknowledge(page);
   await page.getByLabel('Current project').selectOption('beta');
   await expect(page.getByLabel('Native policy', { exact: true })).toHaveValue('');
@@ -178,6 +181,8 @@ test('native and Cloud event views display bounded observed worker states as the
   const state = await fixture(page); state.jobs.push(job('observed'));
   await page.getByRole('button', { name: 'Refresh simulation jobs' }).click();
   await page.getByLabel('Saved simulation job').selectOption('observed');
+  await expect(page.getByLabel('Observed simulation workers')).toHaveText('Isaac: RUNNING · VLA: STARTING');
+  await page.getByText('Activity and technical details', { exact: true }).click();
   await expect(page.getByRole('region', { name: 'Native simulation event log' })).toContainText('Isaac: RUNNING · VLA: STARTING');
   state.tasks = { isaac: 'SUCCEEDED', vla: 'CANCELLING' };
   await expect(page.getByRole('region', { name: 'Native simulation event log' })).toContainText('Isaac: SUCCEEDED · VLA: CANCELLING', { timeout: 7000 });
@@ -215,7 +220,10 @@ for (const view of ['native', 'cloud'] as const) test(`${view} final events refr
     return route.fulfill({ json: state.jobs });
   });
   await page.getByRole('button', { name: 'Refresh simulation jobs' }).click();
-  if (view === 'native') await page.getByLabel('Saved simulation job').selectOption(quick.id);
+  if (view === 'native') {
+    await page.getByLabel('Saved simulation job').selectOption(quick.id);
+    await page.getByText('Activity and technical details', { exact: true }).click();
+  }
   else await page.getByRole('button', { name: 'Cloud runs', exact: true }).click();
   const log = page.getByRole('region', { name: view === 'native' ? 'Native simulation event log' : 'Application job event log', exact: true });
   await expect(log).toContainText(view === 'native' ? 'No recorded events yet.' : 'No events received for this job yet.');
@@ -225,4 +233,101 @@ for (const view of ['native', 'cloud'] as const) test(`${view} final events refr
   await expect(log).toContainText('Generated final integrity receipt', { timeout: 5000 });
   expect(finalReads).toBeGreaterThan(0);
   expect(state.posts).toHaveLength(0);
+});
+
+
+test('completed recording is first, technical details stay secondary, and another run keeps explicit consent', async ({ page }) => {
+  const state = await fixture(page), done = job('result-first', 'policy.run', 'succeeded');
+  done.result = { decision: 'completed', artifacts: [{ ...artifact('record', 'act', 'simulation_record'), job_id: done.id }], reports: [{ stage: 'simulation', task_success: null, calibration_verified: false, artifacts: [{ path: 'artifacts/outputs/video.mp4', sha256: 'e'.repeat(64), bytes: 12, generation: '1' }] }] };
+  state.jobs.push(done);
+  let releaseVideo!: () => void;
+  const videoHeld = new Promise<void>(resolve => { releaseVideo = resolve; });
+  await page.route('**/api/v1/jobs/result-first/simulation-media/video', async route => { await videoHeld; await route.abort(); });
+  try {
+    await page.getByRole('button', { name: 'Refresh simulation jobs' }).click();
+    await page.getByLabel('Saved simulation job').selectOption(done.id);
+    const result = page.getByRole('article', { name: 'Native simulation job details' });
+    const video = page.getByLabel('Recorded cup rollout', { exact: true });
+    await expect(video).toBeVisible();
+    await expect(result.getByRole('region', { name: 'Native simulation event log' })).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Start experimental simulation' })).toBeHidden();
+    const mediaBox = await video.boundingBox();
+    const preparation = page.getByText('Prepare another run', { exact: true });
+    const prepareBox = await preparation.boundingBox();
+    expect(mediaBox!.y + mediaBox!.height).toBeLessThan(prepareBox!.y);
+    await page.getByText('Activity and technical details', { exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await expect(result.getByRole('region', { name: 'Native simulation event log' })).toContainText('Generated event for result-first');
+    await preparation.focus(); await page.keyboard.press('Enter');
+    await expect(page.getByLabel('Native policy', { exact: true })).toHaveValue('');
+    await expect(page.getByRole('checkbox', { name: /experimental, paid cloud rollout/ })).not.toBeChecked();
+    await expect(page.getByRole('button', { name: 'Start experimental simulation' })).toBeDisabled();
+    expect(state.posts).toEqual([]);
+  } finally { releaseVideo(); }
+});
+
+test('collapsed activity retains observed states and user disclosure choice across refresh', async ({ page }) => {
+  const state = await fixture(page); state.jobs.push(job('quiet-progress'));
+  await page.getByRole('button', { name: 'Refresh simulation jobs' }).click();
+  await page.getByLabel('Saved simulation job').selectOption('quiet-progress');
+  const summary = page.getByText('Activity and technical details', { exact: true });
+  await expect(page.getByLabel('Observed simulation workers')).toHaveText('Isaac: RUNNING · VLA: STARTING');
+  await expect(page.getByRole('region', { name: 'Native simulation event log' })).toBeHidden();
+  await summary.click();
+  await expect(page.getByRole('region', { name: 'Native simulation event log' })).toBeVisible();
+  state.tasks = { isaac: 'SUCCEEDED', vla: 'CANCELLING' };
+  await page.getByRole('button', { name: 'Refresh simulation jobs' }).click();
+  await expect(page.getByLabel('Observed simulation workers')).toHaveText('Isaac: SUCCEEDED · VLA: CANCELLING');
+  await expect(page.getByRole('region', { name: 'Native simulation event log' })).toBeVisible();
+  await summary.click();
+  await page.getByRole('button', { name: 'Refresh simulation jobs' }).click();
+  await expect(page.getByRole('region', { name: 'Native simulation event log' })).toBeHidden();
+  expect(state.posts).toEqual([]);
+});
+
+test('failed activity refresh visibly marks cached worker states stale while details stay closed', async ({ page }) => {
+  const state = await fixture(page); state.jobs.push(job('stale-progress'));
+  await page.getByRole('button', { name: 'Refresh simulation jobs' }).click();
+  await page.getByLabel('Saved simulation job').selectOption('stale-progress');
+  const workers = page.getByLabel('Observed simulation workers');
+  const log = page.getByRole('region', { name: 'Native simulation event log' });
+  await expect(workers).toHaveText('Isaac: RUNNING · VLA: STARTING');
+  await expect(log).toBeHidden();
+  await page.route('**/api/v1/jobs/stale-progress/events', route => route.fulfill({ status: 503, json: { detail: 'Generated activity outage' } }));
+  await page.getByRole('button', { name: 'Refresh simulation jobs' }).click();
+  await expect(page.getByRole('article', { name: 'Native simulation job details' }).getByRole('alert')).toHaveText('Activity updates are unavailable. Worker states and event history may be stale.');
+  await expect(workers).toHaveText('Last observed: Isaac: RUNNING · VLA: STARTING');
+  await expect(log).toBeHidden();
+  await page.getByText('Activity and technical details', { exact: true }).click();
+  await expect(log).toContainText('Generated event for stale-progress');
+  await expect(page.getByText('Generated activity outage', { exact: true })).toBeVisible();
+  expect(state.posts).toEqual([]);
+});
+
+
+for (const width of [320, 390]) test(`compact ${width}px navigation keeps stage content visible and every action keyboard reachable`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 844 });
+  const state = await fixture(page);
+  await page.getByRole('button', { name: 'Dataset', exact: true }).click();
+  const heading = page.getByRole('heading', { name: 'Dataset', exact: true });
+  const bounds = await heading.boundingBox();
+  expect(bounds!.y).toBeLessThan(300);
+  const navigation = page.getByRole('navigation', { name: 'Policy lifecycle' });
+  expect(await navigation.evaluate(element => element.scrollWidth > element.clientWidth)).toBe(true);
+  await page.getByRole('button', { name: 'Run', exact: true }).focus();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: 'Settings & diagnostics', exact: true })).toBeFocused();
+  await page.keyboard.press('Tab');
+  const cloud = page.getByRole('button', { name: 'Cloud runs', exact: true });
+  await expect(cloud).toBeFocused();
+  const buttonBounds = await cloud.boundingBox();
+  expect(buttonBounds!.x).toBeGreaterThanOrEqual(0);
+  expect(buttonBounds!.x + buttonBounds!.width).toBeLessThanOrEqual(width);
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading', { name: 'Cloud runs', exact: true })).toBeVisible();
+  await page.getByLabel('Current project').focus();
+  await page.keyboard.press('Tab');
+  await expect(page.getByLabel('New project', { exact: true })).toBeFocused();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+  expect(state.posts).toEqual([]);
 });

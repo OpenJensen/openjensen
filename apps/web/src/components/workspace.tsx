@@ -17,6 +17,17 @@ import { DatasetExplorer } from '@/components/dataset-explorer';
 import { DatasetStarters } from '@/components/dataset-starters';
 import { datasetStarters, type DatasetStarter } from '@/lib/dataset-starters';
 
+const stagePurpose = [
+  'Inspect robotics data, understand its episodes, and prepare a training source.',
+  'Train a policy from an inspected dataset, then review its checkpoints and exports.',
+  'Smaller student policies are planned. Distillation is not yet available in this workspace.',
+  'Create a smaller policy package and inspect the measured differences.',
+  'Check execution or measure task success with a configured evaluation protocol.',
+  'Run a prepared policy and review its recorded execution.',
+  'Manage connections and inspect the capabilities available to this workspace.',
+  'Follow application cloud jobs and external observations, with their collection times.',
+] as const;
+
 const stages = [
   { name: 'Dataset', icon: 'database' },
   { name: 'Fine-tune', icon: 'sliders' },
@@ -265,7 +276,7 @@ function Workbench() {
       </section>
     </>}
   >
-        <div className={`page-heading${activeStage === 1 ? ' training-page-heading' : ''}`}><div><h1>{stage.name}</h1></div><div className={`connection ${connected ? 'connected' : ''}`} role="status" aria-label="Application API connection" title="Application API connection; simulator and voice connections are shown separately."><span />{health.isPending ? 'Connecting' : connected ? 'App connected' : 'App offline'}</div></div>
+        <div className={`page-heading${activeStage === 1 ? ' training-page-heading' : ''}`}><div><h1>{stage.name}</h1><p>{stagePurpose[activeStage]}</p></div><div className={`connection ${connected ? 'connected' : ''}`} role="status" aria-label="Application API connection" title="Application API connection; simulator and voice connections are shown separately."><span />{health.isPending ? 'Connecting' : connected ? 'App connected' : 'App offline'}</div></div>
         {!connected && !health.isPending && <div className="connection-notice"><ErrorNotice error={health.error} /><button className="text-button" onClick={() => { void health.refetch(); void projects.refetch(); void capabilities.refetch(); }}>Retry connection</button></div>}
         {capabilities.error && connected && <div className="connection-notice"><ErrorNotice error={capabilities.error} /><button className="text-button" onClick={() => void capabilities.refetch()} disabled={capabilities.isFetching}>Retry capabilities</button></div>}
         <div className="dataset-view" hidden={activeStage !== 0}>
@@ -297,7 +308,7 @@ function Workbench() {
         {activeStage === 3 && <section className="panel run-modes" aria-label="Quantization workflow"><div role="group" aria-label="Quantization mode"><button className="secondary-button" aria-pressed={quantizeMode === 'gguf'} onClick={() => setQuantizeMode('gguf')}>SmolVLA · GGUF</button><button className="secondary-button" aria-pressed={quantizeMode === 'native'} onClick={() => setQuantizeMode('native')}>Native ACT · INT8 / INT4</button></div><p>{quantizeMode === 'native' ? 'Create a local packed ACT download with measured generated-input drift. Native Isaac loading is not implemented for this format.' : 'Prepare SmolVLA GGUF policies using the existing engine workflow.'}</p></section>}
         {activeStage === 3 && quantizeMode === 'native' && <NativeQuantizationPanel key={workflowProjectId} projectId={workflowProjectId} onPrepare={() => navigateStage(1)} />}
         {activeStage === 4 && <section className="panel workflow-purpose" aria-label="Evaluation purpose"><p>Engine checks measure loading, finite actions and runtime performance. LIBERO measures closed-loop task success only with a configured benchmark runtime. Native ACT / SmolVLA Isaac rollouts are available under Run; scored Isaac evaluation is not configured.</p><button className="text-link" onClick={() => { setRunMode('native'); navigateStage(5); }}>Open native Isaac Run</button></section>}
-        {activeStage === 5 && <section className="panel run-modes" aria-label="Run workflow"><div role="group" aria-label="Run mode"><button className="secondary-button" aria-pressed={runMode === 'native'} onClick={() => setRunMode('native')}>Native Isaac · ACT / SmolVLA</button><button className="secondary-button" aria-pressed={runMode === 'engine'} onClick={() => setRunMode('engine')}>Engine checks · GGUF</button></div><p>{runMode === 'native' ? 'Import your native policy or select a saved export, then explicitly run the experimental cup scene.' : 'Reload a prepared engine policy and check its execution. For ACT or native SmolVLA in the cup scene, choose Native Isaac.'}</p></section>}
+        {activeStage === 5 && <section className="panel run-modes" aria-label="Run workflow"><div role="group" aria-label="Run mode"><button className="secondary-button" aria-pressed={runMode === 'native'} onClick={() => setRunMode('native')}>Native Isaac · ACT / SmolVLA</button><button className="secondary-button" aria-pressed={runMode === 'engine'} onClick={() => setRunMode('engine')}>Engine checks · GGUF</button></div><p>{runMode === 'native' ? 'Recorded cup-scene rollouts and complete native policy packages.' : 'Reload a prepared engine policy and check its execution. For ACT or native SmolVLA in the cup scene, choose Native Isaac.'}</p></section>}
         {activeStage === 5 && runMode === 'native' && <NativeSimulationPanel key={workflowProjectId} projectId={workflowProjectId} preferredJobId={openSimulation?.projectId === workflowProjectId ? openSimulation.id : undefined} onTraining={() => navigateStage(1)} />}
         {activeStage > 1 && activeStage !== 2 && activeStage !== 7 && (activeStage !== 3 || quantizeMode === 'gguf') && (activeStage !== 5 || runMode === 'engine') && <WorkflowPanel key={`${workflowProjectId}-${activeStage}-${workflowNavigation}`} projectId={workflowProjectId} tab={settingsTab} onTabChange={setSettingsTab} onOpenQuantize={() => navigateStage(3)} stage={activeStage === 6 ? 'settings' : stage.name} preferredArtifactId={activeStage === 3 && quantizeArtifact?.projectId === projectId ? quantizeArtifact.artifactId : undefined} onViewTraining={() => navigateStage(1)} />}
         {activeStage === 2 && <section className="planned-panel" aria-labelledby="planned-title"><span className="empty-icon"><Icon name={stage.icon} size={28} /></span><span className="planned-badge">Planned</span><h2 id="planned-title">{stage.name}</h2><button className="secondary-button" onClick={() => setActiveStage(0)}>Go to Dataset <Icon name="arrow" size={15} /></button></section>}
