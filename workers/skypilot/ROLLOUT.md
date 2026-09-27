@@ -1,6 +1,6 @@
 # Isaac + VLA Job Group
 
-For the configured ACT experiment and dedicated service account, start with
+For the configured ACT/SmolVLA experiment and dedicated service account, start with
 [runner setup](RUNNER.md).
 
 `launch-rollout.sh` submits two GPU tasks through SkyPilot 0.13.0:
@@ -131,7 +131,7 @@ bash launch-rollout.sh --validate-only
 bash launch-rollout.sh
 ```
 
-### Experimental ACT motion
+### Experimental policy motion
 
 Use a separate local task file selecting the candidate calibration and scene.
 Set `control.steps` to at most 300 in its simulation manifest:
@@ -145,6 +145,37 @@ bash launch-rollout.sh rollout.experimental.local.yaml --experimental
 simulation. The launcher forwards `SIM_EXPERIMENTAL=1` to the remote runner, which
 passes the adapter flag. Ordinary launches still require verified calibration.
 The mode cannot be combined with `--check-ready`.
+
+### Select a checkpoint
+
+Use the same scenario for either supported architecture:
+
+```bash
+bash launch-rollout.sh rollout.experimental.local.yaml \
+  --checkpoint ~/Downloads/act_step29000 --experimental --validate-only
+bash launch-rollout.sh rollout.experimental.local.yaml \
+  --checkpoint ~/Downloads/smolvla_step20000 --experimental --validate-only
+```
+
+Remove `--validate-only` to launch. `--checkpoint` also works with standard
+rollouts and `--check-ready`; their calibration and readiness checks still apply.
+It overrides the checkpoint mount, model fingerprint, camera key, capture size,
+state dimension and action horizon in an isolated manifest snapshot. It preserves
+the original scenario and task files, including calibration and joint order.
+Relative checkpoint paths resolve from the directory where the command is invoked.
+
+By default, execution uses the smaller of the scenario's `execute_steps` and the
+export's `n_action_steps` (or `chunk_size` when absent). Set `--execute-steps` with
+`--checkpoint` to choose a shared replanning interval for comparisons. The value
+must be positive and no larger than the model's chunk size.
+
+The included ACT and SmolVLA exports share their dataset and normalization
+statistics, but that does not verify the joint calibration. Compatible exports
+must still match the scenario's robot, action convention and camera view. Other
+architectures require an inference backend; matching dimensions alone is insufficient.
+
+SmolVLA's VLM configuration and tokenizer are fetched on first startup. The full
+export supplies the trained weights; keep its saved processors intact.
 
 For capacity fallback, replace Isaac's `instance_type` with:
 
@@ -160,7 +191,7 @@ mode accepts the single-L4 sizes `12`, `16` and `32`; each override may change o
 To pin an experimental Isaac zone, use `infra: gcp/us-central1/us-central1-c`;
 do not add a separate `zone` field alongside `infra`.
 
-Each test receives a unique `isaac-act-test-` group name, disables retries after
+Each test receives a unique `isaac-<policy-type>-test-` group name, disables retries after
 task errors, and inherits the group cleanup. Keep the launcher running for its
 two-hour provisioning and execution deadline; detached tests require manual
 monitoring and cancellation. Results remain experimental even if execution succeeds.

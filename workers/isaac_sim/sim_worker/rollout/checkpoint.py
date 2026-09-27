@@ -29,6 +29,7 @@ class Checkpoint:
     state_dim: int
     action_dim: int
     chunk_size: int
+    action_steps: int
 
 
 def inspect_checkpoint(path: Path) -> Checkpoint:
@@ -60,6 +61,9 @@ def inspect_checkpoint(path: Path) -> Checkpoint:
     if image[0] != _RGB_CHANNELS:
         raise ValueError("Checkpoint camera must have RGB channels")
     chunk_size = _positive(config.get("chunk_size"))
+    action_steps = _positive(config.get("n_action_steps", chunk_size))
+    if action_steps > chunk_size:
+        raise ValueError("Checkpoint n_action_steps exceeds its chunk size")
 
     # Saved statistics affect policy behavior and belong in its identity.
     for name in _PROCESSOR_FILES:
@@ -83,6 +87,7 @@ def inspect_checkpoint(path: Path) -> Checkpoint:
         state[0],
         action[0],
         chunk_size,
+        action_steps,
     )
 
 
