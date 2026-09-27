@@ -29,8 +29,9 @@ def server():
         info.size = len(raw)
         tar.addfile(info, io.BytesIO(raw))
     archive = data.getvalue()
-    state = {"requests": [], "job_reads": 0, "hold": False, "lost_posts": 0}
+    state = {"requests": [], "job_reads": 0, "hold": False, "lost_posts": 0, "hold_posts": False}
     seen = threading.Event()
+    release_posts = threading.Event()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_):
@@ -96,6 +97,9 @@ def server():
             state["requests"].append(("POST", self.path))
             state["lost_posts"] += 1
             self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            if state["hold_posts"]:
+                seen.set()
+                release_posts.wait(timeout=10)
             self.close_connection = True  # Accepted bytes but no response: never safe to resubmit.
 
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
@@ -105,6 +109,7 @@ def server():
     try:
         yield f"http://127.0.0.1:{httpd.server_port}", state, archive, seen
     finally:
+        release_posts.set()
         httpd.shutdown()
         httpd.server_close()
         thread.join(timeout=3)
@@ -180,12 +185,43 @@ def test_real_cli_interrupt_stops_observing_but_never_cancels(server):
         stderr=subprocess.PIPE,
     )
     try:
-        assert seen.wait(timeout=5)
+        # Cold interpreter/CLI startup is separate from cancellation responsiveness.
+        assert seen.wait(timeout=30)
         child.send_signal(signal.SIGINT)
         stdout, stderr = child.communicate(timeout=5)
         assert child.returncode == 130 and not stdout
         assert "No job cancellation" in stderr
         assert all(method == "GET" for method, _ in state["requests"])
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait(timeout=3)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="SIGINT child test is POSIX-specific")
+@pytest.mark.parametrize(
+    "arguments", [["jobs", "cancel", "job"], ["projects", "create", "Generated interrupt"]]
+)
+def test_real_cli_interrupted_write_reports_unknown_outcome_once(server, arguments):
+    origin, state, _, seen = server
+    state["hold_posts"] = True
+    child = subprocess.Popen(
+        [sys.executable, "-m", "vla_platform.cli", *arguments],
+        env={**os.environ, "FIREBIRD_API_URL": origin},
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        # Wait for the server to receive the write before measuring interruption.
+        assert seen.wait(timeout=30)
+        child.send_signal(signal.SIGINT)
+        stdout, stderr = child.communicate(timeout=5)
+        assert child.returncode == 130 and not stdout
+        assert "Outcome unknown" in stderr and "before submitting again" in stderr
+        assert "No job cancellation" not in stderr
+        assert state["lost_posts"] == 1
+        assert len(state["requests"]) == 1 and state["requests"][0][0] == "POST"
     finally:
         if child.poll() is None:
             child.kill()
@@ -212,7 +248,8 @@ def test_bad_endpoint_never_reflects_credentials_or_makes_http(monkeypatch, url)
 
 
 @pytest.mark.parametrize("status", [301, 302, 307, 308])
-def test_cli_rejects_redirect_json_without_following(monkeypatch, status):
+@pytest.mark.parametrize("method", ["GET", "POST"])
+def test_cli_rejects_redirect_json_without_following(monkeypatch, status, method):
     calls = []
 
     def handle(request):
@@ -228,13 +265,15 @@ def test_cli_rejects_redirect_json_without_following(monkeypatch, status):
         "client",
         lambda: ApiClient("http://127.0.0.1", transport=httpx.MockTransport(handle)),
     )
-    result = CliRunner().invoke(cli.app, ["jobs", "show", "job"])
+    arguments = ["jobs", "show", "job"] if method == "GET" else ["jobs", "cancel", "job"]
+    result = CliRunner().invoke(cli.app, arguments)
     assert (
         result.exit_code == 1
         and not result.stdout
         and str(status) in result.stderr
         and len(calls) == 1
     )
+    assert ("Outcome unknown" in result.stderr) == (method == "POST")
 
 
 def test_cli_path_ids_are_encoded_as_single_segments(monkeypatch):

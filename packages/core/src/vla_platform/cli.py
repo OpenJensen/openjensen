@@ -27,7 +27,7 @@ app.add_typer(projects, name="projects")
 app.add_typer(jobs, name="jobs")
 
 
-def execute(operation):
+def execute(operation, *, mutation: bool = False):
     try:
         return asyncio.run(operation)
     except cli_client.WaitDeadline as exc:
@@ -43,14 +43,19 @@ def execute(operation):
         raise typer.Exit(1) from None
     except KeyboardInterrupt:
         typer.echo(
-            "Client interrupted. No job cancellation was requested; inspect recorded jobs.",
+            (
+                "Client interrupted. Outcome unknown; the request may already have been "
+                "applied. Inspect recorded jobs/projects before submitting again."
+                if mutation
+                else "Client interrupted. No job cancellation was requested; inspect recorded jobs."
+            ),
             err=True,
         )
         raise typer.Exit(130) from None
 
 
 def call(method: str, path: str, payload: dict | None = None) -> None:
-    value = execute(cli_client.request_json(method, path, payload))
+    value = execute(cli_client.request_json(method, path, payload), mutation=method != "GET")
     typer.echo(json.dumps(value, indent=2, ensure_ascii=False))
 
 

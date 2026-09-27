@@ -183,7 +183,6 @@ async def download_artifact(
         raise ApiError("Output parent directory must already exist.")
     api = client()
     temporary: Path | None = None
-    published = False
     written_identity = None
     try:
         async with asyncio.timeout(timeout):
@@ -248,7 +247,6 @@ async def download_artifact(
             # A hard link publishes atomically and fails if any destination appeared meanwhile.
             # Never replace an existing file, directory or symlink, even under a race.
             os.link(temporary, output)
-            published = True
             if os.name == "posix":
                 directory = os.open(output.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
                 try:
@@ -269,8 +267,9 @@ async def download_artifact(
                 ),
             }
     except BaseException as exc:
-        if published and written_identity is not None:
-            # Undo only our own publication, never a concurrent replacement.
+        if written_identity is not None:
+            # Also covers a signal immediately after link(), before the next Python line.
+            # Undo only our own publication, never an observed concurrent replacement.
             try:
                 current = output.lstat()
                 if (current.st_dev, current.st_ino) == written_identity:

@@ -323,6 +323,29 @@ def test_failed_directory_sync_removes_only_our_published_inode(tmp_path, monkey
     assert list(tmp_path.iterdir()) == []
 
 
+@pytest.mark.parametrize("replacement", [False, True])
+def test_interruption_at_real_link_cleans_only_owned_output(tmp_path, monkeypatch, replacement):
+    output = tmp_path / "out"
+    download_server(monkeypatch)
+    original = os.link
+
+    def interrupted(source, destination):
+        original(source, destination)
+        if replacement:
+            output.unlink()
+            output.write_bytes(b"other operator")
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(os, "link", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        asyncio.run(cli_client.download_artifact("project", "job:policy", output))
+    if replacement:
+        assert output.read_bytes() == b"other operator"
+        assert list(tmp_path.iterdir()) == [output]
+    else:
+        assert list(tmp_path.iterdir()) == []
+
+
 @pytest.mark.parametrize(
     "status,exit_code", [("succeeded", 0), ("failed", 1), ("cancelled", 1), ("interrupted", 1)]
 )

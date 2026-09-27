@@ -65,6 +65,10 @@ observation deadline expires. The timeout range is 1–86400 seconds; polling is
 0.1–30 seconds. An unavailable/invalid API response stops the wait with an error.
 Ctrl+C exits the client (`130`) without cancelling the job. Cancellation remains a
 separate explicit `firebird jobs cancel JOB` command.
+Interrupting a write, including a cancellation request, has an unknown outcome:
+the server may already have accepted it. Inspect the saved job/project before
+submitting that write again. A redirect after a write is also treated as uncertain
+and is never followed or retried automatically.
 
 Downloads use an explicit **new file on the CLI computer**, never a server path.
 The parent directory must exist. The command resolves the project-owned registry

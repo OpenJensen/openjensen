@@ -120,13 +120,32 @@ def test_recipe_bound_and_fifo_reject_before_http(tmp_path, monkeypatch):
     result = runner.invoke(cli.app, ["policy", "submit", "p", str(large)])
     assert result.exit_code == 2 and "1 MiB" in result.output
     if hasattr(os, "mkfifo"):
+        import select
+
         fifo = tmp_path / "pipe"
         os.mkfifo(fifo)
-        result = subprocess.run(
-            [sys.executable, "-m", "vla_platform.cli", "policy", "submit", "p", str(fifo)],
-            capture_output=True,
+        # Bound cold CLI imports separately; the FIFO operation still gets five seconds.
+        child = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                "from vla_platform.cli import app; print('ready', flush=True); app()",
+                "policy",
+                "submit",
+                "p",
+                str(fifo),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=5,
         )
-        assert result.returncode == 2 and "regular JSON" in result.stderr
+        try:
+            assert select.select([child.stdout], [], [], 30)[0], "CLI startup deadline"
+            assert child.stdout.readline() == "ready\n"
+            stdout, stderr = child.communicate(timeout=5)
+            assert child.returncode == 2 and not stdout and "regular JSON" in stderr
+        finally:
+            if child.poll() is None:
+                child.kill()
+                child.communicate(timeout=3)
     assert not calls
