@@ -1,6 +1,6 @@
 # Teaching connections and camera preview
 
-The application's API connection, teaching executor and optional voice service are separate connections. A ready Google Cloud account does not mean a VM or simulator is running. The Teaching page never starts one automatically.
+Open **Teaching** directly from the **Data** navigation group. The application's API connection, teaching executor and optional voice service are separate connections. A ready Google Cloud account does not mean a VM or simulator is running. The Teaching page never starts one automatically.
 
 An operator must start a reviewed teaching executor and configure `FIREBIRD_TEACHING_URL` plus `FIREBIRD_TEACHING_CONTROL_TOKEN_FILE` on the application host, following [the worker setup](../workers/teaching/README.md). These are operator settings; the browser cannot choose an arbitrary URL or token path. The existing relay only permits its authenticated loopback origin. Optional voice additionally needs `FIREBIRD_TEACHING_VOICE_URL` and the worker's isolated LiveKit/OpenRouter configuration. Camera viewing does not enable the microphone or join a room.
 

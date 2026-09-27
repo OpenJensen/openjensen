@@ -4,8 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { TeachingIntelligence } from "./teaching-intelligence";
 import { TeachingPreview } from "./teaching-preview";
+import { WorkflowIntegration } from "./workflow-integration";
 import { apiOrigin } from "@/lib/api";
 import type { Room } from "livekit-client";
+import "./workbench-form.css";
+import "./teaching-panel.css";
 
 type State = { mode: string; episode_id: string | null; revision: number; session_id: string | null; instruction: string; outcome: string; steps: number; sim_time: number; joints: string[]; state_rad: number[] | null; fault: string | null };
 type Connection = { connected: boolean; state: State | null; message: string | null; voice_configured: boolean };
@@ -125,31 +128,35 @@ export function TeachingPanel() {
       setVoiceState("Disconnected"); setAgentPresent(false); setVoiceError("Voice could not connect. Check microphone permission and the server's LiveKit/OpenRouter settings.");
     } finally { if (generation.current === attempt) joining.current = false; }
   }
-  return <section className="panel" aria-labelledby="teaching-title">
-    <div className="panel-title"><h2 id="teaching-title">Teach in simulation</h2><span className="metadata-badge">{online ? "Executor reachable" : "Executor disconnected"}</span></div>
-    <p>Record what the simulator actually does: camera, state, applied action, timing and corrections. Voice supplies instructions; recorded actions supply training data.</p>
-    {!online && <p role="status">{connection.data?.message ?? "Checking teaching executor…"} The existing rollout monitor does not provide teaching control.</p>}
-    <details className="teaching-setup"><summary>How to connect a simulator</summary><p>Teaching needs a running OPEN JENSEN teaching executor, its private control token and an operator-configured connection on the application host. Google Cloud readiness and previous rollout logs do not create this connection.</p><ol><li>Start the teaching executor with your reviewed scene and recording settings.</li><li>Have the application operator configure its loopback connection and private control token.</li><li>Wait for Executor reachable and a fresh camera observation before recording. Voice is optional and requires its separate configured teaching room.</li></ol><p>This page does not start a VM or simulator. See <code>workers/teaching/README.md</code> in the installed repository for the operator setup instructions.</p></details>
-    <dl className="cloud-run-facts"><div><dt>Executor connection</dt><dd>{online ? "Reachable" : connection.isPending ? "Checking" : "Not connected"}</dd></div><div><dt>Voice service</dt><dd>{voiceReadiness.isSuccess && voiceReadiness.data?.broker_reachable && voiceReadiness.data.configuration_present && voiceReadiness.data.dependencies_present ? "Configured; access unverified" : "Not configured or broker unavailable"}</dd></div><div><dt>Last response from application</dt><dd>{connection.dataUpdatedAt ? new Date(connection.dataUpdatedAt).toLocaleTimeString() : "Not received"}</dd></div></dl>
+  return <section className="panel teaching-panel" aria-label="Teaching controls">
+    <WorkflowIntegration label="Control source" name="Isaac Sim" meta="Teaching executor" icon="play" status={online ? "Executor reachable" : "Executor disconnected"} />
+    {!online && <p role="status">{connection.data?.message ?? "Checking teaching executor…"}</p>}
+    <details className="teaching-setup"><summary>Connection details</summary><dl className="cloud-run-facts"><div><dt>Executor connection</dt><dd>{online ? "Reachable" : connection.isPending ? "Checking" : "Not connected"}</dd></div><div><dt>Voice service</dt><dd>{voiceReadiness.isSuccess && voiceReadiness.data?.broker_reachable && voiceReadiness.data.configuration_present && voiceReadiness.data.dependencies_present ? "Configured; access unverified" : "Not configured or broker unavailable"}</dd></div><div><dt>Last response from application</dt><dd>{connection.dataUpdatedAt ? new Date(connection.dataUpdatedAt).toLocaleTimeString() : "Not received"}</dd></div></dl></details>
     {connection.error && <p role="alert">Teaching connection could not be checked.</p>}
     {state?.fault && <p role="alert">The executor stopped after a fault. Inspect the worker before continuing.</p>}
     {previewState?.session_id && <TeachingPreview key={previewState.session_id} online={!!online} context={{ session_id: previewState.session_id, revision: previewState.revision, active_episode_id: previewState.episode_id, mode: previewState.mode }} />}
-    {!previewState?.session_id && <p className="warning-box">Simulator preview unavailable until an executor is connected. No camera or microphone has been enabled.</p>}
-    <form onSubmit={event => { event.preventDefault(); command.mutate({ operation: "task", args: { instruction: instruction.trim() } }); }}>
-      <label className="field-label" htmlFor="teaching-task">Task instruction</label>
-      <input id="teaching-task" value={instruction} maxLength={256} onChange={event => setInstruction(event.target.value)} placeholder="Move the gripper above the object" disabled={!online} />
-      <button type="submit" className="secondary-button" disabled={!online || !instruction.trim() || command.isPending}>Set instruction</button>
+    <form className="workbench-form teaching-task-form" onSubmit={event => { event.preventDefault(); command.mutate({ operation: "task", args: { instruction: instruction.trim() } }); }}>
+      <div className="workbench-field">
+        <label htmlFor="teaching-task">Task instruction</label>
+        <input id="teaching-task" value={instruction} maxLength={256} onChange={event => setInstruction(event.target.value)} placeholder="Move the gripper above the object" disabled={!online} />
+      </div>
+      <div className="workbench-actions"><button type="submit" className="secondary-button" disabled={!online || !instruction.trim() || command.isPending}>Set instruction</button></div>
     </form>
-    <div className="teaching-actions" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBlock: 16 }}>
+    <div className="workbench-actions teaching-recording-actions">
       <button className="primary-button" disabled={!online || !state.instruction || state.mode === "running" || command.isPending} onClick={() => command.mutate({ operation: "start" })}>Start recording</button>
       <button className="secondary-button" disabled={!online || state.mode !== "running"} onClick={() => command.mutate({ operation: "pause" })}>Pause</button>
       <button className="secondary-button" disabled={!online || state.mode === "idle"} onClick={() => command.mutate({ operation: "finish" })}>Finish episode</button>
       <button className="secondary-button" disabled={!online || command.isPending} onClick={() => command.mutate({ operation: "reset" })}>Reset scene</button>
       <button className="secondary-button" disabled={!online || state.mode === "idle" || command.isPending} onClick={() => command.mutate({ operation: "mark_failure", args: { reason: "Operator marked this episode as failed" } })}>Mark failure</button>
     </div>
-    <label className="field-label">Joint correction<select aria-label="Joint correction" value={joint || state?.joints?.[0] || ""} onChange={event => setJoint(event.target.value)} disabled={!online}>{state?.joints?.map(name => <option key={name}>{name}</option>)}</select></label>
-    <div style={{ display: "flex", gap: 8 }}>
-      {[-.05, .05].map(delta => <button key={delta} className="secondary-button" disabled={!online || state.mode !== "running" || command.isPending} onClick={() => command.mutate({ operation: "correct", args: { joint: joint || state?.joints[0], delta_rad: delta } })}>{delta > 0 ? "+" : "−"} 0.05 rad</button>)}
+    <div className="teaching-correction" role="group" aria-label="Joint correction controls">
+      <div className="workbench-field">
+        <label htmlFor="teaching-joint">Joint correction</label>
+        <select id="teaching-joint" aria-label="Joint correction" value={joint || state?.joints?.[0] || ""} onChange={event => setJoint(event.target.value)} disabled={!online}>{state?.joints?.map(name => <option key={name}>{name}</option>)}</select>
+      </div>
+      <div className="workbench-actions">
+        {[-.05, .05].map(delta => <button key={delta} className="secondary-button" disabled={!online || state.mode !== "running" || command.isPending} onClick={() => command.mutate({ operation: "correct", args: { joint: joint || state?.joints[0], delta_rad: delta } })}>{delta > 0 ? "+" : "−"} 0.05 rad</button>)}
+      </div>
     </div>
     {command.error && <p role="alert">{command.error.message}</p>}
     {receipt.data && <p role="status">Command: {receipt.data.status}{receipt.data.error ? ` · ${receipt.data.error}` : ""}</p>}
@@ -157,12 +164,12 @@ export function TeachingPanel() {
     {receipt.error && <p role="alert">Command acknowledgement unavailable. Execution is not confirmed.</p>}
     {state && <dl className="dataset-facts"><div><dt>Session</dt><dd>{state.session_id}</dd></div><div><dt>Executor mode</dt><dd>{state.mode}</dd></div><div><dt>Recorded steps</dt><dd>{state.steps}</dd></div><div><dt>Simulation time</dt><dd>{state.sim_time?.toFixed(2)} s</dd></div><div><dt>Outcome</dt><dd>{state.outcome || "Unverified"}</dd></div></dl>}
     <TeachingIntelligence context={state?.session_id ? { session_id: state.session_id, episode_id: state.episode_id, revision: state.revision } : null} online={!!online} />
-    <hr />
-    <h3>Optional voice connection</h3>
-    <p>Uses an isolated LiveKit teaching room and OpenRouter. Hosted speech/model services require their configured accounts. Joining enables your microphone for up to five minutes.</p>
-    <button className="primary-button" disabled={!online || !(voiceReadiness.isSuccess && voiceReadiness.data?.broker_reachable && voiceReadiness.data.configuration_present && voiceReadiness.data.dependencies_present) || voiceState !== "Disconnected"} onClick={() => void join()}>Connect voice</button>{voiceState !== "Disconnected" && <button className="secondary-button" onClick={() => void leave()}>Disconnect microphone</button>}
-    <p role="status">{voiceState} · Voice agent {agentPresent ? "present in room" : "not observed"}</p>{voiceError && <p role="alert">{voiceError}</p>}
-    <div ref={media} aria-label="Teaching room media" />
-    <p className="field-help">Finalized demonstrations can be imported as an immutable training copy. Task success and physical robot calibration remain separate checks.</p>
+    <section className="teaching-voice" aria-labelledby="teaching-voice-title">
+      <h3 id="teaching-voice-title">Voice</h3>
+      <p>Connecting sends microphone audio through LiveKit/OpenRouter for up to five minutes. Provider charges may apply.</p>
+      <div className="workbench-actions"><button className="primary-button" disabled={!online || !(voiceReadiness.isSuccess && voiceReadiness.data?.broker_reachable && voiceReadiness.data.configuration_present && voiceReadiness.data.dependencies_present) || voiceState !== "Disconnected"} onClick={() => void join()}>Connect voice</button>{voiceState !== "Disconnected" && <button className="secondary-button" onClick={() => void leave()}>Disconnect microphone</button>}</div>
+      <p role="status">{voiceState} · Voice agent {agentPresent ? "present in room" : "not observed"}</p>{voiceError && <p role="alert">{voiceError}</p>}
+      <div ref={media} aria-label="Teaching room media" />
+    </section>
   </section>;
 }

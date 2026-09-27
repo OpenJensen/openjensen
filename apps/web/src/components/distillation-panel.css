@@ -1,0 +1,27 @@
+.distillation-overview { min-width: 0; }
+.distillation-model-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.distillation-model-heading h2, .distillation-history-overview h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.distillation-model-heading > span { font-size: 11px; color: var(--muted); }
+.distillation-model-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 420px)); }
+.distillation-model-card { display: flex; align-items: center; gap: 16px; min-width: 0; width: 100%; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); text-align: left; }
+.distillation-model-card:hover:not(:disabled) { border-color: var(--accent); background: var(--subtle); }
+.distillation-model-icon { display: grid; place-items: center; width: 44px; height: 44px; flex: 0 0 44px; color: var(--muted); border-radius: 9px; background: var(--subtle); }
+.distillation-model-copy { display: grid; gap: 5px; flex: 1; min-width: 0; }
+.distillation-model-copy strong { font-size: 17px; font-weight: 600; }
+.distillation-model-copy > span { color: var(--muted); font-size: 12px; }
+.distillation-model-copy small { color: var(--muted); font-size: 11px; margin-top: 6px; }
+.distillation-model-card > svg { color: var(--muted); }
+.distillation-back { display: inline-flex; align-items: center; gap: 7px; padding: 5px 0; margin-bottom: 18px; border: 0; background: transparent; color: var(--muted); font-size: 12px; }
+.distillation-back svg { transform: rotate(180deg); }
+.distillation-back:hover { color: var(--ink); }
+.distillation-recovery { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 16px; margin-top: 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: 13px; }
+.distillation-history-overview { margin-top: 28px; }
+.distillation-saved-jobs { display: grid; gap: 8px; max-height: 350px; overflow-y: auto; margin-top: 12px; }
+.distillation-saved-jobs > button { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--ink); text-align: left; }
+.distillation-saved-jobs > button:hover { border-color: var(--accent); }
+.distillation-saved-jobs strong { display: block; font-size: 13px; font-weight: 550; }
+.distillation-saved-jobs small { display: block; color: var(--muted); font-size: 11px; margin-top: 3px; }
+@media (max-width: 500px) {
+  .distillation-model-card { padding: 16px; gap: 12px; }
+  .distillation-saved-jobs > button { flex-wrap: wrap; }
+}

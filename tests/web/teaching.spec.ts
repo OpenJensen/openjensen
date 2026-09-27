@@ -46,7 +46,8 @@ async function teaching(page: Page, connected = true) {
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Teaching', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Teach in simulation' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Teaching', level: 1 })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Control source', exact: true })).toContainText('Isaac Sim');
   return { commands, unexpected, changes };
 }
 
@@ -55,7 +56,7 @@ test('disconnected executor disables recording and voice without pretending moni
   await expect(page.getByRole('status', { name: 'Application API connection' })).toHaveText('App connected');
   await expect(page.getByRole('button', { name: 'Start recording' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Connect voice' })).toBeDisabled();
-  await expect(page.getByText(/existing rollout monitor does not provide teaching control/)).toBeVisible();
+  await expect(page.getByText('Connect a teaching executor in the application host configuration.', { exact: true })).toBeVisible();
   expect(commands).toEqual([]); expect(unexpected).toEqual([]);
   const size = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
   expect(size[0]).toBeLessThanOrEqual(size[1] + 1);
@@ -267,3 +268,58 @@ test('revision change cancels advice and cannot promote a late response', async 
   await expect(page.getByRole('alert').filter({ hasText: 'Teaching context changed' })).toBeVisible();
   await expect(page.getByRole('article', { name: 'Intelligence suggestion' })).toHaveCount(0);
 });
+
+for (const width of [1440, 390, 320]) {
+  test(`teaching fields keep labels above usable controls and consent on its own row at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 1000 });
+    const { commands, unexpected } = await teaching(page, false);
+    await page.getByText('Configure optional services', { exact: true }).click();
+    const controls = page.getByRole('region', { name: 'Teaching controls', exact: true });
+    const geometry = await controls.evaluate(section => {
+      const rect = (element: Element) => {
+        const value = element.getBoundingClientRect();
+        return { top: value.top, bottom: value.bottom, left: value.left, right: value.right, width: value.width, height: value.height };
+      };
+      const field = (id: string) => {
+        const input = section.querySelector(`#${id}`)!;
+        return { input: rect(input), label: rect(section.querySelector(`label[for="${id}"]`)!), field: rect(input.parentElement!) };
+      };
+      const question = section.querySelector('#teaching-advice-question')!;
+      const consent = section.querySelector('.teaching-advice-form .workbench-check')!;
+      return {
+        panel: rect(section), advice: rect(section.querySelector('.teaching-advice')!),
+        task: field('teaching-task'), joint: field('teaching-joint'), question: field('teaching-advice-question'),
+        key: field('teaching-openrouter-key'), model: field('teaching-voice-model'),
+        setInstruction: rect(section.querySelector('.teaching-task-form button')!),
+        consent: rect(consent), checkbox: rect(consent.querySelector('input')!), consentText: rect(consent.querySelector('span')!),
+        questionValue: (question as HTMLInputElement).value,
+      };
+    });
+    for (const field of [geometry.task, geometry.joint, geometry.question, geometry.key, geometry.model]) {
+      expect(field.input.top - field.label.bottom).toBeGreaterThanOrEqual(6);
+      expect(field.input.width).toBeGreaterThanOrEqual(field.field.width - 2);
+      expect(field.input.width).toBeGreaterThan(140);
+      expect(field.input.height).toBeGreaterThanOrEqual(44);
+    }
+    expect(geometry.task.input.width).toBeGreaterThan(geometry.panel.width * .6);
+    expect(geometry.question.input.width).toBeGreaterThan(geometry.advice.width * .65);
+    expect(geometry.consent.top - geometry.question.input.bottom).toBeGreaterThanOrEqual(12);
+    expect(geometry.consentText.left - geometry.checkbox.right).toBeGreaterThanOrEqual(8);
+    expect(geometry.checkbox.width).toBeLessThanOrEqual(20);
+    if (width > 700) {
+      expect(geometry.setInstruction.left - geometry.task.input.right).toBeGreaterThanOrEqual(10);
+      expect(geometry.model.input.left - geometry.key.input.right).toBeGreaterThanOrEqual(16);
+    } else {
+      expect(geometry.setInstruction.top - geometry.task.input.bottom).toBeGreaterThanOrEqual(10);
+      expect(geometry.model.label.top - geometry.key.input.bottom).toBeGreaterThanOrEqual(16);
+    }
+    await expect(page.getByRole('checkbox', { name: /I consent to sending/ })).not.toBeChecked();
+    await expect(page.getByRole('button', { name: 'Connect voice', exact: true })).toBeDisabled();
+    expect(commands).toEqual([]);
+    expect(unexpected).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width + 1);
+    const path = testInfo.outputPath(`teaching-form-${width}.png`);
+    await controls.screenshot({ path });
+    await testInfo.attach(`Teaching form ${width}px`, { path, contentType: 'image/png' });
+  });
+}

@@ -1,0 +1,100 @@
+/* Shared navigation and workflow choices. Keep the primary tasks visible. */
+.sidebar { padding-top: 24px; }
+.brand { margin-bottom: 22px; }
+.brand-mark, .main-shell { box-shadow: none; }
+.sidebar .projects-section { margin: 0 0 25px; padding: 0 5px 22px; border-bottom: 1px solid var(--line); }
+.sidebar .project-picker { margin: 10px 0 0; }
+.sidebar .project-form { margin: 12px 0 0; }
+.grouped-navigation { display: grid; gap: 19px; }
+.grouped-navigation .sidebar-section-label { font-size: 10px; letter-spacing: 1px; }
+.grouped-navigation .stage-list { margin-top: 7px; gap: 2px; }
+.grouped-navigation .stage-button { min-height: 39px; font-size: 13px; padding-block: 7px; }
+.grouped-navigation .stage-button.selected { box-shadow: none; }
+.sidebar-bottom { padding-top: 20px; }
+.workspace-identity { margin-top: 16px; padding-top: 14px; }
+.workflow-choices { margin-bottom: 28px; min-width: 0; }
+.workflow-section-heading { margin-bottom: 15px; }
+.workflow-section-heading h2 { font-size: 17px; font-weight: 600; letter-spacing: -.3px; }
+.workflow-section-heading p { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.mode-card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.mode-card-grid.two-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.mode-card { display: flex; flex-direction: column; align-items: flex-start; gap: 9px; min-width: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); padding: 20px; text-align: left; }
+.mode-card:hover:not(:disabled) { border-color: var(--accent); background: var(--subtle); }
+.mode-card.selected { border-color: var(--accent); background: color-mix(in srgb, var(--selected) 35%, var(--surface)); }
+.mode-card-top { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 6px; }
+.mode-card-icon { color: var(--muted); }
+.mode-card.selected .mode-card-icon { color: var(--accent); }
+.mode-card-check { display: grid; place-items: center; width: 18px; height: 18px; border: 1px solid var(--line-strong); border-radius: 50%; }
+.mode-card.selected .mode-card-check { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.mode-card strong { font-size: 15px; font-weight: 600; }
+.mode-card-description { font-size: 13px; line-height: 1.65; color: var(--muted); }
+.mode-card-detail { margin-top: auto; padding-top: 8px; font-size: 11px; color: var(--muted); }
+.dataset-train-action { display: flex; flex-wrap: wrap; gap: 12px; }
+.intake-panel input[type=checkbox] { width: 16px; min-height: 16px; height: 16px; padding: 0; vertical-align: middle; margin-right: 6px; }
+@media (min-width: 701px) {
+  .main-content { padding-top: 34px; }
+  .page-heading { margin-bottom: 30px; }
+  .grouped-navigation .navigation-group:last-child .stage-button { font-size: 12px; }
+}
+@media (max-width: 1000px) and (min-width: 701px) {
+  .mode-card { padding: 16px; }
+  .mode-card-grid { gap: 8px; }
+}
+@media (max-width: 700px) {
+  .sidebar { padding: 14px 16px 16px; }
+  .sidebar .brand { margin-bottom: 14px; }
+  .sidebar .projects-section { margin: 0 0 14px; padding: 0 0 14px; border-top: 0; }
+  .sidebar .project-picker, .sidebar .project-form { margin: 0; }
+  .grouped-navigation { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; gap: 12px 5px; padding: 0; margin: 0; overflow: visible; }
+  .grouped-navigation .navigation-group { min-width: 0; }
+  .grouped-navigation .sidebar-section-label { display: block; padding-inline: 8px; }
+  .grouped-navigation .stage-list { display: flex; flex-direction: column; gap: 2px; margin-top: 5px; }
+  .grouped-navigation .stage-button { width: 100%; min-height: 40px; font-size: 11px; gap: 6px; padding: 8px; white-space: normal; }
+  .grouped-navigation .stage-button svg { width: 14px; height: 14px; }
+  .grouped-navigation .navigation-group:last-child { grid-column: 1 / -1; border-top: 1px solid var(--line); padding-top: 7px; }
+  .grouped-navigation .navigation-group:last-child > p { display: none; }
+  .grouped-navigation .navigation-group:last-child .stage-list { flex-direction: row; margin-top: 0; }
+  .grouped-navigation .navigation-group:last-child .stage-button { min-height: 36px; }
+  .mode-card-grid, .mode-card-grid.two-columns { grid-template-columns: 1fr; }
+  .mode-card { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 4px 13px; padding: 16px; }
+  .mode-card-top { display: contents; }
+  .mode-card-icon { grid-column: 1; grid-row: 1 / 4; padding-top: 2px; }
+  .mode-card-check { display: none; }
+  .mode-card strong, .mode-card-description, .mode-card-detail { grid-column: 2; }
+  .mode-card-detail { padding-top: 4px; }
+  .mode-card.selected { box-shadow: inset 3px 0 0 var(--accent); }
+}
+
+/* One page title; explanation belongs in the guide. */
+.page-heading { align-items: center; margin-bottom: 24px; }
+.page-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; }
+.page-guide { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; text-decoration: none; }
+.page-guide:hover { color: var(--ink); }
+.sidebar-bottom > .sidebar-link + .sidebar-link { margin-top: 12px; }
+.mobile-guide-link { display: none; color: var(--muted); }
+.mode-card { gap: 6px; padding: 16px 18px; }
+.mode-card-top { margin-bottom: 4px; }
+.mode-card-detail { padding-top: 2px; }
+.workflow-choices { margin-bottom: 20px; }
+.workflow-context { margin-bottom: 16px; }
+.workflow-context .workbench-disclosure { border: 0; background: transparent; }
+.workflow-context .workbench-disclosure > summary { padding: 4px 0; justify-content: flex-start; color: var(--muted); font-size: 12px; }
+.workflow-context .workbench-disclosure-body { padding: 12px 0; font-size: 13px; color: var(--muted); }
+.workflow-context .native-result-actions { margin: 8px 0; }
+@media (max-width: 700px) {
+  .mobile-guide-link { display: inline-flex; }
+  .topbar-actions { gap: 10px; }
+  .breadcrumb strong { overflow: hidden; text-overflow: ellipsis; }
+  .page-actions { gap: 12px; }
+  .page-heading { gap: 12px; }
+  .mode-card { padding: 14px; }
+}
+
+.workflow-choice-title { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
+
+/* Model names identify quantization choices; only workflow actions use icons. */
+.mode-card-plain .mode-card-top { margin-bottom: 0; }
+@media (max-width: 700px) {
+  .mode-card-plain { grid-template-columns: minmax(0, 1fr); }
+  .mode-card-plain strong, .mode-card-plain .mode-card-detail { grid-column: 1; }
+}

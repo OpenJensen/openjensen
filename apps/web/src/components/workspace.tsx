@@ -2,16 +2,16 @@
 
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type FormEvent } from 'react';
+import { isAugmentationSource } from '@/lib/augmentation-source';
 import { api, isActive, isDatasetJob, type DatasetJob, type DatasetProfile, type Job, type Project } from '@/lib/api';
 import { engineRuntime, initialQuantizeEntry, initialRunEntry, runJobMode, type Entry, type ProjectEntry, type QuantizeMode, type RunMode } from '@/lib/workflow-entry';
 import { storedSimulationAttempt } from '@/lib/native-simulation-recovery';
 import { storedAttempt, type PolicyJobAttempt } from '@/lib/policy-job-attempt';
 import { replayRuntime } from '@/lib/native-replay';
-import { availableNativeQuantizer } from '@/lib/native-quantization';
 import { simulationOptions } from '@/lib/native-simulation';
 import { NativeQuantizationPanel } from '@/components/native-quantization-panel';
 import { NativeReplayPanel } from '@/components/native-replay-panel';
-import { NativeDistillationPanel } from '@/components/native-distillation-panel';
+import { DistillationPanel, type DistillationModel } from '@/components/distillation-panel';
 import { NativeSimulationPanel } from '@/components/native-simulation-panel';
 import { CloudRuns } from '@/components/cloud-runs';
 import { WorkflowPanel } from '@/components/workflow-panel';
@@ -24,17 +24,9 @@ import { WorkspaceShell } from '@/components/workspace-shell';
 import { DatasetExplorer } from '@/components/dataset-explorer';
 import { DatasetStarters } from '@/components/dataset-starters';
 import { datasetStarters, type DatasetStarter } from '@/lib/dataset-starters';
-
-const stagePurpose = [
-  'Inspect robotics data, understand its episodes, and prepare a training source.',
-  'Train a policy from an inspected dataset, then review its checkpoints and exports.',
-  'Train a smaller student from a teacher policy and verified robotics observations.',
-  'Create a smaller policy package and inspect the measured differences.',
-  'Check execution or measure task success with a configured evaluation protocol.',
-  'Run a prepared policy and review its recorded execution.',
-  'Manage connections and inspect the capabilities available to this workspace.',
-  'Follow application cloud jobs and external observations, with their collection times.',
-] as const;
+import { publicPath } from '@/lib/base-path';
+import { guideSectionId } from '@/lib/guide-section';
+import { WorkbenchDisclosure } from '@/components/workbench-disclosure';
 
 const stages = [
   { name: 'Dataset', icon: 'database' },
@@ -43,7 +35,26 @@ const stages = [
   { name: 'Quantize', icon: 'compress' },
   { name: 'Evaluate', icon: 'chart' },
   { name: 'Run', icon: 'play' },
+  { name: 'Settings & diagnostics', icon: 'sliders' },
+  { name: 'Cloud runs', icon: 'clock' },
+  { name: 'Augmentation', icon: 'spark' },
+  { name: 'Teaching', icon: 'plus' },
+  { name: 'Decision lab', icon: 'chart' },
 ] as const;
+
+const navigationGroups = [
+  { name: 'Data', items: [0, 8, 9] },
+  { name: 'Train', items: [1, 2, 3] },
+  { name: 'Test', items: [4, 5, 10] },
+  { name: 'Workspace', items: [7, 6] },
+];
+
+function ModeCard({ title, detail, icon, selected, disabled, onClick }: { title: string; detail: string; icon?: Parameters<typeof Icon>[0]['name']; selected: boolean; disabled: boolean; onClick: () => void }) {
+  return <button type="button" className={`mode-card${icon ? '' : ' mode-card-plain'}${selected ? ' selected' : ''}`} aria-label={title} aria-pressed={selected} disabled={disabled} onClick={onClick}>
+    <span className="mode-card-top">{icon ? <span className="mode-card-icon"><Icon name={icon} size={23} /></span> : <strong>{title}</strong>}<span className="mode-card-check">{selected && <Icon name="check" size={13} />}</span></span>
+    {icon && <strong>{title}</strong>}<span className="mode-card-detail">{detail}</span>
+  </button>;
+}
 
 function ErrorNotice({ error }: { error: Error | null }) {
   return error ? <p className="error-notice" role="alert">{error.message}</p> : null;
@@ -146,8 +157,7 @@ function IntakeForm({ project, readinessMessage, localAvailable, onCreated, star
       </>}
       <ErrorNotice error={mutation.error} />
       {!project && <p className="form-note" role="status">{readinessMessage}</p>}
-      <p className="field-help">Saved inspections are reused when the dataset revision is unchanged.</p>
-      <button className="primary-button inspect-button" type="submit" disabled={!project || mutation.isPending}>{mutation.isPending ? 'Checking dataset…' : 'Inspect dataset'}<Icon name="arrow" size={17} /></button>
+            <button className="primary-button inspect-button" type="submit" disabled={!project || mutation.isPending}>{mutation.isPending ? 'Checking dataset…' : 'Inspect dataset'}<Icon name="arrow" size={17} /></button>
     </form>
   </section>;
 }
@@ -175,6 +185,7 @@ function Workbench() {
   const [selectedJobId, setSelectedJobId] = useState('');
   const [activeStage, setActiveStage] = useState(0);
   const [entries, setEntries] = useState<Record<string, ProjectEntry>>({});
+  const [distillationModels, setDistillationModels] = useState<Record<string, DistillationModel | undefined>>({});
   const [entryError, setEntryError] = useState<{ projectId: string; stage: number; message: string } | null>(null);
   const [openSimulation, setOpenSimulation] = useState<{ projectId: string; id: string } | null>(null);
   const [quantizeArtifact, setQuantizeArtifact] = useState<{ projectId: string; artifactId: string } | null>(null);
@@ -184,7 +195,7 @@ function Workbench() {
   const [workflowNavigation, setWorkflowNavigation] = useState(0);
   const [startTraining, setStartTraining] = useState<{ id: number; datasetId?: string }>();
   const [settingsTab, setSettingsTab] = useState<'compute' | 'settings' | 'diagnostics'>('compute');
-  const [datasetView, setDatasetView] = useState<'sources' | 'inspection' | 'augmentation' | 'teaching' | 'decision'>('sources');
+  const [datasetView, setDatasetView] = useState<'sources' | 'inspection'>('sources');
   const [starter, setStarter] = useState(datasetStarters[0]);
   const [starterSelection, setStarterSelection] = useState(0);
   const [activeStarterId, setActiveStarterId] = useState(datasetStarters[0].id);
@@ -271,7 +282,7 @@ function Workbench() {
   useEffect(() => {
     const stage = activeStage === 3 ? 'quantize' : activeStage === 5 ? 'run' : null;
     if (!stage || !workflowProjectId || context?.[stage]) return;
-    // An unfinished request has priority over automatic history/capability selection.
+    // An unfinished request has priority over restoring owned history.
     // Read only: the child owns its journal and explicit recovery acknowledgement.
     let recovery = false, simulationRecovery = false;
     try {
@@ -281,23 +292,22 @@ function Workbench() {
       if (stage === 'run') simulationRecovery = !!queryClient.getQueryData<PolicyJobAttempt>(['native-simulation-attempt', workflowProjectId]) || !!storedSimulationAttempt(workflowProjectId);
       if (recovery && simulationRecovery) { setEntryError({ projectId: workflowProjectId, stage: activeStage, message: 'Both observation replay and native simulation have unresolved requests. Choose either workflow to inspect its recovery record; neither request was retried.' }); return; }
     } catch {
-      setEntryError({ projectId: workflowProjectId, stage: activeStage, message: 'Saved request recovery could not be read. Choose a workflow to inspect its history; automatic selection is paused.' });
+      setEntryError({ projectId: workflowProjectId, stage: activeStage, message: 'Saved request recovery could not be read. Choose a workflow to inspect its history.' });
       return;
     }
-    if (!recovery && !simulationRecovery && (!jobs.isSuccess || jobs.isError || !options.isSuccess || options.isError || (stage === 'run' && (!simulation.isSuccess || simulation.isError)))) return;
+    if (!recovery && !simulationRecovery && (!jobs.isSuccess || jobs.isError)) return;
     const next = stage === 'quantize'
-      ? recovery ? { mode: 'native' as const, origin: 'recovery' as const } : initialQuantizeEntry(workflowProjectId, jobs.data!, options.data!)
-      : simulationRecovery ? { mode: 'native' as const, origin: 'recovery' as const } : recovery ? { mode: 'replay' as const, origin: 'recovery' as const } : initialRunEntry(workflowProjectId, jobs.data!, options.data!, simulation.data!.profiles);
-    setEntries(previous => previous[workflowProjectId]?.[stage] ? previous : { ...previous, [workflowProjectId]: { ...previous[workflowProjectId], [stage]: next } });
+      ? recovery ? { mode: 'native' as const, origin: 'recovery' as const } : initialQuantizeEntry(workflowProjectId, jobs.data!)
+      : simulationRecovery ? { mode: 'native' as const, origin: 'recovery' as const } : recovery ? { mode: 'replay' as const, origin: 'recovery' as const } : initialRunEntry(workflowProjectId, jobs.data!);
+    if (next) setEntries(previous => previous[workflowProjectId]?.[stage] ? previous : { ...previous, [workflowProjectId]: { ...previous[workflowProjectId], [stage]: next } });
     setEntryError(null);
-  }, [activeStage, workflowProjectId, context, jobs.data, jobs.isSuccess, jobs.isError, options.data, options.isSuccess, options.isError, simulation.data, simulation.isSuccess, simulation.isError, queryClient]);
+  }, [activeStage, workflowProjectId, context, jobs.data, jobs.isSuccess, jobs.isError, queryClient]);
   const ownedJobs = (jobs.data ?? []).filter(job => job.project_id === workflowProjectId);
   const replayHistory = ownedJobs.some(job => runJobMode(job, workflowProjectId) === 'replay');
   const simulationHistory = ownedJobs.some(job => runJobMode(job, workflowProjectId) === 'native');
   const replayConfigured = options.isSuccess && !options.isError && options.data.runtimes.some(replayRuntime);
   const simulationConfigured = simulation.isSuccess && !simulation.isError && simulation.data.profiles.length > 0;
   const engineConfigured = options.isSuccess && !options.isError && options.data.runtimes.some(item => engineRuntime(item, activeStage === 4 ? 'Evaluate' : activeStage === 3 ? 'Quantize' : 'Run'));
-  const nativeQuantConfigured = options.isSuccess && !options.isError && options.data.runtimes.some(availableNativeQuantizer);
   const entryPending = (activeStage === 3 && !quantizeMode) || (activeStage === 5 && !runMode);
   const entryFailed = jobs.isError || options.isError || (activeStage === 5 && simulation.isError);
   const recoveryError = entryError?.projectId === workflowProjectId && entryError.stage === activeStage ? entryError.message : null;
@@ -305,21 +315,11 @@ function Workbench() {
   const selectedJob = sortedJobs.find(job => job.id === selectedJobId) ?? sortedJobs[0];
   const connected = health.isSuccess && !health.isError;
 
-  const stage = activeStage === 7 ? { name: 'Cloud runs', icon: 'clock' as const } : stages[activeStage] ?? { name: 'Settings & diagnostics', icon: 'sliders' as const };
+  const stage = stages[activeStage] ?? stages[0];
 
-  return <WorkspaceShell
+  return <WorkspaceShell showGuideShortcut={false}
     breadcrumb={<><Icon name={stage.icon} size={18} /><strong>{stage.name}</strong><span className="breadcrumb-divider">/</span><span className="breadcrumb-project">{project?.name ?? 'No project selected'}</span></>}
     navigation={<>
-      <nav className="stage-navigation" aria-label="Policy lifecycle">
-        <p className="sidebar-section-label">Workspace</p>
-        <ul className="stage-list">{stages.map((item, index) => <li key={item.name}>
-          <button type="button" className={`stage-button${activeStage === index ? ' selected' : ''}`} onClick={() => navigateStage(index)} aria-current={activeStage === index ? 'page' : undefined}>
-            <Icon name={item.icon} size={19} /><span>{item.name}</span>
-          </button>
-        </li>)}</ul>
-        <button className={`stage-button${activeStage === 6 ? ' selected' : ''}`} onClick={() => { setSettingsTab('compute'); setActiveStage(6); }}><Icon name="sliders" size={19} /><span>Settings & diagnostics</span></button>
-        <button className={`stage-button${activeStage === 7 ? ' selected' : ''}`} onClick={() => setActiveStage(7)} aria-current={activeStage === 7 ? 'page' : undefined}><Icon name="clock" size={19} /><span>Cloud runs</span></button>
-      </nav>
       <section className="projects-section" aria-labelledby="projects-heading">
         <div className="sidebar-section-label"><h2 id="projects-heading">Project</h2><span>{projects.data?.length ?? '—'}</span></div>
         {projects.isPending && <p className="sidebar-note" role="status">Loading projects…</p>}
@@ -334,13 +334,24 @@ function Workbench() {
           <ErrorNotice error={projectMutation.error} />
         </form>
       </section>
+      <nav className="stage-navigation grouped-navigation" aria-label="Policy lifecycle">
+        {navigationGroups.map(group => <div className="navigation-group" key={group.name}>
+          <p className="sidebar-section-label">{group.name}</p>
+          <ul className="stage-list">{group.items.map(index => {
+            const item = stages[index];
+            return <li key={item.name}><button type="button" className={`stage-button${activeStage === index ? ' selected' : ''}`} onClick={() => { if (index === 6) setSettingsTab('compute'); navigateStage(index); }} aria-current={activeStage === index ? 'page' : undefined}>
+              <Icon name={item.icon} size={18} /><span>{item.name}</span>
+            </button></li>;
+          })}</ul>
+        </div>)}
+      </nav>
     </>}
   >
-        <div className={`page-heading${activeStage === 1 ? ' training-page-heading' : ''}`}><div><h1>{stage.name}</h1><p>{stagePurpose[activeStage]}</p></div><div className={`connection ${connected ? 'connected' : ''}`} role="status" aria-label="Application API connection" title="Application API connection; simulator and voice connections are shown separately."><span />{health.isPending ? 'Connecting' : connected ? 'App connected' : 'App offline'}</div></div>
+        <div className={`page-heading${activeStage === 1 ? ' training-page-heading' : ''}`}><h1>{stage.name}</h1><div className="page-actions"><a className="page-guide" href={publicPath(`/guide/#${guideSectionId(stage.name)}`)}><Icon name="book" size={16} />Guide</a><div className={`connection ${connected ? 'connected' : ''}`} role="status" aria-label="Application API connection" title="Application API connection; simulator and voice connections are shown separately."><span />{health.isPending ? 'Connecting' : connected ? 'App connected' : 'App offline'}</div></div></div>
         {!connected && !health.isPending && <div className="connection-notice"><ErrorNotice error={health.error} /><button className="text-button" onClick={() => { void health.refetch(); void projects.refetch(); void capabilities.refetch(); }}>Retry connection</button></div>}
         {capabilities.error && connected && <div className="connection-notice"><ErrorNotice error={capabilities.error} /><button className="text-button" onClick={() => void capabilities.refetch()} disabled={capabilities.isFetching}>Retry capabilities</button></div>}
         <div className="dataset-view" hidden={activeStage !== 0}>
-          <div className="section-tabs"><nav className="dataset-tab-buttons" aria-label="Dataset views"><button type="button" className={`section-tab${datasetView === 'sources' ? ' active' : ''}`} aria-pressed={datasetView === 'sources'} onClick={() => setDatasetView('sources')}>Sources</button><button type="button" className={`section-tab${datasetView === 'inspection' ? ' active' : ''}`} aria-pressed={datasetView === 'inspection'} disabled={!selectedJob} onClick={() => setDatasetView('inspection')}>Inspection{sortedJobs.length > 0 && <span className="tab-count">{sortedJobs.length}</span>}</button><button type="button" className={`section-tab${datasetView === 'augmentation' ? ' active' : ''}`} aria-pressed={datasetView === 'augmentation'} onClick={() => setDatasetView('augmentation')}>Augmentation</button><button type="button" className={`section-tab${datasetView === 'teaching' ? ' active' : ''}`} aria-pressed={datasetView === 'teaching'} onClick={() => setDatasetView('teaching')}>Teaching</button><button type="button" className={`section-tab${datasetView === 'decision' ? ' active' : ''}`} aria-pressed={datasetView === 'decision'} onClick={() => setDatasetView('decision')}>Decision lab</button></nav><span className="section-note">LeRobot v2 / v3</span></div>
+          <div className="section-tabs"><nav className="dataset-tab-buttons" aria-label="Dataset views"><button type="button" className={`section-tab${datasetView === 'sources' ? ' active' : ''}`} aria-pressed={datasetView === 'sources'} onClick={() => setDatasetView('sources')}>Sources</button><button type="button" className={`section-tab${datasetView === 'inspection' ? ' active' : ''}`} aria-pressed={datasetView === 'inspection'} disabled={!selectedJob} onClick={() => setDatasetView('inspection')}>Inspection{sortedJobs.length > 0 && <span className="tab-count">{sortedJobs.length}</span>}</button></nav><span className="section-note">LeRobot v2 / v3</span></div>
           <div className="content-grid source-grid" hidden={datasetView !== 'sources'}>
             <div className="intake-column"><IntakeForm key={`${projectId}-${starterSelection}`} project={workflowProjectId ? project : undefined} readinessMessage={projects.isPending ? 'Loading projects before importing a dataset.' : projects.isError ? 'Project list unavailable. Retry projects to continue.' : 'Create or select a project to import a dataset.'} starter={starter} onSourceEdited={() => setActiveStarterId('')} localAvailable={capabilities.data?.some(item => item.operation === 'dataset.inspect.local' && (item.status === 'available' || item.status === 'untested')) ?? false} onCreated={job => { setSelectedJobId(job.id); setDatasetView('inspection'); }} /></div>
             <DatasetStarters selected={activeStarterId} onSelect={item => { setStarter(item); setActiveStarterId(item.id); setStarterSelection(previous => previous + 1); }} />
@@ -354,22 +365,27 @@ function Workbench() {
                 {sortedJobs.length > 1 && <div className="history-control"><label htmlFor="inspection-history">History</label><select id="inspection-history" value={selectedJob.id} onChange={event => setSelectedJobId(event.target.value)}>{sortedJobs.map(job => <option key={job.id} value={job.id}>{job.request.repo_id || 'Local dataset'} · {displayDate(job.created_at)} · {job.status}</option>)}</select></div>}
                 <JobDetail key={selectedJob.id} job={selectedJob} projectId={projectId} />
                 {selectedJob.result && <DatasetExplorer key={`explorer-${selectedJob.id}`} job={selectedJob} active={activeStage === 0 && datasetView === 'inspection'} />}
-                {selectedJob.status === 'succeeded' && (selectedJob.result?.source === 'huggingface' || selectedJob.result?.snapshot) && <div className="dataset-train-action"><button className="primary-button" onClick={() => startTrainingOnDataset(selectedJob.id)}>Train on this dataset <Icon name="arrow" size={16} /></button></div>}
+                {selectedJob.status === 'succeeded' && (selectedJob.result?.source === 'huggingface' || selectedJob.result?.snapshot) && <div className="dataset-train-action">{isAugmentationSource(selectedJob) && <button className="secondary-button" onClick={() => navigateStage(8)}><Icon name="spark" size={16} />Augment this dataset</button>}<button className="primary-button" onClick={() => startTrainingOnDataset(selectedJob.id)}>Train on this dataset <Icon name="arrow" size={16} /></button></div>}
               </>}
             </section>
           </div>
-          {activeStage === 0 && datasetView === 'teaching' && <TeachingPanel />}
-          {activeStage === 0 && datasetView === 'decision' && <DecisionPanel />}
-          {activeStage === 0 && datasetView === 'augmentation' && <AugmentationPanel key={projectId} projectId={workflowProjectId} preferredDatasetId={selectedJob?.id} onChooseDataset={() => setDatasetView('sources')} />}
           {jobs.error && datasetView === 'sources' && <ErrorNotice error={jobs.error} />}
         </div>
+        {activeStage === 8 && <AugmentationPanel key={projectId} projectId={workflowProjectId} preferredDatasetId={selectedJob?.id} onOpenSettings={() => { setSettingsTab('compute'); navigateStage(6); }} onChooseDataset={() => { navigateStage(0); setDatasetView('sources'); }} />}
+        {activeStage === 9 && <TeachingPanel />}
+        {activeStage === 10 && <DecisionPanel />}
         {(activeStage === 1 || activeStage === 6) && <div className="training-view" hidden={activeStage !== 1}><TrainingPanel active={activeStage === 1} key={projectId} projectId={workflowProjectId} startNew={startTraining} showJobsRequest={trainingNavigation} preferredRunId={openTrainingRun?.projectId === projectId ? openTrainingRun.id : undefined} preferredDatasetId={selectedJob?.id} onChooseDataset={() => { setActiveStage(0); setDatasetView('sources'); }} onDiagnostics={() => { setSettingsTab('diagnostics'); setActiveStage(6); }} onComputeSettings={() => { setSettingsTab('compute'); setActiveStage(6); }} onQuantize={artifactId => { chooseQuantize('gguf', 'handoff'); setQuantizeArtifact({ projectId, artifactId }); setWorkflowNavigation(value => value + 1); setActiveStage(3); }} onNativeQuantize={artifactId => { navigateStage(3); setQuantizeArtifact({ projectId: workflowProjectId, artifactId }); chooseQuantize('native', 'handoff'); }} /></div>}
         {activeStage === 7 && <CloudRuns key={workflowProjectId} projectId={workflowProjectId} onOpenSimulation={id => { setOpenSimulation({ projectId: workflowProjectId, id }); chooseRun('native', 'handoff', id); setActiveStage(5); }} onOpenTraining={id => { setStartTraining(undefined); setOpenTrainingRun({ projectId: workflowProjectId, id }); setActiveStage(1); }} />}
-        {activeStage === 3 && <section className="panel run-modes" aria-label="Quantization workflow"><div role="group" aria-label="Quantization mode"><button className="secondary-button" disabled={!workflowProjectId} aria-pressed={quantizeMode === 'gguf'} onClick={() => { if (quantizeMode !== 'gguf') setQuantizeArtifact(null); chooseQuantize('gguf'); }}>SmolVLA · GGUF</button><button className="secondary-button" disabled={!workflowProjectId} aria-pressed={quantizeMode === 'native'} onClick={() => { if (quantizeMode !== 'native') setQuantizeArtifact(null); chooseQuantize('native'); }}>Native ACT · INT8 / INT4</button></div><p>{!quantizeMode ? 'Choose a workflow, or wait for this project’s history and configured workers.' : quantizeMode === 'native' ? 'Create a local packed ACT download with measured generated-input drift. Native Isaac loading is not implemented for this format.' : 'Prepare SmolVLA GGUF policies using the existing engine workflow.'}</p></section>}
-        {entryPending && <section className="panel" aria-label="Workflow selection status"><p role={entryFailed || recoveryError ? 'alert' : 'status'}>{!workflowProjectId ? 'Select a project to see its workflow history.' : recoveryError ?? (entryFailed ? 'Workflow availability or history could not be loaded. Choose a mode to inspect it, or retry these reads.' : 'Loading this project’s workflow history and configured workers…')}</p>{entryFailed && <button className="secondary-button" onClick={() => { void jobs.refetch(); void options.refetch(); if (activeStage === 5) void simulation.refetch(); }}>Retry workflow context</button>}</section>}
-        {(activeStage === 3 || (activeStage === 5 && simulation.isSuccess && !simulation.isError)) && options.isSuccess && !options.isError && <p className="field-help" role="status">{activeStage === 3 ? `Configured workflows: ${[engineConfigured && 'SmolVLA GGUF', nativeQuantConfigured && 'Native ACT'].filter(Boolean).join(', ') || 'none'}.` : `Configured workflows: ${[engineConfigured && 'Engine checks', replayConfigured && 'Observation replay', simulationConfigured && 'Native Isaac'].filter(Boolean).join(', ') || 'none'}.`} Saved results remain readable when a worker is unavailable.</p>}
+        {activeStage === 3 && <section className="workflow-choices" aria-label="Quantization workflow">
+          <h2 className="workflow-choice-title">Supported models</h2>
+          <div className="mode-card-grid two-columns" role="group" aria-label="Quantization mode">
+            <ModeCard title="SmolVLA" detail="GGUF · 4-bit or 8-bit" selected={quantizeMode === 'gguf'} disabled={!workflowProjectId} onClick={() => { if (quantizeMode !== 'gguf') setQuantizeArtifact(null); chooseQuantize('gguf'); }} />
+            <ModeCard title="ACT" detail="INT8 or INT4 · Local worker" selected={quantizeMode === 'native'} disabled={!workflowProjectId} onClick={() => { if (quantizeMode !== 'native') setQuantizeArtifact(null); chooseQuantize('native'); }} />
+          </div>
+        </section>}
+        {entryPending && (!workflowProjectId || jobs.isPending || entryFailed || recoveryError) && <section className="panel" aria-label="Workflow selection status"><p role={entryFailed || recoveryError ? 'alert' : 'status'}>{!workflowProjectId ? 'Select a project to see its workflow history.' : recoveryError ?? (entryFailed ? 'Workflow availability or history could not be loaded. Choose a mode to inspect it, or retry these reads.' : 'Loading this project’s workflow history and configured workers…')}</p>{entryFailed && <button className="secondary-button" onClick={() => { void jobs.refetch(); void options.refetch(); if (activeStage === 5) void simulation.refetch(); }}>Retry workflow context</button>}</section>}
         {activeStage === 3 && quantizeMode === 'native' && <NativeQuantizationPanel key={workflowProjectId} projectId={workflowProjectId} preferredJobId={context?.quantize?.jobId} onJobSelected={id => chooseQuantize('native', 'manual', id)} preferredArtifactId={quantizeArtifact?.projectId === workflowProjectId ? quantizeArtifact.artifactId : undefined} onPrepare={() => navigateStage(1)} onReplay={artifactId => { navigateStage(5); setReplayArtifact({ projectId: workflowProjectId, artifactId }); chooseRun('replay', 'handoff'); }} />}
-        {activeStage === 4 && <section className="panel workflow-purpose" aria-label="Evaluation purpose"><h2>Execution checks and scored benchmarks</h2><p>Engine checks measure loading, finite actions and runtime performance. LIBERO measures closed-loop task success with a configured benchmark runtime. Observation replay and experimental Isaac rollouts do not establish task success; scored ACT / Isaac evaluation is not configured.</p>
+        {activeStage === 4 && <section className="workflow-context" aria-label="Evaluation purpose"><WorkbenchDisclosure title="Evaluation details"><p>Engine checks measure loading, finite actions and runtime performance. LIBERO measures closed-loop task success with a configured benchmark runtime. Observation replay and experimental Isaac rollouts do not establish task success; scored ACT / Isaac evaluation is not configured.</p></WorkbenchDisclosure>
           {options.isPending ? <p role="status">Checking evaluation targets…</p> : options.isError ? <p role="alert">Evaluation targets could not be loaded. Availability is unknown.</p> : <p role="status">{engineConfigured ? 'Engine evaluation is configured.' : 'No engine evaluation target is configured.'} {options.data?.runtimes.some(item => engineRuntime(item, 'Evaluate') && item.simulation) ? 'A LIBERO target is configured; its policy and protocol still require validation.' : 'No LIBERO evaluation target is configured.'}</p>}
           {simulation.isError && <p role="alert">Isaac profile availability could not be loaded.</p>}
           {jobs.isError && <p role="alert">Saved workflow history could not be refreshed; previously received records may be stale.</p>}
@@ -378,11 +394,18 @@ function Workbench() {
             {(simulationConfigured || simulationHistory) && <button className="text-link" onClick={() => { navigateStage(5); chooseRun('native', 'handoff'); }}>Open native Isaac Run</button>}
           </div>
         </section>}
-        {activeStage === 5 && <section className="panel run-modes" aria-label="Run workflow"><div role="group" aria-label="Run mode"><button className="secondary-button" disabled={!workflowProjectId} aria-pressed={runMode === 'native'} onClick={() => { if (runMode !== 'native') { setOpenSimulation(null); setReplayArtifact(null); } chooseRun('native'); }}>Native Isaac · ACT / SmolVLA</button><button className="secondary-button" disabled={!workflowProjectId} aria-pressed={runMode === 'replay'} onClick={() => { if (runMode !== 'replay') { setOpenSimulation(null); setReplayArtifact(null); } chooseRun('replay'); }}>Observation replay · ACT</button><button className="secondary-button" disabled={!workflowProjectId} aria-pressed={runMode === 'engine'} onClick={() => { if (runMode !== 'engine') { setOpenSimulation(null); setReplayArtifact(null); } chooseRun('engine'); }}>Engine checks · GGUF</button></div><p>{!runMode ? 'Choose a workflow, or wait for this project’s history and configured workers.' : runMode === 'native' ? 'Recorded cup-scene rollouts and complete native policy packages.' : runMode === 'replay' ? 'Inspect packed ACT predictions on immutable dataset observations. Actions stay offline and do not advance a scene.' : 'Reload a prepared engine policy and check its execution. For ACT or native SmolVLA in the cup scene, choose Native Isaac.'}</p></section>}
+        {activeStage === 5 && <section className="workflow-choices" aria-label="Run workflow">
+          <h2 className="workflow-choice-title">Workflows</h2>
+          <div className="mode-card-grid" role="group" aria-label="Run mode">
+            <ModeCard title="3D simulation" detail="Isaac Sim · ACT or SmolVLA" icon="play" selected={runMode === 'native'} disabled={!workflowProjectId} onClick={() => { if (runMode !== 'native') { setOpenSimulation(null); setReplayArtifact(null); } chooseRun('native'); }} />
+            <ModeCard title="Replay observations" detail="Offline replay · ACT" icon="database" selected={runMode === 'replay'} disabled={!workflowProjectId} onClick={() => { if (runMode !== 'replay') { setOpenSimulation(null); setReplayArtifact(null); } chooseRun('replay'); }} />
+            <ModeCard title="Check inference" detail="Inference engine · GGUF" icon="chart" selected={runMode === 'engine'} disabled={!workflowProjectId} onClick={() => { if (runMode !== 'engine') { setOpenSimulation(null); setReplayArtifact(null); } chooseRun('engine'); }} />
+          </div>
+        </section>}
         {activeStage === 5 && runMode === 'replay' && <NativeReplayPanel key={workflowProjectId} projectId={workflowProjectId} preferredJobId={context?.run?.mode === 'replay' ? context.run.jobId : undefined} onJobSelected={id => chooseRun('replay', 'manual', id)} preferredArtifactId={replayArtifact?.projectId === workflowProjectId ? replayArtifact.artifactId : undefined} onDataset={() => { setDatasetView('sources'); navigateStage(0); }} />}
         {activeStage === 5 && runMode === 'native' && <NativeSimulationPanel key={workflowProjectId} projectId={workflowProjectId} onJobSelected={id => { setOpenSimulation(null); chooseRun('native', 'manual', id); }} preferredJobId={openSimulation?.projectId === workflowProjectId ? openSimulation.id : context?.run?.mode === 'native' ? context.run.jobId : undefined} onTraining={() => navigateStage(1)} />}
-        {activeStage > 1 && activeStage !== 2 && activeStage !== 7 && (activeStage !== 3 || quantizeMode === 'gguf') && (activeStage !== 5 || runMode === 'engine') && <WorkflowPanel key={`${workflowProjectId}-${activeStage}-${workflowNavigation}`} projectId={workflowProjectId} tab={settingsTab} onTabChange={setSettingsTab} onOpenQuantize={() => { navigateStage(3); chooseQuantize('gguf', 'handoff'); }} stage={activeStage === 6 ? 'settings' : stage.name} preferredArtifactId={activeStage === 3 && quantizeArtifact?.projectId === projectId ? quantizeArtifact.artifactId : undefined} onViewTraining={() => navigateStage(1)} />}
-        {activeStage === 2 && <NativeDistillationPanel key={workflowProjectId} projectId={workflowProjectId} onDataset={() => { setDatasetView('sources'); navigateStage(0); }} onQuantize={artifactId => { navigateStage(3); setQuantizeArtifact({ projectId, artifactId }); chooseQuantize('native', 'handoff'); }} />}
+        {[3, 4, 5, 6].includes(activeStage) && (activeStage !== 3 || quantizeMode === 'gguf') && (activeStage !== 5 || runMode === 'engine') && <WorkflowPanel key={`${workflowProjectId}-${activeStage}-${workflowNavigation}`} projectId={workflowProjectId} tab={settingsTab} onTabChange={setSettingsTab} onOpenQuantize={() => { navigateStage(3); chooseQuantize('gguf', 'handoff'); }} stage={activeStage === 6 ? 'settings' : stage.name} preferredArtifactId={activeStage === 3 && quantizeArtifact?.projectId === projectId ? quantizeArtifact.artifactId : undefined} onViewTraining={() => navigateStage(1)} />}
+        {activeStage === 2 && <DistillationPanel key={workflowProjectId} projectId={workflowProjectId} model={distillationModels[workflowProjectId]} onSelectModel={model => { if (workflowProjectId) setDistillationModels(previous => ({ ...previous, [workflowProjectId]: model })); }} onDataset={() => { setDatasetView('sources'); navigateStage(0); }} onQuantize={artifactId => { navigateStage(3); setQuantizeArtifact({ projectId, artifactId }); chooseQuantize('native', 'handoff'); }} />}
   </WorkspaceShell>;
 }
 

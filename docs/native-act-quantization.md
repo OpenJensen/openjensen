@@ -68,5 +68,8 @@ processor bytes must remain unchanged; no floating master may be included.
 observations. Exact fresh reload means the packed candidate matches its fresh
 packed reload; it does not mean the packed candidate matches FP32. These
 observations do not measure task success, calibration, GPU memory or speedup.
-The package records those claims as false or null. No Run button or supported
-simulation backend is implied by downloading it.
+The package records those claims as false or null. Compatible saved results can
+open **Run → Replay observations** through **Replay recorded observations**,
+using the separate [offline replay worker](../workers/isaac_sim/NATIVE_REPLAY.md).
+That action prepares a replay; downloading a package does not establish simulator
+support or start a job.

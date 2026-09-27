@@ -116,7 +116,8 @@ async function mockWorkspace(page: Page, config: { configured?: boolean; empty?:
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Augmentation', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Augment dataset', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Augmentation', exact: true, level: 1 })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Generator', exact: true })).toContainText('Gemini Omni');
   return { submitted, unexpected, jobs, cancelled, optionsAttempts: () => optionsAttempts };
 }
 
@@ -127,13 +128,15 @@ async function noOverflow(page: Page) {
 
 test('submits selected clips and texture instructions, then compares and downloads the completed result', async ({ page }, testInfo) => {
   const { submitted, unexpected } = await mockWorkspace(page, { complete: true });
-  await expect(page.getByLabel('Inspected dataset')).toHaveValue('inspected-video');
-  await expect(page.getByLabel('Inspected dataset').locator('option')).toHaveCount(2);
-  await expect(page.getByLabel('Video camera').locator('option')).toHaveCount(2);
-  await page.getByLabel('Video camera').selectOption('observation.images.side');
-  await page.getByLabel('Episode indices', { exact: true }).fill('1, 3');
-  await page.getByLabel('Episode start (seconds)').fill('1.5');
-  await page.getByLabel('Clip duration (seconds)').fill('4');
+  await expect(page.getByRole('group', { name: 'Generator', exact: true })).toContainText('Gemini API');
+  expect(submitted).toEqual([]);
+  await expect(page.getByRole('radiogroup', { name: 'Dataset', exact: true }).getByRole('radio')).toBeChecked();
+  await expect(page.getByRole('radiogroup', { name: 'Dataset', exact: true }).getByRole('radio')).toHaveCount(1);
+  await expect(page.getByRole('radiogroup', { name: 'Camera', exact: true }).getByRole('radio')).toHaveCount(2);
+  await page.getByRole('radio', { name: 'Side camera', exact: true }).locator('..').click();
+  await page.getByLabel('Episode numbers', { exact: true }).fill('1, 3');
+  await page.getByLabel('Start at (seconds)').fill('1.5');
+  await page.getByLabel('Clip length (seconds)').fill('4');
   await page.getByRole('radio', { name: 'Change textures', exact: true }).locator('..').click();
   await page.getByLabel('Additional instructions (optional)').fill('Give the table a matte wood surface.');
   await expect(page.getByText(/Clips and prompts are sent to Google’s Gemini API. Charges may apply./)).toBeVisible();
@@ -148,7 +151,7 @@ test('submits selected clips and texture instructions, then compares and downloa
   await expect(page.getByText('Generated clips may not match the original action labels. Review motion and timing, and validate labels before training.', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Original episode 1', { exact: true })).toHaveAttribute('src', /augmentation-1\/augmentation\/clips\/0\?original=true$/);
   await expect(page.getByLabel('Augmented episode 1', { exact: true })).toHaveAttribute('src', /augmentation-1\/augmentation\/clips\/0\?original=false$/);
-  await page.getByLabel('Preview episode').selectOption('1');
+  await page.getByRole('button', { name: 'Preview episode 3', exact: true }).click();
   await expect(page.getByLabel('Augmented episode 3', { exact: true })).toHaveAttribute('src', /\/clips\/1\?original=false$/);
   await expect(page.getByRole('link', { name: 'Download review bundle' })).toHaveAttribute('href', /augmentation-1\/augmentation\/download$/);
   // The only write is the requested augmentation; no training job is submitted.
@@ -167,18 +170,18 @@ test('validates episode selection, timing and required custom instructions befor
   const start = page.getByRole('button', { name: 'Generate augmented clips', exact: true });
   await expect(start).toBeEnabled();
   for (const value of ['', '-1', '1.5', '0,0', '0,1,2,3,4', '12']) {
-    await page.getByLabel('Episode indices', { exact: true }).fill(value);
+    await page.getByLabel('Episode numbers', { exact: true }).fill(value);
     await expect(start).toBeDisabled();
   }
-  await page.getByLabel('Episode indices', { exact: true }).fill('0, 2');
-  await page.getByLabel('Episode start (seconds)').fill('-1');
+  await page.getByLabel('Episode numbers', { exact: true }).fill('0, 2');
+  await page.getByLabel('Start at (seconds)').fill('-1');
   await expect(start).toBeDisabled();
-  await page.getByLabel('Episode start (seconds)').fill('0');
+  await page.getByLabel('Start at (seconds)').fill('0');
   for (const value of ['0', '11', '']) {
-    await page.getByLabel('Clip duration (seconds)').fill(value);
+    await page.getByLabel('Clip length (seconds)').fill(value);
     await expect(start).toBeDisabled();
   }
-  await page.getByLabel('Clip duration (seconds)').fill('5');
+  await page.getByLabel('Clip length (seconds)').fill('5');
   await page.getByRole('radio', { name: 'Custom edit', exact: true }).focus();
   await page.keyboard.press('Space');
   await expect(start).toBeDisabled();
@@ -194,7 +197,7 @@ test('running augmentation persists across tab changes, polls for completion and
   const { submitted, unexpected, jobs, cancelled } = await mockWorkspace(page);
   await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Cancel augmentation', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Sources', exact: true }).click();
+  await page.getByRole('button', { name: 'Dataset', exact: true }).click();
   await page.getByRole('button', { name: 'Augmentation', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Cancel augmentation', exact: true })).toBeVisible();
   jobs[0].status = 'succeeded';
@@ -205,7 +208,7 @@ test('running augmentation persists across tab changes, polls for completion and
   await page.getByRole('button', { name: 'Cancel augmentation', exact: true }).click();
   await expect.poll(() => cancelled).toEqual(['augmentation-2']);
   await expect(page.getByText('Run did not complete.', { exact: true })).toBeVisible();
-  await page.getByLabel('Run', { exact: true }).selectOption('augmentation-1');
+  await page.getByRole('button', { name: 'View run 1', exact: true }).click();
   await expect(page.getByText('Generated clips may not match the original action labels. Review motion and timing, and validate labels before training.', { exact: true })).toBeVisible();
   expect(unexpected).toEqual([]);
 });
@@ -213,6 +216,7 @@ test('running augmentation persists across tab changes, polls for completion and
 test('requires server configuration, explains the setup, and keeps API keys out of the form', async ({ page }) => {
   const { submitted, unexpected } = await mockWorkspace(page, { configured: false });
   await expect(page.getByText('Connect Gemini to start generating', { exact: true })).toBeVisible();
+  await page.getByText('Setup details', { exact: true }).click();
   await expect(page.getByText(/Set GEMINI_API_KEY/)).toBeVisible();
   await expect(page.getByText(/ffmpeg and ffprobe/).first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeDisabled();
@@ -224,6 +228,8 @@ test('requires server configuration, explains the setup, and keeps API keys out 
 
 test('shows the Google Cloud login and billing project before augmentation', async ({ page }) => {
   const { submitted, unexpected } = await mockWorkspace(page, { cloud: true });
+  await expect(page.getByRole('group', { name: 'Generator', exact: true })).toContainText('Google Cloud');
+  await page.getByText('Connection details', { exact: true }).click();
   await expect(page.getByText(/uses your Google Cloud login, without an API key/)).toBeVisible();
   await expect(page.getByText('Clips and prompts are sent to Google Cloud. Charges apply to robotics-demo.', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeEnabled();
@@ -237,7 +243,7 @@ test('recovers a failed configuration request and offers source import when no v
   await expect(page.getByText('Augmentation setup temporarily unavailable.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Retry augmentation setup', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Retry augmentation setup', exact: true })).toHaveCount(0);
-  await expect(page.getByText('Choose a video dataset first', { exact: true })).toBeVisible();
+  await expect(page.getByText('No video datasets', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Import a dataset', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Import a dataset', exact: true })).toBeVisible();
@@ -275,7 +281,7 @@ test('waits for confirmed project membership and preserves the first setup error
   await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeDisabled();
   expect(fixture.optionsAttempts()).toBe(0);
   releaseProjects();
-  await expect(page.getByLabel('Inspected dataset')).toHaveValue('inspected-video');
+  await expect(page.getByRole('radiogroup', { name: 'Dataset', exact: true }).getByRole('radio')).toBeChecked();
   await expect(page.getByText('Augmentation setup temporarily unavailable.', { exact: true })).toBeVisible();
   expect(fixture.optionsAttempts()).toBe(1);
   await page.getByRole('button', { name: 'Retry augmentation setup', exact: true }).click();
@@ -294,7 +300,7 @@ test('retains edit instructions when inspections arrive and disables cached cont
   await expect(prompt).toBeEnabled();
   await prompt.fill('Preserve this lighting instruction.');
   releaseJobs();
-  await expect(page.getByLabel('Inspected dataset')).toHaveValue('inspected-video');
+  await expect(page.getByRole('radiogroup', { name: 'Dataset', exact: true }).getByRole('radio')).toBeChecked();
   await expect(prompt).toHaveValue('Preserve this lighting instruction.');
   // The application retries projects on window focus. Expire the real query's
   // five-second freshness; no provider/model request is allowed by the fixture.
@@ -310,4 +316,54 @@ test('retains edit instructions when inspections arrive and disables cached cont
   await expect(prompt).toHaveValue('Preserve this lighting instruction.');
   expect(fixture.submitted).toEqual([]);
   expect(fixture.unexpected).toEqual([]);
+});
+
+
+test('episode quick picks enforce the clip limit and keep manual selection in sync', async ({ page }) => {
+  const { submitted, unexpected } = await mockWorkspace(page);
+  const episode = (index: number) => page.getByRole('button', { name: `Episode ${index}`, exact: true });
+  const numbers = page.getByLabel('Episode numbers', { exact: true });
+  await expect(episode(0)).toHaveAttribute('aria-pressed', 'true');
+  await episode(2).click();
+  await episode(3).click();
+  await episode(5).click();
+  await expect(numbers).toHaveValue('0, 2, 3, 5');
+  await expect(episode(1)).toBeDisabled();
+  await episode(2).click();
+  await expect(numbers).toHaveValue('0, 3, 5');
+  await expect(episode(1)).toBeEnabled();
+  await numbers.fill('6, 10');
+  await expect(episode(6)).toHaveAttribute('aria-pressed', 'true');
+  await expect(episode(0)).toHaveAttribute('aria-pressed', 'false');
+  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
+  await expect.poll(() => submitted.length).toBe(1);
+  expect(submitted[0].episode_indices).toEqual([6, 10]);
+  expect(unexpected).toEqual([]);
+});
+
+test('dataset handoff only offers supported video sources and preserves the selected inspection', async ({ page }) => {
+  const { jobs, submitted, unexpected } = await mockWorkspace(page);
+  jobs.find(job => job.id === 'local-inspection')!.result.snapshot = { path: '/fixture/local', lineage_validated: true, total_episodes: 12 };
+  jobs.push({ ...inspectedDataset('second-video', 'fixture/second'), created_at: '2026-09-25T12:00:00Z' });
+  await page.route('**/api/v1/jobs/*/episodes**', route => route.fulfill({ json: { episodes: [], total_episodes: 12, offset: 0, limit: 6, warnings: [] } }));
+  await page.reload();
+  await page.getByRole('button', { name: /^Inspection/ }).click();
+  const history = page.getByRole('combobox', { name: 'History', exact: true });
+  const augment = page.getByRole('button', { name: 'Augment this dataset', exact: true });
+  for (const id of ['local-inspection', 'image-only']) {
+    await history.selectOption(id);
+    await expect(augment).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Train on this dataset', exact: true })).toBeVisible();
+  }
+  await history.selectOption('failed-inspection');
+  await expect(augment).toHaveCount(0);
+  await history.selectOption('second-video');
+  await expect(augment).toBeVisible();
+  await augment.click();
+  await expect(page.getByRole('radiogroup', { name: 'Dataset', exact: true }).getByRole('radio', { name: /^fixture\/second,/ })).toBeChecked();
+  expect(submitted).toEqual([]);
+  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
+  await expect.poll(() => submitted.length).toBe(1);
+  expect(submitted[0].source_job_id).toBe('second-video');
+  expect(unexpected).toEqual([]);
 });

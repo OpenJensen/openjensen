@@ -45,8 +45,8 @@ async function fixture(page: Page) {
   });
   await page.goto('/'); await expect(page.getByLabel('Current project')).toHaveValue('alpha');
   await page.getByRole('button', { name: 'Run', exact: true }).click();
-  await page.getByRole('button', { name: 'Native Isaac · ACT / SmolVLA', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Native Isaac simulation', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '3D simulation', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Native Isaac simulation', exact: true })).toBeVisible();
   return state;
 }
 const acknowledge = (page: Page) => page.getByRole('checkbox', { name: /experimental, paid cloud rollout/ }).check();
@@ -54,11 +54,12 @@ const acknowledge = (page: Page) => page.getByRole('checkbox', { name: /experime
 test('native Run preserves engine navigation and fails closed when profiles are missing', async ({ page }) => {
   const state = await fixture(page); state.profiles = [];
   await page.reload(); await page.getByRole('button', { name: 'Run', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Run jobs', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Native Isaac · ACT / SmolVLA' }).click();
-  await expect(page.getByText(/No Isaac simulation profile is configured/)).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Run mode', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Run jobs', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: '3D simulation' }).click();
+  await expect(page.getByText('Simulator not connected', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start experimental simulation' })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Upload and validate policy' })).toBeDisabled();
+  await expect(page.getByRole('radiogroup', { name: 'Policy source', exact: true })).toHaveCount(0);
   expect(state.posts).toEqual([]);
   await page.getByRole('button', { name: 'Evaluate', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Evaluation purpose' })).toContainText('scored ACT / Isaac evaluation is not configured');
@@ -67,24 +68,29 @@ test('native Run preserves engine navigation and fails closed when profiles are 
 test('native import sends exact TAR bytes once and does not start a GPU run', async ({ page }) => {
   const state = await fixture(page);
   const bytes = Buffer.from('Explicit generated TAR transport fixture; worker validation is covered by API tests.');
+  await page.getByRole('radio', { name: 'Import package', exact: true }).check();
   await page.getByLabel('Native policy TAR', { exact: true }).setInputFiles({ name: 'synthetic-policy.tar', mimeType: 'application/x-tar', buffer: bytes });
   await page.getByRole('button', { name: 'Upload and validate policy' }).dblclick();
   await expect(page.getByRole('article', { name: 'Native simulation job details' })).toContainText('The native package is saved');
   expect(state.uploaded).toEqual(bytes); expect(state.posts).toHaveLength(1);
   await page.getByText('Prepare another run', { exact: true }).click();
-  await expect(page.getByLabel('Native policy', { exact: true })).toHaveValue('');
-  await expect(page.getByLabel('Native policy', { exact: true }).locator('option[value="uploaded-policy"]')).toHaveCount(1);
+  await expect(page.getByRole('radiogroup', { name: 'Native policy', exact: true }).locator('input:checked')).toHaveCount(0);
+  await expect(page.getByRole('radio', { name: 'Generated uploaded-policy', exact: true })).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Start experimental simulation' })).toBeDisabled();
 });
 
 for (const architecture of ['act', 'smol']) test(`native ${architecture} launch requires explicit source and consent with bounded exact payload`, async ({ page }) => {
   const state = await fixture(page);
-  const select = page.getByLabel('Native policy', { exact: true });
-  await expect(select.locator('option')).toHaveText(['Choose a saved native policy', 'Generated act-export · ACT · act-expo', 'Generated smol-export · SMOLVLA · smol-exp']);
-  await select.selectOption(`${architecture}-export`); await acknowledge(page);
+  const choices = page.getByRole('radiogroup', { name: 'Native policy', exact: true });
+  await expect(choices.getByRole('radio')).toHaveCount(2);
+  await expect(choices).toContainText('Generated act-export');
+  await expect(choices).toContainText('Generated smol-export');
+  await choices.getByRole('radio', { name: `Generated ${architecture}-export`, exact: true }).check(); await acknowledge(page);
   await page.getByLabel('Simulation timeout (seconds)').fill('7201');
   await expect(page.getByRole('button', { name: 'Start experimental simulation' })).toBeDisabled();
   await page.getByLabel('Simulation timeout (seconds)').fill('600');
+  await expect(page.getByRole('checkbox', { name: /experimental, paid cloud rollout/ })).not.toBeChecked();
+  await acknowledge(page);
   await page.getByRole('button', { name: 'Start experimental simulation' }).dblclick();
   await expect(page.getByRole('article', { name: 'Native simulation job details' })).toHaveAttribute('data-job-id', 'submitted');
   expect(state.posts).toEqual([{ path: '/api/v1/projects/alpha/policy-jobs', body: { operation: 'policy.run', runtime_id: profile.id, artifact_id: `${architecture}-export`, simulation: { profile_id: profile.id, experimental: true }, timeout_seconds: 600 } }]);
@@ -95,7 +101,7 @@ for (const architecture of ['act', 'smol']) test(`native ${architecture} launch 
 
 test('lost launch receipt pauses submissions and recovers the actual job without retry', async ({ page }) => {
   const state = await fixture(page); state.submit = 'lost';
-  await page.getByLabel('Native policy', { exact: true }).selectOption('act-export'); await acknowledge(page);
+  await page.getByRole('radio', { name: 'Generated act-export', exact: true }).check(); await acknowledge(page);
   await page.getByRole('button', { name: 'Start experimental simulation' }).click();
   await expect(page.locator('.native-simulation').getByRole('alert')).toContainText('outcome is unverified');
   await expect(page.getByRole('button', { name: 'Start experimental simulation' })).toBeDisabled();
@@ -108,7 +114,7 @@ test('lost launch receipt pauses submissions and recovers the actual job without
 
 test('mismatched receipt is ambiguous while explicit admission failure remains visible', async ({ page }) => {
   const state = await fixture(page); state.submit = 'reject';
-  await page.getByLabel('Native policy', { exact: true }).selectOption('act-export'); await acknowledge(page);
+  await page.getByRole('radio', { name: 'Generated act-export', exact: true }).check(); await acknowledge(page);
   await page.getByRole('button', { name: 'Start experimental simulation' }).click();
   await expect(page.locator('.native-simulation').getByRole('alert')).toHaveText('Fixture camera is incompatible with the cup scene');
   expect(state.posts).toHaveLength(1);
@@ -156,11 +162,11 @@ test('failed run and project changes cannot reuse selected source or expose succ
   await expect(page.locator('.native-simulation').getByRole('alert')).toHaveText('Synthetic worker failure');
   await expect(page.getByRole('link', { name: 'Download simulation record' })).toHaveCount(0);
   await page.getByText('Prepare another run', { exact: true }).click();
-  await page.getByLabel('Native policy', { exact: true }).selectOption('smol-export'); await acknowledge(page);
+  await page.getByRole('radio', { name: 'Generated smol-export', exact: true }).check(); await acknowledge(page);
   await page.getByLabel('Current project').selectOption('beta');
-  await expect(page.getByRole('button', { name: 'Engine checks · GGUF', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await page.getByRole('button', { name: 'Native Isaac · ACT / SmolVLA', exact: true }).click();
-  await expect(page.getByLabel('Native policy', { exact: true })).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Check inference', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await page.getByRole('button', { name: '3D simulation', exact: true }).click();
+  await expect(page.getByRole('radiogroup', { name: 'Native policy', exact: true }).locator('input:checked')).toHaveCount(0);
   await expect(page.getByRole('checkbox', { name: /experimental, paid cloud rollout/ })).not.toBeChecked();
   await expect(page.getByRole('button', { name: 'Start experimental simulation' })).toBeDisabled();
   expect(state.posts).toHaveLength(0);
@@ -171,10 +177,10 @@ test('failed run and project changes cannot reuse selected source or expose succ
 
 test('changing the available profile cannot carry consent to a different cloud target', async ({ page }) => {
   const state = await fixture(page);
-  await page.getByLabel('Native policy', { exact: true }).selectOption('act-export'); await acknowledge(page);
+  await page.getByRole('radio', { name: 'Generated act-export', exact: true }).check(); await acknowledge(page);
   state.profiles = [{ ...profile, id: 'replacement-cup', label: 'Different generated profile' }];
   await page.getByRole('button', { name: 'Refresh simulation jobs' }).click();
-  await expect(page.getByLabel('Isaac profile', { exact: true })).toHaveValue('replacement-cup');
+  await expect(page.getByRole('radio', { name: 'Different generated profile', exact: true })).toBeChecked();
   await expect(page.getByRole('checkbox', { name: /experimental, paid cloud rollout/ })).not.toBeChecked();
   await expect(page.getByRole('button', { name: 'Start experimental simulation' })).toBeDisabled();
   expect(state.posts).toHaveLength(0);
@@ -263,7 +269,7 @@ test('completed recording is first, technical details stay secondary, and anothe
     await page.keyboard.press('Enter');
     await expect(result.getByRole('region', { name: 'Native simulation event log' })).toContainText('Generated event for result-first');
     await preparation.focus(); await page.keyboard.press('Enter');
-    await expect(page.getByLabel('Native policy', { exact: true })).toHaveValue('');
+    await expect(page.getByRole('radiogroup', { name: 'Native policy', exact: true }).locator('input:checked')).toHaveCount(0);
     await expect(page.getByRole('checkbox', { name: /experimental, paid cloud rollout/ })).not.toBeChecked();
     await expect(page.getByRole('button', { name: 'Start experimental simulation' })).toBeDisabled();
     expect(state.posts).toEqual([]);
@@ -315,14 +321,20 @@ for (const width of [320, 390]) test(`compact ${width}px navigation keeps stage 
   await page.getByRole('button', { name: 'Dataset', exact: true }).click();
   const heading = page.getByRole('heading', { name: 'Dataset', exact: true });
   const bounds = await heading.boundingBox();
-  expect(bounds!.y).toBeLessThan(300);
+  // The grouped navigation exposes all destinations; the stage heading and
+  // introduction must still fit in the first screen without scrolling.
+  expect(bounds!.y + bounds!.height).toBeLessThan(844 * 0.6);
   const navigation = page.getByRole('navigation', { name: 'Policy lifecycle' });
-  expect(await navigation.evaluate(element => element.scrollWidth > element.clientWidth)).toBe(true);
+  expect(await navigation.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   await page.getByRole('button', { name: 'Run', exact: true }).focus();
   await page.keyboard.press('Tab');
-  await expect(page.getByRole('button', { name: 'Settings & diagnostics', exact: true })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Decision lab', exact: true })).toBeFocused();
   await page.keyboard.press('Tab');
   const cloud = page.getByRole('button', { name: 'Cloud runs', exact: true });
+  await expect(cloud).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: 'Settings & diagnostics', exact: true })).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
   await expect(cloud).toBeFocused();
   const buttonBounds = await cloud.boundingBox();
   expect(buttonBounds!.x).toBeGreaterThanOrEqual(0);
@@ -336,16 +348,85 @@ for (const width of [320, 390]) test(`compact ${width}px navigation keeps stage 
   expect(state.posts).toEqual([]);
 });
 
+test('scene cards support keyboard selection and changing the cloud target clears policy and consent', async ({ page }) => {
+  const state = await fixture(page);
+  state.profiles.push({ ...profile, id: 'second-scene', label: 'Second cup scene' });
+  await page.getByRole('button', { name: 'Refresh simulation jobs' }).click();
+  await expect(page.getByRole('radio', { name: 'Second cup scene', exact: true })).toBeVisible();
+  await page.getByRole('radio', { name: 'Generated act-export', exact: true }).check();
+  await acknowledge(page);
+  await expect(page.getByRole('button', { name: 'Start experimental simulation' })).toBeEnabled();
+  await page.getByRole('radio', { name: profile.label, exact: true }).focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByRole('radio', { name: 'Second cup scene', exact: true })).toBeChecked();
+  await expect(page.getByRole('radiogroup', { name: 'Native policy', exact: true }).locator('input:checked')).toHaveCount(0);
+  await expect(page.getByRole('checkbox', { name: /experimental, paid cloud rollout/ })).not.toBeChecked();
+  await expect(page.getByRole('button', { name: 'Start experimental simulation' })).toBeDisabled();
+  expect(state.posts).toEqual([]);
+});
+
+test('an empty policy library has a direct import path without opening a technical menu', async ({ page }) => {
+  const state = await fixture(page); state.artifacts = [];
+  await page.getByRole('button', { name: 'Refresh simulation jobs' }).click();
+  await expect(page.getByText('No compatible policy yet', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Import a policy', exact: true }).click();
+  await expect(page.getByRole('radio', { name: 'Import package', exact: true })).toBeChecked();
+  await expect(page.getByLabel('Native policy TAR', { exact: true })).toBeVisible();
+  await expectImportBlocked(page);
+  expect(state.posts).toEqual([]);
+});
+
+test('upload cancellation stays reachable when its simulation profile disappears', async ({ page }) => {
+  const state = await fixture(page);
+  let release!: () => void, uploads = 0;
+  const heldUpload = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/v1/projects/alpha/model-imports?*', async route => {
+    uploads += 1;
+    await heldUpload;
+    // The browser may already have cancelled this held request via XHR.abort().
+    try { await route.abort(); } catch { /* No response is needed for an aborted upload. */ }
+  });
+  try {
+    await page.getByRole('radio', { name: 'Import package', exact: true }).check();
+    await page.getByLabel('Native policy TAR', { exact: true }).setInputFiles({ name: 'held-policy.tar', mimeType: 'application/x-tar', buffer: Buffer.from('Generated upload cancellation fixture') });
+    await page.getByRole('button', { name: 'Upload and validate policy', exact: true }).click();
+    await expect.poll(() => uploads).toBe(1);
+    await expect(page.getByRole('button', { name: 'Stop upload', exact: true })).toBeVisible();
+
+    state.profiles = [];
+    await page.getByRole('button', { name: 'Refresh simulation jobs', exact: true }).click();
+    await expect(page.getByText('Simulator not connected', { exact: true })).toBeVisible();
+    const stop = page.getByRole('button', { name: 'Stop upload', exact: true });
+    await expect(stop).toBeEnabled();
+    await stop.click();
+
+    await expect(page.getByRole('region', { name: 'Native Isaac simulation', exact: true }).getByRole('alert')).toContainText('submission outcome is unverified');
+    await expect(stop).toHaveCount(0);
+    const acknowledgment = page.getByRole('button', { name: 'I checked the jobs; allow a new request', exact: true });
+    await expect(acknowledgment).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Start experimental simulation', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Refresh simulation jobs', exact: true }).click();
+    await expect(acknowledgment).toBeEnabled();
+    expect(uploads).toBe(1);
+    expect(state.posts).toEqual([]);
+  } finally { release(); }
+});
+
+async function expectImportBlocked(page: Page) {
+  const upload = page.getByRole('button', { name: 'Upload and validate policy' });
+  if (await upload.count()) await expect(upload).toBeDisabled();
+  else await expect(page.getByRole('radio', { name: 'Import package', exact: true })).toBeDisabled();
+}
 
 async function openNativeAgain(page: Page, reload = false) {
   if (reload) { await page.reload(); await expect(page.getByLabel('Current project')).toHaveValue('alpha'); }
   else await page.getByRole('button', { name: 'Dataset', exact: true }).click();
   await page.getByRole('button', { name: 'Run', exact: true }).click();
-  await page.getByRole('button', { name: 'Native Isaac · ACT / SmolVLA', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Native Isaac simulation', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '3D simulation', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Native Isaac simulation', exact: true })).toBeVisible();
 }
 async function prepareExplicitRun(page: Page) {
-  await page.getByLabel('Native policy', { exact: true }).selectOption('act-export');
+  await page.getByRole('radio', { name: 'Generated act-export', exact: true }).check();
   await page.getByLabel('Simulation timeout (seconds)').fill('600');
   await acknowledge(page);
 }
@@ -361,7 +442,7 @@ for (const boundary of ['navigation', 'reload'] as const) test(`native launch un
   await expect(page.locator('.native-simulation')).toContainText('act-export');
   await expect(page.locator('.native-simulation')).toContainText('cup-fixture');
   await expect(page.getByRole('button', { name: 'Start experimental simulation' })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Upload and validate policy' })).toBeDisabled();
+  await expectImportBlocked(page);
   await expect(page.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toBeDisabled();
   expect(state.posts).toHaveLength(1);
 });
@@ -377,8 +458,8 @@ test('native pending launch remains owned after leaving the panel before its los
     await prepareExplicitRun(page); await page.getByRole('button', { name: 'Start experimental simulation' }).click();
     await expect.poll(() => state.posts.length).toBe(1);
     await openNativeAgain(page);
-    await expect(page.getByRole('button', { name: 'Upload and validate policy' })).toBeDisabled();
-    await expect(page.getByLabel('Native policy', { exact: true })).toBeDisabled();
+    await expectImportBlocked(page);
+    await expect(page.getByRole('radio', { name: 'Generated act-export', exact: true })).toBeDisabled();
     release();
     await expect(page.locator('.native-simulation')).toContainText('outcome is unverified');
     await expect(page.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toBeDisabled();
@@ -450,6 +531,7 @@ for (const outcome of ['lost', 'wrong-timeout', 'redirect'] as const) test(`nati
       const ack = job('upload-mismatch', 'policy.import', 'queued'); ack.request.timeout_seconds = 7200;
       return route.fulfill({ status: 202, json: ack });
     });
+    await page.getByRole('radio', { name: 'Import package', exact: true }).check();
     const bytes = Buffer.from('Generated upload transport fixture');
     await page.getByLabel('Native policy TAR', { exact: true }).setInputFiles({ name: 'explicit-generated.tar', mimeType: 'application/x-tar', buffer: bytes });
     await page.getByRole('button', { name: 'Upload and validate policy' }).click();
@@ -458,7 +540,7 @@ for (const outcome of ['lost', 'wrong-timeout', 'redirect'] as const) test(`nati
     await openNativeAgain(page, true);
     const recovery = page.getByRole('region', { name: 'Native simulation recovery' });
     await expect(recovery).toContainText(` ${bytes.length} bytes`); await expect(recovery).toContainText('cup-fixture');
-    await expect(page.getByRole('button', { name: 'Upload and validate policy' })).toBeDisabled();
+    await expectImportBlocked(page);
     expect(state.posts).toHaveLength(1);
     // XHR itself follows a 307. Refusing the receipt cannot undo that transfer.
     expect(followed).toBe(outcome === 'redirect' ? 1 : 0);
@@ -527,7 +609,7 @@ for (const failure of ['pending-write', 'receipt-write', 'cleanup'] as const) te
     await expect(page.getByRole('button', { name: 'Cancel selected native job' })).toBeDisabled();
     await page.getByText('Prepare another run', { exact: true }).click();
   }
-  await expect(page.getByRole('button', { name: 'Upload and validate policy' })).toBeDisabled();
+  await expectImportBlocked(page);
   await expect(page.getByRole('button', { name: 'Start experimental simulation' })).toBeDisabled();
   expect(state.posts).toHaveLength(failure === 'pending-write' ? 0 : 1);
 });
@@ -566,11 +648,11 @@ test('native pending restart preserves original context and project isolation wi
     sessionStorage.setItem('firebird:job-attempt:policy.run.simulation:alpha', JSON.stringify({ state: 'pending', message: 'Project: alpha · Profile: cup-fixture · Policy: act-export · Budget: 600 seconds' }));
   });
   await openNativeAgain(page, true);
-  await expect(page.getByRole('button', { name: 'Native Isaac · ACT / SmolVLA', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: '3D simulation', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('region', { name: 'Native simulation recovery' })).toContainText('Policy: act-export');
   await expect(page.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toBeDisabled();
   await page.getByLabel('Current project').selectOption('beta');
-  await page.getByRole('button', { name: 'Native Isaac · ACT / SmolVLA', exact: true }).click();
+  await page.getByRole('button', { name: '3D simulation', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Native simulation recovery' })).toHaveCount(0);
   await page.getByLabel('Current project').selectOption('alpha');
   await expect(page.getByRole('region', { name: 'Native simulation recovery' })).toContainText('Policy: act-export');
@@ -586,17 +668,17 @@ for (const both of [false, true]) test(`native recovery entry ${both ? 'asks whi
   }, both);
   await page.reload(); await expect(page.getByLabel('Current project')).toHaveValue('alpha');
   await page.getByRole('button', { name: 'Run', exact: true }).click();
-  const nativeMode = page.getByRole('button', { name: 'Native Isaac · ACT / SmolVLA', exact: true });
+  const nativeMode = page.getByRole('button', { name: '3D simulation', exact: true });
   if (both) {
     await expect(page.getByRole('region', { name: 'Workflow selection status' })).toContainText('Both observation replay and native simulation have unresolved requests');
     await expect(nativeMode).toHaveAttribute('aria-pressed', 'false');
     await nativeMode.click();
   } else await expect(nativeMode).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('region', { name: 'Native simulation recovery' })).toContainText('Original native launch');
-  await page.getByRole('button', { name: 'Engine checks · GGUF', exact: true }).click();
+  await page.getByRole('button', { name: 'Check inference', exact: true }).click();
   await page.getByRole('button', { name: 'Dataset', exact: true }).click();
   await page.getByRole('button', { name: 'Run', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Engine checks · GGUF', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Check inference', exact: true })).toHaveAttribute('aria-pressed', 'true');
   expect(await page.evaluate(() => sessionStorage.getItem('firebird:job-attempt:policy.run.simulation:alpha'))).toContain('Original native launch');
   expect(state.posts).toEqual([]);
 });

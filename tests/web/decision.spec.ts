@@ -20,7 +20,8 @@ async function lab(page: Page, configured = true) {
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Decision lab', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Local decision advisory' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Decision lab', level: 1 })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Advisory model', exact: true })).toContainText('Muose-50M');
   return { posts, controls };
 }
 async function fill(page: Page) {
@@ -32,7 +33,10 @@ async function fill(page: Page) {
 test('decision lab is disabled without explicit operator configuration', async ({ page }) => {
   const { posts } = await lab(page, false); await fill(page);
   await expect(page.getByRole('button', { name: 'Score criteria' })).toBeDisabled();
-  await expect(page.getByText(/only 3 of 6 workflow/)).toBeVisible();
+  await expect(page.getByText('Experimental · advisory only', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Only 3 of 6 workflow/)).not.toBeVisible();
+  await page.getByText('Model details', { exact: true }).click();
+  await expect(page.getByText(/Only 3 of 6 workflow/)).toBeVisible();
   expect(posts).toHaveLength(0);
 });
 
@@ -65,4 +69,78 @@ test('criteria enforce uniqueness and two to eight choices', async ({ page }) =>
   await expect(page.getByRole('button', { name: 'Add criterion' })).toBeDisabled();
   for (let i = 8; i > 2; i--) await page.getByRole('button', { name: `Remove criterion ${i}`, exact: true }).click();
   await expect(page.getByRole('button', { name: 'Remove criterion 2', exact: true })).toHaveCount(0);
+});
+
+for (const width of [1440, 560, 320]) for (const theme of ['Light', 'Dark'] as const) test(`decision form has aligned full-width fields at ${width}px in ${theme.toLowerCase()} mode`, async ({ page }, testInfo) => {
+  await page.setViewportSize({ width, height: 1100 });
+  const { posts } = await lab(page, false);
+  await page.getByRole('button', { name: theme, exact: true }).click();
+  const region = page.getByRole('region', { name: 'Decision advisory', exact: true });
+  await expect(region.getByRole('status')).toHaveText('Setup required');
+  await expect(region.getByRole('group', { name: 'Comparison', exact: true })).toHaveCSS('border-top-width', '0px');
+  await expect(region.locator('.workbench-field')).toHaveCount(4);
+  expect(await page.getByLabel('Comparison instructions').evaluate(element => element.scrollHeight <= element.clientHeight + 1)).toBe(true);
+  const fields = await region.locator('.workbench-field').evaluateAll(elements => elements.map(element => {
+    const field = element.getBoundingClientRect();
+    const label = element.querySelector('label')!.getBoundingClientRect();
+    const control = element.querySelector('textarea')!.getBoundingClientRect();
+    return { fieldX: field.x, fieldWidth: field.width, labelBottom: label.bottom, controlX: control.x, controlWidth: control.width, controlTop: control.top, controlBottom: control.bottom };
+  }));
+  for (const field of fields) {
+    expect(field.controlTop - field.labelBottom).toBeGreaterThanOrEqual(6);
+    expect(Math.abs(field.controlX - field.fieldX)).toBeLessThanOrEqual(1);
+    expect(Math.abs(field.controlWidth - field.fieldWidth)).toBeLessThanOrEqual(1);
+    expect(field.controlWidth).toBeGreaterThan(180);
+  }
+  expect(fields[1].labelBottom).toBeGreaterThan(fields[0].controlBottom + 16);
+  if (width <= 700) expect(fields[3].controlTop).toBeGreaterThan(fields[2].controlBottom + 16);
+  else expect(Math.abs(fields[2].controlTop - fields[3].controlTop)).toBeLessThanOrEqual(1);
+  const add = await page.getByRole('button', { name: 'Add criterion', exact: true }).boundingBox();
+  expect(add!.y - Math.max(fields[2].controlBottom, fields[3].controlBottom)).toBeGreaterThanOrEqual(12);
+  const submit = page.getByRole('button', { name: 'Score criteria', exact: true });
+  await expect(submit).toBeDisabled();
+  expect((await submit.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+  const screenshot = testInfo.outputPath(`decision-form-${width}-${theme.toLowerCase()}.png`);
+  await page.screenshot({ path: screenshot, fullPage: true });
+  await testInfo.attach('Decision form layout', { path: screenshot, contentType: 'image/png' });
+  expect(posts).toEqual([]);
+});
+
+test('adding and removing criteria preserves keyboard focus without submitting', async ({ page }) => {
+  const { posts } = await lab(page);
+  await fill(page);
+  await page.getByRole('button', { name: 'Add criterion', exact: true }).click();
+  await expect(page.getByLabel('Criterion 3', { exact: true })).toBeFocused();
+  await page.getByLabel('Criterion 3', { exact: true }).fill('Review the policy');
+  await page.getByRole('button', { name: 'Remove criterion 2', exact: true }).click();
+  await expect(page.getByLabel('Criterion 2', { exact: true })).toBeFocused();
+  await expect(page.getByLabel('Criterion 2', { exact: true })).toHaveValue('Review the policy');
+  await expect(page.getByLabel('Criterion 1', { exact: true })).toHaveValue('Inspect the dataset');
+  expect(posts).toEqual([]);
+});
+
+test('pending scoring locks fields while cancellation stays reachable', async ({ page }) => {
+  const { posts } = await lab(page);
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/v1/decision/score', async route => {
+    posts.push(route.request().postDataJSON());
+    await held;
+    try { await route.abort(); } catch { /* The client may already have stopped scoring. */ }
+  });
+  try {
+    await fill(page);
+    await page.getByRole('button', { name: 'Score criteria', exact: true }).click();
+    await expect.poll(() => posts.length).toBe(1);
+    await expect(page.getByLabel('State to compare')).toBeDisabled();
+    await expect(page.getByLabel('Criterion 1', { exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Add criterion', exact: true })).toBeDisabled();
+    const stop = page.getByRole('button', { name: 'Stop scoring', exact: true });
+    await expect(stop).toBeEnabled();
+    await stop.click();
+    await expect(page.getByRole('alert').filter({ hasText: 'Scoring stopped' })).toBeVisible();
+    await expect(page.getByLabel('State to compare')).toBeEnabled();
+    expect(posts).toHaveLength(1);
+  } finally { release(); }
 });

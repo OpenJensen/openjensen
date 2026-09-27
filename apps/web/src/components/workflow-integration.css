@@ -1,0 +1,12 @@
+.workflow-integration { display: grid; min-width: 0; gap: 9px; margin-bottom: 22px; }
+.workflow-integration-label { color: var(--muted); font-size: 12px; font-weight: 500; }
+.workflow-integration-card { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.workflow-integration-icon { display: grid; place-items: center; width: 38px; height: 38px; flex: 0 0 38px; border-radius: 8px; background: var(--subtle); color: var(--muted); }
+.workflow-integration-copy { display: grid; gap: 4px; min-width: 0; flex: 1; }
+.workflow-integration-copy strong { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.workflow-integration-copy small { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.workflow-integration-status { color: var(--muted); font-size: 11px; line-height: 1.5; text-align: right; max-width: 45%; }
+@media (max-width: 500px) {
+  .workflow-integration-card { flex-wrap: wrap; padding: 12px; gap: 10px; }
+  .workflow-integration-status { width: 100%; max-width: none; padding-left: 48px; text-align: left; }
+}

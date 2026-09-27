@@ -1,6 +1,5 @@
 .training-workspace { max-width: 1060px; }
 .training-view-toolbar { max-width: 1060px; margin-bottom: 20px; }
-.training-view-toolbar h2 { margin-top: 18px; font-size: 17px; font-weight: 600; }
 .training-back { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; }
 .training-back > svg { transform: rotate(180deg); }
 .training-workspace fieldset { min-width: 0; border: 0; padding: 0; margin-inline: 0; }
@@ -58,10 +57,8 @@
 .training-model-copy { min-width: 0; flex: 1; display: grid; gap: 5px; }
 .training-model-copy > span { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .training-model-copy strong { font-size: 12px; font-weight: 600; white-space: nowrap; }
-.training-model-copy > small { color: var(--muted); font-size: 10px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
 .training-model-copy > .training-model-memory { margin-top: 4px; color: var(--muted); font-size: 11px; gap: 5px; }
 .training-model-memory strong { color: var(--ink); font-size: 13px; font-weight: 750; }
-.training-memory-help { color: var(--muted); font-size: 11px; line-height: 1.5; margin: 12px 0 0; }
 .training-model-status { font-size: 9px; color: var(--muted); border: 1px solid var(--line); padding: 1px 4px; border-radius: 4px; white-space: nowrap; }
 .training-methods { display: flex; gap: 7px; margin-top: 24px; }
 .training-methods legend { margin-bottom: 10px; font-size: 12px; font-weight: 500; }
@@ -153,3 +150,9 @@
 .training-recovery h2 { font-size: 15px; }
 .training-recovery-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
 .training-recovery-actions > button { white-space: normal; }
+
+.training-method-choices { margin-top: 28px; }
+.training-model-tile { align-items: flex-start; }
+.training-model-grid { align-items: stretch; }
+
+.training-model-tile { min-height: 76px; align-items: center; }

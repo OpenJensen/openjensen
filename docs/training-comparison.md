@@ -21,8 +21,8 @@ available UI choices, not an independent training certification.
 
 ## Reading an OPEN JENSEN run
 
-The monitor is on **Fine-tune**, below setup and run history. Selecting an older
-run restores its persisted observations. Refreshing the page does not reset
+Open **Fine-tune** and select a saved run to see its monitor. Setup is a separate
+new-run view; selecting an older run restores its persisted observations. Refreshing the page does not reset
 progress. Events and training measurements come from supervised worker output,
 with local metric-file fallback and bounded histories. Raw worker output exposes
 GPU provisioning and dependency/download diagnostics as well as training output.

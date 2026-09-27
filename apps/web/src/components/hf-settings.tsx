@@ -57,12 +57,11 @@ export function HuggingFaceSettingsPanel() {
         <Icon name="folder" size={22} />
         <div>
           <h2 id="hf-settings-title">Hugging Face</h2>
-          <p>Access tokens for model downloads</p>
         </div>
         <span className="hf-settings-badge">{status?.configured ? "Token saved" : "Optional"}</span>
       </header>
       <p className="hf-settings-note">
-        Public models download without a token. Add one for gated or private models your account can access.
+        For private or gated models.
       </p>
       {status?.configured && (
         <p className="hf-settings-account">
@@ -96,7 +95,7 @@ export function HuggingFaceSettingsPanel() {
           )}
         </div>
         <p className="hf-settings-note">
-          Stored privately on this application server. The saved token is never shown here.
+          Stored privately on this server.
           {" "}<a href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer">Create a token <Icon name="external" size={11} /></a>
         </p>
         {status?.message && !status.configured && <p className="hf-settings-error" role="alert">{status.message}</p>}

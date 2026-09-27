@@ -1,10 +1,21 @@
 # Gemini Omni appearance augmentation
 
-Under **Dataset → Augmentation**, choose a successful public Hugging Face
-inspection, a video camera and up to four episode indices. Choose **Change
-lighting**, **Change textures**, or a custom appearance prompt. Start time is
-relative to each episode; duration is 1–10 seconds. The whole selection is
-checked and trimmed before the first generation request.
+Open **Augmentation** in the sidebar's **Data** group, or select **Augment this
+dataset** from a successful inspection. The page has three steps:
+
+1. **Choose source clips:** select a successful public Hugging Face inspection
+   and a video camera from the visible cards. Pick up to four episode numbers
+   using the quick picks or the number field. Episode numbers start at zero.
+2. **Choose an appearance:** select **Change lighting**, **Change textures**, or
+   **Custom edit** from the illustrated cards, then add instructions as needed.
+3. **Generate & review:** check the provider disclosure and clip summary, then
+   explicitly start generation. Compare the original and edited clips before
+   downloading them.
+
+Start time is relative to each episode; duration is 1–10 seconds. The whole
+selection is checked and trimmed before the first generation request. A missing
+dataset offers an import action; unavailable provider setup offers **Open
+settings**, which opens **Settings & diagnostics → Compute**.
 
 This first augmentation method uses Google's Gemini Omni video editing API.
 Google Cloud login uses `gemini-omni-1.1-flash-preview`; the Gemini API key route
@@ -12,8 +23,8 @@ uses `gemini-omni-1.1-flash`. Additional augmentation models are planned.
 
 ## Setup
 
-Connect **Google Cloud in Settings** using the Google Cloud CLI login and your
-project. Install `gcloud`, `ffmpeg` and `ffprobe` on the **Python application
+Connect **Google Cloud** in **Settings & diagnostics → Compute** using the
+Google Cloud CLI login and your project. Install `gcloud`, `ffmpeg` and `ffprobe` on the **Python application
 server** PATH. A saved Google Cloud project takes priority over a Gemini API key.
 The augmentation page shows the selected project before generating. The server
 obtains a short-lived bearer token with `gcloud auth print-access-token --quiet`
@@ -48,8 +59,10 @@ uploaded-video editing in the EEA, Switzerland and UK. Generated media includes 
 
 ## Outputs and scope
 
-Jobs appear with queued/running/terminal status, preparation/generation progress,
-and cancellation. Successful runs show the original and edited clips, plus a ZIP
+Jobs appear under **Your augmentations** with queued/running/terminal status,
+preparation/generation progress and cancellation. When multiple runs exist,
+visible run cards reopen their results. Successful runs show the original and
+edited clips side by side, with episode buttons for switching clips and a ZIP
 download containing both MP4s and `manifest.json`. The manifest records the
 exact resolved prompt, request, source inspection, immutable Hub revision,
 metadata hash, episode and camera identity, **absolute camera-file timestamps**,

@@ -9,7 +9,7 @@ Application and native-worker workflows inspect the local Git diff with `.github
 - Application/core/web/test changes run application checks. Core lifecycle/worker contracts also run all native boundaries.
 - Worker changes run their matching isolated suite and application adapters. Native training changes additionally check ACT export and teaching data consumers.
 - New/unknown workers, shared CI changes and selector tests run every scope.
-- Documentation-only changes skip those application/native jobs. The independent simulation workflow keeps its existing behavior.
+- Documentation-only changes skip those application/native jobs, except `docs/workspace-guide.md`: it ships in the web app and runs application checks. The independent simulation workflow keeps its existing behavior.
 - Linux runs core, optional terminal tests, generated API checks, type checking, production build, all browser tests and diagnostics. Push, PR and merge-group application matrices contain Linux only. A manual application run defaults to Linux too; explicitly enabling **windows_browser** adds Windows core/terminal and complete web/build/browser checks. Native desktop packaging remains a separately recorded platform check.
 
 The teaching job checks the real CPU LeRobot recorder/readback and provider proposal contracts in one environment, and voice SDK contracts in another. A separate small decision-worker job runs contracts without installing Torch or downloading Muose; its opt-in real-model test is explicitly skipped. Actual model-scoring evidence remains a separate local receipt. It does not access voice providers, cloud credentials or GPUs. Dependencies are installed on every run; caches contain dependency downloads, not application workspaces, model weights, credentials or virtual environments.
@@ -34,6 +34,14 @@ pnpm build:web
 pnpm exec playwright install --with-deps --only-shell chromium
 pnpm test:web --retries=0
 pnpm test:diagnostics --retries=0
+```
+
+The prefix smoke check also verifies the in-app guide and API reference under `/firebird`. Its separate export leaves the normal preview available:
+
+```sh
+NEXT_PUBLIC_BASE_PATH=/firebird FIREBIRD_PREFIX_SMOKE_EXPORT=1 pnpm build:web
+NEXT_PUBLIC_BASE_PATH=/firebird FIREBIRD_TEST_WEB_DIR="$PWD/apps/web/out/prefix-smoke" pnpm exec playwright test --config tests/web/base-path.config.ts
+pnpm build:web
 ```
 
 The production-browser fixture owns a disposable local server and refuses an occupied port. Keep the developer's application running separately; do not kill a process without identifying it. Some core snapshot/video tests additionally require the isolated CPU reader and FFmpeg installed exactly as the application workflow describes. Native workers keep separate environments and commands in `.github/workflows/native-workers.yml`; the core environment must not absorb their Torch/CUDA dependencies.

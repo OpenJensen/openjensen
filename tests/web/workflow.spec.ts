@@ -12,7 +12,7 @@ test.describe.configure({ timeout: 120_000 });
 
 async function cli(...args: string[]) {
   const { stdout } = await execute(python, ['-m', 'vla_platform.cli', ...args], {
-    env: { ...process.env, FIREBIRD_API_URL: 'http://127.0.0.1:8765' },
+    env: { ...process.env, FIREBIRD_API_URL: `http://127.0.0.1:${process.env.FIREBIRD_BROWSER_PORT ?? '8765'}` },
     timeout: 15_000,
   });
   return JSON.parse(stdout);
@@ -35,9 +35,10 @@ class WorkflowPage {
 
   async quantize(runtime: string) {
     await this.page.getByRole('button', { name: 'Quantize', exact: true }).click();
+    await this.page.getByRole('group', { name: 'Quantization mode', exact: true }).getByRole('button', { name: 'SmolVLA', exact: true }).click();
     await this.page.getByRole('button', { name: 'New quantization', exact: true }).click();
-    await this.page.getByLabel('Execution target').selectOption(runtime);
-    await this.page.getByLabel('Checkpoint or policy').selectOption('source:synthetic-source');
+    await this.page.getByRole('group', { name: 'Compute', exact: true }).locator(`input[value="${runtime}"]`).check();
+    await this.page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="source:synthetic-source"]').check();
     const created = this.page.waitForResponse(response => response.url().endsWith('/policy-jobs') && response.request().method() === 'POST');
     await this.page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
     const response = await created;
