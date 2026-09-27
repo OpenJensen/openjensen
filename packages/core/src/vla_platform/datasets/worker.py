@@ -12,6 +12,8 @@ from vla_platform.datasets.inspect import inspect_hub, inspect_local
 async def run(request_path: Path, result_path: Path) -> None:
     try:
         request = WorkerRequest.model_validate_json(request_path.read_bytes())
+        if request.intake.recordings is not None:
+            raise ValueError("Recording selections require the supervised preparation adapter")
         if request.intake.source == "huggingface":
             result = await inspect_hub(request.intake)
         elif request.intake.snapshot_for_training:
@@ -22,7 +24,10 @@ async def run(request_path: Path, result_path: Path) -> None:
             # Synchronous inside this isolated process so SIGTERM unwinds the
             # snapshot reader's finally block and reaps its native subprocess.
             value = create_snapshot(
-                request.local_root, request.intake.path, Path(request.snapshot_store)
+                request.local_root,
+                request.intake.path,
+                Path(request.snapshot_store),
+                python=request.reader_python,
             )
             frozen = resolve_snapshot(Path(request.snapshot_store), value)
             result = inspect_local(

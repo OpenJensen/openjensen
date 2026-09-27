@@ -1479,6 +1479,16 @@
               }
             ]
           },
+          "recording_preparation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordingSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "repo_id": {
             "anyOf": [
               {
@@ -2388,6 +2398,16 @@
               }
             ],
             "title": "Path"
+          },
+          "recordings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordingPreparation"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "repo_id": {
             "anyOf": [
@@ -3773,6 +3793,418 @@
           "training_gpu_count"
         ],
         "title": "PublicRuntime",
+        "type": "object"
+      },
+      "RecordingCapture": {
+        "additionalProperties": false,
+        "properties": {
+          "episodes": {
+            "items": {
+              "$ref": "#/components/schemas/RecordingEpisode"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Episodes",
+            "type": "array"
+          },
+          "session_id": {
+            "maxLength": 32,
+            "minLength": 32,
+            "pattern": "^[a-f0-9]{32}$",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "session_sha256": {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Session Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "session_sha256",
+          "episodes"
+        ],
+        "title": "RecordingCapture",
+        "type": "object"
+      },
+      "RecordingCaptureOption": {
+        "additionalProperties": false,
+        "properties": {
+          "action_units": {
+            "const": "radians",
+            "title": "Action Units",
+            "type": "string"
+          },
+          "camera_key": {
+            "const": "observation.images.front",
+            "title": "Camera Key",
+            "type": "string"
+          },
+          "camera_prim": {
+            "title": "Camera Prim",
+            "type": "string"
+          },
+          "content_verified": {
+            "const": false,
+            "default": false,
+            "title": "Content Verified",
+            "type": "boolean"
+          },
+          "controller": {
+            "const": "joint_position_targets",
+            "title": "Controller",
+            "type": "string"
+          },
+          "episodes": {
+            "items": {
+              "$ref": "#/components/schemas/RecordingEpisodeOption"
+            },
+            "title": "Episodes",
+            "type": "array"
+          },
+          "fps": {
+            "title": "Fps",
+            "type": "integer"
+          },
+          "height": {
+            "title": "Height",
+            "type": "integer"
+          },
+          "joint_names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Joint Names",
+            "type": "array"
+          },
+          "lineage_group": {
+            "title": "Lineage Group",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "recorded",
+              "synthetic"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "physics_hz": {
+            "title": "Physics Hz",
+            "type": "integer"
+          },
+          "scene_sha256": {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Scene Sha256",
+            "type": "string"
+          },
+          "session_id": {
+            "maxLength": 32,
+            "minLength": 32,
+            "pattern": "^[a-f0-9]{32}$",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "session_sha256": {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Session Sha256",
+            "type": "string"
+          },
+          "state_units": {
+            "const": "radians",
+            "title": "State Units",
+            "type": "string"
+          },
+          "timebase": {
+            "const": "simulation_seconds",
+            "title": "Timebase",
+            "type": "string"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "session_id",
+          "session_sha256",
+          "origin",
+          "lineage_group",
+          "controller",
+          "state_units",
+          "action_units",
+          "timebase",
+          "camera_key",
+          "joint_names",
+          "width",
+          "height",
+          "fps",
+          "physics_hz",
+          "scene_sha256",
+          "camera_prim",
+          "episodes"
+        ],
+        "title": "RecordingCaptureOption",
+        "type": "object"
+      },
+      "RecordingCatalog": {
+        "additionalProperties": false,
+        "properties": {
+          "captures": {
+            "items": {
+              "$ref": "#/components/schemas/RecordingCaptureOption"
+            },
+            "title": "Captures",
+            "type": "array"
+          },
+          "configuration_sha256": {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Configuration Sha256",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "configuration_sha256",
+          "captures",
+          "message"
+        ],
+        "title": "RecordingCatalog",
+        "type": "object"
+      },
+      "RecordingEpisode": {
+        "additionalProperties": false,
+        "properties": {
+          "episode_id": {
+            "maxLength": 32,
+            "minLength": 32,
+            "pattern": "^[a-f0-9]{32}$",
+            "title": "Episode Id",
+            "type": "string"
+          },
+          "receipt_sha256": {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Receipt Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "episode_id",
+          "receipt_sha256"
+        ],
+        "title": "RecordingEpisode",
+        "type": "object"
+      },
+      "RecordingEpisodeOption": {
+        "additionalProperties": false,
+        "properties": {
+          "episode_id": {
+            "maxLength": 32,
+            "minLength": 32,
+            "pattern": "^[a-f0-9]{32}$",
+            "title": "Episode Id",
+            "type": "string"
+          },
+          "frames": {
+            "maximum": 3600.0,
+            "minimum": 1.0,
+            "title": "Frames",
+            "type": "integer"
+          },
+          "outcome": {
+            "enum": [
+              "unknown",
+              "operator_reported_failure"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "receipt_sha256": {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Receipt Sha256",
+            "type": "string"
+          },
+          "termination": {
+            "enum": [
+              "finish",
+              "reset",
+              "step_limit",
+              "shutdown"
+            ],
+            "title": "Termination",
+            "type": "string"
+          }
+        },
+        "required": [
+          "episode_id",
+          "receipt_sha256",
+          "frames",
+          "outcome",
+          "termination"
+        ],
+        "title": "RecordingEpisodeOption",
+        "type": "object"
+      },
+      "RecordingOptions": {
+        "additionalProperties": false,
+        "properties": {
+          "configuration_sha256": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Configuration Sha256"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "max_episodes": {
+            "default": 100,
+            "title": "Max Episodes",
+            "type": "integer"
+          },
+          "max_source_bytes": {
+            "default": 8589934592,
+            "title": "Max Source Bytes",
+            "type": "integer"
+          },
+          "runtime_verified": {
+            "const": false,
+            "default": false,
+            "title": "Runtime Verified",
+            "type": "boolean"
+          },
+          "setup_message": {
+            "title": "Setup Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "configured",
+          "configuration_sha256",
+          "setup_message"
+        ],
+        "title": "RecordingOptions",
+        "type": "object"
+      },
+      "RecordingPreparation": {
+        "additionalProperties": false,
+        "properties": {
+          "captures": {
+            "items": {
+              "$ref": "#/components/schemas/RecordingCapture"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Captures",
+            "type": "array"
+          },
+          "configuration_sha256": {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Configuration Sha256",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "timeout_seconds": {
+            "default": 600,
+            "maximum": 1800.0,
+            "minimum": 60.0,
+            "title": "Timeout Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "configuration_sha256",
+          "captures"
+        ],
+        "title": "RecordingPreparation",
+        "type": "object"
+      },
+      "RecordingSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "job_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Job Id",
+            "type": "string"
+          },
+          "lineage_group_count": {
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Lineage Group Count",
+            "type": "integer"
+          },
+          "selection_sha256": {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Selection Sha256",
+            "type": "string"
+          },
+          "source_count": {
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Source Count",
+            "type": "integer"
+          },
+          "source_preserved": {
+            "const": true,
+            "default": true,
+            "title": "Source Preserved",
+            "type": "boolean"
+          },
+          "task_success_verified": {
+            "const": false,
+            "default": false,
+            "title": "Task Success Verified",
+            "type": "boolean"
+          },
+          "writer_readback_verified": {
+            "const": true,
+            "default": true,
+            "title": "Writer Readback Verified",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "job_id",
+          "selection_sha256",
+          "source_count",
+          "lineage_group_count"
+        ],
+        "title": "RecordingSummary",
         "type": "object"
       },
       "ReplayObservation": {
@@ -5940,6 +6372,84 @@
           }
         },
         "summary": "Policy Job"
+      }
+    },
+    "/api/v1/projects/{project_id}/recordings": {
+      "get": {
+        "operationId": "recording_catalog_api_v1_projects__project_id__recordings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingCatalog"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recording Catalog"
+      }
+    },
+    "/api/v1/projects/{project_id}/recordings/options": {
+      "get": {
+        "operationId": "recording_options_api_v1_projects__project_id__recordings_options_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingOptions"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recording Options"
       }
     },
     "/api/v1/simulation-options": {
