@@ -85,7 +85,7 @@ svg { flex-shrink: 0; }
 .projects-section { margin-top: 24px; padding-bottom: 5px; }
 .projects-section > .text-button { margin: 5px; }
 .sidebar-note { margin: 12px; font-size: 12px; color: var(--muted); line-height: 1.7; }
-.project-picker { display: flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 7px; margin: 13px 5px 0; padding-left: 10px; color: var(--muted); background: var(--surface); }
+.project-picker { display: flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 7px; margin: 13px 5px 0; padding: 0 12px 0 10px; color: var(--muted); background: var(--surface); }
 .project-picker select { width: 100%; min-width: 0; background: transparent; color: var(--ink); border: 0; padding: 10px 7px 10px 0; font-size: 12px; text-overflow: ellipsis; }
 .project-picker:has(select:focus-visible) { outline: 2px solid var(--ink); outline-offset: -2px; }
 .project-picker select:focus-visible { outline: none; }
