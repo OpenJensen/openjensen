@@ -1,0 +1,131 @@
+{
+  "schema_version": 1,
+  "scope": "Actual offline ACT student-to-INT8-to-observation-replay application execution on generated fixtures; no physical quality, calibration, CUDA, Isaac, speedup or cloud acceptance",
+  "worker_source_commit": "cf4ebf26b782584bb8a39977434feaf34ad55832",
+  "project_id": "a4943fde-ff34-43c7-9ba1-873b054fc02a",
+  "student_artifact_id": "3012c2fa-2cc7-4746-9684-df0614912638:operation",
+  "quantization": {
+    "job_id": "de9b954e-a174-4dbf-be2b-edc57724e1be",
+    "artifact_id": "de9b954e-a174-4dbf-be2b-edc57724e1be:operation",
+    "manifest_sha256": "35cfcfa6a50505aadffc6bcb7cc9633701b0975b72a6bd544222f8a6237158be",
+    "source_weight_bytes": 55946840,
+    "packed_weight_bytes": 15056276,
+    "policy_package_bytes": 15061170,
+    "fresh_reload_verified": true,
+    "elapsed_job_seconds": 35.330436,
+    "drift_from_fp32": [
+      {
+        "input_sha256": "5ea7625441591ee6c555dcb116fef72f062f4e6e5391a3837ddeeb7998a4ff47",
+        "postprocessed": {
+          "coordinates": 600,
+          "maximum_absolute_difference": 0.02485942840576172,
+          "rmse": 0.011367025150087886
+        },
+        "raw": {
+          "coordinates": 600,
+          "maximum_absolute_difference": 0.008286476135253906,
+          "rmse": 0.0037890090162561907
+        },
+        "seed": 171
+      },
+      {
+        "input_sha256": "968520be37d75f4b5ca836e041a55aef62d0a68cb46c59d0073ebbf016da6c6b",
+        "postprocessed": {
+          "coordinates": 600,
+          "maximum_absolute_difference": 0.023249387741088867,
+          "rmse": 0.012326803724376193
+        },
+        "raw": {
+          "coordinates": 600,
+          "maximum_absolute_difference": 0.007749795913696289,
+          "rmse": 0.004108932363515719
+        },
+        "seed": 902
+      }
+    ]
+  },
+  "replay": {
+    "job_id": "c3f40ae4-679a-44da-84dd-2f4df7d20837",
+    "artifact_id": "c3f40ae4-679a-44da-84dd-2f4df7d20837:operation",
+    "manifest_sha256": "cf16b8e587beeb3eb24e274e3adbd1ef006cbcc6ee44c3e71c2e332b2ba90f6b",
+    "model_id": "sha256:60f81bd64b94f62a841bfb5835e4a4c35ab5ed32e548efd0a3162bdc7d4c419d",
+    "observations": 3,
+    "action_shape": [
+      100,
+      6
+    ],
+    "coordinate_names": [
+      "joint_0",
+      "joint_1",
+      "joint_2",
+      "joint_3",
+      "joint_4",
+      "joint_5"
+    ],
+    "units": [
+      "generated_fixture_radians",
+      "generated_fixture_radians",
+      "generated_fixture_radians",
+      "generated_fixture_radians",
+      "generated_fixture_radians",
+      "generated_fixture_radians"
+    ],
+    "pairs": [
+      [
+        0,
+        0
+      ],
+      [
+        2,
+        1
+      ],
+      [
+        4,
+        2
+      ]
+    ],
+    "reset_repeat_exact": true,
+    "worker_server_closed": true,
+    "elapsed_job_seconds": 39.22982
+  },
+  "source_preservation": {
+    "student_inventory_unchanged": true,
+    "dataset_snapshot_verified_unchanged": true,
+    "original_runtime_config_unchanged": true,
+    "historical_installation_receipt_unchanged": true
+  },
+  "jobs_submitted": 2,
+  "remote_operations": 0,
+  "receipt_sha256": "62a4c1828c7962be93c38a708ad6e72c02925fa9ae3f0648431a0984915f22b7",
+  "independent_review": {
+    "schema_version": 1,
+    "reviewer": "workers_audit",
+    "verdict": "approved for generated-fixture local CPU application scope",
+    "pipeline_receipt_sha256": "62a4c1828c7962be93c38a708ad6e72c02925fa9ae3f0648431a0984915f22b7",
+    "server_binding_sha256": "9fd5bc87ffcc290f222c29e3e28c2c61ed5379ad8654300a47ecd341a3cf38f2",
+    "checks": {
+      "receipt_files_verified": 11,
+      "student_inventory_files": 10,
+      "snapshot_files": 8,
+      "artifact_payload_file_counts": {
+        "3012c2fa-2cc7-4746-9684-df0614912638:operation": 9,
+        "de9b954e-a174-4dbf-be2b-edc57724e1be:operation": 9,
+        "c3f40ae4-679a-44da-84dd-2f4df7d20837:operation": 3
+      },
+      "registered_lineage_and_metadata": true,
+      "packed_model_identity_recomputed": true,
+      "full_finite_action_coordinates": 1800,
+      "reset_repeat_hashes_verified": 6,
+      "rgb_state_sample_identity": true,
+      "configured_v3_model_and_reader_paths": true,
+      "original_runtime_configuration_and_installation_receipt_unchanged": true
+    },
+    "limitations": [
+      "Generated 32-pixel observations and generated teacher/student lineage only; no task success, calibration, speedup, GPU, Isaac or physical-robot acceptance.",
+      "Configured V3 executables are bound through saved server script/config and resulting pinned runtime reports; no historical child exec syscall trace was retained.",
+      "Read-only artifact/hash review; no duplicate model execution or lifecycle submission.",
+      "Earlier installer/probe timeouts remain historical failures; this successful workload is not a blanket reliability guarantee."
+    ]
+  },
+  "browser_build_scope": "Real browser controls submitted each job once and rendered saved results. Worker source is bound to the listed local commit. The browser export preceded the unrelated final training-recovery patch."
+}

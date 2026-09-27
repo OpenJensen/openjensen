@@ -46,3 +46,13 @@ generated scenes, so this remains software integration evidence.95 focused
 core/contract tests passed, including repeated cancellation of actual child
 processes, source/receipt integrity, retained Linux wheel variant identities
 and rejection of consistently truncated corpus lengths. No task-quality claim.
+
+
+`student-pipeline.json` records a real follow-through of the same saved student:
+native INT8 conversion followed by CPU inference on three explicitly selected
+observations from the immutable generated dataset. The independent review checks
+artifact ancestry, packed model identity, all 1,800 finite output coordinates and
+reset repeatability. Source student/dataset/configuration were preserved. This
+exercises the new independent persistent model/reader environments through the
+local application; no physical task quality, calibration, GPU or Isaac acceptance
+is implied. Installation history still includes the separately retained timeouts.
