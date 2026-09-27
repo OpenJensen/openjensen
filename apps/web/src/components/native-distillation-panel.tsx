@@ -116,8 +116,8 @@ export function NativeDistillationPanel({ projectId, onDataset, onQuantize }: { 
     finally { busy.current = false; if (mounted.current) { setCancelling(false); setCancelId(''); } }
   }
   return <section className="panel native-simulation native-distillation" aria-label="ACT distillation">
-    <div className="cloud-heading"><div><h2>Teach a smaller ACT policy</h2><p>Train an ACT256 student to imitate your teacher’s action chunks, then reload the saved student in a fresh process.</p></div><button className="secondary-button" disabled={!projectId || jobs.isFetching} onClick={() => void refresh()}>Refresh distillation jobs</button></div>
-    <p>ACT → ACT256 · local CPU · saved inference policy. SmolVLA and cross-family distillation are not supported yet.</p>
+    <div className="cloud-heading"><div><h2>Teach a smaller ACT policy</h2>{!selected && <p>Train an ACT256 student to imitate your teacher’s action chunks, then reload the saved student in a fresh process.</p>}</div><button className="secondary-button" disabled={!projectId || jobs.isFetching} onClick={() => void refresh()}>Refresh distillation jobs</button></div>
+    {!selected && <p>ACT → ACT256 · local CPU · saved inference policy. SmolVLA and cross-family distillation are not supported yet.</p>}
     {selected && <article className="native-simulation-result" aria-label="Distillation job details" data-job-id={selected.id}>
       <div className="native-result-header"><h3>ACT256 student</h3><span className={`status status-${selected.status}`}>{selected.status}</span></div>
       <p className="native-result-summary">{selected.stage ?? 'Queued'} · {selected.id}</p>

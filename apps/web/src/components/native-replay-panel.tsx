@@ -107,7 +107,7 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, onDataset }:
     finally { busy.current = false; if (mounted.current) { setCancelling(false); setCancelId(''); } }
   }
   return <section className="panel native-simulation native-replay" aria-label="CPU observation replay">
-    <div className="cloud-heading"><div><h2>Inspect the actions your policy predicts</h2><p>Run a packed ACT policy on selected dataset observations. Each observation starts from a reset policy and produces a complete 100-action chunk.</p></div><button className="secondary-button" disabled={!projectId || jobs.isFetching} onClick={() => void refresh()}>Refresh replay jobs</button></div>
+    <div className="cloud-heading"><div><h2>Inspect the actions your policy predicts</h2>{!selected && <p>Run a packed ACT policy on selected dataset observations. Each observation starts from a reset policy and produces a complete 100-action chunk.</p>}</div><button className="secondary-button" disabled={!projectId || jobs.isFetching} onClick={() => void refresh()}>Refresh replay jobs</button></div>
     <p>Local CPU · INT8 / INT4 ACT · actions are saved, never applied to a robot or simulator. Use Native Isaac for a scene rollout.</p>
     {selected && <article className="native-simulation-result" aria-label="Observation replay details" data-job-id={selected.id}>
       <div className="native-result-header"><h3>CPU observation replay</h3><span className={`status status-${selected.status}`}>{selected.status}</span></div><p className="native-result-summary">{selected.stage ?? 'Queued'} · {selected.id}</p>

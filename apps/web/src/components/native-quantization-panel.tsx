@@ -109,7 +109,7 @@ export function NativeQuantizationPanel({ projectId, preferredArtifactId, onPrep
     } finally { busy.current = false; if (mounted.current) { setPending(null); setConfirmCancel(null); } }
   }
   return <section className="panel native-simulation native-quantization" aria-labelledby="native-quantization-title">
-    <div className="cloud-heading"><div><h2 id="native-quantization-title">Native ACT quantization</h2><p>Create a smaller INT8 or INT4 package, then compare its actions and verify a fresh CPU reload.</p></div><button className="secondary-button" disabled={!projectId || jobs.isFetching} onClick={() => void refresh()}>Refresh ACT quantization jobs</button></div>
+    <div className="cloud-heading"><div><h2 id="native-quantization-title">Native ACT quantization</h2>{!selected && <p>Create a smaller INT8 or INT4 package, then compare its actions and verify a fresh CPU reload.</p>}</div><button className="secondary-button" disabled={!projectId || jobs.isFetching} onClick={() => void refresh()}>Refresh ACT quantization jobs</button></div>
     <p>Local ACT · saved weight compression. Task quality, calibration, speed and GPU memory savings remain unverified. Native Isaac does not support this packed format.</p>
     {selected && <article className="native-simulation-result" aria-label="ACT quantization job details" data-job-id={selected.id}>
       <div className="native-result-header"><h3>INT{nativeQuantizationOf(selected)?.bits} candidate</h3><span className={`status status-${selected.status}`}>{selected.status}</span></div>
