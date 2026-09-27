@@ -26,15 +26,50 @@ def _tool(path: Path, option: str, limit: int) -> str:
     return raw.decode("utf-8", errors="strict")
 
 
-def parse_dependencies(text: str) -> list[str]:
-    values = []
-    for line in text.splitlines()[1:]:
-        match = re.fullmatch(r"\s+(.+) \(compatibility version .+\)", line)
-        if match:
-            values.append(match.group(1))
-        elif line.strip():
-            raise ValueError("Unrecognized otool dependency output")
-    return values
+DYLIB_LOAD_COMMANDS = frozenset(
+    {
+        "LC_LOAD_DYLIB",
+        "LC_LOAD_WEAK_DYLIB",
+        "LC_REEXPORT_DYLIB",
+        "LC_LOAD_UPWARD_DYLIB",
+        "LC_LAZY_LOAD_DYLIB",
+    }
+)
+
+
+def parse_dylib_commands(text: str) -> tuple[list[str], list[str]]:
+    """Separate actual dylib loads from the library's own LC_ID_DYLIB identity."""
+    dependencies: list[str] = []
+    identities: list[str] = []
+    command: str | None = None
+    lines: list[str] = []
+
+    def finish() -> None:
+        if command not in DYLIB_LOAD_COMMANDS and command != "LC_ID_DYLIB":
+            if command is not None and "DYLIB" in command:
+                raise ValueError("Unsupported dylib load command")
+            return
+        names = [line for line in lines if line.startswith("name ")]
+        if len(names) != 1:
+            raise ValueError("Dylib load command must contain exactly one name")
+        match = re.fullmatch(r"name (.+) \(offset [0-9]+\)", names[0])
+        if not match:
+            raise ValueError("Unrecognized dylib load-command name")
+        (identities if command == "LC_ID_DYLIB" else dependencies).append(match.group(1))
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("cmd "):
+            finish()
+            command, lines = stripped[4:], []
+        else:
+            lines.append(stripped)
+    finish()
+    if command is None:
+        raise ValueError("Missing Mach-O load commands")
+    if len(identities) > 1:
+        raise ValueError("Multiple dylib identity commands")
+    return dependencies, identities
 
 
 def parse_rpaths(text: str) -> list[str]:
@@ -99,8 +134,10 @@ def inspect(root: Path, recorded: dict[str, Any]) -> dict[str, Any]:
     for path in binaries:
         libraries = _tool(path, "-L", 65536)
         commands = _tool(path, "-l", 256 * 1024)
+        dependencies, identities = parse_dylib_commands(commands)
         raw[path] = {
-            "dependencies": parse_dependencies(libraries),
+            "dependencies": dependencies,
+            "install_names": identities,
             "rpaths": parse_rpaths(commands),
             "otool_L": libraries,
             "otool_l": commands,
