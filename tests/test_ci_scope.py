@@ -1,0 +1,129 @@
+"""CI must skip unrelated expensive environments while retaining cross-boundary checks."""
+
+import importlib.util
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+SCRIPT = Path(__file__).resolve().parents[1] / ".github/scripts/ci_scope.py"
+spec = importlib.util.spec_from_file_location("ci_scope", SCRIPT)
+ci_scope = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(ci_scope)
+
+
+@pytest.mark.parametrize(
+    "paths,expected",
+    [
+        (["README.md", "docs/terminal.md"], set()),
+        (["new-component/code.py"], set(ci_scope.SCOPES)),
+        (["workers/new-worker/code.py"], set(ci_scope.SCOPES)),
+        (["apps/web/src/app/page.tsx"], {"application"}),
+        (["packages/core/src/vla_platform/tui.py", "uv.lock"], {"application"}),
+        (["workers/act_optimizer/src/firebird_act/application.py"], {"application", "act"}),
+        (["workers/vla_cpp/src/quantize.py"], {"application", "quantization", "benchmark"}),
+        (
+            ["workers/smolvla_qlora/src/firebird_vla/local_dataset.py"],
+            {"application", "training", "act", "teaching"},
+        ),
+        (["workers/decision/src/firebird_decision/contracts.py"], {"application", "decision"}),
+        (["workers/teaching/requirements-voice.txt"], {"application", "teaching"}),
+        (["packages/core/src/vla_platform/lifecycle/contracts.py"], set(ci_scope.SCOPES)),
+        (
+            ["packages/core/src/vla_platform/datasets/snapshots.py"],
+            {"application", "training", "act", "teaching"},
+        ),
+        ([".github/workflows/application.yml"], set(ci_scope.SCOPES)),
+    ],
+)
+def test_selects_changed_area_and_consumers(paths, expected):
+    assert ci_scope.select(paths) == expected
+
+
+def test_rename_runs_both_old_and_new_scopes(tmp_path, monkeypatch):
+    # The real Git diff is tested: -M rename output would otherwise hide the old consumer.
+    monkeypatch.chdir(tmp_path)
+
+    def git(*args):
+        return subprocess.check_output(["git", *args], text=True).strip()
+
+    git("init", "-q")
+    git("config", "user.name", "CI fixture")
+    git("config", "user.email", "fixture@example.test")
+    source = tmp_path / "workers/vla_cpp/file with\nnewline.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("fixture")
+    git("add", ".")
+    git("commit", "-qm", "before")
+    before = git("rev-parse", "HEAD")
+    target = tmp_path / "workers/teaching/file.py"
+    target.parent.mkdir(parents=True)
+    source.rename(target)
+    git("add", "-A")
+    git("commit", "-qm", "after")
+    paths = ci_scope.changed_paths("push", {"before": before, "after": git("rev-parse", "HEAD")})
+    assert len(paths) == 2
+    assert ci_scope.select(paths) == {"application", "quantization", "benchmark", "teaching"}
+
+
+@pytest.mark.parametrize(
+    "event,document",
+    [
+        ("workflow_dispatch", {}),
+        ("push", {"before": "0" * 40, "after": "a" * 40}),
+        ("push", {"before": "--help", "after": "a" * 40}),
+        ("pull_request", {}),
+        ("push", {"before": "a" * 40, "after": "b" * 40}),
+    ],
+)
+def test_uncertain_history_never_skips_checks(tmp_path, monkeypatch, event, document):
+    event_path, output = tmp_path / "event.json", tmp_path / "output"
+    event_path.write_text(json.dumps(document))
+    monkeypatch.setenv("GITHUB_EVENT_NAME", event)
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event_path))
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    ci_scope.main()
+    assert output.read_text().splitlines() == [f"{name}=true" for name in ci_scope.SCOPES]
+
+
+@pytest.mark.parametrize("workflow", ["application.yml", "native-workers.yml"])
+@pytest.mark.parametrize(
+    "case",
+    ["pass", "skip", "failure", "cancelled", "unexpected_skip", "missing_output", "scope_failure"],
+)
+def test_stable_gate_does_not_hide_failed_or_missing_checks(workflow, case):
+    # Execute the exact inline gate shipped to Actions, not a test reimplementation.
+    import ast
+    import re
+
+    text = (SCRIPT.parents[1] / "workflows" / workflow).read_text()
+    block = text.split("python3 - <<'PY_GATE'\n", 1)[1].split("          PY_GATE", 1)[0]
+    script = "\n".join(line[10:] for line in block.splitlines())
+    mapping = ast.literal_eval(re.search(r"required = (.*)", script)[1])
+    results = {
+        "scope": {"result": "success", "outputs": {scope: "true" for scope in mapping.values()}}
+    }
+    results.update({job: {"result": "success"} for job in mapping})
+    job, scope = next(iter(mapping.items()))
+    if case == "skip":
+        results["scope"]["outputs"][scope] = "false"
+        results[job]["result"] = "skipped"
+    elif case in {"failure", "cancelled"}:
+        results[job]["result"] = case
+    elif case in {"unexpected_skip", "missing_output"}:
+        results[job]["result"] = "skipped"
+        if case == "missing_output":
+            del results["scope"]["outputs"][scope]
+    elif case == "scope_failure":
+        results["scope"]["result"] = "failure"
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        env=os.environ | {"CHECK_RESULTS": json.dumps(results)},
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    assert (completed.returncode == 0) == (case in {"pass", "skip"}), completed.stderr

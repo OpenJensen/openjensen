@@ -19,6 +19,9 @@ dependencies = [
   "filelock>=3.18,<4",
 ]
 
+[project.optional-dependencies]
+tui = ["textual==8.2.8"]
+
 [project.scripts]
 firebird = "vla_platform.cli:app"
 

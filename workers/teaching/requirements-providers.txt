@@ -1,0 +1,2 @@
+# Optional proposal-only adapters; separate from Isaac. Matches existing core HTTP pin.
+httpx==0.28.1
