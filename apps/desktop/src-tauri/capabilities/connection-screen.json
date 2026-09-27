@@ -1,8 +1,16 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "connection-screen",
-  "description": "Only bundled connection UI may perform a fixed loopback readiness probe. No remote IPC grant.",
-  "windows": ["main"],
+  "description": "Only the bundled connection screen may check or manage the fixed desktop backend. HTTP pages have no native permissions.",
+  "windows": [
+    "main"
+  ],
   "local": true,
-  "permissions": ["allow-probe-backend"]
+  "permissions": [
+    "allow-probe-backend",
+    "allow-desktop-status",
+    "allow-start-owned",
+    "allow-stop-owned",
+    "allow-restart-owned"
+  ]
 }
