@@ -16,25 +16,35 @@ function job(id: string, project = 'alpha', two = true, status = 'succeeded'): a
 const panel = (page: Page) => page.getByRole('region', { name: 'Recording dataset preparation', exact: true });
 const submit = (page: Page) => panel(page).getByRole('button', { name: 'Prepare selected recordings', exact: true });
 const refresh = (page: Page) => panel(page).getByRole('button', { name: 'Refresh recordings and jobs', exact: true });
+const recovery = (page: Page) => panel(page).getByRole('complementary', { name: 'Request recovery' });
+const checkSaved = (page: Page) => recovery(page).getByRole('button', { name: 'Check saved request', exact: true });
+const retrySaved = (page: Page) => recovery(page).getByRole('button', { name: 'Retry same request', exact: true });
 const ack = (page: Page) => panel(page).getByRole('button', { name: 'I checked recording jobs; allow a new request', exact: true });
 function deferred() { let release!: () => void; const promise = new Promise<void>(r => { release = r; }); return { promise, release }; }
 async function fixture(page: Page) {
-  const state = { configured: true, failCatalog: false, failHistory: false, omit: '' as string, captures: catalog(), jobs: [] as any[], posts: [] as { path: string; body: any }[], lost: false, bad: null as null | string, gate: null as ReturnType<typeof deferred> | null, getGate: null as ReturnType<typeof deferred> | null, getGateId: '', nextId: 'new-preparation', reads: 0 };
+  const state = { configured: true, failCatalog: false, failHistory: false, omit: '' as string, captures: catalog(), jobs: [] as any[], posts: [] as { path: string; body: any }[], lost: false, bad: null as null | string, gate: null as ReturnType<typeof deferred> | null, getGate: null as ReturnType<typeof deferred> | null, getGateId: '', nextId: 'new-preparation', reads: 0, keys: [] as string[], bindings: new Map<string, any>(), commitLost: false, support: true, lookupReads: 0, catalogGate: null as ReturnType<typeof deferred> | null };
   await page.route('**/api/v1/**', async route => {
     const req = route.request(), path = new URL(req.url()).pathname, project = path.split('/')[4];
     if (req.method() === 'POST') {
       state.posts.push({ path, body: req.postDataJSON() });
+      const key = req.headers()['idempotency-key'] ?? ''; if (path.endsWith('/intakes')) state.keys.push(key);
+      const headers = key ? { 'Idempotency-Key': key, 'Cache-Control': 'no-store' } : {};
       const pendingGate = state.gate, lost = state.lost, bad = state.bad, id = state.nextId;
-      const value = path.endsWith('/cancel') ? { ...state.jobs.find(j => j.id === path.split('/').at(-2)), status: 'cancelled' } : { ...job(id, project, true, 'queued'), request: req.postDataJSON() };
+      const value = state.bindings.get(key) ?? (path.endsWith('/cancel') ? { ...state.jobs.find(j => j.id === path.split('/').at(-2)), status: 'cancelled' } : { ...job(id, project, true, 'queued'), request: req.postDataJSON() });
       if (pendingGate) await pendingGate.promise;
+      if (key && (!lost || state.commitLost)) state.bindings.set(key, structuredClone(value));
       if (lost) return route.abort('failed');
       if (bad === 'array') value.status = ['queued'];
       if (bad === 'foreign') value.project_id = 'beta';
       if (bad === 'recipe') value.request = { ...value.request, recordings: { ...value.request.recordings, timeout_seconds: 601 } };
-      return route.fulfill({ status: 202, json: value });
+      return route.fulfill({ status: 202, json: value, headers });
+    }
+    if (path.includes('/submissions/')) {
+      state.lookupReads++; const key = path.split('/').at(-1)!, value = state.bindings.get(key);
+      return route.fulfill({ status: value ? 200 : 404, json: value ?? { detail: 'No saved fixture binding' }, headers: state.support ? { 'Idempotency-Key': key, 'Cache-Control': 'no-store' } : {} });
     }
     if (path.endsWith('/recordings/options')) return route.fulfill({ json: { ...options, configured: state.configured, configuration_sha256: state.configured ? options.configuration_sha256 : null } });
-    if (path.endsWith('/recordings')) return route.fulfill({ status: state.failCatalog ? 503 : 200, json: state.failCatalog ? { detail: 'Generated catalog unavailable' } : state.captures });
+    if (path.endsWith('/recordings')) { if (state.catalogGate) await state.catalogGate.promise; return route.fulfill({ status: state.failCatalog ? 503 : 200, json: state.failCatalog ? { detail: 'Generated catalog unavailable' } : state.captures }); }
     if (path.endsWith('/jobs') && path.includes('/projects/')) { state.reads++; return route.fulfill({ status: state.failHistory ? 503 : 200, json: state.failHistory ? { detail: 'Generated history unavailable' } : state.jobs.filter(j => j.project_id === project && j.id !== state.omit) }); }
     if (path.startsWith('/api/v1/jobs/')) {
       const id = path.split('/')[4]; if (state.getGate && id === state.getGateId) await state.getGate.promise;
@@ -94,23 +104,31 @@ for (const unavailable of ['unconfigured', 'empty', 'error']) test(`${unavailabl
   await expect(panel(page).getByText(unavailable === 'unconfigured' ? /Remote Isaac captures/ : unavailable === 'empty' ? 'No finalized episodes are published for this project.' : /Recording availability is unverified/)).toBeVisible(); await expect(submit(page)).toBeDisabled(); expect(s.posts).toEqual([]);
 });
 for (const bad of ['array', 'foreign', 'recipe']) test(`${bad} invalid acknowledgement remains uncertain after reload`, async ({ page }) => {
-  const s = await fixture(page); s.bad = bad; await selectEpisodes(page); await submit(page).click(); await expect(ack(page)).toBeDisabled(); await page.reload(); await page.getByRole('button', { name: 'Teaching', exact: true }).click(); await expect(ack(page)).toBeDisabled(); await expect(submit(page)).toBeDisabled(); expect(s.posts).toHaveLength(1);
+  const s = await fixture(page); s.bad = bad; await selectEpisodes(page); await submit(page).click(); await expect(checkSaved(page)).toBeEnabled(); await page.reload(); await page.getByRole('button', { name: 'Teaching', exact: true }).click(); await expect(checkSaved(page)).toBeEnabled(); await expect(ack(page)).toHaveCount(0); await expect(submit(page)).toBeDisabled(); expect(s.posts).toHaveLength(1);
 });
-test('lost response requires fresh successful review and does not silently retry', async ({ page }) => {
-  const s = await fixture(page); s.lost = true; await selectEpisodes(page); await submit(page).click(); await expect(ack(page)).toBeDisabled(); s.failHistory = true; await refresh(page).click(); await expect(panel(page).getByText(/Saved preparation history is unavailable/)).toBeVisible(); await expect(ack(page)).toBeDisabled(); s.failHistory = false; await refresh(page).click(); await expect(ack(page)).toBeEnabled(); await ack(page).click(); await expect(submit(page)).toBeDisabled(); expect(s.posts).toHaveLength(1);
+test('lost recording response keeps the saved key despite empty history and retries only explicitly', async ({ page }) => {
+  const s = await fixture(page); s.lost = true; await selectEpisodes(page); await submit(page).click(); await expect(checkSaved(page)).toBeEnabled();
+  await refresh(page).click(); await expect(ack(page)).toHaveCount(0); await expect(submit(page)).toBeDisabled(); expect(s.posts).toHaveLength(1);
+  const key = s.keys[0]; await page.reload(); await page.getByRole('button', { name: 'Teaching', exact: true }).click(); await expect(retrySaved(page)).toHaveCount(0);
+  await checkSaved(page).click(); await expect(retrySaved(page)).toBeEnabled(); expect(s.posts).toHaveLength(1);
+  s.lost = false; await retrySaved(page).click(); await expect(panel(page).getByRole('article')).toHaveAttribute('data-job-id', 'new-preparation');
+  expect(s.keys).toEqual([key, key]); expect(s.posts.map(p => p.body)).toEqual([request(), request()]);
 });
-for (const failure of ['first pending write', 'journal read']) test(`${failure} latches admission off before POST until explicit recovery`, async ({ page }) => {
-  const s = await fixture(page); await selectEpisodes(page); await storageFault(page, failure === 'journal read' ? 'job-attempt' : 'recording-preparation', failure === 'journal read' ? 'getItem' : 'setItem'); await submit(page).click(); await expect(panel(page).getByText('Recording session recovery is not ready. No preparation or cancellation can be submitted.')).toBeVisible(); await expect(submit(page)).toBeDisabled(); expect(s.posts).toEqual([]); await page.evaluate(() => (window as any).__restoreRecordingStorage()); await panel(page).getByRole('button', { name: 'Read session recovery again' }).click(); await expect(submit(page)).toBeDisabled(); await panel(page).getByRole('checkbox', { name: /I reviewed these exact/ }).check(); await expect(submit(page)).toBeEnabled();
+for (const failure of ['first pending write', 'journal read']) test(`${failure} latches intake admission off before I/O until browser recovery`, async ({ page }) => {
+  const s = await fixture(page); await selectEpisodes(page); await storageFault(page, 'firebird:submission:v1:', failure === 'journal read' ? 'getItem' : 'setItem');
+  const reads = s.lookupReads; await submit(page).click(); await expect(panel(page).getByText(/Intake recovery is unavailable/)).toBeVisible(); await expect(submit(page)).toBeDisabled(); expect(s.posts).toEqual([]); expect(s.lookupReads).toBe(reads);
+  await page.evaluate(() => (window as any).__restoreRecordingStorage()); await page.reload(); await page.getByRole('button', { name: 'Teaching', exact: true }).click();
+  await expect(submit(page)).toBeDisabled(); await panel(page).getByRole('checkbox', { name: /I reviewed these exact/ }).check(); await expect(submit(page)).toBeEnabled();
 });
 test('known accepted ID stays visible when first receipt persistence fails and history is unavailable', async ({ page }) => {
   const s = await fixture(page); await selectEpisodes(page); await storageFault(page, 'recording-receipt', 'setItem'); s.failHistory = true; await submit(page).click(); await expect(panel(page).getByText(/Retained acknowledgement: job new-preparation/)).toBeVisible(); await expect(submit(page)).toBeDisabled(); expect(s.posts).toHaveLength(1);
 });
-for (const outcome of ['ack', 'error']) test(`old same-recipe ${outcome} after remount cannot replace a new pending request`, async ({ page }) => {
+for (const outcome of ['ack', 'error']) test(`remounted recording controller cannot replace a still-pending ${outcome} with another key`, async ({ page }) => {
   const s = await fixture(page), first = deferred(); s.gate = first; s.lost = outcome === 'error'; s.nextId = 'old-job'; await selectEpisodes(page); await submit(page).click(); await expect.poll(() => s.posts.length).toBe(1);
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await page.getByRole('button', { name: 'Teaching', exact: true }).click(); await refresh(page).click(); await ack(page).click();
-  const second = deferred(); s.gate = second; s.lost = false; s.nextId = 'new-job'; await panel(page).getByRole('checkbox', { name: /I reviewed these exact/ }).check(); await submit(page).click(); await expect.poll(() => s.posts.length).toBe(2);
-  const pending = await page.evaluate(() => sessionStorage.getItem('firebird:recording-preparation:alpha')); first.release(); await expect.poll(() => page.evaluate(() => sessionStorage.getItem('firebird:recording-preparation:alpha'))).toBe(pending); await expect(panel(page).getByText(/Retained acknowledgement: job old-job/)).toHaveCount(0);
-  second.release(); await expect(panel(page).getByRole('article')).toHaveAttribute('data-job-id', 'new-job'); expect(s.posts).toHaveLength(2);
+  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await expect(page.getByRole('button', { name: 'Inspect dataset', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Teaching', exact: true }).click(); await expect(submit(page)).toBeDisabled(); await expect(checkSaved(page)).toBeDisabled(); await expect(ack(page)).toHaveCount(0);
+  first.release(); if (outcome === 'ack') await expect(panel(page).getByText(/Retained acknowledgement: job old-job/)).toBeVisible(); else await expect(checkSaved(page)).toBeEnabled();
+  expect(s.posts).toHaveLength(1); expect(new Set(s.keys).size).toBe(1);
 });
 test('late accepted job never replaces a manual saved selection', async ({ page }) => {
   const s = await fixture(page), gate = deferred(); s.gate = gate; const saved = job('manual-job'); s.jobs.push(saved); await refresh(page).click(); await selectEpisodes(page); await submit(page).click(); await expect.poll(() => s.posts.length).toBe(1); await panel(page).getByLabel('Saved recording preparation', { exact: true }).selectOption(saved.id); gate.release(); await expect(panel(page).getByText(/Retained acknowledgement: job new-preparation/)).toBeVisible(); await expect(panel(page).getByRole('article')).toHaveAttribute('data-job-id', saved.id);
@@ -150,43 +168,76 @@ test('Teaching draft is not remounted by recording project changes', async ({ pa
 
 for (const action of ['submit', 'cancel'] as const) test(`post-ACK storage read denial retains exact ${action} identity and disables further mutation`, async ({ page }) => {
   const s = await fixture(page), gate = deferred(); s.gate = gate;
-  if (action === 'submit') {
-    await selectEpisodes(page); await submit(page).click();
-  } else {
-    await openSaved(page, s, job('cancel-target', 'alpha', true, 'running'));
-    await panel(page).getByRole('button', { name: 'Cancel selected preparation' }).click();
-    await panel(page).getByRole('button', { name: 'Confirm preparation cancellation' }).click();
-  }
-  await expect.poll(() => s.posts.length).toBe(1);
-  const saved = await page.evaluate(() => sessionStorage.getItem('firebird:recording-preparation:alpha'));
-  s.failHistory = true;
-  await storageFault(page, 'recording-preparation', 'getItem');
-  gate.release();
-  const id = action === 'submit' ? 'new-preparation' : 'cancel-target';
-  // Even the selected cancellation target must retain its new ACK status when history fails.
-  await expect(panel(page).getByText(`Retained acknowledgement: job ${id} · ${action === 'submit' ? 'queued' : 'cancelled'}. Restore session recovery and inspect saved jobs to verify its current result.`)).toBeVisible();
-  await expect(panel(page).getByText('Recording session recovery is not ready. No preparation or cancellation can be submitted.')).toBeVisible();
+  if (action === 'submit') { await selectEpisodes(page); await submit(page).click(); }
+  else { await openSaved(page, s, job('cancel-target', 'alpha', true, 'running')); await panel(page).getByRole('button', { name: 'Cancel selected preparation' }).click(); await panel(page).getByRole('button', { name: 'Confirm preparation cancellation' }).click(); }
+  await expect.poll(() => s.posts.length).toBe(1); s.failHistory = true;
+  await storageFault(page, action === 'submit' ? 'firebird:submission:v1:' : 'recording-preparation', 'getItem'); gate.release();
+  if (action === 'submit') { await expect(recovery(page).getByText(/Accepted job: new-preparation/)).toBeVisible(); await expect(panel(page).getByText(/Intake recovery is unavailable/)).toBeVisible(); }
+  else { await expect(panel(page).getByText(/Retained acknowledgement: job cancel-target · cancelled/)).toBeVisible(); await expect(panel(page).getByText('Recording session recovery is not ready. No preparation or cancellation can be submitted.')).toBeVisible(); }
   await expect(submit(page)).toBeDisabled(); expect(s.posts).toHaveLength(1);
-  await page.evaluate(() => (window as any).__restoreRecordingStorage());
-  expect(await page.evaluate(() => sessionStorage.getItem('firebird:recording-preparation:alpha'))).toBe(saved);
 });
 
-test('post-ACK read failure after successor takeover preserves only the new known receipt', async ({ page }) => {
-  const s = await fixture(page), first = deferred(); s.gate = first; s.nextId = 'old-job';
-  await selectEpisodes(page); await submit(page).click(); await expect.poll(() => s.posts.length).toBe(1);
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await page.getByRole('button', { name: 'Teaching', exact: true }).click();
-  await refresh(page).click(); await ack(page).click();
-  const second = deferred(); s.gate = second; s.nextId = 'new-job';
-  await panel(page).getByRole('checkbox', { name: /I reviewed these exact/ }).check(); await submit(page).click();
+test('lost ACK committed before reload recovers its exact job without a second POST', async ({ page }) => {
+  const s = await fixture(page); s.lost = true; s.commitLost = true; await selectEpisodes(page); await submit(page).click(); await expect(checkSaved(page)).toBeEnabled();
+  await page.reload(); await page.getByRole('button', { name: 'Teaching', exact: true }).click(); s.failCatalog = true; await checkSaved(page).click();
+  await expect(panel(page).getByRole('article')).toHaveAttribute('data-job-id', 'new-preparation'); expect(s.posts).toHaveLength(1);
+});
+
+test('unsupported durable endpoint refuses recording POST and preserves exact request', async ({ page }) => {
+  const s = await fixture(page); s.support = false; await selectEpisodes(page); await submit(page).click(); await expect(checkSaved(page)).toBeEnabled(); await expect(retrySaved(page)).toHaveCount(0); await expect(submit(page)).toBeDisabled(); expect(s.posts).toEqual([]);
+});
+test('navigation during fresh recording catalog check prevents POST', async ({ page }) => {
+  const s = await fixture(page); await selectEpisodes(page); const gate = deferred(); s.catalogGate = gate; await submit(page).click(); await expect.poll(() => s.lookupReads).toBe(1);
+  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); gate.release(); await expect(page.getByText('Selection changed; preparation was not submitted.', { exact: true })).toBeVisible(); expect(s.posts).toEqual([]);
+});
+test('generic Dataset recovers a recording key and Recording recovers a generic intake without relabeling', async ({ page }) => {
+  const s = await fixture(page); s.lost = true; s.commitLost = true; await selectEpisodes(page); await submit(page).click(); await expect(checkSaved(page)).toBeEnabled();
+  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await page.getByRole('button', { name: 'Check saved request', exact: true }).click(); await expect(page.getByRole('button', { name: 'Check saved request', exact: true })).toHaveCount(0); expect(s.posts).toHaveLength(1);
+  // A genuinely different generic request is only admitted after the first key was resolved.
+  await page.getByRole('button', { name: 'Sources', exact: true }).click(); s.nextId = 'generic-intake'; await page.getByLabel('Dataset repository', { exact: true }).fill('owned/recorded'); await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click(); await expect.poll(() => s.posts.length).toBe(2);
+  await expect(page.getByRole('button', { name: 'Check saved request', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Teaching', exact: true }).click(); await checkSaved(page).click(); await expect(panel(page).getByText(/Recovered dataset intake generic-intake/)).toBeVisible(); expect(s.posts).toHaveLength(2);
+});
+for (const kind of ['generic', 'recording']) test(`legacy recording recovery on Dataset rejects active ${kind} intake and failed history`, async ({ page }) => {
+  const s = await fixture(page);
+  await page.evaluate(({ recipe }) => {
+    sessionStorage.setItem('firebird:recording-preparation:alpha', JSON.stringify({ schema_version: 1, project_id: 'alpha', recipe, selected_job_id: '', pending: { attempt_id: 'f'.repeat(32), action: 'submit', recipe, job_id: null } }));
+    sessionStorage.setItem('firebird:job-attempt:dataset.inspect.recordings:alpha', JSON.stringify({ state: 'pending', message: 'Original recording submission' }));
+  }, { recipe: recipe() });
+  await page.reload(); await page.getByRole('button', { name: 'Dataset', exact: true }).click();
+  const value = job('active-intake', 'alpha', true, 'running'); if (kind === 'generic') value.request = { source: 'huggingface', repo_id: 'owned/data', revision: 'main' }; s.jobs.push(value);
+  const review = page.getByRole('button', { name: 'Refresh job history', exact: true }), allow = page.getByRole('button', { name: 'I reviewed the jobs; allow a new request', exact: true });
+  await review.click(); await expect(page.getByText(/Dataset intake active-intake is still running/)).toBeVisible(); await expect(allow).toBeDisabled();
+  s.jobs = []; s.failHistory = true; await review.click(); await expect(allow).toBeDisabled();
+  s.failHistory = false; await review.click(); await expect(allow).toBeEnabled(); await allow.click(); await expect(page.getByRole('button', { name: 'Inspect dataset', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Teaching', exact: true }).click(); await expect(panel(page).getByRole('checkbox', { checked: true })).toHaveCount(2); await expect(submit(page)).toBeDisabled(); expect(s.posts).toEqual([]);
+});
+
+test('Dataset retry of an unresolved recording request fences navigation during catalog validation', async ({ page }) => {
+  const s = await fixture(page); s.lost = true; await selectEpisodes(page); await submit(page).click(); await expect(checkSaved(page)).toBeEnabled();
+  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); const gate = deferred(); s.catalogGate = gate;
+  await page.getByRole('button', { name: 'Retry same request', exact: true }).click(); await expect.poll(() => s.lookupReads).toBe(2);
+  await page.getByRole('button', { name: 'Teaching', exact: true }).click(); gate.release();
+  await expect(recovery(page).getByText('Selection changed; the saved request was not retried.', { exact: true })).toBeVisible(); await expect(checkSaved(page)).toBeEnabled(); expect(s.posts).toHaveLength(1);
+});
+test('delayed legacy history response cannot authorize recovery after project navigation', async ({ page }) => {
+  const s = await fixture(page); await page.evaluate(() => sessionStorage.setItem('firebird:job-attempt:dataset.inspect.recordings:alpha', '{'));
+  await page.reload(); await page.getByRole('button', { name: 'Dataset', exact: true }).click(); const gate = deferred(); let started = false;
+  await page.route('**/api/v1/projects/alpha/jobs', async route => { started = true; await gate.promise; await route.fulfill({ json: [] }); });
+  await page.getByRole('button', { name: 'Refresh job history', exact: true }).click(); await expect.poll(() => started).toBe(true);
+  await page.getByLabel('Current project').selectOption('beta'); gate.release();
+  await expect(page.getByRole('button', { name: 'I reviewed the jobs; allow a new request', exact: true })).toHaveCount(0);
+  await page.getByLabel('Current project').selectOption('alpha'); await expect(page.getByRole('button', { name: 'I reviewed the jobs; allow a new request', exact: true })).toBeDisabled(); expect(s.posts).toEqual([]);
+});
+
+test('remount preserves newer cancellation receipt instead of replacing it with initial intake acknowledgement', async ({ page }) => {
+  const s = await fixture(page); await selectEpisodes(page); await submit(page).click(); await expect(panel(page).getByRole('article')).toHaveAttribute('data-job-id', 'new-preparation');
+  s.jobs.push(job('new-preparation', 'alpha', true, 'running'), job('other-saved'));
+  await refresh(page).click(); await panel(page).getByRole('button', { name: 'Cancel selected preparation' }).click(); await panel(page).getByRole('button', { name: 'Confirm preparation cancellation' }).click();
   await expect.poll(() => s.posts.length).toBe(2);
-  const saved = await page.evaluate(() => sessionStorage.getItem('firebird:recording-preparation:alpha'));
-  s.failHistory = true; await storageFault(page, 'recording-preparation', 'getItem');
-  const oldResponse = page.waitForResponse(r => new URL(r.url()).pathname === '/api/v1/projects/alpha/intakes' && r.request().method() === 'POST');
-  first.release(); expect((await (await oldResponse).json()).id).toBe('old-job');
-  second.release();
-  await expect(panel(page).getByText(/Retained acknowledgement: job new-job/)).toBeVisible();
-  await expect(panel(page).getByText(/Retained acknowledgement: job old-job/)).toHaveCount(0);
-  await expect(submit(page)).toBeDisabled(); expect(s.posts).toHaveLength(2);
-  await page.evaluate(() => (window as any).__restoreRecordingStorage());
-  expect(await page.evaluate(() => sessionStorage.getItem('firebird:recording-preparation:alpha'))).toBe(saved);
+  await expect.poll(() => page.evaluate(() => JSON.parse(sessionStorage.getItem('firebird:recording-receipt:alpha')!).status)).toBe('cancelled');
+  await panel(page).getByLabel('Saved recording preparation', { exact: true }).selectOption('other-saved');
+  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await page.getByRole('button', { name: 'Teaching', exact: true }).click();
+  await expect(panel(page).getByText(/Retained acknowledgement: job new-preparation · cancelled/)).toBeVisible();
+  await expect(panel(page).getByText(/Retained acknowledgement: job new-preparation · queued/)).toHaveCount(0); expect(s.posts).toHaveLength(2);
 });

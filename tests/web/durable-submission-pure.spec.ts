@@ -247,3 +247,113 @@ test('fresh-history acknowledgement cannot remove a different malformed legacy r
   const expected = f.state().attempt; f.seed.set(key, '{changed');
   expect(f.controller.clearLegacy(expected)).toBe(false); expect(f.seed.get(key)).toBe('{changed'); expect(f.state().available).toBe(false);
 });
+
+import { intakeAcknowledgement } from '../../apps/web/src/lib/dataset-submission';
+import { emptyRecordingState, recordingRequest, type RecordingRecipe } from '../../apps/web/src/lib/recording-preparation';
+const intakeScope: SubmissionScope = { project: 'alpha', operation: 'dataset.inspect' };
+const recordingRecipeFixture: RecordingRecipe = { schema_version: 1, configuration_sha256: 'a'.repeat(64), timeout_seconds: 600, captures: [{ session_id: 'b'.repeat(32), session_sha256: 'c'.repeat(64), episodes: [{ episode_id: 'd'.repeat(32), receipt_sha256: 'e'.repeat(64) }] }] };
+const recordingBody = () => recordingRequest(recordingRecipeFixture);
+const intakeValidator = (value: unknown, original: Record<string, unknown>) => intakeAcknowledgement(value, 'alpha', original);
+const recordingAlias = 'firebird:job-attempt:dataset.inspect.recordings:alpha', recordingDraft = 'firebird:recording-preparation:alpha';
+function intakeFixture(seed = new Map<string, string>()) {
+  const f = fixture(seed); f.cache.set({ ...initialSubmissionRecovery });
+  const controller = submissionController(intakeScope, f.cache, () => f.storage); controller.hydrate();
+  return { ...f, controller };
+}
+function oldRecording(action: 'submit' | 'cancel' = 'submit') {
+  return { ...emptyRecordingState('alpha'), recipe: recordingRecipeFixture, selected_job_id: 'manual-selection', pending: { attempt_id: 'f'.repeat(32), action, recipe: recordingRecipeFixture, job_id: action === 'cancel' ? 'existing-job' : null } };
+}
+const plainIntake = { source: 'local', path: '/recorded/dataset', snapshot_for_training: true, repo_id: null, revision: 'main' };
+
+for (const body of [recordingBody(), plainIntake]) test(`intake recovery shares full exact job across surfaces: ${body.path}`, async () => {
+  const attempt = createSubmissionAttempt('alpha', 'dataset.inspect', body), f = intakeFixture(new Map([[submissionStorageKey(intakeScope), JSON.stringify(attempt)]]));
+  const accepted = job(body, { kind: 'dataset.inspect', status: 'succeeded', result: { preserved: 'full profile' } });
+  globalThis.fetch = async (_url, init) => { expect(init?.method).toBe('GET'); return response(accepted, requestKey(init)); };
+  expect(await f.controller.reconcile(intakeValidator)).toEqual(accepted);
+  expect(f.state().attempt).toBeNull();
+});
+for (const change of ['foreign project', 'changed recipe', 'host path', 'extra original field']) test(`recording intake shared ACK refuses ${change}`, () => {
+  const original: Record<string, unknown> = recordingBody(), accepted = job(original, { kind: 'dataset.inspect' });
+  if (change === 'foreign project') accepted.project_id = 'beta';
+  if (change === 'changed recipe') accepted.request = { ...original, recordings: { ...recordingRecipeFixture, timeout_seconds: 601 } };
+  if (change === 'host path') accepted.request = { ...original, path: '/foreign' };
+  if (change === 'extra original field') original.extra = true;
+  expect(() => intakeValidator(accepted, original)).toThrow();
+});
+for (const variant of ['submit marker', 'orphan attempt', 'malformed attempt', 'marker only', 'malformed draft']) test(`generic intake cannot bypass legacy recording ${variant}`, async () => {
+  const seed = new Map<string, string>();
+  if (variant !== 'orphan attempt' && variant !== 'malformed attempt') seed.set(recordingDraft, variant === 'malformed draft' ? '{' : JSON.stringify(oldRecording()));
+  if (variant !== 'marker only' && variant !== 'malformed draft') seed.set(recordingAlias, variant === 'malformed attempt' ? '{' : JSON.stringify({ state: 'pending', message: 'Original recording request' }));
+  const f = intakeFixture(seed), before = [...seed]; let calls = 0;
+  globalThis.fetch = async () => { calls++; throw new Error(); };
+  expect(f.state().attempt?.state).toBe('uncertain'); expect(submissionOf(f.state().attempt)).toBeNull();
+  expect(await f.controller.submit(plainIntake, intakeValidator)).toBeNull(); expect(await f.controller.retry(intakeValidator)).toBeNull();
+  expect(calls).toBe(0); expect([...seed]).toEqual(before);
+});
+test('explicit legacy recording cleanup preserves recipe, selected job, receipt and other project', () => {
+  const state = oldRecording(), seed = new Map([[recordingDraft, JSON.stringify(state)], [recordingAlias, '{'], ['firebird:recording-receipt:alpha', 'unchanged-receipt'], ['firebird:job-attempt:dataset.inspect.recordings:beta', 'other-project']]);
+  const f = intakeFixture(seed); expect(f.controller.clearLegacy(f.state().attempt, [])).toBe(true);
+  expect(JSON.parse(seed.get(recordingDraft)!)).toEqual({ ...state, pending: null });
+  expect(seed.get('firebird:recording-receipt:alpha')).toBe('unchanged-receipt'); expect(seed.get('firebird:job-attempt:dataset.inspect.recordings:beta')).toBe('other-project'); expect(seed.has(recordingAlias)).toBe(false);
+});
+test('old cancellation state and journal are excluded from intake migration and never deleted', () => {
+  const seed = new Map([[recordingDraft, JSON.stringify(oldRecording('cancel'))], [recordingAlias, '{'], ['firebird:job-attempt:dataset.inspect:alpha', '{']]), f = intakeFixture(seed);
+  const draft = seed.get(recordingDraft), alias = seed.get(recordingAlias);
+  expect(f.controller.clearLegacy(f.state().attempt, [])).toBe(true); expect(seed.get(recordingDraft)).toBe(draft); expect(seed.get(recordingAlias)).toBe(alias);
+  const reloaded = intakeFixture(seed); expect(reloaded.state().attempt).toBeNull();
+});
+for (const replacement of ['changed submit', 'cancel']) test(`legacy review cannot clear a newer recording ${replacement}`, () => {
+  const seed = new Map([[recordingDraft, JSON.stringify(oldRecording())], [recordingAlias, '{']]), f = intakeFixture(seed);
+  seed.set(recordingDraft, JSON.stringify(replacement === 'cancel' ? oldRecording('cancel') : { ...oldRecording(), pending: { ...oldRecording().pending, attempt_id: 'a'.repeat(32) } })); const before = [...seed];
+  expect(f.controller.clearLegacy(f.state().attempt, [])).toBe(false); expect([...seed]).toEqual(before);
+});
+test('malformed recording draft remains preserved after explicit history acknowledgement', () => {
+  const seed = new Map([[recordingDraft, '{']]), f = intakeFixture(seed);
+  expect(f.controller.clearLegacy(f.state().attempt, [])).toBe(false); expect(seed.get(recordingDraft)).toBe('{'); expect(f.state().available).toBe(false);
+});
+test('newly appearing legacy recording submit blocks a keyed POST after support lookup', async () => {
+  const f = intakeFixture(); let calls = 0;
+  globalThis.fetch = async (_url, init) => { calls++; expect(init?.method).toBe('GET'); f.seed.set(recordingDraft, JSON.stringify(oldRecording())); return missing(requestKey(init)); };
+  expect(await f.controller.submit(plainIntake, intakeValidator)).toBeNull(); expect(calls).toBe(1); expect(f.state().available).toBe(false);
+});
+test('preflight sees persisted immutable body after support lookup; ownership is rechecked before POST', async () => {
+  const f = fixture(), gate = deferred<void>(), events: string[] = [];
+  globalThis.fetch = async (_url, init) => { events.push(init!.method!); expect(f.seed.has(submissionStorageKey(scope))).toBe(true); return missing(requestKey(init)); };
+  const pending = f.controller.submit(body(), validator, async original => { events.push('preflight'); expect(original).toEqual(body()); await gate.promise; });
+  await expect.poll(() => events).toEqual(['GET', 'preflight']);
+  const successor = createSubmissionAttempt('alpha', 'policy.finetune', body()); f.seed.set(submissionStorageKey(scope), JSON.stringify(successor)); f.cache.set({ ...f.state(), attempt: successor, busy: true });
+  const before = f.state(); gate.resolve(); expect(await pending).toBeNull(); expect(f.state()).toBe(before); expect(events).toEqual(['GET', 'preflight']);
+});
+test('never-POSTed preflight refusal allows corrected request, uncertain retry refusal retains original key', async () => {
+  const f = fixture(); let posts = 0;
+  globalThis.fetch = async (_url, init) => { if (init?.method === 'GET') return missing(requestKey(init)); posts++; throw new Error('lost ACK'); };
+  expect(await f.controller.submit(body(), validator, async () => { throw new Error('Selection changed'); })).toBeNull();
+  expect(posts).toBe(0); expect(f.state().attempt).toBeNull(); expect(f.state().available).toBe(true);
+  await f.controller.submit(body(), validator); const original = submissionOf(f.state().attempt);
+  await f.controller.retry(validator, async () => { throw new Error('Old captures no longer available'); });
+  expect(posts).toBe(1); expect(submissionOf(f.state().attempt)).toEqual(original);
+});
+test('generic surface cannot skip recording catalog validation on retry; found lookup needs no catalog', async () => {
+  const body = recordingBody(), attempt = createSubmissionAttempt('alpha', 'dataset.inspect', body), f = intakeFixture(new Map([[submissionStorageKey(intakeScope), JSON.stringify(attempt)]]));
+  const reads: string[] = []; let found = false;
+  globalThis.fetch = async (url, init) => {
+    expect(init?.method).toBe('GET'); reads.push(String(url));
+    if (String(url).includes('/submissions/')) return found ? response(job(body, { kind: 'dataset.inspect' }), requestKey(init)) : missing(requestKey(init));
+    return Response.json({ detail: 'Catalog unavailable' }, { status: 503 });
+  };
+  await f.controller.reconcile(intakeValidator); expect(f.controller.canRetry()).toBe(true);
+  await f.controller.retry(intakeValidator); expect(reads.at(-1)).toContain('/recordings/options'); expect(submissionOf(f.state().attempt)).toEqual(attempt.submission);
+  found = true; const count = reads.length; expect((await f.controller.reconcile(intakeValidator))?.id).toBe('accepted-job'); expect(reads.length).toBe(count + 1);
+});
+
+for (const value of [undefined, true, [{ ...job(), project_id: 'foreign' }], [job(plainIntake, { kind: 'dataset.inspect', status: 'running' })], [job(recordingBody(), { kind: 'dataset.inspect', status: 'queued' })]]) test(`shared legacy intake clearing requires verified inactive project history: ${JSON.stringify(value)}`, () => {
+  const seed = new Map([[recordingDraft, JSON.stringify(oldRecording())]]), f = intakeFixture(seed), before = [...seed];
+  expect(f.controller.clearLegacy(f.state().attempt, value)).toBe(false); expect([...seed]).toEqual(before); expect(f.state().attempt).not.toBeNull();
+});
+
+test('legacy recording review retains later manual history selection while clearing only the same pending identity', () => {
+  const seed = new Map([[recordingDraft, JSON.stringify(oldRecording())]]), f = intakeFixture(seed);
+  const current = { ...oldRecording(), selected_job_id: 'reviewed-job' }; seed.set(recordingDraft, JSON.stringify(current));
+  expect(f.controller.clearLegacy(f.state().attempt, [])).toBe(true);
+  expect(JSON.parse(seed.get(recordingDraft)!)).toEqual({ ...current, pending: null });
+});

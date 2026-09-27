@@ -1,3 +1,5 @@
+import { recordingSubmissionLegacy, clearRecordingSubmissionLegacy, checkRecordingSubmission, recordingRecipe } from './recording-preparation';
+import { reviewedIntakeHistory } from './dataset-submission';
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiOrigin, type Job } from './api';
@@ -6,10 +8,11 @@ import { PolicyJobHttpError, policyJobRequest, record, sameJson } from './policy
 
 export type SubmissionScope = { project: string; operation: SubmissionOperation };
 export type SubmissionValidator = (value: unknown, originalBody: Record<string, unknown>) => Job;
+export type SubmissionPreflight = (originalBody: Record<string, unknown>) => Promise<void>;
 type Store = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 export type SubmissionRecovery = {
   hydrated: boolean; available: boolean; attempt: PolicyJobAttempt; receipt: Job | null;
-  error: string; busy: boolean; notFoundKey: string | null; legacyRecords?: [string | null, string | null];
+  error: string; busy: boolean; notFoundKey: string | null; legacyRecords?: { primary: [string | null, string | null]; recording: [string | null, string | null] | null };
 };
 export const initialSubmissionRecovery: SubmissionRecovery = { hydrated: false, available: false, attempt: null, receipt: null, error: '', busy: false, notFoundKey: null };
 export type SubmissionCache = { get(): SubmissionRecovery; set(value: SubmissionRecovery): void };
@@ -74,17 +77,22 @@ function parseAttempt(raw: string, scope: SubmissionScope): NonNullable<PolicyJo
   if (!record(value) || Object.keys(value).sort().join(',') !== 'message,state,submission' || (value.state !== 'pending' && value.state !== 'uncertain') || typeof value.message !== 'string' || value.message.length > 2000) throw new SubmissionJournalChanged();
   return { state: value.state, message: value.message, submission: identity(value.submission, scope) };
 }
+function legacyRecords(scope: SubmissionScope, storage: Store): NonNullable<SubmissionRecovery['legacyRecords']> {
+  try { return { primary: [readRaw(storage, submissionStorageKey(scope)), readRaw(storage, legacyKey(scope))], recording: scope.operation === 'dataset.inspect' ? recordingSubmissionLegacy(scope.project, storage) : null }; }
+  catch { throw new SubmissionStorageUnavailable(); }
+}
 function readAttempt(scope: SubmissionScope, storage: Store): PolicyJobAttempt {
   const raw = readRaw(storage, submissionStorageKey(scope));
   if (raw !== null) {
     try { return parseAttempt(raw, scope); }
     catch { return { state: 'uncertain', message: 'Saved submission identity is unreadable. Inspect recorded jobs before explicitly acknowledging this legacy or damaged recovery record.' }; }
   }
-  const legacy = readRaw(storage, legacyKey(scope));
-  if (legacy === null) return null;
+  const records = legacyRecords(scope, storage);
+  const legacy = records.primary[1] ?? records.recording?.[1] ?? null;
+  if (legacy === null && records.recording === null) return null;
   let message = interrupted;
   try {
-    if (legacy.length <= 16384) {
+    if (legacy !== null && legacy.length <= 16384) {
       const value: unknown = JSON.parse(legacy);
       if (record(value) && typeof value.message === 'string' && value.message.length <= 2000) message = value.message;
     }
@@ -109,8 +117,8 @@ export function submissionController(scope: SubmissionScope, cache: SubmissionCa
     if (current().hydrated || !identifier(scope.project) || !Object.hasOwn(paths, scope.operation)) return;
     try {
       const saved = readAttempt(scope, getStorage());
-      const legacyRecords: [string | null, string | null] | undefined = saved && !saved.submission ? [readRaw(getStorage(), submissionStorageKey(scope)), readRaw(getStorage(), legacyKey(scope))] : undefined;
-      put({ hydrated: true, available: true, attempt: saved ? { ...saved, state: 'uncertain' } : null, legacyRecords });
+      const records = saved && !saved.submission ? legacyRecords(scope, getStorage()) : undefined;
+      put({ hydrated: true, available: true, attempt: saved ? { ...saved, state: 'uncertain' } : null, legacyRecords: records });
     } catch (error) { storageFailure(error); }
   }
   function storedOwner(expected: NonNullable<PolicyJobAttempt>): boolean {
@@ -153,7 +161,7 @@ export function submissionController(scope: SubmissionScope, cache: SubmissionCa
       throw error;
     }
   }
-  async function execute(expected: NonNullable<PolicyJobAttempt>, validate: SubmissionValidator, postIfMissing: boolean, initial = false): Promise<Job | null> {
+  async function execute(expected: NonNullable<PolicyJobAttempt>, validate: SubmissionValidator, postIfMissing: boolean, initial = false, beforePost?: SubmissionPreflight): Promise<Job | null> {
     try {
       if (!storedOwner(expected)) return null;
       const result = await lookup(expected);
@@ -161,6 +169,27 @@ export function submissionController(scope: SubmissionScope, cache: SubmissionCa
       if (!storedOwner(expected)) return null;
       put({ notFoundKey: expected.submission!.key });
       if (!postIfMissing) throw new Error('No saved binding is visible yet. The earlier request may still commit. Check again or explicitly retry the same saved request; a new request remains blocked.');
+      const savedBody = expected.submission!.body;
+      if (beforePost || (scope.operation === 'dataset.inspect' && savedBody.recordings != null)) {
+        try {
+          if (scope.operation === 'dataset.inspect' && savedBody.recordings != null) await checkRecordingSubmission(scope.project, recordingRecipe(savedBody.recordings), () => owns(expected));
+          if (beforePost) await beforePost(boundedBody(savedBody));
+        }
+        catch (error) {
+          if (!initial) throw error; // A prior POST may still commit on explicit retry.
+          if (!storedOwner(expected)) return null;
+          // This newly admitted identity has never been POSTed. A rejected local
+          // preflight may permit an edited request, unlike an uncertain retry.
+          writeRaw(getStorage(), submissionStorageKey(scope), null);
+          put({ attempt: null, error: error instanceof Error ? error.message : 'Submission preflight failed.', busy: false, notFoundKey: null });
+          return null;
+        }
+        if (!storedOwner(expected)) return null;
+      }
+      // Older recording pages must not bypass this shared admission while a
+      // durable request is awaiting its catalog read or support response.
+      const older = legacyRecords(scope, getStorage());
+      if (older.primary[1] !== null || older.recording !== null) throw new SubmissionJournalChanged();
       // Every POST is initiated by submit()/retry(), after this exact endpoint
       // echoed the saved key on 404. No fetch/query library mutation retry exists.
       let value: unknown;
@@ -179,7 +208,7 @@ export function submissionController(scope: SubmissionScope, cache: SubmissionCa
     } catch (error) { fail(error, expected); return null; }
     finally { if (owns(expected)) put({ busy: false }); }
   }
-  async function submit(body: unknown, validate: SubmissionValidator): Promise<Job | null> {
+  async function submit(body: unknown, validate: SubmissionValidator, beforePost?: SubmissionPreflight): Promise<Job | null> {
     if (!current().hydrated || !current().available || current().attempt || current().busy) return null;
     let attempt: NonNullable<PolicyJobAttempt> | undefined;
     try {
@@ -192,7 +221,7 @@ export function submissionController(scope: SubmissionScope, cache: SubmissionCa
       else put({ error: error instanceof Error ? error.message : 'Invalid submission recipe.' });
       return null;
     }
-    return execute(attempt, validate, true, true);
+    return execute(attempt, validate, true, true, beforePost);
   }
   async function reconcile(validate: SubmissionValidator): Promise<Job | null> {
     const attempt = current().attempt;
@@ -201,20 +230,25 @@ export function submissionController(scope: SubmissionScope, cache: SubmissionCa
     return execute(attempt!, validate, false);
   }
   const canRetry = () => current().available && !current().busy && !!current().attempt?.submission && current().notFoundKey === current().attempt?.submission?.key;
-  async function retry(validate: SubmissionValidator): Promise<Job | null> {
+  async function retry(validate: SubmissionValidator, beforePost?: SubmissionPreflight): Promise<Job | null> {
     if (!canRetry()) return null;
     const expected = current().attempt!;
     put({ busy: true, error: '', notFoundKey: null });
-    return execute(expected, validate, true);
+    return execute(expected, validate, true, false, beforePost);
   }
-  function clearLegacy(expected: PolicyJobAttempt): boolean {
+  function clearLegacy(expected: PolicyJobAttempt, history?: unknown): boolean {
     if (!expected || expected.submission || !current().available || current().busy || current().attempt !== expected) return false;
+    if (scope.operation === 'dataset.inspect') {
+      try { reviewedIntakeHistory(history, scope.project); }
+      catch (error) { put({ error: error instanceof Error ? error.message : 'Project history could not be verified.' }); return false; }
+    }
     try {
       // Only legacy/damaged records can be acknowledged following the caller's
       // explicit fresh history review. A valid saved key is never discarded here.
       const storage = getStorage(), saved = readAttempt(scope, storage);
-      const records = [readRaw(storage, submissionStorageKey(scope)), readRaw(storage, legacyKey(scope))];
+      const records = legacyRecords(scope, storage);
       if (saved?.submission || !sameJson(saved, expected) || !sameJson(records, current().legacyRecords)) throw new SubmissionJournalChanged();
+      if (records.recording) clearRecordingSubmissionLegacy(scope.project, records.recording, storage);
       writeRaw(storage, submissionStorageKey(scope), null);
       writeRaw(storage, legacyKey(scope), null);
       put({ attempt: null, error: '', notFoundKey: null, legacyRecords: undefined });
@@ -235,5 +269,5 @@ export function useDurableSubmission(scope: SubmissionScope) {
     void client.invalidateQueries({ queryKey: ['jobs', scope.project] }).catch(() => {});
     return receipt;
   };
-  return { ...query.data, canRetry: controller.canRetry(), submit: (body: unknown, validate: SubmissionValidator) => run(() => controller.submit(body, validate)), reconcile: (validate: SubmissionValidator) => run(() => controller.reconcile(validate)), retry: (validate: SubmissionValidator) => run(() => controller.retry(validate)), clearLegacy: controller.clearLegacy };
+  return { ...query.data, canRetry: controller.canRetry(), submit: (body: unknown, validate: SubmissionValidator, beforePost?: SubmissionPreflight) => run(() => controller.submit(body, validate, beforePost)), reconcile: (validate: SubmissionValidator) => run(() => controller.reconcile(validate)), retry: (validate: SubmissionValidator, beforePost?: SubmissionPreflight) => run(() => controller.retry(validate, beforePost)), clearLegacy: controller.clearLegacy };
 }

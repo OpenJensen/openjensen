@@ -175,11 +175,11 @@ function IntakeForm({ project, readinessMessage, localAvailable, onCreated, star
       </>}
       <ErrorNotice error={mutation.error} />
       <DatasetSubmissionRecovery submission={submission} onReconcile={async () => { const generation = selection.current.generation; accept(await submission.reconcile(validate), generation); }}
-        onRetry={async () => { const generation = selection.current.generation; accept(await submission.retry(validate), generation); }} onReviewHistory={async () => {
+        onRetry={async () => { const generation = selection.current.generation; accept(await submission.retry(validate, async () => { if (!mounted.current || selection.current.generation !== generation) throw new Error('Selection changed; the saved request was not retried.'); }), generation); }} onReviewHistory={async () => {
           if (!project) return false;
           const fresh = validatedProjectHistory(await api.jobs(project.id), project.id);
           queryClient.setQueryData(['jobs', project.id], fresh);
-          return true;
+          return fresh;
         }} />
       {!project && <p className="form-note" role="status">{readinessMessage}</p>}
             <button className="primary-button inspect-button" type="submit" disabled={blocked || mutation.isPending}>{mutation.isPending || submission.busy ? 'Checking dataset…' : 'Inspect dataset'}<Icon name="arrow" size={17} /></button>

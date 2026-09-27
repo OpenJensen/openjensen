@@ -105,11 +105,16 @@ export async function readRecordingContext(project: string): Promise<{ options: 
   need(options.configuration_sha256 === catalog.configuration_sha256, 'Recording configuration changed during refresh. Review the catalog again.');
   return { options, catalog };
 }
-export async function submitRecordings(project: string, recipe: RecordingRecipe, stillSelected: () => boolean): Promise<RecordingJob> {
+export async function checkRecordingSubmission(project: string, recipe: RecordingRecipe, stillSelected: () => boolean): Promise<void> {
   const checked = recordingRecipe(recipe), context = await readRecordingContext(project);
   need(context.catalog && selectionMatches(checked, context.catalog), 'Selected recording bytes or configuration changed. Reselect and review the published episodes.');
   need(stillSelected(), 'Selection changed; preparation was not submitted.');
-  return recordingReceipt(await policyJobRequest(`${projectPath(project)}/intakes`, recordingRequest(checked)), project, checked);
+}
+
+/** Legacy entry point retained for callers outside the durable browser controller. */
+export async function submitRecordings(project: string, recipe: RecordingRecipe, stillSelected: () => boolean): Promise<RecordingJob> {
+  await checkRecordingSubmission(project, recipe, stillSelected);
+  return recordingReceipt(await policyJobRequest(`${projectPath(project)}/intakes`, recordingRequest(recipe)), project, recipe);
 }
 export async function readRecordingHistory(project: string): Promise<RecordingJob[]> {
   const raw = await policyJobRequest(`${projectPath(project)}/jobs`);
@@ -220,4 +225,27 @@ export function clearRecordingAttempt(project: string, reviewedAttemptId: string
   if ((current.pending?.attempt_id ?? null) !== reviewedAttemptId) return null;
   try { storage.removeItem(attemptKey(project)); const next = { ...current, pending: null }; writeRecordingState(project, next, storage); return next; }
   catch { throw new RecordingStorageUnavailable(); }
+}
+
+/** Older recording submissions share intake admission; cancellation records remain independent. */
+export function recordingSubmissionLegacy(project: string, storage: Reader): [string | null, string | null] | null {
+  const raw = storage.getItem(stateKey(project)), attempt = storage.getItem(attemptKey(project));
+  if (raw === null) return attempt === null ? null : [raw, attempt];
+  try {
+    const state = stateValue(project, boundedJSON(raw));
+    if (state.pending?.action === 'cancel') return null;
+    if (!state.pending && attempt === null) return null;
+    // Draft edits and manual history selection do not change the old request's
+    // ownership. Bind only the exact pending identity plus its journal bytes.
+    return [state.pending ? JSON.stringify(state.pending) : null, attempt];
+  } catch { /* Unknown saved state cannot silently authorize another intake. */ }
+  return [raw, attempt];
+}
+export function clearRecordingSubmissionLegacy(project: string, expected: [string | null, string | null], storage: Writer): void {
+  need(sameJson(recordingSubmissionLegacy(project, storage), expected), 'Recording recovery changed. Review its history again.');
+  // Never delete malformed draft data or a cancellation to clear submission recovery.
+  const state = readRecordingState(project, storage);
+  need(state.pending?.action !== 'cancel');
+  if (state.pending) writeRecordingState(project, { ...state, pending: null }, storage);
+  storage.removeItem(attemptKey(project));
 }
