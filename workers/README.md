@@ -80,3 +80,13 @@ reload gate publication. This is inference-only compression, not quantization.
 It does not yet register an application optimizer operation or verify calibration,
 pickup quality, GPU memory or inference speed. Existing GGUF recipes do not apply
 to ACT. Keep original checkpoints and generated policy packages outside Git.
+
+## Unified model quantization
+
+[Firebird Quant](firebird_quant/README.md) provides a shared packed 4/8-bit API
+for dense PyTorch models and safetensors checkpoints, without model-family or
+parameter-name allowlists. It supports portable dequantize-on-access inference,
+explicit coverage audits, tied weights and verified save/reload. CPU tests cover
+convolutional, recurrent, transformer and custom functional models. It is a
+standalone library/CLI, not a newly advertised application or robot capability;
+model-specific quality and optimized runtime deployment remain separate gates.
