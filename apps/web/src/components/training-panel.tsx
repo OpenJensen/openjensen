@@ -19,9 +19,15 @@ import { Icon } from "@/components/icon";
 import { GpuPicker } from "@/components/gpu-picker";
 import { TrainingMonitor } from "@/components/training-monitor";
 import { JobHistory, type JobHistoryEntry } from "@/components/job-history";
+import { startTraining } from "@/lib/training-submission";
+import { UncertainPolicyJob } from "@/lib/policy-job-mutation";
+import { storeAttempt, storedAttempt, type PolicyJobAttempt } from "@/lib/policy-job-attempt";
 import "./training-panel.css";
 
 const steps = ["Dataset", "Model", "Compute"];
+class TrainingJournalUnavailable extends Error {
+  constructor() { super("Browser session storage is unavailable. Restore it and reload, then inspect recorded training jobs before submitting again."); }
+}
 type Recipe = {
   trainingSteps: number;
   batchSize: number;
@@ -196,6 +202,29 @@ export function TrainingPanel({
   const [recipe, setRecipe] = useState(defaults);
   const [loaded, setLoaded] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState("");
+  const attemptKey = ["training-attempt", projectId];
+  const attempt = useQuery<PolicyJobAttempt>({ queryKey: attemptKey, queryFn: async () => null, enabled: false, initialData: null, gcTime: Infinity });
+  const [journalReady, setJournalReady] = useState(false);
+  const [journalError, setJournalError] = useState("");
+  const [historyReviewed, setHistoryReviewed] = useState(false);
+  const mounted = useRef(true), submitting = useRef(false), attemptVersion = useRef(0);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => {
+    try {
+      if (!client.getQueryData<PolicyJobAttempt>(["training-attempt", projectId])) client.setQueryData<PolicyJobAttempt>(["training-attempt", projectId], storedAttempt("policy.finetune", projectId));
+      setJournalReady(true);
+    } catch { setJournalError(new TrainingJournalUnavailable().message); }
+  }, [client, projectId]);
+  function saveAttempt(value: PolicyJobAttempt) {
+    try { storeAttempt("policy.finetune", projectId, value); }
+    catch {
+      const error = new TrainingJournalUnavailable();
+      if (client.getQueryData<PolicyJobAttempt>(attemptKey)?.state === 'pending') client.setQueryData<PolicyJobAttempt>(attemptKey, (): PolicyJobAttempt => ({ state: 'uncertain', message: error.message }));
+      if (mounted.current) { setJournalReady(false); setJournalError(error.message); }
+      throw error;
+    }
+    client.setQueryData<PolicyJobAttempt>(attemptKey, value);
+  }
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (!active) return;
@@ -212,6 +241,7 @@ export function TrainingPanel({
     queryKey: ["jobs", projectId],
     queryFn: () => api.jobs(projectId),
     enabled: active && !!projectId,
+    retry: false,
     refetchInterval: (query) =>
       active ? (query.state.data?.some(isActive) ? 1000 : 5000) : false,
   });
@@ -221,6 +251,12 @@ export function TrainingPanel({
     enabled: active && !!projectId,
     refetchInterval: active ? 5000 : false,
   });
+  async function reviewHistory() {
+    const version = attemptVersion.current;
+    const uncertain = client.getQueryData<PolicyJobAttempt>(attemptKey)?.state === 'uncertain';
+    const result = await jobs.refetch();
+    if (mounted.current && uncertain && version === attemptVersion.current && result.isSuccess && !result.isError) setHistoryReviewed(true);
+  }
   useEffect(() => {
     if (!projectId) { setLoaded(false); return; }
     try {
@@ -464,6 +500,10 @@ export function TrainingPanel({
     positiveInteger(recipe.evalEvery);
   const blocked = !projectId
     ? "Select a project."
+    : !journalReady
+      ? "Browser recovery storage is unavailable. Restore it before starting a job."
+    : attempt.data
+      ? "Inspect the earlier training request before submitting another job."
     : !loaded || options.isPending || jobs.isPending
       ? "Loading…"
       : options.isError || jobs.isError
@@ -520,7 +560,30 @@ export function TrainingPanel({
           save_every: checkpointInterval,
         };
       }
-      return api.policyJob(projectId, body);
+      if (submitting.current) throw new Error("A training request is already in progress.");
+      submitting.current = true;
+      attemptVersion.current += 1;
+      setHistoryReviewed(false);
+      try {
+        saveAttempt({ state: 'pending', message: 'Submitting one training request…' });
+        const job = await startTraining(projectId, body, options.data?.training_methods.map(item => item.id) ?? []);
+        // Keep the acknowledged result even if clearing recovery storage fails.
+        client.setQueryData<Job[]>(["jobs", projectId], previous => [job, ...(previous ?? []).filter(item => item.id !== job.id)]);
+        if (mounted.current) { setSelectedRunId(job.id); setView("run"); }
+        saveAttempt(null);
+        return job;
+      } catch (error) {
+        attemptVersion.current += 1;
+        if (mounted.current) setHistoryReviewed(false);
+        if (!(error instanceof TrainingJournalUnavailable)) {
+          try { saveAttempt(error instanceof UncertainPolicyJob ? { state: 'uncertain', message: error.message } : null); }
+          catch { /* Preserve the storage error and any acknowledged job. */ }
+        }
+        throw error;
+      } finally {
+        submitting.current = false;
+        void client.invalidateQueries({ queryKey: ["jobs", projectId] });
+      }
     },
     onSuccess: (job) => {
       setSelectedRunId(job.id);
@@ -545,7 +608,7 @@ export function TrainingPanel({
     ? trainingRuns.find((job) => job.id === mutation.data.id) ?? mutation.data
     : undefined;
   const runStarting = !!submittedRun && isActive(submittedRun);
-  const busy = mutation.isPending || runStarting;
+  const busy = mutation.isPending || runStarting || !!attempt.data;
   const startLabel = mutation.isPending ? "Starting…"
     : runStarting ? (submittedRun?.stage === "preparing" || submittedRun?.status === "queued" ? "Preparing GPU…" : "Training…")
     : resumeId ? "Resume fine-tuning" : "Start fine-tuning";
@@ -602,6 +665,20 @@ export function TrainingPanel({
 
   return (
     <>
+      {(attempt.data || journalError) && <section className="warning-box training-recovery" aria-label="Training submission recovery">
+        <h2>{attempt.data?.state === 'pending' && !journalError ? 'Starting training' : 'Check your training request'}</h2>
+        <p role={attempt.data?.state === 'pending' ? 'status' : 'alert'}>{journalError || attempt.data?.message}</p>
+        {attempt.data?.state === 'uncertain' && <>
+          <p>New submissions are paused. Check the recorded jobs for the original request; navigating away does not cancel it.</p>
+          <div className="training-recovery-actions">
+            <button type="button" className="secondary-button" disabled={jobs.isFetching} onClick={() => { setView("jobs"); void reviewHistory(); }}>Refresh training jobs</button>
+            <button type="button" className="secondary-button" disabled={!journalReady || !historyReviewed || jobs.isError || mutation.isPending} onClick={() => {
+              try { saveAttempt(null); setHistoryReviewed(false); mutation.reset(); } catch { /* Recovery remains visible. */ }
+            }}>I checked the jobs; allow a new request</button>
+          </div>
+          {jobs.isError && <p role="alert">Training history could not refresh. {jobs.error.message}</p>}
+        </>}
+      </section>}
       {view === "jobs" && <JobHistory title="Fine-tuning jobs" newLabel="Start a new fine-tuning"
         entries={historyEntries} onNew={() => openNew()}
         onSelect={id => { setSelectedRunId(id); setView("run"); }}
