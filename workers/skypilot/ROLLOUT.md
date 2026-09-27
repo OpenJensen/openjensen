@@ -17,6 +17,67 @@ Isaac is the primary task. SkyPilot terminates VLA after Isaac finishes. A manag
 Job Group also needs a CPU controller VM; this is additional to the two GPU VMs.
 No cloud resources are created by copying files or running `--validate-only`.
 
+## Separate packed ACT CPU profile
+
+`rollout.packed-cpu.example.yaml` adds an explicit `--policy-runtime packed-act-cpu`
+lane. It keeps the existing L4 Isaac task and CPU SkyPilot controller, and replaces
+only the policy worker with one on-demand `n2-standard-8` CPU VM. This is still a
+paid cloud simulation. The resource is an allowlist choice, not measured capacity,
+latency, lower cost, task success or calibration evidence. Existing ACT/SmolVLA
+CUDA templates and `policy_setup.sh` retain their behavior; `lerobot-cuda` remains
+the default when the flag is omitted.
+
+The packed lane admits only an inspected ACT `firebird_quant` package, not SmolVLA
+or a float export. The CUDA lane refuses packed weights before submission. Both
+readiness and experimental launches enforce this distinction. Packed admission
+requires the shared inspector's explicit `model_format=firebird_quant`; an older
+inspector without that field fails closed. Core application registration,
+artifact eligibility and control-contract preservation must be integrated before
+the application advertises this route. A launcher profile alone cannot override
+an unsupported simulator contract or establish policy quality.
+
+Start from the new example and fill its existing operator-owned image, result
+prefix, scene manifest and checkpoint placeholders. Do not change the working
+CUDA YAML or private network configuration. For local validation only:
+
+```bash
+bash launch-rollout.sh /absolute/path/to/packed-cpu.yaml \
+  --policy-runtime packed-act-cpu --experimental --validate-only \
+  --checkpoint /absolute/path/to/complete-packed-policy
+```
+
+This checks local inputs; it does not allocate workers or verify remote quota,
+package installation or real inference. `--check-ready` is the other allowed
+mode; when used without `--validate-only`, it allocates workers and runs actual
+inference. Packed CPU mode has no implicit motion mode. Existing explicit launch
+confirmation, two-task cancellation, persistent receipt directory, model hash,
+result-prefix binding and zero automatic restart behavior remain in force.
+
+The policy task mounts only the checkpoint, the reviewed `remote` scripts and
+the checkout's two source directories: `firebird_quant/src` and
+`act_optimizer/src`. No repository-wide mount, virtualenv, credential or weight
+directory is used for library shipping. The launcher validates these fixed mount
+locations and the exact setup/run commands. The core profile identity must cover
+both source trees plus the CPU scripts/requirements; the launcher context stores
+the selected runtime, device and model format, and the existing SDK submission
+receipt hashes the generated YAML containing those same fields.
+
+`remote/policy_cpu_setup.sh` uses Python 3.12 and the existing uv 0.8.22 bootstrap
+pattern. `remote/policy-cpu.requirements.txt` pins LeRobot 0.6.1, Torch 2.11.0+cpu,
+torchvision 0.26.0+cpu, safetensors 0.8.0, NumPy 2.2.6 and PyYAML 6.0.3. The two
+Linux x86_64 CPU wheel URLs and SHA-256 values come from the checked-in ACT lock;
+this requirements file is not a new fully locked transitive environment. Local
+Firebird packages run directly from the fixed source mounts. Installation occurs
+only in the remote policy virtualenv during an explicitly launched job.
+
+`remote/policy_cpu_run.sh` uses `--device cpu`, hides CUDA, disables model Hub
+access and fixes Torch/BLAS thread pools to one. Setup and inference retain the
+2400/4500-second task deadlines with a 60-second termination grace. The existing
+application deadline and cleanup supervisor remain necessary; none is a billing
+cap. Packed storage is decoded for ordinary FP32 eager computation, not fused
+low-bit execution. No packed CPU rollout has been accepted merely by adding
+this source profile.
+
 ## Prerequisites
 
 - An exported Kite ACT or SmolVLA checkpoint: `config.json`, `model.safetensors`, saved

@@ -1,0 +1,8 @@
+# Linux x86_64 / CPython 3.12 CPU wheels and hashes from
+# workers/act_optimizer/uv.lock. These direct URLs cannot select CUDA wheels.
+torch @ https://download-r2.pytorch.org/whl/cpu/torch-2.11.0%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=f82e2ae20c1545bb03997d1cc3143d94e14b800038669ee1aca45808a9acc338
+torchvision @ https://download-r2.pytorch.org/whl/cpu/torchvision-0.26.0%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=cf547dc0975eb40bc3249be4ccbeb736597d2c3ece305b1c4e5b7a5dd7363567
+lerobot==0.6.1
+safetensors==0.8.0
+numpy==2.2.6
+PyYAML==6.0.3
