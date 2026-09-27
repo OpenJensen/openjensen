@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, isActive, isDatasetJob, type DatasetJob, type DatasetProfile, type Job, type Project } from '@/lib/api';
 import { engineRuntime, initialQuantizeEntry, initialRunEntry, runJobMode, type Entry, type ProjectEntry, type QuantizeMode, type RunMode } from '@/lib/workflow-entry';
+import { storedSimulationAttempt } from '@/lib/native-simulation-recovery';
 import { storedAttempt, type PolicyJobAttempt } from '@/lib/policy-job-attempt';
 import { replayRuntime } from '@/lib/native-replay';
 import { availableNativeQuantizer } from '@/lib/native-quantization';
@@ -272,19 +273,21 @@ function Workbench() {
     if (!stage || !workflowProjectId || context?.[stage]) return;
     // An unfinished request has priority over automatic history/capability selection.
     // Read only: the child owns its journal and explicit recovery acknowledgement.
-    let recovery = false;
+    let recovery = false, simulationRecovery = false;
     try {
       const operation = stage === 'quantize' ? 'policy.quantize' : 'policy.run.replay';
       const cacheKey = [stage === 'quantize' ? 'native-quantization-attempt' : 'native-replay-attempt', workflowProjectId];
       recovery = !!queryClient.getQueryData<PolicyJobAttempt>(cacheKey) || !!storedAttempt(operation, workflowProjectId);
+      if (stage === 'run') simulationRecovery = !!queryClient.getQueryData<PolicyJobAttempt>(['native-simulation-attempt', workflowProjectId]) || !!storedSimulationAttempt(workflowProjectId);
+      if (recovery && simulationRecovery) { setEntryError({ projectId: workflowProjectId, stage: activeStage, message: 'Both observation replay and native simulation have unresolved requests. Choose either workflow to inspect its recovery record; neither request was retried.' }); return; }
     } catch {
       setEntryError({ projectId: workflowProjectId, stage: activeStage, message: 'Saved request recovery could not be read. Choose a workflow to inspect its history; automatic selection is paused.' });
       return;
     }
-    if (!recovery && (!jobs.isSuccess || jobs.isError || !options.isSuccess || options.isError || (stage === 'run' && (!simulation.isSuccess || simulation.isError)))) return;
+    if (!recovery && !simulationRecovery && (!jobs.isSuccess || jobs.isError || !options.isSuccess || options.isError || (stage === 'run' && (!simulation.isSuccess || simulation.isError)))) return;
     const next = stage === 'quantize'
       ? recovery ? { mode: 'native' as const, origin: 'recovery' as const } : initialQuantizeEntry(workflowProjectId, jobs.data!, options.data!)
-      : recovery ? { mode: 'replay' as const, origin: 'recovery' as const } : initialRunEntry(workflowProjectId, jobs.data!, options.data!, simulation.data!.profiles);
+      : simulationRecovery ? { mode: 'native' as const, origin: 'recovery' as const } : recovery ? { mode: 'replay' as const, origin: 'recovery' as const } : initialRunEntry(workflowProjectId, jobs.data!, options.data!, simulation.data!.profiles);
     setEntries(previous => previous[workflowProjectId]?.[stage] ? previous : { ...previous, [workflowProjectId]: { ...previous[workflowProjectId], [stage]: next } });
     setEntryError(null);
   }, [activeStage, workflowProjectId, context, jobs.data, jobs.isSuccess, jobs.isError, options.data, options.isSuccess, options.isError, simulation.data, simulation.isSuccess, simulation.isError, queryClient]);
