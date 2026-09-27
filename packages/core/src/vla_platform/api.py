@@ -173,7 +173,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return [
             *registry(
                 native_configured=any(
-                    not (r.export_only or r.native_quantization_only or r.native_distillation_only)
+                    not (
+                        r.export_only
+                        or r.native_quantization_only
+                        or r.native_distillation_only
+                        or r.native_replay_only
+                    )
                     for r in execution.lifecycle.catalog.runtimes
                 ),
                 training_configured=any(
@@ -186,6 +191,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 ),
                 native_quantization_configured=any(
                     item["native_quantization"]
+                    for item in execution.lifecycle.catalog.public()["runtimes"]
+                ),
+                native_replay_configured=any(
+                    item["native_replay"]
                     for item in execution.lifecycle.catalog.public()["runtimes"]
                 ),
                 native_distillation_configured=any(

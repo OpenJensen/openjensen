@@ -164,6 +164,27 @@ class NativeDistillation(StrictRecord):
     units: list[CoordinateUnit] = Field(min_length=6, max_length=6)
 
 
+class ReplayObservation(StrictRecord):
+    episode_index: EpisodeId
+    frame_index: int = Field(ge=0, le=10000000, strict=True)
+
+
+class NativeReplay(StrictRecord):
+    """Explicit CPU observation replay, not an environment or a scored simulation."""
+
+    adapter: Literal["act-packed-observation-v1"]
+    selection: list[ReplayObservation] = Field(min_length=1, max_length=32)
+    coordinate_attestation: Literal["policy_recorded_coordinates", "generated_fixture"]
+    units: list[CoordinateUnit] = Field(min_length=6, max_length=6)
+
+    @model_validator(mode="after")
+    def unique_observations(self):
+        pairs = [(item.episode_index, item.frame_index) for item in self.selection]
+        if len(set(pairs)) != len(pairs):
+            raise ValueError("Replay observations must be distinct episode/frame pairs")
+        return self
+
+
 class PolicyRequest(StrictRecord):
     operation: Literal[
         "policy.import",
@@ -194,12 +215,14 @@ class PolicyRequest(StrictRecord):
     simulation: SimulationRequest | None = None
     native_quantization: NativeQuantization | None = None
     native_distillation: NativeDistillation | None = None
+    native_replay: NativeReplay | None = None
 
     @model_validator(mode="before")
     @classmethod
     def native_deadline(cls, value):
         if isinstance(value, dict) and any(
-            value.get(key) is not None for key in ("native_quantization", "native_distillation")
+            value.get(key) is not None
+            for key in ("native_quantization", "native_distillation", "native_replay")
         ):
             value = dict(value)
             value.setdefault("timeout_seconds", 600)
@@ -209,6 +232,30 @@ class PolicyRequest(StrictRecord):
 
     @model_validator(mode="after")
     def input_contract(self):
+        if self.native_replay is not None:
+            if (
+                self.operation != "policy.run"
+                or not self.artifact_id
+                or not self.dataset_job_id
+                or self.source_id is not None
+                or self.resume_job_id is not None
+                or self.training is not None
+                or self.training_method != "lora"
+                or self.precision is not None
+                or self.candidates != [Precision()]
+                or self.evaluation != Evaluation()
+                or self.limits is not None
+                or self.simulation is not None
+                or self.native_quantization is not None
+                or self.native_distillation is not None
+                or self.timeout_seconds > 600
+            ):
+                raise ValueError(
+                    "CPU observation replay requires one local packed ACT artifact and an "
+                    "explicit immutable dataset selection; simulation and other lifecycle "
+                    "options are unsupported"
+                )
+            return self
         if self.native_distillation is not None:
             if (
                 self.operation != "policy.distill"
@@ -327,6 +374,7 @@ class PolicyArtifact(StrictRecord):
         "inference_export",
         "simulation_record",
         "native_quantized",
+        "native_run_record",
     ]
     path: str
     manifest_sha256: str
