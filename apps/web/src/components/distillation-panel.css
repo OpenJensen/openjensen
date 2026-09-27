@@ -25,3 +25,10 @@
   .distillation-model-card { padding: 16px; gap: 12px; }
   .distillation-saved-jobs > button { flex-wrap: wrap; }
 }
+
+.distillation-continuation { min-width: 0; padding: 0 0 18px; border-bottom: 1px solid var(--line); }
+.distillation-continuation-step { font-size: 11px; color: var(--muted); }
+.distillation-continuation h3 { margin: 6px 0 10px; font-size: 17px; font-weight: 600; }
+.distillation-continuation p { margin: 7px 0 0; font-size: 13px; line-height: 1.6; }
+.distillation-continuation p:last-child, .distillation-continuation p span { color: var(--muted); }
+.distillation-continuation small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }

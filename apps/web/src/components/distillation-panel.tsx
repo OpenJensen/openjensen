@@ -14,13 +14,14 @@ export type DistillationModel = 'act';
 type Props = {
   projectId: string;
   model?: DistillationModel;
+  preferredTeacherArtifactId?: string;
   onSelectModel: (model: DistillationModel | undefined) => void;
   onDataset: () => void;
   onQuantize: (artifactId: string) => void;
 };
 
 /** Distillation is a workflow; the ACT implementation is one supported adapter. */
-export function DistillationPanel({ projectId, model, onSelectModel, onDataset, onQuantize }: Props) {
+export function DistillationPanel({ projectId, model, preferredTeacherArtifactId, onSelectModel, onDataset, onQuantize }: Props) {
   const jobs = useQuery({ queryKey: ['jobs', projectId], queryFn: () => api.jobs(projectId), enabled: !!projectId, retry: false, refetchInterval: 3_000 });
   const cachedAttempt = useQuery<PolicyJobAttempt>({ queryKey: ['distillation-attempt', projectId], queryFn: async () => null, enabled: false, initialData: null, gcTime: Infinity });
   const [recovery, setRecovery] = useState<{ attempt: PolicyJobAttempt; unreadable: boolean }>({ attempt: null, unreadable: false });
@@ -41,7 +42,7 @@ export function DistillationPanel({ projectId, model, onSelectModel, onDataset, 
 
   if (model === 'act') return <div className="distillation-workflow">
     <button type="button" className="distillation-back" onClick={() => { setPreferredJobId(undefined); onSelectModel(undefined); }}><Icon name="arrow" size={15} />All models</button>
-    <NativeDistillationPanel projectId={projectId} preferredJobId={preferredJobId} onDataset={onDataset} onQuantize={onQuantize} />
+    <NativeDistillationPanel projectId={projectId} preferredJobId={preferredJobId} preferredTeacherArtifactId={preferredTeacherArtifactId} onDataset={onDataset} onQuantize={onQuantize} />
   </div>;
 
   return <section className="distillation-overview" aria-label="Distillation models">

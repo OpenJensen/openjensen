@@ -21,21 +21,23 @@ class JournalUnavailable extends Error {
   constructor() { super('Browser session storage is unavailable. Restore it and reload, then inspect recorded jobs before submitting again.'); }
 }
 
-export function NativeDistillationPanel({ projectId, preferredJobId, onDataset, onQuantize }: { projectId: string; preferredJobId?: string; onDataset: () => void; onQuantize: (artifactId: string) => void }) {
+export function NativeDistillationPanel({ projectId, preferredJobId, preferredTeacherArtifactId, onDataset, onQuantize }: { projectId: string; preferredJobId?: string; preferredTeacherArtifactId?: string; onDataset: () => void; onQuantize: (artifactId: string) => void }) {
   const client = useQueryClient();
   const options = useQuery({ queryKey: ['policy-options'], queryFn: api.policyOptions, retry: false, refetchInterval: 10_000 });
   const jobs = useQuery({ queryKey: ['jobs', projectId], queryFn: () => api.jobs(projectId), enabled: !!projectId, retry: false, refetchInterval: 2_000 });
   const artifacts = useQuery({ queryKey: ['artifacts', projectId], queryFn: () => api.artifacts(projectId), enabled: !!projectId, retry: false, refetchInterval: 5_000 });
   const attemptKey = ['distillation-attempt', projectId];
   const attempt = useQuery<Attempt>({ queryKey: attemptKey, queryFn: async () => null, enabled: false, initialData: null, gcTime: Infinity });
+  const preference = useRef({ id: preferredTeacherArtifactId, consumed: false });
+  const [pendingTeacher, setPendingTeacher] = useState(!!preferredTeacherArtifactId);
   const [teacherId, setTeacher] = useState(''), [datasetId, setDataset] = useState(''), [runtimeId, setRuntime] = useState('');
   const [train, setTrain] = useState(''), [validation, setValidation] = useState(''), [final, setFinal] = useState('');
   const [units, setUnits] = useState(''), [attested, setAttested] = useState(false), [generated, setGenerated] = useState(false);
   const [steps, setSteps] = useState('100'), [stride, setStride] = useState('30'), [rate, setRate] = useState('0.0001'), [seed, setSeed] = useState('1729'), [timeout, setTimeoutValue] = useState('600');
-  const [selectedId, setSelectedId] = useState(preferredJobId ?? ''), [accepted, setAccepted] = useState<Job | null>(null);
+  const [selectedId, setSelectedId] = useState(preferredTeacherArtifactId ? '' : preferredJobId ?? ''), [accepted, setAccepted] = useState<Job | null>(null);
   const [journalReady, setJournalReady] = useState(false);
   const [error, setError] = useState(''), [cancelId, setCancelId] = useState(''), [cancelling, setCancelling] = useState(false), [reviewed, setReviewed] = useState(false);
-  const mounted = useRef(true), busy = useRef(false), currentId = useRef(preferredJobId ?? '');
+  const mounted = useRef(true), busy = useRef(false), currentId = useRef(preferredTeacherArtifactId ? '' : preferredJobId ?? '');
   const attemptVersion = useRef(0);
   const selectionGeneration = useRef(0);
   const cancellation = useNativeCancellation({ project: projectId, workflow: 'distillation' });
@@ -60,6 +62,17 @@ export function NativeDistillationPanel({ projectId, preferredJobId, onDataset, 
   const runtime = runtimeId ? runtimes.find(item => item.id === runtimeId) : runtimes[0];
   const teachers = (artifacts.data ?? []).filter(item => studentTeacher(item, projectId));
   const teacher = teachers.find(item => item.id === teacherId);
+  useEffect(() => {
+    if (preference.current.id !== preferredTeacherArtifactId) { preference.current = { id: preferredTeacherArtifactId, consumed: false }; setPendingTeacher(!!preferredTeacherArtifactId); }
+    if (!preferredTeacherArtifactId || preference.current.consumed || !artifacts.isSuccess || artifacts.isError) return;
+    const candidate = teachers.find(item => item.id === preferredTeacherArtifactId);
+    if (!candidate) return;
+    preference.current.consumed = true; setPendingTeacher(false);
+    setTeacher(candidate.id); setAttested(false);
+  }, [preferredTeacherArtifactId, teachers, artifacts.isSuccess, artifacts.isError]);
+  function consumeTeacherPreference() { preference.current = { id: preferredTeacherArtifactId, consumed: true }; setPendingTeacher(false); }
+  function chooseTeacher(id: string) { consumeTeacherPreference(); setTeacher(id); setAttested(false); }
+  const continuedTeacher = teacher && teacher.id === preferredTeacherArtifactId ? teacher : undefined;
   const datasets = (jobs.data ?? []).filter(isDatasetJob).filter(item => studentDataset(item, projectId));
   const dataset = datasets.find(item => item.id === datasetId);
   const history = (jobs.data ?? []).filter(studentJob).filter(item => item.project_id === projectId).sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -69,7 +82,7 @@ export function NativeDistillationPanel({ projectId, preferredJobId, onDataset, 
   const result: Record<string, unknown> | null = selected?.result && record(selected.result) ? selected.result : null;
   const report = selected && Array.isArray(result?.reports) ? result.reports.map(value => studentReport(value, selected)).find(Boolean) : null;
   const outputs = selected?.result && 'artifacts' in selected.result ? (selected.result.artifacts ?? []).filter(item => item.project_id === projectId && item.job_id === selected.id && item.format === 'native_checkpoint' && item.metadata?.recipe === 'act-action-distillation-v1') : [];
-  function selectJob(id: string) { selectionGeneration.current += 1; cancellation.selectionChanged(); currentId.current = id; setSelectedId(id); setCancelId(''); }
+  function selectJob(id: string) { consumeTeacherPreference(); selectionGeneration.current += 1; cancellation.selectionChanged(); currentId.current = id; setSelectedId(id); setCancelId(''); }
   let recipe: DistillationRecipe | undefined, invalid = '';
   try {
     const partitions = { train: episodeSelection(train), validation: episodeSelection(validation), final: episodeSelection(final) };
@@ -151,13 +164,21 @@ export function NativeDistillationPanel({ projectId, preferredJobId, onDataset, 
     {error && <p role="alert">{error}</p>}
     {journalReady && attempt.data?.state === 'pending' && <p role="status">{attempt.data.message}</p>}
     {attempt.data?.state === 'uncertain' && <div className="warning-box"><p>{attempt.data.message}</p><button className="secondary-button" disabled={!reviewed || jobs.isError} onClick={() => { try { saveAttempt(null); setReviewed(false); setError(''); } catch { setJournalReady(false); setError('Browser session storage is unavailable.'); } }}>I checked recorded jobs; allow a new request</button></div>}
+    {preferredTeacherArtifactId && pendingTeacher && <p role="status" className="field-help">{artifacts.isPending ? 'Loading the selected training package…' : artifacts.isError ? 'The selected training package could not be checked. Refresh teacher policies before continuing.' : 'The selected training package is unavailable or unsupported. Refresh, or choose another teacher explicitly; no replacement has been selected.'}</p>}
     <NativePreparation key={selected ? 'another' : 'first'} title="Prepare another student" hasResult={!!selected}>
       {!projectId || !runtimes.length ? <div className="native-setup-empty">
         <p role="status">{!projectId ? 'Select a project to continue.' : options.isPending ? 'Loading workers…' : options.isError ? 'Worker availability is unknown.' : 'No local ACT distillation worker is configured.'}</p>
         <a className="text-link" href={publicPath('/guide/#distill')}>Set up distillation</a>
         <button className="primary-button" disabled>Train ACT256 student</button>
       </div> : <fieldset className="native-simulation-form" disabled={!!attempt.data || cancelling || cancellation.attempt?.state === 'pending'}><legend className="visually-hidden">Distillation setup</legend>
-        <WorkflowChoiceGrid name="teacher" label="Teacher" value={teacherId} onChange={value => { setTeacher(value); setAttested(false); }} options={teachers.map(item => ({ value: item.id, label: item.label, meta: item.id.slice(0, 8), icon: 'layers' }))} emptyMessage="No ACT teacher policies. Import or export a complete policy first." />
+        {continuedTeacher && <div className="distillation-continuation" aria-label="Teacher from training">
+          <span className="distillation-continuation-step">Training → Distill</span>
+          <h3>Your exported teacher is selected</h3>
+          <p>{continuedTeacher.label} <span>· Export {continuedTeacher.job_id.slice(0, 8)}</span></p>
+          <small>{continuedTeacher.id}</small>
+          <p>Choose a prepared dataset and independent episode splits, then confirm its coordinates. Training starts only when you submit.</p>
+        </div>}
+        <WorkflowChoiceGrid name="teacher" label="Teacher" value={teacherId} onChange={chooseTeacher} options={teachers.map(item => ({ value: item.id, label: item.label, meta: item.id.slice(0, 8), icon: 'layers' }))} emptyMessage="No ACT teacher policies. Import or export a complete policy first." />
         <WorkflowChoiceGrid name="student-dataset" label="Dataset" value={datasetId} onChange={value => { setDataset(value); setAttested(false); setTrain(''); setValidation(''); setFinal(''); }} options={datasets.map(item => ({ value: item.id, label: item.result!.repo_id ?? 'Local robotics dataset', description: `${item.result!.total_episodes} episodes`, icon: 'database' }))} emptyMessage="Import a complete dataset snapshot to continue." />
         {!datasets.length && <button type="button" className="text-link" onClick={onDataset}>Open Dataset intake</button>}
         {(runtimes.length > 1 || !runtime) && <WorkflowChoiceGrid name="student-worker" label="Compute" value={runtime?.id ?? ''} onChange={setRuntime} options={runtimes.map(item => ({ value: item.id, label: item.label, icon: 'sliders' }))} />}
