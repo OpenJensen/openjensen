@@ -1,5 +1,6 @@
 "use client";
 
+import { publicDemo } from "@/lib/public-demo";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -1159,7 +1160,7 @@ export function TrainingPanel({
             <button
               type="button"
               className="text-button"
-              onClick={onDiagnostics}
+              disabled={publicDemo} onClick={onDiagnostics}
             >
               Diagnostics <Icon name="arrow" size={14} />
             </button>

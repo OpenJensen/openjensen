@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import stat
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -17,7 +18,7 @@ import httpx
 from starlette.applications import Starlette
 from starlette.exceptions import HTTPException
 from starlette.requests import Request
-from starlette.responses import RedirectResponse, Response, StreamingResponse
+from starlette.responses import JSONResponse, RedirectResponse, Response, StreamingResponse
 from starlette.routing import Route
 from starlette.staticfiles import StaticFiles
 
@@ -52,6 +53,7 @@ class GatewayConfig:
     password_hash: bytes
     iterations: int
     preview_origins: tuple[str, ...] = ()
+    public_readonly: bool = False
 
     @classmethod
     def from_value(cls, value):
@@ -63,6 +65,7 @@ class GatewayConfig:
             "password_hash_hex",
             "password_iterations",
             "preview_origins",
+            "public_readonly",
         }
         if not isinstance(value, dict) or set(value) - expected:
             raise ValueError("Invalid gateway configuration")
@@ -94,6 +97,7 @@ class GatewayConfig:
                 or not directory.is_absolute()
                 or not directory.is_dir()
                 or not isinstance(previews, list)
+                or type(value.get("public_readonly", False)) is not bool
                 or any(
                     item
                     not in {
@@ -108,7 +112,16 @@ class GatewayConfig:
                 raise ValueError
         except KeyError, TypeError, AttributeError, ValueError:
             raise ValueError("Invalid gateway configuration") from None
-        return cls(origin, directory, "firebird", salt, password_hash, iterations, tuple(previews))
+        return cls(
+            origin,
+            directory,
+            "firebird",
+            salt,
+            password_hash,
+            iterations,
+            tuple(previews),
+            value.get("public_readonly", False),
+        )
 
     @classmethod
     def load(cls, path):
@@ -176,6 +189,34 @@ def public_location(location, origin):
             path = PREFIX + (path if path.startswith("/") else "/" + path)
         return urlunsplit(("", "", path, parsed.query, parsed.fragment))
     return location
+
+
+def public_read_allowed(path):
+    """Public demonstrations expose saved application results, never account administration."""
+    if path == PREFIX:
+        return True
+    if not path.startswith(PREFIX + "/"):
+        return False
+    path = path[len(PREFIX) :]
+    if path == "/openapi.json":
+        return True
+    if path != "/api" and not path.startswith("/api/"):
+        return True  # StaticFiles still enforces filesystem containment.
+    if path in {
+        "/api/v1/health",
+        "/api/v1/projects",
+        "/api/v1/capabilities",
+        "/api/v1/policy-options",
+    }:
+        return True
+    return (
+        re.fullmatch(
+            r"/api/v1/(?:projects/[A-Za-z0-9_-]+/(?:jobs|artifacts)|"
+            r"jobs/[A-Za-z0-9_-]+(?:/(?:events|training|episodes(?:/[0-9]+)?))?)",
+            path,
+        )
+        is not None
+    )
 
 
 class PublicGateway:
@@ -274,7 +315,7 @@ class PublicGateway:
         host = single_header(scope, b"host")
         if not host or host.lower() not in self.hosts:
             response = self.error(scope, 400, "Invalid host")
-        elif not await self.authenticated(scope):
+        elif not self.config.public_readonly and not await self.authenticated(scope):
             response = self.error(
                 scope,
                 401,
@@ -283,6 +324,22 @@ class PublicGateway:
             )
         elif not (scope["path"] == PREFIX or scope["path"].startswith(PREFIX + "/")):
             response = self.error(scope, 404, "Not found")
+        elif (
+            self.config.public_readonly
+            and not (scope["method"] in {"GET", "HEAD"} and public_read_allowed(scope["path"]))
+            and not await self.authenticated(scope)
+        ):
+            # Do not trigger a browser login dialog while someone explores the demo.
+            response = JSONResponse(
+                {
+                    "detail": (
+                        "This public demo is read-only. Cloud jobs, downloads "
+                        "and account settings require owner access."
+                    )
+                },
+                status_code=403,
+                headers=SECURITY_HEADERS,
+            )
         else:
             origin = single_header(scope, b"origin")
             count = sum(key.lower() == b"origin" for key, _ in scope["headers"])

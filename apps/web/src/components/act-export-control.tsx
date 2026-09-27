@@ -1,5 +1,6 @@
 "use client";
 
+import { publicDemo } from "@/lib/public-demo";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, artifactDownloadUrl, isActive, type Job, type PolicyArtifact, type PolicyOptions } from "@/lib/api";
@@ -41,13 +42,13 @@ export function ActExportControl({ projectId, checkpoint, runtimes, jobs, artifa
   });
   return <section aria-label="ACT inference export">
     <p className="training-monitor-note">Remove the training-only VAE and keep FP32 weights. Each export checks complete synthetic action chunks in fresh CPU processes. This does not establish robot task success, calibration, GPU fit, or faster inference.</p>
-    {available.length > 1 && <label>Export computer<select value={runtime?.id ?? ""} disabled={!active || mutation.isPending || !!pending} onChange={event => setSelectedRuntime(event.target.value)}>{available.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>}
-    <button type="button" className="primary-button" disabled={!active || !!issue || mutation.isPending || !!pending} onClick={() => mutation.mutate()}>{mutation.isPending || pending ? "Exporting ACT policy…" : "Export ACT inference package"}</button>
+    {available.length > 1 && <label>Export computer<select value={runtime?.id ?? ""} disabled={publicDemo || !active || mutation.isPending || !!pending} onChange={event => setSelectedRuntime(event.target.value)}>{available.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>}
+    <button type="button" className="primary-button" disabled={publicDemo || !active || !!issue || mutation.isPending || !!pending} onClick={() => mutation.mutate()}>{mutation.isPending || pending ? "Exporting ACT policy…" : "Export ACT inference package"}</button>
     {issue && <p role="status" className="training-monitor-note">{issue}</p>}
     {pending && <p role="status">Export {pending.status}. CPU verification is running.</p>}
     {latest?.status === "failed" && <p role="alert">Export failed: {latest.error ?? "See the recorded job for details."}</p>}
     {latest && ["cancelled", "interrupted"].includes(latest.status) && <p role="status">Export {latest.status}. No verified package is ready from this attempt.</p>}
     {mutation.error && <p role="alert">{mutation.error.message}</p>}
-    {exports.map(item => <p key={item.id}><a className="text-link" href={artifactDownloadUrl(projectId, item.id)}>Download ACT inference package</a><span className="training-monitor-note"> · Inference only; keep the original checkpoint for training.</span></p>)}
+    {!publicDemo && exports.map(item => <p key={item.id}><a className="text-link" href={artifactDownloadUrl(projectId, item.id)}>Download ACT inference package</a><span className="training-monitor-note"> · Inference only; keep the original checkpoint for training.</span></p>)}
   </section>;
 }

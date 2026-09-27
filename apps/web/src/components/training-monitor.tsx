@@ -1,5 +1,6 @@
 "use client";
 
+import { publicDemo } from "@/lib/public-demo";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -183,8 +184,8 @@ export function TrainingMonitor({ run, projectId, active, artifacts, onCancel, c
         <div><span className="training-monitor-eyebrow">Run {run.id.slice(0, 8)}</span><h3>{phaseNames[phase] ?? phase.replaceAll("_", " ")}</h3></div>
         <div className="training-monitor-actions">
           <span className={`status status-${status}`}>{status}</span>
-          {running && <button type="button" className="secondary-button" disabled={cancelling} onClick={onCancel}>{cancelling ? "Cancelling…" : "Cancel run"}</button>}
-          {!running && onResume && <button type="button" className="secondary-button" onClick={onResume}>Resume from checkpoint</button>}
+          {running && <button type="button" className="secondary-button" disabled={publicDemo || cancelling} onClick={onCancel}>{cancelling ? "Cancelling…" : "Cancel run"}</button>}
+          {!running && onResume && <button type="button" className="secondary-button" disabled={publicDemo} onClick={onResume}>Resume from checkpoint</button>}
         </div>
       </header>
       <p className="training-current-action" role="status">{runSummary(run, phase, status)}</p>
@@ -221,7 +222,7 @@ export function TrainingMonitor({ run, projectId, active, artifacts, onCancel, c
         {chosenCheckpoint?.metadata?.architecture === "act" ? <ActExportControl
           projectId={projectId} checkpoint={chosenCheckpoint} runtimes={exportRuntimes}
           jobs={exportJobs} artifacts={exportArtifacts} active={active}
-        /> : <><button type="button" className="primary-button" disabled={!!checkpointIssue} onClick={() => chosenCheckpoint && onQuantize(chosenCheckpoint.id)}>Quantize checkpoint</button>
+        /> : <><button type="button" className="primary-button" disabled={publicDemo || !!checkpointIssue} onClick={() => chosenCheckpoint && onQuantize(chosenCheckpoint.id)}>Quantize checkpoint</button>
         {checkpointIssue && <p className="training-monitor-note" role="status">{checkpointIssue}</p>}</>}
       </section>}
       <details className="training-monitor-disclosure training-details" onToggle={event => setDetailsOpen(event.currentTarget.open)}>
@@ -234,7 +235,7 @@ export function TrainingMonitor({ run, projectId, active, artifacts, onCancel, c
           <tbody>{metrics.slice(-20).reverse().map((point, index) => <tr key={`${point.step}-${index}`}><th>{point.step.toLocaleString()}</th><td>{metric(point.train_loss)}</td><td>{metric(point.validation_loss)}</td><td>{metric(point.learning_rate)}</td><td>{metric(point.grad_norm)}</td></tr>)}</tbody></table></div>
       </details>}
       {!!data?.checkpoints?.length && <div className="training-saved-checkpoints"><h4>Saved checkpoints</h4><ul>{data.checkpoints.map((checkpoint, index) => <li key={`${checkpoint.name}-${index}`}><strong>Step {checkpoint.step.toLocaleString()}</strong><span>{checkpoint.name}</span><time>{time(checkpoint.timestamp)}</time></li>)}</ul></div>}
-      {!!artifacts.length && <div className="training-run-downloads">{artifacts.map(item => <a className="text-link" key={item.id} href={artifactDownloadUrl(projectId, item.id)}>Download {item.label}</a>)}</div>}
+      {!publicDemo && !!artifacts.length && <div className="training-run-downloads">{artifacts.map(item => <a className="text-link" key={item.id} href={artifactDownloadUrl(projectId, item.id)}>Download {item.label}</a>)}</div>}
       <section className="training-detail-activity"><h4>Activity log</h4>
         <label className="training-log-filter">Filter activity<input type="search" value={logFilter} onChange={event => setLogFilter(event.target.value)} placeholder="Search stages and messages" /></label>
         <ol className="training-event-log" aria-label="Persisted training activity">{filteredEvents.map(event => <li key={event.sequence}><time>{time(event.timestamp)}</time><span>{event.stage}</span><p>{event.message}</p></li>)}</ol>
@@ -259,7 +260,7 @@ export function TrainingMonitor({ run, projectId, active, artifacts, onCancel, c
             <div><dt>Runtime</dt><dd>{description(object(reproducibility.runtime).label ?? object(reproducibility.runtime).id ?? ("runtime_id" in run.request ? run.request.runtime_id : undefined))}</dd></div>
           </dl>
           {limitations.length > 0 && <ul className="training-monitor-limitations">{limitations.map((item, index) => <li key={index}>{item}</li>)}</ul>}
-          <a className="secondary-button training-reproducibility-download" href={trainingReproducibilityUrl(run.id)}>Download reproducibility JSON</a>
+          {!publicDemo && <a className="secondary-button training-reproducibility-download" href={trainingReproducibilityUrl(run.id)}>Download reproducibility JSON</a>}
           <details><summary>Full recorded configuration</summary><pre>{JSON.stringify(reproducibility, null, 2)}</pre></details>
         </>}
         {!Object.keys(reproducibility).length && <p className="training-monitor-note">The recorded configuration is not available yet.</p>}

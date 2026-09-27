@@ -87,6 +87,109 @@ def test_every_path_requires_auth_before_static_or_upstream(config, path):
         assert response.status_code == 401 and response.content == b""
 
 
+def test_public_demo_serves_real_history_metrics_and_assets_without_login(config):
+    seen = []
+
+    def upstream(request):
+        seen.append(request.url.path)
+        return httpx.Response(
+            200,
+            stream=Chunks(b'{"value": "saved backend result"}'),
+            headers={"content-type": "application/json"},
+        )
+
+    public = gateway.GatewayConfig.from_value({**config[1], "public_readonly": True})
+    with TestClient(
+        gateway.PublicGateway(public, transport=httpx.MockTransport(upstream)), base_url=ORIGIN
+    ) as client:
+        for path in [
+            "/",
+            "/docs/",
+            "/_next/app.js",
+            "/openapi.json",
+            "/api/v1/health",
+            "/api/v1/projects",
+            "/api/v1/policy-options",
+            "/api/v1/capabilities",
+            "/api/v1/projects/project-1/jobs",
+            "/api/v1/projects/project-1/artifacts",
+            "/api/v1/jobs/job-1",
+            "/api/v1/jobs/job-1/training",
+            "/api/v1/jobs/job-1/events",
+            "/api/v1/jobs/job-1/episodes/0",
+        ]:
+            response = client.get("/firebird" + path)
+            assert response.status_code == 200, path
+            assert "www-authenticate" not in response.headers
+            assert response.headers["cache-control"] == "no-store"
+        assert client.get("/firebird/api/v1/jobs/job-1/training").json() == {
+            "value": "saved backend result"
+        }
+        assert "/api/v1/jobs/job-1/training" in seen
+
+
+@pytest.mark.parametrize(
+    "method,path",
+    [
+        ("POST", "/api/v1/projects/p/policy-jobs"),
+        ("POST", "/api/v1/jobs/j/cancel"),
+        ("POST", "/api/v1/projects"),
+        ("PUT", "/api/v1/huggingface-connection"),
+        ("DELETE", "/api/v1/cloud-connections/gcp"),
+        ("GET", "/api/v1/cloud-connections"),
+        ("GET", "/api/v1/cloud-runs"),
+        ("GET", "/api/v1/compute-settings"),
+        ("GET", "/api/v1/huggingface-connection"),
+        ("GET", "/api/v1/projects/p/artifacts/a/download"),
+        ("GET", "/api/v1/jobs/j/training/reproducibility"),
+        ("GET", "/api/v1/teaching/state"),
+        ("GET", "/api/v1/unknown-future-route"),
+    ],
+)
+def test_public_demo_blocks_writes_accounts_downloads_and_unknown_apis(config, method, path):
+    def forbidden(_request):
+        raise AssertionError("Protected requests must not reach the backend")
+
+    public = gateway.GatewayConfig.from_value({**config[1], "public_readonly": True})
+    with TestClient(
+        gateway.PublicGateway(public, transport=httpx.MockTransport(forbidden)), base_url=ORIGIN
+    ) as client:
+        response = client.request(method, "/firebird" + path, headers={"Origin": ORIGIN})
+        assert response.status_code == 403
+        assert "read-only" in response.json()["detail"]
+        assert "www-authenticate" not in response.headers
+
+
+def test_public_demo_preserves_authenticated_owner_writes_and_origin_checks(config):
+    received = []
+
+    def upstream(request):
+        received.append(request)
+        return httpx.Response(
+            200, stream=Chunks(b'{"owner": true}'), headers={"content-type": "application/json"}
+        )
+
+    public = gateway.GatewayConfig.from_value({**config[1], "public_readonly": True})
+    with TestClient(
+        gateway.PublicGateway(public, transport=httpx.MockTransport(upstream)),
+        base_url=ORIGIN,
+        headers={"Authorization": AUTH},
+    ) as client:
+        assert client.get("/firebird/api/v1/cloud-connections").status_code == 200
+        assert client.post("/firebird/api/v1/projects").status_code == 403
+        assert (
+            client.post("/firebird/api/v1/projects", headers={"Origin": ORIGIN}).status_code == 200
+        )
+        assert len(received) == 2
+        assert all("authorization" not in request.headers for request in received)
+
+
+@pytest.mark.parametrize("value", ["true", 1, None, []])
+def test_public_access_requires_explicit_boolean(config, value):
+    with pytest.raises(ValueError, match="Invalid gateway configuration"):
+        gateway.GatewayConfig.from_value({**config[1], "public_readonly": value})
+
+
 @pytest.mark.parametrize(
     "authorization",
     [

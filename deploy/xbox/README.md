@@ -88,3 +88,29 @@ After activation, verify that unauthenticated public page/API requests return
 `/firebird/docs/`, and the pre-existing root site is still reachable. Change the
 private credential configuration and restart `firebird-public` to rotate its
 password; the gateway configuration is immutable for a running process.
+
+## Public demonstration without a login
+
+Build a separate public export with `NEXT_PUBLIC_BASE_PATH=/firebird` and
+`NEXT_PUBLIC_DEMO_MODE=1`. Keep the normal root export for the owner workspace.
+Set `public_readonly: true` in the private gateway JSON and point `static_dir`
+at this demonstration export, then restart only `firebird-public`.
+
+The link opens the real fine-tuning history. Visitors can view projects, saved
+jobs, training metrics, loss curves, checkpoints and policy results. The gateway
+allows only explicit read routes without authentication. Creating, cancelling or
+changing jobs, account settings, external cloud inventory, and artifact downloads
+still require the existing owner credentials. New API routes remain private by
+default. The public export disables owner actions and does not send mutations.
+This is a view of the live application, not simulated training data.
+
+The default remains authenticated access when `public_readonly` is omitted or
+false. Restore the prior config and public export path to roll back; keep a
+private backup of both the gateway code and config before switching. Verify an
+anonymous GET to `/firebird/` and `/firebird/api/v1/projects` succeeds, a saved
+job's training telemetry loads, and anonymous writes and account reads return
+403 without a browser authentication challenge.
+
+Focused checks: `pytest tests/test_public_gateway.py`; after building the demo
+export, run `playwright test -c tests/web/public-demo.config.ts`. The latter covers
+desktop and mobile history, actual returned metrics, and disabled owner actions.

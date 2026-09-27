@@ -1,3 +1,4 @@
+import { publicDemo } from "@/lib/public-demo";
 import type { components } from './api.generated';
 import { basePath, publicPath } from './base-path';
 import type { TrainingModel } from './training-models';
@@ -95,6 +96,9 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit, timeoutMs = 15_000): Promise<T> {
+  if (publicDemo && init?.method && !["GET", "HEAD"].includes(init.method.toUpperCase())) {
+    throw new ApiError("This public demo is read-only. New jobs and changes are available in the owner workspace.", 403);
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {

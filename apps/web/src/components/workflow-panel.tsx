@@ -1,5 +1,6 @@
 "use client";
 
+import { publicDemo } from "@/lib/public-demo";
 import { useEffect, useState } from "react";
 import { CloudConnectionsPanel } from "@/components/cloud-connections";
 import { JobHistory } from "@/components/job-history";
@@ -683,7 +684,7 @@ export function WorkflowPanel({
                 </div>}
                 {selected?.error && <p className="error-notice" role="alert">{conciseRunError(selected.error)}</p>}
                 {selected && <p className={`status status-${selected.status}`}>{selected.status}</p>}
-                {selected && isActive(selected) && <button className="secondary-button" disabled={cancel.isPending} onClick={() => cancel.mutate()}>Cancel run</button>}
+                {selected && isActive(selected) && <button className="secondary-button" disabled={publicDemo || cancel.isPending} onClick={() => cancel.mutate()}>Cancel run</button>}
                 {!!data?.reports?.some(
                   (report) => typeof report.p95_ms === "number",
                 ) && (
@@ -854,7 +855,7 @@ export function WorkflowPanel({
       <article className="panel workflow-panel workflow-job-detail" aria-label={`${stage} job details`}>
         <div className="workflow-view-navigation">
           <button className="text-link" onClick={backToHistory}>← All {historyTitle.toLowerCase()}</button>
-          <button className="secondary-button" onClick={openNew} disabled={!ready}>{newLabel}</button>
+          <button className="secondary-button" onClick={openNew} disabled={publicDemo || !ready}>{newLabel}</button>
         </div>
         <header className="workflow-job-heading">
           <div><p className="workflow-job-type">{stage === "Quantize" ? "Quantization" : stage === "Evaluate" ? "Evaluation" : "Policy run"}</p><h2>{modelFor(selected)}{precisionFor(selected) !== "—" ? ` · ${precisionFor(selected)}` : ""}</h2></div>
@@ -875,7 +876,7 @@ export function WorkflowPanel({
           <div><dt>Target</dt><dd>{target}</dd></div>
           <div><dt>Started</dt><dd>{new Date(selected.created_at).toLocaleString()}</dd></div>
         </dl>
-        {isActive(selected) && <button className="secondary-button" disabled={cancel.isPending} onClick={() => cancel.mutate()}>{cancel.isPending ? "Cancelling…" : "Cancel run"}</button>}
+        {isActive(selected) && <button className="secondary-button" disabled={publicDemo || cancel.isPending} onClick={() => cancel.mutate()}>{cancel.isPending ? "Cancelling…" : "Cancel run"}</button>}
         {cancel.error && <p className="error-notice" role="alert">{cancel.error.message}</p>}
         {events.error && <p className="error-notice" role="alert">Activity is unavailable: {events.error.message}</p>}
         {(engineReport || inference) && <section className="workflow-measurements" aria-label="Measured results">
@@ -896,7 +897,7 @@ export function WorkflowPanel({
           <h3>Output</h3>
           {data?.artifacts?.length ? <ul className="workflow-output-list">{data.artifacts.map(artifact => <li key={artifact.id}>
             <div><strong>{artifact.label}</strong><span>{artifact.format === "gguf" ? "GGUF" : artifact.format.replaceAll("_", " ")}{artifact.file_bytes > 0 ? ` · ${sizeLabel(artifact.file_bytes)}` : ""}{isCloudArtifact(artifact) ? " · Google Cloud" : ""}</span></div>
-            <a className="secondary-button" href={artifactDownloadUrl(projectId, artifact.id)}>Download {artifact.label}</a>
+            {!publicDemo && <a className="secondary-button" href={artifactDownloadUrl(projectId, artifact.id)}>Download {artifact.label}</a>}
           </li>)}</ul> : <p className="muted">{isActive(selected) ? "Output will appear when this job finishes." : selected.status === "succeeded" ? "This job produced a report. Open the details below." : "No completed output."}</p>}
         </section>
         <details className="workflow-job-technical" key={selected.id}>

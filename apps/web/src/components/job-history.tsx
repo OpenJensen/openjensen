@@ -1,5 +1,6 @@
 "use client";
 
+import { publicDemo } from "@/lib/public-demo";
 import type { Job } from "@/lib/api";
 import { Icon } from "@/components/icon";
 import "./job-history.css";
@@ -28,7 +29,7 @@ export function JobHistory({ title, newLabel, entries, onNew, onSelect, loading 
   return <section className="job-history" aria-label={title}>
     <header className="job-history-heading">
       <h2>{title}</h2>
-      <button type="button" className="primary-button" disabled={disabled} onClick={onNew}>
+      <button type="button" className="primary-button" disabled={publicDemo || disabled} title={publicDemo ? "Owner access is required to start jobs" : undefined} onClick={onNew}>
         <Icon name="plus" size={15} />{newLabel}
       </button>
     </header>
