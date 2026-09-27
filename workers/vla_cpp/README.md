@@ -10,7 +10,7 @@ runs the historical experiment harness.
 This package converts an F32/BF16 SmolVLA GGUF into LM Q8_0/Q4_0, optionally with
 vision Q8_0, while preserving the action expert, projectors, embeddings, norms and
 other protected tensors. It includes the pinned vla.cpp packed-weight loader patch
-and a versioned subprocess worker. It has no dependency on the Firebird core.
+and a versioned subprocess worker. It has no dependency on the OPEN JENSEN core.
 
 The implementation branches target `main` in `firebird-hackathon-codebase`.
 `feat/quantization_module` provides the shared worker; CPU benchmarking and RTX 3070

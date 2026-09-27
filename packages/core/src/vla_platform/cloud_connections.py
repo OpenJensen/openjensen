@@ -1,7 +1,7 @@
 """Verify operator-managed cloud credentials without provisioning resources.
 
 The workspace stores provider selection only. Tokens, keys, and CLI auth files
-remain managed by the provider CLIs, outside Firebird.
+remain managed by the provider CLIs, outside OPEN JENSEN.
 """
 
 import asyncio

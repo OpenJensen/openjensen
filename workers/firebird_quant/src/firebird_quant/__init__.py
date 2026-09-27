@@ -1,4 +1,4 @@
-"""Firebird Quant: one packed-weight API across model families."""
+"""OPEN JENSEN Quant: one packed-weight API across model families."""
 
 from .codec import PackedTensor, pack
 from .model import QuantizedModel, load_model, quantize

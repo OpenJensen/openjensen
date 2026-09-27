@@ -124,7 +124,7 @@ namespace Firebird.TeachingViewer
         void OnGUI()
         {
             GUILayout.BeginArea(new Rect(12, 12, Mathf.Min(Screen.width - 24, 720), Screen.height - 24));
-            GUILayout.Label(binding?.GeneratedFixture == true ? "GENERATED FIXTURE — no simulator or robot acceptance" : "Firebird — receive-only simulator viewer");
+            GUILayout.Label(binding?.GeneratedFixture == true ? "GENERATED FIXTURE: no simulator or robot acceptance" : "OPEN JENSEN: receive-only simulator viewer");
             GUILayout.Label(DisplayStatus(Time.realtimeSinceStartupAsDouble));
             if (stream?.Latest != null)
             {

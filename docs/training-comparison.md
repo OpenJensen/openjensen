@@ -5,7 +5,7 @@ existing live run in Chrome, plus its [training API documentation](https://docs.
 and [OpenAPI schema](https://api.kiteml.com/v1/openapi.json). No Kite training run
 was launched or changed during this review.
 
-| Area | Kite observed behavior | Firebird behavior and changes |
+| Area | Kite observed behavior | OPEN JENSEN behavior and changes |
 | --- | --- | --- |
 | Dataset entry | Nine starter cards; Hugging Face ID/URL or GCS path; inspect before training | Two immutable Hugging Face examples: SO-101 pickup and SO-100 pick & place. Actual episode previews verified for both starters. |
 | Cameras | Inspect dimensions; map dataset camera names to policy slots. UI explicitly says unchecking is only a label and the trainer still consumes every camera. | Explicit selected-camera list is passed to the SmolVLA worker and preserved in the recipe. |
@@ -19,7 +19,7 @@ Multi-Task DiT, pi0, pi0-FAST, pi0.5, SmolVLA, VLA-JEPA, VQ-BeT, WALL-X,
 XVLA (experimental) and Psi-Zero (experimental). These are observations of its
 available UI choices, not an independent training certification.
 
-## Reading a Firebird run
+## Reading an OPEN JENSEN run
 
 The monitor is on **Fine-tune**, below setup and run history. Selecting an older
 run restores its persisted observations. Refreshing the page does not reset

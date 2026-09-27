@@ -276,14 +276,14 @@ def load(path) -> QuantizedState:
     with safe_open(str(path), framework="pt", device="cpu") as reader:
         metadata = reader.metadata() or {}
         if "firebird_quant" not in metadata:
-            raise ValueError("Not a Firebird Quant artifact")
+            raise ValueError("Not an OPEN JENSEN Quant artifact")
         manifest = json.loads(metadata["firebird_quant"])
         if (
             manifest.get("format") != "firebird-quant"
             or type(manifest.get("version")) is not int
             or manifest["version"] != 1
         ):
-            raise ValueError("Unsupported Firebird Quant format version")
+            raise ValueError("Unsupported OPEN JENSEN Quant format version")
         if set(reader.keys()) != set(manifest["storage_hashes"]):
             raise ValueError("Storage inventory mismatch")
         storage = {name: reader.get_tensor(name) for name in reader.keys()}

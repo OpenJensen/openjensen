@@ -83,7 +83,7 @@ to ACT. Keep original checkpoints and generated policy packages outside Git.
 
 ## Unified model quantization
 
-[Firebird Quant](firebird_quant/README.md) provides a shared packed 4/8-bit API
+[OPEN JENSEN Quant](firebird_quant/README.md) provides a shared packed 4/8-bit API
 for dense PyTorch models and safetensors checkpoints, without model-family or
 parameter-name allowlists. It supports portable dequantize-on-access inference,
 explicit coverage audits, tied weights and verified save/reload. CPU tests cover

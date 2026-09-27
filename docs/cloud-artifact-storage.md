@@ -1,6 +1,6 @@
 # Cloud checkpoint storage
 
-Firebird serves the application on xbox-360. GCP workers download model and dataset
+OPEN JENSEN serves the application on xbox-360. GCP workers download model and dataset
 weights directly from their pinned sources. Checkpoints, exported policies and
 quantized models stay in a private Google Cloud Storage bucket in the selected
 project. They are not automatically downloaded to the Mac or application server.
@@ -19,7 +19,7 @@ resume resolve that ID, download its files on the new cloud worker and verify
 both the registered manifest and every file hash before using the checkpoint.
 
 The GPU workspace retains only the newest two published working checkpoints.
-Earlier checkpoints remain in GCS and can be selected in Firebird. A final
+Earlier checkpoints remain in GCS and can be selected in OPEN JENSEN. A final
 successful training artifact additionally records fresh-process reload evidence.
 An intermediate checkpoint is selectable after publication but is not labeled
 reload-verified until the worker has actually performed that check.

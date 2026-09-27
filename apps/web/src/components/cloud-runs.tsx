@@ -40,7 +40,7 @@ export function CloudRuns({ projectId, onOpenTraining, onOpenSimulation }: { pro
 
   return <div className="cloud-runs">
     <section className="panel managed-cloud-jobs" aria-labelledby="managed-cloud-title">
-      <div className="cloud-heading"><div><h2 id="managed-cloud-title">Application cloud jobs</h2><p>Recorded jobs for the selected project. Status comes from Firebird's job runner; it does not indicate whether a VM is still running.</p></div>
+      <div className="cloud-heading"><div><h2 id="managed-cloud-title">Application cloud jobs</h2><p>Recorded jobs for the selected project. Status comes from OPEN JENSEN's job runner; it does not indicate whether a VM is still running.</p></div>
         <button className="secondary-button" disabled={!projectId || jobs.isFetching} onClick={() => { void jobs.refetch(); if (job) void events.refetch(); }}>Refresh application jobs</button></div>
       {!projectId && <p role="status">Select a project to see its cloud jobs.</p>}
       {projectId && jobs.isPending && <p role="status">Loading application cloud jobs…</p>}

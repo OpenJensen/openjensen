@@ -60,7 +60,7 @@ SmolVLA and π₀ can share the pinned LeRobot environment from the
 environments separate: their Torch, Transformers and PEFT requirements differ.
 
 Install the selected native repository at the commit recorded in the profile,
-following its own installation procedure. In each environment install Firebird
+following its own installation procedure. In each environment install OPEN JENSEN
 with `pip install --no-deps -e /absolute/path/to/this/repository`. Use Python 3.11+
 (GR00T's native environment uses Python 3.12). Record the actual resolved packages
 with `python -m pip freeze --all > /absolute/path/to/locks/model.txt` and pass that

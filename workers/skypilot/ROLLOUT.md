@@ -346,9 +346,9 @@ bash launch-rollout.sh rollout.experimental.local.yaml \
   --experimental --validate-only
 ```
 
-A Firebird download contains an outer `policy/` envelope and an inner policy
+An OPEN JENSEN download contains an outer `policy/` envelope and an inner policy
 folder; the resolver locates exactly one checkpoint without rewriting config,
-weights or processors. External exports do **not** need a Firebird manifest.
+weights or processors. External exports do **not** need an OPEN JENSEN manifest.
 When any `manifest.json` is present, its complete inventory and hashes must match.
 Imported parity, task-success or calibration claims never become verified merely
 because the file hashes match. Bare weights are insufficient: the config, saved

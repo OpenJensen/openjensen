@@ -97,7 +97,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     lock.release()
 
     app = FastAPI(
-        title="Firebird local VLA application",
+        title="OPEN JENSEN local VLA application",
         version=__version__,
         lifespan=lifespan,
         # The web app owns /docs so the reference shares the product's design system.
