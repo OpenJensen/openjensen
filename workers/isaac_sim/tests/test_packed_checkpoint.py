@@ -19,6 +19,7 @@ from test_checkpoint_package import export, manifest, tensor_file
 
 from sim_worker.rollout.checkpoint import inspect_checkpoint
 from sim_worker.rollout.checkpoint_package import resolve_checkpoint
+from sim_worker.rollout.control_schema import FILE, SCOPE, canonical
 
 
 def packed_fixture(root, bits=8):
@@ -82,6 +83,65 @@ def packed_fixture(root, bits=8):
     (root / "model.safetensors").rename(root / "model.fbq")
     (root / "encoding.json").write_text(json.dumps(encoding(bits)))
     return root
+
+
+def add_control_contract(root, *, prediction=8, execution=3):
+    """Generated coordinate provenance only; never an actual recorder or simulator proof."""
+    config = json.loads((root / "config.json").read_text())
+    config.update(chunk_size=prediction, n_action_steps=execution)
+    (root / "config.json").write_bytes(canonical(config))
+    record = {
+        "schema_version": 1,
+        "kind": "simulator_joint_position",
+        "controller": "joint_position_targets",
+        "state_key": "observation.state",
+        "action_key": "action",
+        "state_units": "radians",
+        "action_units": "radians",
+        "timebase": "simulation_seconds",
+        "joint_order": [f"joint_{i}" for i in range(6)],
+        "camera": {
+            "key": "observation.images.front",
+            "width": 32,
+            "height": 32,
+            "prim": "/World/Camera",
+        },
+        "action_fps": 20,
+        "source": {
+            "dataset_snapshot_id": "sha256:" + "a" * 64,
+            "dataset_manifest_sha256": "a" * 64,
+            "demonstrations_sha256": "b" * 64,
+            "scene_sha256": ["c" * 64],
+            "scene_hash_scope": SCOPE,
+            "origins": ["synthetic"],
+        },
+        "physical_calibration_verified": False,
+        "task_success_verified": False,
+    }
+    (root / FILE).write_bytes(canonical(record))
+    (root / "temporal-contract.json").write_bytes(
+        canonical(
+            {
+                "schema_version": 1,
+                "family": "act",
+                "action_fps": 20,
+                "policy_fields": {
+                    "chunk_size": prediction,
+                    "n_action_steps": execution,
+                    "n_obs_steps": 1,
+                },
+                "prediction_horizon": prediction,
+                "execution_horizon": execution,
+                "observation_history": 1,
+                "frame_stride": 1,
+                "action_delta_indices": list(range(prediction)),
+                "observation_delta_indices": [0],
+                "action_delta_timestamps": [i / 20 for i in range(prediction)],
+                "observation_delta_timestamps": [0.0],
+            }
+        )
+    )
+    return record
 
 
 class PackedCheckpointTests(unittest.TestCase):
@@ -204,6 +264,48 @@ class PackedCheckpointTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "manifest"):
             with resolve_checkpoint(policy.parent):
                 self.fail("Changed package admitted")
+
+    def test_packed_control_and_temporal_survive_manifest_archive(self):
+        for bits in (4, 8):
+            outer = self.root / str(bits)
+            policy = packed_fixture(outer / "policy", bits)
+            record = add_control_contract(policy)
+            expected = inspect_policy(policy)
+            manifest(outer)
+            archive = self.root / f"controlled-{bits}.tar"
+            with tarfile.open(archive, "w") as stream:
+                stream.add(outer, arcname="native-quantized")
+            with resolve_checkpoint(archive, archive=True) as admitted:
+                info = admitted.checkpoint
+                self.assertEqual(info.model_id, expected["model_id"])
+                self.assertEqual(info.control_contract, record)
+                self.assertEqual(info.control_contract_sha256, expected["control_contract_sha256"])
+                self.assertEqual((info.chunk_size, info.action_steps), (8, 3))
+                self.assertEqual(
+                    (admitted.directory / FILE).read_bytes(), (policy / FILE).read_bytes()
+                )
+                self.assertEqual(
+                    (admitted.directory / "temporal-contract.json").read_bytes(),
+                    (policy / "temporal-contract.json").read_bytes(),
+                )
+                self.assertEqual(admitted.metadata()["checkpoint"]["control_contract"], record)
+
+    def test_contract_change_between_packed_and_checkpoint_inspection_is_rejected(self):
+        import firebird_quant.native_package as package
+
+        policy = packed_fixture(self.root / "policy")
+        record = add_control_contract(policy)
+        original = package.inspect_policy
+
+        def changed(root):
+            result = original(root)
+            record["joint_order"].reverse()
+            (root / FILE).write_bytes(canonical(record))
+            return result
+
+        with patch.object(package, "inspect_policy", changed):
+            with self.assertRaisesRegex(ValueError, "control contract changed"):
+                inspect_checkpoint(policy)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .native_package import (
     BASE,
+    CONTROL_FIELDS,
     canonical,
     encoding,
     inspect_policy,
@@ -102,7 +103,7 @@ def evaluate(policy, root, config, torch):
 
 
 def convert(source, destination, bits):
-    from firebird_act.bundle import temporal_files, tensor_header, validate_processors
+    from firebird_act.bundle import control_files, temporal_files, tensor_header, validate_processors
     from safetensors.torch import load_file
 
     from . import Recipe, quantize
@@ -131,7 +132,12 @@ def convert(source, destination, bits):
     if candidate.audit["quantized_elements"] <= 0:
         raise ValueError("No weights were packed")
     raw_config = read_json(source / "config.json")
-    names = BASE | validate_processors(source, raw_config) | temporal_files(source, raw_config)
+    names = (
+        BASE
+        | validate_processors(source, raw_config)
+        | temporal_files(source, raw_config)
+        | control_files(source, raw_config)
+    )
     destination.mkdir()
     for name in sorted(names):
         write_new(destination / name, read(source / name))
@@ -146,6 +152,7 @@ def convert(source, destination, bits):
         "versions": versions,
         "model_id": info["model_id"],
         "policy_files": info["files"],
+        **{key: info[key] for key in CONTROL_FIELDS if key in info},
         "baseline": baseline,
         "packed": packed,
         "audit": candidate.audit,
@@ -172,6 +179,7 @@ def reload_packed(root):
         "versions": versions,
         "model_id": before["model_id"],
         "policy_files": before["files"],
+        **{key: before[key] for key in CONTROL_FIELDS if key in before},
         "packed": rows,
         "network_disabled": True,
         "floating_master_reads_blocked": True,

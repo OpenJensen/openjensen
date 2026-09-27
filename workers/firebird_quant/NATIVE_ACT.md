@@ -91,6 +91,8 @@ policy/
   policy_preprocessor.json # original bytes
   policy_postprocessor.json # original bytes
   <referenced statistics>  # original bytes
+  temporal-contract.json  # original bytes, when present
+  control-contract.json   # original canonical bytes, when present
   model.fbq                # packed parameters and retained tensors, no float master
   encoding.json            # exact recipe/runtime/format discriminator
 ```
@@ -109,9 +111,26 @@ and the default recipe. A model identity is SHA256 initialized with
 `firebird-native-packed-policy-v1\0`; for every sorted inference filename it
 hashes its UTF-8 name length (unsigned 64-bit big-endian), name bytes, file size
 (unsigned 64-bit big-endian), and raw 32-byte file SHA256. Thus config, processors,
-statistics, encoding and packed weights all affect identity. Verification and
-lineage are hashed by the outer manifest but do not introduce a model-ID cycle.
+statistics, optional temporal/control contracts, encoding and packed weights all
+affect identity. Verification and lineage are hashed by the outer manifest but
+do not introduce a model-ID cycle.
 A consumer must validate the format and recompute identity before runtime load.
+
+An optional simulator control contract is validated against the saved feature
+names/shapes and temporal cadence. It is copied unchanged, included in the packed
+identity, and reported as `control_contract` plus `control_contract_sha256` in
+both worker probes, verification, manifest metadata and the operation report.
+The owner rejects a dropped or changed sidecar, configuration or processor before
+publication. Legacy policies omit both control fields; absent/null legacy probe
+claims remain compatible. A canonical sidecar whose value is null is invalid.
+
+This preservation does not enable CUDA serving, physical calibration or genuine
+Isaac acceptance. The packed consumer remains CPU-only. Current cloud Run profiles
+also need an explicit compatible policy runtime and its worker dependencies;
+this change does not modify or activate those profiles. Structural tests can
+establish byte/identity preservation, but native conversion/reload and HTTP tests
+must be explicitly run in the pinned environment before claiming runtime evidence
+for a simulator-bound packed policy.
 
 ## Evidence meaning
 

@@ -21,6 +21,11 @@ pytestmark = [
 
 @pytest.fixture(scope="module")
 def real_act(tmp_path_factory):
+    return make_real_act(tmp_path_factory.mktemp("native-act-source"))
+
+
+def make_real_act(root, *, prediction=100, execution=100):
+    """Create real native tensors only in explicitly opted-in tests."""
     import torch
     from lerobot.configs import FeatureType, PolicyFeature
     from lerobot.policies.act.configuration_act import ACTConfig
@@ -40,8 +45,8 @@ def real_act(tmp_path_factory):
         n_vae_encoder_layers=1,
         latent_dim=8,
         use_vae=False,
-        chunk_size=100,
-        n_action_steps=100,
+        chunk_size=prediction,
+        n_action_steps=execution,
         input_features={
             "observation.state": PolicyFeature(FeatureType.STATE, (6,)),
             "observation.images.front": PolicyFeature(FeatureType.VISUAL, (3, 32, 32)),
@@ -56,7 +61,6 @@ def real_act(tmp_path_factory):
         },
         "action": {"mean": torch.arange(6).float(), "std": torch.ones(6) * 3},
     }
-    root = tmp_path_factory.mktemp("native-act-source")
     ACTPolicy(config).save_pretrained(root)
     pre, post = make_act_pre_post_processors(config, dataset_stats=stats)
     pre.save_pretrained(root, config_filename="policy_preprocessor.json")

@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 from .native_package import (
+    CONTROL_FIELDS,
     EVIDENCE_LIMIT,
     JSON_LIMIT,
     RUNTIME,
@@ -284,6 +285,8 @@ def verify_reports(conversion, reload, info):
             or report.get("model_id") != info["model_id"]
             or report.get("policy_files") != info["files"]
             or report.get("network_disabled") is not True
+            or canonical({key: report.get(key) for key in CONTROL_FIELDS})
+            != canonical({key: info.get(key) for key in CONTROL_FIELDS})
         ):
             raise ValueError("Probe runtime/package identity differs")
     prediction = info.get("prediction_horizon", 100)
@@ -318,6 +321,7 @@ def verify_reports(conversion, reload, info):
         "model_id": info["model_id"],
         "prediction_horizon": prediction,
         "execution_horizon": info.get("execution_horizon", 100),
+        **{key: info[key] for key in CONTROL_FIELDS if key in info},
         "versions": conversion["versions"],
         "floating": baseline,
         "packed": candidate,
@@ -342,7 +346,7 @@ def run_job(job):
     source, output, destination = validate_request(job)
     expected = job["source"]["files"]
     with _Owner(job["timeout_seconds"]) as owner:
-        admit_source(source, expected, job["source"]["manifest_sha256"])
+        required, _ = admit_source(source, expected, job["source"]["manifest_sha256"])
         owner.check()
         output.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix=".native-quant-", dir=output) as temporary:
@@ -367,6 +371,11 @@ def run_job(job):
                 bits=job["native_quantization"]["bits"],
             )
             info = inspect_policy(policy)
+            unchanged = required - {"model.safetensors"}
+            if set(info["files"]) != unchanged | {"model.fbq", "encoding.json"} or any(
+                info["files"][name] != expected[name] for name in unchanged
+            ):
+                raise ValueError("Packing changed source configuration, processors or contracts")
             reload = _probe(owner, "reload", policy, scratch / "reload.json")
             if conversion.get("source_files") != expected:
                 raise ValueError("Conversion used a different source inventory")
@@ -390,6 +399,7 @@ def run_job(job):
                 "temporal_contract_sha256": info["files"]
                 .get("temporal-contract.json", {})
                 .get("sha256"),
+                **{key: info[key] for key in CONTROL_FIELDS if key in info},
                 "format": "firebird_quant",
                 "format_version": 1,
                 "model_id": info["model_id"],
