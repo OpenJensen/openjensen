@@ -18,7 +18,7 @@ function ActionTrace({ values, name, unit }: { values: number[]; name: string; u
   return <figure className="replay-action-trace"><figcaption>{name}<span>{unit}</span></figcaption><svg viewBox="0 0 260 56" role="img" aria-label={`${name}: 100 predicted actions, minimum ${low.toPrecision(4)}, maximum ${high.toPrecision(4)} ${unit}`}><line x1="4" y1="52" x2="256" y2="52" stroke="var(--line)" /><polyline points={points} fill="none" stroke="currentColor" strokeWidth="2" /></svg><small>{low.toPrecision(4)} to {high.toPrecision(4)} · actions 1–100</small></figure>;
 }
 
-export function NativeReplayPanel({ projectId, preferredArtifactId, onDataset }: { projectId: string; preferredArtifactId?: string; onDataset: () => void }) {
+export function NativeReplayPanel({ projectId, preferredArtifactId, preferredJobId, onJobSelected, onDataset }: { projectId: string; preferredArtifactId?: string; preferredJobId?: string; onJobSelected?: (id: string) => void; onDataset: () => void }) {
   const client = useQueryClient();
   const options = useQuery({ queryKey: ['policy-options'], queryFn: api.policyOptions, retry: false, refetchInterval: 10000 });
   const jobs = useQuery({ queryKey: ['jobs', projectId], queryFn: () => api.jobs(projectId), enabled: !!projectId, retry: false, refetchInterval: 2000 });
@@ -28,9 +28,9 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, onDataset }:
   const [journalReady, setJournalReady] = useState(false), [reviewed, setReviewed] = useState(false);
   const [policyId, setPolicy] = useState(''), [datasetId, setDataset] = useState(''), [runtimeId, setRuntime] = useState('');
   const [selection, setSelection] = useState(''), [units, setUnits] = useState(''), [generated, setGenerated] = useState(false), [attested, setAttested] = useState(false);
-  const [timeout, setTimeoutValue] = useState('600'), [selectedId, setSelectedId] = useState(''), [accepted, setAccepted] = useState<ReplayJob | null>(null);
+  const [timeout, setTimeoutValue] = useState('600'), [selectedId, setSelectedId] = useState(preferredArtifactId ? '' : preferredJobId ?? ''), [accepted, setAccepted] = useState<ReplayJob | null>(null);
   const [error, setError] = useState(''), [cancelId, setCancelId] = useState(''), [cancelling, setCancelling] = useState(false), [observationIndex, setObservationIndex] = useState(0);
-  const mounted = useRef(true), busy = useRef(false), currentId = useRef(''), attemptVersion = useRef(0), preferred = useRef('');
+  const mounted = useRef(true), busy = useRef(false), currentId = useRef(preferredArtifactId ? '' : preferredJobId ?? ''), attemptVersion = useRef(0), preferred = useRef('');
   const policyChosenManually = useRef(false);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
@@ -54,7 +54,7 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, onDataset }:
   const output = outputs[0];
   const preview = useQuery({ queryKey: ['native-replay-record', projectId, selected?.id, output?.id, output?.manifest_sha256], queryFn: () => readReplay(projectId, output!.id, selected!, report!), enabled: !!selected && !!output && !!report, retry: false });
   const observed = preview.data?.records[observationIndex];
-  function selectJob(id: string) { currentId.current = id; setSelectedId(id); setCancelId(''); setObservationIndex(0); }
+  function selectJob(id: string) { onJobSelected?.(id); currentId.current = id; setSelectedId(id); setCancelId(''); setObservationIndex(0); }
   function saveAttempt(value: PolicyJobAttempt) {
     try { storeAttempt('policy.run.replay', projectId, value); }
     catch {

@@ -11,7 +11,7 @@ class QuantizationJournalUnavailable extends Error {
   constructor() { super('Browser session storage is unavailable. Restore it and reload, then inspect recorded jobs before submitting again.'); }
 }
 
-export function NativeQuantizationPanel({ projectId, preferredArtifactId, onPrepare, onReplay }: { projectId: string; preferredArtifactId?: string; onPrepare: () => void; onReplay?: (artifactId: string) => void }) {
+export function NativeQuantizationPanel({ projectId, preferredArtifactId, preferredJobId, onJobSelected, onPrepare, onReplay }: { projectId: string; preferredArtifactId?: string; preferredJobId?: string; onJobSelected?: (id: string) => void; onPrepare: () => void; onReplay?: (artifactId: string) => void }) {
   const client = useQueryClient();
   const options = useQuery({ queryKey: ['policy-options'], queryFn: api.policyOptions, retry: false, refetchInterval: 10_000 });
   const jobs = useQuery({ queryKey: ['jobs', projectId], queryFn: () => api.jobs(projectId), enabled: !!projectId, retry: false, refetchInterval: 2_000 });
@@ -35,12 +35,12 @@ export function NativeQuantizationPanel({ projectId, preferredArtifactId, onPrep
   const attemptVersion = useRef(0);
   const preference = useRef({ id: preferredArtifactId, consumed: false });
   const [reviewed, setReviewed] = useState(false);
-  const [jobId, setJobId] = useState('');
+  const [jobId, setJobId] = useState(preferredArtifactId ? '' : preferredJobId ?? '');
   const [accepted, setAccepted] = useState<Job | null>(null);
   const [confirmCancel, setConfirmCancel] = useState<string | null>(null);
   const busy = useRef(false);
   const mounted = useRef(true);
-  const selectedId = useRef('');
+  const selectedId = useRef(preferredArtifactId ? '' : preferredJobId ?? '');
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
     try {
@@ -77,7 +77,7 @@ export function NativeQuantizationPanel({ projectId, preferredArtifactId, onPrep
   const reports: Record<string, unknown>[] = Array.isArray(result?.reports) ? result.reports.filter(object) : [];
   const measured = selected ? reports.map(item => measuredNativeReport(item, selected)).find(Boolean) : null;
   const ready = journalReady && !!projectId && options.isSuccess && !options.isError && !!runtime && artifacts.isSuccess && !artifacts.isError && jobs.isSuccess && !jobs.isError && !pending && !attempt.data;
-  function showJob(id: string) { selectedId.current = id; setJobId(id); setConfirmCancel(null); }
+  function showJob(id: string) { onJobSelected?.(id); selectedId.current = id; setJobId(id); setConfirmCancel(null); }
   async function refresh() {
     const version = attemptVersion.current, canReview = attempt.data?.state === 'uncertain';
     const response = await jobs.refetch();
