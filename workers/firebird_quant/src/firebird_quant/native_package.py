@@ -200,7 +200,7 @@ def encoding(bits):
             "include": [],
             "exclude": [],
         },
-        "runtime": RUNTIME,
+        "runtime": dict(RUNTIME),
     }
 
 
@@ -220,14 +220,15 @@ def inspect_policy(root):
 
     files = inventory(root)
     encoded = read_json(root / "encoding.json")
-    bits = (
-        encoded.get("recipe", {}).get("bits") if isinstance(encoded.get("recipe"), dict) else None
-    )
+    recipe = encoded.get("recipe")
+    if not isinstance(recipe, dict):
+        raise ValueError("Native packed encoding requires a recipe object")
+    bits = recipe.get("bits")
     if (
         type(encoded.get("schema_version")) is not int
         or type(encoded.get("format_version")) is not int
-        or type(encoded.get("recipe", {}).get("group_size")) is not int
-        or encoded != encoding(bits)
+        or type(recipe.get("group_size")) is not int
+        or canonical(encoded) != canonical(encoding(bits))
     ):
         raise ValueError("Unsupported native packed encoding")
     config = read_json(root / "config.json")

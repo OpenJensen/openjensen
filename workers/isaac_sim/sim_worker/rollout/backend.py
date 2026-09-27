@@ -49,7 +49,20 @@ class LeRobotPolicy:
         state_dim: int,
         camera_key: str,
     ):
+        packed = (checkpoint / "model.fbq").exists() or (checkpoint / "encoding.json").exists()
         info = inspect_checkpoint(checkpoint)
+        if packed != (
+            (checkpoint / "model.fbq").exists() or (checkpoint / "encoding.json").exists()
+        ):
+            raise ValueError("Checkpoint format changed during inspection")
+        if packed and device != "cpu":
+            raise ValueError("Native packed ACT serving is verified for CPU only")
+        if packed and (
+            state_dim != info.state_dim
+            or camera_key != info.camera_key
+            or not 1 <= action_steps <= info.chunk_size
+        ):
+            raise ValueError("Packed checkpoint features differ from the serving request")
         if version("lerobot") != _LEROBOT_VERSION:
             raise ValueError(f"Install lerobot[smolvla]=={_LEROBOT_VERSION}")
 
@@ -61,7 +74,16 @@ class LeRobotPolicy:
         if device == "cuda" and not torch.cuda.is_available():
             raise ValueError("CUDA was requested but is unavailable")
 
-        config = PreTrainedConfig.from_pretrained(checkpoint, local_files_only=True)
+        if packed:
+            from firebird_quant.native_consumer import load_packed_act
+
+            self._policy, config, self._pre, self._post, loaded_id = load_packed_act(
+                checkpoint.absolute(), device=device, expected_model_id=info.model_id
+            )
+            if loaded_id != info.model_id:
+                raise ValueError("Packed model identity changed during loading")
+        else:
+            config = PreTrainedConfig.from_pretrained(checkpoint, local_files_only=True)
         _check_features(config, state_dim, camera_key, action_steps)
         config.device = device
         if config.type == _ACT:
@@ -73,17 +95,18 @@ class LeRobotPolicy:
         self._camera_key = camera_key
         self._action_steps = action_steps
         self._state_dim = state_dim
-        self._policy = (
-            get_policy_class(config.type)
-            .from_pretrained(checkpoint, config=config, local_files_only=True, strict=True)
-            .to(device)
-            .eval()
-        )
-        self._pre, self._post = make_pre_post_processors(
-            config,
-            pretrained_path=str(checkpoint),
-            preprocessor_overrides={"device_processor": {"device": device}},
-        )
+        if not packed:
+            self._policy = (
+                get_policy_class(config.type)
+                .from_pretrained(checkpoint, config=config, local_files_only=True, strict=True)
+                .to(device)
+                .eval()
+            )
+            self._pre, self._post = make_pre_post_processors(
+                config,
+                pretrained_path=str(checkpoint),
+                preprocessor_overrides={"device_processor": {"device": device}},
+            )
         self.reset()
 
     def model_id(self) -> str:
