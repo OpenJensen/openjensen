@@ -16,7 +16,7 @@ export default defineConfig({
     reducedMotion: 'reduce',
   },
   projects: [
-    { name: 'pure', testMatch: 'durable-submission-pure.spec.ts' },
+    { name: 'pure', testMatch: ['durable-submission-pure.spec.ts', 'native-temporal-pure.spec.ts'] },
     { name: 'openapi', testMatch: 'openapi.spec.ts' },
     { name: 'workflow', testMatch: 'workflow.spec.ts', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1000 } } },
     { name: 'desktop', testMatch: ['dataset-submission.spec.ts', 'recording-preparation.spec.ts', 'distillation-model-choice.spec.ts', 'workspace-ux.spec.ts', 'native-lifecycle-handoff.spec.ts', 'native-replay.spec.ts', 'native-distillation.spec.ts', 'native-quantization.spec.ts', 'native-simulation.spec.ts', 'decision.spec.ts', 'teaching.spec.ts', 'api-reference.spec.ts', 'augmentation.spec.ts', 'cloud-connections.spec.ts', 'gpu-picker.spec.ts', 'dataset-starters.spec.ts', 'training-monitor.spec.ts', 'hf-settings.spec.ts', 'quantization.spec.ts', 'cloud-runs.spec.ts'], use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1000 } } },
