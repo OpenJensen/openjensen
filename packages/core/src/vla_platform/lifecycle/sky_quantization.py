@@ -8,7 +8,7 @@ VENDOR_COMMIT = "52439f7c6c362d7bee218b400b9080cc32d75cc3"
 CPPZMQ_SHA256 = "1f8b641161dcf12641ae4951c2c49552de425be88d66c988ec5e85046f1320f6"
 
 
-def stage_quantization(bundle: Path, training_root: Path) -> list[str]:
+def stage_native_worker(bundle: Path, training_root: Path) -> list[str]:
     """Stage source only and return setup lines to append after trainer installation."""
     source = training_root.parent / "vla_cpp"
     package = source / "policykit"
@@ -22,6 +22,7 @@ def stage_quantization(bundle: Path, training_root: Path) -> list[str]:
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
     )
     shutil.copyfile(source / "pyproject.toml", destination / "pyproject.toml")
+    shutil.copyfile(source / "uv.lock", destination / "uv.lock")
     return [
         # The pinned root CMake configures its serving targets unconditionally,
         # so their Protobuf/ZeroMQ headers are required even for the CPU probe.
@@ -44,6 +45,11 @@ def stage_quantization(bundle: Path, training_root: Path) -> list[str]:
         "git -C vendor/vla.cpp apply "
         '"$PWD/quantization-worker/policykit/patches/vla-cpp-smolvla-packed.patch"',
         ".venv/bin/python -m policykit.worker --describe-runtime vendor/vla.cpp",
+    ]
+
+
+def stage_quantization(bundle: Path, training_root: Path) -> list[str]:
+    return stage_native_worker(bundle, training_root) + [
         ".venv/bin/cmake -S vendor/vla.cpp -B native-smoke "
         "-DCMAKE_BUILD_TYPE=Release -DGGML_CUDA=OFF -DGGML_METAL=OFF "
         "-DGGML_NATIVE=OFF -DVLA_BUILD_TESTS=ON -DLLAMA_CURL=OFF",

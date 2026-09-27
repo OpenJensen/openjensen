@@ -3,13 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiOrigin } from "@/lib/api";
-import { basePath } from "@/lib/base-path";
 import type { Room } from "livekit-client";
 
 type State = { mode: string; episode_id: string | null; revision: number; session_id: string | null; instruction: string; outcome: string; steps: number; sim_time: number; joints: string[]; state_rad: number[] | null; fault: string | null };
 type Connection = { connected: boolean; state: State | null; message: string | null; voice_configured: boolean };
 type Receipt = { command_id: string; status: "queued" | "executing" | "acknowledged" | "rejected"; error?: string };
-const endpoint = `${apiOrigin}${basePath}/api/v1/teaching`;
+const endpoint = `${apiOrigin}/api/v1/teaching`;
 async function request<T>(path: string, body?: object): Promise<T> {
   const response = await fetch(endpoint + path, { method: body ? "POST" : "GET", headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined, cache: "no-store" });
   const value = await response.json();

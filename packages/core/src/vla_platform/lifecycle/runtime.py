@@ -114,6 +114,8 @@ class PublicRuntime(StrictRecord):
     act_export: bool = False
     training_model_ids: list[str]
     simulation: bool
+    engine_evaluation: bool = False
+    run: bool = False
     gpu_name: str | None
     gpu_memory_mib: int | None
     training_gpu_count: int | None
@@ -165,6 +167,8 @@ class RuntimeCatalog(StrictRecord):
                         x.training_model_ids if x.training_python and x.training_root else []
                     ),
                     "simulation": bool(x.simulator_lane),
+                    "engine_evaluation": True,
+                    "run": True,
                     "gpu_name": x.gpu_name,
                     "gpu_memory_mib": x.gpu_memory_mib,
                     # The current native trainer uses one device per run. This

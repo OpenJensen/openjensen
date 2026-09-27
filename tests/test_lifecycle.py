@@ -210,6 +210,8 @@ def test_training_options_expose_configured_gpu_specs_without_private_runtime_fi
         "act_export": False,
         "training_model_ids": ["smolvla"],
         "simulation": True,
+        "engine_evaluation": True,
+        "run": True,
         "gpu_name": "NVIDIA GeForce RTX 3070",
         "gpu_memory_mib": 8192,
         "training_gpu_count": 1,

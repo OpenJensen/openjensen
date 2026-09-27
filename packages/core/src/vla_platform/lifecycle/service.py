@@ -587,8 +587,15 @@ class Lifecycle:
         self.compute.require_enabled(runtime)
         cloud_target = None
         if runtime.execution == "skypilot":
-            if request.operation not in {"policy.finetune", "policy.quantize"}:
-                raise ValueError("SkyPilot cloud GPUs support fine-tuning and quantization")
+            if request.operation not in {
+                "policy.finetune",
+                "policy.quantize",
+                "policy.evaluate",
+                "policy.run",
+            }:
+                raise ValueError(
+                    "SkyPilot cloud GPUs support training, quantization, engine evaluation and run"
+                )
         if request.source_id and self.catalog.source(request.source_id) is None:
             raise ValueError("Policy source is not configured")
         if request.evaluation.suite == "libero_spatial" and request.operation in {
@@ -640,6 +647,29 @@ class Lifecycle:
                 and artifact.metadata.get("architecture", "smolvla") != "smolvla"
             ):
                 raise ValueError("No export adapter is registered for this policy architecture")
+            if runtime.execution == "skypilot" and request.operation in {
+                "policy.evaluate",
+                "policy.run",
+            }:
+                if (
+                    request.evaluation.mode != "engine"
+                    or request.evaluation.suite != "libero_object"
+                ):
+                    raise ValueError(
+                        "Cloud Evaluate and Run support engine inference tests; "
+                        "simulator task evaluation is not configured"
+                    )
+                if artifact.metadata.get("architecture", "smolvla") != "smolvla":
+                    raise ValueError("Cloud inference currently supports SmolVLA artifacts")
+                if artifact.format not in {"gguf", "deployment_package"}:
+                    raise ValueError(
+                        "Quantize the trained checkpoint first, then select its GGUF or package"
+                    )
+                if request.training is not None or request.limits is not None:
+                    raise ValueError(
+                        "Engine inference does not accept training recipes "
+                        "or robot task-success limits"
+                    )
             if request.operation == "policy.quantize":
                 if artifact.format not in {"training_checkpoint", "native_checkpoint", "gguf"}:
                     raise ValueError("Choose a trained checkpoint or floating GGUF to quantize")
@@ -1080,8 +1110,13 @@ class Lifecycle:
 
             async def progress(message):
                 nonlocal cloud_stage
-                if message.startswith("_quantization:"):
-                    detail = json.loads(message[len("_quantization:") :])
+                if message.startswith("_cloud_setup:"):
+                    detail = json.loads(message.split(":", 1)[1])
+                    cloud_stage = detail["phase"]
+                    await self.event(job, cloud_stage, detail["message"], detail)
+                    return
+                if message.startswith(("_quantization:", "_inference:")):
+                    detail = json.loads(message.split(":", 1)[1])
                     cloud_stage = detail.get("phase", "quantizing")
                     await self.event(
                         job, cloud_stage, detail.get("message", "Quantizing checkpoint")
@@ -1098,8 +1133,16 @@ class Lifecycle:
                     return
                 if message.startswith("Optimizer step"):
                     cloud_stage = "training"
-                elif message.startswith("Downloading training"):
+                elif message.startswith(("Downloading training", "Saving cloud artifacts")):
                     cloud_stage = "saving"
+                elif message == "Quantizing on Google Cloud":
+                    cloud_stage = "quantizing"
+                elif message == "Evaluating on Google Cloud":
+                    cloud_stage = "evaluating"
+                elif message == "Running policy on Google Cloud":
+                    cloud_stage = "running"
+                elif message == "Training on Google Cloud":
+                    cloud_stage = "training"
                 elif message.startswith("Stopping Google Cloud"):
                     cloud_stage = "finishing"
                 await self.event(job, cloud_stage, message)

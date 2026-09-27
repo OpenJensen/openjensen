@@ -183,6 +183,7 @@ def main():
         "firebird_vla.lerobot_application",
         "firebird_vla.psi_application",
         "policykit.cloud_quantize",
+        "policykit.cloud_inference",
     }:
         raise ValueError("Unknown cloud worker module")
     code = run_worker(

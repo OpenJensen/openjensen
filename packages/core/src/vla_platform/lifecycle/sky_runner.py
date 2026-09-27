@@ -153,8 +153,13 @@ def prepare(payload: dict, stage_dir: Path, target: dict) -> tuple[Path, dict]:
         raise ValueError("Cloud disk must be between 100 and 2048 GiB")
     if type(idle) is not int or not 1 <= idle <= 60:
         raise ValueError("Cloud idle teardown must be between 1 and 60 minutes")
-    if payload.get("operation") not in {"policy.finetune", "policy.quantize"}:
-        raise ValueError("SkyPilot supports fine-tuning and quantization")
+    if payload.get("operation") not in {
+        "policy.finetune",
+        "policy.quantize",
+        "policy.evaluate",
+        "policy.run",
+    }:
+        raise ValueError("SkyPilot supports training, quantization, engine evaluation and run")
     recipe = effective_training_recipe(payload)
     steps = recipe.get("steps", 20000)
     every = recipe.get("save_every", max(1, (steps + 4) // 5) if type(steps) is int else 4000)
@@ -231,6 +236,11 @@ def prepare(payload: dict, stage_dir: Path, target: dict) -> tuple[Path, dict]:
 
         worker_module = WORKER_MODULE
         extra_setup = stage_psi(bundle, root)
+    elif payload["operation"] in {"policy.evaluate", "policy.run"}:
+        from vla_platform.lifecycle.sky_inference import WORKER_MODULE, stage_inference
+
+        worker_module = WORKER_MODULE
+        extra_setup = stage_inference(bundle, root, accelerator)
     elif payload["operation"] == "policy.quantize":
         from vla_platform.lifecycle.sky_quantization import WORKER_MODULE, stage_quantization
 
@@ -257,7 +267,7 @@ def prepare(payload: dict, stage_dir: Path, target: dict) -> tuple[Path, dict]:
             "assert torchvision.__version__ == '0.26.0+cu128'; "
             "assert torch.version.cuda == '12.8'\"",
         ]
-    elif not psi_training:
+    elif not psi_training and payload["operation"] not in {"policy.evaluate", "policy.run"}:
         dependency_setup = [
             "python3 -m uv pip install --python .venv/bin/python "
             "-r worker/requirements-smolvla-linux.txt"
@@ -282,7 +292,7 @@ def prepare(payload: dict, stage_dir: Path, target: dict) -> tuple[Path, dict]:
         "memory": "32+"
         if psi_training
         else "16+"
-        if payload["operation"] == "policy.quantize"
+        if payload["operation"] in {"policy.quantize", "policy.evaluate", "policy.run"}
         else "4+",
         "disk_size": disk,
         "use_spot": False,
@@ -379,6 +389,64 @@ async def _safe_output(stream, secrets: tuple[str, ...] = ()):
         yield pattern.sub(b"[REDACTED]", carry)
 
 
+class SetupProgress:
+    """Recognize bounded build milestones without publishing any setup log content."""
+
+    _ansi = re.compile(r"\x1b(?:\][^\x07\x1b]*(?:\x07|\x1b\\)|\[[0-?]*[ -/]*[@-~])")
+    _build = re.compile(r"\[\s*(\d{1,3})%\]\s+(?:Building (?:C|CXX|CUDA)|Linking|Built target)\b")
+
+    def __init__(self):
+        self.seen = set()
+        self.build_percent = -1
+        self.compiling = False
+
+    def observe(self, line: str) -> dict | None:
+        # _command already bounds lines. Do not retain package names, paths, URLs,
+        # credential-bearing commands, or arbitrary messages in the public event.
+        line = self._ansi.sub("", line[:16384])
+        build = self._build.search(line)
+        if build and 0 <= (percent := int(build[1])) <= 100:
+            self.compiling = True
+            percent = (percent // 5) * 5
+            if percent <= self.build_percent:
+                return None
+            self.build_percent = percent
+            return {
+                "phase": "compiling",
+                "message": f"Compiling native engine · build progress {percent}%",
+                "scope": "native_build",
+                "build_percent": percent,
+            }
+        if re.search(
+            r"-- (?:The (?:C|CXX|CUDA) compiler identification|"
+            r"Configuring done|Found CUDAToolkit:)",
+            line,
+        ):
+            self.compiling = True
+            key, phase, message = "configure", "compiling", "Configuring native engine"
+            if self.build_percent >= 0:
+                return None
+        elif not self.compiling and re.search(
+            r"(?:Setting up|Unpacking) (?:cuda-|libcublas-)", line
+        ):
+            key, phase, message = "cuda", "setup", "Installing CUDA dependencies"
+        elif not self.compiling and re.search(
+            r"(?:Reading package lists|Preparing to unpack|Setting up [a-z0-9][a-z0-9+.-]*[ :])",
+            line,
+        ):
+            key, phase, message = "system", "setup", "Installing system dependencies"
+        elif not self.compiling and re.search(
+            r"(?:Resolved|Prepared|Installed) \d+ packages? in ", line
+        ):
+            key, phase, message = "python", "setup", "Installing Python dependencies"
+        else:
+            return None
+        if key in self.seen:
+            return None
+        self.seen.add(key)
+        return {"phase": phase, "message": message, "scope": "cloud_setup"}
+
+
 async def _command(
     argv: list[str],
     stage_dir: Path,
@@ -409,6 +477,37 @@ async def _command(
     )
     captured = bytearray()
     pending = ""
+
+    async def process_line(line):
+        if not line:
+            return
+        if on_line:
+            await on_line(line)
+        if not on_event:
+            return
+        # SkyPilot may prefix job-log lines. Progress content is parsed strictly
+        # and never treated as executable text.
+        start = line.find("{")
+        if start < 0:
+            return
+        try:
+            item = json.loads(line[start:])
+        except ValueError:
+            return
+        if isinstance(item, dict) and (
+            type(item.get("step")) is int or isinstance(item.get("phase"), str)
+        ):
+            prefix = (
+                "_quantization:"
+                if item.get("operation") == "policy.quantize"
+                else "_inference:"
+                if item.get("operation") in {"policy.evaluate", "policy.run"}
+                else "_telemetry:"
+            )
+            await on_event(prefix + json.dumps(item))
+            if item.get("checkpoint_saved") and type(item.get("step")) is int:
+                await on_event(f"_checkpoint_ready:{item['step']}")
+
     log_path = stage_dir / "worker.log"
     written = log_path.stat().st_size if log_path.exists() else 0
     try:
@@ -424,33 +523,12 @@ async def _command(
                         written += len(part)
                     if on_event or on_line:
                         pending += chunk.decode("utf-8", errors="replace")
-                        lines = pending.split("\n")
+                        lines = re.split(r"\r\n|\r|\n", pending)
                         pending = lines.pop()[-16384:]
                         for line in lines:
-                            if on_line:
-                                await on_line(line)
-                            if not on_event:
-                                continue
-                            # SkyPilot may prefix job-log lines. Progress content is
-                            # parsed strictly and never treated as executable text.
-                            start = line.find("{")
-                            if start < 0:
-                                continue
-                            try:
-                                item = json.loads(line[start:])
-                            except ValueError:
-                                continue
-                            if isinstance(item, dict) and (
-                                type(item.get("step")) is int or isinstance(item.get("phase"), str)
-                            ):
-                                prefix = (
-                                    "_quantization:"
-                                    if item.get("operation") == "policy.quantize"
-                                    else "_telemetry:"
-                                )
-                                await on_event(prefix + json.dumps(item))
-                                if item.get("checkpoint_saved") and type(item.get("step")) is int:
-                                    await on_event(f"_checkpoint_ready:{item['step']}")
+                            await process_line(line)
+                if pending:
+                    await process_line(pending)
                 await process.wait()
         return process.returncode, captured.decode("utf-8", errors="replace")
     finally:
@@ -1097,11 +1175,19 @@ async def _run(
             )
         state["request_id"] = request[1]
         _write_json(state_path, state)
+        setup_progress = SetupProgress()
+
+        async def setup_line(line):
+            detail = setup_progress.observe(line)
+            if detail:
+                await on_event("_cloud_setup:" + json.dumps(detail))
+
         code, setup_output = await _command(
             [sky, "api", "logs", request[1], *_args(state)],
             stage_dir,
             timeout=timeout,
             on_event=on_event,
+            on_line=setup_line,
         )
         if code:
             from vla_platform.lifecycle.cloud_errors import cloud_launch_error
@@ -1112,6 +1198,10 @@ async def _run(
         await on_event(
             "Quantizing on Google Cloud"
             if payload["operation"] == "policy.quantize"
+            else "Evaluating on Google Cloud"
+            if payload["operation"] == "policy.evaluate"
+            else "Running policy on Google Cloud"
+            if payload["operation"] == "policy.run"
             else "Training on Google Cloud"
         )
         await follow_training(sky, stage_dir, state, timeout, on_event)

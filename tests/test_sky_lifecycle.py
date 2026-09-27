@@ -314,8 +314,6 @@ def test_cloud_selection_cannot_reroute_to_native_while_queued(cloud):
     [
         "policy.import",
         "policy.export",
-        "policy.evaluate",
-        "policy.run",
         "policy.workflow",
     ],
 )
@@ -327,7 +325,7 @@ def test_cloud_rejects_unsupported_operations(cloud, operation):
             fields = {"operation": operation, "artifact_id": "unused", "training": None}
             if operation == "policy.export":
                 fields["dataset_job_id"] = None
-            with pytest.raises(ValueError, match="support fine-tuning and quantization"):
+            with pytest.raises(ValueError, match="support training, quantization"):
                 await execution.submit(PROJECT, request(**fields))
             assert [job.id for job in await execution.list(PROJECT)] == [DATASET]
             assert not execution.tasks
@@ -722,5 +720,144 @@ def test_cloud_jobs_use_two_independent_gpu_slots(cloud):
             )
             assert all(job.status == "succeeded" for job in results)
             assert peak == 2
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("operation", ["policy.evaluate", "policy.run"])
+@pytest.mark.parametrize("kind", ["gguf", "deployment_package"])
+def test_cloud_evaluate_and_run_dispatch_exact_selected_artifact(cloud, operation, kind):
+    state, runner, workspace = cloud
+    calls = []
+
+    async def run(payload, stage_dir, target, on_event):
+        calls.append(payload)
+        if payload["operation"] == "policy.finetune":
+            write_result(payload, stage_dir)
+            result = json.loads((stage_dir / "result.json").read_text())
+            result["artifact"]["format"] = kind
+        else:
+            await on_event('_inference:{"phase":"evaluating","message":"Measuring CUDA inference"}')
+            result = {
+                "schema_version": 1,
+                "job_id": payload["job_id"],
+                "report": {
+                    "scope": "engine_diagnostics",
+                    "fixture_only": True,
+                    "p50_ms": 10,
+                    "p95_ms": 12,
+                    "peak_device_mib": 1000,
+                    "finite_action_values": 1600,
+                    "task_success": None,
+                },
+            }
+        (stage_dir / "result.json").write_text(json.dumps(result))
+        return 0
+
+    runner.run = run
+
+    async def exercise():
+        async with workspace() as execution:
+            first = await finished(execution, await execution.submit(PROJECT, request()))
+            selected = first.result.artifacts[0]
+            result = await finished(
+                execution,
+                await execution.submit(
+                    PROJECT,
+                    request(
+                        operation=operation,
+                        artifact_id=selected.id,
+                        training=None,
+                        evaluation={"mode": "engine", "warmups": 1, "repetitions": 2},
+                    ),
+                ),
+            )
+            assert result.status == "succeeded", result.error
+            assert calls[-1]["operation"] == operation
+            assert calls[-1]["artifact"]["id"] == selected.id
+            assert calls[-1]["artifact"]["format"] == kind
+            assert result.result.reports[0]["p95_ms"] == 12
+            assert result.result.reports[0]["task_success"] is None
+            assert state["native_calls"] == 0
+            assert any(
+                event.stage == "evaluating" for event in execution.lifecycle.events(result.id)
+            )
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    "invalid,match",
+    [
+        ({"evaluation": {"mode": "libero"}}, "engine inference"),
+        ({"limits": {}}, "task-success limits"),
+        ({"training": {"steps": 20}}, "training recipes"),
+    ],
+)
+def test_cloud_inference_rejects_incompatible_modes_before_allocating(cloud, invalid, match):
+    _, runner, workspace = cloud
+    calls = []
+
+    async def run(payload, stage_dir, target, on_event):
+        calls.append(payload)
+        write_result(payload, stage_dir)
+        result = json.loads((stage_dir / "result.json").read_text())
+        result["artifact"]["format"] = "gguf"
+        (stage_dir / "result.json").write_text(json.dumps(result))
+        return 0
+
+    runner.run = run
+
+    async def exercise():
+        async with workspace() as execution:
+            first = await finished(execution, await execution.submit(PROJECT, request()))
+            with pytest.raises(ValueError, match=match):
+                await execution.submit(
+                    PROJECT,
+                    request(
+                        **{
+                            "operation": "policy.evaluate",
+                            "artifact_id": first.result.artifacts[0].id,
+                            "training": None,
+                            **invalid,
+                        }
+                    ),
+                )
+            assert len(calls) == 1
+
+    asyncio.run(exercise())
+
+
+def test_cloud_setup_events_update_running_job_without_claiming_job_percentage(cloud):
+    _, runner, workspace = cloud
+
+    async def exercise():
+        async with workspace() as execution:
+
+            async def run(payload, stage_dir, target, on_event):
+                before = await execution.get(payload["job_id"])
+                progress = {
+                    "phase": "compiling",
+                    "message": "Compiling native engine · build progress 35%",
+                    "scope": "native_build",
+                    "build_percent": 35,
+                }
+                await on_event("_cloud_setup:" + json.dumps(progress))
+                current = await execution.get(payload["job_id"])
+                assert current.status == "running"
+                assert current.stage == "compiling"
+                assert current.updated_at > before.updated_at
+                event = execution.lifecycle.events(payload["job_id"])[-1]
+                assert event.stage == "compiling"
+                assert event.data == progress
+                assert "percent" not in event.data
+                await on_event("Training on Google Cloud")
+                assert (await execution.get(payload["job_id"])).stage == "training"
+                write_result(payload, stage_dir)
+                return 0
+
+            runner.run = run
+            result = await finished(execution, await execution.submit(PROJECT, request()))
+            assert result.status == "succeeded", result.error
 
     asyncio.run(exercise())

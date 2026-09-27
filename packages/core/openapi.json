@@ -2882,6 +2882,11 @@
             "title": "Enabled",
             "type": "boolean"
           },
+          "engine_evaluation": {
+            "default": false,
+            "title": "Engine Evaluation",
+            "type": "boolean"
+          },
           "execution": {
             "default": "native",
             "enum": [
@@ -2953,6 +2958,11 @@
               }
             ],
             "title": "Region"
+          },
+          "run": {
+            "default": false,
+            "title": "Run",
+            "type": "boolean"
           },
           "simulation": {
             "title": "Simulation",

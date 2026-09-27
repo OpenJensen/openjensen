@@ -281,6 +281,15 @@ def engine(job):
     build = Path(runtime["build"])
     output = Path(job["output_dir"])
     evaluation = job["parameters"]["evaluation"]
+    cameras = manifest["metadata"].get("camera_keys")
+    if cameras is not None and (
+        not isinstance(cameras, list)
+        or not 1 <= len(cameras) <= 8
+        or any(not isinstance(camera, str) or not camera for camera in cameras)
+        or len(set(cameras)) != len(cameras)
+    ):
+        raise ValueError("Artifact camera selection is invalid for native inference")
+    image_count = len(cameras) if cameras else 2
 
     def measured(argv, name):
         log = output / name
@@ -300,7 +309,7 @@ def engine(job):
         return text, memory
 
     text, probe_memory = measured(
-        [str(build / "tests/vla_predict_check"), str(model)], "reload.log"
+        [str(build / "tests/vla_predict_check"), str(model), "", str(image_count)], "reload.log"
     )
     match = re.search(r"action_len=(\d+)\n", text)
     action_length = contract["action_length"]
@@ -320,9 +329,9 @@ def engine(job):
             "--ckpt",
             str(model),
             "--images",
-            "2",
+            str(image_count),
             "--size",
-            "512",
+            str(contract["image_size"]),
             "--warmup",
             str(evaluation["warmups"]),
             "--reps",
@@ -352,6 +361,16 @@ def engine(job):
         "runtime": identity,
         "fresh_reload_verified": True,
         "finite_action_values": len(values),
+        "action_preview": values[: contract["real_action_dim"]],
+        "synthetic_input": {
+            "camera_count": image_count,
+            "camera_keys": cameras,
+            "image_size": contract["image_size"],
+            "description": (
+                "Fixed native image patterns, token IDs, state and noise; no dataset replay"
+            ),
+        },
+        "task_success": None,
         "p50_ms": percentile(samples, 50),
         "p95_ms": percentile(samples, 95),
         "samples_ms": samples,
