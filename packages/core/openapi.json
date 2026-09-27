@@ -1411,6 +1411,56 @@
         "title": "DatasetSnapshot",
         "type": "object"
       },
+      "DecisionStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "advisory_only": {
+            "const": true,
+            "default": true,
+            "title": "Advisory Only",
+            "type": "boolean"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "busy": {
+            "title": "Busy",
+            "type": "boolean"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "license": {
+            "default": "CC-BY-NC-SA-4.0",
+            "title": "License",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "model": {
+            "default": "muose/Muose-50M-Decision",
+            "title": "Model",
+            "type": "string"
+          },
+          "revision": {
+            "default": "5afb8eeff127621fea2d66fc63f56798ada12eda",
+            "title": "Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "configured",
+          "available",
+          "busy",
+          "message"
+        ],
+        "title": "DecisionStatus",
+        "type": "object"
+      },
       "EpisodePage": {
         "additionalProperties": false,
         "properties": {
@@ -2960,6 +3010,153 @@
         "title": "PublicRuntime",
         "type": "object"
       },
+      "Score": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "logit": {
+            "title": "Logit",
+            "type": "number"
+          },
+          "relative_weight": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Relative Weight",
+            "type": "number"
+          },
+          "tokens": {
+            "maximum": 512.0,
+            "minimum": 1.0,
+            "title": "Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "logit",
+          "relative_weight",
+          "tokens"
+        ],
+        "title": "Score",
+        "type": "object"
+      },
+      "ScoreResult": {
+        "additionalProperties": false,
+        "properties": {
+          "advisory_only": {
+            "const": true,
+            "title": "Advisory Only",
+            "type": "boolean"
+          },
+          "calibrated": {
+            "const": false,
+            "title": "Calibrated",
+            "type": "boolean"
+          },
+          "caveats": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Caveats",
+            "type": "array"
+          },
+          "device": {
+            "const": "cpu",
+            "title": "Device",
+            "type": "string"
+          },
+          "license": {
+            "const": "CC-BY-NC-SA-4.0",
+            "title": "License",
+            "type": "string"
+          },
+          "model": {
+            "const": "muose/Muose-50M-Decision",
+            "title": "Model",
+            "type": "string"
+          },
+          "model_sha256": {
+            "title": "Model Sha256",
+            "type": "string"
+          },
+          "prompt_template": {
+            "const": "firebird-experimental-sections-v1",
+            "title": "Prompt Template",
+            "type": "string"
+          },
+          "prompt_template_sha256": {
+            "title": "Prompt Template Sha256",
+            "type": "string"
+          },
+          "request_sha256": {
+            "title": "Request Sha256",
+            "type": "string"
+          },
+          "revision": {
+            "const": "5afb8eeff127621fea2d66fc63f56798ada12eda",
+            "title": "Revision",
+            "type": "string"
+          },
+          "runtime_versions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Runtime Versions",
+            "type": "object"
+          },
+          "schema_version": {
+            "const": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "scores": {
+            "items": {
+              "$ref": "#/components/schemas/Score"
+            },
+            "maxItems": 8,
+            "minItems": 2,
+            "title": "Scores",
+            "type": "array"
+          },
+          "selected_id": {
+            "title": "Selected Id",
+            "type": "string"
+          },
+          "threads": {
+            "const": 2,
+            "title": "Threads",
+            "type": "integer"
+          },
+          "timing_ms": {
+            "$ref": "#/components/schemas/Timing"
+          }
+        },
+        "required": [
+          "schema_version",
+          "model",
+          "revision",
+          "model_sha256",
+          "license",
+          "prompt_template",
+          "prompt_template_sha256",
+          "request_sha256",
+          "device",
+          "threads",
+          "runtime_versions",
+          "advisory_only",
+          "calibrated",
+          "selected_id",
+          "scores",
+          "timing_ms",
+          "caveats"
+        ],
+        "title": "ScoreResult",
+        "type": "object"
+      },
       "TeachingCommand": {
         "additionalProperties": false,
         "properties": {
@@ -3017,6 +3214,27 @@
           "operation"
         ],
         "title": "TeachingCommand",
+        "type": "object"
+      },
+      "Timing": {
+        "additionalProperties": false,
+        "properties": {
+          "load": {
+            "minimum": 0.0,
+            "title": "Load",
+            "type": "number"
+          },
+          "score": {
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "load",
+          "score"
+        ],
+        "title": "Timing",
         "type": "object"
       },
       "TrainingCheckpoint": {
@@ -3704,6 +3922,113 @@
         "summary": "Prepare Gcp Compute",
         "tags": [
           "Compute settings"
+        ]
+      }
+    },
+    "/api/v1/decision/score": {
+      "post": {
+        "operationId": "score_api_v1_decision_score_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "criteria": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+                          "title": "Id",
+                          "type": "string"
+                        },
+                        "text": {
+                          "maxLength": 2000,
+                          "minLength": 1,
+                          "title": "Text",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "text"
+                      ],
+                      "title": "Criterion",
+                      "type": "object"
+                    },
+                    "maxItems": 8,
+                    "minItems": 2,
+                    "title": "Criteria",
+                    "type": "array"
+                  },
+                  "instructions": {
+                    "maxLength": 2000,
+                    "minLength": 1,
+                    "title": "Instructions",
+                    "type": "string"
+                  },
+                  "schema_version": {
+                    "const": 1,
+                    "title": "Schema Version",
+                    "type": "integer"
+                  },
+                  "state": {
+                    "maxLength": 8000,
+                    "minLength": 1,
+                    "title": "State",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "schema_version",
+                  "state",
+                  "instructions",
+                  "criteria"
+                ],
+                "title": "ScoreRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoreResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Score",
+        "tags": [
+          "Decision advisory"
+        ]
+      }
+    },
+    "/api/v1/decision/status": {
+      "get": {
+        "operationId": "status_api_v1_decision_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Status",
+        "tags": [
+          "Decision advisory"
         ]
       }
     },

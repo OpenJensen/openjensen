@@ -178,6 +178,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/decision/score": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Score */
+        post: operations["score_api_v1_decision_score_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/decision/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Status */
+        get: operations["status_api_v1_decision_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/health": {
         parameters: {
             query?: never;
@@ -1120,6 +1154,38 @@ export interface components {
             /** Warnings */
             warnings: string[];
         };
+        /** DecisionStatus */
+        DecisionStatus: {
+            /**
+             * Advisory Only
+             * @default true
+             * @constant
+             */
+            advisory_only: true;
+            /** Available */
+            available: boolean;
+            /** Busy */
+            busy: boolean;
+            /** Configured */
+            configured: boolean;
+            /**
+             * License
+             * @default CC-BY-NC-SA-4.0
+             */
+            license: string;
+            /** Message */
+            message: string;
+            /**
+             * Model
+             * @default muose/Muose-50M-Decision
+             */
+            model: string;
+            /**
+             * Revision
+             * @default 5afb8eeff127621fea2d66fc63f56798ada12eda
+             */
+            revision: string;
+        };
         /** EpisodePage */
         EpisodePage: {
             /** Episodes */
@@ -1727,6 +1793,82 @@ export interface components {
             /** Unavailable Reason */
             unavailable_reason?: string | null;
         };
+        /** Score */
+        Score: {
+            /** Id */
+            id: string;
+            /** Logit */
+            logit: number;
+            /** Relative Weight */
+            relative_weight: number;
+            /** Tokens */
+            tokens: number;
+        };
+        /** ScoreResult */
+        ScoreResult: {
+            /**
+             * Advisory Only
+             * @constant
+             */
+            advisory_only: true;
+            /**
+             * Calibrated
+             * @constant
+             */
+            calibrated: false;
+            /** Caveats */
+            caveats: string[];
+            /**
+             * Device
+             * @constant
+             */
+            device: "cpu";
+            /**
+             * License
+             * @constant
+             */
+            license: "CC-BY-NC-SA-4.0";
+            /**
+             * Model
+             * @constant
+             */
+            model: "muose/Muose-50M-Decision";
+            /** Model Sha256 */
+            model_sha256: string;
+            /**
+             * Prompt Template
+             * @constant
+             */
+            prompt_template: "firebird-experimental-sections-v1";
+            /** Prompt Template Sha256 */
+            prompt_template_sha256: string;
+            /** Request Sha256 */
+            request_sha256: string;
+            /**
+             * Revision
+             * @constant
+             */
+            revision: "5afb8eeff127621fea2d66fc63f56798ada12eda";
+            /** Runtime Versions */
+            runtime_versions: {
+                [key: string]: string;
+            };
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: 1;
+            /** Scores */
+            scores: components["schemas"]["Score"][];
+            /** Selected Id */
+            selected_id: string;
+            /**
+             * Threads
+             * @constant
+             */
+            threads: 2;
+            timing_ms: components["schemas"]["Timing"];
+        };
         /** TeachingCommand */
         TeachingCommand: {
             /** Arguments */
@@ -1746,6 +1888,13 @@ export interface components {
             operation: "task" | "start" | "pause" | "reset" | "correct" | "mark_failure" | "finish";
             /** Session Id */
             session_id: string;
+        };
+        /** Timing */
+        Timing: {
+            /** Load */
+            load: number;
+            /** Score */
+            score: number;
         };
         /** TrainingCheckpoint */
         TrainingCheckpoint: {
@@ -2117,6 +2266,67 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ComputeSettingsResponse"];
+                };
+            };
+        };
+    };
+    score_api_v1_decision_score_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Criteria */
+                    criteria: {
+                        /** Id */
+                        id: string;
+                        /** Text */
+                        text: string;
+                    }[];
+                    /** Instructions */
+                    instructions: string;
+                    /**
+                     * Schema Version
+                     * @constant
+                     */
+                    schema_version: 1;
+                    /** State */
+                    state: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScoreResult"];
+                };
+            };
+        };
+    };
+    status_api_v1_decision_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionStatus"];
                 };
             };
         };

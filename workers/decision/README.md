@@ -1,6 +1,6 @@
 # Optional Muose decision worker
 
-This standalone CPU worker scores a small list of text criteria against a state and instructions. It has no job, tool, cloud, payment, or robot execution interface. It is **experimental and advisory only**. It is not a VLA and is not currently connected to the Firebird application.
+This standalone CPU worker scores a small list of text criteria against a state and instructions. It has no job, tool, cloud, payment, or robot execution interface. It is **experimental and advisory only**. It is not a VLA. The optional Firebird **Dataset → Decision lab** panel exposes manual advisory scoring when the application operator configures this isolated worker. It is disabled by default.
 
 The only supported model is [muose/Muose-50M-Decision](https://huggingface.co/muose/Muose-50M-Decision/tree/5afb8eeff127621fea2d66fc63f56798ada12eda) at commit `5afb8eeff127621fea2d66fc63f56798ada12eda`. Its [model card](https://huggingface.co/muose/Muose-50M-Decision/blob/5afb8eeff127621fea2d66fc63f56798ada12eda/README.md) attributes it to Muose and licenses it under **CC-BY-NC-SA-4.0**. Use requires explicit license acceptance; commercial use needs separate permission from the owner. This optional component does not change the license of the rest of Firebird. No model weights or upstream Python files are included here.
 
@@ -74,7 +74,26 @@ The upstream repository does not publish a complete inference/tokenization helpe
 - CPU only: two intra-op threads, one inter-op thread, evaluation/inference mode. Python audit hooks reject socket connection/name-resolution and subprocess launch attempts; this is **not an OS network or filesystem sandbox**. The pinned dependency runtime and operator configuration remain trusted.
 - Only the public CLI supplies the owned-process deadline: default 30 seconds, configurable above zero through 120 seconds. Output streams are bounded to 64 KiB each. Timeout, interruption, or excessive output kills and reaps the owned scoring child, with up to five seconds for local reaping. The supervisor defers signals during child creation and cleanup. There is no automatic retry.
 - The internal `--_child` path and `DecisionScorer` class are implementation/isolated-experiment interfaces, not independent timeout boundaries. An outer application supervisor must give the public CLI its requested deadline plus the cleanup allowance and send graceful termination before forced kill. No software can reap a child after the parent itself is forcibly killed.
-- Future application integration must configure the interpreter and model directory on the operator side. Browser requests must not select filesystem paths, executables, prompts with tool authority, or credentials. The model must not authorize operations on its own.
+- Application integration configures the interpreter and model directory on the operator side. Browser requests cannot select filesystem paths, executables or credentials. The model cannot authorize operations on its own.
+
+## Optional application panel
+
+Configure these variables on the separately running application host, then restart it:
+
+```sh
+export FIREBIRD_DECISION_PYTHON=/absolute/path/to/decision-env/bin/python
+export FIREBIRD_DECISION_ROOT=/absolute/path/to/firebird/workers/decision
+export FIREBIRD_DECISION_MODEL_DIR=/absolute/operator/path/to/pinned-muose
+export FIREBIRD_DECISION_ACCEPT_LICENSE=CC-BY-NC-SA-4.0
+```
+
+The interpreter must already contain the pinned dependencies above. The worker root is the directory containing `src/firebird_decision`; it is not supplied by a browser. The model directory remains external and unchanged. These settings do not configure GCP or any provider. The application supports this worker on POSIX hosts; Windows reports unavailable.
+
+`GET /api/v1/decision/status` reports configuration and whether a request can be attempted. It does not pre-certify model integrity, runtime compatibility or quality. `POST /api/v1/decision/score` accepts the same bounded request shown above. The application validates the exact model, weights, template, runtime and request identities, every finite score and token count, the selected criterion, and recomputed relative weights. Failed or malformed worker output is rejected without exposing local paths or arbitrary diagnostics.
+
+Only one score runs per application process; concurrent submissions receive HTTP409. There is no automatic write retry, queue, saved job or motion operation. The app sends the fixed public CLI a 30-second deadline within an outer 40-second timeout; cleanup first allows the CLI 6 seconds to reap its child, then forces owned-process-group cleanup if needed. This is a local execution deadline, not a model-quality claim. Child processes receive a minimal environment without inherited provider or cloud credentials. Disconnect, timeout, excessive output and cancellation are covered by local subprocess tests.
+
+Open **Dataset → Decision lab**, enter a state and 2–8 unique criteria, and explicitly choose **Score criteria**. The result is a manual experiment. Changing the input clears the displayed result. Stopping or leaving the panel cancels the browser request; no automatic retry or action follows. The panel displays the existing 3/6 workflow-fixture limitation and uncalibrated labels prominently. Real-model application validation on macOS uses the exact pinned model and unchanged source inventory; it does not establish Linux/Windows model scoring or robotics success.
 
 ## Tests and measured limitations
 
