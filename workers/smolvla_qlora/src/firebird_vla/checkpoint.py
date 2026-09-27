@@ -227,6 +227,7 @@ def save_checkpoint(
     *,
     scaler=None,
     compute_dtype=None,
+    temporal_contract=None,
 ):
     import random
     from importlib.metadata import version
@@ -244,6 +245,8 @@ def save_checkpoint(
         )
         policy_config.save_pretrained(staging / "policy")
         write_json(staging / "recipe.json", cfg.to_dict())
+        if temporal_contract is not None:
+            write_json(staging / "temporal-contract.json", temporal_contract)
         write_json(staging / "stats.json", stats)
         write_json(staging / "splits.json", splits)
         save_file({"action": probe_action.contiguous()}, str(staging / "probe.safetensors"))

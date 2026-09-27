@@ -82,6 +82,7 @@ def train(cfg, resume=None):
 
     from .data import load_data, prepare_batch
     from .model import build_policy, make_processors, predict, require_runtime
+    from .temporal import check_dataset_temporal, resolved_temporal
 
     compute_dtype = require_runtime()
     dtype_name = "float16" if compute_dtype == torch.float16 else "bfloat16"
@@ -145,6 +146,13 @@ def train(cfg, resume=None):
             policy_config_dir=resume_path / "policy" if resume_path else None,
             adapter_dir=resume_path / "adapter" if resume_path else None,
         )
+        temporal = resolved_temporal(policy_config, train_set.meta.fps, "smolvla", cfg.to_dict())
+        for dataset in (train_set, validation_set):
+            check_dataset_temporal(temporal, dataset)
+        if resume_path and (resume_path / "temporal-contract.json").exists():
+            if json.loads((resume_path / "temporal-contract.json").read_text()) != temporal:
+                raise ValueError("Resume temporal contract differs from the saved checkpoint")
+        write_json(output / "temporal-contract.json", temporal)
         if manifest and quantized != manifest["quantized_modules"]:
             raise ValueError("Quantization layout changed since checkpoint")
         preprocessor, postprocessor = make_processors(policy_config, stats)
@@ -325,6 +333,7 @@ def train(cfg, resume=None):
                     probe,
                     scaler=scaler,
                     compute_dtype=dtype_name,
+                    temporal_contract=temporal,
                 )
                 print(json.dumps({"checkpoint_saved": saved.name, "step": step}), flush=True)
                 if step < cfg.steps:

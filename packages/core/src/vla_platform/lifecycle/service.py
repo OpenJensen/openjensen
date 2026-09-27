@@ -31,6 +31,7 @@ from vla_platform.lifecycle.contracts import (
     Precision,
 )
 from vla_platform.lifecycle.runtime import RuntimeCatalog, command
+from vla_platform.lifecycle.temporal import validate_temporal
 from vla_platform.lifecycle.training_catalog import training_model_for_recipe
 from vla_platform.local_worker_registry import LocalWorkerRegistry
 
@@ -755,6 +756,8 @@ class Lifecycle:
             if not runtime.training_python or not runtime.training_root:
                 raise ValueError("This runtime has no training environment")
             model = training_model_for_recipe(recipe)
+            if not resuming:
+                validate_temporal(recipe, model.id)
             if request.operation == "policy.workflow" and model.id == "act":
                 raise ValueError(
                     "Train ACT separately, then export it; its GGUF workflow is unsupported"
