@@ -93,3 +93,24 @@ one CPU thread and an external timeout. The optional checkpoint argument permits
 read-only reuse of a preserved interrupted checkpoint. Keep generated weights
 outside Git. CPU evidence does not establish CUDA memory savings, full SmolVLA
 training/resume, multi-GPU correctness, robot quality or cloud execution.
+
+## Recorded simulator coordinates
+
+For a verified local snapshot containing the existing recorder's
+`meta/firebird-demonstrations.json`, native training derives a canonical
+`control-contract.json`. It validates state/action feature names against recorded
+joint order, applied-target radians, camera key and shape, integer action FPS,
+source origins and the complete episode lineage. The resolved native policy
+configuration must match before training proceeds. A snapshot with no recorder
+provenance retains the legacy path; it is not relabeled as simulator-native.
+
+Every completed native checkpoint contains the contract at its root and under
+`pretrained_model/`, covered by the checkpoint inventory. Resume rederives it from
+the original snapshot and requires both copies; fresh verification reports the
+same record and digest. This does not alter saved processors or normalization.
+See the [consumer contract and limits](../isaac_sim/CONTROL_CONTRACT.md).
+
+The current simulator training route targets native ACT with a local snapshot.
+The dedicated SmolVLA PEFT worker still requires its pinned Hub dataset; a complete
+SmolVLA local simulator training/export proof is not supplied by this change. Pure
+contract tests do not establish native training, CUDA, Isaac or robot quality.

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from .bundle import canonical, inventory, read_json, tensor_header, validate_config, verify_export
+from .control_schema import metadata as control_metadata
 
 VERSIONS = {"lerobot": "0.6.1", "torch": "2.11.0", "torchvision": "0.26.0", "safetensors": "0.8.0"}
 FIXTURE_SEEDS = (171, 902)
@@ -160,6 +161,7 @@ def infer(checkpoint: Path) -> dict[str, Any]:
         raise ValueError("Checkpoint changed during inference")
     return {
         "schema_version": 1,
+        **control_metadata(checkpoint, raw_config),
         "versions": versions,
         "python": platform.python_version(),
         "device": "cpu",

@@ -175,9 +175,9 @@ def add_teaching_submission(root, status="failed"):
     from vla_platform.teaching_sessions.contracts import TeachingCaptureRequest
 
     add_submissions(root)
-    request = TeachingCaptureRequest(
-        profile_id="local-isaac", profile_sha256="a" * 64
-    ).model_dump(mode="json")
+    request = TeachingCaptureRequest(profile_id="local-isaac", profile_sha256="a" * 64).model_dump(
+        mode="json"
+    )
     with sqlite3.connect(root / "workspace.sqlite3") as db:
         value = json.loads(db.execute("SELECT record FROM jobs").fetchone()[0])
         value.update(kind="teaching.capture", status=status, request=request, result=None)

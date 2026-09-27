@@ -166,7 +166,12 @@ def _manifest(task, mode):
     if not isinstance(data, dict):
         raise ValueError("The rollout manifest must be a mapping")
     # Paths must remain valid after syncing the worker into the container.
-    _inside(str(manifest.parent.relative_to(_WORKER) / data["calibration"]), _WORKER, "calibration")
+    if "control_contract" not in data:
+        _inside(
+            str(manifest.parent.relative_to(_WORKER) / data["calibration"]), _WORKER, "calibration"
+        )
+    elif data.get("calibration") is not None:
+        raise ValueError("Simulator-native policy requires calibration: null")
     _inside(str(manifest.parent.relative_to(_WORKER) / data["scene"]["uri"]), _WORKER, "scene.uri")
     environment = os.environ | {"PYTHONPATH": str(_WORKER)}
     command = [
@@ -206,11 +211,46 @@ def _inspect(source):
     return inspect_checkpoint(Path(source).expanduser().resolve())
 
 
-def _bind_model(tasks, data, checkpoint, execute_steps):
+def _bind_model(tasks, data, checkpoint, execute_steps, *, manifest_path=None):
     artifact = _inspect(checkpoint)
     joints = len(data["scene"]["joints"])
     if (artifact.state_dim, artifact.action_dim) != (joints, joints):
         raise ValueError("Checkpoint state/actions must match the scene joint count")
+
+    if artifact.control_contract is not None:
+        from sim_worker.rollout.contracts import SimSpec
+        from sim_worker.rollout.control_contract import admit
+        from sim_worker.rollout.control_schema import canonical
+
+        if manifest_path is None:
+            raise ValueError("Simulator contract admission requires the scene manifest path")
+        contract = {"record": artifact.control_contract, "sha256": artifact.control_contract_sha256}
+        if "control_contract" in data and canonical(data["control_contract"]) != canonical(
+            contract
+        ):
+            raise ValueError("Rollout simulator contract differs from the selected checkpoint")
+        scene = _inside(
+            str(manifest_path.parent.relative_to(_WORKER) / data["scene"]["uri"]),
+            _WORKER,
+            "scene.uri",
+        )
+        admit(
+            contract,
+            SimSpec(
+                str(scene),
+                data["scene"]["camera"],
+                data["scene"]["articulation"],
+                tuple(data["scene"]["joints"]),
+                data["capture"]["width"],
+                data["capture"]["height"],
+                data["control"]["fps"],
+                data["control"]["physics_hz"],
+            ),
+        )
+        data["control_contract"] = contract
+        data["calibration"] = None
+    elif "control_contract" in data:
+        raise ValueError("Checkpoint has no simulator control contract")
 
     steps = data["control"]["execute_steps"] if execute_steps is None else execute_steps
     if type(steps) is not int or steps < 1:
@@ -248,7 +288,9 @@ def _select_checkpoint(path, checkpoint, mode, execute_steps=None):
     isaac = tasks["isaac"]
     manifest = _inside(isaac["envs"]["SIM_MANIFEST"], _WORKER, "SIM_MANIFEST")
     data = yaml.safe_load(manifest.read_text())
-    _bind_model(tasks, data, checkpoint.expanduser().resolve(), execute_steps)
+    _bind_model(
+        tasks, data, checkpoint.expanduser().resolve(), execute_steps, manifest_path=manifest
+    )
 
     # Unique snapshots preserve templates and isolate overlapping submissions.
     with (
@@ -278,6 +320,15 @@ def _checkpoint(task, manifest):
     if not checkpoint.is_dir():
         raise ValueError(f"Checkpoint directory does not exist: {checkpoint}")
     artifact = _inspect(checkpoint)
+    expected_control = (
+        None
+        if artifact.control_contract is None
+        else {"record": artifact.control_contract, "sha256": artifact.control_contract_sha256}
+    )
+    from sim_worker.rollout.control_schema import canonical
+
+    if canonical(manifest.get("control_contract")) != canonical(expected_control):
+        raise ValueError("Rollout control contract is missing or differs from checkpoint")
     envs = task["envs"]
     if envs.get("MODEL_ID") != manifest["policy"]["model_id"]:
         raise ValueError("VLA MODEL_ID must match the rollout policy.model_id")

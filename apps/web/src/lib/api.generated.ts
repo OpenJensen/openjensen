@@ -684,6 +684,142 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/teaching/profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Profiles */
+        get: operations["profiles_api_v1_projects__project_id__teaching_profiles_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/teaching/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start */
+        post: operations["start_api_v1_projects__project_id__teaching_sessions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/teaching/sessions/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Status */
+        get: operations["status_api_v1_projects__project_id__teaching_sessions__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/teaching/sessions/{job_id}/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Command */
+        post: operations["command_api_v1_projects__project_id__teaching_sessions__job_id__commands_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/teaching/sessions/{job_id}/commands/{command_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Receipt */
+        get: operations["receipt_api_v1_projects__project_id__teaching_sessions__job_id__commands__command_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/teaching/sessions/{job_id}/frame": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Frame */
+        get: operations["frame_api_v1_projects__project_id__teaching_sessions__job_id__frame_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/teaching/sessions/{job_id}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** State */
+        get: operations["state_api_v1_projects__project_id__teaching_sessions__job_id__state_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/teaching/sessions/{job_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop */
+        post: operations["stop_api_v1_projects__project_id__teaching_sessions__job_id__stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/simulation-options": {
         parameters: {
             query?: never;
@@ -1220,6 +1356,25 @@ export interface components {
              * @enum {string}
              */
             os: "linux" | "windows" | "macos";
+        };
+        /** CaptureEpisode */
+        CaptureEpisode: {
+            /** Episode Id */
+            episode_id: string;
+            /** Frames */
+            frames: number;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "unknown" | "operator_reported_failure";
+            /** Receipt Sha256 */
+            receipt_sha256: string;
+            /**
+             * Termination
+             * @enum {string}
+             */
+            termination: "finish" | "reset" | "step_limit" | "shutdown";
         };
         /** Choice */
         Choice: {
@@ -1834,9 +1989,9 @@ export interface components {
             /** Project Id */
             project_id: string;
             /** Request */
-            request: components["schemas"]["IntakeRequest"] | components["schemas"]["PolicyRequest"] | components["schemas"]["AugmentationRequest"];
+            request: components["schemas"]["IntakeRequest"] | components["schemas"]["PolicyRequest"] | components["schemas"]["AugmentationRequest"] | components["schemas"]["TeachingCaptureRequest"];
             /** Result */
-            result?: components["schemas"]["DatasetProfile"] | components["schemas"]["LifecycleResult"] | components["schemas"]["AugmentationResult"] | null;
+            result?: components["schemas"]["DatasetProfile"] | components["schemas"]["LifecycleResult"] | components["schemas"]["AugmentationResult"] | components["schemas"]["TeachingCaptureResult"] | null;
             simulation_target?: components["schemas"]["SimulationTarget"] | null;
             /** Stage */
             stage?: string | null;
@@ -2681,6 +2836,16 @@ export interface components {
             threads: 2;
             timing_ms: components["schemas"]["Timing"];
         };
+        /** SessionStatus */
+        SessionStatus: {
+            job: components["schemas"]["Job"];
+            /** Ready */
+            ready: boolean;
+            /** Session Id */
+            session_id: string | null;
+            /** Stop Requested */
+            stop_requested: boolean;
+        };
         /**
          * SimulationRequest
          * @description A registered scenario selection; paths and commands belong to the operator.
@@ -2715,6 +2880,96 @@ export interface components {
             provider: "gcp";
             /** Source Manifest Sha256 */
             source_manifest_sha256: string;
+        };
+        /** TeachingCaptureRequest */
+        TeachingCaptureRequest: {
+            /**
+             * Operation
+             * @default teaching.capture
+             * @constant
+             */
+            operation: "teaching.capture";
+            /** Profile Id */
+            profile_id: string;
+            /** Profile Sha256 */
+            profile_sha256: string;
+            /**
+             * Timeout Seconds
+             * @default 300
+             */
+            timeout_seconds: number;
+        };
+        /** TeachingCaptureResult */
+        TeachingCaptureResult: {
+            /**
+             * Content Verified
+             * @default true
+             * @constant
+             */
+            content_verified: true;
+            /** Episodes */
+            episodes: components["schemas"]["CaptureEpisode"][];
+            /** Inventory Sha256 */
+            inventory_sha256: string;
+            /** Lineage Group */
+            lineage_group: string;
+            /**
+             * Operation
+             * @default teaching.capture
+             * @constant
+             */
+            operation: "teaching.capture";
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "recorded" | "synthetic";
+            /**
+             * Physical Calibration Verified
+             * @default false
+             * @constant
+             */
+            physical_calibration_verified: false;
+            /**
+             * Process Cleanup Verified
+             * @default true
+             * @constant
+             */
+            process_cleanup_verified: true;
+            /** Profile Id */
+            profile_id: string;
+            /** Profile Sha256 */
+            profile_sha256: string;
+            /**
+             * Published
+             * @default true
+             * @constant
+             */
+            published: true;
+            /** Recording Configuration Sha256 */
+            recording_configuration_sha256: string;
+            /**
+             * Schema Version
+             * @default 1
+             * @constant
+             */
+            schema_version: 1;
+            /** Session Id */
+            session_id: string;
+            /** Session Sha256 */
+            session_sha256: string;
+            /**
+             * Simulator Coordinates
+             * @default true
+             * @constant
+             */
+            simulator_coordinates: true;
+            /**
+             * Task Success Claimed
+             * @default false
+             * @constant
+             */
+            task_success_claimed: false;
         };
         /** TeachingCommand */
         TeachingCommand: {
@@ -4135,7 +4390,7 @@ export interface operations {
     saved_submission_api_v1_projects__project_id__submissions__key__get: {
         parameters: {
             query: {
-                operation: "dataset.inspect" | "dataset.augment" | "policy.finetune" | "policy.distill" | "policy.quantize" | "policy.evaluate" | "policy.run" | "policy.export" | "policy.workflow" | "policy.import";
+                operation: "teaching.capture" | "dataset.inspect" | "dataset.augment" | "policy.finetune" | "policy.distill" | "policy.quantize" | "policy.evaluate" | "policy.run" | "policy.export" | "policy.workflow" | "policy.import";
             };
             header?: never;
             path: {
@@ -4177,6 +4432,271 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    profiles_api_v1_projects__project_id__teaching_profiles_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_api_v1_projects__project_id__teaching_sessions_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "idempotency-key"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeachingCaptureRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    status_api_v1_projects__project_id__teaching_sessions__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    command_api_v1_projects__project_id__teaching_sessions__job_id__commands_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeachingCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    receipt_api_v1_projects__project_id__teaching_sessions__job_id__commands__command_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                job_id: string;
+                command_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    frame_api_v1_projects__project_id__teaching_sessions__job_id__frame_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    state_api_v1_projects__project_id__teaching_sessions__job_id__state_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_api_v1_projects__project_id__teaching_sessions__job_id__stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };

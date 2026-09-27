@@ -512,7 +512,7 @@ def test_collector_rejects_unowned_or_incomplete_results(
     assert not (directory / "artifacts.json").exists()
 
 
-def collection_fixture(profile, checkpoint, tmp_path, monkeypatch, fault=None):
+def collection_fixture(profile, checkpoint, tmp_path, monkeypatch, fault=None, coordinate=None):
     from types import ModuleType
 
     directory = tmp_path / "job"
@@ -523,6 +523,8 @@ def collection_fixture(profile, checkpoint, tmp_path, monkeypatch, fault=None):
         "model_id": checkpoint["model_id"],
         "manifest_sha256": "c" * 64,
     }
+    if coordinate is not None:
+        rollout.update(coordinate)
     if fault == "wrong-model":
         rollout["model_id"] = "sha256:" + "f" * 64
     if fault == "wrong-manifest":
@@ -744,3 +746,56 @@ def test_recovery_refuses_changed_control_or_model_identity(
     monkeypatch.setattr(runner, "_command", unexpected)
     result = asyncio.run(runner.recover(profile, directory))
     assert result["status"] == "cleanup_unknown"
+
+
+@pytest.mark.parametrize("change", [None, "missing", "mapping", "digest", "alias"])
+def test_collector_binds_simulator_coordinates_before_publishing(
+    profile, checkpoint, tmp_path, monkeypatch, change
+):
+    from test_simulator_control_provenance import evidence
+
+    expected = evidence()
+    received = expected | {"calibration_sha256": expected["control_contract_sha256"]}
+    if change == "missing":
+        received = {}
+    elif change == "mapping":
+        received["coordinate_mapping"] = "legacy_affine"
+    elif change == "digest":
+        received["control_contract_sha256"] = "e" * 64
+    elif change == "alias":
+        received["calibration_sha256"] = "e" * 64
+    directory, _, _ = collection_fixture(
+        profile, checkpoint, tmp_path, monkeypatch, coordinate=received
+    )
+    runner._write(directory / "request.json", {"model_id": checkpoint["model_id"], **expected})
+    if change is None:
+        runner._collect(directory)
+        assert (directory / "artifacts.json").is_file()
+    else:
+        with pytest.raises(ValueError, match="coordinate|control|mapping digest"):
+            runner._collect(directory)
+        assert not (directory / "artifacts.json").exists()
+
+
+@pytest.mark.parametrize("family", ["act", "smolvla"])
+def test_simulator_admission_carries_exact_control_identity(profile, checkpoint, family):
+    import hashlib
+
+    from test_simulator_control_provenance import control_record
+    from vla_platform.lifecycle.control_schema import canonical
+
+    control = control_record()
+    checkpoint.update(
+        policy_type=family,
+        control_contract=control,
+        control_contract_sha256=hashlib.sha256(canonical(control)).hexdigest(),
+    )
+    accepted = runner.admit(profile, checkpoint)
+    assert accepted["control_contract_sha256"] == checkpoint["control_contract_sha256"]
+    assert accepted["coordinate_mapping"] == "simulator_native_radians"
+    assert accepted["calibration_verified"] is False
+    assert accepted["physical_calibration_verified"] is False
+    assert accepted["task_success"] is None
+    checkpoint["control_contract"]["joint_order"].reverse()
+    with pytest.raises(ValueError, match="control identity differs"):
+        runner.admit(profile, checkpoint)

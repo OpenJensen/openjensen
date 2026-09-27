@@ -133,7 +133,7 @@ def verify_local_snapshot(pointer):
 
 def bind_local_recipe(job, recipe):
     pointer = job.get("dataset_snapshot")
-    _, manifest = verify_local_snapshot(pointer)
+    root, manifest = verify_local_snapshot(pointer)
     data = job["dataset"]
     if data.get("format") != "lerobot_v3" or data.get("features") != manifest["features"]:
         raise ValueError("Local dataset profile differs from the verified snapshot")
@@ -146,6 +146,11 @@ def bind_local_recipe(job, recipe):
             "dataset_lineage_validated": manifest["lineage_validated"],
         }
     )
+    from .control_contract import derive
+
+    control = derive(root, manifest, pointer, recipe)
+    if control is not None:
+        recipe["control_contract"] = control
     recipe["dataset_splits"] = split_lineage(
         manifest, recipe["validation_fraction"], recipe["seed"]
     )
@@ -200,6 +205,13 @@ def load_operation_snapshot(operation, recipe):
         "dataset_splits"
     ):
         raise ValueError("Saved recipe dataset lineage split mismatch")
+    from .control_contract import derive
+    from .control_schema import canonical
+
+    if canonical(derive(root, manifest, pointer, recipe)) != canonical(
+        recipe.get("control_contract")
+    ):
+        raise ValueError("Saved recipe simulator control provenance differs from snapshot")
     return root, manifest
 
 

@@ -334,3 +334,35 @@ def test_unverified_simulation_outputs_are_never_published(app, monkeypatch, cha
     assert job["result"] is None
     assert client.get(f"/api/v1/jobs/{job['id']}/simulation-media/video").status_code == 422
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize("location", ["outer", "checkpoint"])
+def test_run_rejects_registered_coordinates_missing_from_resolved_package(app, location):
+    client, pid, settings, profile, calls = app
+    imported = upload(client, pid, "act")
+    execution = client.app.state.execution
+    record = client.portal.call(execution.get, imported["id"])
+    artifact = record.result.artifacts[0]
+    metadata = artifact.metadata
+    if location == "checkpoint":
+        metadata = metadata["checkpoint"]
+    metadata["control_contract_sha256"] = "e" * 64
+    root = settings.data_dir / artifact.path
+    (root / "manifest.json").unlink()
+    artifact.manifest_sha256, artifact.file_bytes = simulation.manifest(root, artifact.metadata)
+    client.portal.call(execution.save, record)
+    response = client.post(
+        f"/api/v1/projects/{pid}/policy-jobs",
+        json={
+            "operation": "policy.run",
+            "runtime_id": profile.id,
+            "artifact_id": artifact.id,
+            "simulation": {"profile_id": profile.id, "experimental": True},
+        },
+    )
+    assert response.status_code == 202, response.text
+    job = wait(client, response.json()["id"])
+    assert job["status"] == "failed", job
+    assert "control metadata differs" in job["error"]
+    assert not calls
+    assert len(client.get(f"/api/v1/projects/{pid}/artifacts").json()) == 1

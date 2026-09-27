@@ -12,6 +12,7 @@ from typing import Any
 from .bundle import (
     CORE_FILES,
     JSON_LIMIT,
+    control_files,
     decode,
     inventory,
     read_json,
@@ -24,6 +25,8 @@ from .bundle import (
     validate_processors,
     validate_temporal_contract,
 )
+from .control_schema import canonical as control_canonical
+from .control_schema import optional as control_optional
 
 TRAINING_REVISION = "e595b7902714ba51f91e47523f66f89c5181b649"
 MAX_ENTRIES = 128
@@ -58,6 +61,10 @@ class ActTrainingSource:
     source_files: tuple[tuple[str, str, int], ...]
     temporal_source: Path | None = None
     temporal_sha256: str | None = None
+    dataset_metadata: dict[str, Any] | None = None
+    dataset_manifest_sha256: str | None = None
+    control_contract: dict[str, Any] | None = None
+    control_contract_sha256: str | None = None
 
     def receipt(self) -> dict[str, Any]:
         return {
@@ -78,6 +85,23 @@ class ActTrainingSource:
                 name: {"sha256": digest, "bytes": size} for name, digest, size in self.source_files
             },
             "temporal_contract_sha256": self.temporal_sha256,
+            **(
+                {
+                    "dataset_source": "local",
+                    "dataset_snapshot_id": self.dataset_revision,
+                    "dataset_manifest_sha256": self.dataset_manifest_sha256,
+                }
+                if self.dataset_manifest_sha256 is not None
+                else {}
+            ),
+            **(
+                {
+                    "control_contract": self.control_contract,
+                    "control_contract_sha256": self.control_contract_sha256,
+                }
+                if self.control_contract is not None
+                else {}
+            ),
             "runtime_compatibility_verified": False,
             "export_verified": False,
             "task_success": None,
@@ -257,6 +281,7 @@ def admit_training_source(
         CORE_FILES
         | validate_processors(source, config)
         | temporal_files(source, config)
+        | control_files(source, config)
         | {"train_config.json"}
     )
     read_json(source / "train_config.json")
@@ -297,7 +322,42 @@ def admit_training_source(
     else:
         temporal_source = None
     dataset = metadata.get("dataset")
-    if (
+    dataset_sha = None
+    if isinstance(dataset, dict) and dataset.get("source") == "local":
+        dataset_sha = recipe.get("dataset_manifest_sha256")
+        snapshot = dataset.get("snapshot")
+        if not isinstance(snapshot, dict):
+            raise ValueError("Local ACT dataset lineage requires its complete snapshot profile")
+        if (
+            not _sha(dataset_sha)
+            or recipe.get("dataset_source") != "local"
+            or recipe.get("dataset_revision") != "sha256:" + dataset_sha
+            or recipe.get("dataset_id") != "firebird/local-" + dataset_sha[:16]
+            or (
+                "dataset_snapshot_id" in metadata
+                and metadata["dataset_snapshot_id"] != recipe["dataset_revision"]
+            )
+            or (
+                "dataset_manifest_sha256" in metadata
+                and metadata["dataset_manifest_sha256"] != dataset_sha
+            )
+            or snapshot.get("id") != recipe["dataset_revision"]
+            or snapshot.get("manifest_sha256") != dataset_sha
+            or type(snapshot.get("schema_version")) is not int
+            or snapshot["schema_version"] != 1
+            or snapshot.get("format") != "lerobot_v3"
+            or dataset.get("inspection_scope") != "complete_snapshot"
+            or dataset.get("repo_id") is not None
+            or not _sha(dataset.get("metadata_sha256"))
+            or dataset.get("revision") != "metadata-sha256:" + dataset["metadata_sha256"]
+            or any(
+                type(snapshot.get(k)) is not int or snapshot[k] < 1 or snapshot[k] != dataset.get(k)
+                for k in ("total_frames", "total_episodes")
+            )
+            or dataset.get("format") != "lerobot_v3"
+        ):
+            raise ValueError("Saved ACT local snapshot identity differs from its recipe")
+    elif (
         not isinstance(dataset, dict)
         or dataset.get("source") != "huggingface"
         or dataset.get("repo_id") != recipe.get("dataset_id")
@@ -307,6 +367,22 @@ def admit_training_source(
         or not _sha(recipe.get("dataset_revision"), 40)
     ):
         raise ValueError("Saved ACT dataset lineage differs from its pinned recipe")
+    control, control_sha = control_optional(source, config)
+    outer_control, outer_sha = control_optional(checkpoint, config)
+    if (
+        control_canonical(control) != control_canonical(recipe.get("control_contract"))
+        or control != outer_control
+        or control_sha != outer_sha
+        or control_canonical(metadata.get("control_contract")) != control_canonical(control)
+        or metadata.get("control_contract_sha256") != control_sha
+        or control_canonical(verification.get("control_contract")) != control_canonical(control)
+        or verification.get("control_contract_sha256") != control_sha
+    ):
+        raise ValueError("Simulator control contract is missing or differs from training lineage")
+    if control is not None and (
+        dataset_sha is None or control["source"]["dataset_manifest_sha256"] != dataset_sha
+    ):
+        raise ValueError("Simulator control contract differs from the local training snapshot")
     for name, identity in selected.items():
         if before.get("checkpoint/pretrained_model/" + name) != (
             identity["sha256"],
@@ -327,4 +403,8 @@ def admit_training_source(
         tuple((name, item["sha256"], item["bytes"]) for name, item in sorted(selected.items())),
         temporal_source,
         temporal_sha,
+        dataset,
+        dataset_sha,
+        control,
+        control_sha,
     )
