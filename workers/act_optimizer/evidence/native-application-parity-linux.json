@@ -1,0 +1,199 @@
+{
+  "application": {
+    "archive_members_sha256": {
+      "policy/lineage.json": "6c903af2d1d4bbdeac0e33d3ff3f3bf02345e41d91c231dd08a87b9877ae97bc",
+      "policy/manifest.json": "49a8b6d20778a29acf791d803df3bb9f559de59f20df9cd35b88943dea2857fc",
+      "policy/policy/config.json": "35c829f487eaaeedd0dfe5b61525b3d5aea3ff710892c54e7500fbf9f3c35bc5",
+      "policy/policy/manifest.json": "8b839680decb54a63710f142d971455b773941d44235167cd11317e54e32b2f3",
+      "policy/policy/model.safetensors": "93d01feb12c482a83c5e10ac9c31d0d4d8a0a2b638f7c5244a3e986dcaf78f66",
+      "policy/policy/parity.json": "25a79eef0004a36a9cf5161ce473fb114b122d4e77b226e3de6016b892298325",
+      "policy/policy/policy_postprocessor.json": "648b415125a183dfd6cbc47c1dc04ab3f2d912654ef22a12ca5e8b93d7d85cdd",
+      "policy/policy/policy_postprocessor_step_0_unnormalizer_processor.safetensors": "ae1e255d00209ed7dfbd83163089ea55eb63aebe57c0e8e92497914ba56a4d71",
+      "policy/policy/policy_preprocessor.json": "0708a2a86799db24a2c4076be30ac17d82898e6606eddfa4bae9af1cdb1b7a3d",
+      "policy/policy/policy_preprocessor_step_3_normalizer_processor.safetensors": "ae1e255d00209ed7dfbd83163089ea55eb63aebe57c0e8e92497914ba56a4d71",
+      "policy/policy/recipe.json": "64298b4fb202d1b809624644b7695079c2bccf666ac1989814a7f4b47a2099ee",
+      "policy/policy/train_config.json": "7d3787c4658ec59eca80d900406620440ee072a7a591a674c40c0f3634350d8f",
+      "policy/verification.json": "5a708378c334e62d61963d89b991678986bf6b6b0b3124b12ce681a852c0f0bc"
+    },
+    "archive_sha256": "4fc676826fe3373efc591967e1c3769c2f6131a15b9aeee5d68565416acd1842",
+    "artifact_format": "inference_export",
+    "decision": "completed",
+    "export_manifest_sha256": "49a8b6d20778a29acf791d803df3bb9f559de59f20df9cd35b88943dea2857fc",
+    "operation": "policy.export",
+    "parent_ids": [
+      "synthetic-native:step1"
+    ],
+    "policy_manifest_sha256": "8b839680decb54a63710f142d971455b773941d44235167cd11317e54e32b2f3",
+    "source_files_unchanged": true,
+    "source_manifest_sha256": "05d8b6c89b4d001ef308c7ba70dfcdbff5b468380f7b9b2febc7ed79f6e59203"
+  },
+  "base_application_revision": "34dd0990e5155aac42ed33e011dff1bfda9caaf1",
+  "checks": {
+    "act_worker_tests": {
+      "elapsed_seconds": 121.99,
+      "passed": 155,
+      "skipped": 0
+    },
+    "actual_application_worker_export_registration_and_download": "passed",
+    "complete_checkpoint_bundle": "passed",
+    "core_export_tests": {
+      "elapsed_seconds": 5.5,
+      "passed": 22,
+      "skipped": 0
+    },
+    "fresh_upstream_resume": "passed",
+    "genuine_upstream_checkpoint_generation": "passed"
+  },
+  "consumer": {
+    "action_dimension": 6,
+    "actions_per_observation": 100,
+    "device": "cpu",
+    "dtype": "float32",
+    "fresh_processes": 3,
+    "lerobot": "0.6.1",
+    "queue_and_reset_exact": true,
+    "raw_and_postprocessed_exact": true,
+    "safetensors": "0.8.0",
+    "synthetic_observations": 2,
+    "torch": "2.11.0+cpu",
+    "torchvision": "0.26.0+cpu"
+  },
+  "container": {
+    "architecture": "linux/amd64 emulated on arm64 macOS host",
+    "image": "sha256:14680bafa4770286d4b55684ed85bbe7a763988141cba327c543417a0383fbe8",
+    "mounts": "Input recipes/source/wheel read-only; no host home, credentials or Docker socket",
+    "network": "All Docker interfaces disconnected after official pinned dependency installation; tests and ML proof offline",
+    "unprivileged_user": "node"
+  },
+  "environment": {
+    "cpu_limit": 2,
+    "machine": "x86_64",
+    "memory_limit_bytes": 3221225472,
+    "network": "Docker interfaces disconnected after setup",
+    "platform": "Linux-6.12.76-linuxkit-x86_64-with-glibc2.36",
+    "python": "3.12.14",
+    "versions": {
+      "lerobot": "0.6.1",
+      "safetensors": "0.8.0",
+      "torch": "2.11.0+cpu",
+      "torchvision": "0.26.0+cpu"
+    }
+  },
+  "evidence_sha256": {
+    "commit-source-binding.json": "1e31b858e69a828c0e4161d5e7e0aa8d0ae7a704208428bd1189f121c25cdc5b",
+    "container.json": "0fa0575164ebdd12bfa4b08ea0eafebdf327f62fc13858626a09a9f496763aec",
+    "install-attempt1.log": "7ee9631ab36c6dfb4b558f963a9bc663ca9184a9e7b596310aaad0b8217a8463",
+    "install.log": "20c3fbeb8ac0bc164b7e9bcf5b63b2c5d1f27d4a041dfac3c22ea73660f74cb0",
+    "proof/application-e2e/data/compute-settings.json": "a1ea4145fd83492e5688dbc8662f642eb42e0454fb330f37ba4f9e9e982ac81f",
+    "proof/application-e2e/data/jobs/0d6e9775-dc5d-4f80-8cd3-ac13843d405a/operation/inference-export/lineage.json": "6c903af2d1d4bbdeac0e33d3ff3f3bf02345e41d91c231dd08a87b9877ae97bc",
+    "proof/application-e2e/data/jobs/0d6e9775-dc5d-4f80-8cd3-ac13843d405a/operation/inference-export/manifest.json": "49a8b6d20778a29acf791d803df3bb9f559de59f20df9cd35b88943dea2857fc",
+    "proof/application-e2e/data/jobs/0d6e9775-dc5d-4f80-8cd3-ac13843d405a/operation/inference-export/policy/config.json": "35c829f487eaaeedd0dfe5b61525b3d5aea3ff710892c54e7500fbf9f3c35bc5",
+    "proof/application-e2e/data/jobs/0d6e9775-dc5d-4f80-8cd3-ac13843d405a/operation/inference-export/policy/manifest.json": "8b839680decb54a63710f142d971455b773941d44235167cd11317e54e32b2f3",
+    "proof/application-e2e/data/jobs/0d6e9775-dc5d-4f80-8cd3-ac13843d405a/operation/inference-export/policy/parity.json": "25a79eef0004a36a9cf5161ce473fb114b122d4e77b226e3de6016b892298325",
+    "proof/application-e2e/data/jobs/0d6e9775-dc5d-4f80-8cd3-ac13843d405a/operation/inference-export/policy/policy_postprocessor.json": "648b415125a183dfd6cbc47c1dc04ab3f2d912654ef22a12ca5e8b93d7d85cdd",
+    "proof/application-e2e/data/jobs/0d6e9775-dc5d-4f80-8cd3-ac13843d405a/operation/inference-export/policy/policy_preprocessor.json": "0708a2a86799db24a2c4076be30ac17d82898e6606eddfa4bae9af1cdb1b7a3d",
+    "proof/application-e2e/data/jobs/0d6e9775-dc5d-4f80-8cd3-ac13843d405a/operation/inference-export/policy/recipe.json": "64298b4fb202d1b809624644b7695079c2bccf666ac1989814a7f4b47a2099ee",
+    "proof/application-e2e/data/jobs/0d6e9775-dc5d-4f80-8cd3-ac13843d405a/operation/inference-export/policy/train_config.json": "7d3787c4658ec59eca80d900406620440ee072a7a591a674c40c0f3634350d8f",
+    "proof/application-e2e/data/jobs/0d6e9775-dc5d-4f80-8cd3-ac13843d405a/operation/inference-export/verification.json": "5a708378c334e62d61963d89b991678986bf6b6b0b3124b12ce681a852c0f0bc",
+    "proof/application-e2e/data/jobs/0d6e9775-dc5d-4f80-8cd3-ac13843d405a/operation/request.json": "27c35076df58797b51a384964fd34ef71e3da6b28280d4db558a34142e97b895",
+    "proof/application-e2e/data/jobs/0d6e9775-dc5d-4f80-8cd3-ac13843d405a/operation/result.json": "b0bc140e235a049cbdeb86b5b264e30ebfa29e6cb2db09bc81f7b2f93496373f",
+    "proof/application-e2e/data/jobs/0d6e9775-dc5d-4f80-8cd3-ac13843d405a/operation/worker.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "proof/application-e2e/data/source/checkpoint/manifest.json": "3289582ca6a2460ff96d281e3ca189120da72eca308941256f79d5a011e737d0",
+    "proof/application-e2e/data/source/checkpoint/pretrained_model/config.json": "49bb40acdd0b4dd6878702316b046638114f89a348d4262c7dc88dbc81787328",
+    "proof/application-e2e/data/source/checkpoint/pretrained_model/policy_postprocessor.json": "648b415125a183dfd6cbc47c1dc04ab3f2d912654ef22a12ca5e8b93d7d85cdd",
+    "proof/application-e2e/data/source/checkpoint/pretrained_model/policy_preprocessor.json": "0708a2a86799db24a2c4076be30ac17d82898e6606eddfa4bae9af1cdb1b7a3d",
+    "proof/application-e2e/data/source/checkpoint/pretrained_model/train_config.json": "7d3787c4658ec59eca80d900406620440ee072a7a591a674c40c0f3634350d8f",
+    "proof/application-e2e/data/source/checkpoint/recipe.json": "c1502aa4f12b308ab2f8b0a469a311feaad918975c11367cd938d70ce310c924",
+    "proof/application-e2e/data/source/checkpoint/training_state/optimizer_param_groups.json": "23133ba6eb8c999695f05ae5f5d4e1e9c77e7b4c171215f1932e363a9925350a",
+    "proof/application-e2e/data/source/checkpoint/training_state/training_step.json": "745e60acc5f2025df2c8e0d14f0b712c544789fe1121f4c3c7d19a2e6b954c9b",
+    "proof/application-e2e/data/source/manifest.json": "05d8b6c89b4d001ef308c7ba70dfcdbff5b468380f7b9b2febc7ed79f6e59203",
+    "proof/application-e2e/data/source/verification.json": "dc1b5aa34d3fae6a597d0f8fd914a9cddc058438e862a413240e1bfa9dd8d01d",
+    "proof/application-e2e/receipt.json": "66acf13ee8b19dfe74ede468db0476d9054b7b79a4f564f6c6d1b549931dcc2f",
+    "proof/application-e2e/runtimes.json": "19b5128da3450074a28cb9ba9f592b2f3fb96625f7283ffe74e924e6e27f12b0",
+    "proof/bundle.json": "22eee7d91b63ff481107d999a7ace0fdf1efe0b9e4000d3f55f1c8b6d7778c2d",
+    "proof/generated.json": "7cd026a94cd5d6758292518fc8c439507e9721fec9eeb60902cfcd862fb024a2",
+    "proof/resumed.json": "dc1b5aa34d3fae6a597d0f8fd914a9cddc058438e862a413240e1bfa9dd8d01d",
+    "proof/training-bundle/checkpoint/manifest.json": "3289582ca6a2460ff96d281e3ca189120da72eca308941256f79d5a011e737d0",
+    "proof/training-bundle/checkpoint/pretrained_model/config.json": "49bb40acdd0b4dd6878702316b046638114f89a348d4262c7dc88dbc81787328",
+    "proof/training-bundle/checkpoint/pretrained_model/policy_postprocessor.json": "648b415125a183dfd6cbc47c1dc04ab3f2d912654ef22a12ca5e8b93d7d85cdd",
+    "proof/training-bundle/checkpoint/pretrained_model/policy_preprocessor.json": "0708a2a86799db24a2c4076be30ac17d82898e6606eddfa4bae9af1cdb1b7a3d",
+    "proof/training-bundle/checkpoint/pretrained_model/train_config.json": "7d3787c4658ec59eca80d900406620440ee072a7a591a674c40c0f3634350d8f",
+    "proof/training-bundle/checkpoint/recipe.json": "c1502aa4f12b308ab2f8b0a469a311feaad918975c11367cd938d70ce310c924",
+    "proof/training-bundle/checkpoint/training_state/optimizer_param_groups.json": "23133ba6eb8c999695f05ae5f5d4e1e9c77e7b4c171215f1932e363a9925350a",
+    "proof/training-bundle/checkpoint/training_state/training_step.json": "745e60acc5f2025df2c8e0d14f0b712c544789fe1121f4c3c7d19a2e6b954c9b",
+    "proof/training-bundle/manifest.json": "05d8b6c89b4d001ef308c7ba70dfcdbff5b468380f7b9b2febc7ed79f6e59203",
+    "proof/training-bundle/verification.json": "dc1b5aa34d3fae6a597d0f8fd914a9cddc058438e862a413240e1bfa9dd8d01d",
+    "proof/upstream-checkpoint/pretrained_model/config.json": "49bb40acdd0b4dd6878702316b046638114f89a348d4262c7dc88dbc81787328",
+    "proof/upstream-checkpoint/pretrained_model/policy_postprocessor.json": "648b415125a183dfd6cbc47c1dc04ab3f2d912654ef22a12ca5e8b93d7d85cdd",
+    "proof/upstream-checkpoint/pretrained_model/policy_preprocessor.json": "0708a2a86799db24a2c4076be30ac17d82898e6606eddfa4bae9af1cdb1b7a3d",
+    "proof/upstream-checkpoint/pretrained_model/train_config.json": "7d3787c4658ec59eca80d900406620440ee072a7a591a674c40c0f3634350d8f",
+    "proof/upstream-checkpoint/training_state/optimizer_param_groups.json": "23133ba6eb8c999695f05ae5f5d4e1e9c77e7b4c171215f1932e363a9925350a",
+    "proof/upstream-checkpoint/training_state/training_step.json": "745e60acc5f2025df2c8e0d14f0b712c544789fe1121f4c3c7d19a2e6b954c9b",
+    "results/application-proof.log": "390afc1d8598590a8f602d169b1c08a727423c58c284f153656060c49b56f175",
+    "results/core-tests.log": "f2934e1be990c4ea45d1089f9b806f97f3b15e88f1cb38144e42a843acbd36cb",
+    "results/environment.json": "be4a5b2bd63e4cb5df012a994d318db6bed7c221f315a71316d8950f59fe41ed",
+    "results/native-bundle.log": "16f7b5e41e7871f56fa7d6e7969722961b72ac6011780989e53f1ee069e9400f",
+    "results/native-generate.log": "9cef24bc1edde21427a74ec0c4bdbd0a5ae7b184adf36e0f4045bf2c03719efc",
+    "results/native-resume.log": "a7faad69840232695ad0383e347415982cf7baa5c2e6e47f071a2605e4f15298",
+    "results/source-integrity.json": "abd610fec7f83dd0095668403c07a145cea4a5b423e4d03fae091ff1c1d517bf",
+    "results/worker-tests.log": "b208a8b87deaa7ab54a9b627f931fe2a75dd8e1fc9e8f8327eb43e1239c22188",
+    "verify.log": "22d06aadea0e6e0a649b7d931f2baa9cd338c0c87d4f08b618a5306cc10fd95a"
+  },
+  "implementation_revision": "d46b143b66e371c556630086ee3f256440be6b26",
+  "limitations": [
+    "Synthetic seeded batch and two CPU optimizer updates; no dataset-loader resume or trained task quality proof.",
+    "No GPU, native Windows, simulation, calibration, task success, latency or hardware-fit claim.",
+    "Exporter remains pinned0.6.1; producer0.6.2+Accelerate1.14 are scratch-only dependencies.",
+    "Full checkpoint and exported tensor payloads are retained separately outside Git.",
+    "The current application export requires pinned Hugging Face dataset lineage; local snapshots are rejected.",
+    "Linux amd64 under emulation; no native Windows acceptance. The initial setup attempt used the wrong cached work directory and was retried; no product-source change.",
+    "Training used a seeded synthetic batch; Hugging Face lineage is a fixture identity, not a downloaded dataset. Source and export payloads differ from macOS and are preserved separately."
+  ],
+  "producer": {
+    "device": "cpu",
+    "dtype": "float32",
+    "network_disabled": true,
+    "platform": "Linux-6.12.76-linuxkit-x86_64-with-glibc2.36",
+    "python": "3.12.14",
+    "threads": 1,
+    "upstream_revision": "e595b7902714ba51f91e47523f66f89c5181b649",
+    "versions": {
+      "accelerate": "1.14.0",
+      "lerobot": "0.6.2",
+      "safetensors": "0.8.0",
+      "torch": "2.11.0+cpu",
+      "torchvision": "0.26.0+cpu"
+    }
+  },
+  "producer_proof": {
+    "max_abs_action_difference": 0.0,
+    "next_loss": 18.227672576904297,
+    "next_model_sha256": "e300a50ba331b4b7a146ce3cbebd936ad1fa118498a009e94dab9e1bc138335b",
+    "next_optimizer_sha256": "68272e6b763e56c5c8abbd9061725b274045017a500809d6f588acd20e5212fd",
+    "next_update_exact": true,
+    "optimizer_resume_exact": true,
+    "reload_verified": true,
+    "rng_resume_exact": true
+  },
+  "schema_version": 1,
+  "scope": "Synthetic native0.6.2 full checkpoint through pinned0.6.1 CPU export and application artifact registration",
+  "sizes": {
+    "export_model_bytes": 44926632,
+    "policy_package_bytes": 44962031,
+    "source_model_bytes": 44980096
+  },
+  "source_binding": {
+    "archive_file_count": 663,
+    "commit": "d46b143b66e371c556630086ee3f256440be6b26",
+    "commit_file_count": 663,
+    "differences": [],
+    "file_sets_equal": true,
+    "status": "passed"
+  },
+  "source_integrity": {
+    "archive_sha256": "c80eb04682c85d5480a9a679b9bbe258f4b14edd88bcaaffd772f4ba9cf83c50",
+    "errors": [],
+    "status": "passed",
+    "verified_source_files": 663
+  }
+}

@@ -125,6 +125,7 @@ class Execution:
         request_path.write_text(
             WorkerRequest(
                 intake=job.request,
+                snapshot_store=str(self.settings.data_dir / "dataset-snapshots"),
                 local_root=str(self.settings.local_root) if self.settings.local_root else None,
             ).model_dump_json(),
             encoding="utf-8",
@@ -158,7 +159,9 @@ class Execution:
                     stdout=asyncio.subprocess.DEVNULL,
                     stderr=asyncio.subprocess.DEVNULL,
                 )
-                await asyncio.wait_for(process.wait(), timeout=90)
+                await asyncio.wait_for(
+                    process.wait(), timeout=180 if job.request.snapshot_for_training else 90
+                )
                 if process.returncode != 0 or not result_path.is_file():
                     raise RuntimeError(
                         f"Metadata worker exited without a result (code {process.returncode})"

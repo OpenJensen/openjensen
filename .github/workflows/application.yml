@@ -38,6 +38,9 @@ jobs:
           cache: true
           cache_dependency_path: pnpm-lock.yaml
       - run: uv sync --frozen
+      - name: Install video validation tools (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Install isolated CPU preview reader (POSIX)
         if: runner.os != 'Windows'
         run: |

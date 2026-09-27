@@ -505,6 +505,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teaching/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Command */
+        post: operations["command_api_v1_teaching_commands_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teaching/commands/{command_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Receipt */
+        get: operations["receipt_api_v1_teaching_commands__command_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teaching/frame": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Frame */
+        get: operations["frame_api_v1_teaching_frame_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teaching/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** State */
+        get: operations["state_api_v1_teaching_state_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teaching/voice/join": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Voice Join */
+        post: operations["voice_join_api_v1_teaching_voice_join_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -680,7 +765,7 @@ export interface components {
              * Operation
              * @enum {string}
              */
-            operation: "dataset.inspect" | "dataset.inspect.local" | "dataset.augment" | "policy.finetune" | "policy.distill" | "policy.quantize" | "policy.evaluate" | "policy.run";
+            operation: "dataset.inspect" | "dataset.inspect.local" | "dataset.augment" | "policy.finetune" | "policy.distill" | "policy.export" | "policy.quantize" | "policy.evaluate" | "policy.run";
             /**
              * Schema Version
              * @default 1
@@ -970,7 +1055,7 @@ export interface components {
              * @default metadata_only
              * @enum {string}
              */
-            inspection_scope: "metadata_only" | "bounded_parquet_rows";
+            inspection_scope: "metadata_only" | "bounded_parquet_rows" | "complete_snapshot";
             /** License */
             license?: string | null;
             /** Metadata Sha256 */
@@ -988,11 +1073,46 @@ export interface components {
              * @constant
              */
             schema_version: 1;
+            snapshot?: components["schemas"]["DatasetSnapshot"] | null;
             /**
              * Source
              * @enum {string}
              */
             source: "huggingface" | "local";
+            /** Total Episodes */
+            total_episodes: number;
+            /** Total Frames */
+            total_frames: number;
+            /** Warnings */
+            warnings: string[];
+        };
+        /**
+         * DatasetSnapshot
+         * @description Path-free identity; only the application can resolve the snapshot store.
+         */
+        DatasetSnapshot: {
+            /** File Count */
+            file_count: number;
+            /**
+             * Format
+             * @default lerobot_v3
+             * @constant
+             */
+            format: "lerobot_v3";
+            /** Id */
+            id: string;
+            /** Lineage Validated */
+            lineage_validated: boolean;
+            /** Manifest Sha256 */
+            manifest_sha256: string;
+            /**
+             * Schema Version
+             * @default 1
+             * @constant
+             */
+            schema_version: 1;
+            /** Total Bytes */
+            total_bytes: number;
             /** Total Episodes */
             total_episodes: number;
             /** Total Frames */
@@ -1215,6 +1335,11 @@ export interface components {
              * @default main
              */
             revision: string;
+            /**
+             * Snapshot For Training
+             * @default false
+             */
+            snapshot_for_training: boolean;
             /**
              * Source
              * @default huggingface
@@ -1457,7 +1582,7 @@ export interface components {
              * Format
              * @enum {string}
              */
-            format: "gguf" | "training_checkpoint" | "native_checkpoint" | "deployment_package";
+            format: "gguf" | "training_checkpoint" | "native_checkpoint" | "deployment_package" | "inference_export";
             /** Id */
             id: string;
             /** Job Id */
@@ -1547,6 +1672,11 @@ export interface components {
             /** Accelerator */
             accelerator?: string | null;
             /**
+             * Act Export
+             * @default false
+             */
+            act_export: boolean;
+            /**
              * Device
              * @enum {string}
              */
@@ -1596,6 +1726,26 @@ export interface components {
             training_model_ids: string[];
             /** Unavailable Reason */
             unavailable_reason?: string | null;
+        };
+        /** TeachingCommand */
+        TeachingCommand: {
+            /** Arguments */
+            arguments?: {
+                [key: string]: unknown;
+            };
+            /** Command Id */
+            command_id: string;
+            /** Episode Id */
+            episode_id?: string | null;
+            /** Expected Revision */
+            expected_revision: number;
+            /**
+             * Operation
+             * @enum {string}
+             */
+            operation: "task" | "start" | "pause" | "reset" | "correct" | "mark_failure" | "finish";
+            /** Session Id */
+            session_id: string;
         };
         /** TrainingCheckpoint */
         TrainingCheckpoint: {
@@ -1686,6 +1836,11 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** VoiceJoin */
+        VoiceJoin: {
+            /** Session Id */
+            session_id: string;
         };
     };
     responses: never;
@@ -2643,6 +2798,143 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Job"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    command_api_v1_teaching_commands_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeachingCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    receipt_api_v1_teaching_commands__command_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                command_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    frame_api_v1_teaching_frame_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    state_api_v1_teaching_state_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    voice_join_api_v1_teaching_voice_join_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoiceJoin"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
