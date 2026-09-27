@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from rich.text import Text
 from textual import on
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import HorizontalScroll, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import (
@@ -177,6 +178,7 @@ class FirebirdApp(App):
         ("f3", "view('detail-tab')", "Details"),
         ("ctrl+n", "new_project", "New project"),
         ("f4", "intake", "Intake"),
+        Binding("f5", "lifecycle", "New lifecycle", priority=True),
         ("f8", "cancel_job", "Cancel job"),
         ("ctrl+r", "refresh", "Refresh"),
         ("ctrl+q", "quit", "Quit"),
@@ -191,10 +193,13 @@ class FirebirdApp(App):
     #detail { height: 1fr; }
     """
 
-    def __init__(self, base="http://127.0.0.1:8000", *, client=None, poll_seconds=3):
+    def __init__(
+        self, base="http://127.0.0.1:8000", *, client=None, poll_seconds=3, journal_dir=None
+    ):
         super().__init__()
         self.client = client or ApiClient(base)
         self.poll_seconds = poll_seconds
+        self.journal_dir = journal_dir
         self.projects = []
         self.jobs = []
         self.project_id = None
@@ -212,6 +217,7 @@ class FirebirdApp(App):
         with HorizontalScroll(id="actions"):
             yield Button("New project", id="new-project")
             yield Button("Intake", id="intake", disabled=True)
+            yield Button("New lifecycle", id="lifecycle", disabled=True)
             yield Button("Refresh", id="refresh")
             yield Button("Cancel selected job", id="cancel-job", disabled=True)
         with TabbedContent(initial="projects-tab", id="views"):
@@ -247,6 +253,7 @@ class FirebirdApp(App):
             or not self.connected
             or not any(p["id"] == self.project_id for p in self.projects)
         )
+        self.query_one("#lifecycle", Button).disabled = self.query_one("#intake", Button).disabled
         job = self.highlighted_job()
         self.query_one("#cancel-job", Button).disabled = (
             self.writing or not self.connected or job is None or job["status"] not in ACTIVE
@@ -400,6 +407,59 @@ class FirebirdApp(App):
         project_id = self.project_id
         self.push_screen(IntakeForm(), lambda payload: self.mutate("intake", payload, project_id))
 
+    def action_lifecycle(self):
+        if self.screen is not self.default_screen or self.query_one("#lifecycle", Button).disabled:
+            return
+        project_id, epoch = self.project_id, self.epoch
+        self.writing = True
+        self.controls()
+        self.run_worker(partial(self.open_lifecycle, project_id, epoch), group="lifecycle-context")
+
+    async def open_lifecycle(self, project_id, epoch):
+        from vla_platform.tui_lifecycle import AttemptJournal, Context, journal_directory
+        from vla_platform.tui_lifecycle_forms import LifecycleForm
+
+        try:
+            context = await Context.fetch(self.client, project_id)
+            if self.epoch != epoch or self.project_id != project_id:
+                self.notice("Project changed. Open the lifecycle composer again.")
+                return
+            request = (self.highlighted_job() or {}).get("request", {})
+            saved = (
+                request
+                if request.get("operation")
+                in {"policy.finetune", "policy.distill", "policy.quantize", "policy.run"}
+                else None
+            )
+            journal = AttemptJournal(
+                self.journal_dir or journal_directory(), self.client.base, project_id
+            )
+
+            def current():
+                return self.project_id == project_id and any(
+                    p["id"] == project_id for p in self.projects
+                )
+
+            self.push_screen(
+                LifecycleForm(self.client, context, journal, current, saved),
+                partial(self.lifecycle_closed, project_id),
+            )
+        except ApiError as exc:
+            self.notice(str(exc))
+        finally:
+            self.writing = False
+            self.controls()
+
+    def lifecycle_closed(self, project_id, job):
+        if job and self.project_id == project_id:
+            self.epoch += 1
+            self.job_id = job["id"]
+            self.notice(
+                f"Job accepted: {job['id']} · {job['status']}. Following saved application status."
+            )
+            self.action_view("detail-tab")
+        self.action_refresh()
+
     def action_cancel_job(self):
         if self.screen is not self.default_screen:
             return
@@ -475,6 +535,7 @@ class FirebirdApp(App):
         action = {
             "new-project": self.action_new_project,
             "intake": self.action_intake,
+            "lifecycle": self.action_lifecycle,
             "refresh": self.action_refresh,
             "cancel-job": self.action_cancel_job,
         }.get(event.button.id)
