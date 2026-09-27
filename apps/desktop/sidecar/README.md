@@ -166,3 +166,44 @@ source snapshot predates WEB-009 and must not be described as the latest web bui
 
 Production Start remains disabled. Tauri-owned lifecycle, installation on a clean
 machine, upgrades, signing, Linux/Windows and ML runtimes require separate evidence.
+
+
+## Local native candidate preparation
+
+`prepare_local_tauri.py` is an opt-in, standard-library preparation step. It does not run
+PyInstaller, Cargo, the frozen executable or any network operation. Give it an absolute
+payload path, its complete inventory and the corresponding completed frozen-harness
+receipt, plus a new absolute output directory:
+
+```text
+python -B -s apps/desktop/sidecar/prepare_local_tauri.py \
+  --payload /absolute/accepted/firebird-sidecar \
+  --manifest /absolute/payload-inventory.json \
+  --acceptance /absolute/acceptance/receipt.json \
+  --output /absolute/new-native-candidate
+```
+
+Use a sanitized environment without Python path overrides. Unlike the fixed PyInstaller
+build invocation, this direct source helper imports sibling verification modules and uses
+`-B -s`; `-I` would remove its required source directory from module search.
+
+The preparer verifies full payload/resource identity and recorded acceptance fields, then
+copies files/relative links without changing the original. Failed partial directories are
+preserved. The receipt is a trusted local review input, not a signed remote attestation.
+It emits `local-payload-pin.rs`, `tauri.local.json`, the complete resources and a preparation
+receipt. The overlay uses a dedicated experiment identifier; it does not edit the checked-in
+production configuration. Its compiled pin must be supplied explicitly to a reviewed build:
+
+```text
+FIREBIRD_DESKTOP_EXPERIMENT_PIN=/absolute/new-native-candidate/local-payload-pin.rs \
+  CARGO_NET_OFFLINE=true pnpm exec tauri build --features local-payload-experiment \
+  --config /absolute/new-native-candidate/tauri.local.json --bundles app --no-sign
+```
+
+This build command is a proposal until the source and resource slot are approved. Use the
+cached exact toolchain/locks and a clean environment without signing credentials or Python
+path overrides. Keep `--no-sign` explicit and record the wrapper commit separately from the child source
+commit. The default build keeps Start disabled. Compare the final app's complete resource
+inventory with the original pin before launch; never weaken it because packaging changed a
+file. No installer, runtime activation, model operation or existing user-data adoption is
+performed by the preparer.

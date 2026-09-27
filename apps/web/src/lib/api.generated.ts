@@ -596,6 +596,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/recordings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recording Catalog */
+        get: operations["recording_catalog_api_v1_projects__project_id__recordings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/recordings/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recording Options */
+        get: operations["recording_options_api_v1_projects__project_id__recordings_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/simulation-options": {
         parameters: {
             query?: never;
@@ -1363,6 +1397,7 @@ export interface components {
             /** Metadata Sha256 */
             metadata_sha256: string;
             preview?: components["schemas"]["LocalDatasetPreview"] | null;
+            recording_preparation?: components["schemas"]["RecordingSummary"] | null;
             /** Repo Id */
             repo_id?: string | null;
             /** Revision */
@@ -1694,6 +1729,7 @@ export interface components {
         IntakeRequest: {
             /** Path */
             path?: string | null;
+            recordings?: components["schemas"]["RecordingPreparation"] | null;
             /** Repo Id */
             repo_id?: string | null;
             /**
@@ -2266,6 +2302,183 @@ export interface components {
             training_model_ids: string[];
             /** Unavailable Reason */
             unavailable_reason?: string | null;
+        };
+        /** RecordingCapture */
+        RecordingCapture: {
+            /** Episodes */
+            episodes: components["schemas"]["RecordingEpisode"][];
+            /** Session Id */
+            session_id: string;
+            /** Session Sha256 */
+            session_sha256: string;
+        };
+        /** RecordingCaptureOption */
+        RecordingCaptureOption: {
+            /**
+             * Action Units
+             * @constant
+             */
+            action_units: "radians";
+            /**
+             * Camera Key
+             * @constant
+             */
+            camera_key: "observation.images.front";
+            /** Camera Prim */
+            camera_prim: string;
+            /**
+             * Content Verified
+             * @default false
+             * @constant
+             */
+            content_verified: false;
+            /**
+             * Controller
+             * @constant
+             */
+            controller: "joint_position_targets";
+            /** Episodes */
+            episodes: components["schemas"]["RecordingEpisodeOption"][];
+            /** Fps */
+            fps: number;
+            /** Height */
+            height: number;
+            /** Joint Names */
+            joint_names: string[];
+            /** Lineage Group */
+            lineage_group: string;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "recorded" | "synthetic";
+            /** Physics Hz */
+            physics_hz: number;
+            /** Scene Sha256 */
+            scene_sha256: string;
+            /** Session Id */
+            session_id: string;
+            /** Session Sha256 */
+            session_sha256: string;
+            /**
+             * State Units
+             * @constant
+             */
+            state_units: "radians";
+            /**
+             * Timebase
+             * @constant
+             */
+            timebase: "simulation_seconds";
+            /** Width */
+            width: number;
+        };
+        /** RecordingCatalog */
+        RecordingCatalog: {
+            /** Captures */
+            captures: components["schemas"]["RecordingCaptureOption"][];
+            /** Configuration Sha256 */
+            configuration_sha256: string;
+            /** Message */
+            message: string;
+        };
+        /** RecordingEpisode */
+        RecordingEpisode: {
+            /** Episode Id */
+            episode_id: string;
+            /** Receipt Sha256 */
+            receipt_sha256: string;
+        };
+        /** RecordingEpisodeOption */
+        RecordingEpisodeOption: {
+            /** Episode Id */
+            episode_id: string;
+            /** Frames */
+            frames: number;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "unknown" | "operator_reported_failure";
+            /** Receipt Sha256 */
+            receipt_sha256: string;
+            /**
+             * Termination
+             * @enum {string}
+             */
+            termination: "finish" | "reset" | "step_limit" | "shutdown";
+        };
+        /** RecordingOptions */
+        RecordingOptions: {
+            /** Configuration Sha256 */
+            configuration_sha256: string | null;
+            /** Configured */
+            configured: boolean;
+            /**
+             * Max Episodes
+             * @default 100
+             */
+            max_episodes: number;
+            /**
+             * Max Source Bytes
+             * @default 8589934592
+             */
+            max_source_bytes: number;
+            /**
+             * Runtime Verified
+             * @default false
+             * @constant
+             */
+            runtime_verified: false;
+            /** Setup Message */
+            setup_message: string;
+        };
+        /** RecordingPreparation */
+        RecordingPreparation: {
+            /** Captures */
+            captures: components["schemas"]["RecordingCapture"][];
+            /** Configuration Sha256 */
+            configuration_sha256: string;
+            /**
+             * Schema Version
+             * @default 1
+             * @constant
+             */
+            schema_version: 1;
+            /**
+             * Timeout Seconds
+             * @default 600
+             */
+            timeout_seconds: number;
+        };
+        /** RecordingSummary */
+        RecordingSummary: {
+            /** Job Id */
+            job_id: string;
+            /** Lineage Group Count */
+            lineage_group_count: number;
+            /** Selection Sha256 */
+            selection_sha256: string;
+            /** Source Count */
+            source_count: number;
+            /**
+             * Source Preserved
+             * @default true
+             * @constant
+             */
+            source_preserved: true;
+            /**
+             * Task Success Verified
+             * @default false
+             * @constant
+             */
+            task_success_verified: false;
+            /**
+             * Writer Readback Verified
+             * @default true
+             * @constant
+             */
+            writer_readback_verified: true;
         };
         /** ReplayObservation */
         ReplayObservation: {
@@ -3622,6 +3835,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Job"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recording_catalog_api_v1_projects__project_id__recordings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingCatalog"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recording_options_api_v1_projects__project_id__recordings_options_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingOptions"];
                 };
             };
             /** @description Validation Error */

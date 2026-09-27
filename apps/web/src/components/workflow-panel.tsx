@@ -163,6 +163,7 @@ export function WorkflowPanel({
     queryKey: ["jobs", projectId],
     queryFn: () => api.jobs(projectId),
     enabled: !!projectId,
+    retry: false,
     refetchInterval: (query) =>
       query.state.data?.some(isActive) ? 1000 : 5000,
   });

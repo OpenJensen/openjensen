@@ -18,4 +18,5 @@ getrandom = "=0.4.3"
 sha2 = "=0.10.9"
 
 [features]
+local-payload-experiment = []
 custom-protocol = ["tauri/custom-protocol"]
