@@ -12,6 +12,9 @@ use std::sync::{Arc, Mutex, MutexGuard, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
+#[path = "workspace_gate.rs"]
+mod workspace_gate;
+
 const MAX_LINE: usize = 4096;
 const MAX_STDERR: usize = 64 * 1024;
 const UNAVAILABLE: &str = "This desktop has no verified bundled Python payload. Connect to an existing application instead.";
@@ -248,7 +251,7 @@ fn directory(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn workspace(parent: &Path, payload: &Payload) -> Result<PathBuf, String> {
+fn prepare_workspace_parent(parent: &Path) -> Result<(), String> {
     if !parent.is_absolute() {
         return Err("Desktop data directory must be absolute.".into());
     }
@@ -262,14 +265,26 @@ fn workspace(parent: &Path, payload: &Payload) -> Result<PathBuf, String> {
     }
     fs::create_dir_all(parent)
         .map_err(|_| "Cannot create the dedicated desktop data directory.")?;
-    let root = parent.join("desktop-v1");
-    let expected = WorkspaceOwner {
+    Ok(())
+}
+
+fn expected_owner(payload: &Payload) -> WorkspaceOwner {
+    WorkspaceOwner {
         schema_version: 2,
         owner: "openjensen-desktop".into(),
         build_id: payload.build_id.clone(),
         resources_sha256: payload.resources_sha256.clone(),
         payload_identity_sha256: payload.pin.manifest.identity.into(),
-    };
+    }
+}
+
+fn workspace(parent: &Path, payload: &Payload) -> Result<PathBuf, String> {
+    prepare_workspace_parent(parent)?;
+    let root = parent.join("desktop-v1");
+    if !root.exists() && parent.join(".desktop-handoff").symlink_metadata().is_ok() {
+        return Err("An existing handoff cannot create a replacement workspace.".into());
+    }
+    let expected = expected_owner(payload);
     match fs::create_dir(&root) {
         Ok(()) => {
             #[cfg(unix)]
@@ -389,6 +404,7 @@ struct OwnedChild {
     nonce: String,
     stopped: bool,
     protocol_failed: bool,
+    startup_gate: Option<workspace_gate::Gate>,
 }
 
 impl OwnedChild {
@@ -408,6 +424,7 @@ impl OwnedChild {
             nonce,
             stopped: false,
             protocol_failed: false,
+            startup_gate: None,
         })
     }
 
@@ -730,7 +747,9 @@ impl Controller {
         }
         let payload = self.payload.as_ref().map_err(Clone::clone)?;
         payload.verify()?;
+        let gate = workspace_gate::Gate::acquire(&self.workspace_parent)?;
         let data = workspace(&self.workspace_parent, payload)?;
+        gate.before_start(&data, payload)?;
         let mut random = [0_u8; 16];
         getrandom::fill(&mut random).map_err(|_| "Cannot create a private startup nonce.")?;
         let nonce = hex(&random);
@@ -748,7 +767,10 @@ impl Controller {
         let deadline = Instant::now() + self.limits.startup;
         let started = OwnedChild::spawn(payload, &data, nonce.clone());
         match started {
-            Ok(child) => *slot = Some(child),
+            Ok(mut child) => {
+                child.startup_gate = Some(gate);
+                *slot = Some(child);
+            }
             Err(error) => {
                 self.update("failed", None, false, &error);
                 return Err(error);
@@ -782,6 +804,7 @@ impl Controller {
         })();
         match result {
             Ok(backend) => {
+                slot.as_mut().expect("registered child").startup_gate.take();
                 self.update("owned", Some(backend.url.to_string()), false, "The dedicated desktop backend is ready. Closing this desktop requests its shutdown.");
                 Ok(lock(&self.view).clone())
             }

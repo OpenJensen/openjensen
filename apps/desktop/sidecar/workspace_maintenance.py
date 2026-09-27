@@ -460,6 +460,15 @@ def prepare_backup(workspace: Path, output: Path, *, limits: Limits = Limits()) 
     is success unless this function returns. Original data and marker bytes are unchanged.
     """
     workspace = directory(workspace)
+    budget = Budget(limits)
+    with locks(workspace):
+        return _prepare_backup_locked(workspace, output, budget)
+
+
+def _prepare_backup_locked(workspace, output, budget):
+    """Private transaction reuse; caller must hold maintenance and owner locks."""
+    limits = budget.limits
+    workspace = directory(workspace)
     output = Path(output)
     parent = directory(output.parent)
     if (
@@ -472,66 +481,64 @@ def prepare_backup(workspace: Path, output: Path, *, limits: Limits = Limits()) 
         or output.is_symlink()
     ):
         raise MaintenanceError("Backup must be a new disjoint absolute directory")
-    budget = Budget(limits)
-    with locks(workspace):
-        before = inventory(workspace, budget)
-        original_marker = marker(workspace, budget)
-        database = validate_database(workspace, before, budget)
-        if inventory(workspace, budget) != before:
-            raise MaintenanceError("Workspace changed during preflight")
-        total = sum(row.get("bytes", 0) for row in before.values())
-        if shutil.disk_usage(parent).free < total + limits.spare_bytes:
-            raise MaintenanceError("Insufficient disk space for the complete backup")
-        output.mkdir(mode=0o700)
-        copied = output / "workspace"
-        copied.mkdir(mode=0o700)
-        copy_files(workspace, copied, before, budget)
-        if inventory(copied, budget) != before or inventory(workspace, budget) != before:
-            raise MaintenanceError("Backup or source inventory changed")
-        if validate_database(copied, before, budget) != database:
-            raise MaintenanceError("Copied database compatibility differs")
-        receipt = {
-            "schema_version": 1,
-            "operation": "desktop.workspace.backup",
-            "complete": True,
-            "workspace_path_sha256": hashlib.sha256(os.fsencode(workspace)).hexdigest(),
-            "marker": original_marker,
-            "database": database,
-            "files": before,
-            "inventory_sha256": hashlib.sha256(canonical(before)).hexdigest(),
-            "file_bytes": total,
-            "limits": asdict(limits),
-            "source_unchanged": True,
-            "migration_performed": False,
-            "activation_performed": False,
-            "restore_or_upgrade_verified": False,
-        }
-        budget.check()
-        receipt_path = output / "receipt.json"
-        published_identity = None
-        stream = None
-        try:
-            stream = receipt_path.open("xb")
-            published_identity = os.fstat(stream.fileno())
-            stream.write(canonical(receipt) + b"\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-            sync_directory(output)
-            sync_directory(parent)
-        except BaseException:
-            # Newly owned output was exclusive; leave payload partial, never a success receipt.
-            if published_identity is not None:
-                try:
-                    current = receipt_path.lstat()
-                    if (current.st_dev, current.st_ino) == (
-                        published_identity.st_dev,
-                        published_identity.st_ino,
-                    ) and stat.S_ISREG(current.st_mode):
-                        receipt_path.unlink()
-                except FileNotFoundError:
-                    pass
-            raise
-        finally:
-            if stream is not None:
-                stream.close()
-        return receipt
+    before = inventory(workspace, budget)
+    original_marker = marker(workspace, budget)
+    database = validate_database(workspace, before, budget)
+    if inventory(workspace, budget) != before:
+        raise MaintenanceError("Workspace changed during preflight")
+    total = sum(row.get("bytes", 0) for row in before.values())
+    if shutil.disk_usage(parent).free < total + limits.spare_bytes:
+        raise MaintenanceError("Insufficient disk space for the complete backup")
+    output.mkdir(mode=0o700)
+    copied = output / "workspace"
+    copied.mkdir(mode=0o700)
+    copy_files(workspace, copied, before, budget)
+    if inventory(copied, budget) != before or inventory(workspace, budget) != before:
+        raise MaintenanceError("Backup or source inventory changed")
+    if validate_database(copied, before, budget) != database:
+        raise MaintenanceError("Copied database compatibility differs")
+    receipt = {
+        "schema_version": 1,
+        "operation": "desktop.workspace.backup",
+        "complete": True,
+        "workspace_path_sha256": hashlib.sha256(os.fsencode(workspace)).hexdigest(),
+        "marker": original_marker,
+        "database": database,
+        "files": before,
+        "inventory_sha256": hashlib.sha256(canonical(before)).hexdigest(),
+        "file_bytes": total,
+        "limits": asdict(limits),
+        "source_unchanged": True,
+        "migration_performed": False,
+        "activation_performed": False,
+        "restore_or_upgrade_verified": False,
+    }
+    budget.check()
+    receipt_path = output / "receipt.json"
+    published_identity = None
+    stream = None
+    try:
+        stream = receipt_path.open("xb")
+        published_identity = os.fstat(stream.fileno())
+        stream.write(canonical(receipt) + b"\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+        sync_directory(output)
+        sync_directory(parent)
+    except BaseException:
+        # Newly owned output was exclusive; leave payload partial, never a success receipt.
+        if published_identity is not None:
+            try:
+                current = receipt_path.lstat()
+                if (current.st_dev, current.st_ino) == (
+                    published_identity.st_dev,
+                    published_identity.st_ino,
+                ) and stat.S_ISREG(current.st_mode):
+                    receipt_path.unlink()
+            except FileNotFoundError:
+                pass
+        raise
+    finally:
+        if stream is not None:
+            stream.close()
+    return receipt

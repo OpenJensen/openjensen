@@ -484,3 +484,228 @@ fn compiled_candidate_identifier_cannot_adopt_the_normal_application_namespace()
     #[cfg(not(feature = "local-payload-experiment"))]
     assert!(validate_identifier("dev.firebird.workbench").is_ok());
 }
+
+fn handoff(scratch: &Scratch, payload: &Payload, reverse: bool) -> (PathBuf, PathBuf) {
+    let parent = scratch.0.join("workspaces");
+    let data = workspace(&parent, payload).unwrap();
+    let journal = parent.join(".desktop-handoff");
+    fs::create_dir(&journal).unwrap();
+    let target = serde_json::to_value(expected_owner(payload)).unwrap();
+    let mut other = target.clone();
+    other["build_id"] = serde_json::json!("d".repeat(40));
+    let (old, new) = if reverse {
+        (target, other)
+    } else {
+        (other, target)
+    };
+    let prepared = serde_json::json!({
+        "schema_version":1,"operation":"desktop.workspace.handoff","transaction_id":"a".repeat(32),
+        "workspace":data,"workspace_path_sha256":workspace_id(&data).unwrap(),
+        "old_payload":{"marker":old,"paths":{},"manifest_sha256":"e".repeat(64),"acceptance_sha256":"f".repeat(64)},
+        "new_payload":{"marker":new,"paths":{},"manifest_sha256":"e".repeat(64),"acceptance_sha256":"f".repeat(64)},
+        "old_marker_hex":"","files":{},"backup":"/never-opened-by-native","backup_receipt_sha256":"b".repeat(64),"backup_inventory":{},"limits":{}
+    });
+    let raw = serde_json::to_vec(&prepared).unwrap();
+    fs::write(journal.join("prepared.json"), &raw).unwrap();
+    let digest = hex(&Sha256::digest(raw));
+    let intent = serde_json::json!({"schema_version":1,"prepared_sha256":digest});
+    fs::write(journal.join("commit-intent.json"), intent.to_string()).unwrap();
+    let mut completion = serde_json::json!({"schema_version":1,"prepared_sha256":digest,"workspace_path_sha256":workspace_id(&data).unwrap(),"marker":prepared["new_payload"]["marker"],"inventory_sha256":"1".repeat(64)});
+    fs::write(journal.join("committed.json"), completion.to_string()).unwrap();
+    if reverse {
+        fs::write(journal.join("reverse-intent.json"), intent.to_string()).unwrap();
+        completion["marker"] = prepared["old_payload"]["marker"].clone();
+        fs::write(journal.join("reversed.json"), completion.to_string()).unwrap();
+    }
+    (data, journal)
+}
+
+#[test]
+fn committed_and_reversed_handoff_publish_bound_start_intent_and_allow_same_pin_restart() {
+    for reversed in [false, true] {
+        let scratch = Scratch::new();
+        let payload = payload();
+        let (data, journal) = handoff(&scratch, &payload, reversed);
+        let gate = workspace_gate::Gate::acquire(data.parent().unwrap()).unwrap();
+        gate.before_start(&data, &payload).unwrap();
+        let intent = fs::read(journal.join("start-intent.json")).unwrap();
+        gate.before_start(&data, &payload).unwrap();
+        assert_eq!(fs::read(journal.join("start-intent.json")).unwrap(), intent);
+        let mut wrong = payload.clone();
+        wrong.build_id = "9".repeat(40);
+        assert!(gate.before_start(&data, &wrong).is_err());
+        assert_eq!(fs::read(journal.join("start-intent.json")).unwrap(), intent);
+    }
+}
+
+#[test]
+fn uncertain_missing_tampered_or_started_journal_never_admits_start() {
+    for fault in [
+        "missing", "pending", "intent", "digest", "path", "bool", "extra", "start", "reverse",
+    ] {
+        let scratch = Scratch::new();
+        let payload = payload();
+        let (data, journal) = handoff(&scratch, &payload, false);
+        match fault {
+            "missing" => fs::remove_file(journal.join("committed.json")).unwrap(),
+            "pending" => fs::write(journal.join("marker.pending"), "pending").unwrap(),
+            "intent" => fs::write(journal.join("commit-intent.json"), "{}").unwrap(),
+            "start" => fs::write(journal.join("start-intent.json"), "{}").unwrap(),
+            "reverse" => fs::write(journal.join("reverse-intent.json"), "{}").unwrap(),
+            _ => {
+                let path = journal.join("committed.json");
+                let mut value: serde_json::Value =
+                    serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+                match fault {
+                    "digest" => value["prepared_sha256"] = serde_json::json!("f".repeat(64)),
+                    "path" => value["workspace_path_sha256"] = serde_json::json!("f".repeat(64)),
+                    "bool" => value["schema_version"] = serde_json::json!(true),
+                    _ => value["extra"] = serde_json::json!(1),
+                }
+                fs::write(path, value.to_string()).unwrap();
+            }
+        }
+        let before = fs::read(data.join("desktop-owner.json")).unwrap();
+        let gate = workspace_gate::Gate::acquire(data.parent().unwrap()).unwrap();
+        assert!(gate.before_start(&data, &payload).is_err(), "{fault}");
+        assert_eq!(fs::read(data.join("desktop-owner.json")).unwrap(), before);
+        if fault != "start" {
+            assert!(!journal.join("start-intent.json").exists());
+        }
+    }
+}
+
+#[cfg(unix)]
+struct LockPython(Child);
+#[cfg(unix)]
+impl Drop for LockPython {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+#[cfg(unix)]
+impl LockPython {
+    fn spawn(path: &Path, ready: &Path, hold: bool) -> Self {
+        // Test-only fixed platform interpreter and stdlib script; no application imports.
+        let script = r#"import fcntl,sys,pathlib
+f=open(sys.argv[1],'a+b')
+try: fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB)
+except BlockingIOError: sys.exit(3)
+pathlib.Path(sys.argv[2]).write_text('locked')
+if sys.argv[3]=='hold': sys.stdin.read(1)
+"#;
+        Self(
+            Command::new("/usr/bin/python3")
+                .args(["-I", "-B", "-c", script])
+                .arg(path)
+                .arg(ready)
+                .arg(if hold { "hold" } else { "exit" })
+                .stdin(Stdio::piped())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap(),
+        )
+    }
+    fn status(&mut self) -> std::process::ExitStatus {
+        let until = Instant::now() + Duration::from_secs(5);
+        loop {
+            if let Some(status) = self.0.try_wait().unwrap() {
+                return status;
+            }
+            assert!(
+                Instant::now() < until,
+                "owned lock fixture exceeded deadline"
+            );
+            thread::sleep(Duration::from_millis(5));
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn python_flock_and_rust_lock_exclude_each_other_and_release() {
+    let scratch = Scratch::new();
+    let parent = scratch.0.join("workspaces");
+    fs::create_dir(&parent).unwrap();
+    let path = parent.join(".desktop-maintenance.lock");
+    let ready = scratch.0.join("ready");
+    let mut python = LockPython::spawn(&path, &ready, true);
+    let until = Instant::now() + Duration::from_secs(5);
+    while !ready.exists() {
+        assert!(Instant::now() < until);
+        thread::sleep(Duration::from_millis(5));
+    }
+    assert!(workspace_gate::Gate::acquire(&parent).is_err());
+    python.0.stdin.take();
+    assert!(python.status().success());
+    let gate = workspace_gate::Gate::acquire(&parent).unwrap();
+    let mut denied = LockPython::spawn(&path, &scratch.0.join("denied"), false);
+    assert_eq!(denied.status().code(), Some(3));
+    drop(gate);
+    let mut allowed = LockPython::spawn(&path, &scratch.0.join("allowed"), false);
+    assert!(allowed.status().success());
+}
+
+#[cfg(unix)]
+#[test]
+fn maintenance_gate_is_held_through_pending_start_and_released_after_cleanup() {
+    let scratch = Scratch::new();
+    let owner = Arc::new(fixture(&scratch, "stall_start"));
+    let second = Arc::clone(&owner);
+    let task = thread::spawn(move || second.start(true));
+    let until = Instant::now() + Duration::from_secs(5);
+    while owner.status().mode != "starting" {
+        assert!(Instant::now() < until);
+        thread::sleep(Duration::from_millis(5));
+    }
+    assert!(workspace_gate::Gate::acquire(&scratch.0.join("workspaces")).is_err());
+    owner.stop();
+    assert!(task.join().unwrap().is_err());
+    assert!(workspace_gate::Gate::acquire(&scratch.0.join("workspaces")).is_ok());
+}
+
+#[cfg(unix)]
+#[test]
+fn journal_start_intent_precedes_failed_owned_spawn() {
+    let scratch = Scratch::new();
+    let mut payload = payload();
+    let (_, journal) = handoff(&scratch, &payload, false);
+    payload.executable = scratch.0.join("missing-fixed-executable");
+    let owner = Controller::with_payload(
+        Ok(payload),
+        scratch.0.join("workspaces"),
+        Backend::from_port(None),
+    );
+    assert!(owner.start(true).is_err());
+    assert!(journal.join("start-intent.json").is_file());
+    assert!(lock(&owner.child).is_none());
+    assert!(workspace_gate::Gate::acquire(&scratch.0.join("workspaces")).is_ok());
+}
+
+#[cfg(unix)]
+#[test]
+fn journal_metadata_denial_cannot_be_treated_as_absence() {
+    use std::os::unix::fs::PermissionsExt;
+    let scratch = Scratch::new();
+    let payload = payload();
+    let (data, journal) = handoff(&scratch, &payload, false);
+    let parent = data.parent().unwrap();
+    let gate = workspace_gate::Gate::acquire(parent).unwrap();
+    let original = fs::metadata(parent).unwrap().permissions();
+    fs::set_permissions(parent, fs::Permissions::from_mode(0o000)).unwrap();
+    let metadata = fs::symlink_metadata(&journal);
+    let result = gate.before_start(&data, &payload);
+    // Restore access before assertions so a failed regression never strands scratch files.
+    fs::set_permissions(parent, original).unwrap();
+    assert_eq!(
+        metadata.unwrap_err().kind(),
+        std::io::ErrorKind::PermissionDenied
+    );
+    assert!(
+        result.is_err(),
+        "an unreadable journal was accepted as absent"
+    );
+    assert!(!journal.join("start-intent.json").exists());
+}
