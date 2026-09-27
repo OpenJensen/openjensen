@@ -47,12 +47,19 @@ def test_actual_migration_then_read_only_roundtrip_preserves_all_records_and_mod
     ):
         assert result[key] is False
     assert result["record_identity"]["database"] == {
-        "alembic_revision": "0001",
+        "alembic_revision": "0002",
+        "job_submissions": 1,
         "projects": 1,
         "jobs": 2,
         "all_jobs_terminal": True,
         "validation": "stored_schema_and_local_artifact_inventory",
     }
+    submissions = result["record_identity"]["job_submissions"]
+    assert len(submissions) == 1
+    assert submissions[0]["index"] == [proof.PROJECT, "dataset.inspect", "generated-intake-1"]
+    assert submissions[0]["job_id"] == "intake"
+    assert submissions[0]["accepted_response"]["id"] == "intake"
+    assert submissions[0]["request_sha256"] == proof.sha256(m.canonical(submissions[0]["request"]))
     for name in ("original", "backup/workspace", "candidate", "roundtrip"):
         root = output / name
         intake = result["record_identity"]["jobs"][0]["record"]

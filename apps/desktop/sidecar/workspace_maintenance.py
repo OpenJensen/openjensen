@@ -277,6 +277,109 @@ def local_artifact(workspace, artifact, files, budget):
         raise MaintenanceError("Registered artifact byte count differs")
 
 
+def validate_submission_records(database, budget):
+    """Check durable request bindings without importing dispatch or opening a writer."""
+    from pydantic import TypeAdapter
+    from vla_platform.augmentation.contracts import AugmentationRequest
+    from vla_platform.contracts import IntakeRequest, Job, Timestamp
+    from vla_platform.lifecycle.contracts import PolicyRequest
+
+    layout = database.execute("PRAGMA table_info(job_submissions)").fetchall()
+    expected = {
+        "project_id": ("VARCHAR", 1),
+        "operation": ("VARCHAR", 2),
+        "idempotency_key": ("VARCHAR", 3),
+        "fingerprint_version": ("INTEGER", 0),
+        "request_sha256": ("VARCHAR", 0),
+        "request_record": ("JSON", 0),
+        "job_id": ("VARCHAR", 0),
+        "accepted_response": ("JSON", 0),
+        "created_at": ("VARCHAR", 0),
+    }
+    if {row[1]: (row[2], row[5]) for row in layout} != expected or any(
+        row[3] != 1 or row[4] is not None for row in layout
+    ):
+        raise MaintenanceError("Unsupported submission table layout")
+    if [row[2] for row in database.execute("PRAGMA index_info(ix_job_submissions_job_id)")] != [
+        "job_id"
+    ]:
+        raise MaintenanceError("Unsupported submission index")
+    foreign_keys = database.execute("PRAGMA foreign_key_list(job_submissions)").fetchall()
+    if len(foreign_keys) != 1 or foreign_keys[0][2:5] != ("jobs", "job_id", "id"):
+        raise MaintenanceError("Unsupported submission job link")
+    count = database.execute("SELECT count(*) FROM job_submissions").fetchone()[0]
+    if count > budget.limits.records:
+        raise MaintenanceError("Excessive submission records")
+    for column, maximum in {
+        "project_id": 4096,
+        "operation": 100,
+        "idempotency_key": 128,
+        "request_sha256": 64,
+        "request_record": budget.limits.json_bytes,
+        "job_id": 4096,
+        "accepted_response": budget.limits.json_bytes,
+        "created_at": 100,
+    }.items():
+        size = database.execute(
+            f"SELECT max(length(CAST({column} AS BLOB))) FROM job_submissions"
+        ).fetchone()[0]
+        if size is not None and size > maximum:
+            raise MaintenanceError("Stored submission field exceeds its byte bound")
+    for row in database.execute(
+        "SELECT project_id,operation,idempotency_key,fingerprint_version,request_sha256,"
+        "request_record,job_id,accepted_response,created_at FROM job_submissions"
+    ):
+        budget.check()
+        project, operation, key, version, digest, raw, job_id, response, created = row
+        if (
+            type(version) is not int
+            or version != 1
+            or not isinstance(key, str)
+            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", key)
+            or not isinstance(digest, str)
+            or not re.fullmatch(r"[a-f0-9]{64}", digest)
+            or not isinstance(raw, str)
+            or not isinstance(response, str)
+        ):
+            raise MaintenanceError("Invalid submission fingerprint or record")
+        TypeAdapter(Timestamp).validate_python(created, strict=True)
+        original = parse_json(raw.encode())
+        model = (
+            IntakeRequest
+            if operation == "dataset.inspect"
+            else AugmentationRequest
+            if operation == "dataset.augment"
+            else PolicyRequest
+        )
+        request = model.model_validate(original, strict=True)
+        normalized = canonical(request.model_dump(mode="json"))
+        if (
+            normalized != canonical(original)
+            or len(normalized) > 1024 * 1024
+            or hashlib.sha256(normalized).hexdigest() != digest
+            or getattr(request, "operation", "dataset.inspect") != operation
+        ):
+            raise MaintenanceError("Submission request identity differs")
+        accepted = Job.model_validate(parse_json(response.encode()), strict=True)
+        current_row = database.execute("SELECT record FROM jobs WHERE id=?", (job_id,)).fetchone()
+        if current_row is None or not isinstance(current_row[0], str):
+            raise MaintenanceError("Submission job is missing")
+        current = Job.model_validate(parse_json(current_row[0].encode()), strict=True)
+        if (
+            (accepted.id, accepted.project_id, accepted.kind) != (job_id, project, operation)
+            or (current.id, current.project_id, current.kind) != (job_id, project, operation)
+            or current.created_at != accepted.created_at
+            or canonical(current.request.model_dump(mode="json"))
+            != canonical(accepted.request.model_dump(mode="json"))
+        ):
+            raise MaintenanceError("Submission accepted job identity differs")
+        # The accepted response may be a cached job in any valid lifecycle state.
+        # Original request and resolved accepted request need not be identical.
+        if accepted.compute_target is not None or accepted.simulation_target is not None:
+            raise MaintenanceError("Remote acceptance requires separate compatibility review")
+    return count
+
+
 def validate_database(workspace, files, budget):
     # Schema-only imports: never import API/Execution/Storage or a runtime registry.
     from vla_platform.contracts import TERMINAL, Job, Project
@@ -302,17 +405,23 @@ def validate_database(workspace, files, budget):
             schema = database.execute(
                 "SELECT name,type FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'"
             ).fetchall()
-            if set(schema) != {
+            revisions = database.execute("SELECT version_num FROM alembic_version").fetchall()
+            if revisions not in ([("0001",)], [("0002",)]):
+                raise MaintenanceError("Unsupported SQLite migration revision")
+            revision = revisions[0][0]
+            expected_schema = {
                 ("projects", "table"),
                 ("jobs", "table"),
                 ("alembic_version", "table"),
                 ("ix_jobs_project_id", "index"),
-            }:
+            }
+            if revision == "0002":
+                expected_schema |= {
+                    ("job_submissions", "table"),
+                    ("ix_job_submissions_job_id", "index"),
+                }
+            if set(schema) != expected_schema:
                 raise MaintenanceError("Unsupported SQLite schema objects")
-            if database.execute("SELECT version_num FROM alembic_version").fetchall() != [
-                ("0001",)
-            ]:
-                raise MaintenanceError("Unsupported SQLite migration revision")
             for table, columns in (
                 ("projects", ["id", "name", "created_at"]),
                 ("jobs", ["id", "project_id", "status", "record"]),
@@ -402,13 +511,16 @@ def validate_database(workspace, files, budget):
                         "Native dataset snapshots require separate compatibility review"
                     )
             budget.check()
-            return {
-                "alembic_revision": "0001",
+            summary = {
+                "alembic_revision": revision,
                 "projects": len(projects),
                 "jobs": count,
                 "all_jobs_terminal": True,
                 "validation": "stored_schema_and_local_artifact_inventory",
             }
+            if revision == "0002":
+                summary["job_submissions"] = validate_submission_records(database, budget)
+            return summary
     except (sqlite3.Error, ValueError, TypeError) as exc:
         if isinstance(exc, MaintenanceError):
             raise

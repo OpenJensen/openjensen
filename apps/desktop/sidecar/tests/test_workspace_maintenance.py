@@ -325,7 +325,8 @@ def test_actual_current_alembic_schema_accepted_without_api(workspace):
 
     asyncio.run(initialize())
     result = run(workspace)
-    assert result["database"]["alembic_revision"] == "0001"
+    assert result["database"]["alembic_revision"] == "0002"
+    assert result["database"]["job_submissions"] == 0
     assert result["database"]["projects"] == result["database"]["jobs"] == 0
 
 
