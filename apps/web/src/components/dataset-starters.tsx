@@ -7,6 +7,5 @@ export function DatasetStarters({ selected, onSelect }: { selected: string; onSe
       <div className="starter-image"><img src={starter.poster} alt={`${starter.title} — source camera frame`} width="640" height="400" loading="lazy" /><span className="starter-camera-count">{starter.cameras} {starter.cameras === 1 ? 'camera' : 'cameras'}</span>{selected === starter.id && <span className="starter-selected" aria-label="Selected">✓</span>}</div>
       <div className="starter-copy"><h3>{starter.title}</h3><p className="starter-repo">{starter.repoId}</p><div className="starter-meta"><span>{starter.episodes} episodes</span><span>Use dataset <span aria-hidden="true">↗</span></span></div></div>
     </button>)}</div>
-    <p className="starter-footnote">Select an example to inspect its cameras and episodes. Examples use pinned dataset versions.</p>
   </section>;
 }

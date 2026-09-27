@@ -2,6 +2,11 @@ import { expect, test, type Page } from '@playwright/test';
 
 const projectId = 'quantization-fixture';
 
+function choice(page: Page, group: string, value: string) {
+  return page.getByRole('group', { name: group, exact: true }).locator(`input[value="${value}"]`);
+}
+
+
 async function workspace(page: Page, cloudOnly = false, cloudChecks = false,
   initialize?: (data: { jobs: Record<string, any>[]; artifacts: Record<string, any>[] }) => void) {
   const submitted: Record<string, any>[] = [];
@@ -34,6 +39,7 @@ async function workspace(page: Page, cloudOnly = false, cloudChecks = false,
     if (request.method() === 'GET') {
       const replies: Record<string, unknown> = {
         '/api/v1/health': { status: 'ok', version: 'fixture' }, '/api/v1/capabilities': [],
+        '/api/v1/simulation-options': { profiles: [], scored_evaluation: false, max_archive_bytes: 4294967296 },
         '/api/v1/projects': [{ id: projectId, name: 'Cloud checkpoints', created_at: new Date().toISOString() }],
         [`/api/v1/projects/${projectId}/jobs`]: jobs,
         [`/api/v1/projects/${projectId}/artifacts`]: artifacts,
@@ -64,16 +70,19 @@ async function workspace(page: Page, cloudOnly = false, cloudChecks = false,
 test('defaults to the latest cloud checkpoint and quantizes it with visible precision and activity', async ({ page }) => {
   const { jobs, submitted, unexpected } = await workspace(page);
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('group', { name: 'Quantization mode', exact: true }).getByRole('button', { name: 'SmolVLA', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Quantization jobs', exact: true })).toBeVisible();
-  await expect(page.getByLabel('Checkpoint or policy', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('group', { name: 'Policy', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'New quantization', exact: true }).click();
-  const picker = page.getByLabel('Checkpoint or policy', { exact: true });
-  await expect(picker).toHaveValue('latest');
-  await expect(picker.locator('option[value="latest"]')).toHaveText(/Latest checkpoint · Step 100/);
-  await expect(picker.locator('optgroup[label="Trained checkpoints"] option')).toHaveCount(3);
-  await expect(page.getByLabel('Execution target', { exact: true })).toHaveValue('gcp');
-  await expect(page.getByText(/Stored on Google Cloud/)).toBeVisible();
-  await page.getByLabel('Quantization precision', { exact: true }).selectOption('Q8_0');
+  const picker = page.getByRole('group', { name: 'Policy', exact: true });
+  await expect(choice(page, 'Policy', 'recent-100')).toBeChecked();
+  await expect(picker.getByText('Latest checkpoint', { exact: false })).toBeVisible();
+  await expect(picker.getByRole('radio')).toHaveCount(3);
+  await expect(choice(page, 'Compute', 'gcp')).toBeChecked();
+  await expect(choice(page, 'Policy', 'recent-100').locator('..')).toContainText('Cloud storage');
+  await choice(page, 'Compression', 'recommended').focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(choice(page, 'Compression', 'Q8_0')).toBeChecked();
   await page.getByRole('button', { name: 'Start quantization', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0]).toMatchObject({ operation: 'policy.quantize', artifact_id: 'recent-100', runtime_id: 'gcp', precision: { language: 'Q8_0', vision: null } });
@@ -99,14 +108,14 @@ test('preserves an earlier checkpoint selected from a training run through quant
   await expect(checkpointActions).toBeVisible();
   await checkpointActions.getByLabel('Checkpoint', { exact: true }).selectOption('recent-20');
   await checkpointActions.getByRole('button', { name: 'Quantize checkpoint' }).click();
-  await expect(page.getByLabel('Checkpoint or policy', { exact: true })).toHaveValue('recent-20');
+  await expect(choice(page, 'Policy', 'recent-20')).toBeChecked();
   await page.getByRole('button', { name: 'Start quantization', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0]).toMatchObject({ artifact_id: 'recent-20', precision: { language: 'Q8_0', vision: null } });
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Quantization jobs', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'New quantization', exact: true }).click();
-  await expect(page.getByLabel('Checkpoint or policy', { exact: true })).toHaveValue('latest');
+  await expect(choice(page, 'Policy', 'recent-100')).toBeChecked();
   expect(submitted).toHaveLength(1);
   expect(unexpected).toEqual([]);
 });
@@ -117,11 +126,11 @@ test('cloud quantization keeps Q8 by default and accepts explicit experimental p
   })), projectId);
   const { submitted, unexpected } = await workspace(page, true);
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('group', { name: 'Quantization mode', exact: true }).getByRole('button', { name: 'SmolVLA', exact: true }).click();
   await page.getByRole('button', { name: 'New quantization', exact: true }).click();
-  const precision = page.getByLabel('Quantization precision', { exact: true });
-  await expect(precision).toHaveValue('recommended');
-  await expect(precision.locator('option[value="recommended"]')).toHaveText('Recommended · 8-bit (Q8)');
-  await precision.selectOption('Q4_0');
+  await expect(choice(page, 'Compression', 'recommended')).toBeChecked();
+  await expect(page.getByRole('radio', { name: '4-bit', exact: true })).toBeVisible();
+  await choice(page, 'Compression', 'Q4_0').check();
   await page.getByText('Advanced quantization', { exact: true }).click();
   await page.getByLabel('Also quantize vision to Q8 (experimental)', { exact: true }).check();
   await page.getByRole('button', { name: 'Start quantization', exact: true }).click();
@@ -136,11 +145,12 @@ test('keeps unsupported checkpoints visible and explains the SmolVLA quantizatio
   const { artifacts, submitted, unexpected } = await workspace(page);
   Object.assign(artifacts.find(item => item.id === 'recent-100')!.metadata, { architecture: 'psi0' });
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('group', { name: 'Quantization mode', exact: true }).getByRole('button', { name: 'SmolVLA', exact: true }).click();
   await page.getByRole('button', { name: 'New quantization', exact: true }).click();
-  await expect(page.getByLabel('Checkpoint or policy', { exact: true })).toHaveValue('latest');
+  await expect(choice(page, 'Policy', 'recent-100')).toBeChecked();
   await expect(page.getByText(/GGUF quantization currently supports SmolVLA checkpoints/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start quantization', exact: true })).toBeDisabled();
-  await page.getByLabel('Checkpoint or policy', { exact: true }).selectOption('recent-20');
+  await choice(page, 'Policy', 'recent-20').check();
   await expect(page.getByRole('button', { name: 'Start quantization', exact: true })).toBeEnabled();
   expect(submitted).toEqual([]);
   expect(unexpected).toEqual([]);
@@ -151,10 +161,11 @@ for (const stage of ['Evaluate', 'Run']) {
     const { artifacts, submitted, unexpected } = await workspace(page, true);
     artifacts.push({ ...artifacts[0], id: 'packed-policy', label: 'Compressed policy', format: 'gguf' });
     await page.getByRole('button', { name: stage, exact: true }).click();
+    if (stage === 'Run') await page.getByRole('group', { name: 'Run mode', exact: true }).getByRole('button', { name: 'Check inference', exact: true }).click();
     await page.getByRole('button', { name: stage === 'Evaluate' ? 'New evaluation' : 'New run', exact: true }).click();
-    await expect(page.getByLabel('Execution target', { exact: true })).toBeDisabled();
-    await expect(page.getByLabel('Execution target', { exact: true }).locator('option[value="gcp"]')).toHaveCount(0);
-    await expect(page.getByText(/Cloud engine checks appear when supported by the connected backend/)).toBeVisible();
+    await expect(page.getByRole('group', { name: 'Compute', exact: true }).getByRole('radio')).toHaveCount(0);
+    await expect(choice(page, 'Compute', 'gcp')).toHaveCount(0);
+    await expect(page.getByText(stage === 'Evaluate' ? 'No evaluation target is available.' : 'No policy runner is available.', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: stage === 'Evaluate' ? 'Start evaluation' : 'Reload and run', exact: true })).toBeDisabled();
     await page.getByRole('button', { name: 'View training metrics', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Fine-tuning jobs' })).toBeVisible();
@@ -168,8 +179,8 @@ test('native evaluation targets remain usable while cloud training targets are e
   artifacts.push({ ...artifacts[0], id: 'packed-policy', label: 'Compressed policy', format: 'gguf', metadata: { architecture: 'smolvla', precision: 'Q8_0' } });
   await page.getByRole('button', { name: 'Evaluate', exact: true }).click();
   await page.getByRole('button', { name: 'New evaluation', exact: true }).click();
-  await expect(page.getByLabel('Execution target', { exact: true })).toHaveValue('xbox');
-  await expect(page.getByLabel('Execution target', { exact: true }).locator('option[value="gcp"]')).toHaveCount(0);
+  await expect(choice(page, 'Compute', 'xbox')).toBeChecked();
+  await expect(choice(page, 'Compute', 'gcp')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Start evaluation', exact: true })).toBeEnabled();
   expect(unexpected).toEqual([]);
 });
@@ -184,11 +195,13 @@ test('model names distinguish checkpoint choices and training runs while legacy 
   artifacts.push({ ...artifacts[0], id: 'psi-checkpoint', job_id: 'psi-run', metadata: { step: 30, storage: 'gcs', remote_uri: 'gs://fixture/psi-run/checkpoint-30', base_model: { repository: 'USC-PSI-Lab/psi-model' } } } as typeof artifacts[number]);
   jobs.push({ ...jobs[1], id: 'legacy-run', request: { ...jobs[1].request, training: null }, created_at: '2026-09-24T10:00:00Z' });
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('group', { name: 'Quantization mode', exact: true }).getByRole('button', { name: 'SmolVLA', exact: true }).click();
   await page.getByRole('button', { name: 'New quantization', exact: true }).click();
-  const picker = page.getByLabel('Checkpoint or policy', { exact: true });
-  await expect(picker.locator('option[value="recent-100"]')).toHaveText(/Step 100 · SmolVLA · .* · Run recent-r/);
-  await expect(picker.locator('option[value="old-900"]')).toHaveText(/Step 900 · ACT · .* · Run older-ru/);
-  await expect(picker.locator('option[value="psi-checkpoint"]')).toHaveText(/Step 30 · Psi-Zero · .* · Run psi-run/);
+  const picker = page.getByRole('group', { name: 'Policy', exact: true });
+  await expect(picker.getByRole('radio', { name: 'SmolVLA · Step 100', exact: true })).toBeVisible();
+  await expect(choice(page, 'Policy', 'recent-100').locator('..')).toContainText('Run recent-r');
+  await expect(picker.getByRole('radio', { name: 'ACT · Step 900', exact: true })).toBeVisible();
+  await expect(picker.getByRole('radio', { name: 'Psi-Zero · Step 30', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
   const runs = page.locator('.job-history-entry');
   await expect(runs.filter({ hasText: /SmolVLA · LORA/ })).toHaveCount(1);
@@ -219,7 +232,7 @@ test('opens a previous quantization job from history without mixing its details 
   const history = page.getByRole('region', { name: 'Quantization jobs', exact: true });
   await expect(history.locator('.job-history-entry')).toHaveCount(2);
   await expect(history.locator('.job-history-entry').first()).toContainText('Preparing worker');
-  await expect(page.getByLabel('Checkpoint or policy')).toHaveCount(0);
+  await expect(page.getByRole('group', { name: 'Policy', exact: true })).toHaveCount(0);
   await history.locator('[data-job-id="prior-quantization"]').click();
   const detail = page.getByRole('article', { name: 'Quantize job details' });
   await expect(detail.getByRole('heading', { name: 'SmolVLA · Q4', exact: true })).toBeVisible();
@@ -231,7 +244,7 @@ test('opens a previous quantization job from history without mixing its details 
   await detail.getByText('Details and logs', { exact: true }).click();
   await expect(detail.getByText('prior-quantization', { exact: true })).toBeVisible();
   await detail.getByRole('button', { name: 'New quantization', exact: true }).click();
-  await expect(page.getByLabel('Checkpoint or policy', { exact: true })).toHaveValue('latest');
+  await expect(choice(page, 'Policy', 'recent-100')).toBeChecked();
   await expect(page.getByRole('article', { name: 'Quantize job details' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: /^Download / })).toHaveCount(0);
   await page.getByRole('button', { name: '← All quantization jobs', exact: true }).click();
@@ -250,11 +263,12 @@ for (const stage of ['Evaluate', 'Run']) {
         metadata: { architecture: 'smolvla', storage: 'gcs', precision: 'Q8_0' } });
     });
     await page.getByRole('button', { name: stage, exact: true }).click();
+    if (stage === 'Run') await page.getByRole('group', { name: 'Run mode', exact: true }).getByRole('button', { name: 'Check inference', exact: true }).click();
     await expect(page.getByRole('region', { name: stage === 'Evaluate' ? 'Evaluation jobs' : 'Run jobs', exact: true })).toBeVisible();
-    await expect(page.getByLabel('Input policy', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('group', { name: 'Policy', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: stage === 'Evaluate' ? 'New evaluation' : 'New run', exact: true }).click();
-    await expect(page.getByLabel('Execution target', { exact: true })).toHaveValue('gcp');
-    await expect(page.getByText('Native loading, finite actions and timing on synthetic inputs. Robot task success is not measured.')).toBeVisible();
+    await expect(choice(page, 'Compute', 'gcp')).toBeChecked();
+    await expect(page.getByText('Synthetic inputs · no task success score')).toBeVisible();
     await page.getByRole('button', { name: stage === 'Evaluate' ? 'Start evaluation' : 'Reload and run', exact: true }).click();
     await expect.poll(() => submitted.length).toBe(1);
     expect(submitted[0]).toMatchObject({ operation: stage === 'Evaluate' ? 'policy.evaluate' : 'policy.run', artifact_id: 'cloud-q8', runtime_id: 'gcp',
@@ -297,14 +311,15 @@ for (const stage of ['Evaluate', 'Run']) {
   test(`${stage} explains how to prepare a trained checkpoint when no GGUF is available`, async ({ page }) => {
     const { submitted, unexpected } = await workspace(page, true, true);
     await page.getByRole('button', { name: stage, exact: true }).click();
+    if (stage === 'Run') await page.getByRole('group', { name: 'Run mode', exact: true }).getByRole('button', { name: 'Check inference', exact: true }).click();
     await page.getByRole('button', { name: stage === 'Evaluate' ? 'New evaluation' : 'New run', exact: true }).click();
-    await expect(page.getByLabel('Execution target', { exact: true })).toHaveValue('gcp');
+    await expect(choice(page, 'Compute', 'gcp')).toBeChecked();
     await expect(page.getByText('Quantize a SmolVLA checkpoint first.', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: stage === 'Evaluate' ? 'Start evaluation' : 'Reload and run', exact: true })).toBeDisabled();
     await page.getByRole('button', { name: 'Go to quantization', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Quantization jobs', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'New quantization', exact: true }).click();
-    await expect(page.getByLabel('Checkpoint or policy', { exact: true })).toHaveValue('latest');
+    await expect(choice(page, 'Policy', 'recent-100')).toBeChecked();
     await expect(page.getByRole('button', { name: 'Start quantization', exact: true })).toBeEnabled();
     expect(submitted).toEqual([]);
     expect(unexpected).toEqual([]);

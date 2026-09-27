@@ -1,6 +1,6 @@
 # Train from a verified local dataset
 
-In **Dataset → Sources → Local folder**, select **Prepare immutable training copy** before inspection. The application copies the entire finalized LeRobot v3 dataset into its workspace, checks every declared row and video, and records a content identity. A normal metadata inspection does not grant training eligibility.
+In **Dataset → Sources → Local directory**, select **Prepare immutable training copy** before inspection. The application copies the entire finalized LeRobot v3 dataset into its workspace, checks every declared row and video, and records a content identity. A normal metadata inspection does not grant training eligibility.
 
 Set `FIREBIRD_LOCAL_DATA_ROOT` to the permitted source directory, install the [isolated CPU reader](../workers/_cpu_readers/README.md), and put FFmpeg/ffprobe on the application host's path. Secure snapshots currently support Linux and macOS; Windows metadata inspection remains available but snapshot training is not yet supported. The source must be finalized, contain no symlinks or unfinished files, and fit the current limits: 16 GiB total, 4 GiB per file, 4,096 files, two million rows and 20,000 episodes. Validation is bounded to 120 seconds; exceeding a limit fails instead of granting partial eligibility.
 
@@ -12,7 +12,7 @@ Changing source files requires a new inspection/copy. Existing jobs retain the o
 
 # Teach in simulation
 
-**Dataset → Teaching** relays explicit task, recording, pause/reset, named-joint correction, failure annotation and finish commands to an authenticated local executor. Each command binds to the exact executor session and state revision. A correction is acknowledged only after physics advances and the applied-action row is written. A timeout means execution is unverified; inspect the executor before retrying.
+**Teaching**, directly under the sidebar's **Data** group, relays explicit task, recording, pause/reset, named-joint correction, failure annotation and finish commands to an authenticated local executor. Each command binds to the exact executor session and state revision. A correction is acknowledged only after physics advances and the applied-action row is written. A timeout means execution is unverified; inspect the executor before retrying.
 
 Install and run the separate [teaching worker](../workers/teaching/README.md) using the existing Isaac runtime. Set these application-host variables before starting OPEN JENSEN:
 

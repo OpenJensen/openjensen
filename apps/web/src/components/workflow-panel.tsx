@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CloudConnectionsPanel } from "@/components/cloud-connections";
 import { JobHistory } from "@/components/job-history";
+import { WorkflowChoiceGrid, type WorkflowChoice } from "@/components/workflow-choice-grid";
 import { nativeQuantizationOf, nativeQuantizationOnly } from "@/lib/native-quantization";
 import { replayJob } from "@/lib/native-replay";
 import { isSimulationJob } from "@/lib/native-simulation";
@@ -419,7 +420,6 @@ export function WorkflowPanel({
           <fieldset className="workflow-fields workflow-controls" disabled={!ready}>
             <legend className="visually-hidden">Project workflow settings</legend>
             <h2>Compression defaults</h2>
-            <p className="muted">Start with LM Q8 on CPU and CUDA, preserving vision precision. Q4 is experimental: a prior RTX 3070 pilot lost task success. Every policy still needs evaluation on its execution target.</p>
             <label>
               Quantization recipe
               <select
@@ -432,7 +432,7 @@ export function WorkflowPanel({
                 }
               >
                 <option value="recommended">
-                  Start with LM Q8; validate on your target
+                  Recommended · Q8
                 </option>
                 <option value="Q4_0">LM Q4 (experimental)</option>
                 <option value="Q8_0">LM Q8</option>
@@ -446,7 +446,6 @@ export function WorkflowPanel({
               />
               Compare Q8 and Q4 (experimental)
             </label>
-            <p className="muted">Candidate comparisons use a configured native evaluation worker. Cloud quantization produces the precision selected for that job.</p>
             <label className="workflow-check">
               <input
                 type="checkbox"
@@ -477,7 +476,6 @@ export function WorkflowPanel({
                   Spatial task IDs
                   <input value={preferences.taskIds} onChange={(e) => update("taskIds", e.target.value)} />
                 </label>
-                <p className="muted">Use unique task IDs 0–9. Every task uses the same paired search and final states. Hardware acceptance is still required.</p>
                 <label>
                   Approved parity profile
                   <input value={preferences.parityProfile} onChange={(e) => update("parityProfile", e.target.value)} placeholder="Name your reviewed tolerance profile" />
@@ -490,7 +488,6 @@ export function WorkflowPanel({
                   Maximum absolute action error
                   <input type="number" min="0" step="any" value={preferences.parityMaxError} onChange={(e) => update("parityMaxError", e.target.value)} />
                 </label>
-                <p className="muted">Declare reviewed tolerances before running. Native and floating C++ actions must pass this check before compression starts; no universal tolerance is assumed.</p>
               </>
             )}
             <label>
@@ -506,7 +503,6 @@ export function WorkflowPanel({
                 <option value="libero">Paired LIBERO episodes</option>
               </select>
             </label>
-            {preferences.mode === "engine" && <p className="muted">Measures latency and loading; task success requires LIBERO.</p>}
             <label>
               Timed predictions
               <input
@@ -605,7 +601,6 @@ export function WorkflowPanel({
                         }
                       />
                     </label>
-                    <p className="muted">Candidates must match reference success and pass unused states. GPU memory includes other processes.</p>
                   </>
                 )}
               </>
@@ -626,7 +621,6 @@ export function WorkflowPanel({
         ) : (
           <>
             <h2>Run diagnostics</h2>
-            <p className="muted">Check a policy on your configured target. Results are saved to this project.</p>
             <form className="workflow-fields diagnostic-launcher" onSubmit={(event) => {
               event.preventDefault();
               if (!diagnosticBlocker && !mutation.isPending) mutation.mutate();
@@ -649,11 +643,11 @@ export function WorkflowPanel({
                   <option value="libero" disabled={!runtime?.simulation}>LIBERO task evaluation</option>
                 </select>
               </label>
-              <p className="muted">{preferences.mode === "engine"
+              <details className="workflow-advanced"><summary>Protocol details</summary><p className="muted">{preferences.mode === "engine"
                 ? `Checks loading, finite actions, prediction latency and memory with ${preferences.warmup} warmups and ${preferences.repetitions} repetitions. Task success is not measured.`
                 : preferences.suite === "libero_spatial"
                   ? `Evaluates LIBERO Spatial tasks ${preferences.taskIds} with initial states ${preferences.searchStates}, seed 42 and the full 280-step horizon. The policy must include pinned Spatial assets and approved parity limits.`
-                  : `Evaluates LIBERO Object task ${preferences.task} with initial states ${preferences.searchStates}, seed 42 and up to ${preferences.steps} steps. The policy must declare LIBERO Object compatibility.`}</p>
+                  : `Evaluates LIBERO Object task ${preferences.task} with initial states ${preferences.searchStates}, seed 42 and up to ${preferences.steps} steps. The policy must declare LIBERO Object compatibility.`}</p></details>
               <button className="text-link" type="button" onClick={() => setTab("settings")}>Edit diagnostic settings</button>
               {diagnosticBlocker && <p className="warning-box" id="diagnostic-readiness" role="status">{diagnosticBlocker}</p>}
               {!runtime && !options.isPending && <p className="muted"><a className="text-link" href="https://github.com/sobhanb-eth/firebird-hackathon-codebase/blob/main/docs/policy-workflow.md#configure-the-execution-host" target="_blank" rel="noreferrer">Worker setup instructions ↗</a></p>}
@@ -915,15 +909,30 @@ export function WorkflowPanel({
     );
   }
 
+  const policyChoices: WorkflowChoice[] = [
+    ...(stage === "Quantize" ? checkpoints : inputs).map((artifact, index) => {
+      const job = policyJobs.find(item => item.id === artifact.job_id);
+      const step = checkpointStep(artifact);
+      const model = job ? trainingRunModelLabel(job, options.data?.training_models, [artifact], policyJobs) : null;
+      const checkpoint = ["training_checkpoint", "native_checkpoint"].includes(artifact.format);
+      return {
+        value: artifact.id,
+        label: checkpoint ? [model, step !== null ? `Step ${step.toLocaleString()}` : artifact.label].filter(Boolean).join(" · ") : artifact.label,
+        description: checkpoint ? `${index === 0 ? "Latest checkpoint · " : ""}${job ? new Date(job.created_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "Saved checkpoint"}` : `${precisionName(artifact.metadata?.precision)} · ${sizeLabel(artifact.file_bytes)}`,
+        meta: checkpoint ? `Run ${artifact.job_id.slice(0, 8)} · ${isCloudArtifact(artifact) ? "Cloud storage" : "Local storage"}` : isCloudArtifact(artifact) ? "Cloud storage" : "Local storage",
+        icon: checkpoint ? "layers" as const : "compress" as const,
+      };
+    }),
+    ...(stage === "Quantize" ? (options.data?.sources ?? []).map(source => ({ value: `source:${source.id}`, label: source.label, meta: "Base policy", icon: "spark" as const })) : []),
+    ...(stage === "Quantize" ? inputs.filter(artifact => !["training_checkpoint", "native_checkpoint"].includes(artifact.format)).map(artifact => ({ value: artifact.id, label: artifact.label, meta: "Floating-point", icon: "layers" as const })) : []),
+  ];
   const formIssue = inputIssue ?? executionIssue;
   return (
     <section className="panel workflow-panel workflow-new-job">
       <div className="workflow-view-navigation"><button className="text-link" type="button" disabled={mutation.isPending} onClick={backToHistory}>← All {historyTitle.toLowerCase()}</button></div>
-      <h2>{newLabel}</h2>
       {preferencesBlocker && <p className="warning-box" role="status">{preferencesBlocker}</p>}
       {options.data && !runtimes.length && <div className="workflow-storage-note" role="status">
         <p>{stage === "Evaluate" ? "No evaluation target is available." : stage === "Run" ? "No policy runner is available." : "Connect a worker to start quantization."}</p>
-        {(stage === "Evaluate" || stage === "Run") && <p>Cloud engine checks appear when supported by the connected backend.</p>}
         {onViewTraining && (stage === "Evaluate" || stage === "Run") && <button type="button" className="text-link" onClick={onViewTraining}>View training metrics</button>}
       </div>}
       <form onSubmit={event => { event.preventDefault(); if (ready && !mutation.isPending && !formIssue) mutation.mutate(); }}>
@@ -934,32 +943,36 @@ export function WorkflowPanel({
             <label>Inspected dataset<select value={datasetId || datasets[0]?.id || ""} onChange={event => setDatasetId(event.target.value)}><option value="" disabled>Select an inspection</option>{datasets.map(job => <option key={job.id} value={job.id}>{"repo_id" in job.request ? job.request.repo_id : job.id}</option>)}</select></label>
             <label>Resume checkpoint<select value={resumeId} onChange={event => setResumeId(event.target.value)}><option value="">Start a new training run</option>{checkpoints.map(artifact => <option key={artifact.id} value={artifact.id}>{checkpointLabel(artifact, policyJobs, options.data?.training_models)}</option>)}{policyJobs.filter(job => job.kind === "policy.finetune" && ["failed", "interrupted", "cancelled"].includes(job.status)).map(job => <option key={job.id} value={`job:${job.id}`}>Last saved checkpoint · {job.id.slice(0, 8)}</option>)}</select></label>
           </> : <>
-            <label>{stage === "Quantize" ? "Checkpoint or policy" : "Input policy"}<select aria-label={stage === "Quantize" ? "Checkpoint or policy" : "Input policy"} value={input} onChange={event => { setInput(event.target.value); mutation.reset(); }} required>
-              <option value="">Choose a policy</option>
-              {stage === "Quantize" && checkpoints.length > 0 && <option value="latest">Latest checkpoint · {checkpointLabel(checkpoints[0], policyJobs, options.data?.training_models)}</option>}
-              {stage !== "Quantize" && inputs.length > 0 && <option value="latest">Latest policy · {inputs[0].label}</option>}
-              {stage === "Quantize" && checkpoints.length > 0 && <optgroup label="Trained checkpoints">{checkpoints.map(artifact => <option key={artifact.id} value={artifact.id}>{checkpointLabel(artifact, policyJobs, options.data?.training_models)}</option>)}</optgroup>}
-              {stage === "Quantize" && !!options.data?.sources.length && <optgroup label="Base policies">{options.data.sources.map(source => <option key={source.id} value={`source:${source.id}`}>{source.label}</option>)}</optgroup>}
-              {inputs.filter(artifact => stage !== "Quantize" || !["training_checkpoint", "native_checkpoint"].includes(artifact.format)).map(artifact => <option key={artifact.id} value={artifact.id}>{artifact.label} · {artifact.id.slice(0, 8)}</option>)}
-            </select></label>
+            <WorkflowChoiceGrid name="input-policy" label="Policy" value={selectedInput}
+              options={policyChoices} onChange={value => { setInput(value); mutation.reset(); }}
+              emptyMessage={artifacts.isPending ? "Loading policies…" : "Your saved policies will appear here."} />
             {(stage === "Evaluate" || stage === "Run") && !artifacts.isPending && !artifacts.isError && !inputs.length && <div className="workflow-storage-note" role="status">
               <p>Quantize a SmolVLA checkpoint first.</p>
               <button type="button" className="text-link" onClick={onOpenQuantize}>Go to quantization</button>
             </div>}
-            {cloudCheckpoint && <p className="workflow-input-help">Stored on Google Cloud. Weights are loaded on the cloud worker.</p>}
             {stage === "Quantize" && <>
-              {!checkpoints.length && !artifacts.isPending && <p className="muted">Saved training checkpoints will appear here.</p>}
-              <label>Quantization precision<select aria-label="Quantization precision" value={preferences.precision} onChange={event => update("precision", event.target.value as Preferences["precision"])}>
-                <option value="recommended">Recommended · 8-bit (Q8)</option>
-                <option value="Q8_0">8-bit (Q8)</option>
-                <option value="Q4_0">4-bit (Q4) · experimental</option>
-              </select></label>
+              <WorkflowChoiceGrid name="quantization-precision" label="Compression" value={preferences.precision}
+                options={[
+                  { value: "recommended", label: "Recommended", meta: "Q8 · 8-bit", icon: "spark" },
+                  { value: "Q8_0", label: "8-bit", meta: "Q8", icon: "layers" },
+                  { value: "Q4_0", label: "4-bit", meta: "Q4 · Experimental", icon: "compress" },
+                ]} onChange={value => update("precision", value as Preferences["precision"])} />
               <details className="workflow-advanced"><summary>Advanced quantization</summary><label className="workflow-check"><input type="checkbox" checked={preferences.vision} onChange={event => update("vision", event.target.checked)} />Also quantize vision to Q8 (experimental)</label>{nativeQuantization && <label className="workflow-check"><input type="checkbox" checked={preferences.compareQ4} onChange={event => update("compareQ4", event.target.checked)} />Compare Q8 and Q4 (experimental)</label>}</details>
             </>}
           </>}
-          <label>Execution target<select aria-label="Execution target" disabled={!runtimes.length} value={runtime?.id ?? ""} onChange={event => setRuntimeId(event.target.value)}><option value="" disabled>Select a target</option>{runtimes.map(target => <option key={target.id} value={target.id}>{target.label}</option>)}</select></label>
+          <WorkflowChoiceGrid name="execution-target" label="Compute" value={runtime?.id ?? ""}
+            disabled={!runtimes.length}
+            options={runtimes.map(target => ({ value: target.id, label: target.label,
+              meta: `${target.execution === "skypilot" ? "Cloud" : "Local"} · ${target.device === "cuda" ? "GPU" : "CPU"}`, icon: "layers" }))}
+            onChange={setRuntimeId} emptyMessage="Connect a compatible worker in Compute settings." />
           {(stage === "Evaluate" || stage === "Run") && <>
-            {cloudEngine ? <p className="workflow-input-help">Native loading, finite actions and timing on synthetic inputs. Robot task success is not measured.</p> : <label>Evaluation method<select value={preferences.mode} disabled={preferences.suite === "libero_spatial"} onChange={event => update("mode", event.target.value as Preferences["mode"])}><option value="engine">Engine checks</option><option value="libero" disabled={!runtime?.simulation}>LIBERO episodes</option></select></label>}
+            {cloudEngine ? <p className="workflow-input-help">Synthetic inputs · no task success score</p> : <WorkflowChoiceGrid
+              name="evaluation-method" label="Check type" value={preferences.mode} disabled={preferences.suite === "libero_spatial"}
+              options={[
+                { value: "engine", label: "Inference checks", meta: "Synthetic inputs · timing", icon: "chart" },
+                { value: "libero", label: "Robot task evaluation", meta: runtime?.simulation ? "LIBERO · task success" : "LIBERO worker required", icon: "play", disabled: !runtime?.simulation },
+              ]} onChange={value => update("mode", value as Preferences["mode"])} />}
+
             {evaluationMode === "engine" && <details className="workflow-advanced"><summary>Engine check settings</summary><div className="workflow-form-row"><label>Warmup predictions<input type="number" min="1" max="100" value={preferences.warmup} onChange={event => update("warmup", Number(event.target.value))} /></label><label>Timed predictions<input type="number" min="2" max="1000" value={preferences.repetitions} onChange={event => update("repetitions", Number(event.target.value))} /></label></div></details>}
             {!cloudEngine && preferences.mode === "libero" && !runtime?.simulation && <button type="button" className="text-link" onClick={() => setPreferences(old => ({ ...old, mode: "engine", suite: "libero_object" }))}>Use engine checks</button>}
           </>}

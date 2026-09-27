@@ -16,6 +16,7 @@ import { trainingModels, type TrainingModel } from "@/lib/training-models";
 import { checkpointStep, trainingRunModelLabel } from "@/lib/checkpoints";
 import { CameraPlayer } from "@/components/dataset-explorer";
 import { Icon } from "@/components/icon";
+import { WorkflowChoiceGrid } from "@/components/workflow-choice-grid";
 import { GpuPicker } from "@/components/gpu-picker";
 import { TrainingMonitor } from "@/components/training-monitor";
 import { JobHistory, type JobHistoryEntry } from "@/components/job-history";
@@ -292,7 +293,7 @@ export function TrainingPanel({
   }, [projectId, recipe, modelId, modelBatchSizes, loaded]);
   function update<K extends keyof Recipe>(key: K, value: Recipe[K]) {
     setRecipe((old) => ({ ...old, [key]: value }));
-    if (key === "batchSize" && typeof value === "number") setModelBatchSizes(previous => ({ ...previous, [modelId || "smolvla"]: value }));
+    if (key === "batchSize" && typeof value === "number" && modelId) setModelBatchSizes(previous => ({ ...previous, [modelId]: value }));
   }
 
   const trainingRuns = (jobs.data ?? [])
@@ -414,7 +415,7 @@ export function TrainingPanel({
       (!originalTraining?.model_id
         ? models.find((item) => item.id === "smolvla")
         : undefined))
-    : (models.find((item) => item.id === modelId) ?? models[0]);
+    : models.find((item) => item.id === modelId);
   const availableMethods = (options.data?.training_methods ?? []).filter(
     (item) => model?.methods.includes(item.id),
   );
@@ -689,7 +690,6 @@ export function TrainingPanel({
       {view === "new" && <>
       <div className="training-view-toolbar">
         <button type="button" className="text-button training-back" onClick={() => setView("jobs")}><Icon name="arrow" size={14} />Back to jobs</button>
-        <h2>New fine-tuning</h2>
       </div>
       <form
         className="training-workspace"
@@ -952,7 +952,7 @@ export function TrainingPanel({
                 <label
                   key={item.id}
                   className={`training-model-tile model-${item.id}`}
-                  title={item.model_id}
+                  title={`${item.model_id} · ${item.description}`}
                 >
                   <input
                     type="radio"
@@ -961,7 +961,7 @@ export function TrainingPanel({
                     checked={displayedModelId === item.id}
                     disabled={!!resumeId || busy || !modelSupported(item)}
                     onChange={() => {
-                      setModelBatchSizes(previous => ({ ...previous, [displayedModelId ?? "smolvla"]: recipe.batchSize }));
+                      if (displayedModelId) setModelBatchSizes(previous => ({ ...previous, [displayedModelId]: recipe.batchSize }));
                       setRecipe(previous => ({ ...previous, batchSize: modelBatchSizes[item.id] ?? (item.id === "smolvla" ? defaults.batchSize : item.id === "psi0" ? 2 : 4) }));
                       setModelId(item.id);
                       setRuntimeId("");
@@ -989,7 +989,6 @@ export function TrainingPanel({
                         </small>
                       )}
                     </span>
-                    <small title={item.description}>{item.description}</small>
                     <span className="training-model-memory">
                       {typeof memory === "number" && Number.isFinite(memory) && memory > 0
                         ? <>GPU budget: <strong>{number(memory)} GB+</strong></>
@@ -1000,24 +999,13 @@ export function TrainingPanel({
                 );
               })}
             </fieldset>
-            <p className="training-memory-help">GPU memory budget for training; usage varies with method and batch size.</p>
-            <fieldset className="training-methods">
-              <legend>Method</legend>
-              {availableMethods.map((item) => (
-                <label key={item.id}>
-                  <input
-                    type="radio"
-                    name="training-method"
-                    aria-label={item.label}
-                    checked={activeMethod === item.id}
-                    disabled={!!resumeId || busy}
-                    onChange={() => setMethod(item.id)}
-                  />
-                  {item.label}
-                </label>
-              ))}
-            </fieldset>
-            {model?.id === "psi0" && <p className="training-control-note">Psi-Zero trains its action expert while keeping the vision-language backbone frozen. It currently supports one camera and LeRobot v2 datasets.</p>}
+            {model && <div className="training-method-choices">
+              <WorkflowChoiceGrid name="training-method" label="Training method" value={activeMethod ?? ""} disabled={!!resumeId || busy}
+                options={availableMethods.map(item => ({ value: item.id, label: item.label,
+                  meta: item.id === "lora" ? "Adapters" : item.id === "qlora" ? "Quantized adapters" : item.id === "full" ? "Trainable weights" : undefined,
+                  icon: item.id === "lora" ? "sliders" : "layers" }))}
+                onChange={setMethod} />
+            </div>}
             {modelIssue && <p className="error-notice" role="alert">{modelIssue}</p>}
             <div className="training-footer">
               <button
@@ -1067,7 +1055,6 @@ export function TrainingPanel({
                   memory: item.gpu_memory_mib ? `${number(item.gpu_memory_mib / 1024)} GB` : undefined })),
               ]}
             />
-            {!!model?.minimum_gpu_memory_gb && <p className="training-control-note">{model.label} requires at least {model.minimum_gpu_memory_gb} GB of GPU memory. Only compatible GPUs are shown.</p>}
             <details className="training-disclosure">
               <summary>
                 Training settings

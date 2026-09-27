@@ -1,0 +1,68 @@
+/* Shared visual choices for scene simulation and observation replay. */
+.native-simulation .simulation-setup { gap: 0; }
+.native-simulation .simulation-setup > legend.visually-hidden { margin: 0; }
+.native-simulation .simulation-step { display: grid; gap: 16px; min-width: 0; padding: 24px 0; }
+.native-simulation .simulation-step:first-of-type { padding-top: 4px; }
+.native-simulation .simulation-step + .simulation-step { border-top: 1px solid var(--line); }
+.native-simulation .simulation-step:last-of-type { padding-bottom: 4px; }
+.native-simulation .simulation-step-heading { display: flex; align-items: flex-start; gap: 12px; }
+.native-simulation .simulation-step-heading > span { display: grid; place-items: center; flex: 0 0 26px; height: 26px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); font-size: 12px; font-weight: 650; }
+.native-simulation .simulation-step-heading h3 { font-size: 16px; line-height: 1.5; font-weight: 650; }
+.native-simulation .simulation-step-heading p { margin-top: 3px; color: var(--muted); font-size: 13px; }
+.native-simulation .simulation-choice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 10px; min-width: 0; }
+.native-simulation .simulation-choice-grid:empty { display: none; }
+.native-simulation .simulation-choice { display: grid; grid-template-columns: 30px minmax(0, 1fr) 16px; align-items: start; gap: 10px; padding: 16px; margin: 0; min-width: 0; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); cursor: pointer; transition: border-color .15s, background-color .15s; }
+.native-simulation .simulation-choice:hover { border-color: var(--accent); }
+.native-simulation .simulation-choice:has(input:checked) { border-color: var(--accent); background: var(--selected); }
+.native-simulation .simulation-choice:has(input:focus-visible) { outline: 3px solid var(--accent); outline-offset: 3px; }
+.native-simulation .simulation-choice:has(input:disabled) { cursor: not-allowed; }
+.native-simulation .simulation-choice > input { grid-column: 3; grid-row: 1; width: 16px; height: 16px; min-height: 0; padding: 0; margin: 4px 0 0; accent-color: var(--accent); }
+.native-simulation .simulation-choice-icon { grid-column: 1; grid-row: 1; color: var(--muted); padding-top: 2px; }
+.native-simulation .simulation-choice:has(input:checked) .simulation-choice-icon { color: var(--accent); }
+.native-simulation .simulation-choice-copy { grid-column: 2; grid-row: 1; display: grid; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
+.native-simulation .simulation-choice-copy strong { font-size: 14px; font-weight: 600; line-height: 1.5; }
+.native-simulation .simulation-choice-copy > span { color: var(--muted); font-size: 12px; line-height: 1.6; }
+.native-simulation .simulation-choice-copy small { color: var(--muted); font-size: 11px; }
+.native-simulation .simulation-source-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.native-simulation .simulation-empty { display: flex; align-items: flex-start; gap: 12px; padding: 18px; border: 1px dashed var(--line-strong); border-radius: 12px; background: var(--subtle); }
+.native-simulation .simulation-empty > svg { margin-top: 2px; color: var(--muted); }
+.native-simulation .simulation-empty strong { font-size: 14px; font-weight: 600; }
+.native-simulation .simulation-empty p { margin-top: 4px; color: var(--muted); font-size: 13px; }
+.native-simulation .simulation-empty .text-link { margin-top: 8px; }
+.native-simulation .simulation-inline-link { display: inline-flex; align-items: center; justify-self: start; gap: 6px; text-align: left; }
+.native-simulation .simulation-timeout { max-width: 400px; }
+.native-simulation .simulation-scope-note { color: var(--muted); font-size: 13px; line-height: 1.7; }
+.native-simulation .simulation-submit { display: inline-flex; align-items: center; justify-content: center; gap: 8px; justify-self: start; min-height: 44px; }
+.native-simulation .simulation-setup .native-confirm { border-top: 0; padding-top: 0; line-height: 1.7; }
+.native-simulation .native-import { border-radius: 12px; }
+.native-simulation .native-import .secondary-button { justify-self: start; }
+.native-simulation .simulation-setup .field-hint { color: var(--muted); font-size: 12px; font-weight: 400; }
+@media (max-width: 600px) {
+  .native-simulation .simulation-source-grid { grid-template-columns: 1fr; }
+  .native-simulation .simulation-choice { padding: 14px; }
+  .native-simulation .simulation-step { padding-block: 20px; }
+  .native-simulation .simulation-submit { width: 100%; justify-self: stretch; }
+}
+
+/* Native workflows share the page title and keep preparation directly on the page. */
+.panel.native-workflow { padding: 0; border: 0; background: transparent; }
+.native-workflow .native-workflow-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 32px; }
+.native-workflow .native-model-badge { color: var(--muted); font-size: 12px; font-weight: 500; }
+.native-workflow .native-workflow-toolbar .text-link { padding: 4px 0; font-size: 12px; }
+.native-workflow .native-preparation-content { display: grid; gap: 16px; min-width: 0; }
+.native-workflow .native-setup-empty { display: grid; justify-items: start; gap: 10px; padding: 12px 0; color: var(--muted); }
+.native-workflow .native-setup-empty > p { margin: 0; font-size: 13px; }
+.native-workflow .native-setup-empty .primary-button { margin-top: 8px; }
+.native-workflow .native-empty-note { color: var(--muted); font-size: 13px; }
+.native-workflow .native-form-section { display: grid; gap: 12px; min-width: 0; }
+.native-workflow .native-form-section > h3, .native-workflow .simulation-step > h3 { font-size: 14px; font-weight: 600; }
+.native-workflow .simulation-setup { gap: 20px; }
+.native-workflow .simulation-step, .native-workflow .simulation-step:first-of-type, .native-workflow .simulation-step:last-of-type { padding: 0; gap: 12px; }
+.native-workflow .simulation-step + .simulation-step { border: 0; }
+.native-workflow .native-simulation-form > legend.visually-hidden { margin: 0; }
+.native-workflow .workflow-choice-grid .workflow-choice-card { min-height: 64px; padding: 12px; }
+.native-workflow .simulation-choice { padding: 12px; }
+.native-workflow .native-import { border: 0; padding: 0; background: transparent; }
+.native-workflow .native-simulation-history { padding: 0; }
+.native-workflow .native-simulation-form > .primary-button { justify-self: start; }
+.native-workflow .simulation-submit { margin-top: 4px; }

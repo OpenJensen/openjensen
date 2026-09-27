@@ -46,6 +46,8 @@ async function openGpuPicker(page: Page, local = false) {
   await page.goto('/');
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Model', exact: true }).click();
+  await page.getByRole('radio', { name: 'SmolVLA', exact: true }).locator('..').click();
   await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Compute', exact: true }).click();
   const picker = page.getByRole('combobox', { name: 'GPU', exact: true });
   await expect(picker).toBeVisible();
@@ -91,9 +93,9 @@ test('changing to a large model removes undersized GPUs and clears the previous 
   const setup = page.getByRole('navigation', { name: 'Training setup' });
   await setup.getByRole('button', { name: 'Model', exact: true }).click();
   await page.getByRole('radio', { name: 'π₀.₅', exact: true }).locator('..').click();
+  await expect(page.getByRole('radio', { name: 'π₀.₅', exact: true }).locator('..').locator('.training-model-memory strong')).toHaveText('40 GB+');
   await setup.getByRole('button', { name: 'Compute', exact: true }).click();
   await expect(picker).toHaveAttribute('value', 'A100');
-  await expect(page.getByText(/requires at least 40 GB of GPU memory/)).toBeVisible();
   await picker.click();
   const menu = page.getByRole('listbox', { name: 'GPU', exact: true });
   await expect(menu.getByRole('option')).toHaveCount(1);
@@ -303,6 +305,7 @@ test('disconnected cloud labels implemented trainers separately from planned ada
   const smol = page.getByRole('radio', { name: 'SmolVLA', exact: true });
   await expect(smol).toBeEnabled();
   await expect(smol.locator('..').locator('.training-model-status')).toHaveText('Connect Google Cloud');
+  await smol.locator('..').click();
   await fixture.setup.getByRole('button', { name: 'Compute', exact: true }).click();
   await expect(fixture.start).toBeDisabled();
   expect(fixture.state.submitted).toEqual([]);

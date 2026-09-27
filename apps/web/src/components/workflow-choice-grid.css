@@ -1,0 +1,20 @@
+.workflow-choice-grid { min-width: 0; padding: 0; margin: 0; border: 0; }
+.workflow-choice-grid > legend { padding: 0; margin-bottom: 12px; color: var(--ink); font-size: 14px; font-weight: 600; }
+.workflow-choice-help { margin: -3px 0 13px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.workflow-choice-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 10px; }
+.workflow-choice-grid .workflow-choice-card { position: relative; display: flex; align-items: flex-start; gap: 12px; min-width: 0; min-height: 68px; padding: 14px; margin: 0; border: 1px solid var(--line); border-radius: 9px; color: var(--ink); background: var(--surface); cursor: pointer; }
+.workflow-choice-card:hover { border-color: var(--line-strong); }
+.workflow-choice-card:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: var(--selected); }
+.workflow-choice-card:has(input:focus-visible) { outline: 2px solid var(--ink); outline-offset: 3px; }
+.workflow-choice-card:has(input:disabled) { cursor: not-allowed; color: var(--muted); opacity: .65; }
+.workflow-choice-grid .workflow-choice-card > input[type=radio] { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; min-height: 0; padding: 0; margin: 0; border: 0; opacity: 0; cursor: inherit; }
+.workflow-choice-icon { display: grid; place-items: center; width: 38px; height: 38px; flex-shrink: 0; border-radius: 8px; background: var(--subtle); color: var(--muted); }
+.workflow-choice-copy { display: grid; gap: 6px; min-width: 0; flex: 1; }
+.workflow-choice-copy strong { font-size: 13px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.workflow-choice-copy > span { color: var(--muted); font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
+.workflow-choice-detail { display: grid; gap: 6px; }
+.workflow-choice-detail > small { color: var(--muted); font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+.workflow-choice-indicator { display: grid; place-items: center; flex-shrink: 0; width: 17px; height: 17px; margin-top: 1px; color: transparent; border: 1px solid var(--line-strong); border-radius: 50%; }
+.workflow-choice-card:has(input:checked) .workflow-choice-indicator { color: var(--surface); background: var(--accent); border-color: var(--accent); }
+.workflow-choice-empty { margin: 0; padding: 18px; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+@media (max-width: 600px) { .workflow-choice-options { grid-template-columns: 1fr; } .workflow-choice-grid .workflow-choice-card { padding: 14px; } }

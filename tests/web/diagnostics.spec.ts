@@ -89,12 +89,14 @@ test('keeps the Spatial protocol locked and labels the selected suite', async ({
   const mode = page.getByRole('combobox', { name: 'Diagnostic mode', exact: true });
   await expect(mode).toHaveValue('libero');
   await expect(mode).toBeDisabled();
+  await page.getByText('Protocol details', { exact: true }).click();
   await expect(page.getByText('Evaluates LIBERO Spatial tasks 1,2', { exact: false })).toContainText('full 280-step horizon');
   await page.getByRole('button', { name: 'Edit diagnostic settings', exact: true }).click();
   await page.getByRole('combobox', { name: 'Task suite', exact: true }).selectOption('libero_object');
   await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
   await expect(mode).toBeEnabled();
   await mode.selectOption('engine');
+  await page.getByText('Protocol details', { exact: true }).click();
   await expect(page.getByText('Checks loading, finite actions', { exact: false })).toBeVisible();
 });
 
@@ -124,6 +126,7 @@ test('submits the selected policy through the real API and shows subprocess resu
 test('guides an empty project to Quantize and blocks unsupported simulation', async ({ page, request }) => {
   const id = await project(request, configured);
   await openDiagnostics(page, id, configured, { mode: 'libero' });
+  await page.getByText('Protocol details', { exact: true }).click();
   await expect(page.getByText('Evaluates LIBERO Object task 0', { exact: false })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start diagnostics', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Open Quantize', exact: true }).click();

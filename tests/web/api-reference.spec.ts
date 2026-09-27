@@ -659,6 +659,12 @@ async function mockTrainingWorkspace(page: Page, {
   await expect(page.getByRole('radio', { name: 'fixture/pick-and-place', exact: true })).toBeVisible();
   await expect.poll(() => previews.length).toBeGreaterThanOrEqual(2);
   if (!emptyPreview) await expect(page.locator('.training-workspace .dx-camera video')).toHaveCount(2);
+  const setup = page.getByRole('navigation', { name: 'Training setup' });
+  await setup.getByRole('button', { name: 'Model', exact: true }).click();
+  if (!await page.getByRole('group', { name: 'Base model', exact: true }).locator('input:checked').count()) {
+    await page.getByRole('radio', { name: 'SmolVLA', exact: true }).locator('..').click();
+  }
+  await setup.getByRole('button', { name: 'Dataset', exact: true }).click();
   return { submitted, unexpectedRequests, previews, jobs };
 }
 
@@ -1258,8 +1264,9 @@ test('quantization submits Q4 only after an explicit experimental choice', async
   });
   async function submitQuantization(count: number) {
     await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+    await page.getByRole('group', { name: 'Quantization mode', exact: true }).getByRole('button', { name: 'SmolVLA', exact: true }).click();
     await page.getByRole('button', { name: 'New quantization', exact: true }).click();
-    await page.getByLabel('Checkpoint or policy').selectOption('source:source');
+    await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="source:source"]').check();
     await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
     await expect.poll(() => requests.length).toBe(count);
   }
@@ -1315,10 +1322,10 @@ test('Spatial settings require explicit task and parity choices in the submitted
     await expect(page.getByLabel('Diagnostic mode')).toBeDisabled();
     await expect(page.getByRole('heading', { name: 'Recorded benchmark comparison' })).toBeVisible();
     await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'SmolVLA · GGUF', exact: true })).toBeDisabled();
-    await expect(page.getByRole('button', { name: 'Native ACT · INT8 / INT4', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'SmolVLA', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'ACT', exact: true })).toBeDisabled();
     await expect(page.getByRole('button', { name: 'New quantization', exact: true })).toHaveCount(0);
-    await expect(page.getByLabel('Checkpoint or policy')).toHaveCount(0);
+    await expect(page.getByRole('group', { name: 'Policy', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toHaveCount(0);
     expect(await page.evaluate(() => localStorage.getItem('firebird.workflow.'))).toBeNull();
     expect(submitted).toEqual([]);
@@ -1339,8 +1346,9 @@ test('Spatial settings require explicit task and parity choices in the submitted
   await page.getByLabel('Maximum action RMSE').fill('0');
   await page.getByLabel('Maximum absolute action error').fill('0');
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-    await page.getByRole('button', { name: 'New quantization', exact: true }).click();
-  await page.getByLabel('Checkpoint or policy').selectOption('source:source');
+  await page.getByRole('group', { name: 'Quantization mode', exact: true }).getByRole('button', { name: 'SmolVLA', exact: true }).click();
+  await page.getByRole('button', { name: 'New quantization', exact: true }).click();
+  await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="source:source"]').check();
   await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0].evaluation).toMatchObject({
@@ -1358,8 +1366,9 @@ test('Spatial settings require explicit task and parity choices in the submitted
   await expect(page.getByRole('combobox', { name: 'Protocol', exact: true })).toHaveValue('libero');
   await expect(page.getByLabel('Episode step limit')).toHaveValue('280');
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-    await page.getByRole('button', { name: 'New quantization', exact: true }).click();
-  await page.getByLabel('Checkpoint or policy').selectOption('source:source');
+  await page.getByRole('group', { name: 'Quantization mode', exact: true }).getByRole('button', { name: 'SmolVLA', exact: true }).click();
+  await page.getByRole('button', { name: 'New quantization', exact: true }).click();
+  await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="source:source"]').check();
   await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(2);
   expect(submitted[1].evaluation).toEqual(submitted[0].evaluation);
@@ -1388,8 +1397,9 @@ async function workflowPreferenceFixture(page: Page) {
   async function submit() {
     const count = requests.length;
     await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+    await page.getByRole('group', { name: 'Quantization mode', exact: true }).getByRole('button', { name: 'SmolVLA', exact: true }).click();
     await page.getByRole('button', { name: 'New quantization', exact: true }).click();
-    await page.getByLabel('Checkpoint or policy').selectOption('source:source');
+    await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="source:source"]').check();
     await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
     await expect.poll(() => requests.length).toBe(count + 1);
     return requests.at(-1)!;
@@ -1464,10 +1474,10 @@ for (const state of ['empty', 'error'] as const) {
     await page.getByLabel('Reference hardware').selectOption('rtx3070');
     await expect(page.getByRole('table', { name: 'NVIDIA RTX 3070 · recorded reference results' })).toBeVisible();
     await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'SmolVLA · GGUF', exact: true })).toBeDisabled();
-    await expect(page.getByRole('button', { name: 'Native ACT · INT8 / INT4', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'SmolVLA', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'ACT', exact: true })).toBeDisabled();
     await expect(page.getByRole('button', { name: 'New quantization', exact: true })).toHaveCount(0);
-    await expect(page.getByLabel('Checkpoint or policy')).toHaveCount(0);
+    await expect(page.getByRole('group', { name: 'Policy', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toHaveCount(0);
     expect(fixture.requests).toEqual([]);
     expect(await page.evaluate(() => localStorage.getItem('firebird.workflow.'))).toBeNull();
@@ -1515,8 +1525,9 @@ test('a project removed during refetch cannot submit with its stale selection', 
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-    await page.getByRole('button', { name: 'New quantization', exact: true }).click();
-  await page.getByLabel('Checkpoint or policy').selectOption('source:source');
+  await page.getByRole('group', { name: 'Quantization mode', exact: true }).getByRole('button', { name: 'SmolVLA', exact: true }).click();
+  await page.getByRole('button', { name: 'New quantization', exact: true }).click();
+  await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="source:source"]').check();
   await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toBeEnabled();
   removed = true;
   // Advance beyond the configured 5s freshness period without a wall-clock sleep.
@@ -1524,11 +1535,11 @@ test('a project removed during refetch cannot submit with its stale selection', 
   // React Query refetches stale project data when the browser regains visibility.
   await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
   await expect.poll(() => emptyResponses).toBeGreaterThan(0);
-  await expect(page.getByRole('button', { name: 'SmolVLA · GGUF', exact: true })).toBeDisabled();
-    await expect(page.getByRole('button', { name: 'Native ACT · INT8 / INT4', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'SmolVLA', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'ACT', exact: true })).toBeDisabled();
     await expect(page.getByRole('button', { name: 'New quantization', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toHaveCount(0);
-  await expect(page.getByLabel('Checkpoint or policy')).toHaveCount(0);
+  await expect(page.getByRole('group', { name: 'Policy', exact: true })).toHaveCount(0);
   expect(fixture.requests).toEqual([]);
   expect(await page.evaluate(() => localStorage.getItem('firebird.workflow.'))).toBeNull();
 });

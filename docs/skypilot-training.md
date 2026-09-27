@@ -84,6 +84,8 @@ not replace the training monitor or control OPEN JENSEN-managed jobs.
 
 ## Evaluate and Run on cloud GPUs
 
+In the web app, select **Evaluate** or **Run → Check inference** for this engine path. **3D simulation** and **Replay observations** have separate requirements.
+
 The application now advertises `engine_evaluation` and `run` on supported GCP
 runtimes. Evaluate accepts a saved SmolVLA GGUF or deployment package, retrieves
 it on the worker, and measures real CUDA inference with a fresh reload, finite

@@ -203,6 +203,7 @@ test('new fine-tuning is a separate view with bold catalog memory budgets and a 
   await expect(budget('π₀.₅')).toHaveText('40 GB+');
   await expect(budget('OpenVLA')).toHaveText('GPU budget not verified');
   expect(await budget('SmolVLA').evaluate(element => Number(getComputedStyle(element).fontWeight))).toBeGreaterThanOrEqual(700);
+  await page.getByRole('radio', { name: 'SmolVLA', exact: true }).locator('..').click();
   await setup.getByRole('button', { name: 'Compute', exact: true }).click();
   await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
   await page.getByRole('spinbutton', { name: 'Batch size', exact: true }).fill('3');
@@ -243,6 +244,7 @@ test('local training copies open the jobs-first wizard and retain native model a
   await expect(page.getByRole('radio', { name: 'Local dataset', exact: true })).toBeChecked();
   const setup = page.getByRole('navigation', { name: 'Training setup' });
   await setup.getByRole('button', { name: 'Model', exact: true }).click();
+  await page.getByRole('radio', { name: 'SmolVLA', exact: true }).locator('..').click();
   await expect(page.getByText('Local snapshots currently support native LeRobot models, including ACT.')).toBeVisible();
   await page.getByRole('radio', { name: 'ACT', exact: true }).locator('..').click();
   await setup.getByRole('button', { name: 'Compute', exact: true }).click();
@@ -386,6 +388,9 @@ test('submits explicit reproducible training settings supported by the worker', 
   const { submitted, unexpected } = await workspace(page);
   await page.getByRole('button', { name: 'Back to jobs', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Model', exact: true }).click();
+  const models = page.getByRole('group', { name: 'Base model', exact: true });
+  if (!await models.locator('input:checked').count()) await models.getByRole('radio', { name: 'SmolVLA', exact: true }).locator('..').click();
   await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Compute', exact: true }).click();
   await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
   await page.getByLabel('Steps', { exact: true }).fill('200');
@@ -506,18 +511,21 @@ test('ACT export-only computer never appears as an engine execution target', asy
   const { submitted } = await workspace(page, 'running', true, 'local');
   for (const [stage, create] of [['Run', 'New run'], ['Evaluate', 'New evaluation'], ['Quantize', 'New quantization']]) {
     await page.getByRole('button', { name: stage, exact: true }).click();
-    if (stage === 'Run') await page.getByRole('button', { name: 'Engine checks · GGUF', exact: true }).click();
-    if (stage === 'Quantize') await page.getByRole('button', { name: 'SmolVLA · GGUF', exact: true }).click();
+    if (stage === 'Run') await page.getByRole('button', { name: 'Check inference', exact: true }).click();
+    if (stage === 'Quantize') await page.getByRole('button', { name: 'SmolVLA', exact: true }).click();
     await page.getByRole('button', { name: create, exact: true }).click();
-    const target = page.getByRole('combobox', { name: 'Execution target', exact: true });
+    const target = page.getByRole('group', { name: 'Compute', exact: true });
     await expect(target).not.toContainText('Local CPU export');
-    if (stage !== 'Quantize') await expect(target).toBeDisabled();
+    if (stage !== 'Quantize') await expect(target.getByRole('radio')).toHaveCount(0);
   }
   expect(submitted).toEqual([]);
 });
 
 async function newTraining(page: Page) {
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Model', exact: true }).click();
+  const models = page.getByRole('group', { name: 'Base model', exact: true });
+  if (!await models.locator('input:checked').count()) await models.getByRole('radio', { name: 'SmolVLA', exact: true }).locator('..').click();
   await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Compute', exact: true }).click();
   return page.getByRole('button', { name: 'Start fine-tuning', exact: true });
 }

@@ -41,6 +41,7 @@ def select(paths):
             ".node-version",
             "playwright.config.ts",
             "playwright.diagnostics.config.ts",
+            "docs/workspace-guide.md",  # Rendered into the application at build time.
         }:
             scopes.add("application")
         if path.startswith("packages/core/src/vla_platform/lifecycle/") or path in {

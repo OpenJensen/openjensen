@@ -46,7 +46,8 @@ async function teaching(page: Page, connected = true) {
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Teaching', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Teach in simulation' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Teaching', level: 1 })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Control source', exact: true })).toContainText('Isaac Sim');
   return { commands, unexpected, changes };
 }
 
@@ -55,7 +56,7 @@ test('disconnected executor disables recording and voice without pretending moni
   await expect(page.getByRole('status', { name: 'Application API connection' })).toHaveText('App connected');
   await expect(page.getByRole('button', { name: 'Start recording' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Connect voice' })).toBeDisabled();
-  await expect(page.getByText(/existing rollout monitor does not provide teaching control/)).toBeVisible();
+  await expect(page.getByText('Connect a teaching executor in the application host configuration.', { exact: true })).toBeVisible();
   expect(commands).toEqual([]); expect(unexpected).toEqual([]);
   const size = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
   expect(size[0]).toBeLessThanOrEqual(size[1] + 1);

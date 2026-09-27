@@ -1,6 +1,6 @@
 # Compute settings
 
-Settings stores the local compute switch and a display label for this machine.
+**Settings & diagnostics → Compute** stores the local compute switch and a display label for this machine.
 Local runs are disabled by default and require an explicit opt-in. Existing saved
 local choices remain intact. These
 preferences persist in the workspace's `compute-settings.json`; disabling local
@@ -64,7 +64,7 @@ server immediately before launch and refuses to provision if its project or
 server differs; it never falls back to a default workspace. Saved server addresses
 cannot contain credentials, query strings, or fragments.
 
-The dropdown is limited to these three GPU choices. Older saved `A100-80GB`
+The GPU cards are limited to these three choices. Older saved `A100-80GB`
 preferences migrate to `A100`; existing job records retain their original target.
 T4 uses FP16 compute, floating NF4 storage, FP32 trainable parameters, and dynamic
 gradient scaling. L4 and A100 retain native BF16 compute. Checkpoints preserve

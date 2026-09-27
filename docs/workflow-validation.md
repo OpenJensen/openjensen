@@ -1,5 +1,7 @@
 # Workflow integration validation — 2026-09-26
 
+This is a historical verification record. Interface names and availability below describe the recorded integration, not a new test of the current UI. Use the [workspace guide](workspace-guide.md) for current navigation and capabilities.
+
 Status: **native GPU acceptance is deferred by user decision**. Further Xbox
 testing is deferred; the software foundation is approved for merging into main.
 This connects application jobs to workers; it does not complete TRAIN-001,

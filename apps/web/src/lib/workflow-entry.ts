@@ -1,7 +1,7 @@
 import { isActive, type Job, type PolicyOptions } from './api';
-import { availableNativeQuantizer, nativeQuantizationOf, nativeQuantizationOnly } from './native-quantization';
-import { replayJob, replayRuntime } from './native-replay';
-import { isSimulationJob, type SimulationProfile } from './native-simulation';
+import { nativeQuantizationOf, nativeQuantizationOnly } from './native-quantization';
+import { replayJob } from './native-replay';
+import { isSimulationJob } from './native-simulation';
 
 export type RunMode = 'engine' | 'native' | 'replay';
 export type QuantizeMode = 'gguf' | 'native';
@@ -31,18 +31,12 @@ export function quantizeJobMode(job: Job, projectId: string): QuantizeMode | nul
 function ordered(jobs: Job[]) {
   return [...jobs].sort((a, b) => Number(isActive(b)) - Number(isActive(a)) || b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id));
 }
-export function initialRunEntry(projectId: string, jobs: Job[], options: PolicyOptions, profiles: SimulationProfile[]): Entry<RunMode> {
+/** An existing job may restore its workflow; available workers never choose one. */
+export function initialRunEntry(projectId: string, jobs: Job[]): Entry<RunMode> | undefined {
   const saved = ordered(jobs).find(job => runJobMode(job, projectId));
-  if (saved) return { mode: runJobMode(saved, projectId)!, jobId: saved.id, origin: 'automatic' };
-  const available: RunMode[] = [];
-  if (options.runtimes.some(item => engineRuntime(item, 'Run'))) available.push('engine');
-  if (options.runtimes.some(replayRuntime)) available.push('replay');
-  if (profiles.length) available.push('native');
-  return { mode: available.length === 1 ? available[0] : 'engine', origin: 'automatic' };
+  return saved ? { mode: runJobMode(saved, projectId)!, jobId: saved.id, origin: 'automatic' } : undefined;
 }
-export function initialQuantizeEntry(projectId: string, jobs: Job[], options: PolicyOptions): Entry<QuantizeMode> {
+export function initialQuantizeEntry(projectId: string, jobs: Job[]): Entry<QuantizeMode> | undefined {
   const saved = ordered(jobs).find(job => quantizeJobMode(job, projectId));
-  if (saved) return { mode: quantizeJobMode(saved, projectId)!, jobId: saved.id, origin: 'automatic' };
-  const native = options.runtimes.some(availableNativeQuantizer), gguf = options.runtimes.some(item => engineRuntime(item, 'Quantize'));
-  return { mode: native && !gguf ? 'native' : 'gguf', origin: 'automatic' };
+  return saved ? { mode: quantizeJobMode(saved, projectId)!, jobId: saved.id, origin: 'automatic' } : undefined;
 }

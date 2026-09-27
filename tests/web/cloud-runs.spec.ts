@@ -15,7 +15,7 @@ function feed(runs: ReturnType<typeof run>[], errors: { run_id: string | null; m
 async function openCloud(page: Page) {
   await page.goto('/');
   await page.getByRole('button', { name: 'Cloud runs', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'External rollout observations' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'External observations' })).toBeVisible();
 }
 
 test('cloud monitor is disabled by default and never launches a job', async ({ page, request }) => {
@@ -126,7 +126,7 @@ async function managedWorkspace(page: Page) {
 
 test('managed cloud jobs use persisted targets and open the exact training run', async ({ page }) => {
   const { posts } = await managedWorkspace(page);
-  await expect(page.getByRole('heading', { name: 'Application cloud jobs' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Jobs' })).toBeVisible();
   await expect(page.getByLabel('Application cloud job', { exact: true })).toHaveValue('cloud-finished');
   await expect(page.getByLabel('Application cloud job', { exact: true }).locator('option')).toHaveCount(2);
   await expect(page.getByRole('region', { name: 'Application job event log' })).toContainText('Recorded cloud-finished');

@@ -1,6 +1,6 @@
 # Cloud connections
 
-Settings can associate this OPEN JENSEN workspace with a Google Cloud project.
+**Settings & diagnostics → Compute** can associate this OPEN JENSEN workspace with a Google Cloud project.
 Connection checks use credentials already managed by the provider CLI on the
 machine running the API. They verify account access only;
 they do not create GPU workers, check GPU quota, grant permissions, or start jobs.

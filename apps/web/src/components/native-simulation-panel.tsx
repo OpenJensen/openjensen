@@ -3,6 +3,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, artifactDownloadUrl, isActive } from '@/lib/api';
+import { Icon } from '@/components/icon';
+import './simulation-workspace.css';
+import { NativePreparation } from './native-preparation';
+import { publicPath } from '@/lib/base-path';
 import { WorkbenchDisclosure } from '@/components/workbench-disclosure';
 import { cancelSimulation, isSimulationJob, nativeInput, simulationOptions, simulationTarget, simulationTaskSummary, simulationVideoUrl, startSimulation, UncertainSubmission, uploadModel, type NativeArtifact, type SimulationJob } from '@/lib/native-simulation';
 
@@ -17,6 +21,7 @@ export function NativeSimulationPanel({ projectId, preferredJobId, onJobSelected
   const inputs = (artifacts.data ?? []).filter(item => nativeInput(item, projectId, profile));
   const input = inputs.find(item => item.id === artifactId);
   const [file, setFile] = useState<File | null>(null);
+  const [policySource, setPolicySource] = useState<'saved' | 'upload'>('saved');
   const [timeout, setTimeoutValue] = useState('7200');
   const [experimentalProfile, setExperimentalProfile] = useState<string | null>(null);
   const experimental = !!profile && experimentalProfile === profile.id;
@@ -30,8 +35,8 @@ export function NativeSimulationPanel({ projectId, preferredJobId, onJobSelected
   const [accepted, setAccepted] = useState<SimulationJob | null>(null);
   const [confirmCancel, setConfirmCancel] = useState<string | null>(null);
   const [videoFailed, setVideoFailed] = useState(false);
-  const [preparing, setPreparing] = useState(!preferredJobId);
   const busy = useRef(false);
+  const attemptVersion = useRef(0);
   const mounted = useRef(true);
   const abortUpload = useRef<(() => void) | null>(null);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; abortUpload.current?.(); }; }, []);
@@ -51,19 +56,20 @@ export function NativeSimulationPanel({ projectId, preferredJobId, onJobSelected
   const timeoutValid = /^\d+$/.test(timeout) && Number.isSafeInteger(seconds) && seconds >= 30 && seconds <= 7200;
   const ready = !!projectId && options.isSuccess && !options.isError && !!profile && !pending && !ambiguous;
   const refresh = async () => {
+    const version = attemptVersion.current, canReview = ambiguous;
     const response = await jobs.refetch();
     void artifacts.refetch();
     void options.refetch();
     if (selected) void events.refetch();
-    if (!response.isError) setReviewed(true);
+    if (canReview && version === attemptVersion.current && !response.isError && mounted.current) setReviewed(true);
   };
-  function showJob(id: string) { onJobSelected?.(id); setJobId(id); setConfirmCancel(null); setVideoFailed(false); setPreparing(!id); }
+  function showJob(id: string) { onJobSelected?.(id); setJobId(id); setConfirmCancel(null); setVideoFailed(false); }
   async function mutate(kind: 'upload' | 'run' | 'cancel') {
     if (busy.current || !projectId || (kind !== 'cancel' && !ready)) return;
     if (kind === 'upload' && (!file || !profile || !file.size || file.size > (options.data?.max_archive_bytes ?? 0))) return;
-    if (kind === 'run' && (!input || !profile || !experimental || !timeoutValid || artifacts.isError || jobs.isError)) return;
+    if (kind === 'run' && (policySource !== 'saved' || !input || !profile || !experimental || !timeoutValid || artifacts.isError || jobs.isError)) return;
     if (kind === 'cancel' && (!selected || selected.id !== confirmCancel || !isActive(selected) || jobs.isError)) return;
-    busy.current = true; setPending(kind); setError(''); setProgress(0); setReviewed(false);
+    busy.current = true; attemptVersion.current += 1; setPending(kind); setError(''); setProgress(0); setReviewed(false);
     try {
       let receipt: SimulationJob;
       if (kind === 'upload') {
@@ -72,25 +78,22 @@ export function NativeSimulationPanel({ projectId, preferredJobId, onJobSelected
         receipt = await transfer.result;
       } else if (kind === 'run') receipt = await startSimulation(projectId, profile!.id, input!.id, seconds);
       else receipt = await cancelSimulation(selected!);
-      if (mounted.current) { setAccepted(receipt); showJob(receipt.id); setExperimental(false); }
+      if (mounted.current) { setAccepted(receipt); showJob(receipt.id); setExperimental(false); if (kind === 'upload') setPolicySource('saved'); }
       await client.invalidateQueries({ queryKey: ['jobs', projectId] });
       await client.invalidateQueries({ queryKey: ['artifacts', projectId] });
     } catch (cause) {
-      if (mounted.current) { setError(cause instanceof Error ? cause.message : 'The request failed.'); if (cause instanceof UncertainSubmission) setAmbiguous(true); }
+      if (mounted.current) { setError(cause instanceof Error ? cause.message : 'The request failed.'); if (cause instanceof UncertainSubmission) { attemptVersion.current += 1; setAmbiguous(true); setReviewed(false); } }
     } finally {
       busy.current = false; abortUpload.current = null;
       if (mounted.current) { setPending(null); setConfirmCancel(null); }
     }
   }
-  return <section className="panel native-simulation" aria-labelledby="native-simulation-title">
-    <div className="cloud-heading"><div><h2 id="native-simulation-title">Native Isaac simulation</h2>{!selected && <p>Run an ACT or SmolVLA policy in the registered SO-101 cup scene. This is an experimental rollout, not a scored benchmark.</p>}</div><button type="button" className="secondary-button" disabled={!projectId || jobs.isFetching} onClick={() => void refresh()}>Refresh simulation jobs</button></div>
-    {!projectId && <p role="status">Select a project before importing a policy or starting simulation.</p>}
-    {options.isPending && <p role="status">Loading simulation profiles…</p>}
+  return <section className="panel native-simulation native-workflow" aria-label="Native Isaac simulation">
+    <div className="native-workflow-toolbar"><span className="native-model-badge">Isaac Sim</span><button type="button" className="text-link" aria-label="Refresh simulation jobs" disabled={!projectId || jobs.isFetching} onClick={() => void refresh()}>Refresh</button></div>
     {options.isError && <p className="error-notice" role="alert">Simulation options are unavailable. {options.error.message}</p>}
-    {options.isSuccess && !options.data.profiles.length && <p role="status">{options.data.unavailable_reason ?? 'No Isaac simulation profile is configured.'} An operator must connect the simulator; this page does not start it automatically.</p>}
     {error && <p className="error-notice" role="alert">{error}</p>}
     {ambiguous && <div className="warning-box"><p>Further submissions are paused. Refresh and inspect the recorded jobs first.</p><button className="secondary-button" disabled={!reviewed || jobs.isError || pending !== null} onClick={() => { setAmbiguous(false); setError(''); setReviewed(false); }}>I checked the jobs; allow a new request</button></div>}
-    <section className="native-simulation-history" aria-label="Native simulation jobs"><h3>Imports and simulation jobs</h3>
+    {(saved.length > 0 || accepted || jobs.isError || preferredJobId) && <section className="native-simulation-history" aria-label="Native simulation jobs">
       {jobs.isError && <p role="alert">Job updates are unavailable. Previously received status may be stale. {jobs.error.message}</p>}
       {!saved.length && !accepted && <p>{jobs.isPending && projectId ? 'Loading jobs…' : 'No native imports or simulation runs in this project yet.'}</p>}
       {saved.length > 0 && <label>Saved simulation job<select aria-label="Saved simulation job" value={selected?.id ?? ''} onChange={event => showJob(event.target.value)}><option value="">Choose a recorded job</option>{saved.map(item => <option key={item.id} value={item.id}>{item.kind === 'policy.import' ? 'Policy import' : 'Isaac rollout'} · {item.id.slice(0, 8)} · {item.status}</option>)}</select></label>}
@@ -103,7 +106,7 @@ export function NativeSimulationPanel({ projectId, preferredJobId, onJobSelected
         {events.isError && <p className="error-notice" role="alert">Activity updates are unavailable. Worker states and event history may be stale.</p>}
         {observedTasks && <p className="native-worker-summary" role="status" aria-label="Observed simulation workers">{events.isError ? 'Last observed: ' : ''}{observedTasks}</p>}
         {selected.error && <p role="alert" className="error-notice">{selected.error}</p>}
-        {selected.status === 'succeeded' && <p className="native-result-summary">{selected.kind === 'policy.import' ? 'The native package is saved and its package integrity checked. Runtime compatibility and task quality remain unverified. Open Prepare another run to select it for an explicit experimental Run.' : 'Execution completed. This is not a scored evaluation or proof of cup pickup.'}</p>}
+        {selected.status === 'succeeded' && <p className="native-result-summary">{selected.kind === 'policy.import' ? 'The native package is saved. Runtime compatibility and task quality remain unverified.' : 'Execution completed. This is not a scored evaluation or proof of cup pickup.'}</p>}
         {isActive(selected) && <><progress aria-label="Native job in progress" /><button className="secondary-button" disabled={pending !== null || jobs.isError} onClick={() => setConfirmCancel(selected.id)}>Cancel selected native job</button></>}
         {confirmCancel === selected.id && isActive(selected) && <div className="warning-box" role="group" aria-label="Confirm native cancellation"><p>Request cancellation of {selected.id}? This does not prove cloud resources have been deleted.</p><button className="secondary-button" disabled={pending !== null || jobs.isError} onClick={() => void mutate('cancel')}>Confirm cancellation</button><button className="text-link" disabled={pending !== null} onClick={() => setConfirmCancel(null)}>Keep running</button></div>}
         {selected.status === 'succeeded' && records.map(item => <p key={item.id}><a className="secondary-button" href={artifactDownloadUrl(projectId, item.id)}>Download simulation record</a></p>)}
@@ -114,31 +117,60 @@ export function NativeSimulationPanel({ projectId, preferredJobId, onJobSelected
           {report && <details><summary>Recorded simulation report</summary><pre className="cloud-log-tail">{JSON.stringify(report, null, 2)}</pre></details>}
         </WorkbenchDisclosure>
       </article>}
-    </section>
-    <details className="workbench-disclosure native-preparation" open={preparing} onToggle={event => setPreparing(event.currentTarget.open)}>
-      <summary>{selected ? 'Prepare another run' : 'Prepare a simulation'}</summary>
-      <div className="workbench-disclosure-body">
-    <fieldset disabled={!ready} className="native-simulation-form">
-      <legend>Choose a native policy</legend>
-      <label>Isaac profile<select aria-label="Isaac profile" value={profile?.id ?? ''} onChange={event => { setProfileId(event.target.value); setArtifactId(''); setExperimental(false); }}><option value="" disabled>No profile selected</option>{options.data?.profiles.map(item => <option key={item.id} value={item.id}>{item.label} · cup · {item.architectures.map(a => a.toUpperCase()).join(' / ')}</option>)}</select></label>
-      <div className="native-import"><h3>Import your weights</h3><p>Choose a complete TAR with safetensors weights, policy configuration, saved processors and normalization statistics. A weights-only file is insufficient. Import validates and copies the package locally; it does not launch a GPU job.</p><label>Native policy TAR<input type="file" accept=".tar,.tar.gz,.tgz,application/x-tar,application/gzip" onChange={event => setFile(event.target.files?.[0] ?? null)} /></label>
-        {file && <p>{file.name} · {(file.size / 1024 ** 2).toFixed(1)} MiB</p>}
-        {file && (!file.size || file.size > (options.data?.max_archive_bytes ?? 0)) && <p role="alert">Choose a nonempty TAR within the 4 GiB limit.</p>}
-        <button type="button" className="secondary-button" disabled={!file || !file.size || file.size > (options.data?.max_archive_bytes ?? 0)} onClick={() => void mutate('upload')}>Upload and validate policy</button>
-      </div>
-      <label>Native policy<select aria-label="Native policy" value={input?.id ?? ''} onChange={event => { setArtifactId(event.target.value); setExperimental(false); }}><option value="">Choose a saved native policy</option>{inputs.map(item => <option key={item.id} value={item.id}>{item.label} · {String(item.metadata?.architecture).toUpperCase()} · {item.id.slice(0, 8)}</option>)}</select></label>
-      {!artifacts.isPending && !inputs.length && <p>No compatible local policy is available. Import a complete native package, or export a completed training checkpoint first.</p>}
-      <label>Simulation timeout (seconds)<input type="number" min="30" max="7200" step="1" value={timeout} onChange={event => setTimeoutValue(event.target.value)} /></label>
-      {!timeoutValid && <p role="alert">Choose a whole number from 30 to 7200 seconds.</p>}
-      <p className="native-scope-note">Launching requests the profile's cloud workers (L4 and H100). The job has a maximum two-hour timeout; cancellation is supervised; resource deletion is not verified. This is not a spending cap. Completed execution does not establish cup pickup success or calibration.</p>
-      <label className="native-confirm"><input type="checkbox" checked={experimental} onChange={event => setExperimental(event.target.checked)} />I understand this is an experimental, paid cloud rollout with unverified cup pickup and calibration.</label>
-      <button type="button" className="primary-button" disabled={!input || !experimental || !timeoutValid || artifacts.isError || jobs.isError} onClick={() => void mutate('run')}>Start experimental simulation</button>
+    </section>}
+    <NativePreparation key={selected?.id ?? 'first'} title="Prepare another run" hasResult={!!selected}>
+      {!projectId || !profile ? <div className="native-setup-empty">
+        <p role="status">{!projectId ? 'Select a project to continue.' : options.isPending ? 'Loading scenes…' : options.isError ? 'Scene availability is unknown.' : 'Simulator not connected'}</p>
+        {options.data?.unavailable_reason && options.data.unavailable_reason !== 'No Isaac simulation profile is configured.' && <p>{options.data.unavailable_reason}</p>}
+        <a className="text-link" href={publicPath('/guide/#run')}>Set up simulation</a>
+        <button className="primary-button" disabled>Start experimental simulation</button>
+      </div> : <>
+    <fieldset disabled={!ready} className="native-simulation-form simulation-setup">
+      <legend className="visually-hidden">Choose a native policy</legend>
+      <section className="simulation-step" aria-labelledby="simulation-scene-title">
+        <h3 id="simulation-scene-title">Scene</h3>
+        <div className="simulation-choice-grid" role="radiogroup" aria-label="Isaac profile">
+          {options.data?.profiles.map(item => <label className="simulation-choice" key={item.id}>
+            <input type="radio" name="simulation-profile" aria-label={item.label} value={item.id} checked={profile?.id === item.id} onChange={() => { setProfileId(item.id); setArtifactId(''); setExperimental(false); }} />
+            <span className="simulation-choice-icon"><Icon name="play" /></span><span className="simulation-choice-copy"><strong>{item.label}</strong><span>{item.architectures.map(a => a === 'act' ? 'ACT' : 'SmolVLA').join(' / ')}</span></span>
+          </label>)}
+        </div>
+      </section>
+      <section className="simulation-step" aria-labelledby="simulation-policy-title">
+        <h3 id="simulation-policy-title">Policy</h3>
+        <div className="simulation-choice-grid simulation-source-grid" role="radiogroup" aria-label="Policy source">
+          <label className="simulation-choice"><input type="radio" name="simulation-source" aria-label="Saved policies" checked={policySource === 'saved'} onChange={() => setPolicySource('saved')} /><span className="simulation-choice-icon"><Icon name="layers" /></span><span className="simulation-choice-copy"><strong>Saved policies</strong><span>{inputs.length} available</span></span></label>
+          <label className="simulation-choice"><input type="radio" name="simulation-source" aria-label="Import package" checked={policySource === 'upload'} onChange={() => { setPolicySource('upload'); setArtifactId(''); setExperimental(false); }} /><span className="simulation-choice-icon"><Icon name="folder" /></span><span className="simulation-choice-copy"><strong>Import package</strong><span>TAR archive</span></span></label>
+        </div>
+        {policySource === 'upload' ? <div className="native-import">
+          <label>Native policy TAR<input type="file" accept=".tar,.tar.gz,.tgz,application/x-tar,application/gzip" onChange={event => setFile(event.target.files?.[0] ?? null)} /></label>
+          {file && <p>{file.name} · {(file.size / 1024 ** 2).toFixed(1)} MiB</p>}
+          {file && (!file.size || file.size > (options.data?.max_archive_bytes ?? 0)) && <p role="alert">Choose a nonempty TAR no larger than {((options.data?.max_archive_bytes ?? 0) / 1024 ** 3).toFixed(1)} GiB.</p>}
+          <WorkbenchDisclosure title="Package requirements"><p>Include safetensors weights, configuration, saved processors and normalization statistics. Import saves and validates locally; no GPU job starts.</p></WorkbenchDisclosure>
+          <button type="button" className="secondary-button" disabled={!file || !file.size || file.size > (options.data?.max_archive_bytes ?? 0)} onClick={() => void mutate('upload')}>Upload and validate policy</button>
+        </div> : <>
+          <div className="simulation-choice-grid" role="radiogroup" aria-label="Native policy">
+            {inputs.map(item => <label className="simulation-choice" key={item.id}><input type="radio" name="simulation-policy" aria-label={item.label} value={item.id} checked={input?.id === item.id} onChange={() => { setArtifactId(item.id); setExperimental(false); }} /><span className="simulation-choice-icon"><Icon name="layers" /></span><span className="simulation-choice-copy"><strong>{item.label}</strong><span>{item.metadata?.architecture === 'act' ? 'ACT' : 'SmolVLA'} · {item.id.slice(0, 8)}</span></span></label>)}
+          </div>
+          {artifacts.isPending && <p role="status">Loading saved policies…</p>}
+          {!artifacts.isPending && !artifacts.isError && !inputs.length && <div className="native-setup-empty"><p>No compatible policy yet</p><button className="text-link" type="button" onClick={() => setPolicySource('upload')}>Import a policy</button></div>}
+        </>}
+      </section>
+      {policySource === 'saved' && <section className="simulation-step" aria-labelledby="simulation-launch-title">
+        <h3 id="simulation-launch-title" className="visually-hidden">Run settings</h3>
+        <label className="simulation-timeout">Timeout (seconds)<input aria-label="Simulation timeout (seconds)" type="number" min="30" max="7200" step="1" value={timeout} onChange={event => { setTimeoutValue(event.target.value); setExperimental(false); }} /></label>
+        {!timeoutValid && <p role="alert">Choose a whole number from 30 to 7200 seconds.</p>}
+        <p className="simulation-scope-note">Paid L4 + H100 workers. Timeout is not a spending cap.</p>
+        <WorkbenchDisclosure title="Cloud limits"><p>Cancellation is supervised; resource deletion is not verified. The job has a maximum two-hour timeout.</p></WorkbenchDisclosure>
+        <label className="native-confirm"><input type="checkbox" checked={experimental} onChange={event => setExperimental(event.target.checked)} />I understand this is an experimental, paid cloud rollout with unverified cup pickup and calibration.</label>
+        <button type="button" className="primary-button simulation-submit" disabled={policySource !== 'saved' || !input || !experimental || !timeoutValid || artifacts.isError || jobs.isError} onClick={() => void mutate('run')}><Icon name="play" size={17} />Start experimental simulation</button>
+      </section>}
     </fieldset>
+    <button className="text-link simulation-inline-link" type="button" onClick={onTraining}>Open training checkpoints <Icon name="arrow" size={15} /></button>
+    {artifacts.isError && <p role="alert">Saved policies are unavailable. {artifacts.error.message}</p>}
+      </>}
     {pending === 'upload' && <div role="status"><p>{progress === 100 ? 'Upload sent; waiting for the import job receipt…' : `Uploading policy: ${progress}%`}</p><progress max="100" value={progress} aria-label="Policy upload progress" /><button className="secondary-button" onClick={() => abortUpload.current?.()}>Stop upload</button></div>}
     {pending === 'run' && <p role="status">Submitting one simulation job…</p>}
-    <button className="text-link" type="button" onClick={onTraining}>Open training checkpoints</button>
-    {artifacts.isError && <p role="alert">Saved policies are unavailable. {artifacts.error.message}</p>}
-      </div>
-    </details>
+    </NativePreparation>
   </section>;
 }

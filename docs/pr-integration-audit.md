@@ -1,5 +1,7 @@
 # Integration audit — September 26, 2026
 
+This is a historical verification record. Interface names and availability below describe the recorded integration, not a new test of the current UI. Use the [workspace guide](workspace-guide.md) for current navigation and capabilities.
+
 The six author-owned PRs (#43–#47 and #52) form one application integration.
 This is a software integration check, **not a completed product acceptance**.
 The locked product brief requires measured task quality, target constraints,

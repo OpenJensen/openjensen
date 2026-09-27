@@ -31,7 +31,7 @@ export function LocalComputeSettingsPanel() {
     <section className="local-compute-settings" aria-labelledby="local-compute-title">
       <div className="local-compute-heading">
         <Icon name="layers" size={22} />
-        <div><h2 id="local-compute-title">Local runs</h2><p>Use a GPU on the machine running OPEN JENSEN.</p></div>
+        <div><h2 id="local-compute-title">Local runs</h2></div>
         <span className="cloud-status">{saved ? (current.enabled ? "Enabled" : "Disabled") : "Loading…"}</span>
       </div>
       <form onSubmit={(event) => { event.preventDefault(); save.mutate(); }}>
@@ -51,8 +51,8 @@ export function LocalComputeSettingsPanel() {
           </button>
         </div>
         <p className="local-compute-note">{workers.length
-          ? `${workers.length} configured GPU worker${workers.length === 1 ? "" : "s"}. This label appears in fine-tuning.`
-          : "No local GPU worker configured yet. Add a CUDA worker using Local worker setup below."}</p>
+          ? `${workers.length} configured GPU worker${workers.length === 1 ? "" : "s"}`
+          : "No local GPU worker. See Local worker setup below."}</p>
         {dirty && <p className="local-compute-note">Unsaved changes</p>}
         {options.error && <p className="cloud-connection-error" role="alert">{options.error.message}</p>}
         {save.error && <p className="cloud-connection-error" role="alert">{save.error.message}</p>}
