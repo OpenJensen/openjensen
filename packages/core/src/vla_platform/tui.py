@@ -428,7 +428,14 @@ class FirebirdApp(App):
             saved = (
                 request
                 if request.get("operation")
-                in {"policy.finetune", "policy.distill", "policy.quantize", "policy.run"}
+                in {
+                    "policy.finetune",
+                    "policy.distill",
+                    "policy.quantize",
+                    "policy.run",
+                    "policy.export",
+                    "policy.evaluate",
+                }
                 else None
             )
             journal = AttemptJournal(

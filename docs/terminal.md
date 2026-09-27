@@ -45,7 +45,9 @@ The noninteractive CLI continues to emit JSON to stdout and errors to stderr. `f
 ## Review and submit lifecycle recipes
 
 F5 opens an editable composer for **Fine-tune / train**, **ACT teacher-to-student
-Distill**, **ACT INT8/INT4 Quantize**, and **CPU observation Replay**. It reads the
+Distill**, **ACT INT8/INT4 Quantize**, **CPU observation Replay**, **Resume saved
+training**, **Export inference policy**, **SmolVLA GGUF quantization**, **Evaluate
+engine / LIBERO**, and **Run SmolVLA engine / LIBERO**. It reads the
 selected project's saved datasets/artifacts and the application's advertised
 runtime/model catalog. An empty selector means there is no currently compatible
 choice; the terminal never installs a runtime or invents connectivity.
@@ -57,7 +59,36 @@ chosen. Edit the complete JSON in the terminal without creating a recipe file.
 The model catalog lists registered repository IDs and methods. The application
 still enforces model-specific camera, dataset and hardware requirements. **Copy
 selected job recipe** copies the entire saved request for editing; it neither
-retries nor resumes that job. This composer admits new jobs, not checkpoint resume.
+retries nor resumes that job. Use the separate Resume workflow for checkpoint recovery.
+
+Resume selects either an exact registered training checkpoint or an interrupted
+training job. **Build / replace draft** retains the original dataset and method;
+choose a new execution timeout, not a changed training budget. The review binds
+the visible saved lineage and rejects recipe overrides. The server independently
+verifies the checkpoint files and restores its saved training recipe, optimizer
+and RNG state. With an interrupted job it chooses the latest complete checkpoint;
+a failed job may have no usable checkpoint. The terminal does not claim to have
+read server-side checkpoint files. Cloud checkpoints require the cloud training
+runtime; selecting them does not implicitly materialize a local resumable copy.
+
+Export consumes a training checkpoint. ACT requires its separately configured
+local CPU exporter, full-training metadata and pinned Hugging Face dataset lineage;
+local-snapshot ACT export is unsupported. A completed, reload-verified cloud ACT
+checkpoint can be materialized by the existing backend (up to 4 GiB) before export.
+SmolVLA export requires its local training adapter and a local checkpoint. Export
+does not establish task success or simulator compatibility.
+
+Engine Evaluate/Run require a compatible SmolVLA GGUF or deployment package.
+Choose explicit `evaluation.mode`, `suite`, `warmups` and `repetitions`. Engine
+mode measures inference behavior/timing and cannot score a robot task. Choose the
+protocol selector before **Build / replace draft** to expose its required fields.
+For LIBERO,
+also supply `task_id` (Object) or `task_ids` (Spatial), disjoint `initial_states`
+and `final_states`, `seed` and `steps`. Spatial requires a CUDA simulator, its
+280-step horizon and explicit `parity_limits`; the artifact must declare the same
+suite. Google Cloud currently supports engine checks, not LIBERO scoring. These
+forms do not add ACT/Isaac scoring support. GGUF quantization chooses an explicit
+`precision.language`; native packed ACT uses its distinct workflow.
 
 **Review exact recipe** rereads current context, validates the existing API
 schema, and shows the complete normalized recipe plus source manifest and compute
@@ -86,11 +117,11 @@ promised by the server. If a server acknowledgment arrives but local cleanup fai
 its accepted job ID remains visible and **Back to jobs** follows it; do not submit
 it again. Closing the terminal does not cancel an accepted application job.
 
-These four recipe paths are a bounded terminal milestone. CPU replay is not an
+These recipe paths expose existing backend adapters. CPU replay is not an
 Isaac rollout or task-success evaluation. Quantization reports drift/reload evidence,
-not calibration, hardware performance or robot quality. Dedicated Evaluate, export,
-resume, artifact download forms and complete structured editors remain follow-up
-work; existing CLI commands remain available where their APIs support them.
+not calibration, hardware performance or robot quality. Artifact download forms
+and complete structured editors remain follow-up work; existing CLI download
+commands remain available.
 
 ## Follow lifecycle jobs from the CLI
 
@@ -156,7 +187,7 @@ checkpoint-owned training settings; the CLI does not invent those identities.
 ## Verification
 
 ```sh
-uv run --frozen --extra tui pytest tests/test_tui.py tests/test_tui_cli.py tests/test_tui_integration.py tests/test_cli_client.py tests/test_cli_workflow.py tests/test_cli_ack_types.py tests/test_tui_lifecycle.py tests/test_tui_lifecycle_integration.py -q
+uv run --frozen --extra tui pytest tests/test_tui.py tests/test_tui_cli.py tests/test_tui_integration.py tests/test_cli_client.py tests/test_cli_workflow.py tests/test_cli_ack_types.py tests/test_tui_lifecycle.py tests/test_tui_lifecycle_integration.py tests/test_tui_policy_modes.py -q
 ```
 
 Pilot tests exercise keyboard navigation, forms, 48×18 terminal resizing, stale/invalid responses, selection changes, offline recovery, explicit cancellation and non-retried ambiguous writes. The integration test starts a disposable loopback API on an ephemeral port, creates a real project, runs actual local metadata intake and a supervised slow protocol fixture, cancels that fixture, reads the same records with the CLI, and restarts the API to verify persistence. It never contacts a model provider or cloud service. Fixture evidence is not training, robot-quality or hardware evidence.

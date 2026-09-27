@@ -19,6 +19,12 @@ from vla_platform.contracts import now
 from vla_platform.lifecycle.contracts import PolicyArtifact, PolicyRequest
 from vla_platform.lifecycle.runtime import PublicRuntime
 from vla_platform.tui_client import ApiClient, ApiError, endpoint, segment
+from vla_platform.tui_policy_modes import (
+    EXTENDED_GUIDANCE,
+    EXTENDED_MODES,
+    extended_artifact_allowed,
+    review_extended,
+)
 
 MAX_RECIPE = 65536
 OPERATIONS = {
@@ -26,6 +32,7 @@ OPERATIONS = {
     "distill": ("ACT teacher → smaller student", "policy.distill", "native_distillation"),
     "quantize": ("ACT packed INT8 / INT4", "policy.quantize", "native_quantization"),
     "replay": ("CPU observation replay", "policy.run", "native_replay"),
+    **EXTENDED_MODES,
 }
 GUIDANCE = {
     "train": "Choose a registered model and method, camera keys and explicit training budget. "
@@ -39,6 +46,7 @@ GUIDANCE = {
     "replay": "Choose explicit episode/frame pairs and six recorded coordinate units. "
     "coordinate_attestation must be policy_recorded_coordinates, or generated_fixture "
     "only for generated data. This is not a simulator or scored task.",
+    **EXTENDED_GUIDANCE,
 }
 
 
@@ -77,12 +85,17 @@ def parse_recipe(raw: str) -> dict:
 
 def local_artifact(item):
     metadata = item["metadata"]
-    return metadata.get("storage") != "gcs" and not any(
-        metadata.get(key) for key in ("remote", "remote_uri")
+    return (
+        not item["path"].startswith("gs://")
+        and metadata.get("storage") != "gcs"
+        and metadata.get("storage_provider") != "gcp"
+        and not any(metadata.get(key) for key in ("remote", "remote_uri", "gcs_uri", "storage_uri"))
     )
 
 
 def artifact_allowed(item, mode):
+    if mode in EXTENDED_MODES:
+        return extended_artifact_allowed(item, mode)
     metadata = item["metadata"]
     if not local_artifact(item) or metadata.get("architecture") != "act":
         return False
@@ -108,7 +121,7 @@ def dataset_allowed(job, mode):
     result = job.get("result") or {}
     if job["kind"] != "dataset.inspect" or job["status"] != "succeeded":
         return False
-    if mode == "train":
+    if mode in {"train", "resume"}:
         return result.get("source") == "huggingface" or bool(result.get("snapshot"))
     snapshot = result.get("snapshot") or {}
     complete = result.get("inspection_scope") == "complete_snapshot" and (
@@ -124,13 +137,19 @@ def dataset_allowed(job, mode):
 
 
 def runtime_allowed(runtime, mode):
+    capability = runtime[OPERATIONS[mode][2]] is True
+    if mode == "export":
+        capability = runtime["act_export"] or (
+            runtime["training"] and "smolvla" in runtime["training_model_ids"]
+        )
     return (
-        runtime[OPERATIONS[mode][2]] is True
+        capability
         and runtime["enabled"] is True
         and runtime["launchable"] is True
         and not runtime.get("unavailable_reason")
         and (
-            mode == "train" or (runtime["provider"] == "local" and runtime["execution"] == "native")
+            mode in {"train", "resume", "evaluate", "engine_run", "gguf_quantize"}
+            or (runtime["provider"] == "local" and runtime["execution"] == "native")
         )
     )
 
@@ -195,7 +214,11 @@ class Context:
             raise ApiError("Recipe needs correction: " + "; ".join(details)) from None
         if request["operation"] != OPERATIONS[mode][1]:
             raise ApiError("Recipe operation must match the selected workflow.")
-        if request["simulation"] or request["source_id"] or request["resume_job_id"]:
+        if (
+            request["simulation"]
+            or request["source_id"]
+            or (request["resume_job_id"] and mode != "resume")
+        ):
             raise ApiError(
                 "This composer creates new lifecycle jobs; simulation/resume use other flows."
             )
@@ -205,7 +228,12 @@ class Context:
         artifact = next((a for a in self.artifacts if a["id"] == request["artifact_id"]), None)
         dataset = next((j for j in self.jobs if j["id"] == request["dataset_job_id"]), None)
         model = None
-        if mode != "train":
+        lineage = []
+        if mode in EXTENDED_MODES:
+            dataset, model, lineage = review_extended(
+                self, mode, value, request, runtime, artifact, local_artifact
+            )
+        elif mode != "train":
             if artifact is None or not artifact_allowed(artifact, mode):
                 raise ApiError("Choose a compatible project-owned local ACT artifact.")
             if not re.fullmatch(r"[a-f0-9]{64}", artifact["manifest_sha256"]):
@@ -215,7 +243,11 @@ class Context:
                 raise ApiError("Choose the explicit native operation recipe.")
         elif request["artifact_id"]:
             raise ApiError("Checkpoint resume is not part of this new-training composer.")
-        if mode != "quantize" and (dataset is None or not dataset_allowed(dataset, mode)):
+        if artifact is not None and not re.fullmatch(r"[a-f0-9]{64}", artifact["manifest_sha256"]):
+            raise ApiError("Artifact manifest identity is invalid.")
+        if mode in {"train", "distill", "replay"} and (
+            dataset is None or not dataset_allowed(dataset, mode)
+        ):
             raise ApiError(
                 "Choose a completed compatible dataset; native flows need an immutable snapshot."
             )
@@ -257,8 +289,9 @@ class Context:
             "dataset": dataset,
             "model": model,
             "request": request,
+            "source_jobs": lineage,
         }
-        return Review(mode, request, runtime, artifact, dataset, digest(bound))
+        return Review(mode, request, runtime, artifact, dataset, digest(bound), lineage)
 
 
 @dataclass
@@ -269,13 +302,16 @@ class Review:
     artifact: dict | None
     dataset: dict | None
     context_sha256: str
+    source_jobs: list[dict]
 
 
-def template(mode, runtime_id=None, artifact_id=None, dataset_job_id=None):
+def template(
+    mode, runtime_id=None, artifact_id=None, dataset_job_id=None, resume_job_id=None, protocol=None
+):
     value = {"operation": OPERATIONS[mode][1], "runtime_id": runtime_id, "timeout_seconds": None}
     if mode != "train":
         value["artifact_id"] = artifact_id
-    if mode != "quantize":
+    if mode in {"train", "distill", "replay", "resume"}:
         value["dataset_job_id"] = dataset_job_id
     if mode == "train":
         value.update(
@@ -302,13 +338,36 @@ def template(mode, runtime_id=None, artifact_id=None, dataset_job_id=None):
         }
     elif mode == "quantize":
         value["native_quantization"] = {"format": "firebird_quant", "bits": None, "group_size": 64}
-    else:
+    elif mode == "replay":
         value["native_replay"] = {
             "adapter": "act-packed-observation-v1",
             "selection": [],
             "coordinate_attestation": None,
             "units": [],
         }
+    elif mode == "resume":
+        value.update(resume_job_id=resume_job_id, training_method=None)
+    elif mode == "export":
+        value["training_method"] = None
+    elif mode == "gguf_quantize":
+        value["precision"] = {"language": None, "vision": None}
+    elif mode in {"evaluate", "engine_run"}:
+        value["evaluation"] = {"mode": None, "suite": None, "warmups": None, "repetitions": None}
+        if protocol in {"engine", "libero_object", "libero_spatial"}:
+            value["evaluation"].update(
+                mode="engine" if protocol == "engine" else "libero",
+                suite="libero_object" if protocol == "engine" else protocol,
+            )
+        if protocol in {"libero_object", "libero_spatial"}:
+            value["evaluation"].update(initial_states=[], final_states=[], seed=None, steps=None)
+            if protocol == "libero_object":
+                value["evaluation"]["task_id"] = None
+            else:
+                value["evaluation"].update(
+                    task_ids=[],
+                    steps=280,
+                    parity_limits={"profile": None, "max_rmse": None, "max_abs_error": None},
+                )
     return value
 
 

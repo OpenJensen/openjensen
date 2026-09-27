@@ -29,6 +29,7 @@ from vla_platform.tui_lifecycle import (
 from vla_platform.tui_lifecycle_forms import LifecycleForm
 
 SHA = "a" * 64
+BASE_MODES = ("train", "distill", "quantize", "replay")
 
 
 def dataset():
@@ -132,7 +133,7 @@ class LifecycleServer(Server):
                 training_gpu_count=None,
                 **({OPERATIONS[mode][2]: True} if mode != "train" else {}),
             ).model_dump(mode="json")
-            for mode in OPERATIONS
+            for mode in BASE_MODES
         ]
         self.models = [{"id": "act", "model_id": "fixture/act", "methods": ["full"]}]
         self.invalid_ack = False
@@ -185,7 +186,7 @@ async def context(server):
         await client.close()
 
 
-@pytest.mark.parametrize("mode", OPERATIONS)
+@pytest.mark.parametrize("mode", BASE_MODES)
 def test_complete_recipes_preserved_and_templates_require_choices(mode):
     current = asyncio.run(context(LifecycleServer()))
     reviewed = current.review(mode, canonical(recipe(mode)))
@@ -231,7 +232,7 @@ def test_recipe_capability_dataset_and_identity_gates():
     current = asyncio.run(context(LifecycleServer()))
     for item in current.runtimes:
         item["enabled"] = False
-    for mode in OPERATIONS:
+    for mode in BASE_MODES:
         with pytest.raises(ApiError, match="runtime"):
             current.review(mode, canonical(recipe(mode)))
     server = LifecycleServer()
@@ -337,7 +338,7 @@ async def reviewed(form, pilot):
     await pilot.pause()
 
 
-@pytest.mark.parametrize("mode", OPERATIONS)
+@pytest.mark.parametrize("mode", BASE_MODES)
 def test_pilot_explicit_complete_submission_one_post_and_job_monitor(tmp_path, mode):
     async def scenario():
         server = LifecycleServer()

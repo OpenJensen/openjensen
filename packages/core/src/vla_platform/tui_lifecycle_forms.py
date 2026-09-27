@@ -23,6 +23,11 @@ from vla_platform.tui_lifecycle import (
     runtime_allowed,
     template,
 )
+from vla_platform.tui_policy_modes import (
+    interrupted_training,
+    resume_context,
+    visible_resume_recipe,
+)
 
 
 class LifecycleForm(ModalScreen):
@@ -69,12 +74,30 @@ class LifecycleForm(ModalScreen):
                 id="lifecycle-mode",
             )
             yield Static("", id="recipe-guidance", markup=False)
+            yield Label(
+                "Evaluation protocol (choose before building the draft)", id="protocol-label"
+            )
+            yield Select(
+                [
+                    ("Engine inference checks", "engine"),
+                    ("LIBERO Object", "libero_object"),
+                    ("LIBERO Spatial", "libero_spatial"),
+                ],
+                prompt="Choose a protocol",
+                id="recipe-protocol",
+            )
             yield Label("Registered compute (configured capability, not model validation)")
             yield Select([], prompt="Choose compute", id="recipe-runtime")
             yield Label("Completed dataset intake")
             yield Select([], prompt="Choose a dataset when required", id="recipe-dataset")
-            yield Label("Local policy artifact")
+            yield Label("Registered policy artifact")
             yield Select([], prompt="Choose a policy when required", id="recipe-artifact")
+            yield Label("Interrupted training job (alternative to a checkpoint)", id="resume-label")
+            yield Select(
+                [],
+                prompt="Choose one interrupted job, or use the policy selector",
+                id="recipe-resume",
+            )
             yield Static("", id="model-guidance", markup=False)
             with HorizontalScroll():
                 yield Button("Build / replace draft", id="recipe-build")
@@ -188,13 +211,17 @@ class LifecycleForm(ModalScreen):
             "recipe-runtime",
             "recipe-dataset",
             "recipe-artifact",
+            "recipe-resume",
+            "recipe-protocol",
             "recipe-editor",
         ):
             self.query_one("#" + name).disabled = (
                 self.busy
                 or (name == "recipe-copy" and self.saved is None)
-                or (name == "recipe-dataset" and mode == "quantize")
+                or (name == "recipe-dataset" and mode not in {"train", "distill", "replay"})
                 or (name == "recipe-artifact" and mode == "train")
+                or (name == "recipe-resume" and mode != "resume")
+                or (name == "recipe-protocol" and mode not in {"evaluate", "engine_run"})
             )
 
     @on(Checkbox.Changed)
@@ -207,6 +234,8 @@ class LifecycleForm(ModalScreen):
         self.reviewed = None
         self.query_one("#recipe-reviewed").add_class("hidden")
         self.query_one("#recipe-guidance", Static).update(Text(GUIDANCE[mode]))
+        for selector in ("#protocol-label", "#recipe-protocol"):
+            self.query_one(selector).set_class(mode not in {"evaluate", "engine_run"}, "hidden")
         self.query_one("#recipe-runtime", Select).set_options(
             [
                 (Text(plain(f"{r['label']} · {r['provider_label']} · {r['device']}")), r["id"])
@@ -229,7 +258,20 @@ class LifecycleForm(ModalScreen):
             ]
         )
         self.query_one("#recipe-artifact", Select).disabled = mode == "train"
-        self.query_one("#recipe-dataset", Select).disabled = mode == "quantize"
+        self.query_one("#recipe-dataset", Select).disabled = mode not in {
+            "train",
+            "distill",
+            "replay",
+        }
+        self.query_one("#recipe-resume", Select).set_options(
+            [
+                (Text(plain(f"{j['id']} · {j['status']}")), j["id"])
+                for j in self.context.jobs
+                if interrupted_training(j)
+            ]
+        )
+        for selector in ("#resume-label", "#recipe-resume"):
+            self.query_one(selector).set_class(mode != "resume", "hidden")
         models = "\n".join(
             f"{m['model_id']}: {', '.join(m['methods'])} · {m.get('status', 'unknown')}"
             for m in self.context.models
@@ -249,23 +291,41 @@ class LifecycleForm(ModalScreen):
         )
 
     def selected(self, name):
-        value = self.query_one("#recipe-" + name, Select).value
-        return None if value is Select.BLANK else str(value)
+        selector = self.query_one("#recipe-" + name, Select)
+        return None if selector.is_blank() else str(selector.value)
 
     @on(Button.Pressed, "#recipe-build")
     def build(self):
         mode = str(self.query_one("#lifecycle-mode", Select).value)
-        self.query_one("#recipe-editor", TextArea).load_text(
-            json.dumps(
-                template(
-                    mode,
-                    self.selected("runtime"),
-                    self.selected("artifact"),
-                    self.selected("dataset"),
-                ),
-                indent=2,
-            )
+        value = template(
+            mode,
+            self.selected("runtime"),
+            self.selected("artifact"),
+            self.selected("dataset"),
+            self.selected("resume") if mode == "resume" else None,
+            self.selected("protocol") if mode in {"evaluate", "engine_run"} else None,
         )
+        if mode == "resume" and (value["artifact_id"] or value["resume_job_id"]):
+            try:
+                saved, metadata, _ = resume_context(
+                    self.context, value["artifact_id"], value["resume_job_id"]
+                )
+            except ApiError as exc:
+                self.message(str(exc))
+                return
+            value.update(
+                dataset_job_id=saved.get("dataset_job_id"),
+                training_method=visible_resume_recipe(saved, metadata).get(
+                    "method", saved["training_method"]
+                ),
+            )
+        if mode == "export":
+            source = next(
+                (a for a in self.context.artifacts if a["id"] == value["artifact_id"]), None
+            )
+            if source:
+                value["training_method"] = source["metadata"].get("method")
+        self.query_one("#recipe-editor", TextArea).load_text(json.dumps(value, indent=2))
         self.message("Draft replaced. Fill required values before review.")
 
     @on(Button.Pressed, "#recipe-copy")
@@ -319,6 +379,10 @@ class LifecycleForm(ModalScreen):
             if reviewed.dataset:
                 summary += (
                     f"Dataset {reviewed.dataset['id']} · immutable identity retained in review\n"
+                )
+            if reviewed.source_jobs:
+                summary += (
+                    "Saved lineage: " + " → ".join(j["id"] for j in reviewed.source_jobs) + "\n"
                 )
             self.query_one("#review-summary", Static).update(Text(plain(summary + GUIDANCE[mode])))
             self.query_one("#review-recipe", TextArea).load_text(
