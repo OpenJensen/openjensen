@@ -75,6 +75,10 @@ request termination and cleanup; no automatic retry is made. A successful receip
 requires both dependency checks and fresh offline probes. Probes verify exact
 runtime versions, CPU Torch, native reader source hashes, worker import paths,
 PyArrow and the PyAV decoder. They do not load model weights or evaluate a task.
+Each fresh probe retains its 60-second deadline. A timeout reports whether a complete
+JSON object reached stdout and includes at most the last 2,000 stderr bytes; output
+without normal process exit is never accepted. Dependency metadata is read once per
+installed distribution, retaining duplicate, version and environment-origin checks.
 
 ```sh
 python3 workers/local_cpu/manage.py verify --root /absolute/persistent/cpu-20260927
