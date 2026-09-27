@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "firebird-quant"
+version = "0.1.0"
+description = "Architecture-independent packed weight quantization and portable PyTorch inference"
+requires-python = ">=3.11,<3.13"
+dependencies = ["torch>=2.2,<3", "safetensors>=0.6.2,<1", "numpy>=1.26,<2"]
+
+[project.optional-dependencies]
+test = ["pytest==8.4.2", "ruff==0.13.2"]
+
+[project.scripts]
+firebird-quant = "firebird_quant.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]

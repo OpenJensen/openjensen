@@ -18,6 +18,7 @@ jobs:
     outputs:
       application: ${{ steps.changes.outputs.application }}
       quantization: ${{ steps.changes.outputs.quantization }}
+      unified_quantization: ${{ steps.changes.outputs.unified_quantization }}
       training: ${{ steps.changes.outputs.training }}
       benchmark: ${{ steps.changes.outputs.benchmark }}
       act: ${{ steps.changes.outputs.act }}
@@ -48,6 +49,36 @@ jobs:
           cache-dependency-glob: workers/vla_cpp/uv.lock
       - run: uv sync --locked --extra quantize --extra test
       - run: uv run --no-sync python -m pytest -q -rs
+  unified-quantization:
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.unified_quantization != 'false') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        torch: ['2.2.2', '2.11.0']
+    defaults:
+      run:
+        working-directory: workers/firebird_quant
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.19'
+          python-version: '3.11'
+          enable-cache: true
+          cache-suffix: firebird-quant-${{ matrix.torch }}
+          cache-dependency-glob: workers/firebird_quant/pyproject.toml
+      - run: uv venv --python 3.11
+      - run: uv pip install --python .venv/bin/python --index-url https://download.pytorch.org/whl/cpu 'torch==${{ matrix.torch }}'
+      - run: uv pip install --python .venv/bin/python -e '.[test]'
+      - run: .venv/bin/python -m pytest -q -rs
+        env:
+          HF_HUB_OFFLINE: '1'
+          CUDA_VISIBLE_DEVICES: ''
+      - run: .venv/bin/ruff check src tests
+      - run: .venv/bin/ruff format --check src tests
   training:
     needs: scope
     if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.training != 'false') }}
@@ -177,7 +208,7 @@ jobs:
           HF_HUB_OFFLINE: '1'
           CUDA_VISIBLE_DEVICES: ''
   native-worker-verification:
-    needs: [scope, quantization, training, benchmark, act-inference-export, teaching, decision]
+    needs: [scope, quantization, unified-quantization, training, benchmark, act-inference-export, teaching, decision]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -190,7 +221,7 @@ jobs:
           import json, os
           results = json.loads(os.environ['CHECK_RESULTS'])
           scope = results['scope']
-          required = {'quantization': 'quantization', 'training': 'training', 'benchmark': 'benchmark', 'act-inference-export': 'act', 'teaching': 'teaching', 'decision': 'decision'}
+          required = {'quantization': 'quantization', 'unified-quantization': 'unified_quantization', 'training': 'training', 'benchmark': 'benchmark', 'act-inference-export': 'act', 'teaching': 'teaching', 'decision': 'decision'}
           failures = []
           for job, output in required.items():
               result = results[job]['result']

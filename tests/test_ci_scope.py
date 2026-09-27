@@ -26,6 +26,10 @@ spec.loader.exec_module(ci_scope)
         (["workers/act_optimizer/src/firebird_act/application.py"], {"application", "act"}),
         (["workers/vla_cpp/src/quantize.py"], {"application", "quantization", "benchmark"}),
         (
+            ["workers/firebird_quant/src/firebird_quant/codec.py"],
+            {"application", "unified_quantization"},
+        ),
+        (
             ["workers/smolvla_qlora/src/firebird_vla/local_dataset.py"],
             {"application", "training", "act", "teaching"},
         ),
