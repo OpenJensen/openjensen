@@ -81,7 +81,8 @@ export function sortCheckpoints(artifacts: PolicyArtifact[], jobs: Job[] = []): 
   const unique = new Map<string, PolicyArtifact>();
   for (const artifact of artifacts) {
     const step = checkpointStep(artifact);
-    const key = artifact.format === 'training_checkpoint' && step !== null ? `${artifact.job_id}:${step}` : artifact.id;
+    const verifiedAct = artifact.metadata?.architecture === 'act' && artifact.metadata?.reload_verified === true;
+    const key = artifact.format === 'training_checkpoint' && step !== null && !verifiedAct ? `${artifact.job_id}:${step}` : artifact.id;
     if (!unique.has(key)) unique.set(key, artifact);
   }
   return [...unique.values()].sort((a, b) => {
@@ -89,7 +90,8 @@ export function sortCheckpoints(artifacts: PolicyArtifact[], jobs: Job[] = []): 
       const dateOrder = (dates.get(b.job_id) ?? '').localeCompare(dates.get(a.job_id) ?? '');
       if (dateOrder) return dateOrder;
     }
-    return (checkpointStep(b) ?? -1) - (checkpointStep(a) ?? -1) || a.label.localeCompare(b.label);
+    return (checkpointStep(b) ?? -1) - (checkpointStep(a) ?? -1) ||
+      Number(b.metadata?.architecture === 'act' && b.metadata?.reload_verified === true) - Number(a.metadata?.architecture === 'act' && a.metadata?.reload_verified === true) || a.label.localeCompare(b.label);
   });
 }
 
@@ -98,5 +100,6 @@ export function checkpointLabel(artifact: PolicyArtifact, jobs: Job[] = [], cata
   const job = jobs.find(item => item.id === artifact.job_id);
   const date = job ? new Date(job.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : null;
   const model = artifactModelLabel(artifact, catalog) ?? (job ? trainingRunModelLabel(job, catalog, [], jobs) : null);
-  return [step !== null ? `Step ${step.toLocaleString()}` : artifact.label, model, date, `Run ${artifact.job_id.slice(0, 8)}`].filter(Boolean).join(' · ');
+  return [step !== null ? `Step ${step.toLocaleString()}` : artifact.label,
+    artifact.metadata?.architecture === 'act' && artifact.metadata?.reload_verified === true ? 'Reload-verified bundle' : null, model, date, `Run ${artifact.job_id.slice(0, 8)}`].filter(Boolean).join(' · ');
 }

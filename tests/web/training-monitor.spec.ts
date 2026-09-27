@@ -5,7 +5,7 @@ const projectId = 'training-monitor-fixture';
 const revision = 'a'.repeat(40);
 const timestamp = () => new Date().toISOString();
 
-async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 'stale' | 'unavailable' | 'legacy' | 'validating' = 'running', exportMode?: 'local' | 'remote' | 'unconfigured' | 'failed' | 'local-dataset') {
+async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 'stale' | 'unavailable' | 'legacy' | 'validating' = 'running', exportMode?: 'local' | 'remote' | 'remote-complete' | 'unconfigured' | 'failed' | 'local-dataset') {
   const submitted: Record<string, any>[] = [];
   const unexpected: string[] = [];
   const cancelled: string[] = [];
@@ -60,8 +60,13 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
   const artifact: Record<string, any> = { id: 'checkpoint-artifact', project_id: projectId, job_id: job.id, format: 'training_checkpoint', label: 'Checkpoint step 20', file_bytes: 100, path: 'checkpoint', manifest_sha256: 'c'.repeat(64), parent_ids: [], metadata: {} };
   if (exportMode) artifact.metadata = { architecture: 'act', training_backend: 'lerobot', method: 'full',
     dataset: { source: exportMode === 'local-dataset' ? 'local' : 'huggingface' },
-    ...(exportMode === 'remote' ? { storage: 'gcs' } : {}) };
+    ...(exportMode?.startsWith('remote') ? { storage: 'gcs', reload_verified: exportMode === 'remote-complete', step: 20 } : {}) };
   const artifacts: Record<string, any>[] = [artifact];
+  if (exportMode === 'remote-complete') {
+    job.status = 'succeeded';
+    telemetry.status = 'succeeded';
+    artifacts.unshift({ ...artifact, id: 'periodic-same-step', metadata: { ...artifact.metadata, reload_verified: false } });
+  }
   await page.route('**/api/v1/**', async route => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -69,12 +74,13 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
       const body = request.postDataJSON();
       submitted.push(body);
       if (body.operation === 'policy.export') {
+        if (exportMode === 'remote-complete') artifacts.push({ ...artifact, id: 'local-copy', job_id: 'export-job', parent_ids: [artifact.id], metadata: { ...artifact.metadata, storage: undefined } });
         const created = { ...job, id: 'export-job', kind: 'policy.export', request: body,
           status: exportMode === 'failed' ? 'failed' : 'succeeded', error: exportMode === 'failed' ? 'Synthetic CPU parity did not match.' : null,
           stage: 'operation', created_at: timestamp() };
         jobs.unshift(created);
         if (exportMode !== 'failed') artifacts.push({ ...artifact, id: 'inference-export', job_id: created.id,
-          format: 'inference_export', label: 'ACT inference export', parent_ids: [artifact.id], metadata: { inference_only: true } });
+          format: 'inference_export', label: 'ACT inference export', parent_ids: exportMode === 'remote-complete' ? ['local-copy'] : [artifact.id], metadata: { inference_only: true } });
         await route.fulfill({ status: 202, json: created });
         return;
       }
@@ -100,7 +106,7 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
         [`/api/v1/projects/${projectId}/artifacts`]: artifacts,
         '/api/v1/jobs/dataset/episodes': { episodes: [], total: 10, offset: 0, limit: 6 },
         '/api/v1/policy-options': {
-          runtimes: [...(exportMode && exportMode !== 'unconfigured' ? [{ id: 'act-cpu', label: 'Local CPU export', provider: 'local', execution: 'native', device: 'cpu', enabled: true, training: false, act_export: true, simulation: false }] : []), { id: 'skypilot-gcp-A100', label: 'A100', accelerator: 'A100', execution: 'skypilot', provider: 'gcp', device: 'cuda', enabled: true, training: true, simulation: false, training_model_ids: ['smolvla'] }],
+          runtimes: [...(exportMode && exportMode !== 'unconfigured' ? [{ id: 'act-cpu', label: 'Local CPU export', provider: 'local', execution: 'native', device: 'cpu', enabled: true, training: false, act_export: true, export_only: true, simulation: false }] : []), { id: 'skypilot-gcp-A100', label: 'A100', accelerator: 'A100', execution: 'skypilot', provider: 'gcp', device: 'cuda', enabled: true, training: true, simulation: false, training_model_ids: ['smolvla'] }],
           compute: { local: { enabled: false, label: 'Local' }, gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 } },
           training_models: [], sources: [], training_methods: [{ id: 'lora', label: 'LoRA', description: 'Train adapters.' }], default_training_method: 'lora',
           quantization_defaults: { cuda: { language: 'Q8_0', vision: null }, cpu: { language: 'Q8_0', vision: null }, note: '' },
@@ -325,8 +331,8 @@ test('ACT checkpoint exports inference-only package through local registered run
 
 for (const mode of ['remote', 'unconfigured'] as const) test(`ACT export refuses ${mode} checkpoint without a job`, async ({ page }) => {
   const { monitor, submitted } = await workspace(page, 'running', mode);
-  await expect(monitor.getByRole('button', { name: 'Export ACT inference package' })).toBeDisabled();
-  await expect(monitor.getByText(mode === 'remote' ? 'Download and register the complete checkpoint locally before exporting.' : 'Ask the app operator to configure the local ACT export worker.', { exact: false })).toBeVisible();
+  await expect(monitor.getByRole('button', { name: mode === 'remote' ? 'Download checkpoint and export' : 'Export ACT inference package' })).toBeDisabled();
+  await expect(monitor.getByText(mode === 'remote' ? 'Wait for the completed, reload-verified ACT checkpoint.' : 'Ask the app operator to configure the local ACT export worker.', { exact: false })).toBeVisible();
   expect(submitted).toEqual([]);
 });
 
@@ -344,4 +350,31 @@ test('ACT export does not mislabel local snapshot lineage as Hugging Face', asyn
   await expect(monitor.getByRole('button', { name: 'Export ACT inference package' })).toBeDisabled();
   await expect(monitor.getByText('ACT export from local dataset snapshots is not supported yet.')).toBeVisible();
   expect(submitted).toEqual([]);
+});
+
+
+test('completed cloud ACT checkpoint explicitly downloads and exports with separate ancestry', async ({ page }) => {
+  const { monitor, submitted, unexpected } = await workspace(page, 'running', 'remote-complete');
+  const checkpoint = monitor.getByRole('combobox', { name: 'Checkpoint', exact: true });
+  await expect(checkpoint.locator('option')).toHaveCount(3);
+  await expect(checkpoint.locator('option').first()).toContainText('Reload-verified bundle');
+  await checkpoint.selectOption('periodic-same-step');
+  await expect(monitor.getByRole('button', { name: 'Download checkpoint and export' })).toBeDisabled();
+  await expect(monitor.getByText('Wait for the completed, reload-verified ACT checkpoint.', { exact: false })).toBeVisible();
+  await checkpoint.selectOption('checkpoint-artifact');
+  await expect(monitor.getByText('It does not start a cloud GPU.', { exact: false })).toBeVisible();
+  await monitor.getByRole('button', { name: 'Download checkpoint and export' }).click();
+  await expect(monitor.getByRole('link', { name: 'Download ACT inference package' })).toBeVisible();
+  expect(submitted).toEqual([{ operation: 'policy.export', runtime_id: 'act-cpu', artifact_id: 'checkpoint-artifact', training_method: 'full', timeout_seconds: 600 }]);
+  expect(unexpected).toEqual([]);
+  await noOverflow(page);
+});
+
+test('ACT export-only computer never appears as an engine execution target', async ({ page }) => {
+  await workspace(page, 'running', 'local');
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Execution target', exact: true })).toBeDisabled();
+  await expect(page.getByRole('combobox', { name: 'Execution target', exact: true })).not.toContainText('Local CPU export');
+  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Execution target', exact: true })).not.toContainText('Local CPU export');
 });

@@ -166,7 +166,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def capabilities(execution: ExecutionDep) -> list[Capability]:
         return [
             *registry(
-                bool(execution.lifecycle.catalog.runtimes),
+                any(not r.export_only for r in execution.lifecycle.catalog.runtimes),
                 any(
                     r.training_python and r.training_root
                     for r in execution.lifecycle.catalog.runtimes

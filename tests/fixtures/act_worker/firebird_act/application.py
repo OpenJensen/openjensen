@@ -41,7 +41,9 @@ metadata = {
     "checkpoint_manifest_sha256": hashlib.sha256(
         (source_path / "checkpoint/manifest.json").read_bytes()
     ).hexdigest(),
-    "dataset": source["metadata"]["dataset"],
+    "dataset": {
+        key: source["metadata"]["dataset"][key] for key in ("source", "repo_id", "revision")
+    },
     "camera_keys": source["metadata"]["camera_keys"],
 }
 fault = os.getenv("FIXTURE_FAULT")

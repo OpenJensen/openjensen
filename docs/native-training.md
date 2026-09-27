@@ -72,3 +72,5 @@ disabled in the general training profile so a LIBERO gripper index is not impose
 on a different robot. World-model camera-count constraints remain explicit.
 
 All native profile dependencies pass the [Linux CUDA dependency audit](native-dependency-resolution.md).
+
+Completed native ACT checkpoints have an explicit [local CPU inference export](cloud-act-export.md) path from the Fine-tune checkpoint panel.
