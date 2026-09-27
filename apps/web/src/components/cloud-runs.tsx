@@ -3,17 +3,18 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, isActive } from '@/lib/api';
+import { simulationTarget } from '@/lib/native-simulation';
 import { runLabel, runSummary } from '@/lib/run-summary';
 
 function reported(value: boolean | null | undefined) {
   return value == null ? 'Not reported' : value ? 'Yes' : 'No';
 }
 
-export function CloudRuns({ projectId, onOpenTraining }: { projectId: string; onOpenTraining: (id: string) => void }) {
+export function CloudRuns({ projectId, onOpenTraining, onOpenSimulation }: { projectId: string; onOpenTraining: (id: string) => void; onOpenSimulation: (id: string) => void }) {
   const jobs = useQuery({ queryKey: ['jobs', projectId], queryFn: () => api.jobs(projectId), enabled: !!projectId, refetchInterval: 3_000, retry: false });
   // The saved execution target is evidence of where this job ran. Current
   // runtime settings and a remote input artifact do not establish cloud execution.
-  const managed = (jobs.data ?? []).filter(job => job.project_id === projectId && job.compute_target != null).sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const managed = (jobs.data ?? []).filter(job => job.project_id === projectId && (job.compute_target != null || simulationTarget(job) !== null)).sort((a, b) => b.created_at.localeCompare(a.created_at));
   const [jobId, setJobId] = useState('');
   const job = managed.find(item => item.id === jobId) ?? managed[0];
   const events = useQuery({ queryKey: ['events', job?.id], queryFn: () => api.events(job!.id), enabled: !!job, refetchInterval: job && isActive(job) ? 3_000 : false, retry: false });
@@ -48,10 +49,11 @@ export function CloudRuns({ projectId, onOpenTraining }: { projectId: string; on
         <h3>{runSummary(job)}</h3>
         <dl className="cloud-run-facts">
           <div><dt>Job ID</dt><dd>{job.id}</dd></div><div><dt>Recorded status</dt><dd>{job.status}</dd></div>
-          <div><dt>Execution target</dt><dd>{job.compute_target?.accelerator} · {job.compute_target?.region}</dd></div>
+          <div><dt>Execution target</dt><dd>{simulationTarget(job) ? `${simulationTarget(job)!.accelerators.join(' + ')} · ${simulationTarget(job)!.profile_id}` : `${job.compute_target?.accelerator} · ${job.compute_target?.region}`} </dd></div>
           <div><dt>Last job update</dt><dd><time dateTime={job.updated_at}>{new Date(job.updated_at).toLocaleString()}</time></dd></div>
         </dl>
         {job.error && <p className="error-notice" role="alert">{job.error}</p>}
+        {simulationTarget(job) && <button className="secondary-button" disabled={jobs.isError} onClick={() => onOpenSimulation(job.id)}>Open simulation job</button>}
         {job.kind === 'policy.finetune' && <button className="secondary-button" disabled={jobs.isError} onClick={() => onOpenTraining(job.id)}>Open training job</button>}
         <h3>Recorded job events</h3>
         {events.isPending && <p role="status">Loading job events…</p>}
