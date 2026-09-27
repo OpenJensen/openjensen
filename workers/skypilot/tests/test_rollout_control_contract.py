@@ -70,6 +70,8 @@ def fixture(tmp_path, monkeypatch):
     tasks = {"vla": {"file_mounts": {}, "envs": {}}}
     checkpoint = tmp_path / "checkpoint"
     checkpoint.mkdir()
+    # This fixture mocks inspection, but still declares a real storage format.
+    (checkpoint / "model.safetensors").write_bytes(b"inspected-float-fixture")
     return info, data, tasks, checkpoint
 
 

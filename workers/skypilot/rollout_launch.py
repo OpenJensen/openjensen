@@ -1,4 +1,4 @@
-"""Validate local rollout inputs before submitting a managed GPU Job Group."""
+"""Validate local rollout inputs before submitting an owned simulation Job Group."""
 
 import argparse
 import hashlib
@@ -32,6 +32,19 @@ _RESOURCE_TYPES = {
     "isaac": ("g2-standard-16", "L4:1", False),
     "vla": ("a3-highgpu-1g", "H100:1", True),
 }
+_CUDA_RUNTIME = "lerobot-cuda"
+_CPU_RUNTIME = "packed-act-cpu"
+_POLICY_RUNTIMES = (_CUDA_RUNTIME, _CPU_RUNTIME)
+_CPU_SOURCE_MOUNTS = {
+    "~/firebird-quant-src": "firebird_quant/src",
+    "~/firebird-act-src": "act_optimizer/src",
+}
+_CPU_SETUP = (
+    "set -euo pipefail\n"
+    'timeout --signal=TERM --kill-after=60 "$POLICY_SETUP_TIMEOUT" '
+    "bash ~/sim-control/policy_cpu_setup.sh\n"
+)
+_CPU_RUN = "set -euo pipefail\nexec bash ~/sim-control/policy_cpu_run.sh\n"
 
 
 class _Mode(Enum):
@@ -110,7 +123,69 @@ def _valid_infra(value, name, mode):
     return len(parts) == 3 and "/".join(parts[:2]) == region and parts[2] in _EXPERIMENTAL_ZONES
 
 
-def _tasks(documents, mode=_Mode.ROLLOUT):
+def _runtime(value: str) -> str:
+    if value not in _POLICY_RUNTIMES:
+        raise ValueError("Unsupported policy runtime")
+    return value
+
+
+def _source_paths() -> dict[str, Path]:
+    return {mount: _ROOT.parent / relative for mount, relative in _CPU_SOURCE_MOUNTS.items()}
+
+
+def _cpu_task(task: dict) -> None:
+    """Keep the CPU lane's imports and command under the checked-out launcher."""
+    if type(task.get("num_nodes")) is not int or task["num_nodes"] != 1:
+        raise ValueError("Packed ACT requires exactly one CPU policy node")
+    mounts = task.get("file_mounts", {})
+    expected = {"~/sim-control": _ROOT / "remote", **_source_paths()}
+    if not isinstance(mounts, dict) or set(mounts) != {*expected, _CHECKPOINT_MOUNT}:
+        raise ValueError("Packed ACT requires only the fixed source and checkpoint mounts")
+    for mount, source in expected.items():
+        value = mounts[mount]
+        if not isinstance(value, str):
+            raise ValueError("Packed ACT source mounts must be local checkout directories")
+        supplied = Path(value).expanduser()
+        if not supplied.is_absolute():
+            supplied = _ROOT / supplied
+        if supplied.resolve() != source.resolve() or source.is_symlink() or not source.is_dir():
+            raise ValueError("Packed ACT source mount differs from the fixed checkout")
+        component = source
+        while component != _ROOT.parent:
+            if component.is_symlink():
+                raise ValueError("Packed ACT source mount contains a directory link")
+            component = component.parent
+        # Normalize once so the generated YAML cannot reinterpret relative paths.
+        mounts[mount] = str(source.resolve())
+    if task.get("setup") != _CPU_SETUP or task.get("run") != _CPU_RUN:
+        raise ValueError("Packed ACT requires the fixed CPU setup and serving commands")
+    envs = task.get("envs", {})
+    required = {
+        "POLICY_RUNTIME": _CPU_RUNTIME,
+        "POLICY_DEVICE": "cpu",
+        "POLICY_SETUP_TIMEOUT": "2400",
+        "POLICY_JOB_TIMEOUT": "4500",
+    }
+    if not isinstance(envs, dict) or any(envs.get(k) != v for k, v in required.items()):
+        raise ValueError("Packed ACT requires explicit CPU identity and bounded deadlines")
+    if envs.get("POLICY_MODEL_FORMAT", "firebird_quant") != "firebird_quant":
+        raise ValueError("Policy model format differs from the requested packed CPU lane")
+    allowed = {
+        *required,
+        "POLICY_MODEL_FORMAT",
+        "MODEL_ID",
+        "POLICY_STATE_DIM",
+        "POLICY_ACTION_STEPS",
+        "POLICY_CAMERA_KEY",
+    }
+    if set(envs) - allowed:
+        raise ValueError("Packed ACT policy environment contains an unsupported override")
+
+
+def _tasks(documents, mode=_Mode.ROLLOUT, policy_runtime=_CUDA_RUNTIME):
+    _runtime(policy_runtime)
+    if policy_runtime == _CPU_RUNTIME and mode == _Mode.ROLLOUT:
+        raise ValueError("Packed ACT CPU requires explicit readiness or experimental mode")
     if len(documents) != 3 or any(not isinstance(doc, dict) for doc in documents):
         raise ValueError("Expected a Job Group header and two task mappings")
     header = documents[0]
@@ -122,6 +197,19 @@ def _tasks(documents, mode=_Mode.ROLLOUT):
     for name, (machine, accelerator, spot) in _RESOURCE_TYPES.items():
         task = tasks[name]
         resources = task.get("resources", {})
+        if name == "vla" and policy_runtime == _CPU_RUNTIME:
+            machine, accelerator, spot = "n2-standard-8", None, False
+            if "accelerators" in resources:
+                raise ValueError("Packed ACT CPU resources must omit accelerators, including null")
+            _cpu_task(task)
+        elif name == "vla":
+            envs = task.get("envs", {})
+            if (
+                envs.get("POLICY_RUNTIME", _CUDA_RUNTIME) != _CUDA_RUNTIME
+                or envs.get("POLICY_DEVICE", "cuda") != "cuda"
+                or envs.get("POLICY_MODEL_FORMAT", "safetensors") != "safetensors"
+            ):
+                raise ValueError("Policy runtime differs from the requested CUDA lane")
         if "zone" in resources:
             raise ValueError("Encode the zone in infra instead of setting both infra and zone")
         machines = (
@@ -134,7 +222,7 @@ def _tasks(documents, mode=_Mode.ROLLOUT):
                 or resource.get("use_spot") is not spot
                 or not _valid_infra(resource.get("infra"), name, mode)
             ):
-                raise ValueError(f"{name} must use its configured {_REGION} GPU resource")
+                raise ValueError(f"{name} must use its configured {_REGION} resource")
         if resources.get("ports"):
             raise ValueError("Do not expose the policy server through public SkyPilot ports")
         if Path(task.get("workdir", "")).resolve() != _WORKER:
@@ -208,11 +296,34 @@ def _inspect(source):
     sys.path.insert(0, str(Path(__file__).resolve().parent / "../isaac_sim"))
     from sim_worker.rollout.checkpoint import inspect_checkpoint
 
-    return inspect_checkpoint(Path(source).expanduser().resolve())
+    # Keep lexical ancestry for the packed validator's no-links policy. The
+    # legacy float inspector retains its own existing path normalization.
+    return inspect_checkpoint(Path(source).expanduser().absolute())
 
 
-def _bind_model(tasks, data, checkpoint, execute_steps, *, manifest_path=None):
+def _policy_format(checkpoint: Path, artifact, policy_runtime: str) -> str:
+    """Bind actual inspected storage to the explicitly selected serving lane."""
+    packed = (checkpoint / "model.fbq").exists() or (checkpoint / "encoding.json").exists()
+    # Older float inspectors predate the model_format field; never infer packed
+    # compatibility from a filename when the inspector did not attest its format.
+    actual = getattr(artifact, "model_format", "safetensors" if not packed else None)
+    expected = "firebird_quant" if policy_runtime == _CPU_RUNTIME else "safetensors"
+    if (
+        actual != expected
+        or packed != (expected == "firebird_quant")
+        or (expected == "safetensors" and not (checkpoint / "model.safetensors").is_file())
+    ):
+        raise ValueError("Checkpoint format differs from the selected policy runtime")
+    if policy_runtime == _CPU_RUNTIME and artifact.policy_type != "act":
+        raise ValueError("The packed CPU profile supports ACT only")
+    return actual
+
+
+def _bind_model(
+    tasks, data, checkpoint, execute_steps, *, manifest_path=None, policy_runtime=_CUDA_RUNTIME
+):
     artifact = _inspect(checkpoint)
+    _policy_format(checkpoint, artifact, policy_runtime)
     joints = len(data["scene"]["joints"])
     if (artifact.state_dim, artifact.action_dim) != (joints, joints):
         raise ValueError("Checkpoint state/actions must match the scene joint count")
@@ -275,7 +386,7 @@ def _bind_model(tasks, data, checkpoint, execute_steps, *, manifest_path=None):
 
 
 @contextmanager
-def _select_checkpoint(path, checkpoint, mode, execute_steps=None):
+def _select_checkpoint(path, checkpoint, mode, execute_steps=None, policy_runtime=_CUDA_RUNTIME):
     if checkpoint is None:
         if execute_steps is not None:
             raise ValueError("--execute-steps requires --checkpoint")
@@ -284,12 +395,17 @@ def _select_checkpoint(path, checkpoint, mode, execute_steps=None):
 
     # Replace model placeholders before the existing complete-input validation.
     documents = list(yaml.safe_load_all(path.read_text()))
-    tasks = _tasks(documents, mode)
+    tasks = _tasks(documents, mode, policy_runtime)
     isaac = tasks["isaac"]
     manifest = _inside(isaac["envs"]["SIM_MANIFEST"], _WORKER, "SIM_MANIFEST")
     data = yaml.safe_load(manifest.read_text())
     _bind_model(
-        tasks, data, checkpoint.expanduser().resolve(), execute_steps, manifest_path=manifest
+        tasks,
+        data,
+        checkpoint.expanduser().absolute(),
+        execute_steps,
+        manifest_path=manifest,
+        policy_runtime=policy_runtime,
     )
 
     # Unique snapshots preserve templates and isolate overlapping submissions.
@@ -312,14 +428,15 @@ def _select_checkpoint(path, checkpoint, mode, execute_steps=None):
         yield Path(task.name)
 
 
-def _checkpoint(task, manifest):
+def _checkpoint(task, manifest, policy_runtime=_CUDA_RUNTIME):
     source = task.get("file_mounts", {}).get(_CHECKPOINT_MOUNT)
     if not isinstance(source, str):
         raise ValueError("Mount a local exported checkpoint at ~/vla-checkpoint")
-    checkpoint = Path(source).expanduser().resolve()
+    checkpoint = Path(source).expanduser().absolute()
     if not checkpoint.is_dir():
         raise ValueError(f"Checkpoint directory does not exist: {checkpoint}")
     artifact = _inspect(checkpoint)
+    _policy_format(checkpoint, artifact, policy_runtime)
     expected_control = (
         None
         if artifact.control_contract is None
@@ -365,14 +482,20 @@ def _checkpoint(task, manifest):
     return artifact
 
 
-def _prepare(path, mode=_Mode.ROLLOUT):
+def _prepare(path, mode=_Mode.ROLLOUT, policy_runtime=_CUDA_RUNTIME):
     if not os.environ.get("SIM_PROJECT_ID"):
         raise ValueError("Set SIM_PROJECT_ID before launching")
     _network(_ROOT / "config.yaml")
     documents = _read(path)
-    tasks = _tasks(documents, mode)
+    tasks = _tasks(documents, mode, policy_runtime)
     manifest = _manifest(tasks["isaac"], mode)
-    artifact = _checkpoint(tasks["vla"], manifest)
+    artifact = _checkpoint(tasks["vla"], manifest, policy_runtime)
+    # These fields are in the SDK's exact YAML receipt hash, not caller inference.
+    tasks["vla"]["envs"].update(
+        POLICY_RUNTIME=policy_runtime,
+        POLICY_DEVICE="cpu" if policy_runtime == _CPU_RUNTIME else "cuda",
+        POLICY_MODEL_FORMAT="firebird_quant" if policy_runtime == _CPU_RUNTIME else "safetensors",
+    )
     # Discovery uses this submission's labels, never another experiment's server.
     run_id = uuid.uuid4().hex
     for name, task in tasks.items():
@@ -482,7 +605,8 @@ def _launch(documents, path, mode, options=(), receipt_dir=None):
 
 
 def _submit(args, path):
-    documents = _prepare(path, args.mode)
+    policy_runtime = getattr(args, "policy_runtime", _CUDA_RUNTIME)
+    documents = _prepare(path, args.mode, policy_runtime)
     expected_model = getattr(args, "expected_model_id", None)
     if expected_model is not None:
         tasks = {task["name"]: task for task in documents[1:]}
@@ -519,6 +643,9 @@ def _submit(args, path):
                 "rollout_id": env["ROLLOUT_ID"],
                 "results_prefix": env["SIM_RESULTS_URI"],
                 "model_id": data["policy"]["model_id"],
+                "policy_runtime": policy_runtime,
+                "policy_device": tasks["vla"]["envs"]["POLICY_DEVICE"],
+                "model_format": tasks["vla"]["envs"]["POLICY_MODEL_FORMAT"],
                 "manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
             },
         )
@@ -538,6 +665,12 @@ def _submit(args, path):
 def _main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("task", nargs="?", type=Path, default=Path("rollout.local.yaml"))
+    parser.add_argument(
+        "--policy-runtime",
+        choices=_POLICY_RUNTIMES,
+        default=_CUDA_RUNTIME,
+        help="Explicit serving lane; packed ACT uses CPU and leaves Isaac on L4",
+    )
     checkpoints = parser.add_mutually_exclusive_group()
     checkpoints.add_argument(
         "--checkpoint", type=Path, help="Select a complete local ACT or SmolVLA export"
@@ -588,6 +721,10 @@ def _main():
     os.chdir(_ROOT)
     try:
         sys.path.insert(0, str(_WORKER))
+        # Structural admission is ML-free. CUDA callers must also be able to
+        # inspect and explicitly reject a packed archive before any allocation.
+        for library_source in _source_paths().values():
+            sys.path.insert(0, str(library_source.resolve()))
         from sim_worker.rollout.checkpoint_package import resolve_checkpoint
 
         lifetime = (
@@ -598,7 +735,7 @@ def _main():
         with lifetime as resolved:
             checkpoint = resolved.directory if resolved is not None else None
             with _select_checkpoint(
-                args.task, checkpoint, args.mode, args.execute_steps
+                args.task, checkpoint, args.mode, args.execute_steps, args.policy_runtime
             ) as selected:
                 return _submit(args, selected)
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:

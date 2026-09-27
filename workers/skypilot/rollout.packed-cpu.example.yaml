@@ -1,0 +1,64 @@
+# Separate explicit packed-ACT CPU policy lane. Isaac still needs an L4 GPU.
+# Use --policy-runtime packed-act-cpu with --experimental or --check-ready.
+name: isaac-packed-cpu
+execution: parallel
+primary_tasks: [isaac]
+termination_delay: 30s
+---
+name: isaac
+workdir: ../isaac_sim
+file_mounts:
+  ~/sim-control: ./remote
+num_nodes: 1
+resources:
+  infra: gcp/us-central1
+  instance_type: g2-standard-16
+  accelerators: L4:1
+  use_spot: false
+  disk_size: 200
+  disk_tier: medium
+envs:
+  ACCEPT_EULA: null
+  SIM_IMAGE: CHANGE_ME_IMMUTABLE_ISAAC_IMAGE
+  SIM_MANIFEST: scenes/so101-pickup/rollout.local.yaml
+  SIM_RESULTS_URI: gs://CHANGE_ME_RESULTS_BUCKET/packed-policy-rollouts
+  SIM_SETUP_TIMEOUT: '2400'
+  SIM_SETUP_KILL_GRACE: '60'
+  SIM_JOB_TIMEOUT: '1800'
+  POLICY_DISCOVERY_TIMEOUT: '900'
+setup: |
+  set -euo pipefail
+  timeout --signal=TERM --kill-after="$SIM_SETUP_KILL_GRACE" "$SIM_SETUP_TIMEOUT" bash ~/sim-control/setup.sh
+run: |
+  set -euo pipefail
+  python3 ~/sim-control/rollout_runner.py
+---
+name: vla
+workdir: ../isaac_sim
+file_mounts:
+  ~/sim-control: ./remote
+  ~/vla-checkpoint: /CHANGE_ME_LOCAL_PACKED_POLICY_DIRECTORY
+  ~/firebird-quant-src: ../firebird_quant/src
+  ~/firebird-act-src: ../act_optimizer/src
+num_nodes: 1
+resources:
+  infra: gcp/us-central1
+  instance_type: n2-standard-8
+  use_spot: false
+  disk_size: 200
+  disk_tier: medium
+envs:
+  POLICY_RUNTIME: packed-act-cpu
+  POLICY_DEVICE: cpu
+  MODEL_ID: CHANGE_ME_PACKED_MODEL_ID
+  POLICY_STATE_DIM: '6'
+  POLICY_ACTION_STEPS: '100'
+  POLICY_CAMERA_KEY: observation.images.front
+  POLICY_SETUP_TIMEOUT: '2400'
+  POLICY_JOB_TIMEOUT: '4500'
+setup: |
+  set -euo pipefail
+  timeout --signal=TERM --kill-after=60 "$POLICY_SETUP_TIMEOUT" bash ~/sim-control/policy_cpu_setup.sh
+run: |
+  set -euo pipefail
+  exec bash ~/sim-control/policy_cpu_run.sh
