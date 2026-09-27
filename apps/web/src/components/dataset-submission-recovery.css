@@ -1,0 +1,12 @@
+.dataset-submission-recovery { margin: 16px 0; padding: 16px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface); color: var(--ink); min-width: 0; }
+.dataset-submission-heading { font-size: 13px; line-height: 1.6; }
+.dataset-submission-recovery p { margin: 9px 0 0; font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
+.dataset-submission-recovery details { margin-top: 12px; font-size: 12px; }
+.dataset-submission-recovery summary { cursor: pointer; padding: 6px 0; }
+.dataset-submission-recovery dl { margin: 10px 0; }
+.dataset-submission-recovery dt { color: var(--muted); font-size: 11px; margin-top: 8px; }
+.dataset-submission-recovery dd { margin: 3px 0; overflow-wrap: anywhere; }
+.dataset-submission-recovery pre { max-height: 200px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.6; }
+.dataset-submission-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.dataset-submission-actions button { min-height: 40px; white-space: normal; text-align: left; }
+@media (max-width: 480px) { .dataset-submission-actions { flex-direction: column; align-items: stretch; } }
