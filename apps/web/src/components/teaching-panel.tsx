@@ -91,7 +91,7 @@ export function TeachingPanel() {
         media.current?.append(element);
       });
       current.on(RoomEvent.TrackUnsubscribed, track => track.detach().forEach(element => element.remove()));
-      current.on(RoomEvent.Disconnected, () => { if (room.current === current) { if (timer.current) clearTimeout(timer.current); timer.current = null; voiceSession.current = null; if (mounted.current) setVoiceState("Disconnected"); media.current?.replaceChildren(); room.current = null; } });
+      current.on(RoomEvent.Disconnected, () => { if (room.current === current) { generation.current += 1; joining.current = false; if (timer.current) clearTimeout(timer.current); timer.current = null; voiceSession.current = null; if (mounted.current) { setVoiceState("Disconnected"); setVoiceError("Voice connection closed. Reconnect to continue."); } media.current?.replaceChildren(); room.current = null; } });
       await current.connect(access.url, access.token);
       if (!live()) { await current.disconnect(); return; }
       await current.localParticipant.setMicrophoneEnabled(true);
