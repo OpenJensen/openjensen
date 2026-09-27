@@ -1,9 +1,10 @@
 # Python sidecar foundation
 
-This is the first DESK-002 Python boundary. Normal-interpreter tests exercise the actual
-application and its intake worker in disposable workspaces. The Tauri shell does not
-start this sidecar yet. No frozen build, relocated application, signing, distribution,
-Windows support, or packaged model runtime has been verified by this slice.
+Normal-interpreter tests exercise the actual application and its intake worker in
+disposable workspaces. A local macOS ARM64 frozen build and relocation experiment has
+also passed the bounded checks recorded below. The Tauri shell does not start this
+sidecar yet. Signing, distribution, Windows support and packaged model runtimes remain
+unverified.
 
 ## Fixed modes and ownership
 
@@ -76,12 +77,12 @@ remain for inspection. The manifest is limited to 4 MiB. Runtime validation chec
 exact file inventory before serving. Bundle immutability after that check relies on
 the installed application's filesystem boundary; this is not a hostile-writer sandbox.
 
-`firebird-sidecar.spec` is an unexecuted one-directory PyInstaller build specification.
+`firebird-sidecar.spec` is a one-directory PyInstaller build specification.
 It includes the bounded resources plus real core Python files needed by Alembic and
-fixed helper subprocesses. A future reviewed build should use an isolated build-only
-environment with the existing core lock and a pinned freezer, then test from a new
-location with no repository or system Python/Node access. No freezer was installed for
-this slice. The complete one-directory payload, including `_internal`, must be shipped
+fixed helper subprocesses. Builds use an isolated build-only environment with the
+existing core lock and a pinned freezer, then test from a new location outside the
+repository, with no Python/Node on the runtime PATH. The complete one-directory payload,
+including `_internal`, must be shipped
 as a Tauri resource; copying just the executable is insufficient. Model runtimes stay
 separate. Native start/stop UI and capability changes are deliberately a later review.
 
@@ -106,7 +107,9 @@ identifies the core/static source; packaging-source changes must have their own 
 
 Run PyInstaller's fixed `firebird-sidecar.spec` with `FIREBIRD_DESKTOP_RESOURCES` pointing
 to that absolute directory and fresh scratch work/dist directories. Keep the complete
-one-directory output. `payload_inventory.py PAYLOAD OUTPUT_JSON` records every regular
+one-directory output. Invoke the build interpreter with `-I -B`: isolated mode ignores
+`PYTHONDONTWRITEBYTECODE`, so the explicit `-B` prevents generated caches in the source
+snapshot. `payload_inventory.py PAYLOAD OUTPUT_JSON` records every regular
 file's bytes, SHA256, permissions and Mach-O CPU types, all directories, and literal
 safe relative symlink targets. It rejects escaping, absolute, dangling or cyclic links
 and special entries. Limits are 20,000 entries and 2 GiB. This is evidence for a trusted
@@ -143,3 +146,23 @@ pass. Retain initial failures and the complete logs. Even a passing local experi
 not establish Tauri-owned packaged lifecycle, upgrades, existing workspace adoption,
 clean-machine installation, notarization, other platforms or separate model runtimes.
 Those gates remain open before production payload activation.
+
+## Recorded local experiment
+
+The macOS ARM64 experiment built core/static source `8ce73ee` using 35 exact, hash-verified
+wheels installed offline in an isolated environment. Its complete payload contains 203
+entries and 13 ARM64 native files. After relocation it served all 36 static files,
+completed generated metadata-only intake, checked SQLite integrity, refused a second
+workspace owner, stopped on command and parent EOF, and restarted with the same saved
+project and job. Tampered static files, a wrong control nonce and generic Python modes
+were refused. This proves neither robotics frame validity nor model execution.
+
+The first build's strict source-inventory gate failed because one Python bytecode cache
+was generated; all 972 original inputs were unchanged. That failure is retained. The
+first acceptance attempt then exposed an inspector bug: a dylib's `LC_ID_DYLIB` identity
+was mistaken for a load dependency. The corrected external inspector separates identity
+from actual loads; the unchanged payload then passed the full bounded harness. The
+source snapshot predates WEB-009 and must not be described as the latest web build.
+
+Production Start remains disabled. Tauri-owned lifecycle, installation on a clean
+machine, upgrades, signing, Linux/Windows and ML runtimes require separate evidence.

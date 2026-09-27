@@ -36,7 +36,7 @@ async function request(path: string, body?: unknown): Promise<unknown> {
 type Expected = { project: string; runtime: string; artifact: string; bits: 4 | 8; timeout: number };
 function accepted(value: unknown, expected: Expected, id?: string): Job {
   if (!object(value) || typeof value.id !== 'string' || !value.id || (id && value.id !== id) || value.project_id !== expected.project ||
-      value.kind !== 'policy.quantize' || !statuses.includes(String(value.status)) || !object(value.request) ||
+      value.kind !== 'policy.quantize' || typeof value.status !== 'string' || !statuses.includes(value.status) || !object(value.request) ||
       value.request.operation !== 'policy.quantize' || value.request.runtime_id !== expected.runtime || value.request.artifact_id !== expected.artifact ||
       value.request.timeout_seconds !== expected.timeout || !object(value.request.native_quantization)) throw uncertain();
   const spec = value.request.native_quantization;
