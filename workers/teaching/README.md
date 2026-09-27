@@ -115,3 +115,7 @@ The separate [Jev/Mk1.5 adapters](PROVIDERS.md) support bounded, explicitly conf
 ## Optional intelligence workbench
 
 The web Teaching panel can explicitly request Jev review suggestions or Mk1.5 frame descriptions through the separate authenticated broker. [Configuration and bounded acceptance](../../docs/teaching-intelligence.md) explain the opt-in private settings file, voice readiness, consent, exact frame freshness and cancellation. Existing executor, LiveKit and cloud configuration are preserved; no provider is contacted by readiness checks.
+
+### Application dataset preparation
+
+The fixed `firebird_teaching.prepare_dataset` process accepts a private, bounded request from the application's recording adapter. It reuses the converter above without changing capture, controller or lineage semantics. It never controls the simulator or trains a model. Operator configuration, project-scoped catalog/selection, saved jobs, source verification and limits are documented in [recording preparation](../../docs/recording-preparation.md). The web Teaching handoff is a separate integration step.

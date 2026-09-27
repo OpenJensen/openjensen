@@ -33,6 +33,7 @@ from vla_platform.contracts import (
     ProjectCreate,
 )
 from vla_platform.datasets.explore import DatasetExplorer, ExplorationError
+from vla_platform.datasets.recordings import RecordingError
 from vla_platform.decision_api import router as decision_router
 from vla_platform.execution import Execution
 from vla_platform.huggingface_api import router as huggingface_router
@@ -46,6 +47,7 @@ from vla_platform.lifecycle.contracts import (
 )
 from vla_platform.lifecycle.training_catalog import public_training_models
 from vla_platform.projects import Projects
+from vla_platform.recordings_api import router as recordings_router
 from vla_platform.settings import Settings
 from vla_platform.storage import Storage
 from vla_platform.teaching_api import router as teaching_router
@@ -110,6 +112,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(huggingface_router)
     app.include_router(teaching_router)
     app.include_router(decision_router)
+    app.include_router(recordings_router)
     app.add_middleware(
         TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]", "testserver"]
     )
@@ -248,10 +251,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> Job:
         if await projects.get(project_id) is None:
             raise HTTPException(404, "Project not found")
-        if payload.source == "local" and settings.local_root is None:
+        if payload.source == "local" and payload.recordings is None and settings.local_root is None:
             raise HTTPException(422, "Local intake is disabled; configure FIREBIRD_LOCAL_DATA_ROOT")
         try:
             return await execution.inspections.submit(project_id, payload)
+        except RecordingError as exc:
+            raise HTTPException(exc.status, str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
         except (TimeoutError, httpx.TimeoutException) as exc:

@@ -12,6 +12,7 @@ from vla_platform.augmentation.contracts import AugmentationRequest
 from vla_platform.augmentation.service import Augmentation
 from vla_platform.contracts import TERMINAL, IntakeRequest, Job, WorkerRequest, WorkerResult, now
 from vla_platform.datasets.cache import Inspections
+from vla_platform.datasets.recordings import Recordings
 from vla_platform.frozen_commands import intake_command
 from vla_platform.lifecycle.contracts import PolicyRequest, SimulationTarget
 from vla_platform.lifecycle.service import Lifecycle
@@ -38,6 +39,7 @@ class Execution:
         self.lifecycle = Lifecycle(self)
         self.augmentation = Augmentation(self)
         self.inspections = Inspections(self)
+        self.recordings = Recordings(self)
         self.slots = asyncio.Semaphore(2)  # Metadata jobs only; not a GPU admission policy.
 
     async def get(self, job_id: str) -> Job | None:
@@ -75,6 +77,8 @@ class Execution:
             compute_target = await self.lifecycle.validate(project_id, request)
         elif isinstance(request, AugmentationRequest):
             await self.augmentation.validate(project_id, request)
+        elif request.recordings is not None:
+            await self.recordings.validate(project_id, request)
         job = Job(
             id=str(uuid4()),
             project_id=project_id,
@@ -150,6 +154,9 @@ class Execution:
             return
         if initial and isinstance(initial.request, PolicyRequest):
             await self.run_policy(initial)
+            return
+        if initial and initial.request.recordings is not None:
+            await self.recordings.run(initial)
             return
         process = None
         try:
