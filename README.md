@@ -10,6 +10,8 @@ Start with [cloud training and quantization](docs/skypilot-training.md), [model 
 
 Fine-tune, Quantize, Evaluate and Run open saved jobs first, with separate creation forms. SmolVLA cloud Evaluate and Run execute real CUDA engine checks and package verification; see the [workflow and live inference verification](docs/jobs-first-verification.md) for measured results and limits.
 
+**Run → Native Isaac** supports complete ACT and SmolVLA packages, including uploaded TAR archives, through the shared cup-scene launcher. It saves owned simulation jobs, verified video and downloadable trajectory records. This is experimental execution evidence; scored cup-task Evaluation remains gated on calibration and an agreed success criterion. See [native simulation](docs/native-simulation.md) for the distinction, setup and current boundaries.
+
 **Dataset → Augmentation** supports Gemini Omni lighting, texture and custom appearance edits for selected camera clips, with before/after review and provenance exports. See the [augmentation setup and scope](docs/augmentation.md); this optional feature uses the saved Google Cloud login or a server-side Gemini API key, plus FFmpeg.
 
 Application Git root: this directory. The nested `firebird-hackathon-prep/` directory remains a separate, ignored Git repository. Its [accepted plan](firebird-hackathon-prep/docs/idea/18_stack-and-phased-build-plan.md) and [task register](firebird-hackathon-prep/docs/tasks/README.md) hold planning and coordination records; they are not included in an application-only clone.
@@ -95,7 +97,7 @@ pnpm exec playwright install chromium
 pnpm test:web
 ```
 
-Do not hand-edit generated API types. Claim a task card before parallel work, coordinate shared schema/manifest/migration changes, and provide evidence plus independent review. CI selects affected suites conservatively; Linux runs the full browser suite and Windows retains core/terminal checks, with full Windows browser checks available by manual dispatch. See [verification and local fallback](docs/ci.md). Full GPU workflows and Windows GPU acceptance remain separate validation gates.
+Do not hand-edit generated API types. Claim a task card before parallel work, coordinate shared schema/manifest/migration changes, and provide evidence plus independent review. CI selects affected suites conservatively; Linux is the hackathon default, with Windows checks available by manual dispatch. See [verification and local fallback](docs/ci.md). Full GPU workflows and Windows GPU acceptance remain separate validation gates.
 
 Connect Google Cloud once in **Settings → Compute**, then choose L4, T4, or A100 and click **Start fine-tuning**. Provider preparation and SkyPilot dispatch happen automatically. See [compute settings](docs/compute-settings.md) and [SkyPilot job lifecycle](docs/skypilot-training.md).
 
