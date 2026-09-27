@@ -40,7 +40,7 @@ export function CloudRuns({ projectId, onOpenTraining, onOpenSimulation }: { pro
 
   return <div className="cloud-runs">
     <section className="panel managed-cloud-jobs" aria-labelledby="managed-cloud-title">
-      <div className="cloud-heading"><div><h2 id="managed-cloud-title">Application cloud jobs</h2><p>Recorded jobs for the selected project. Status comes from OPEN JENSEN's job runner; it does not indicate whether a VM is still running.</p></div>
+      <div className="cloud-heading"><div><h2 id="managed-cloud-title">Jobs</h2></div>
         <button className="secondary-button" disabled={!projectId || jobs.isFetching} onClick={() => { void jobs.refetch(); if (job) void events.refetch(); }}>Refresh application jobs</button></div>
       {!projectId && <p role="status">Select a project to see its cloud jobs.</p>}
       {projectId && jobs.isPending && <p role="status">Loading application cloud jobs…</p>}
@@ -61,17 +61,17 @@ export function CloudRuns({ projectId, onOpenTraining, onOpenSimulation }: { pro
         {events.isPending && <p role="status">Loading job events…</p>}
         {events.isError && <p role="alert">Job events are unavailable. {events.error.message} Previously received events may be out of date.</p>}
         <pre className="cloud-log-tail" role="region" aria-label="Application job event log" tabIndex={0}>{events.data?.length ? events.data.slice(-100).map(event => `${event.timestamp} · ${event.stage} · ${event.message}${simulationTaskSummary(event.data) ? ` · ${simulationTaskSummary(event.data)}` : ''}`).join('\n') : 'No events received for this job yet.'}</pre>
-        <p className="field-help">Showing at most the latest 100 recorded events. Job completion is not robot task success or proof of cloud resource cleanup.</p>
+        <p className="field-help">Latest 100 events · completion does not verify task success or VM cleanup.</p>
       </>}
     </section>
     <section className="panel external-cloud-observations" aria-labelledby="cloud-runs-title">
     <div className="cloud-heading">
-      <div><h2 id="cloud-runs-title">External rollout observations</h2><p>Snapshots from a separately operated Isaac/VLA observer. This page checks saved observations every 3 seconds; it does not start or reconnect the simulator.</p></div>
+      <div><h2 id="cloud-runs-title">External observations</h2></div>
       <button className="secondary-button" onClick={() => void feed.refetch()} disabled={feed.isFetching}>{feed.isFetching ? 'Checking…' : 'Refresh cloud runs'}</button>
     </div>
     {feed.isPending && <p role="status">Loading cloud runs…</p>}
     {feed.isError && <p className="error-notice" role="alert">Cloud updates are unavailable. {feed.error.message}{feed.data && ' Previously received information remains below.'}</p>}
-    {feed.data && !feed.data.enabled && <p className="warning-box" role="status">External rollout monitoring is not configured. Application cloud jobs above remain available; the operator can connect a separate read-only snapshot feed.</p>}
+    {feed.data && !feed.data.enabled && <p className="warning-box" role="status">External rollout monitoring is not configured.</p>}
     {errors.map((error, index) => <p className="error-notice" role="alert" key={`${error.run_id}-${index}`}>Snapshot read error{error.run_id ? ` for ${error.run_id}` : ''}: {error.message}</p>)}
     {feed.data?.enabled && runs.length === 0 && errors.length === 0 && <p>No external rollout observations have been published yet.</p>}
     {selected && <>
@@ -83,7 +83,7 @@ export function CloudRuns({ projectId, onOpenTraining, onOpenSimulation }: { pro
       <div className="cloud-freshness" role="status">
         <strong>{stale ? 'Stale or unavailable observation' : selected.collection_error ? 'Last observation (refresh failed)' : 'Current observation'}</strong>
         <span>{selected.collected_at ? <>Last successful collection: <time dateTime={selected.collected_at}>{new Date(selected.collected_at).toLocaleString()}</time>{age !== null && ` · ${Math.floor(age)}s ago`}</> : 'No successful remote collection yet.'}</span>
-        <span>Observations become stale after {feed.data?.stale_after_seconds ?? 90} seconds. A terminal snapshot is historical evidence, not a live connection.</span>
+        <span>Stale after {feed.data?.stale_after_seconds ?? 90}s · historical snapshot</span>
       </div>
       {selected.collection_error && <p className="error-notice" role="alert">Remote collection error: {selected.collection_error}</p>}
       <dl className="cloud-run-facts">
@@ -94,12 +94,11 @@ export function CloudRuns({ projectId, onOpenTraining, onOpenSimulation }: { pro
         <div><dt>Pickup success</dt><dd>{reported(selected.outcomes.pickup_success)}</dd></div>
         <div><dt>Calibration</dt><dd>{selected.outcomes.calibration ?? 'unknown'}</dd></div>
       </dl>
-      <p className="cloud-outcome-note">Task status and logs do not establish pickup success, calibration or optimizer validation. Outcomes above are explicit monitor reports.</p>
+      <p className="cloud-outcome-note">Observer-reported outcomes · logs do not verify pickup success or calibration.</p>
       <div className="cloud-log-switch" role="group" aria-label="Log stream">
         <button className="secondary-button" aria-pressed={stream === 'isaac'} onClick={() => setStream('isaac')}>Isaac logs</button>
         <button className="secondary-button" aria-pressed={stream === 'vla'} onClick={() => setStream('vla')}>VLA logs</button>
       </div>
-      <p className="cloud-log-caption">{streamName} recent log tail</p>
       <pre className="cloud-log-tail" role="region" aria-label={`${streamName} log tail`} tabIndex={0}>{selected.logs[stream] || 'No log lines collected for this stream yet.'}</pre>
     </>}
   </section></div>;

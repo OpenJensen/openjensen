@@ -18,7 +18,6 @@
 .workflow-live-events span { overflow-wrap: anywhere; white-space: pre-wrap; }
 .workflow-panel select { max-width: 100%; text-overflow: ellipsis; }
 .workflow-new-job { max-width: 760px; }
-.workflow-new-job > h2 { margin: 24px 0 18px; font-size: 22px; }
 .workflow-new-job .workflow-fields { max-width: none; }
 .workflow-new-job .workflow-fields > .primary-button { justify-self: start; margin-top: 18px; min-width: 180px; }
 .workflow-new-job .workflow-fields > .workflow-advanced { margin: 4px 0 8px; }
@@ -77,3 +76,11 @@
   .workflow-form-row, .workflow-job-facts { grid-template-columns: 1fr; }
   .workflow-job-heading { flex-direction: column; }
 }
+
+.workflow-new-job { max-width: 1060px; }
+.workflow-new-job .workflow-fields { gap: 24px; }
+.workflow-new-job .workflow-fields > .workflow-choice-grid + .workflow-choice-grid { padding-top: 4px; }
+.workflow-new-job .workflow-fields > .primary-button { margin-top: 0; }
+.workflow-new-job .workflow-input-help { margin-top: -10px; }
+
+.workflow-new-job > .workflow-view-navigation { margin-bottom: 24px; }

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiOrigin } from "@/lib/api";
 import { basePath } from "@/lib/base-path";
+import { WorkflowIntegration } from "./workflow-integration";
 
 type Status = { configured: boolean; available: boolean; busy: boolean; message: string };
 type Result = { selected_id: string; request_sha256: string; revision: string; scores: { id: string; logit: number; relative_weight: number; tokens: number }[]; timing_ms: { load: number; score: number } };
@@ -45,16 +46,19 @@ export function DecisionPanel() {
       void status.refetch();
     }
   }
-  return <section className="panel" aria-labelledby="decision-title">
-    <h2 id="decision-title">Local decision advisory</h2>
-    <p>Compare text criteria using Muose-50M on the application host CPU. Scoring never starts a job, calls a tool, or moves a robot.</p>
-    <p className="warning-box"><strong>Experimental: only 3 of 6 workflow examples were correct</strong> in a small hand-authored fixture (5 of 6 banking examples). This is not a robotics benchmark. Relative weights are uncalibrated, not probabilities of correctness.</p>
-    <p>Model: muose/Muose-50M-Decision · Noncommercial CC-BY-NC-SA-4.0; the operator must explicitly accept the license.</p>
-    <p role="status">{status.isPending ? "Checking local configuration…" : status.isError ? "Local scorer status is unavailable." : status.data?.message}</p>
+  return <section className="panel" aria-label="Decision advisory">
+    <WorkflowIntegration label="Advisory model" name="Muose-50M" meta="Local CPU" icon="chart" status="Experimental · advisory only" />
+    <details><summary>Model details</summary>
+      <p>Muose-50M runs on the application host CPU. Scoring never starts a job, calls a tool, or moves a robot.</p>
+      <p>Only 3 of 6 workflow examples were correct in a small hand-authored fixture (5 of 6 banking examples). This is not a robotics benchmark. Relative weights are uncalibrated, not probabilities of correctness.</p>
+      <p>Model: muose/Muose-50M-Decision · Noncommercial CC-BY-NC-SA-4.0; the operator must explicitly accept the license.</p>
+      <p>Supply 2–8 unique criteria. Each state + instructions + criterion must fit 512 model tokens; excessive text is rejected, never truncated.</p>
+    </details>
+    <p role="status">{status.isPending ? "Checking local configuration…" : status.isError ? "Local scorer status is unavailable." : status.data?.busy ? status.data.message : ready ? "Local scorer ready" : status.data?.message}</p>
     <button type="button" className="secondary-button" disabled={pending || status.isFetching} onClick={() => void status.refetch()}>Refresh scorer status</button>
     <form onSubmit={event => { event.preventDefault(); void score(); }}>
       <fieldset disabled={pending}>
-        <legend>Manual text experiment</legend>
+        <legend className="visually-hidden">Comparison</legend>
         <label htmlFor="decision-state">State to compare</label>
         <textarea id="decision-state" rows={3} maxLength={8000} value={state} onChange={event => { edited(); setState(event.target.value); }} />
         <label htmlFor="decision-instructions">Comparison instructions</label>
@@ -65,7 +69,6 @@ export function DecisionPanel() {
           {criteria.length > 2 && <button type="button" className="secondary-button" aria-label={`Remove criterion ${index + 1}`} onClick={() => { edited(); setCriteria(criteria.filter((_, position) => position !== index)); }}>Remove</button>}
         </div>)}
         <button type="button" className="secondary-button" disabled={criteria.length >= 8} onClick={() => { edited(); setCriteria([...criteria, ""]); }}>Add criterion</button>
-        <p>Supply 2–8 unique criteria. Each state + instructions + criterion must fit 512 model tokens; excessive text is rejected, never truncated.</p>
       </fieldset>
       <button type="submit" disabled={!ready || !valid || pending}>{pending ? "Scoring locally…" : "Score criteria"}</button>
       {pending && <button type="button" className="secondary-button" onClick={() => active.current?.abort()}>Stop scoring</button>}
@@ -73,9 +76,9 @@ export function DecisionPanel() {
     {error && <p role="alert" className="error-notice">{error}</p>}
     {result && <section aria-label="Advisory score result">
       <h3>Advisory result</h3>
-      <p>Highest relative score: {result.criteria[result.receipt.scores.findIndex(item => item.id === result.receipt.selected_id)]}. Review it yourself; no action was taken.</p>
+      <p>Highest relative score: {result.criteria[result.receipt.scores.findIndex(item => item.id === result.receipt.selected_id)]} · no action was taken.</p>
       <ol>{result.receipt.scores.map((row, index) => <li key={row.id}><strong>{result.criteria[index]}</strong>: {(row.relative_weight * 100).toFixed(2)}% relative weight (uncalibrated); raw score {row.logit.toFixed(4)}; {row.tokens} tokens.</li>)}</ol>
-      <p>CPU load {result.receipt.timing_ms.load.toFixed(1)} ms; scoring {result.receipt.timing_ms.score.toFixed(1)} ms. These are observations, not a latency guarantee.</p>
+      <p>Observed CPU load: {result.receipt.timing_ms.load.toFixed(1)} ms · scoring: {result.receipt.timing_ms.score.toFixed(1)} ms</p>
       <details><summary>Verified receipt identity</summary><p style={{ overflowWrap: "anywhere" }}>Model revision: {result.receipt.revision}<br />Request SHA256: {result.receipt.request_sha256}</p></details>
     </section>}
   </section>;

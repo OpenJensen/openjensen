@@ -1,6 +1,6 @@
 # Evaluate and Run on Google Cloud
 
-The application stays on xbox-360. **Evaluate** and **Run** dispatch an isolated
+The application stays on xbox-360. **Evaluate** and **Run → Check inference** dispatch an isolated
 SkyPilot job for the selected SmolVLA GGUF or previously saved package. The worker
 fetches the registered artifact from private GCS and verifies its manifest and
 file hashes. Model weights do not download to the application host.

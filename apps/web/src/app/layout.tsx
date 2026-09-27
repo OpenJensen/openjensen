@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'OPEN JENSEN · Dataset workspace',
-  description: 'A local robotics workspace. Inspect dataset metadata and prepare the path from data to a tested policy.',
+  title: 'Open Jensen · Dataset workspace',
+  description: 'Open Jensen is a local robotics workspace. Inspect dataset metadata and prepare the path from data to a tested policy.',
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

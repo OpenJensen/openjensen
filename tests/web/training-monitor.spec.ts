@@ -203,6 +203,7 @@ test('new fine-tuning is a separate view with bold catalog memory budgets and a 
   await expect(budget('π₀.₅')).toHaveText('40 GB+');
   await expect(budget('OpenVLA')).toHaveText('GPU budget not verified');
   expect(await budget('SmolVLA').evaluate(element => Number(getComputedStyle(element).fontWeight))).toBeGreaterThanOrEqual(700);
+  await page.getByRole('radio', { name: 'SmolVLA', exact: true }).locator('..').click();
   await setup.getByRole('button', { name: 'Compute', exact: true }).click();
   await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
   await page.getByRole('spinbutton', { name: 'Batch size', exact: true }).fill('3');
@@ -243,6 +244,7 @@ test('local training copies open the jobs-first wizard and retain native model a
   await expect(page.getByRole('radio', { name: 'Local dataset', exact: true })).toBeChecked();
   const setup = page.getByRole('navigation', { name: 'Training setup' });
   await setup.getByRole('button', { name: 'Model', exact: true }).click();
+  await page.getByRole('radio', { name: 'SmolVLA', exact: true }).locator('..').click();
   await expect(page.getByText('Local snapshots currently support native LeRobot models, including ACT.')).toBeVisible();
   await page.getByRole('radio', { name: 'ACT', exact: true }).locator('..').click();
   await setup.getByRole('button', { name: 'Compute', exact: true }).click();
@@ -386,6 +388,9 @@ test('submits explicit reproducible training settings supported by the worker', 
   const { submitted, unexpected } = await workspace(page);
   await page.getByRole('button', { name: 'Back to jobs', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Model', exact: true }).click();
+  const models = page.getByRole('group', { name: 'Base model', exact: true });
+  if (!await models.locator('input:checked').count()) await models.getByRole('radio', { name: 'SmolVLA', exact: true }).locator('..').click();
   await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Compute', exact: true }).click();
   await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
   await page.getByLabel('Steps', { exact: true }).fill('200');
@@ -506,18 +511,21 @@ test('ACT export-only computer never appears as an engine execution target', asy
   const { submitted } = await workspace(page, 'running', true, 'local');
   for (const [stage, create] of [['Run', 'New run'], ['Evaluate', 'New evaluation'], ['Quantize', 'New quantization']]) {
     await page.getByRole('button', { name: stage, exact: true }).click();
-    if (stage === 'Run') await page.getByRole('button', { name: 'Engine checks · GGUF', exact: true }).click();
-    if (stage === 'Quantize') await page.getByRole('button', { name: 'SmolVLA · GGUF', exact: true }).click();
+    if (stage === 'Run') await page.getByRole('button', { name: 'Check inference', exact: true }).click();
+    if (stage === 'Quantize') await page.getByRole('button', { name: 'SmolVLA', exact: true }).click();
     await page.getByRole('button', { name: create, exact: true }).click();
-    const target = page.getByRole('combobox', { name: 'Execution target', exact: true });
+    const target = page.getByRole('group', { name: 'Compute', exact: true });
     await expect(target).not.toContainText('Local CPU export');
-    if (stage !== 'Quantize') await expect(target).toBeDisabled();
+    if (stage !== 'Quantize') await expect(target.getByRole('radio')).toHaveCount(0);
   }
   expect(submitted).toEqual([]);
 });
 
 async function newTraining(page: Page) {
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Model', exact: true }).click();
+  const models = page.getByRole('group', { name: 'Base model', exact: true });
+  if (!await models.locator('input:checked').count()) await models.getByRole('radio', { name: 'SmolVLA', exact: true }).locator('..').click();
   await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Compute', exact: true }).click();
   return page.getByRole('button', { name: 'Start fine-tuning', exact: true });
 }
@@ -1013,8 +1021,8 @@ test('ACT exported packages show distinct identities and hand the exact second p
   await exportSection.screenshot({ path: testInfo.outputPath('act-export-next-actions-dark.png') });
   await page.getByRole('button', { name: 'Light', exact: true }).click();
   await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
-  await expect(page.getByRole('button', { name: 'Native ACT · INT8 / INT4', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByLabel('ACT inference policy', { exact: true })).toHaveValue(state.packages[1].id);
+  await expect(page.getByRole('button', { name: 'ACT', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toBeChecked();
   expect(state.submitted).toEqual([]);
   await noOverflow(page);
   await page.screenshot({ path: testInfo.outputPath('act-export-quantization-handoff.png'), fullPage: true });
@@ -1031,12 +1039,12 @@ test('ACT exported packages show distinct identities and hand the exact second p
 test('ACT export handoff keeps a later manual source choice through a refresh', async ({ page }) => {
   const state = await exportedPackageFixture(page);
   await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
-  const selected = page.getByLabel('ACT inference policy', { exact: true });
-  await expect(selected).toHaveValue(state.packages[1].id);
-  await selected.selectOption(state.packages[0].id);
+  const policies = page.getByRole('group', { name: 'Policy', exact: true });
+  await expect(policies.locator(`input[value="${state.packages[1].id}"]`)).toBeChecked();
+  await policies.locator(`input[value="${state.packages[0].id}"]`).check();
   state.artifacts.reverse();
   await page.getByRole('button', { name: 'Refresh ACT quantization jobs', exact: true }).click();
-  await expect(selected).toHaveValue(state.packages[0].id);
+  await expect(policies.locator(`input[value="${state.packages[0].id}"]`)).toBeChecked();
   expect(state.submitted).toEqual([]); expect(state.unexpected).toEqual([]);
 });
 
@@ -1085,11 +1093,11 @@ test('ACT export preferred package stays within its owning project', async ({ pa
   await page.route('**/api/v1/projects/other-project/*', route => route.fulfill({ json: [] }));
   await page.reload(); await reopenExport(page);
   await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
-  await expect(page.getByLabel('ACT inference policy', { exact: true })).toHaveValue(state.packages[1].id);
+  await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toBeChecked();
   await page.getByLabel('Current project', { exact: true }).selectOption('other-project');
-  await page.getByRole('button', { name: 'Native ACT · INT8 / INT4', exact: true }).click();
-  await expect(page.getByLabel('ACT inference policy', { exact: true })).toHaveValue('');
-  await expect(page.getByLabel('ACT inference policy', { exact: true }).locator(`option[value="${state.packages[1].id}"]`)).toHaveCount(0);
+  await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator('input:checked')).toHaveCount(0);
+  await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Create ACT quantized package', exact: true })).toBeDisabled();
   expect(state.submitted).toEqual([]);
 });
@@ -1101,7 +1109,7 @@ test('ACT export handoff preserves an unresolved quantization request without re
   const stored = JSON.stringify({ state: 'uncertain', message: 'Earlier ACT request has an unverified outcome.' });
   await page.evaluate(({ key, stored }) => sessionStorage.setItem(key, stored), { key, stored });
   await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
-  await expect(page.getByLabel('ACT inference policy', { exact: true })).toHaveValue(state.packages[1].id);
+  await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toBeChecked();
   await expect(page.getByText('Earlier ACT request has an unverified outcome. Further submissions are paused.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Create ACT quantized package', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toBeDisabled();

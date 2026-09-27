@@ -41,6 +41,41 @@ Select **Load visual preview** to fetch the episode index and a small set of rec
 
 The preview is not a dataset-wide quality audit. It returns at most five sampled rows and eight camera references per episode. Local sources can expose bounded Parquet samples, but camera playback currently requires a supported public Hub layout.
 
+## Find your next workflow
+
+Open **Guide** in the app for the short [workspace guide](workspace-guide.md), served at `/guide/` on desktop and mobile. Explanations live there; working pages keep their title, controls and results. The separate `/docs/` route remains the API reference.
+
+The sidebar keeps the main capabilities directly accessible:
+
+- **Data:** Dataset, Augmentation and Teaching. Inspect recordings, create visual
+  variations or record new demonstrations in the configured teaching simulator.
+- **Train:** Fine-tune, Distill and Quantize. Choose the model and preparation
+  workflow that matches your policy.
+- **Test:** Evaluate, Run and Decision lab. Check policies, try supported execution
+  workflows or compare candidate actions with a configured decision model.
+- **Workspace:** Cloud runs and Settings & diagnostics. Review cloud activity and
+  connect the required compute and services.
+
+To change a recording's appearance, open **Augmentation** directly or select
+**Augment this dataset** from its inspection. Dataset, camera and appearance
+choices are visible cards. Review generated clips before reusing their action
+labels; augmentation does not automatically create a trainable dataset. See the
+[augmentation guide](augmentation.md) for setup and limits.
+
+Under **Run**, choose a card by what you want to inspect:
+
+| Choice | What it does | Evidence limit |
+| --- | --- | --- |
+| **3D simulation** | Runs a compatible ACT or SmolVLA policy in the configured Isaac cup scene and records it. | Experimental execution; pickup success is not scored and calibration remains unverified. |
+| **Replay observations** | Compares an ACT policy's actions on recorded observations. | Offline replay does not establish closed-loop task success. |
+| **Check inference** | Checks a supported GGUF policy's loading and finite actions in the inference engine. | Execution checks do not establish robot task success. |
+
+Selecting a card opens its workflow; starting a job remains a separate action.
+Required workers, model compatibility and any paid-run consent still apply.
+Saved results remain available when a worker is unavailable. Use **Evaluate**
+for supported scored benchmarks, with an appropriately configured and validated
+benchmark runtime.
+
 ## Use local data
 
 Local intake is disabled until the operator sets `FIREBIRD_LOCAL_DATA_ROOT` before starting the server. Paths submitted by the UI or CLI must resolve inside that directory.

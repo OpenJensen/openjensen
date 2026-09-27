@@ -19,6 +19,7 @@ spec.loader.exec_module(ci_scope)
     "paths,expected",
     [
         (["README.md", "docs/terminal.md"], set()),
+        (["docs/workspace-guide.md"], {"application"}),
         (["new-component/code.py"], set(ci_scope.SCOPES)),
         (["workers/new-worker/code.py"], set(ci_scope.SCOPES)),
         (["apps/web/src/app/page.tsx"], {"application"}),

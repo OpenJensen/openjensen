@@ -279,7 +279,6 @@ export function CloudConnectionsPanel() {
   return (
     <div className="cloud-settings">
       <h2>Cloud providers</h2>
-      <p className="cloud-auth-note">Google Cloud is available now. More providers are planned.</p>
       {providers.isPending && (
         <p className="cloud-loading" role="status">
           Loading providers…
@@ -411,7 +410,6 @@ export function CloudConnectionsPanel() {
             <h3>Firebird</h3>
             <span className="cloud-status">Coming soon</span>
           </div>
-          <p className="cloud-card-message">Managed compute is planned. Training is currently available through Google Cloud or your configured local worker.</p>
         </section>
       </div>
       {(recheck.error || disconnect.error) && (

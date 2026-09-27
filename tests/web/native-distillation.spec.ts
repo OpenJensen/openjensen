@@ -31,15 +31,16 @@ async function fixture(page: Page) {
   });
   await page.goto('/'); await expect(page.getByLabel('Current project')).toHaveValue('alpha');
   await page.getByRole('button', { name: 'Distill', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Teach a smaller ACT policy' })).toBeVisible();
+  await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'ACT distillation', exact: true })).toBeVisible();
   return state;
 }
 const panel = (page: Page) => page.getByRole('region', { name: 'ACT distillation', exact: true });
 const submit = (page: Page) => page.getByRole('button', { name: 'Train ACT256 student', exact: true });
 const refresh = (page: Page) => page.getByRole('button', { name: 'Refresh distillation jobs' }).click();
 async function prepare(page: Page) {
-  await page.getByLabel('ACT teacher', { exact: true }).selectOption(teacher.id);
-  await page.getByLabel('Verified dataset', { exact: true }).selectOption('data');
+  await page.getByRole('group', { name: 'Teacher', exact: true }).getByRole('radio', { name: teacher.label, exact: true }).check();
+  await page.getByRole('group', { name: 'Dataset', exact: true }).locator('input[value="data"]').check();
   await page.getByLabel('Training episodes', { exact: true }).fill('0, 1');
   await page.getByLabel('Validation episodes', { exact: true }).fill('2, 3');
   await page.getByLabel('Final episodes', { exact: true }).fill('4, 5');
@@ -49,8 +50,8 @@ async function prepare(page: Page) {
 test('owned local teacher, complete dataset, explicit splits and coordinate attestation are required', async ({ page }) => {
   const state = await fixture(page);
   await expect(submit(page)).toBeDisabled();
-  await expect(page.getByLabel('ACT teacher', { exact: true }).locator('option')).toHaveCount(2);
-  await expect(page.getByLabel('Verified dataset', { exact: true }).locator('option')).toHaveCount(2);
+  await expect(page.getByRole('group', { name: 'Teacher', exact: true }).getByRole('radio')).toHaveCount(1);
+  await expect(page.getByRole('group', { name: 'Dataset', exact: true }).getByRole('radio')).toHaveCount(1);
   await prepare(page); await expect(submit(page)).toBeEnabled();
   await page.getByLabel('Final episodes', { exact: true }).fill('0, 5'); await expect(submit(page)).toBeDisabled();
   await page.getByLabel('Final episodes', { exact: true }).fill('4, 6'); await expect(submit(page)).toBeDisabled();
@@ -71,6 +72,7 @@ for (const outcome of ['lost', 'wrong-teacher']) test(`${outcome} does not retry
   await expect(page.getByText(/request outcome is unverified/).first()).toBeVisible(); expect(state.posts).toHaveLength(1);
   await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await page.getByRole('button', { name: 'Distill', exact: true }).click();
   await page.reload(); await page.getByRole('button', { name: 'Distill', exact: true }).click();
+  await page.getByRole('button', { name: 'Review request', exact: true }).click();
   await expect(submit(page)).toBeDisabled();
   const resume = page.getByRole('button', { name: 'I checked recorded jobs; allow a new request' }); await expect(resume).toBeDisabled();
   await refresh(page); await expect(resume).toBeEnabled(); expect(state.posts).toHaveLength(1);
@@ -139,7 +141,9 @@ test('switching project during admission never displays another project job', as
   await submit(page).click(); await expect.poll(() => state.posts.length).toBe(1);
   await page.getByLabel('Current project').selectOption('beta'); release();
   await expect(page.getByRole('article', { name: 'Distillation job details' })).toHaveCount(0);
-  await expect(submit(page)).toBeDisabled();
+  await expect(page.getByRole('region', { name: 'Distillation models', exact: true })).toBeVisible();
+  await expect(panel(page)).toHaveCount(0);
+  await expect(submit(page)).toHaveCount(0);
   await page.getByLabel('Current project').selectOption('alpha'); await refresh(page);
   await page.getByLabel('Saved distillation job', { exact: true }).selectOption('student-001');
   await expect(page.getByRole('article', { name: 'Distillation job details' })).toHaveAttribute('data-job-id', 'student-001');

@@ -88,7 +88,7 @@ native weight anchor and original floating GGUF identity survive quantization;
 each packed model records its own current GGUF hash. An SO-101 policy or arbitrary
 training checkpoint cannot enter this lane by changing a task label.
 
-In **Settings & diagnostics**, choose **LIBERO Spatial**, task IDs, and paired
+In **Settings & diagnostics → Workflow settings**, choose **LIBERO Spatial**, task IDs, and paired
 search/final states. Omitted API `task_ids` means all ten tasks (0–9); Object uses
 its existing single `task_id` and rejects `task_ids`. Spatial requires paired LIBERO
 mode and the full 280-step horizon, with 50 replayed actions. Engine mode and shortened

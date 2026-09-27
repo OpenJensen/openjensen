@@ -97,9 +97,8 @@ export function TeachingIntelligence({ context, online }: { context: Context | n
   const ready = readiness.isSuccess && readiness.data?.broker_reachable && readiness.data.configured && !readiness.data.busy;
   const old = !!result && (!online || contextKey(result.proposal.receipt.context) !== identity);
   return <section aria-labelledby="teaching-intelligence-title" className="panel">
-    <div className="panel-title"><h3 id="teaching-intelligence-title">Optional intelligence</h3><span className="metadata-badge">{ready ? "Configured · access unverified" : "Not ready"}</span></div>
-    <p>Ask Jev what to review, or ask Mk1.5 about a fresh camera observation. Suggestions never move the simulator or start jobs.</p>
-    {!ready && <p role="status">{readiness.isPending ? "Checking intelligence broker…" : readiness.data?.busy ? "The intelligence broker is busy." : "Connect the optional broker and configure OpenRouter to enable advice. Manual teaching remains available."}</p>}
+    <div className="panel-title"><h3 id="teaching-intelligence-title">Advice</h3><span className="metadata-badge">{ready ? "Configured · access unverified" : "Not ready"}</span></div>
+    {!ready && <p role="status">{readiness.isPending ? "Checking intelligence broker…" : readiness.data?.busy ? "The intelligence broker is busy." : "Connect the advice broker and configure OpenRouter."}</p>}
     <details><summary>Configure optional services</summary>
       <p>Save a private OpenRouter key on this application host. Saving does not contact a provider or configure LiveKit, Google Cloud, or a running voice agent.</p>
       <form onSubmit={event => { event.preventDefault(); void save(); }}>
@@ -124,6 +123,5 @@ export function TeachingIntelligence({ context, online }: { context: Context | n
     </div>
     {pending && <p role="status">Waiting for a bounded advisory response…</p>}{error && <p role="alert">{error}</p>}
     {result && <article aria-label="Intelligence suggestion"><h4>{old ? "Historical suggestion · context changed" : "Captured suggestion · generated advice"}</h4><p>{result.kind === "decision" ? result.choices.find(item => item.id === result.proposal.choice)?.description : result.proposal.summary}</p><p className="field-help">{result.proposal.receipt.returned_model} · revision {result.proposal.receipt.context.revision}{result.proposal.receipt.frame ? ` · captured frame ${result.proposal.receipt.frame.step}` : ""}. This is not a live observation, calibrated confidence, or task-success measurement.</p><details><summary>Request receipt</summary><dl className="dataset-facts"><div><dt>Request</dt><dd>{result.request_id}</dd></div><div><dt>Response time</dt><dd>{result.proposal.receipt.elapsed_seconds.toFixed(2)} s</dd></div><div><dt>Provider-reported cost</dt><dd>{result.proposal.receipt.reported_cost_usd === null ? "Not reported" : `$${result.proposal.receipt.reported_cost_usd}`}</dd></div></dl></details></article>}
-    <p className="field-help">Camera advice is withheld if its exact frame changes or expires. A moving scene may require a fresh request; pausing alone does not create a new observation.</p>
   </section>;
 }

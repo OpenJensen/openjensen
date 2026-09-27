@@ -6,6 +6,10 @@ import { api, artifactDownloadUrl, isActive, isDatasetJob } from '@/lib/api';
 import { record, UncertainPolicyJob } from '@/lib/policy-job-mutation';
 import { storedAttempt, storeAttempt, type PolicyJobAttempt } from '@/lib/policy-job-attempt';
 import { cancelReplay, readReplay, replayDataset, replayJob, replayPolicy, replayReport, replayRuntime, replaySelection, startReplay, type ReplayJob, type ReplayRecipe } from '@/lib/native-replay';
+import { Icon } from '@/components/icon';
+import './simulation-workspace.css';
+import { NativePreparation } from './native-preparation';
+import { publicPath } from '@/lib/base-path';
 import { WorkbenchDisclosure } from './workbench-disclosure';
 
 class JournalUnavailable extends Error {
@@ -106,13 +110,12 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, preferredJob
     } catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : 'Cancellation outcome is unverified; refresh this job.'); }
     finally { busy.current = false; if (mounted.current) { setCancelling(false); setCancelId(''); } }
   }
-  return <section className="panel native-simulation native-replay" aria-label="CPU observation replay">
-    <div className="cloud-heading"><div><h2>Inspect the actions your policy predicts</h2>{!selected && <p>Run a packed ACT policy on selected dataset observations. Each observation starts from a reset policy and produces a complete 100-action chunk.</p>}</div><button className="secondary-button" disabled={!projectId || jobs.isFetching} onClick={() => void refresh()}>Refresh replay jobs</button></div>
-    <p>Local CPU · INT8 / INT4 ACT · actions are saved, never applied to a robot or simulator. Use Native Isaac for a scene rollout.</p>
+  return <section className="panel native-simulation native-replay native-workflow" aria-label="CPU observation replay">
+    <div className="native-workflow-toolbar"><span className="native-model-badge">ACT · CPU replay</span><button className="text-link" aria-label="Refresh replay jobs" disabled={!projectId || jobs.isFetching} onClick={() => void refresh()}>Refresh</button></div>
     {selected && <article className="native-simulation-result" aria-label="Observation replay details" data-job-id={selected.id}>
       <div className="native-result-header"><h3>CPU observation replay</h3><span className={`status status-${selected.status}`}>{selected.status}</span></div><p className="native-result-summary">{isActive(selected) ? selected.stage ?? selected.status : 'Recorded job'} · {selected.id}</p>
       {selected.error && <p role="alert">{selected.error}</p>}
-      {report && <><p>{report.observation_source.kind === 'generated_fixture' ? 'Generated observations · software verification only' : 'Dataset observations · execution check only'}</p><dl className="cloud-run-facts"><div><dt>Observations</dt><dd>{report.observations}</dd></div><div><dt>Predictions per observation</dt><dd>100 × 6</dd></div><div><dt>Reset repeatability</dt><dd>Exact repeat</dd></div></dl><p>The saved policy returned the same full chunk after reset. This does not measure task success, action accuracy, GPU performance, or calibration.</p></>}
+      {report && <><p>{report.observation_source.kind === 'generated_fixture' ? 'Generated observations · software verification only' : 'Dataset observations · execution check only'}</p><dl className="cloud-run-facts"><div><dt>Observations</dt><dd>{report.observations}</dd></div><div><dt>Predictions per observation</dt><dd>100 × 6</dd></div><div><dt>Reset repeatability</dt><dd>Exact repeat</dd></div></dl><p>Reset reproduced the same action chunk. This does not measure task success, action accuracy, GPU performance or calibration.</p></>}
       {selected.status === 'succeeded' && !report && <p role="alert">Complete replay evidence is unavailable. Job completion alone does not verify the output.</p>}
       {preview.isError && <p role="alert">Saved action preview unavailable. {preview.error.message}</p>}
       {report && preview.isPending && output && <p role="status">Verifying the saved action record…</p>}
@@ -126,20 +129,49 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, preferredJob
     {jobs.isError && <p role="alert">Job updates are unavailable; displayed status may be stale.</p>}{options.isError && <p role="alert">Worker options are unavailable.</p>}{artifacts.isError && <p role="alert">Saved policies are unavailable.</p>}{error && <p role="alert">{error}</p>}
     {journalReady && attempt.data?.state === 'pending' && <p role="status">{attempt.data.message}</p>}
     {attempt.data?.state === 'uncertain' && <div className="warning-box"><p>{attempt.data.message}</p><button className="secondary-button" disabled={!reviewed || jobs.isError} onClick={() => { try { saveAttempt(null); setReviewed(false); setError(''); } catch { setJournalReady(false); setError('Browser session storage is unavailable.'); } }}>I checked replay jobs; allow a new request</button></div>}
-    <WorkbenchDisclosure key={selected ? 'another' : 'first'} title={selected ? 'Prepare another replay' : 'Choose policy and observations'} initiallyOpen={!selected}>
-      {options.isSuccess && !runtimes.length && <p role="status">No local CPU replay worker is configured. Its isolated model environment and dataset reader must be registered first.</p>}
-      <fieldset className="native-simulation-form" disabled={!projectId || !!attempt.data || cancelling}><legend>Explicit observation selection</legend>
-        <label>Replay worker<select aria-label="Replay worker" value={runtime?.id ?? ''} onChange={event => setRuntime(event.target.value)}><option value="">Choose a local worker</option>{runtimes.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
-        <label>Packed ACT policy<select aria-label="Packed ACT policy" value={policyId} onChange={event => { policyChosenManually.current = true; setPolicy(event.target.value); setAttested(false); }}><option value="">Choose a complete local INT8 or INT4 policy</option>{policies.map(item => <option key={item.id} value={item.id}>{item.label} · {item.id.slice(0, 8)}</option>)}</select></label>
-        <label>Observation dataset<select aria-label="Observation dataset" value={datasetId} onChange={event => { setDataset(event.target.value); setSelection(''); setAttested(false); }}><option value="">Choose a complete dataset snapshot</option>{datasets.map(item => <option key={item.id} value={item.id}>{item.result!.repo_id ?? 'Local robotics dataset'} · {item.result!.total_episodes} episodes · {item.id.slice(0, 8)}</option>)}</select></label>
-        <button className="text-link" type="button" onClick={onDataset}>Open Dataset intake</button>
-        <label>Episode and frame pairs<input value={selection} onChange={event => setSelection(event.target.value)} placeholder="For example: 0:3, 2:1" /></label><p>Choose 1–32 distinct observations. Original camera resolution, raw states, exact frame identity, and a 128 MiB input limit are verified before execution.</p>
-        <label>Six replay coordinate units<input value={units} maxLength={500} onChange={event => { setUnits(event.target.value); setAttested(false); }} placeholder="One unit per recorded action coordinate, in order" /></label>
-        <label className="distillation-check"><input type="checkbox" checked={generated} onChange={event => { setGenerated(event.target.checked); setAttested(false); }} /> These are generated test observations.</label>
-        <label className="distillation-check"><input type="checkbox" checked={attested} onChange={event => setAttested(event.target.checked)} /> I verified that these coordinates, order, and camera match the packed policy’s saved processors.</label>
-        <label>Replay timeout (seconds)<input type="number" min="30" max="600" value={timeout} onChange={event => setTimeoutValue(event.target.value)} /></label>
-        {invalid && <p className="field-hint">{invalid}</p>}<button className="primary-button" type="button" disabled={!ready} onClick={() => void submit()}>Run CPU observation replay</button>
+    <NativePreparation key={selected ? 'another' : 'first'} title="Prepare another replay" hasResult={!!selected}>
+      {!projectId || !runtimes.length ? <div className="native-setup-empty">
+        <p role="status">{!projectId ? 'Select a project to continue.' : options.isPending ? 'Loading workers…' : options.isError ? 'Worker availability is unknown.' : 'Replay worker not connected'}</p>
+        <a className="text-link" href={publicPath('/guide/#run')}>Set up replay</a>
+        <button className="primary-button" disabled>Run CPU observation replay</button>
+      </div> : <>
+      <fieldset className="native-simulation-form simulation-setup" disabled={!projectId || !!attempt.data || cancelling}><legend className="visually-hidden">Explicit observation selection</legend>
+        <section className="simulation-step" aria-labelledby="replay-policy-title">
+          <h3 id="replay-policy-title">Policy</h3>
+          <div className="simulation-choice-grid" role="radiogroup" aria-label="Packed ACT policy">
+            {policies.map(item => <label className="simulation-choice" key={item.id}><input type="radio" name="replay-policy" aria-label={item.label} value={item.id} checked={policyId === item.id} onChange={() => { policyChosenManually.current = true; setPolicy(item.id); setAttested(false); }} /><span className="simulation-choice-icon"><Icon name="layers" /></span><span className="simulation-choice-copy"><strong>{item.label}</strong><span>{item.id.slice(0, 8)}</span></span></label>)}
+          </div>
+          {artifacts.isPending && <p role="status">Loading saved policies…</p>}
+          {artifacts.isSuccess && !policies.length && <p className="native-empty-note">No packed ACT policies. Create one in Quantize.</p>}
+        </section>
+        <section className="simulation-step" aria-labelledby="replay-observations-title">
+          <h3 id="replay-observations-title">Dataset</h3>
+          <div className="simulation-choice-grid" role="radiogroup" aria-label="Observation dataset">
+            {datasets.map(item => <label className="simulation-choice" key={item.id}><input type="radio" name="replay-dataset" aria-label={item.result!.repo_id ?? 'Local robotics dataset'} value={item.id} checked={datasetId === item.id} onChange={() => { setDataset(item.id); setSelection(''); setAttested(false); }} /><span className="simulation-choice-icon"><Icon name="database" /></span><span className="simulation-choice-copy"><strong>{item.result!.repo_id ?? 'Local robotics dataset'}</strong><span>{item.result!.total_episodes} episodes · {item.result!.total_frames} frames</span></span></label>)}
+          </div>
+          {jobs.isPending && <p role="status">Loading dataset snapshots…</p>}
+          {jobs.isSuccess && !datasets.length && <div className="native-setup-empty"><p>No dataset snapshots.</p><button className="text-link" type="button" onClick={onDataset}>Open Dataset intake</button></div>}
+          {policy && dataset && <>
+          <label>Frames (episode:frame)<input aria-label="Episode and frame pairs" value={selection} onChange={event => setSelection(event.target.value)} placeholder="0:3, 2:1" /></label>
+          <div className="simulation-choice-grid simulation-source-grid" role="radiogroup" aria-label="Observation source">
+            <label className="simulation-choice"><input type="radio" name="replay-source" aria-label="Recorded dataset" checked={!generated} onChange={() => { setGenerated(false); setAttested(false); }} /><span className="simulation-choice-icon"><Icon name="database" /></span><span className="simulation-choice-copy"><strong>Recorded dataset</strong></span></label>
+            <label className="simulation-choice"><input type="radio" name="replay-source" aria-label="Generated test observations" checked={generated} onChange={() => { setGenerated(true); setAttested(false); }} /><span className="simulation-choice-icon"><Icon name="sliders" /></span><span className="simulation-choice-copy"><strong>Generated test data</strong></span></label>
+          </div>
+          </>}
+        </section>
+        {policy && dataset && <section className="simulation-step" aria-labelledby="replay-review-title">
+          <h3 id="replay-review-title" className="visually-hidden">Replay settings</h3>
+          <label>Six replay coordinate units<input aria-label="Six replay coordinate units" value={units} maxLength={500} onChange={event => { setUnits(event.target.value); setAttested(false); }} placeholder="One unit per recorded action coordinate, in order" /></label>
+          {(runtimes.length > 1 || !runtime) && <div className="simulation-choice-grid" role="radiogroup" aria-label="Replay worker">
+            {runtimes.map(item => <label className="simulation-choice" key={item.id}><input type="radio" name="replay-worker" aria-label={item.label} value={item.id} checked={runtime?.id === item.id} onChange={() => setRuntime(item.id)} /><span className="simulation-choice-icon"><Icon name="play" /></span><span className="simulation-choice-copy"><strong>{item.label}</strong></span></label>)}
+          </div>}
+          <label className="simulation-timeout">Timeout (seconds)<input aria-label="Replay timeout (seconds)" type="number" min="30" max="600" value={timeout} onChange={event => setTimeoutValue(event.target.value)} /></label>
+          <label className="native-confirm"><input type="checkbox" checked={attested} onChange={event => setAttested(event.target.checked)} /> I verified that these coordinates, order, and camera match the packed policy’s saved processors.</label>
+          {invalid && (selection || units) && <p className="field-hint" role="status">{invalid}</p>}
+        </section>}
+        <button className="primary-button simulation-submit" type="button" disabled={!ready} onClick={() => void submit()}><Icon name="play" size={17} />Run CPU observation replay</button>
       </fieldset>
-    </WorkbenchDisclosure>
+      </>}
+    </NativePreparation>
   </section>;
 }

@@ -36,16 +36,16 @@ async function fixture(page: Page) {
   });
   await page.goto('/'); await expect(page.getByLabel('Current project')).toHaveValue('alpha');
   await page.getByRole('button', { name: 'Run', exact: true }).click();
-  await page.getByRole('button', { name: 'Observation replay · ACT', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Inspect the actions your policy predicts' })).toBeVisible();
+  await page.getByRole('button', { name: 'Replay observations', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'CPU observation replay', exact: true })).toBeVisible();
   return state;
 }
 async function prepare(page: Page) {
-  await page.getByLabel('Packed ACT policy', { exact: true }).selectOption(policy.id);
-  await page.getByLabel('Observation dataset', { exact: true }).selectOption('data');
+  await page.getByRole('radio', { name: policy.label, exact: true }).check();
+  await page.getByRole('radio', { name: 'Local robotics dataset', exact: true }).check();
   await page.getByLabel('Episode and frame pairs', { exact: true }).fill('0:3, 2:1');
   await page.getByLabel('Six replay coordinate units', { exact: true }).fill('degrees, degrees, degrees, degrees, degrees, recorded_gripper');
-  await page.getByRole('checkbox', { name: 'These are generated test observations.' }).check();
+  await page.getByRole('radio', { name: 'Generated test observations', exact: true }).check();
   await page.getByRole('checkbox', { name: /I verified that these/ }).check();
 }
 function complete(state: Awaited<ReturnType<typeof fixture>>) {
@@ -55,7 +55,7 @@ function complete(state: Awaited<ReturnType<typeof fixture>>) {
 }
 test('only local packed policies and explicit bounded observations can be replayed', async ({ page }) => {
   const state = await fixture(page); await expect(submit(page)).toBeDisabled();
-  await expect(page.getByLabel('Packed ACT policy', { exact: true }).locator('option')).toHaveCount(2);
+  await expect(page.getByRole('radiogroup', { name: 'Packed ACT policy', exact: true }).getByRole('radio')).toHaveCount(1);
   await prepare(page); await expect(submit(page)).toBeEnabled();
   for (const invalid of ['0:3, 0:3', '6:1', '0:24', 'foo', '0:-1']) { await page.getByLabel('Episode and frame pairs', { exact: true }).fill(invalid); await expect(submit(page)).toBeDisabled(); }
   expect(state.posts).toHaveLength(0);
@@ -72,7 +72,7 @@ test('replay submits once with full identity and cancellation is explicit', asyn
 for (const outcome of ['lost', 'wrong']) test(`${outcome} mutation remains paused after reload`, async ({ page }) => {
   const state = await fixture(page); state.outcome = outcome; await prepare(page); await submit(page).click();
   await expect(page.getByText(/request outcome is unverified/).first()).toBeVisible();
-  await page.reload(); await page.getByRole('button', { name: 'Run', exact: true }).click(); await page.getByRole('button', { name: 'Observation replay · ACT', exact: true }).click();
+  await page.reload(); await page.getByRole('button', { name: 'Run', exact: true }).click(); await page.getByRole('button', { name: 'Replay observations', exact: true }).click();
   const acknowledgment = page.getByRole('button', { name: 'I checked replay jobs; allow a new request' }); await expect(acknowledgment).toBeDisabled(); await expect(submit(page)).toBeDisabled();
   await page.getByRole('button', { name: 'Refresh replay jobs' }).click(); await expect(acknowledgment).toBeEnabled(); expect(state.posts).toHaveLength(1);
 });
@@ -152,13 +152,32 @@ test('journal cleanup failure after navigation preserves recovery guidance', asy
   await page.getByRole('button', { name: 'Dataset', exact: true }).click(); release();
   await expect.poll(() => page.evaluate(() => (window as unknown as { journalCleanupFailures?: number }).journalCleanupFailures)).toBe(1);
   await page.getByRole('button', { name: 'Run', exact: true }).click();
-  await page.getByRole('button', { name: 'Observation replay · ACT', exact: true }).click();
+  await page.getByRole('button', { name: 'Replay observations', exact: true }).click();
   await expect(page.getByRole('button', { name: 'I checked replay jobs; allow a new request' })).toBeVisible();
   await expect(page.getByText(/^Submitting one /)).toHaveCount(0);
   await expect(submit(page)).toBeDisabled();
   expect(state.posts).toHaveLength(1);
 });
 
+test('visible observation source cards preserve the distinction between recorded and generated data', async ({ page }) => {
+  const state = await fixture(page); await prepare(page);
+  await expect(submit(page)).toBeEnabled();
+  await page.getByRole('radio', { name: 'Generated test observations', exact: true }).focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect(page.getByRole('radio', { name: 'Recorded dataset', exact: true })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: /I verified that these/ })).not.toBeChecked();
+  await expect(submit(page)).toBeDisabled();
+  await expect(page.getByRole('radio', { name: policy.label, exact: true })).toBeVisible();
+  expect(state.posts).toEqual([]);
+});
+
+test('a missing replay worker explains how to reconnect and cannot start a job', async ({ page }) => {
+  const state = await fixture(page); state.workers = [];
+  await page.getByRole('button', { name: 'Refresh replay jobs' }).click();
+  await expect(page.getByText('Replay worker not connected', { exact: true })).toBeVisible();
+  await expect(submit(page)).toBeDisabled();
+  expect(state.posts).toEqual([]);
+});
 
 test('replay mutation ACK status contract accepts only six exact strings', async () => {
   const request: Parameters<typeof startReplay>[1] = { operation: 'policy.run', runtime_id: runtime.id, artifact_id: policy.id, dataset_job_id: 'data', timeout_seconds: 600, native_replay: { adapter: 'act-packed-observation-v1', selection: [{ episode_index: 0, frame_index: 3 }], coordinate_attestation: 'generated_fixture', units: ['degrees', 'degrees', 'degrees', 'degrees', 'degrees', 'recorded_gripper'] } };

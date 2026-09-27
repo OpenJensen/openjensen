@@ -8,7 +8,7 @@ OPEN JENSEN brings dataset exploration, training, quantization and simulation in
 
 Built at the Firebird hackathon.
 
-[Get started](#run-locally) · [Product status](#current-status) · [Documentation](#documentation) · [Development](#development)
+[Get started](#run-locally) · [Workspace guide](docs/workspace-guide.md) · [Product status](#current-status) · [Documentation](#documentation) · [Development](#development)
 
 ![OPEN JENSEN dataset explorer showing recorded camera frames and episode data](docs/images/dataset-explorer.png)
 
@@ -16,14 +16,16 @@ Built at the Firebird hackathon.
 
 ## What you can do
 
-| Stage | In the workspace |
+| Sector | In the workspace |
 | --- | --- |
-| Explore | Inspect public LeRobot v2/v3 datasets, play camera recordings and review sampled state/action rows. Validate local v3 datasets into immutable training copies. |
-| Train | Choose a policy and compatible compute, follow loss and progress, resume supported runs, and download checkpoints with their recipes and provenance. |
-| Distill | Train a smaller ACT256 student from a compatible local ACT teacher and immutable observations, with explicit training, validation and final episode groups. |
-| Optimize | Convert SmolVLA checkpoints to GGUF with Q8 or experimental Q4 language-weight quantization. Export completed ACT checkpoints as FP32 inference packages, then create packed INT8/INT4 ACT candidates with fresh CPU reload checks. |
-| Check and run | Measure native inference, inspect full packed ACT predictions on recorded observations, run configured LIBERO evaluations, or launch an experimental ACT/SmolVLA Isaac simulation. |
-| Collect and review | Record demonstrations through the Teaching interface, connect optional voice services, or review appearance-augmentation candidates before reusing them. |
+| Dataset | Inspect public LeRobot v2/v3 datasets, play camera recordings and review sampled state/action rows. Validate local v3 datasets into immutable training copies. |
+| Fine-tune | Choose a policy and compatible compute, follow loss and progress, resume supported runs, and download checkpoints with their recipes and provenance. |
+| Distill | Train a student to imitate a teacher using a supported model adapter. Currently only ACT (Action Chunking with Transformers) → ACT256 is implemented, with compatible observations/actions and explicit episode splits; other model families are unavailable. |
+| Quantize | Convert SmolVLA checkpoints to GGUF with Q8 or experimental Q4 language-weight quantization. Export completed ACT checkpoints as FP32 inference packages, then create packed INT8/INT4 ACT candidates with fresh CPU reload checks. |
+| Evaluate / Run | Measure native inference, inspect full packed ACT predictions on recorded observations, run configured LIBERO evaluations, or launch an experimental ACT/SmolVLA Isaac simulation. |
+| Teaching / Augmentation | Record demonstrations through the Teaching interface, connect optional voice services, or review appearance-augmentation candidates before reusing them. |
+| Decision lab | Compare text criteria with the configured local Muose scorer. Results are uncalibrated advice and never execute actions. |
+| Cloud runs / Settings | Review saved cloud activity, configure connections and compute, and inspect project diagnostics. |
 
 Each operation has its own model, dataset and runtime requirements. The interface shows configured capabilities; a registered adapter does not mean every model has completed a GPU run.
 
@@ -39,7 +41,7 @@ Each operation has its own model, dataset and runtime requirements. The interfac
 
 *Native Isaac setup uses an explicit policy package and configured runner. Cup-task scoring remains unavailable while calibration and success criteria are unresolved.*
 
-These are captures of the product interface, not generated mockups. Capture details are in the [screenshot notes](docs/images/README.md).
+These are dated captures of the product interface, not generated mockups. They predate the current navigation and minimal page layout; use the [workspace guide](docs/workspace-guide.md) for current controls. Capture details are in the [screenshot notes](docs/images/README.md).
 
 ## Current status
 
@@ -95,13 +97,16 @@ these workers. Native ACT quantization also needs its
 1. Create a project and open **Dataset → Sources**.
 2. Choose the pinned **SO-101 pickup** or **SO-100 pick & place** starter and select **Inspect dataset**.
 3. Open **Load visual preview** to browse episodes, camera recordings and sampled actions.
-4. Connect Google Cloud in **Settings → Compute**, or enable an [installed local worker](docs/policy-workflow.md), then choose a compatible model and recipe in **Fine-tune**. Cloud jobs use your configured account.
+4. Connect Google Cloud in **Settings & diagnostics → Compute**, or enable an [installed local worker](docs/policy-workflow.md), then choose a compatible model and recipe in **Fine-tune**. Cloud jobs use your configured account.
 5. Open the saved run to review progress, checkpoints and provenance. Use the supported export or quantization path for that model.
 
 ## Documentation
 
+Start with the [workspace guide](docs/workspace-guide.md) for a short explanation of every sector. The app also serves it at [`/guide/`](http://127.0.0.1:8000/guide/) through the **Guide** link on desktop and mobile.
+
 | Topic | Guides |
 | --- | --- |
+| Workspace | [Sector guide](docs/workspace-guide.md), [interface conventions](docs/workbench-design.md) |
 | Setup and compute | [Getting started](docs/getting-started.md), [compute settings](docs/compute-settings.md), [cloud training](docs/skypilot-training.md) |
 | Datasets | [Local training and Teaching](docs/local-training.md), [appearance augmentation](docs/augmentation.md), [source provenance](apps/web/public/datasets/README.md) |
 | Policies and artifacts | [Training adapters](docs/native-training.md), [native policy workflow](docs/policy-workflow.md), [ACT export](docs/cloud-act-export.md), [ACT distillation](workers/policy_distillation/README.md), [cloud artifact storage](docs/cloud-artifact-storage.md) |
@@ -111,7 +116,7 @@ these workers. Native ACT quantization also needs its
 | Optional AI services | [Voice connections](docs/teaching-connections.md), [Muose decision worker](workers/decision/README.md), [Jev and Mk1.5 proposals](workers/teaching/PROVIDERS.md) |
 | Verification | [Cloud training](docs/cloud-training-verification.md), [inference and package reload](docs/jobs-first-verification.md), [application integration](docs/integration-journey-validation.md), [CI and local checks](docs/ci.md) |
 
-The running app serves its [API reference](http://127.0.0.1:8000/docs/) and [OpenAPI schema](http://127.0.0.1:8000/openapi.json).
+The separate [`/docs/`](http://127.0.0.1:8000/docs/) route serves the [API reference](http://127.0.0.1:8000/docs/) and [OpenAPI schema](http://127.0.0.1:8000/openapi.json).
 
 ## Architecture
 

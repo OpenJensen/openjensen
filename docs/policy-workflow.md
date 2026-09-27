@@ -4,16 +4,20 @@ OPEN JENSEN owns the project, dataset intake, jobs, cancellation, progress, arti
 lineage and downloads. Isolated Python 3.11/3.12 workers own ML/native execution. The core stays
 on Python 3.14 without Torch. Web and CLI submit the same versioned API requests.
 
-For SmolVLA, inspect a dataset, choose **Fine-tune → LoRA or QLoRA**, then choose
-that checkpoint under **Quantize**. Quantize also accepts a prepared, pinned policy
-source. **Evaluate** and **Run** accept the generated policy artifacts. Run creates
-a downloadable package after a fresh native reload and the chosen evaluation.
-**Distill** remains planned; it is not required by this supported path.
+For SmolVLA, inspect a dataset, choose the model and **LoRA** or **QLoRA** in
+**Fine-tune**, then select that checkpoint under **Quantize → SmolVLA**. This
+quantization workflow also accepts a prepared, pinned policy source. **Evaluate**
+and **Run → Check inference** accept the generated GGUF or package artifacts;
+the latter can create a downloadable package after a fresh native reload.
+**Distill** is the separate teacher-to-student training technique described
+[below](#distillation), with an explicitly selected supported model family. See the
+[workspace guide](workspace-guide.md) for all destinations.
 
-Metrics, recorded recipes, provenance and stage events are under
-**Settings & diagnostics → Diagnostics**. Workflow pages show progress and outputs.
-Settings also hold advanced recipes and acceptance constraints. Browser preferences
-are per project; each job preserves the submitted recipe on the server.
+Open each saved job for metrics, recipes, provenance, stage events and outputs.
+**Settings & diagnostics → Diagnostics** provides separate policy checks and
+benchmark references; **Workflow settings** holds advanced recipes and acceptance
+constraints. Browser preferences are per project, and each job preserves its
+submitted recipe on the server.
 
 Diagnostics also shows the completed GPU benchmark comparison as labelled reference
 results, even before a project has policy runs. NVIDIA L4 (8 vCPUs / 32 GiB), NVIDIA
@@ -53,9 +57,27 @@ For the pinned newer Spatial policy, use the [Spatial optimizer workflow](spatia
 It keeps a native BF16 reference and floating C++ control separate, with explicit
 parity admission before compression. Hardware acceptance is still pending.
 
+## Distillation
+
+Distillation trains a student policy to imitate a teacher policy. ACT means
+**Action Chunking with Transformers**: it is a policy model family that predicts
+robot action sequences, not the definition of distillation. Supporting another
+family requires its own compatible adapter, teacher/student architecture handling
+and observation/action mapping; training
+support for a model does not imply distillation support.
+
+The only implemented adapter is `act-act-v1`: a compatible ACT teacher trains a
+smaller ACT256 student on a local CPU worker. Select **ACT** under **Supported
+models** explicitly before preparing its teacher, verified local observations
+and separate training, validation and final episode groups. The camera, saved processors, coordinate
+order and units must match. SmolVLA, other model families and cross-family pairs
+are not implemented. Results measure offline imitation and saved-policy reload,
+not closed-loop task success. See [ACT adapter setup](../workers/policy_distillation/README.md)
+and [local CPU worker setup](../workers/local_cpu/README.md).
+
 ## Cloud GPU setup
 
-Connect Google Cloud once in **Settings → Compute**. Fine-tune then needs only
+Connect Google Cloud once in **Settings & diagnostics → Compute**. Fine-tune then needs only
 GPU selection and **Start fine-tuning**. Preparation happens automatically in
 the queued run and stays pinned to its captured project, region, and server.
 The L4, T4, and A100 picker is independent of transient preparation status.
@@ -269,14 +291,17 @@ for what was actually executed on this integration branch.
 
 ## Job history and creation
 
-Fine-tune, Quantize, Evaluate and Run open the project's saved jobs first. Select
-a row to inspect its status, results and evidence, or use the New action to open
-a separate job form. Successful submission opens that job's detail view. Logs and
-technical details stay behind an explicit disclosure; input, checkpoint, target,
-current stage and measured results remain immediately visible.
+Fine-tune and Evaluate open saved jobs before their new-job forms. Quantize
+first offers **SmolVLA** and **ACT** cards; Run offers **3D simulation**, **Replay
+observations** and **Check inference**, restoring the project's selected workflow
+and saved work. Engine workflows keep separate history, creation and result views;
+native workflows show saved results alongside a separate preparation disclosure.
+Select a saved job to inspect its status and evidence, or open its new-job action.
+Logs and technical details remain behind disclosures while measured results stay
+visible.
 
 A dataset's **Train on this dataset** action opens a new fine-tuning form with
 that dataset selected. A saved training checkpoint's **Quantize** action opens a
-new quantization form for that exact checkpoint. Ordinary sidebar navigation
-returns to history. Moving temporarily to Compute settings preserves the training
-draft. Model-card memory labels describe GPU budgets, not file download sizes.
+new quantization form for that exact checkpoint. Returning to Fine-tune through
+the sidebar opens its history. Moving temporarily to Compute settings preserves
+the training draft. Model-card memory labels describe GPU budgets, not file download sizes.

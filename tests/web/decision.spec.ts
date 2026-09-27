@@ -20,7 +20,8 @@ async function lab(page: Page, configured = true) {
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Decision lab', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Local decision advisory' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Decision lab', level: 1 })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Advisory model', exact: true })).toContainText('Muose-50M');
   return { posts, controls };
 }
 async function fill(page: Page) {
@@ -32,7 +33,10 @@ async function fill(page: Page) {
 test('decision lab is disabled without explicit operator configuration', async ({ page }) => {
   const { posts } = await lab(page, false); await fill(page);
   await expect(page.getByRole('button', { name: 'Score criteria' })).toBeDisabled();
-  await expect(page.getByText(/only 3 of 6 workflow/)).toBeVisible();
+  await expect(page.getByText('Experimental · advisory only', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Only 3 of 6 workflow/)).not.toBeVisible();
+  await page.getByText('Model details', { exact: true }).click();
+  await expect(page.getByText(/Only 3 of 6 workflow/)).toBeVisible();
   expect(posts).toHaveLength(0);
 });
 

@@ -1,5 +1,7 @@
 # Jobs-first workflows and cloud inference verification
 
+This is a historical verification record of the jobs-first interface. Use the [workspace guide](workspace-guide.md) for current navigation; the execution receipts and measurements below are unchanged.
+
 Verified on 2026-09-27 with the application running on Xbox and separate
 SkyPilot-managed NVIDIA L4 workers in GCP. Model weights remained in GCS and on
 the disposable workers.

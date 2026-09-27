@@ -51,7 +51,7 @@ async function settings(page: Page, reject = false) {
 test('HF token is optional, masked, cleared after save, and removable', async ({ page }) => {
   const { panel, requests } = await settings(page);
   await expect(panel.getByText('Optional', { exact: true })).toBeVisible();
-  await expect(panel.getByText(/Public models download without a token/)).toBeVisible();
+  await expect(panel.getByText('For private or gated models.', { exact: true })).toBeVisible();
   const input = panel.getByLabel('Hugging Face access token');
   await expect(input).toHaveAttribute('type', 'password');
   await input.fill(fakeToken);

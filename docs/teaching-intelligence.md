@@ -1,6 +1,6 @@
 # Optional Teaching intelligence
 
-Teaching has three separate optional connections: its authenticated simulator executor, an OpenRouter advisory broker, and a LiveKit voice room. Manual controls and the atomic camera preview do not require voice or OpenRouter. Nothing on this page automatically launches a simulator, cloud job, microphone, room or inference request.
+Open **Teaching** in the **Data** navigation group. It has three separate optional connections: its authenticated simulator executor, an OpenRouter advisory broker, and a LiveKit voice room. Manual controls and the atomic camera preview do not require voice or OpenRouter. Nothing on this page automatically launches a simulator, cloud job, microphone, room or inference request.
 
 ## Design and ownership
 
