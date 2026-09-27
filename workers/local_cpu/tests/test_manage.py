@@ -541,3 +541,297 @@ def test_mock_install_reuses_cache_but_creates_separate_environments(
     assert json.loads((root / "new/installation.json").read_text())["cache"] == result["cache"]
     with pytest.raises(ValueError, match="must be new"):
         m.install(root / "new", python, uv, cache=shared_uv_cache)
+
+
+@pytest.fixture
+def partial_installation(fixture):
+    root, repo = fixture
+    python, uv = root / "python", root / "uv"
+    python.touch()
+    uv.touch()
+    target = root / "partial"
+    plan = m.setup_plan(target, python, uv)
+    target.mkdir()
+    m.write_new(target / "installation-plan.json", plan)
+    (target / "install.log").write_bytes(b"preserved original verification failure\n")
+    (target / "act-project").mkdir()
+    for name in ("pyproject.toml", "uv.lock"):
+        (target / "act-project" / name).write_bytes(
+            (repo / "workers/act_optimizer" / name).read_bytes()
+        )
+    return target, python, uv, plan
+
+
+def mock_completion_tools(monkeypatch, uv, *, failure=None):
+    calls = []
+    monkeypatch.setattr(
+        m.subprocess,
+        "check_output",
+        lambda cmd, **kw: "uv 0.12.19 (fixture)" if cmd[0] == str(uv) else "3.12",
+    )
+
+    def run(command, **kwargs):
+        calls.append((command, kwargs))
+        if failure == "dependencies":
+            raise ValueError("generated dependency failure")
+
+    def verify(root):
+        if failure == "probe":
+            raise ValueError("generated probe failure")
+        calls.append(("verify", root))
+        return {"verified": {"model": True, "reader": True}}
+
+    monkeypatch.setattr(m, "run", run)
+    monkeypatch.setattr(m, "verify", verify)
+    return calls
+
+
+def test_completion_without_execute_never_spawns_writes_or_accepts(
+    partial_installation, monkeypatch, capsys
+):
+    target, python, uv, _ = partial_installation
+    before = {p: p.read_bytes() for p in target.rglob("*") if p.is_file()}
+    monkeypatch.setattr(m.subprocess, "Popen", lambda *a, **kw: pytest.fail("process created"))
+    monkeypatch.setattr(
+        m.subprocess, "check_output", lambda *a, **kw: pytest.fail("process created")
+    )
+    assert (
+        m.main(["complete", "--root", str(target), "--python", str(python), "--uv", str(uv)]) == 0
+    )
+    planned = json.loads(capsys.readouterr().out)
+    assert planned["network_required"] is False
+    assert len(planned["commands"]) == 2 and len(planned["probes"]) == 2
+    assert before == {p: p.read_bytes() for p in target.rglob("*") if p.is_file()}
+    assert not (target / "installation.json").exists()
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "command",
+        "root",
+        "repo",
+        "platform",
+        "hash",
+        "schema-bool",
+        "extra",
+        "copied-lock",
+        "copied-project",
+        "current-source",
+        "python",
+        "uv",
+    ],
+)
+def test_completion_rejects_changed_plan_source_or_copied_inputs_before_tools(
+    partial_installation, fixture, monkeypatch, change
+):
+    target, python, uv, plan = partial_installation
+    _, repo = fixture
+    if change == "command":
+        plan["commands"][0] = ["/untrusted/command"]
+    elif change == "root":
+        plan["installation_root"] = str(target.parent / "other")
+    elif change == "repo":
+        plan["repository"] = "/other-checkout"
+    elif change == "platform":
+        plan["platform"] = "linux-x86_64"
+    elif change == "hash":
+        plan["inputs"]["workers/act_optimizer/uv.lock"] = "0" * 64
+    elif change == "schema-bool":
+        plan["schema_version"] = True
+    elif change == "extra":
+        plan["unrecognized"] = "ignored?"
+    elif change == "copied-lock":
+        (target / "act-project/uv.lock").write_text("changed")
+    elif change == "copied-project":
+        (target / "act-project/pyproject.toml").write_text("changed")
+    elif change == "current-source":
+        (repo / "workers/local_cpu/probe.py").write_text("changed")
+    elif change == "python":
+        python = python.with_name("other-python")
+    else:
+        uv = uv.with_name("other-uv")
+    (target / "installation-plan.json").write_text(json.dumps(plan))
+    monkeypatch.setattr(m.subprocess, "check_output", lambda *a, **kw: pytest.fail("tool invoked"))
+    with pytest.raises(ValueError):
+        m.complete(target, python, uv)
+    assert not list(target.glob("completion-*.log"))
+    assert not (target / "installation.json").exists()
+
+
+def test_completion_rejects_existing_receipt_and_linked_copy(partial_installation, monkeypatch):
+    target, python, uv, _ = partial_installation
+    copied = target / "act-project/uv.lock"
+    copied.unlink()
+    copied.symlink_to(target.parent / "outside")
+    monkeypatch.setattr(m.subprocess, "check_output", lambda *a, **kw: pytest.fail("tool invoked"))
+    with pytest.raises(ValueError, match="symlink"):
+        m.complete(target, python, uv)
+    (target / "installation.json").write_text('{"prior": true}')
+    with pytest.raises(FileExistsError):
+        m.complete(target, python, uv)
+    assert (target / "installation.json").read_text() == '{"prior": true}'
+
+
+@pytest.mark.parametrize("failure", ["dependencies", "probe"])
+def test_completion_failure_preserves_failure_and_publishes_nothing(
+    partial_installation, monkeypatch, failure
+):
+    target, python, uv, _ = partial_installation
+    before = (target / "install.log").read_bytes()
+    mock_completion_tools(monkeypatch, uv, failure=failure)
+    with pytest.raises(ValueError, match="generated"):
+        m.complete(target, python, uv)
+    assert (target / "install.log").read_bytes() == before
+    assert len(list(target.glob("completion-*.log"))) == 1
+    assert not (target / "installation.json").exists()
+
+
+def test_completion_only_checks_offline_before_publishing_new_receipt(
+    partial_installation, monkeypatch
+):
+    target, python, uv, plan = partial_installation
+    before = (target / "install.log").read_bytes()
+    calls = mock_completion_tools(monkeypatch, uv)
+    result = m.complete(target, python, uv)
+    assert len(calls) == 3 and calls[-1] == ("verify", target)
+    for index, folder in enumerate(("act-model", "dataset-reader")):
+        command, options = calls[index]
+        assert command == [
+            str(uv),
+            "--no-config",
+            "--no-python-downloads",
+            "pip",
+            "check",
+            "--python",
+            str(target / folder / "bin/python"),
+        ]
+        assert options["env"]["UV_OFFLINE"] == options["env"]["HF_HUB_OFFLINE"] == "1"
+        assert options["log"].parent == target
+    assert result["inputs"] == plan["inputs"] and result["cache"] == plan["cache"]
+    assert result["completion"]["packages_installed_or_repaired"] is False
+    assert result["completion"]["mode"] == "verified_existing_partial_installation"
+    assert result["completion"]["installation_plan_sha256"] == m.digest(
+        target / "installation-plan.json"
+    )
+    assert (target / "installation.json").stat().st_mode & 0o777 == 0o600
+    assert (target / "install.log").read_bytes() == before
+    with pytest.raises(FileExistsError):
+        m.complete(target, python, uv)
+
+
+def test_completion_rechecks_preserved_inputs_after_fresh_probes(partial_installation, monkeypatch):
+    target, python, uv, plan = partial_installation
+    mock_completion_tools(monkeypatch, uv)
+
+    def changing_probe(root):
+        plan["platform"] = "changed-during-verification"
+        (root / "installation-plan.json").write_text(json.dumps(plan))
+        return {"verified": True}
+
+    monkeypatch.setattr(m, "verify", changing_probe)
+    with pytest.raises(ValueError, match="Preserved installation plan"):
+        m.complete(target, python, uv)
+    assert not (target / "installation.json").exists()
+
+
+def test_completion_requires_original_shared_cache_choice(
+    partial_installation, shared_uv_cache, monkeypatch
+):
+    target, python, uv, _ = partial_installation
+    shared_plan = m.setup_plan(target, python, uv, cache=shared_uv_cache)
+    (target / "installation-plan.json").write_text(json.dumps(shared_plan))
+    monkeypatch.setattr(m.subprocess, "check_output", lambda *a, **kw: pytest.fail("tool invoked"))
+    with pytest.raises(ValueError, match="Preserved installation plan"):
+        m.complete(target, python, uv)
+    calls = mock_completion_tools(monkeypatch, uv)
+    result = m.complete(target, python, uv, cache=shared_uv_cache)
+    assert result["cache"] == shared_plan["cache"]
+    assert all(options["env"]["UV_CACHE_DIR"] == str(shared_uv_cache) for _, options in calls[:2])
+
+
+def test_failed_directory_sync_rolls_back_only_owned_publication(tmp_path, monkeypatch):
+    import os
+    import stat
+
+    target = tmp_path / "receipt.json"
+    fsync = os.fsync
+
+    def fail_directory(fd):
+        if stat.S_ISDIR(os.fstat(fd).st_mode):
+            raise OSError("generated directory sync failure")
+        fsync(fd)
+
+    monkeypatch.setattr(m.os, "fsync", fail_directory)
+    with pytest.raises(OSError, match="generated"):
+        m.write_new(target, {"ready": True})
+    assert not target.exists()
+    assert not list(tmp_path.glob(".local-cpu-*"))
+
+
+@pytest.mark.parametrize("replacement", ["regular", "symlink"])
+def test_failed_publication_does_not_remove_observed_replacement(
+    tmp_path, monkeypatch, replacement
+):
+    import os
+    import stat
+
+    target = tmp_path / "receipt.json"
+    unrelated = tmp_path / "other.json"
+    unrelated.write_text("unrelated concurrent receipt")
+    fsync = os.fsync
+
+    def replace_then_fail(fd):
+        if stat.S_ISDIR(os.fstat(fd).st_mode):
+            if replacement == "regular":
+                os.replace(unrelated, target)
+            else:
+                target.unlink()
+                target.symlink_to(unrelated)
+            raise OSError("generated sync failure after replacement")
+        fsync(fd)
+
+    monkeypatch.setattr(m.os, "fsync", replace_then_fail)
+    with pytest.raises(OSError, match="generated"):
+        m.write_new(target, {"ready": True})
+    assert target.read_text() == "unrelated concurrent receipt"
+    assert target.is_symlink() is (replacement == "symlink")
+
+
+def test_completion_directory_sync_failure_leaves_no_success_receipt(
+    partial_installation, monkeypatch
+):
+    import os
+    import stat
+
+    target, python, uv, _ = partial_installation
+    before = (target / "install.log").read_bytes()
+    mock_completion_tools(monkeypatch, uv)
+    fsync = os.fsync
+
+    def fail_directory(fd):
+        if stat.S_ISDIR(os.fstat(fd).st_mode):
+            raise OSError("generated completion sync failure")
+        fsync(fd)
+
+    monkeypatch.setattr(m.os, "fsync", fail_directory)
+    with pytest.raises(OSError, match="generated"):
+        m.complete(target, python, uv)
+    assert not (target / "installation.json").exists()
+    assert (target / "install.log").read_bytes() == before
+    assert len(list(target.glob("completion-*.log"))) == 1
+
+
+def test_interruption_after_real_link_does_not_leave_accepted_receipt(tmp_path, monkeypatch):
+    target = tmp_path / "receipt.json"
+    link = m.os.link
+
+    def linked_then_interrupted(source, destination):
+        link(source, destination)
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(m.os, "link", linked_then_interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        m.write_new(target, {"ready": True})
+    assert not target.exists()
+    assert not list(tmp_path.glob(".local-cpu-*"))

@@ -107,6 +107,36 @@ roots and their logs are not modified or removed, apart from the explicitly chos
 uv cache if it is inside a preserved attempt. Do not use an untrusted shared cache;
 operator-owned executables, source and cache directories remain a trust boundary.
 
+## Verify a fully populated partial attempt explicitly
+
+If an attempt installed all dependencies but stopped during its final verification,
+inspect and retain its original failure log. `complete` can verify the same existing
+environments without downloading, installing or repairing any package. It is not a
+retry of `install`, and it cannot complete a directory with missing or incompatible
+packages. Supply the original interpreter, uv and optional shared-cache paths:
+
+```sh
+python3 workers/local_cpu/manage.py complete \
+  --root /absolute/existing/partial-installation \
+  --python /absolute/original/python3.12 \
+  --uv /absolute/original/uv \
+  --cache /absolute/original/uv-cache
+```
+
+Without `--execute`, this only validates the preserved plan and prints the fixed
+verification commands. It creates no files and starts no processes. Add `--execute`
+only after reviewing that plan. The original recorded root, checkout, platform,
+tools, input hashes, cache choice and copied ACT project files must match exactly.
+Changed inputs or an existing `installation.json` cause a refusal. Saved commands
+are never executed; the program reconstructs its fixed verification operations.
+
+Execution runs only offline dependency checks and the original fresh probes with
+their 60-second limits. It preserves the original logs and creates a separate
+completion log. A new receipt is atomically published only after every check exits
+successfully and the preserved inputs are checked again. It explicitly records
+verification of an earlier partial attempt, without claiming that the original
+attempt succeeded. Failures still publish no receipt. Configuration remains inactive.
+
 ## Generate a new configuration; preserve the old one
 
 ```sh
