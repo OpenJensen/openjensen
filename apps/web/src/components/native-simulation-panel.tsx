@@ -3,8 +3,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, artifactDownloadUrl, isActive } from '@/lib/api';
+import { storeAttempt, type PolicyJobAttempt } from '@/lib/policy-job-attempt';
+import { minimalSimulationReceipt, simulationAttemptOperation, simulationIntentMessage, storedSimulationAttempt, storedSimulationReceipt, storeSimulationReceipt, type SimulationIntent } from '@/lib/native-simulation-recovery';
 import { WorkbenchDisclosure } from '@/components/workbench-disclosure';
 import { cancelSimulation, isSimulationJob, nativeInput, simulationOptions, simulationTarget, simulationTaskSummary, simulationVideoUrl, startSimulation, UncertainSubmission, uploadModel, type NativeArtifact, type SimulationJob } from '@/lib/native-simulation';
+
+class SimulationJournalUnavailable extends Error {
+  constructor() { super('Browser session storage is unavailable or its simulation receipt is unreadable. Restore it and reload, then inspect recorded jobs before another request.'); }
+}
 
 export function NativeSimulationPanel({ projectId, preferredJobId, onJobSelected, onTraining }: { projectId: string; preferredJobId?: string; onJobSelected?: (id: string) => void; onTraining: () => void }) {
   const client = useQueryClient();
@@ -24,19 +30,34 @@ export function NativeSimulationPanel({ projectId, preferredJobId, onJobSelected
   const [pending, setPending] = useState<'upload' | 'run' | 'cancel' | null>(null);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
-  const [ambiguous, setAmbiguous] = useState(false);
-  const [reviewed, setReviewed] = useState(false);
+  const attemptKey = ['native-simulation-attempt', projectId];
+  const acceptedKey = ['native-simulation-accepted', projectId];
+  const storageKey = ['native-simulation-storage-error', projectId];
+  const attempt = useQuery<PolicyJobAttempt>({ queryKey: attemptKey, queryFn: async () => null, enabled: false, initialData: null, gcTime: Infinity });
+  const accepted = useQuery<SimulationJob | null>({ queryKey: acceptedKey, queryFn: async () => null, enabled: false, initialData: null, gcTime: Infinity });
+  const storageError = useQuery<string | null>({ queryKey: storageKey, queryFn: async () => null, enabled: false, initialData: null, gcTime: Infinity });
+  const [journalProject, setJournalProject] = useState('');
+  const [reviewedAttempt, setReviewedAttempt] = useState<PolicyJobAttempt>(null);
   const [jobId, setJobId] = useState(preferredJobId ?? '');
-  const [accepted, setAccepted] = useState<SimulationJob | null>(null);
   const [confirmCancel, setConfirmCancel] = useState<string | null>(null);
   const [videoFailed, setVideoFailed] = useState(false);
   const [preparing, setPreparing] = useState(!preferredJobId);
+  const selection = useRef({ id: preferredJobId ?? '', generation: 0 });
   const busy = useRef(false);
   const mounted = useRef(true);
   const abortUpload = useRef<(() => void) | null>(null);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; abortUpload.current?.(); }; }, []);
+  useEffect(() => {
+    try {
+      if (!client.getQueryData<PolicyJobAttempt>(['native-simulation-attempt', projectId])) client.setQueryData(['native-simulation-attempt', projectId], storedSimulationAttempt(projectId));
+      if (!client.getQueryData<SimulationJob | null>(['native-simulation-accepted', projectId])) client.setQueryData(['native-simulation-accepted', projectId], storedSimulationReceipt(projectId));
+      setJournalProject(projectId);
+    } catch { client.setQueryData(['native-simulation-storage-error', projectId], new SimulationJournalUnavailable().message); }
+  }, [client, projectId]);
   const saved = (jobs.data ?? []).filter(item => item.project_id === projectId && isSimulationJob(item)).sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const selected = saved.find(item => item.id === jobId) ?? (accepted?.id === jobId ? accepted : undefined);
+  const retained = accepted.data?.project_id === projectId ? accepted.data : null;
+  const receipt = retained ? saved.find(item => item.id === retained.id) ?? retained : null;
+  const selected = saved.find(item => item.id === jobId) ?? (retained?.id === jobId ? retained : undefined);
   // A terminal transition must fetch final events even when the active poll was empty.
   // Job status has a fixed six-value domain; timestamps would grow this cache unboundedly.
   const events = useQuery({ queryKey: ['events', selected?.id, selected?.status], queryFn: () => api.events(selected!.id), enabled: !!selected, retry: false, refetchInterval: selected && isActive(selected) ? 2_000 : false });
@@ -49,34 +70,66 @@ export function NativeSimulationPanel({ projectId, preferredJobId, onJobSelected
   const observedTasks = [...(events.data ?? [])].reverse().map(event => simulationTaskSummary(event.data)).find(Boolean);
   const seconds = Number(timeout);
   const timeoutValid = /^\d+$/.test(timeout) && Number.isSafeInteger(seconds) && seconds >= 30 && seconds <= 7200;
-  const ready = !!projectId && options.isSuccess && !options.isError && !!profile && !pending && !ambiguous;
+  const journalReady = journalProject === projectId && !storageError.data;
+  const ready = !!projectId && journalReady && jobs.isSuccess && !jobs.isError && options.isSuccess && !options.isError && !!profile && !pending && !attempt.data;
   const refresh = async () => {
+    const before = client.getQueryData<PolicyJobAttempt>(attemptKey);
     const response = await jobs.refetch();
-    void artifacts.refetch();
-    void options.refetch();
-    if (selected) void events.refetch();
-    if (!response.isError) setReviewed(true);
+    void artifacts.refetch(); void options.refetch(); if (selected) void events.refetch();
+    if (mounted.current && before?.state === 'uncertain' && before === client.getQueryData<PolicyJobAttempt>(attemptKey) && !response.isError) setReviewedAttempt(before);
   };
-  function showJob(id: string) { onJobSelected?.(id); setJobId(id); setConfirmCancel(null); setVideoFailed(false); setPreparing(!id); }
+  function showJob(id: string) { selection.current = { id, generation: selection.current.generation + 1 }; onJobSelected?.(id); setJobId(id); setConfirmCancel(null); setVideoFailed(false); setPreparing(!id); }
+  function storageFailed() {
+    const failure = new SimulationJournalUnavailable();
+    client.setQueryData(storageKey, failure.message);
+    const previous = client.getQueryData<PolicyJobAttempt>(attemptKey);
+    if (previous?.state === 'pending') client.setQueryData<PolicyJobAttempt>(attemptKey, (): PolicyJobAttempt => ({ state: 'uncertain', message: `${previous.message} ${failure.message}` }));
+    return failure;
+  }
+  function saveAttempt(value: PolicyJobAttempt) {
+    try { storeAttempt(simulationAttemptOperation, projectId, value); } catch { throw storageFailed(); }
+    client.setQueryData<PolicyJobAttempt>(attemptKey, value);
+  }
+  function acknowledgeRecovery() {
+    if (!journalReady || jobs.isError || pending || !reviewedAttempt || reviewedAttempt !== client.getQueryData<PolicyJobAttempt>(attemptKey)) return;
+    try { saveAttempt(null); setError(''); setReviewedAttempt(null); } catch (cause) { setError((cause as Error).message); }
+  }
   async function mutate(kind: 'upload' | 'run' | 'cancel') {
-    if (busy.current || !projectId || (kind !== 'cancel' && !ready)) return;
+    if (busy.current || !projectId || !journalReady || client.getQueryData<PolicyJobAttempt>(attemptKey) || client.getQueryData<string | null>(storageKey) || (kind !== 'cancel' && !ready)) return;
     if (kind === 'upload' && (!file || !profile || !file.size || file.size > (options.data?.max_archive_bytes ?? 0))) return;
     if (kind === 'run' && (!input || !profile || !experimental || !timeoutValid || artifacts.isError || jobs.isError)) return;
     if (kind === 'cancel' && (!selected || selected.id !== confirmCancel || !isActive(selected) || jobs.isError)) return;
-    busy.current = true; setPending(kind); setError(''); setProgress(0); setReviewed(false);
+    const originalSelection = selection.current;
+    const intent: SimulationIntent = kind === 'run' ? { action: 'run', project: projectId, profile: profile!.id, artifact: input!.id, timeout: seconds }
+      : kind === 'upload' ? { action: 'upload', project: projectId, profile: profile!.id, filename: file!.name, bytes: file!.size }
+      : { action: 'cancel', project: projectId, profile: 'runtime_id' in selected!.request ? selected!.request.runtime_id ?? '' : '', job: selected!.id };
+    let context: string;
+    try { context = simulationIntentMessage(intent); } catch (cause) { setError((cause as Error).message); return; }
+    busy.current = true; setPending(kind); setError(''); setProgress(0); setReviewedAttempt(null);
     try {
-      let receipt: SimulationJob;
+      saveAttempt({ state: 'pending', message: context });
+      let value: SimulationJob;
       if (kind === 'upload') {
-        const transfer = uploadModel(projectId, profile!.id, file!, value => { if (mounted.current) setProgress(value); });
-        abortUpload.current = transfer.abort;
-        receipt = await transfer.result;
-      } else if (kind === 'run') receipt = await startSimulation(projectId, profile!.id, input!.id, seconds);
-      else receipt = await cancelSimulation(selected!);
-      if (mounted.current) { setAccepted(receipt); showJob(receipt.id); setExperimental(false); }
-      await client.invalidateQueries({ queryKey: ['jobs', projectId] });
-      await client.invalidateQueries({ queryKey: ['artifacts', projectId] });
+        const transfer = uploadModel(projectId, profile!.id, file!, percent => { if (mounted.current) setProgress(percent); });
+        abortUpload.current = transfer.abort; value = await transfer.result;
+      } else if (kind === 'run') value = await startSimulation(projectId, profile!.id, input!.id, seconds, input!.manifest_sha256);
+      else value = await cancelSimulation(selected!, () => mounted.current && selection.current === originalSelection);
+      const acknowledged = minimalSimulationReceipt(value, projectId);
+      // Admission survives history/storage failure and unmount; never cache unverified result/media claims.
+      client.setQueryData<SimulationJob | null>(acceptedKey, acknowledged);
+      if (mounted.current && selection.current === originalSelection) { showJob(acknowledged.id); setExperimental(false); }
+      try { storeSimulationReceipt(acknowledged); } catch { throw storageFailed(); }
+      saveAttempt(null);
+      void client.invalidateQueries({ queryKey: ['jobs', projectId] });
+      void client.invalidateQueries({ queryKey: ['artifacts', projectId] });
     } catch (cause) {
-      if (mounted.current) { setError(cause instanceof Error ? cause.message : 'The request failed.'); if (cause instanceof UncertainSubmission) setAmbiguous(true); }
+      let message = cause instanceof Error ? cause.message : 'The request failed.';
+      try {
+        if (cause instanceof SimulationJournalUnavailable) { /* Preserve the recovery record; do not retry failed storage writes. */ }
+        else if (cause instanceof UncertainSubmission) { message = `${context} ${message}`; saveAttempt({ state: 'uncertain', message }); }
+        else saveAttempt(null);
+      } catch (failure) { message = failure instanceof Error ? failure.message : message; }
+      if (mounted.current) setError(message);
     } finally {
       busy.current = false; abortUpload.current = null;
       if (mounted.current) { setPending(null); setConfirmCancel(null); }
@@ -88,24 +141,26 @@ export function NativeSimulationPanel({ projectId, preferredJobId, onJobSelected
     {options.isPending && <p role="status">Loading simulation profiles…</p>}
     {options.isError && <p className="error-notice" role="alert">Simulation options are unavailable. {options.error.message}</p>}
     {options.isSuccess && !options.data.profiles.length && <p role="status">{options.data.unavailable_reason ?? 'No Isaac simulation profile is configured.'} An operator must connect the simulator; this page does not start it automatically.</p>}
-    {error && <p className="error-notice" role="alert">{error}</p>}
-    {ambiguous && <div className="warning-box"><p>Further submissions are paused. Refresh and inspect the recorded jobs first.</p><button className="secondary-button" disabled={!reviewed || jobs.isError || pending !== null} onClick={() => { setAmbiguous(false); setError(''); setReviewed(false); }}>I checked the jobs; allow a new request</button></div>}
+    {(storageError.data || error) && <p className="error-notice" role="alert">{storageError.data || error}</p>}
+    {journalReady && attempt.data?.state === 'pending' && <p role="status">{attempt.data.message} Waiting for the application receipt; another request is blocked.</p>}
+    {attempt.data?.state === 'uncertain' && <section aria-label="Native simulation recovery" className="warning-box"><p>{attempt.data.message} Further submissions are paused. Refresh and inspect recorded jobs before explicitly allowing another request.</p><p>Recovery is limited to this browser tab; it does not prevent requests in another tab or prove cloud resources stopped.</p><button className="secondary-button" disabled={!journalReady || reviewedAttempt !== attempt.data || jobs.isError || pending !== null} onClick={acknowledgeRecovery}>I checked the jobs; allow a new request</button></section>}
+    {receipt && receipt.id !== selected?.id && <section aria-label="Native submission receipt"><p>Last acknowledged {receipt.kind === 'policy.import' ? 'import' : 'rollout'} · {receipt.id} · {receipt.status}. Recorded history may contain newer details.</p><button className="text-link" onClick={() => showJob(receipt.id)}>View acknowledged job</button></section>}
     <section className="native-simulation-history" aria-label="Native simulation jobs"><h3>Imports and simulation jobs</h3>
       {jobs.isError && <p role="alert">Job updates are unavailable. Previously received status may be stale. {jobs.error.message}</p>}
-      {!saved.length && !accepted && <p>{jobs.isPending && projectId ? 'Loading jobs…' : 'No native imports or simulation runs in this project yet.'}</p>}
+      {!saved.length && !retained && <p>{jobs.isPending && projectId ? 'Loading jobs…' : 'No native imports or simulation runs in this project yet.'}</p>}
       {saved.length > 0 && <label>Saved simulation job<select aria-label="Saved simulation job" value={selected?.id ?? ''} onChange={event => showJob(event.target.value)}><option value="">Choose a recorded job</option>{saved.map(item => <option key={item.id} value={item.id}>{item.kind === 'policy.import' ? 'Policy import' : 'Isaac rollout'} · {item.id.slice(0, 8)} · {item.status}</option>)}</select></label>}
       {preferredJobId && !selected && jobs.isSuccess && <p role="status">The requested job is not available in this project's native simulation history.</p>}
       {selected && <article className="native-simulation-result" aria-label="Native simulation job details" data-job-id={selected.id}>
         <div className="native-result-header"><div><span className="eyebrow">{selected.kind === 'policy.import' ? 'Package intake' : 'Recorded execution'}</span><h3>{selected.kind === 'policy.import' ? 'Native policy import' : 'Isaac rollout'}</h3></div><span className={`status status-${selected.status}`}><span className="status-dot" />{selected.status}</span></div>
         {videoReady && !videoFailed && <figure className="native-recording"><video controls preload="metadata" aria-label="Recorded cup rollout" src={simulationVideoUrl(selected.id)} onError={() => setVideoFailed(true)} /><figcaption><strong>Recorded cup rollout</strong><span>Execution recording · pickup success not measured</span></figcaption></figure>}
         {videoFailed && <p role="alert">The recorded video is unavailable. You can still download the verified simulation record.</p>}
-        <dl className="cloud-run-facts"><div><dt>Execution target</dt><dd>{simulationTarget(selected)?.accelerators.join(' + ') ?? 'Local package validation'}</dd></div><div><dt>Cup pickup success</dt><dd>Not measured</dd></div><div><dt>Calibration</dt><dd>Unverified</dd></div></dl>
+        <dl className="cloud-run-facts"><div><dt>Execution target</dt><dd>{simulationTarget(selected)?.accelerators.join(' + ') ?? (selected.kind === 'policy.import' ? 'Local package validation' : 'Awaiting recorded cloud target')}</dd></div><div><dt>Cup pickup success</dt><dd>Not measured</dd></div><div><dt>Calibration</dt><dd>Unverified</dd></div></dl>
         {events.isError && <p className="error-notice" role="alert">Activity updates are unavailable. Worker states and event history may be stale.</p>}
         {observedTasks && <p className="native-worker-summary" role="status" aria-label="Observed simulation workers">{events.isError ? 'Last observed: ' : ''}{observedTasks}</p>}
         {selected.error && <p role="alert" className="error-notice">{selected.error}</p>}
-        {selected.status === 'succeeded' && <p className="native-result-summary">{selected.kind === 'policy.import' ? 'The native package is saved and its package integrity checked. Runtime compatibility and task quality remain unverified. Open Prepare another run to select it for an explicit experimental Run.' : 'Execution completed. This is not a scored evaluation or proof of cup pickup.'}</p>}
-        {isActive(selected) && <><progress aria-label="Native job in progress" /><button className="secondary-button" disabled={pending !== null || jobs.isError} onClick={() => setConfirmCancel(selected.id)}>Cancel selected native job</button></>}
-        {confirmCancel === selected.id && isActive(selected) && <div className="warning-box" role="group" aria-label="Confirm native cancellation"><p>Request cancellation of {selected.id}? This does not prove cloud resources have been deleted.</p><button className="secondary-button" disabled={pending !== null || jobs.isError} onClick={() => void mutate('cancel')}>Confirm cancellation</button><button className="text-link" disabled={pending !== null} onClick={() => setConfirmCancel(null)}>Keep running</button></div>}
+        {selected.status === 'succeeded' && <p className="native-result-summary">{!saved.some(item => item.id === selected.id) ? 'Request acknowledged. Refresh recorded history to inspect its final output; this cached receipt does not verify a policy package or recording.' : selected.kind === 'policy.import' ? 'The native package is saved and its package integrity checked. Runtime compatibility and task quality remain unverified. Open Prepare another run to select it for an explicit experimental Run.' : 'Execution completed. This is not a scored evaluation or proof of cup pickup.'}</p>}
+        {isActive(selected) && <><progress aria-label="Native job in progress" /><button className="secondary-button" disabled={!journalReady || !!attempt.data || pending !== null || jobs.isError} onClick={() => setConfirmCancel(selected.id)}>Cancel selected native job</button></>}
+        {confirmCancel === selected.id && isActive(selected) && <div className="warning-box" role="group" aria-label="Confirm native cancellation"><p>Request cancellation of {selected.id}? This does not prove cloud resources have been deleted.</p><button className="secondary-button" disabled={!journalReady || !!attempt.data || pending !== null || jobs.isError} onClick={() => void mutate('cancel')}>Confirm cancellation</button><button className="text-link" disabled={pending !== null} onClick={() => setConfirmCancel(null)}>Keep running</button></div>}
         {selected.status === 'succeeded' && records.map(item => <p key={item.id}><a className="secondary-button" href={artifactDownloadUrl(projectId, item.id)}>Download simulation record</a></p>)}
         <WorkbenchDisclosure key={selected.id} title="Activity and technical details">
           <dl className="native-job-identity"><div><dt>Job ID</dt><dd>{selected.id}</dd></div><div><dt>Last recorded update</dt><dd>{new Date(selected.updated_at).toLocaleString()}</dd></div></dl>
