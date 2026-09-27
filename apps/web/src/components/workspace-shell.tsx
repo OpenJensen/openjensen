@@ -29,12 +29,12 @@ export function WorkspaceShell({
   return <div className="workspace">
     <a href="#main" className="skip-link">{skipLabel}</a>
     <aside className="sidebar" aria-label={sidebarLabel}>
-      <a className="brand" href={publicPath('/')} aria-label="Firebird workspace home"><span className="brand-mark"><Icon name="layers" size={21} /></span><span>Firebird</span></a>
+      <a className="brand" href={publicPath('/')} aria-label="Jensen workspace home"><span className="brand-mark"><Icon name="layers" size={21} /></span><span>Jensen</span></a>
       <div className="sidebar-content">{navigation}</div>
       <div className="sidebar-bottom">
         {sidebarFooter}
         <a className="sidebar-link" href={apiReferenceUrl}><Icon name="book" size={18} /> API reference</a>
-        <div className="workspace-identity"><span className="workspace-avatar">F</span><div><strong>{publicDemo ? "Public demo" : "Local workspace"}</strong></div></div>
+        <div className="workspace-identity"><span className="workspace-avatar">J</span><div><strong>{publicDemo ? "Public demo" : "Local workspace"}</strong></div></div>
       </div>
     </aside>
     <div className="main-shell">

@@ -14,7 +14,7 @@ test('prefixed export loads bundles, API, dataset posters and docs without escap
     if (response.url().startsWith(origin) && response.status() >= 400) failures.push(`${response.status()} ${response.url()}`);
   });
   await page.goto(`${prefix}/`);
-  await expect(page.getByRole('link', { name: 'Firebird workspace home' })).toHaveAttribute('href', `${prefix}/`);
+  await expect(page.getByRole('link', { name: 'Jensen workspace home' })).toHaveAttribute('href', `${prefix}/`);
   await expect(page.getByRole('button', { name: 'Fine-tune', exact: true })).toBeVisible();
   const posters = page.locator('.starter-image img');
   await expect(posters).toHaveCount(2);
