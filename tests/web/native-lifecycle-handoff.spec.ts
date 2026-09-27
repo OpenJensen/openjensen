@@ -325,6 +325,20 @@ test('mixed configured workflows start unselected and preserve a deliberate nati
   await expect(page.getByRole('button', { name: 'Replay observations', exact: true })).toHaveAttribute('aria-pressed', 'true'); expect(state.mutations).toHaveLength(0);
 });
 
+test('a detected training worker is not offered for GGUF quantization or engine evaluation', async ({ page }) => {
+  const state = await fixture(page);
+  state.runtimes = [{ id: 'managed-local-smolvla-test', label: 'Detected GPU trainer', execution: 'native', provider: 'local', device: 'cuda', enabled: true, launchable: true, training: true, training_only: true, training_model_ids: ['smolvla'], simulation: false, run: false, engine_evaluation: false }];
+  await reloadProject(page);
+  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('button', { name: 'SmolVLA', exact: true }).click();
+  await page.getByRole('button', { name: 'New quantization', exact: true }).click();
+  await expect(page.getByText('Connect a compatible worker in Compute settings.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('radio', { name: /Detected GPU trainer/ })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Evaluate', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Evaluation purpose' })).toContainText('No engine evaluation target is configured.');
+  expect(state.mutations).toEqual([]);
+});
+
 for (const mode of ['distillation', 'quantization', 'replay'] as const) test(`${mode} keeps the remaining worker selectable after the chosen worker disappears`, async ({ page }) => {
   const state = await fixture(page);
   const primary = runtimes[mode === 'distillation' ? 0 : mode === 'quantization' ? 1 : 2];

@@ -178,6 +178,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         or r.native_quantization_only
                         or r.native_distillation_only
                         or r.native_replay_only
+                        or r.training_only
                     )
                     for r in execution.lifecycle.catalog.runtimes
                 ),

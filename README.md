@@ -97,7 +97,7 @@ these workers. Native ACT quantization also needs its
 1. Create a project and open **Dataset → Sources**.
 2. Choose the pinned **SO-101 pickup** or **SO-100 pick & place** starter and select **Inspect dataset**.
 3. Open **Load visual preview** to browse episodes, camera recordings and sampled actions.
-4. Connect Google Cloud in **Settings & diagnostics → Compute**, or enable an [installed local worker](docs/policy-workflow.md), then choose a compatible model and recipe in **Fine-tune**. Cloud jobs use your configured account.
+4. In **Settings & diagnostics → Compute**, connect Google Cloud or use **Check this machine → Add worker** for an [installed local SmolVLA worker](docs/compute-settings.md#add-a-local-training-worker). For local compute, enable local runs and save. Choose compatible compute and a recipe in **Fine-tune**. Cloud jobs use your configured account.
 5. Open the saved run to review progress, checkpoints and provenance. Use the supported export or quantization path for that model.
 
 ## Documentation

@@ -10,7 +10,7 @@ export type ProjectEntry = { run?: Entry<RunMode>; quantize?: Entry<QuantizeMode
 
 /** Eligibility is configuration, never proof of a running worker or accepted policy. */
 export function engineRuntime(item: PolicyOptions['runtimes'][number], stage: 'Run' | 'Evaluate' | 'Quantize') {
-  if (item.enabled === false || item.launchable === false || item.unavailable_reason || item.export_only || item.native_distillation_only || item.native_replay_only || nativeQuantizationOnly(item)) return false;
+  if (item.enabled === false || item.launchable === false || item.unavailable_reason || item.training_only || item.export_only || item.native_distillation_only || item.native_replay_only || nativeQuantizationOnly(item)) return false;
   const flag = stage === 'Run' ? item.run : stage === 'Evaluate' ? item.engine_evaluation : undefined;
   return stage === 'Quantize' || (item.execution === 'skypilot' ? flag === true : flag !== false);
 }

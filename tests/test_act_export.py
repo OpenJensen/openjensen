@@ -16,10 +16,17 @@ from vla_platform.api import create_app
 from vla_platform.contracts import Job, now
 from vla_platform.lifecycle.contracts import LifecycleResult, PolicyArtifact, PolicyRequest
 from vla_platform.lifecycle.runtime import Runtime, RuntimeCatalog, command
+from vla_platform.local_worker_registry import LocalWorkerRegistry
 from vla_platform.settings import Settings
 from vla_platform.storage import jobs
 
 FIXTURE = Path(__file__).parent / "fixtures/act_worker"
+
+
+def replace_catalog(app, catalog):
+    lifecycle = app.state.execution.lifecycle
+    lifecycle._operator_catalog = catalog
+    lifecycle.local_workers = LocalWorkerRegistry(lifecycle.settings.data_dir, catalog)
 
 
 def runtime(**changes):
@@ -198,7 +205,9 @@ def test_incompatible_export_fails_before_worker(application, kind):
     elif kind == "missing-model":
         (root / "checkpoint/pretrained_model/model.safetensors").unlink()
     elif kind == "no-runtime":
-        app.state.execution.lifecycle.catalog.runtimes[0].act_export_python = None
+        catalog = app.state.execution.lifecycle.catalog
+        catalog.runtimes[0].act_export_python = None
+        replace_catalog(app, catalog)
     elif kind == "disabled":
         client.put("/api/v1/compute-settings", json={"local": {"enabled": False}})
     elif kind == "wrong-format":
@@ -224,7 +233,9 @@ def test_incompatible_export_fails_before_worker(application, kind):
 @pytest.mark.parametrize("fault", ["source", "format", "reload", "step", "gpu", "no-artifact"])
 def test_bad_export_receipt_never_registers(application, fault):
     app, client, pid, source, _ = application
-    app.state.execution.lifecycle.catalog.runtimes[0].env["FIXTURE_FAULT"] = fault
+    catalog = app.state.execution.lifecycle.catalog
+    catalog.runtimes[0].env["FIXTURE_FAULT"] = fault
+    replace_catalog(app, catalog)
     accepted = submit(client, pid, source)
     assert accepted.status_code == 202, accepted.text
     completed = wait(client, accepted.json()["id"])
@@ -234,11 +245,13 @@ def test_bad_export_receipt_never_registers(application, fault):
 
 def test_act_training_cannot_start_an_unsupported_gguf_workflow(application):
     app, client, pid, _, _ = application
-    configured = app.state.execution.lifecycle.catalog.runtimes[0]
+    catalog = app.state.execution.lifecycle.catalog
+    configured = catalog.runtimes[0]
     configured.training_python = sys.executable
     configured.training_root = str(FIXTURE)
     configured.training_module = "firebird_vla.lerobot_application"
     configured.training_model_ids = ["act"]
+    replace_catalog(app, catalog)
     response = client.post(
         f"/api/v1/projects/{pid}/policy-jobs",
         json={

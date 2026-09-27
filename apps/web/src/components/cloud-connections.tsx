@@ -274,7 +274,7 @@ export function CloudConnectionsPanel() {
     (item) => item.provider === editing,
   );
   const workers = (options.data?.runtimes ?? []).filter(
-    (item) => item.training && item.device === "cuda" && item.execution !== "skypilot",
+    (item) => item.training && item.device === "cuda" && item.execution !== "skypilot" && (item.provider ?? "local") !== "local",
   );
   return (
     <div className="cloud-settings">
@@ -425,13 +425,12 @@ export function CloudConnectionsPanel() {
       <HuggingFaceSettingsPanel />
       <CloudGpuSettingsPanel />
       <LocalComputeSettingsPanel />
-      <section className="cloud-workers" aria-labelledby="cloud-workers-title">
+      {workers.length > 0 && <section className="cloud-workers" aria-labelledby="cloud-workers-title">
         <div className="cloud-workers-heading">
           <h2 id="cloud-workers-title">Existing GPU workers</h2>
-          {workers.length > 0 && <span>{workers.length}</span>}
+          <span>{workers.length}</span>
         </div>
-        {workers.length ? (
-          <div className="cloud-worker-list">
+        <div className="cloud-worker-list">
             {workers.map((worker) => (
               <div key={worker.id}>
                 <Icon name="layers" size={19} />
@@ -445,22 +444,8 @@ export function CloudConnectionsPanel() {
                 <span className="cloud-status">Configured</span>
               </div>
             ))}
-          </div>
-        ) : (
-          <p className="cloud-auth-note">No GPU workers configured.</p>
-        )}
-        <details className="cloud-worker-setup">
-          <summary>Local worker setup</summary>
-          <p>
-            For a GPU already installed on this machine, add a training worker in{" "}
-            <code>FIREBIRD_RUNTIME_CONFIG</code> to make its GPU available in
-            training.
-          </p>
-          <p>
-            Setup: <code>docs/policy-workflow.md</code>
-          </p>
-        </details>
-      </section>
+        </div>
+      </section>}
       {current && (
         <ConnectionDialog
           key={current.provider}

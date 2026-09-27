@@ -3,6 +3,18 @@
 .local-compute-heading > div { flex: 1; }
 .local-compute-heading h2 { font-size: 15px; margin: 0; }
 .local-compute-heading p, .local-compute-note { font-size: 11px; color: var(--muted); line-height: 1.6; margin-top: 6px; }
+.local-worker-discovery { display: grid; gap: 12px; margin-top: 18px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+.local-discovery-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.local-discovery-host { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.local-discovery-results { display: grid; gap: 12px; }
+.local-discovery-results > .local-compute-note { margin: 0; }
+.local-worker-card { display: flex; align-items: center; gap: 16px; padding: 15px; border: 1px solid var(--line); border-radius: 9px; min-width: 0; }
+.local-worker-details { display: grid; gap: 5px; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.local-worker-details strong { font-size: 13px; font-weight: 550; }
+.local-worker-details span, .local-worker-details p { font-size: 11px; color: var(--muted); line-height: 1.6; margin: 0; }
+.local-worker-card > button, .local-worker-card > .cloud-status { flex-shrink: 0; }
+.local-discovery-issues { margin: 0; padding-left: 16px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.local-discovery-results > .text-link { justify-self: start; font-size: 12px; }
 .local-compute-toggle { display: flex; align-items: center; gap: 9px; font-size: 12px; margin-top: 20px; cursor: pointer; }
 .local-compute-toggle input { accent-color: var(--success); width: 15px; height: 15px; }
 .local-compute-fields { display: flex; gap: 16px; align-items: flex-end; margin: 18px 0 12px; }
@@ -13,4 +25,6 @@
   .local-compute-fields { flex-direction: column; align-items: stretch; }
   .local-compute-fields label { max-width: none; }
   .local-compute-heading { flex-wrap: wrap; }
+  .local-worker-card { flex-wrap: wrap; gap: 12px; }
+  .local-worker-details { flex-basis: 100%; }
 }
