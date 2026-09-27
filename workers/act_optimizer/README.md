@@ -31,8 +31,8 @@ A repeated invocation with the same output fails instead of replacing it.
 ## Supported checkpoint and checks
 
 The first recipe supports a full, non-PEFT ACT checkpoint with ResNet18, one RGB
-camera, six state/action coordinates, one observation, a 100-step chunk and
-100 executed actions, MEAN_STD normalization, no temporal ensemble, no AMP,
+camera, six state/action coordinates, one observation, independently saved prediction
+and execution horizons (`1 <= execution <= prediction <= 1024`), MEAN_STD normalization, no temporal ensemble, no AMP,
 ReLU and post-normalized transformer blocks. Bounded transformer dimensions
 support the supplied checkpoint and a small real-policy test fixture. RGB dimensions
 must be integers from 32 through 2048, with at most 2,073,600 pixels (1920 × 1080)
@@ -60,7 +60,8 @@ source hashes, config change and complete output inventory are recorded.
 
 1. Strictly load the original snapshot; compute two seeded synthetic observations.
 2. Strictly load the transformed checkpoint; compare every raw and postprocessed
-   action in both complete 100x6 chunks. Also test the real action queue and reset.
+   action in both complete prediction-horizon × 6 chunks. Test two queue refills at
+   the saved execution horizon and confirm reset forces another inference.
 3. Assemble all package metadata, remove the owned original snapshot, then strictly
    reload the complete package. Block reads beneath the original source/snapshot
    locations through Python open auditing in that child and require the same outputs
@@ -228,6 +229,46 @@ success, learned quality or dataset-loader resume correctness. The default
 ACT CI tests remain on the pinned0.6.1 consumer; the optional0.6.2 producer is
 not silently installed into that environment.
 
-The recorded chunk20 PushT checkpoint remains outside this exporter's chunk100,
-six-coordinate recipe. Inference-only output must never replace or be presented
+The recorded PushT checkpoint remains outside this exporter's six-coordinate recipe. Inference-only output must never replace or be presented
 as the original resumable training checkpoint.
+
+
+## Changed-horizon software acceptance
+
+`native_checkpoint_fixture.py` accepts `--prediction-horizon 8 --execution-horizon 3`.
+Run `generate`, `resume`, and `bundle` in order in the separately pinned native
+0.6.2 producer environment. The generated batches pass through actual saved
+normalizers, perform optimizer updates, save the upstream checkpoint, and verify
+an exact next update after resume. This is generated software evidence, not a
+recorded robotics dataset or learned task-quality measurement.
+
+The complete application exporter now accepts the independently configured
+horizons. New training recipes must include their checkpoint-root
+`temporal-contract.json`; admission checks its exact sampling indices, FPS and
+saved config. Export copies those original bytes into the inference policy.
+Neither processors nor source checkpoints are rewritten. A supplied temporal
+record that disagrees with the config fails even when manifests are rehashed.
+Legacy coupled 100/100 checkpoints without this record remain supported.
+
+Use the fixed `firebird_act.application` protocol for export, then
+`firebird_quant.native_application` for INT8 or INT4 packing. Both manifests and
+reports carry `prediction_horizon`, `execution_horizon` and the optional temporal
+record hash. The packed model identity includes the record when present.
+
+After packing, run the following in the existing pinned 0.6.1 CPU interpreter,
+with `workers/act_optimizer/src:workers/firebird_quant/src:workers/isaac_sim` on
+`PYTHONPATH` and offline/one-thread environment settings:
+
+```sh
+python workers/act_optimizer/scripts/temporal_http_fixture.py   /absolute/export/policy /absolute/packed/verification.json /absolute/new-float.json
+python workers/act_optimizer/scripts/temporal_http_fixture.py   /absolute/packed/policy /absolute/packed/verification.json /absolute/new-packed.json --packed
+python workers/act_optimizer/scripts/temporal_replay_fixture.py   /absolute/packed /absolute/new-replay-proof
+```
+
+The first two commands use fresh processes and real HTTP `/reset`/`/predict`
+requests. They verify full predictions separately from the execution prefix and
+exercise the actual queue refill count. The final command creates explicitly
+synthetic observations, runs the real owned observation-replay worker and checks
+its saved full predictions. It applies no robot or simulator actions. CPU proof
+of 8/3 portability does not establish SmolVLA compatibility, GPU performance,
+calibration, task quality, or a simulator rollout.

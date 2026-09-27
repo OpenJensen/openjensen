@@ -501,3 +501,36 @@ def test_missing_source_returns_admission_error(application, missing):
         path.unlink()
     response = submit(application)
     assert response.status_code == 422, response.text
+
+
+@pytest.mark.parametrize("prediction,execution", [(8, 3), (100, 100), (1024, 1)])
+def test_temporal_config_admission(prediction, execution):
+    from vla_platform.lifecycle.native_quantization import temporal_info
+
+    assert temporal_info(
+        {"chunk_size": prediction, "n_action_steps": execution, "n_obs_steps": 1}
+    ) == {
+        "prediction_horizon": prediction,
+        "execution_horizon": execution,
+        "temporal_contract_sha256": None,
+    }
+
+
+@pytest.mark.parametrize(
+    "prediction,execution", [(8, 9), (True, 1), (8, True), (8.0, 3), (1025, 1)]
+)
+def test_temporal_config_rejects_invalid_shapes(prediction, execution):
+    from vla_platform.lifecycle.native_quantization import temporal_info
+
+    with pytest.raises(ValueError, match="horizon"):
+        temporal_info({"chunk_size": prediction, "n_action_steps": execution, "n_obs_steps": 1})
+
+
+@pytest.mark.parametrize(
+    "change", [{"n_obs_steps": 2}, {"n_obs_steps": True}, {"temporal_ensemble_coeff": 0.01}]
+)
+def test_custom_temporal_config_rejects_unsupported_execution(change):
+    from vla_platform.lifecycle.native_quantization import temporal_info
+
+    with pytest.raises(ValueError, match="temporal admission"):
+        temporal_info({"chunk_size": 8, "n_action_steps": 3, "n_obs_steps": 1} | change)

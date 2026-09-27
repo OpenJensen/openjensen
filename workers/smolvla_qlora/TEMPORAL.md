@@ -53,6 +53,9 @@ and start no worker, and cover Smol loader mapping plus exact resume guards.
 Upstream contracts: native LeRobot `e595b7902714ba51f91e47523f66f89c5181b649`
 ACT config/model; [SmolVLA 0.4.4 configuration](https://github.com/huggingface/lerobot/blob/v0.4.4/src/lerobot/policies/smolvla/configuration_smolvla.py)
 and [queue/loss implementation](https://github.com/huggingface/lerobot/blob/v0.4.4/src/lerobot/policies/smolvla/modeling_smolvla.py).
-The full TRAIN-006 acceptance still needs genuine family-specific training/resume
-and serving/export compatibility evidence for changed horizons, plus any future
-history/stride controls; these software checks do not imply those gates passed.
+ACT changed-horizon native optimizer/resume, processor-bound inference export,
+packing, fresh HTTP and observation replay now have a reproducible generated
+[CPU fixture workflow](../act_optimizer/README.md#changed-horizon-software-acceptance).
+Full TRAIN-006 remains open for genuine SmolVLA training/resume/export/serving,
+GPU/simulator acceptance and any future history/stride controls. No recorded-data
+quality acceptance follows from generated CPU fixtures.

@@ -7,6 +7,7 @@ Never install producer dependencies into the pinned ACT0.6.1 consumer environmen
 Only synthetic seeded tensors are used; no datasets, weights or network are fetched.
 """
 
+# ruff: noqa: E402 -- install the offline audit hook before importing ML libraries.
 import argparse
 import hashlib
 import importlib.metadata
@@ -27,7 +28,8 @@ def audit(event, args):
 sys.addaudithook(audit)
 import torch
 from accelerate import Accelerator
-from lerobot.common.train_utils import save_checkpoint, resume_before_prepare, resume_after_prepare
+from firebird_vla.temporal import resolved_temporal
+from lerobot.common.train_utils import resume_after_prepare, resume_before_prepare, save_checkpoint
 from lerobot.configs import FeatureType, PolicyFeature, PreTrainedConfig
 from lerobot.configs.default import DatasetConfig
 from lerobot.configs.train import TrainPipelineConfig
@@ -96,7 +98,10 @@ def metadata():
         "threads": 1,
         "network_disabled": True,
         "upstream_revision": PIN,
-        "fixture_scope": "synthetic batches and two optimizer updates; no dataset, trained quality, GPU or task success",
+        "fixture_scope": (
+            "synthetic batches and two optimizer updates; "
+            "no dataset, trained quality, GPU or task success"
+        ),
     }
 
 
@@ -114,13 +119,16 @@ def probe(model, batch):
     model.eval()
     with torch.inference_mode():
         action = model.predict_action_chunk(batch)
-    assert tuple(action.shape) == (1, 100, 6) and torch.isfinite(action).all()
+    assert tuple(action.shape) == (1, model.config.chunk_size, 6) and torch.isfinite(action).all()
     return action
 
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("mode", choices=["generate", "resume", "bundle"])
 parser.add_argument("root", type=Path)
+parser.add_argument("--prediction-horizon", type=int, default=100)
+parser.add_argument("--execution-horizon", type=int, default=100)
+parser.add_argument("--fps", type=float, default=20.0)
 args = parser.parse_args()
 root = args.root.resolve()
 checkpoint = root / "upstream-checkpoint"
@@ -137,8 +145,9 @@ if args.mode == "generate":
         n_decoder_layers=1,
         n_vae_encoder_layers=1,
         latent_dim=8,
-        chunk_size=100,
-        n_action_steps=100,
+        chunk_size=args.prediction_horizon,
+        n_action_steps=args.execution_horizon,
+        replace_final_stride_with_dilation=0,
         input_features={
             "observation.state": PolicyFeature(FeatureType.STATE, (6,)),
             "observation.images.front": PolicyFeature(FeatureType.VISUAL, (3, 32, 32)),
@@ -173,10 +182,14 @@ if args.mode == "generate":
     batch = {
         "observation.state": torch.randn(1, 6, generator=generator),
         "observation.images.front": torch.rand(1, 3, 32, 32, generator=generator),
-        "action": torch.randn(1, 100, 6, generator=generator),
-        "action_is_pad": torch.zeros(1, 100, dtype=torch.bool),
+        "action": torch.randn(1, config.chunk_size, 6, generator=generator),
+        "action_is_pad": torch.zeros(1, config.chunk_size, dtype=torch.bool),
     }
+    batch = pre(batch)
+    temporal = resolved_temporal(config, args.fps, "act")
+    initial_model = state_sha(policy.state_dict())
     first_loss = update(policy, optimizer, batch, accelerator)
+    assert state_sha(policy.state_dict()) != initial_model
     action = probe(policy, batch)
     save_checkpoint(
         checkpoint,
@@ -188,6 +201,7 @@ if args.mode == "generate":
         postprocessor=post,
         accelerator=accelerator,
     )
+    (checkpoint / "temporal-contract.json").write_bytes(canonical(temporal))
     torch.save(batch, checkpoint / "probe-batch.pt")
     torch.save(action, checkpoint / "probe-action.pt")
     before = inventory(checkpoint)
@@ -199,6 +213,8 @@ if args.mode == "generate":
         "schema_version": 1,
         "step": 1,
         "first_loss": first_loss,
+        "initial_model_sha256": initial_model,
+        "temporal_contract": temporal,
         "second_loss": second_loss,
         "saved_optimizer_sha256": saved_optimizer,
         "saved_model_sha256": saved_model,
@@ -255,11 +271,12 @@ elif args.mode == "resume":
         "next_model_sha256": expected["next_model_sha256"],
         "next_optimizer_sha256": expected["next_optimizer_sha256"],
         "checkpoint_files": expected["checkpoint_files"],
+        "temporal_contract": expected["temporal_contract"],
     }
     (root / "resumed.json").write_bytes(canonical(result))
 else:
-    from firebird_vla.lerobot_train import commit_checkpoint
     from firebird_vla.application import publish
+    from firebird_vla.lerobot_train import commit_checkpoint
 
     proof = json.loads((root / "resumed.json").read_text())
     assert proof["reload_verified"] and proof["next_update_exact"]
@@ -274,7 +291,8 @@ else:
         "model_revision": PIN,
         "model_id": "code://lerobot/act",
         "steps": 2,
-        "chunk_size": 100,
+        "prediction_horizon": proof["temporal_contract"]["prediction_horizon"],
+        "execution_horizon": proof["temporal_contract"]["execution_horizon"],
         "camera_keys": ["observation.images.front"],
         "dataset_id": "fixture/synthetic-act",
         "dataset_revision": "a" * 40,

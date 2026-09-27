@@ -7,8 +7,8 @@ register an application capability or make the package runnable in Isaac.
 
 The first accepted recipe is exactly the existing ACT export validator: LeRobot
 0.6.1, Torch 2.11.0, torchvision 0.26.0 and safetensors 0.8.0; FP32, ResNet18,
-`use_vae=false`, one RGB camera, six state/action coordinates, and a 100-action
-chunk. Images may use the validator's supported dimensions up to 1920×1080.
+`use_vae=false`, one RGB camera, six state/action coordinates, and saved independent
+prediction/execution horizons with `1 <= execution <= prediction <= 1024`. Images may use the validator's supported dimensions up to 1920×1080.
 This is a bounded tested ACT recipe, not a general restriction on ACT or a
 claim of native SmolVLA support. No environment or dependency pin is changed.
 
@@ -117,7 +117,8 @@ A consumer must validate the format and recompute identity before runtime load.
 
 The converter uses the real saved pre/postprocessors on two explicitly generated
 image/state observations (seeds 171 and 902). It retains the complete raw and
-postprocessed 100×6 arrays, input hashes, and full 100-action queue/reset checks.
+postprocessed prediction-horizon × 6 arrays, input hashes, and real queue refills
+at the saved execution horizon plus reset checks.
 The report computes raw/postprocessed RMSE and maximum absolute differences
 against FP32. There is no invented acceptable-drift threshold. Postprocessed
 units are the saved output coordinates; physical units/calibration are unverified.
@@ -163,3 +164,11 @@ It preserves the producer model identity and saved processors, rejects unsupport
 devices and runtime versions, and loads a private verified byte snapshot.
 CPU serving acceptance does not change the bundle's historical quality,
 calibration, GPU or simulator verification flags.
+
+
+Temporal portability is covered by the generated ACT producer/export/HTTP
+[fixture workflow](../act_optimizer/README.md#changed-horizon-software-acceptance).
+`temporal-contract.json`, when supplied, is validated against config, copied
+byte-for-byte and included in the packed policy identity. Report drift uses
+`prediction_horizon * 6` coordinates, while execution length remains separate.
+Old 100/100 packages and reports without additive temporal metadata remain readable.

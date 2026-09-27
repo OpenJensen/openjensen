@@ -137,6 +137,7 @@ def validate_inventory(value):
 
 def admit_source(root, expected, manifest_sha):
     from firebird_act.bundle import (
+        temporal_files,
         tensor_header,
         validate_config,
         validate_processors,
@@ -167,7 +168,12 @@ def admit_source(root, expected, manifest_sha):
         raise ValueError("Source has no direct manifest")
     config = read_json(root / "config.json")
     validate_config(config, source=False)
-    required = BASE | validate_processors(root, config) | {"model.safetensors"}
+    required = (
+        BASE
+        | validate_processors(root, config)
+        | temporal_files(root, config)
+        | {"model.safetensors"}
+    )
     if not required <= set(expected) or not set(expected) <= required | {
         "manifest.json",
         "recipe.json",
@@ -216,7 +222,12 @@ def model_identity(files):
 
 
 def inspect_policy(root):
-    from firebird_act.bundle import validate_config, validate_processors
+    from firebird_act.bundle import (
+        temporal_dimensions,
+        temporal_files,
+        validate_config,
+        validate_processors,
+    )
 
     files = inventory(root)
     encoded = read_json(root / "encoding.json")
@@ -233,7 +244,12 @@ def inspect_policy(root):
         raise ValueError("Unsupported native packed encoding")
     config = read_json(root / "config.json")
     validate_config(config, source=False)
-    required = BASE | validate_processors(root, config) | {"model.fbq", "encoding.json"}
+    required = (
+        BASE
+        | validate_processors(root, config)
+        | temporal_files(root, config)
+        | {"model.fbq", "encoding.json"}
+    )
     if set(files) != required:
         raise ValueError(
             "Native package must contain exactly its inference files and no float master"
@@ -242,6 +258,7 @@ def inspect_policy(root):
         "model_id": model_identity(files),
         "files": files,
         "encoding": encoded,
+        **temporal_dimensions(config),
         "quality_verified": False,
         "calibration_verified": False,
         "speedup_verified": False,

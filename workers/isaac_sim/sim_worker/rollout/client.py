@@ -10,7 +10,7 @@ from sim_worker.rollout.config import check_endpoint
 from sim_worker.rollout.contracts import RGB_CHANNELS, ActionChunk, Observation
 
 _MAX_RESPONSE_BYTES = 1024 * 1024
-_MAX_ACTIONS = 1000
+_MAX_ACTIONS = 1024
 _READY_POLL_SECONDS = 2.0
 
 

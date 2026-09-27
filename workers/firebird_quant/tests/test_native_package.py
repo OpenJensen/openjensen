@@ -122,7 +122,10 @@ def stub_probes(monkeypatch):
             from firebird_quant import Recipe, quantize_state_dict
 
             destination.mkdir()
-            for name in package.BASE | {"pre.safetensors", "post.safetensors"}:
+            names = package.BASE | {"pre.safetensors", "post.safetensors"}
+            if (source / "temporal-contract.json").exists():
+                names.add("temporal-contract.json")
+            for name in names:
                 (destination / name).write_bytes((source / name).read_bytes())
             (destination / "encoding.json").write_bytes(package.canonical(package.encoding(bits)))
             quantize_state_dict(load_file(source / "model.safetensors"), Recipe(bits=bits)).save(
@@ -137,8 +140,8 @@ def stub_probes(monkeypatch):
                 "seed": seed,
                 "input_sha256": f"{seed:064x}",
                 "image_shape": [3, 32, 32],
-                "raw": [[0.25] * 6 for _ in range(100)],
-                "postprocessed": [[0.5] * 6 for _ in range(100)],
+                "raw": [[0.25] * 6 for _ in range(info["prediction_horizon"])],
+                "postprocessed": [[0.5] * 6 for _ in range(info["prediction_horizon"])],
                 "queue_and_reset_exact": True,
             }
             for seed in (171, 902)
@@ -445,3 +448,18 @@ def test_signal_during_publication_never_returns_success(
         app.run_job(request(source, tmp_path / "out"))
     # An intact artifact after the commit boundary remains unregistered, not a job success.
     assert (tmp_path / "out/native-quantized/manifest.json").exists()
+
+
+def test_changed_horizons_preserved_and_drift_uses_actual_coordinates(
+    source, tmp_path, stub_probes
+):
+    config = package.read_json(source / "config.json")
+    config.update(chunk_size=8, n_action_steps=3)
+    (source / "config.json").write_bytes(package.canonical(config))
+    result = app.run_job(request(source, tmp_path / "out"))
+    root = Path(result["artifact"]["path"])
+    assert (root / "policy/config.json").read_bytes() == (source / "config.json").read_bytes()
+    assert result["report"]["prediction_horizon"] == 8
+    assert result["report"]["execution_horizon"] == 3
+    assert result["report"]["drift_from_fp32"][0]["raw"]["coordinates"] == 48
+    assert result["report"]["drift_from_fp32"][0]["raw"]["rmse"] == (0.25**2 / 48) ** 0.5

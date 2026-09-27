@@ -92,6 +92,11 @@ def application(tmp_path):
         policy = root / "checkpoint/pretrained_model"
         policy.mkdir(parents=True)
         (policy / "model.safetensors").write_bytes(b"protocol fixture; no actual model")
+        (policy / "config.json").write_text(
+            json.dumps(
+                {"chunk_size": 100, "n_action_steps": 100, "n_obs_steps": 1, "use_vae": True}
+            )
+        )
         (root / "checkpoint/manifest.json").write_text(json.dumps({"step": 1}))
         metadata = {
             "architecture": "act",
@@ -264,3 +269,17 @@ def test_act_training_cannot_start_an_unsupported_gguf_workflow(application):
     )
     assert response.status_code == 422 and "GGUF workflow" in response.text
     assert len(client.get(f"/api/v1/projects/{pid}/jobs").json()) == 1
+
+
+def test_changed_source_cannot_omit_temporal_export_claims(application):
+    _, client, pid, artifact, root = application
+    config = root / "checkpoint/pretrained_model/config.json"
+    config.write_text(
+        json.dumps({"chunk_size": 8, "n_action_steps": 3, "n_obs_steps": 1, "use_vae": True})
+    )
+    response = submit(client, pid, artifact)
+    assert response.status_code == 202
+    record = wait(client, response.json()["id"])
+    assert record["status"] == "failed"
+    assert "temporal claims" in record["error"]
+    assert not record.get("result")
