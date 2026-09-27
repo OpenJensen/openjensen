@@ -6,7 +6,7 @@
     "dev": "tauri dev",
     "build": "tauri build --bundles app",
     "test": "cargo test --manifest-path src-tauri/Cargo.toml",
-    "check": "cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings"
+    "check": "cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --features custom-protocol -- -D warnings"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.12.0"

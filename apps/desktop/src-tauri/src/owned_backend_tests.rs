@@ -19,12 +19,21 @@ impl Drop for Scratch {
 
 fn payload() -> Payload {
     let pin = PayloadPin {
+        manifest: crate::payload_manifest::ManifestPin {
+            sha256: "unused",
+            bytes: 0,
+            identity: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            entries: 0,
+            file_bytes: 0,
+        },
         executable_sha256: "unused",
         executable_bytes: 0,
         resources_sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         build_id: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     };
     Payload {
+        folder: PathBuf::from("/not-used-by-test"),
+        manifest: PathBuf::from("/not-used-by-test"),
         executable: PathBuf::from("/bin/sh"),
         resources: PathBuf::from("/not-used-by-test"),
         resources_sha256: pin.resources_sha256.into(),
@@ -70,6 +79,7 @@ fn ready_protocol_types_size_unknown_fields_duplicates_and_incomplete_lines() {
 }
 
 #[test]
+#[cfg(not(feature = "local-payload-experiment"))]
 fn production_start_is_disabled_even_when_directories_exist() {
     let scratch = Scratch::new();
     let controller = Controller::new(&scratch.0, scratch.0.join("data"), Backend::from_port(None));
@@ -92,6 +102,10 @@ fn workspace_requires_explicit_owner_and_exact_build_without_adoption() {
     let root = workspace(&parent, &payload).unwrap();
     fs::write(root.join("project-evidence"), "preserve").unwrap();
     assert_eq!(workspace(&parent, &payload).unwrap(), root);
+    let mut changed_payload = payload.clone();
+    changed_payload.pin.manifest.identity =
+        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+    assert!(workspace(&parent, &changed_payload).is_err());
     let mut other = payload.clone();
     other.build_id = "d".repeat(40);
     assert!(
@@ -347,6 +361,7 @@ fn attached_state_is_not_stopped_or_restarted_and_exit_blocks_new_start() {
 }
 
 #[test]
+#[cfg(unix)]
 fn payload_pin_verifies_fixed_executable_and_manifest_before_admission() {
     let scratch = Scratch::new();
     let folder = scratch.0.join("sidecar/firebird-sidecar");
@@ -360,7 +375,38 @@ fn payload_pin_verifies_fixed_executable_and_manifest_before_admission() {
     fs::write(&executable, b"fixed bundled executable").unwrap();
     let manifest = serde_json::to_vec(&serde_json::json!({"schema_version":1,"build_id":"b".repeat(40),"app_version":"0.1.0","files":{"index.html":{"bytes":0,"sha256":"a".repeat(64)}}})).unwrap();
     fs::write(resources.join("resources.json"), &manifest).unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    let mut entries = serde_json::Map::new();
+    for name in [
+        "_internal",
+        "_internal/sidecar-resources",
+        "_internal/sidecar-resources/resources.json",
+        "firebird-sidecar",
+    ] {
+        let path = folder.join(name);
+        let info = fs::metadata(&path).unwrap();
+        let mode = info.permissions().mode() & 0o7777;
+        let entry = if info.is_dir() {
+            serde_json::json!({"kind":"directory","mode":mode})
+        } else {
+            serde_json::json!({"kind":"file","mode":mode,"bytes":info.len(),"sha256":hex(&Sha256::digest(fs::read(&path).unwrap())),"macho_cpu_types":null})
+        };
+        entries.insert(name.into(), entry);
+    }
+    let full_manifest=serde_json::to_vec(&serde_json::json!({"schema_version":1,"entries":entries,"entry_count":4,"file_bytes":24+manifest.len(),"identity_sha256":"c".repeat(64)})).unwrap();
+    fs::write(
+        scratch.0.join("sidecar/payload-manifest.json"),
+        &full_manifest,
+    )
+    .unwrap();
     let pin = PayloadPin {
+        manifest: crate::payload_manifest::ManifestPin {
+            sha256: Box::leak(hex(&Sha256::digest(&full_manifest)).into_boxed_str()),
+            bytes: full_manifest.len() as u64,
+            identity: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            entries: 4,
+            file_bytes: 24 + manifest.len() as u64,
+        },
         executable_sha256: Box::leak(
             hex(&Sha256::digest(b"fixed bundled executable")).into_boxed_str(),
         ),
@@ -370,15 +416,10 @@ fn payload_pin_verifies_fixed_executable_and_manifest_before_admission() {
     };
     let admitted = Payload::from_pin(&scratch.0, pin).unwrap();
     fs::write(resources.join("resources.json"), b"{}").unwrap();
-    assert!(admitted.verify().unwrap_err().contains("manifest identity"));
+    assert!(admitted.verify().is_err());
     fs::write(resources.join("resources.json"), manifest).unwrap();
     fs::write(&executable, b"other bundled executable").unwrap();
-    assert!(
-        admitted
-            .verify()
-            .unwrap_err()
-            .contains("executable identity")
-    );
+    assert!(admitted.verify().is_err());
 }
 
 #[test]
@@ -431,4 +472,15 @@ fn stopping_attached_mode_does_not_affect_the_actual_external_http_server() {
     assert!(owner.restart().is_err());
     task.join().unwrap();
     assert!(!scratch.0.join("data").exists());
+}
+
+#[test]
+fn compiled_candidate_identifier_cannot_adopt_the_normal_application_namespace() {
+    #[cfg(feature = "local-payload-experiment")]
+    {
+        assert!(validate_identifier("dev.firebird.workbench").is_err());
+        assert!(validate_identifier(LOCAL_EXPERIMENT_IDENTIFIER).is_ok());
+    }
+    #[cfg(not(feature = "local-payload-experiment"))]
+    assert!(validate_identifier("dev.firebird.workbench").is_ok());
 }

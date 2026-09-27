@@ -2,6 +2,7 @@
 
 mod connection;
 mod owned_backend;
+mod payload_manifest;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -126,6 +127,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             restart_owned
         ])
         .setup(move |app| {
+            owned_backend::validate_identifier(&app.config().identifier)
+                .map_err(std::io::Error::other)?;
             let owner = Arc::new(Controller::new(
                 &app.path().resource_dir()?,
                 app.path().app_local_data_dir()?,
