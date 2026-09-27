@@ -582,7 +582,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         job = await submission_lookup(execution.storage, project_id, operation, key)
         if job is None:
             raise HTTPException(
-                404, "No accepted submission found for this project, operation and key"
+                404,
+                "No accepted submission found for this project, operation and key",
+                headers={"Idempotency-Key": key, "Cache-Control": "no-store"},
             )
         response.headers["Idempotency-Key"] = key
         response.headers["Cache-Control"] = "no-store"

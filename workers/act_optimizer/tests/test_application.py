@@ -34,7 +34,10 @@ def stub_probes(monkeypatch):
 
     def probe(checkpoint, report, timeout, *, forbidden_sources=()):
         calls.append((checkpoint, timeout, forbidden_sources))
+        config = read_json(checkpoint / "config.json")
         return {
+            "prediction_horizon": config["chunk_size"],
+            "execution_horizon": config["n_action_steps"],
             "schema_version": 1,
             "device": "cpu",
             "dtype": "float32",
@@ -48,8 +51,8 @@ def stub_probes(monkeypatch):
                     "seed": seed,
                     "input_sha256": f"{seed:064x}",
                     "queue_and_reset_exact": True,
-                    "chunk": [[0.0] * 6 for _ in range(100)],
-                    "postprocessed": [[0.0] * 6 for _ in range(100)],
+                    "chunk": [[0.0] * 6 for _ in range(config["chunk_size"])],
+                    "postprocessed": [[0.0] * 6 for _ in range(config["chunk_size"])],
                 }
                 for seed in FIXTURE_SEEDS
             ],
@@ -265,3 +268,19 @@ def test_local_dataset_snapshot_is_not_relabelled_as_huggingface(
     with pytest.raises(ValueError, match="dataset lineage"):
         application.run_job(job(training_bundle, tmp_path / "export"))
     assert not stub_probes
+
+
+def test_changed_horizon_export_preserves_training_record(training_bundle, tmp_path, stub_probes):
+    from test_training_source import changed_temporal
+
+    changed_temporal(training_bundle)
+    before = tree(training_bundle)
+    response = application.run_job(job(training_bundle, tmp_path / "operation"))
+    output = Path(response["artifact"]["path"])
+    raw = (training_bundle / "checkpoint/temporal-contract.json").read_bytes()
+    assert (output / "policy/temporal-contract.json").read_bytes() == raw
+    assert response["report"]["prediction_horizon"] == 8
+    assert response["report"]["execution_horizon"] == 3
+    assert response["report"]["temporal_contract_sha256"] == hashlib.sha256(raw).hexdigest()
+    assert read_json(output / "policy/parity.json")["action_steps"] == 8
+    assert tree(training_bundle) == before

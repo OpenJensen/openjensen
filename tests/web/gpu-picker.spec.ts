@@ -190,10 +190,14 @@ async function trainingAdmission(page: Page, { format = 'lerobot_v3', dimensions
     const path = new URL(request.url()).pathname;
     if (request.method() === 'POST' && path === '/api/v1/projects/admission/policy-jobs') {
       state.submitted.push(request.postDataJSON());
-      await route.fulfill({ status: 422, json: { detail: 'Recorded fixture request; no worker is launched.' } });
+      await route.fulfill({ status: 422, json: { detail: 'Recorded fixture request; no worker is launched.' }, headers: { 'Idempotency-Key': request.headers()['idempotency-key'], 'Cache-Control': 'no-store' } });
       return;
     }
     if (request.method() !== 'GET') throw new Error(`Unexpected write ${path}`);
+    if (path.startsWith('/api/v1/projects/admission/submissions/')) {
+      await route.fulfill({ status: 404, json: { detail: 'No saved fixture request.' }, headers: { 'Idempotency-Key': decodeURIComponent(path.split('/').at(-1)!), 'Cache-Control': 'no-store' } });
+      return;
+    }
     if (path === '/api/v1/projects') {
       state.projectReads += 1;
       await route.fulfill({ status: state.projectStatus, json: state.projectStatus === 200 ? state.projects : { detail: 'Project list temporarily unavailable' } });

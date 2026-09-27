@@ -64,9 +64,12 @@ def processors(root, config):
 
 
 def evaluate(policy, root, config, torch):
+    from firebird_act.probe import check_queue
+
     pre, post = processors(root, config)
     camera = next(key for key in config.input_features if key.startswith("observation.images."))
     shape = config.input_features[camera].shape
+    prediction, execution = config.chunk_size, config.n_action_steps
     rows = []
     for seed in SEEDS:
         generator = torch.Generator(device="cpu").manual_seed(seed)
@@ -79,17 +82,12 @@ def evaluate(policy, root, config, torch):
         with torch.inference_mode():
             batch = pre({camera: image.float() / 255, "observation.state": state})
             raw = policy.predict_action_chunk(batch)
-            if tuple(raw.shape) != (1, 100, 6) or not torch.isfinite(raw).all():
+            if tuple(raw.shape) != (1, prediction, 6) or not torch.isfinite(raw).all():
                 raise ValueError("Expected a finite complete ACT chunk")
-            processed = torch.stack([post(raw[:, i, :]) for i in range(100)], dim=1)
-            if tuple(processed.shape) != (1, 100, 6) or not torch.isfinite(processed).all():
+            processed = torch.stack([post(raw[:, i, :]) for i in range(prediction)], dim=1)
+            if tuple(processed.shape) != (1, prediction, 6) or not torch.isfinite(processed).all():
                 raise ValueError("Expected finite postprocessed ACT actions")
-            policy.reset()
-            queued = torch.stack([policy.select_action(batch) for _ in range(100)], dim=1)
-            policy.reset()
-            first = policy.select_action(batch)
-            if not torch.equal(queued, raw) or not torch.equal(first, raw[:, 0, :]):
-                raise ValueError("ACT queue/reset differs from its full chunk")
+            check_queue(policy, batch, raw, execution, torch)
         rows.append(
             {
                 "seed": seed,
@@ -104,7 +102,7 @@ def evaluate(policy, root, config, torch):
 
 
 def convert(source, destination, bits):
-    from firebird_act.bundle import tensor_header, validate_processors
+    from firebird_act.bundle import temporal_files, tensor_header, validate_processors
     from safetensors.torch import load_file
 
     from . import Recipe, quantize
@@ -133,7 +131,7 @@ def convert(source, destination, bits):
     if candidate.audit["quantized_elements"] <= 0:
         raise ValueError("No weights were packed")
     raw_config = read_json(source / "config.json")
-    names = BASE | validate_processors(source, raw_config)
+    names = BASE | validate_processors(source, raw_config) | temporal_files(source, raw_config)
     destination.mkdir()
     for name in sorted(names):
         write_new(destination / name, read(source / name))

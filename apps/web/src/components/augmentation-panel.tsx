@@ -1,11 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, augmentationClipUrl, augmentationDownloadUrl, isActive, isAugmentationJob, type AugmentationJob, type AugmentationRequest, type Job } from '@/lib/api';
 import { Icon } from '@/components/icon';
 import { WorkflowIntegration } from '@/components/workflow-integration';
 import { isAugmentationSource, augmentationVideoCameras as videoCameras } from '@/lib/augmentation-source';
+import { useDurableSubmission } from '@/lib/durable-submission';
+import { augmentationAcknowledgement, validatedProjectHistory } from '@/lib/dataset-submission';
+import { DatasetSubmissionRecovery } from '@/components/dataset-submission-recovery';
 import './augmentation-panel.css';
 
 type Preset = 'lighting' | 'texture' | 'custom';
@@ -98,6 +101,19 @@ export function AugmentationPanel({ projectId, preferredDatasetId, onChooseDatas
   const [preset, setPreset] = useState<Preset>('lighting');
   const [prompt, setPrompt] = useState('');
   const [selectedRunId, setSelectedRunId] = useState('');
+  const submission = useDurableSubmission({ project: projectId, operation: 'dataset.augment' });
+  const selection = useRef({ project: projectId, generation: 0 });
+  if (selection.current.project !== projectId) selection.current = { project: projectId, generation: selection.current.generation + 1 };
+  function chooseRun(id: string) { selection.current.generation += 1; setSelectedRunId(id); }
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const validate = (value: unknown, body: unknown) => augmentationAcknowledgement(value, projectId, body);
+  function accept(job: Job | null, generation: number) {
+    if (!job) return;
+    if (mounted.current && selection.current.generation === generation) setSelectedRunId(job.id);
+    client.setQueryData<Job[]>(['jobs', job.project_id], previous => [job, ...(previous ?? []).filter(item => item.id !== job.id)]);
+    void client.invalidateQueries({ queryKey: ['jobs', job.project_id] });
+  }
   const options = useQuery({ queryKey: ['augmentation-options'], queryFn: api.augmentationOptions, enabled: !!projectId, retry: false });
   const jobs = useQuery({ queryKey: ['jobs', projectId], queryFn: () => api.jobs(projectId), enabled: !!projectId, retry: false,
     refetchInterval: query => query.state.data?.some(isActive) ? 1000 : 5000 });
@@ -119,22 +135,24 @@ export function AugmentationPanel({ projectId, preferredDatasetId, onChooseDatas
     : !duration.trim() || !Number.isFinite(Number(duration)) || Number(duration) < 1 || Number(duration) > maxDuration
       ? `Clip duration must be between 1 and ${maxDuration} seconds.` : null;
   const blocked = !projectId ? 'Create or select a project to begin.'
+    : !submission.hydrated ? 'Checking saved requests…'
+    : !submission.available ? 'Restore browser recovery storage before submitting.'
+    : submission.attempt ? 'Verify the saved request before starting another augmentation.'
+    : submission.busy ? 'Checking the request…'
     : options.isPending || jobs.isPending ? 'Loading augmentation options…'
     : options.isError || jobs.isError ? 'Load the augmentation options and datasets to continue.'
     : !options.data?.configured ? 'Set up Gemini on the application server to generate clips.'
     : !dataset ? 'Inspect a Hugging Face dataset with a video camera first.'
     : episodeIssue ?? timingIssue ?? (preset === 'custom' && !prompt.trim() ? 'Describe the edit you want to make.' : null);
   const create = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       if (blocked || !dataset) throw new Error(blocked ?? 'Choose a dataset.');
       const body: AugmentationRequest = { operation: 'dataset.augment', source_job_id: dataset.id,
         episode_indices: indices, camera_key: camera, preset, prompt: prompt.trim(), start_seconds: Number(start), duration_seconds: Number(duration) };
-      return api.augment(projectId, body);
-    },
-    onSuccess: job => {
-      setSelectedRunId(job.id);
-      client.setQueryData<Job[]>(['jobs', projectId], previous => [job, ...(previous ?? []).filter(item => item.id !== job.id)]);
-      void client.invalidateQueries({ queryKey: ['jobs', projectId] });
+      const generation = selection.current.generation;
+      const job = await submission.submit(body, validate);
+      accept(job, generation);
+      return job;
     },
   });
   const runs = (jobs.data ?? []).filter(isAugmentationJob).sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -202,13 +220,19 @@ export function AugmentationPanel({ projectId, preferredDatasetId, onChooseDatas
         <div className="augmentation-disclosure"><Icon name="external" size={16} /><p>{options.data?.auth_mode === 'google_cloud' ? `Clips and prompts are sent to Google Cloud. Charges apply to ${options.data.google_cloud_project}.` : 'Clips and prompts are sent to Google’s Gemini API. Charges may apply.'}</p></div>
         {options.data?.configured && options.data.auth_message && <details className="augmentation-preset-prompt"><summary>Connection details</summary><p>{options.data.auth_message}</p></details>}
         {create.error && <p className="error-notice" role="alert">{create.error.message}</p>}
+        <DatasetSubmissionRecovery submission={submission} onReconcile={async () => { const generation = selection.current.generation; accept(await submission.reconcile(validate), generation); }}
+          onRetry={async () => { const generation = selection.current.generation; accept(await submission.retry(validate), generation); }} onReviewHistory={async () => {
+            const fresh = validatedProjectHistory(await api.jobs(projectId), projectId);
+            client.setQueryData(['jobs', projectId], fresh);
+            return true;
+          }} />
         <div className="augmentation-submit-row"><p className="augmentation-hint" role="status">{blocked ?? `${indices.length} clip${indices.length === 1 ? '' : 's'} · ${duration} seconds each · ${cameraLabel(camera)} camera`}</p><button type="submit" className="primary-button" disabled={!!blocked || create.isPending}>{create.isPending ? 'Starting augmentation…' : 'Generate augmented clips'}<Icon name="spark" size={16} /></button></div>
       </section>
     </form>
     <section className="augmentation-history" aria-labelledby="augmentation-history-title">
       <div className="augmentation-history-heading"><div><h2 id="augmentation-history-title">History</h2></div>{!!runs.length && <span>{runs.length} run{runs.length === 1 ? '' : 's'}</span>}</div>
-      {!runs.length ? <div className="augmentation-history-empty"><Icon name="layers" size={21} /><p>No augmentations yet.</p></div> : <>
-        {runs.length > 1 && <div className="augmentation-run-choices" role="group" aria-label="Augmentation runs">{runs.map((job, index) => <button type="button" key={job.id} aria-label={`View run ${runs.length - index}`} aria-pressed={selectedRun?.id === job.id} onClick={() => setSelectedRunId(job.id)}><span className="augmentation-run-choice-title"><strong>Run {runs.length - index} · {presetDetails[job.request.preset as Preset]?.label ?? 'Augmentation'}</strong><RunStatus job={job} /></span><span>{dateLabel(job.created_at)}</span></button>)}</div>}
+      {jobs.isError ? <p className="augmentation-hint" role="status">History could not be refreshed. Saved requests still need verification.</p> : jobs.isPending ? <p className="augmentation-hint" role="status">Loading augmentation history…</p> : !runs.length ? <div className="augmentation-history-empty"><Icon name="layers" size={21} /><p>No augmentations yet.</p></div> : <>
+        {runs.length > 1 && <div className="augmentation-run-choices" role="group" aria-label="Augmentation runs">{runs.map((job, index) => <button type="button" key={job.id} aria-label={`View run ${runs.length - index}`} aria-pressed={selectedRun?.id === job.id} onClick={() => chooseRun(job.id)}><span className="augmentation-run-choice-title"><strong>Run {runs.length - index} · {presetDetails[job.request.preset as Preset]?.label ?? 'Augmentation'}</strong><RunStatus job={job} /></span><span>{dateLabel(job.created_at)}</span></button>)}</div>}
         {selectedRun && <AugmentationRun key={selectedRun.id} job={selectedRun} projectId={projectId} />}
       </>}
     </section>

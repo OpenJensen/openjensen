@@ -528,3 +528,29 @@ def test_api_corrupt_binding_returns_503_for_retry_and_lookup(tmp_path, monkeypa
         assert "no new work" in retry.json()["detail"]
         assert len(client.get(f"/api/v1/projects/{project}/jobs").json()) == 1
     assert launched == [first.json()["id"]]
+
+
+def test_unused_key_lookup_exposes_contract_without_creating_or_dispatching(tmp_path, monkeypatch):
+    launched = []
+
+    async def record(_self, job_id):
+        launched.append(job_id)
+
+    monkeypatch.setattr(Execution, "run", record)
+    with TestClient(create_app(Settings(data_dir=tmp_path))) as client:
+        project = client.post("/api/v1/projects", json={"name": "Generated"}).json()["id"]
+        url = f"/api/v1/projects/{project}/submissions/browser-key?operation=dataset.inspect"
+        missing = client.get(url, headers={"Origin": "http://localhost:3000"})
+        assert missing.status_code == 404
+        assert missing.headers.get("idempotency-key") == "browser-key"
+        assert missing.headers.get("cache-control") == "no-store"
+        assert "idempotency-key" in missing.headers.get("access-control-expose-headers", "").lower()
+        assert client.get(f"/api/v1/projects/{project}/jobs").json() == []
+        assert launched == []
+        # Generic missing project/route responses cannot impersonate this capability probe.
+        foreign = client.get(url.replace(project, "missing-project"))
+        assert foreign.status_code == 404
+        assert "idempotency-key" not in foreign.headers
+        invalid = client.get(url.replace("dataset.inspect", "unknown"))
+        assert invalid.status_code == 422
+        assert "idempotency-key" not in invalid.headers

@@ -131,6 +131,8 @@ def source_info(artifact, data_dir):
                 if not isinstance(state_file, str) or state_file not in files or "/" in state_file:
                     raise ValueError("ACT processor state must be within the packed policy")
                 required.add(state_file)
+    if "temporal-contract.json" in files:
+        required.add("temporal-contract.json")
     if set(files) != required:
         raise ValueError("Packed replay cannot contain floating masters or extra policy files")
     encoding = strict_json(model / "encoding.json", JSON_LIMIT)
@@ -177,12 +179,13 @@ def source_info(artifact, data_dir):
     for name, value in {
         "type": "act",
         "use_vae": False,
-        "chunk_size": 100,
-        "n_action_steps": 100,
     }.items():
-        equal(
-            config.get(name), value, "Replay requires the reviewed ACT100 inference configuration"
-        )
+        equal(config.get(name), value, "Replay requires the reviewed ACT inference configuration")
+    from .native_quantization import temporal_claims, temporal_info
+
+    temporal = temporal_info(config, model, files)
+    for key, value in temporal_claims(metadata, temporal).items():
+        equal(metadata.get(key), value, "Packed temporal metadata differs from config")
     features = config.get("input_features")
     outputs = config.get("output_features")
     if not isinstance(features, dict) or not isinstance(outputs, dict):
@@ -210,6 +213,7 @@ def source_info(artifact, data_dir):
         "outer": outer,
         "camera": cameras[0],
         "image_shape": shape,
+        **temporal,
     }
 
 
@@ -535,11 +539,11 @@ def predictions(value, admitted, doc):
         }.items():
             equal(row[name], item, "Replay predictions differ from exact selected observation")
         actions = row["actions"]
-        if not isinstance(actions, list) or len(actions) != 100:
-            raise ValueError("Replay requires full100x6 actions")
+        if not isinstance(actions, list) or len(actions) != admitted.get("prediction_horizon", 100):
+            raise ValueError("Replay requires full prediction-horizon x 6 actions")
         for action in actions:
             if not isinstance(action, list) or len(action) != 6:
-                raise ValueError("Replay requires full100x6 actions")
+                raise ValueError("Replay requires full prediction-horizon x 6 actions")
             for coordinate in action:
                 number(coordinate)
         if not isinstance(row["requests"], list) or len(row["requests"]) != 2:
@@ -619,7 +623,7 @@ def check_result(response, job, source, admitted, data, doc, corpus_files, desti
         "versions": value["versions"],
         "observation_source": data["source"],
         "observations": len(doc["samples"]),
-        "action_shape": [100, 6],
+        "action_shape": [admitted.get("prediction_horizon", 100), 6],
         "reset_repeat_exact": True,
         "coordinate_semantics": data["semantics"],
         "server_closed": True,

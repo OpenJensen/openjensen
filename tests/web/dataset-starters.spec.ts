@@ -15,6 +15,10 @@ test('every example fills its pinned source without starting an inspection', asy
     writes.push(route.request().postDataJSON());
     return route.fulfill({ status: 503, json: { detail: 'Fixture stops after validating the submitted source.' } });
   });
+  await page.route('**/api/v1/projects/starter-test/submissions/*?operation=dataset.inspect', route => {
+    const key = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-1)!);
+    return route.fulfill({ status: 404, headers: { 'Idempotency-Key': key, 'Cache-Control': 'no-store' }, json: { detail: 'No accepted submission found for this project, operation and key' } });
+  });
   const gallery = await openExamples(page);
   await expect(gallery.locator('.starter-card')).toHaveCount(2);
   for (const starter of datasetStarters) {

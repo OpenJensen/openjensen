@@ -36,6 +36,22 @@ def runtime_versions() -> dict[str, str]:
     return versions
 
 
+def check_queue(policy, batch, chunk, execution, torch):
+    """Check two real queue refills, the execution prefix and a subsequent reset."""
+    from unittest.mock import patch
+
+    policy.reset()
+    with patch.object(policy, "predict_action_chunk", wraps=policy.predict_action_chunk) as predict:
+        queued = torch.stack([policy.select_action(batch) for _ in range(2 * execution + 1)])
+        expected = torch.stack([chunk[:, i % execution] for i in range(2 * execution + 1)])
+        if predict.call_count != 3 or not torch.equal(queued, expected):
+            raise ValueError("ACT queue does not refill at its saved execution horizon")
+        policy.reset()
+        first = policy.select_action(batch)
+        if predict.call_count != 4 or not torch.equal(first, chunk[:, 0]):
+            raise ValueError("ACT reset did not discard its queued actions")
+
+
 def infer(checkpoint: Path) -> dict[str, Any]:
     """Strictly load one checkpoint without another policy process or network."""
     os.environ.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1", CUDA_VISIBLE_DEVICES="")
@@ -110,6 +126,7 @@ def infer(checkpoint: Path) -> dict[str, Any]:
     )
     camera = next(k for k in raw_config["input_features"] if k.startswith("observation.images."))
     shape = raw_config["input_features"][camera]["shape"]
+    prediction, execution = config.chunk_size, config.n_action_steps
     fixtures = []
     for seed in FIXTURE_SEEDS:
         generator = torch.Generator(device="cpu").manual_seed(seed)
@@ -124,20 +141,12 @@ def infer(checkpoint: Path) -> dict[str, Any]:
         with torch.inference_mode():
             batch = pre({camera: rgb.float() / 255, "observation.state": observed_state})
             chunk = policy.predict_action_chunk(batch)
-            if tuple(chunk.shape) != (1, 100, 6) or not torch.isfinite(chunk).all():
-                raise ValueError("ACT output must be finite [1,100,6]")
-            processed = torch.stack([post(chunk[:, i, :]) for i in range(100)])
-            if tuple(processed.shape) != (100, 1, 6) or not torch.isfinite(processed).all():
-                raise ValueError("ACT postprocessed output must be finite [100,1,6]")
-            # Exercise actual queue semantics and ensure reset prevents history leakage.
-            policy.reset()
-            queued = torch.stack([policy.select_action(batch) for _ in range(100)])
-            policy.reset()
-            reset_first = policy.select_action(batch)
-            if not torch.equal(queued[:, 0, :], chunk[0]) or not torch.equal(
-                reset_first, chunk[:, 0]
-            ):
-                raise ValueError("ACT action queue/reset differs from full chunk")
+            if tuple(chunk.shape) != (1, prediction, 6) or not torch.isfinite(chunk).all():
+                raise ValueError("ACT output must be finite [1,prediction,6]")
+            processed = torch.stack([post(chunk[:, i, :]) for i in range(prediction)])
+            if tuple(processed.shape) != (prediction, 1, 6) or not torch.isfinite(processed).all():
+                raise ValueError("ACT postprocessed output must be finite [prediction,1,6]")
+            check_queue(policy, batch, chunk, execution, torch)
             fixtures.append(
                 {
                     "seed": seed,
@@ -158,6 +167,8 @@ def infer(checkpoint: Path) -> dict[str, Any]:
         "cpu_threads": 1,
         "network_disabled": True,
         "checkpoint_files": before,
+        "prediction_horizon": prediction,
+        "execution_horizon": execution,
         "fixtures": fixtures,
         "fixture_scope": "synthetic inference parity only; not calibration or task success",
     }

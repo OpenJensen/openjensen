@@ -518,3 +518,62 @@ def test_malformed_native_step_document_rejected_after_rehash(
     resign(training_bundle)
     with pytest.raises(ValueError):
         admit(training_bundle)
+
+
+def changed_temporal(root):
+    policy = root / "checkpoint/pretrained_model"
+    edit(policy / "config.json", "chunk_size", 8)
+    edit(policy / "config.json", "n_action_steps", 3)
+    recipe_path = root / "checkpoint/recipe.json"
+    recipe = json.loads(recipe_path.read_text())
+    recipe.pop("chunk_size")
+    recipe.update(prediction_horizon=8, execution_horizon=3)
+    write(recipe_path, recipe)
+    # Generated provenance is verified structurally here; native proof is separate.
+    record = {
+        "schema_version": 1,
+        "family": "act",
+        "action_fps": 20.0,
+        "policy_fields": {"chunk_size": 8, "n_action_steps": 3, "n_obs_steps": 1},
+        "action_delta_indices": list(range(8)),
+        "observation_delta_indices": None,
+        "action_delta_timestamps": [i / 20.0 for i in range(8)],
+        "observation_delta_timestamps": None,
+        "prediction_horizon": 8,
+        "execution_horizon": 3,
+        "observation_history": 1,
+        "frame_stride": 1,
+    }
+    write(root / "checkpoint/temporal-contract.json", record)
+    resign(root)
+    return record
+
+
+def test_changed_horizons_bind_original_temporal_record(training_bundle):
+    changed_temporal(training_bundle)
+    before = training_source._tree(training_bundle)
+    accepted = admit(training_bundle)
+    assert accepted.temporal_source == training_bundle / "checkpoint/temporal-contract.json"
+    assert accepted.temporal_sha256 == digest(accepted.temporal_source)
+    assert training_source._tree(training_bundle) == before
+
+
+@pytest.mark.parametrize("change", ["missing", "fps", "execution", "bool", "sampling", "recipe"])
+def test_changed_horizons_reject_rehashed_temporal_mismatch(training_bundle, change):
+    changed_temporal(training_bundle)
+    path = training_bundle / "checkpoint/temporal-contract.json"
+    if change == "missing":
+        path.unlink()
+    elif change == "recipe":
+        edit(training_bundle / "checkpoint/recipe.json", "execution_horizon", 4)
+    else:
+        key, value = {
+            "fps": ("action_fps", 0),
+            "execution": ("execution_horizon", 4),
+            "bool": ("schema_version", True),
+            "sampling": ("action_delta_timestamps", [0.0] * 8),
+        }[change]
+        edit(path, key, value)
+    resign(training_bundle)
+    with pytest.raises(ValueError):
+        admit(training_bundle)

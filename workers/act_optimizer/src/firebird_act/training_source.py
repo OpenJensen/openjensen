@@ -17,9 +17,12 @@ from .bundle import (
     read_json,
     removal_keys,
     safe_file,
+    temporal_dimensions,
+    temporal_files,
     tensor_header,
     validate_config,
     validate_processors,
+    validate_temporal_contract,
 )
 
 TRAINING_REVISION = "e595b7902714ba51f91e47523f66f89c5181b649"
@@ -53,6 +56,8 @@ class ActTrainingSource:
     dataset_revision: str
     camera: str
     source_files: tuple[tuple[str, str, int], ...]
+    temporal_source: Path | None = None
+    temporal_sha256: str | None = None
 
     def receipt(self) -> dict[str, Any]:
         return {
@@ -72,6 +77,7 @@ class ActTrainingSource:
             "source_files": {
                 name: {"sha256": digest, "bytes": size} for name, digest, size in self.source_files
             },
+            "temporal_contract_sha256": self.temporal_sha256,
             "runtime_compatibility_verified": False,
             "export_verified": False,
             "task_success": None,
@@ -247,7 +253,12 @@ def admit_training_source(
     source = checkpoint / "pretrained_model"
     config = read_json(source / "config.json")
     validate_config(config, source=True)
-    names = CORE_FILES | validate_processors(source, config) | {"train_config.json"}
+    names = (
+        CORE_FILES
+        | validate_processors(source, config)
+        | temporal_files(source, config)
+        | {"train_config.json"}
+    )
     read_json(source / "train_config.json")
     selected = inventory(source)
     if set(selected) != names:
@@ -258,8 +269,33 @@ def admit_training_source(
     camera = next(key for key in config["input_features"] if key.startswith("observation.images."))
     if recipe.get("camera_keys") != [camera] or metadata.get("camera_keys") != [camera]:
         raise ValueError("Saved ACT camera lineage differs from its policy")
-    if recipe.get("chunk_size", 100) != config["chunk_size"] or metadata.get("action_dim") != 6:
+    dimensions = temporal_dimensions(config)
+    prediction = recipe.get("prediction_horizon", recipe.get("chunk_size", 100))
+    execution = recipe.get("execution_horizon", prediction)
+    if (
+        type(prediction) is not int
+        or type(execution) is not int
+        or prediction != dimensions["prediction_horizon"]
+        or execution != dimensions["execution_horizon"]
+        or metadata.get("action_dim") != 6
+        or ("chunk_size" in recipe and {"prediction_horizon", "execution_horizon"} & recipe.keys())
+    ):
         raise ValueError("Saved ACT action/chunk lineage differs from its policy")
+    for key in ("observation_history", "frame_stride"):
+        if key in recipe and (type(recipe[key]) is not int or recipe[key] != 1):
+            raise ValueError("Saved ACT sampling recipe differs from supported configuration")
+    temporal_source = checkpoint / "temporal-contract.json"
+    temporal_sha = None
+    if os.path.lexists(temporal_source):
+        raw_temporal = safe_file(temporal_source, JSON_LIMIT)
+        validate_temporal_contract(config, decode(raw_temporal))
+        temporal_sha = hashlib.sha256(raw_temporal).hexdigest()
+        if inner_files.get("temporal-contract.json") != (temporal_sha, len(raw_temporal)):
+            raise ValueError("Temporal contract differs from the checkpoint manifest")
+    elif {"prediction_horizon", "execution_horizon"} & recipe.keys():
+        raise ValueError("New temporal recipes require their resolved training contract")
+    else:
+        temporal_source = None
     dataset = metadata.get("dataset")
     if (
         not isinstance(dataset, dict)
@@ -289,4 +325,6 @@ def admit_training_source(
         recipe["dataset_revision"],
         camera,
         tuple((name, item["sha256"], item["bytes"]) for name, item in sorted(selected.items())),
+        temporal_source,
+        temporal_sha,
     )

@@ -37,8 +37,13 @@ function resultFor(body: Record<string, any>) {
   };
 }
 
-async function mockWorkspace(page: Page, config: { configured?: boolean; empty?: boolean; complete?: boolean; failFirst?: boolean; cloud?: boolean; projectsReady?: Promise<void>; jobsReady?: Promise<void>; failProjects?: () => boolean } = {}) {
+async function mockWorkspace(page: Page, config: { configured?: boolean; empty?: boolean; complete?: boolean; failFirst?: boolean; cloud?: boolean; projectsReady?: Promise<void>; jobsReady?: Promise<void>; failProjects?: () => boolean; submissionMode?: 'lost-ack' | 'lost-before-commit' | 'unsupported' | 'wrong-ack' | 'rejected' | 'delayed-ack'; priorRuns?: boolean } = {}) {
+  let releaseAck!: () => void;
+  const ackReady = new Promise<void>(resolve => { releaseAck = resolve; });
   const submitted: Record<string, any>[] = [];
+  const keys: string[] = [];
+  const bindings = new Map<string, Record<string, any>>();
+  const lookups: string[] = [];
   const unexpected: string[] = [];
   const cancelled: string[] = [];
   const jobs: Record<string, any>[] = config.empty ? [] : [inspectedDataset(),
@@ -46,15 +51,34 @@ async function mockWorkspace(page: Page, config: { configured?: boolean; empty?:
     { ...inspectedDataset('image-only'), result: { ...inspectedDataset().result, features: { 'observation.images.wrist': { dtype: 'image', shape: [480, 640, 3] } } } },
     { ...inspectedDataset('local-inspection'), result: { ...inspectedDataset().result, source: 'local' } },
   ];
+  if (config.priorRuns) for (let i = 1; i <= 2; i++) {
+    const request = { operation: 'dataset.augment', source_job_id: 'inspected-video', episode_indices: [i], camera_key: camera,
+      preset: 'lighting', prompt: '', start_seconds: 0, duration_seconds: 5 };
+    jobs.unshift({ id: `previous-${i}`, project_id: projectId, kind: 'dataset.augment', status: 'succeeded',
+      request, created_at: `2026-09-26T1${i}:00:00Z`, updated_at: timestamp, result: resultFor(request) });
+  }
   let optionsAttempts = 0;
   // Intercept all application requests, including every write. The browser
   // suite cannot invoke a model or upload media to a real provider.
   await page.route('**/api/v1/**', async route => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
+    const submissionPath = `/api/v1/projects/${projectId}/submissions/`;
+    if (request.method() === 'GET' && path.startsWith(submissionPath)) {
+      const key = decodeURIComponent(path.slice(submissionPath.length));
+      lookups.push(key);
+      const headers = config.submissionMode === 'unsupported' ? {} : { 'Idempotency-Key': key, 'Cache-Control': 'no-store' };
+      await route.fulfill({ status: bindings.has(key) ? 200 : 404, headers,
+        json: bindings.get(key) ?? { detail: 'No accepted submission found for this project, operation and key' } });
+      return;
+    }
     if (request.method() === 'POST' && path === `/api/v1/projects/${projectId}/augmentations`) {
       const body = request.postDataJSON();
       submitted.push(body);
+      const key = request.headers()['idempotency-key'];
+      keys.push(key);
+      if (submitted.length === 1 && config.submissionMode === 'lost-before-commit') { await route.abort('connectionfailed'); return; }
+      if (submitted.length === 1 && config.submissionMode === 'rejected') { await route.fulfill({ status: 422, json: { detail: 'Synthetic recipe rejection before admission.' } }); return; }
       const job = {
         id: `augmentation-${submitted.length}`, project_id: projectId, kind: 'dataset.augment',
         request: body, status: config.complete ? 'succeeded' : 'running', stage: 'generating_clips',
@@ -62,7 +86,10 @@ async function mockWorkspace(page: Page, config: { configured?: boolean; empty?:
         result: config.complete ? resultFor(body) : null,
       };
       jobs.unshift(job);
-      await route.fulfill({ status: 202, json: job });
+      bindings.set(key, job);
+      if (submitted.length === 1 && config.submissionMode === 'lost-ack') { await route.abort('connectionfailed'); return; }
+      if (config.submissionMode === 'delayed-ack') await ackReady;
+      await route.fulfill({ status: 202, headers: { 'Idempotency-Key': key, 'Cache-Control': 'no-store' }, json: config.submissionMode === 'wrong-ack' ? { ...job, project_id: 'another-project' } : job });
       return;
     }
     if (request.method() === 'POST' && /^\/api\/v1\/jobs\/[^/]+\/cancel$/.test(path)) {
@@ -118,7 +145,7 @@ async function mockWorkspace(page: Page, config: { configured?: boolean; empty?:
   await page.getByRole('button', { name: 'Augmentation', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Augmentation', exact: true, level: 1 })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Generator', exact: true })).toContainText('Gemini Omni');
-  return { submitted, unexpected, jobs, cancelled, optionsAttempts: () => optionsAttempts };
+  return { submitted, unexpected, jobs, cancelled, keys, lookups, releaseAck, optionsAttempts: () => optionsAttempts };
 }
 
 async function noOverflow(page: Page) {
@@ -366,4 +393,89 @@ test('dataset handoff only offers supported video sources and preserves the sele
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0].source_job_id).toBe('second-video');
   expect(unexpected).toEqual([]);
+});
+
+
+test('lost augmentation acknowledgement recovers its original job by saved key after reload without another POST', async ({ page }) => {
+  const fixture = await mockWorkspace(page, { submissionMode: 'lost-ack', complete: true });
+  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
+  const recovery = page.getByRole('complementary', { name: 'Request recovery' });
+  await expect(recovery.getByRole('button', { name: 'Check saved request' })).toBeEnabled();
+  expect(fixture.submitted).toHaveLength(1);
+  expect(fixture.keys[0]).toMatch(/^[a-f0-9-]{36}$/);
+  await page.reload();
+  await page.getByRole('button', { name: 'Augmentation', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeDisabled();
+  await recovery.getByRole('button', { name: 'Check saved request' }).click();
+  await expect(recovery).toHaveCount(0);
+  await expect(page.getByLabel('Augmented episode 0', { exact: true })).toBeVisible();
+  expect(fixture.submitted).toHaveLength(1);
+  expect(fixture.lookups).toEqual([fixture.keys[0], fixture.keys[0]]);
+  expect(fixture.unexpected).toEqual([]);
+});
+
+test('a missing binding keeps new augmentation blocked and explicit retry preserves the original key and recipe', async ({ page }) => {
+  const fixture = await mockWorkspace(page, { submissionMode: 'lost-before-commit', complete: true });
+  await page.getByLabel('Additional instructions (optional)').fill('Original saved lighting');
+  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
+  const recovery = page.getByRole('complementary', { name: 'Request recovery' });
+  await expect(recovery.getByRole('button', { name: 'Check saved request' })).toBeEnabled();
+  await page.getByLabel('Additional instructions (optional)').fill('Edited form must not replace saved request');
+  await recovery.getByRole('button', { name: 'Check saved request' }).click();
+  await expect(recovery.getByRole('button', { name: 'Retry same request' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeDisabled();
+  expect(fixture.submitted).toHaveLength(1);
+  await recovery.getByRole('button', { name: 'Retry same request' }).click();
+  await expect(recovery).toHaveCount(0);
+  expect(fixture.keys).toEqual([fixture.keys[0], fixture.keys[0]]);
+  expect(fixture.submitted).toEqual([fixture.submitted[0], fixture.submitted[0]]);
+  expect(fixture.submitted[1].prompt).toBe('Original saved lighting');
+  expect(fixture.unexpected).toEqual([]);
+});
+
+test('an older server cannot receive an unprotected augmentation POST', async ({ page }) => {
+  const fixture = await mockWorkspace(page, { submissionMode: 'unsupported' });
+  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
+  const recovery = page.getByRole('complementary', { name: 'Request recovery' });
+  await expect(recovery).toContainText('did not verify durable submission support');
+  await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeDisabled();
+  await expect(recovery.getByRole('button', { name: 'Retry same request' })).toHaveCount(0);
+  expect(fixture.submitted).toEqual([]);
+});
+
+test('a wrong-project augmentation acknowledgement remains unresolved until scoped lookup verifies it', async ({ page }) => {
+  const fixture = await mockWorkspace(page, { submissionMode: 'wrong-ack' });
+  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
+  const recovery = page.getByRole('complementary', { name: 'Request recovery' });
+  await expect(recovery.getByRole('button', { name: 'Check saved request' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeDisabled();
+  await recovery.getByRole('button', { name: 'Check saved request' }).click();
+  await expect(recovery).toHaveCount(0);
+  expect(fixture.submitted).toHaveLength(1);
+});
+
+test('definitive initial recipe rejection allows correction with a new key', async ({ page }) => {
+  const fixture = await mockWorkspace(page, { submissionMode: 'rejected' });
+  const submit = page.getByRole('button', { name: 'Generate augmented clips', exact: true });
+  await submit.click();
+  await expect(page.getByText('Synthetic recipe rejection before admission.', { exact: true })).toBeVisible();
+  await expect(submit).toBeEnabled();
+  await page.getByLabel('Additional instructions (optional)').fill('Corrected recipe');
+  await submit.click();
+  await expect.poll(() => fixture.submitted.length).toBe(2);
+  expect(fixture.keys[1]).not.toBe(fixture.keys[0]);
+  expect(fixture.submitted[1].prompt).toBe('Corrected recipe');
+});
+
+
+test('late augmentation acknowledgement preserves a manually selected earlier result', async ({ page }) => {
+  const state = await mockWorkspace(page, { submissionMode: 'delayed-ack', priorRuns: true, complete: true });
+  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
+  await expect.poll(() => state.submitted.length).toBe(1);
+  await page.getByRole('button', { name: 'View run 1', exact: true }).click();
+  await expect(page.getByLabel('Augmented episode 1', { exact: true })).toBeVisible();
+  state.releaseAck();
+  await expect(page.getByRole('complementary', { name: 'Request recovery' })).toHaveCount(0);
+  await expect(page.getByLabel('Augmented episode 1', { exact: true })).toBeVisible();
+  expect(state.submitted).toHaveLength(1);
 });

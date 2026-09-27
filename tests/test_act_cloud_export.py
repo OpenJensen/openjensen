@@ -23,7 +23,6 @@ cloud = _cloud
 
 def prepare(application, cloud, tmp_path, monkeypatch):
     app, client, pid, source, root = application
-    (root / "checkpoint/pretrained_model/config.json").write_text("{}")
     (root / "checkpoint/recipe.json").write_text("{}")
     (root / "verification.json").write_text('{"reload_verified":true}')
     metadata = {

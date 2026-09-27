@@ -20,14 +20,21 @@ import { WorkflowChoiceGrid } from "@/components/workflow-choice-grid";
 import { GpuPicker } from "@/components/gpu-picker";
 import { TrainingMonitor } from "@/components/training-monitor";
 import { JobHistory, type JobHistoryEntry } from "@/components/job-history";
-import { startTraining } from "@/lib/training-submission";
-import { UncertainPolicyJob } from "@/lib/policy-job-mutation";
-import { storeAttempt, storedAttempt, type PolicyJobAttempt } from "@/lib/policy-job-attempt";
+import { trainingReceipt } from "@/lib/training-submission";
+import { submissionOf, useDurableSubmission } from "@/lib/durable-submission";
+import { type PolicyJobAttempt } from "@/lib/policy-job-attempt";
+import { checkpointTiming, defaultTemporal, restoreTemporal, temporalFamily, temporalIssue, temporalRecipe, type TemporalDrafts } from "@/lib/training-temporal";
 import "./training-panel.css";
 
 const steps = ["Dataset", "Model", "Compute"];
-class TrainingJournalUnavailable extends Error {
-  constructor() { super("Browser session storage is unavailable. Restore it and reload, then inspect recorded training jobs before submitting again."); }
+function validTrainingHistory(value: unknown, project: string): value is Job[] {
+  return Array.isArray(value) && value.every(item => item && typeof item === 'object' && !Array.isArray(item)
+    && typeof item.id === 'string' && item.id.length > 0 && item.project_id === project
+    && typeof item.kind === 'string' && item.kind.length > 0
+    && typeof item.status === 'string' && ['queued', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted'].includes(item.status)
+    && typeof item.created_at === 'string' && Number.isFinite(Date.parse(item.created_at))
+    && typeof item.updated_at === 'string' && Number.isFinite(Date.parse(item.updated_at))
+    && item.request && typeof item.request === 'object' && !Array.isArray(item.request));
 }
 type Recipe = {
   trainingSteps: number;
@@ -203,30 +210,31 @@ export function TrainingPanel({
   const [method, setMethod] = useState("");
   const [resumeId, setResumeId] = useState("");
   const [recipe, setRecipe] = useState(defaults);
+  const [temporalDrafts, setTemporalDrafts] = useState<TemporalDrafts>({});
   const [loaded, setLoaded] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState("");
-  const attemptKey = ["training-attempt", projectId];
-  const attempt = useQuery<PolicyJobAttempt>({ queryKey: attemptKey, queryFn: async () => null, enabled: false, initialData: null, gcTime: Infinity });
-  const [journalReady, setJournalReady] = useState(false);
-  const [journalError, setJournalError] = useState("");
-  const [historyReviewed, setHistoryReviewed] = useState(false);
-  const mounted = useRef(true), submitting = useRef(false), attemptVersion = useRef(0);
+  const submission = useDurableSubmission({ project: projectId, operation: 'policy.finetune' });
+  const attempt = submission.attempt;
+  const keyedAttempt = submissionOf(attempt);
+  const [historyReviewed, setHistoryReviewed] = useState<PolicyJobAttempt>(null);
+  const mounted = useRef(true), selectionGeneration = useRef(0), currentAttempt = useRef(attempt);
+  currentAttempt.current = attempt;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  useEffect(() => {
-    try {
-      if (!client.getQueryData<PolicyJobAttempt>(["training-attempt", projectId])) client.setQueryData<PolicyJobAttempt>(["training-attempt", projectId], storedAttempt("policy.finetune", projectId));
-      setJournalReady(true);
-    } catch { setJournalError(new TrainingJournalUnavailable().message); }
-  }, [client, projectId]);
-  function saveAttempt(value: PolicyJobAttempt) {
-    try { storeAttempt("policy.finetune", projectId, value); }
-    catch {
-      const error = new TrainingJournalUnavailable();
-      if (client.getQueryData<PolicyJobAttempt>(attemptKey)?.state === 'pending') client.setQueryData<PolicyJobAttempt>(attemptKey, (): PolicyJobAttempt => ({ state: 'uncertain', message: error.message }));
-      if (mounted.current) { setJournalReady(false); setJournalError(error.message); }
-      throw error;
-    }
-    client.setQueryData<PolicyJobAttempt>(attemptKey, value);
+  function chooseRun(id: string) {
+    selectionGeneration.current += 1;
+    setSelectedRunId(id);
+    setView("run");
+  }
+  function showHistory() { selectionGeneration.current += 1; setView("jobs"); }
+  function retainJob(job: Job, generation: number) {
+    client.setQueryData<Job[]>(["jobs", projectId], previous => [job, ...(previous ?? []).filter(item => item.id !== job.id)]);
+    if (mounted.current && generation === selectionGeneration.current) chooseRun(job.id);
+  }
+  const validateReceipt = (value: unknown, body: unknown) => trainingReceipt(value, projectId, body);
+  async function recoverSubmission(retry = false) {
+    const generation = selectionGeneration.current;
+    const job = await (retry ? submission.retry(validateReceipt) : submission.reconcile(validateReceipt));
+    if (job) retainJob(job, generation);
   }
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
@@ -242,7 +250,11 @@ export function TrainingPanel({
   });
   const jobs = useQuery({
     queryKey: ["jobs", projectId],
-    queryFn: () => api.jobs(projectId),
+    queryFn: async () => {
+      const history = await api.jobs(projectId);
+      if (!validTrainingHistory(history, projectId)) throw new Error('Training history is malformed or contains another project. Recovery remains paused.');
+      return history;
+    },
     enabled: active && !!projectId,
     retry: false,
     refetchInterval: (query) =>
@@ -255,10 +267,12 @@ export function TrainingPanel({
     refetchInterval: active ? 5000 : false,
   });
   async function reviewHistory() {
-    const version = attemptVersion.current;
-    const uncertain = client.getQueryData<PolicyJobAttempt>(attemptKey)?.state === 'uncertain';
+    const expected = attempt;
+    if (!expected || expected.state !== 'uncertain' || submissionOf(expected)) return;
+    // Cancel an older in-flight read so it cannot count as this explicit review.
+    await client.cancelQueries({ queryKey: ["jobs", projectId], exact: true });
     const result = await jobs.refetch();
-    if (mounted.current && uncertain && version === attemptVersion.current && result.isSuccess && !result.isError) setHistoryReviewed(true);
+    if (mounted.current && currentAttempt.current === expected && result.isSuccess && !result.isError && validTrainingHistory(result.data, projectId)) setHistoryReviewed(expected);
   }
   useEffect(() => {
     if (!projectId) { setLoaded(false); return; }
@@ -268,12 +282,14 @@ export function TrainingPanel({
       );
       const restored = savedRecipe(saved);
       setRecipe(restored);
+      setTemporalDrafts(restoreTemporal(saved.trainingTemporalByModel));
       setModelId(typeof saved.trainingModelId === "string" ? saved.trainingModelId : "");
       const batches = saved.modelBatchSizes && typeof saved.modelBatchSizes === "object"
         ? Object.fromEntries(Object.entries(saved.modelBatchSizes).filter((entry): entry is [string, number] => positiveInteger(entry[1]))) : {};
       setModelBatchSizes({ smolvla: restored.batchSize, ...batches });
     } catch {
       setRecipe(defaults);
+      setTemporalDrafts({});
     }
     setLoaded(true);
   }, [projectId]);
@@ -285,19 +301,19 @@ export function TrainingPanel({
       );
       localStorage.setItem(
         `firebird.workflow.${projectId}`,
-        JSON.stringify({ ...saved, ...recipe, modelBatchSizes, trainingModelId: modelId, checkpointEvery: undefined, trainingDefaultsVersion: 3 }),
+        JSON.stringify({ ...saved, ...recipe, trainingTemporalByModel: temporalDrafts, modelBatchSizes, trainingModelId: modelId, checkpointEvery: undefined, trainingDefaultsVersion: 3 }),
       );
     } catch {
       /* This session remains usable without browser storage. */
     }
-  }, [projectId, recipe, modelId, modelBatchSizes, loaded]);
+  }, [projectId, recipe, temporalDrafts, modelId, modelBatchSizes, loaded]);
   function update<K extends keyof Recipe>(key: K, value: Recipe[K]) {
     setRecipe((old) => ({ ...old, [key]: value }));
     if (key === "batchSize" && typeof value === "number" && modelId) setModelBatchSizes(previous => ({ ...previous, [modelId]: value }));
   }
 
-  const trainingRuns = (jobs.data ?? [])
-    .filter((job) => job.kind === "policy.finetune")
+  const trainingRuns = [...(jobs.data ?? []), ...(submission.receipt && !(jobs.data ?? []).some(job => job.id === submission.receipt?.id) ? [submission.receipt] : [])]
+    .filter((job) => job.project_id === projectId && job.kind === "policy.finetune")
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
   // Completed artifacts have reached the recipe's final step and cannot resume.
   const resumableRuns = trainingRuns.filter((job) =>
@@ -418,6 +434,13 @@ export function TrainingPanel({
         ? models.find((item) => item.id === "smolvla")
         : undefined))
     : models.find((item) => item.id === modelId);
+  const timingFamily = temporalFamily(model?.id);
+  const timing = timingFamily ? temporalDrafts[timingFamily] ?? defaultTemporal(timingFamily) : null;
+  const timingIssue = !resumeId && timing ? temporalIssue(timing) : null;
+  const effectiveTiming = timingFamily && timing ? timing.enabled ? timing : defaultTemporal(timingFamily) : null;
+  function updateTiming(change: Partial<NonNullable<typeof timing>>) {
+    if (timingFamily && timing) setTemporalDrafts(previous => ({ ...previous, [timingFamily]: { ...timing, ...change } }));
+  }
   const availableMethods = (options.data?.training_methods ?? []).filter(
     (item) => model?.methods.includes(item.id),
   );
@@ -505,9 +528,11 @@ export function TrainingPanel({
     positiveInteger(recipe.evalEvery);
   const blocked = !projectId
     ? "Select a project."
-    : !journalReady
+    : !submission.hydrated
+      ? "Loading saved request…"
+    : !submission.available
       ? "Browser recovery storage is unavailable. Restore it before starting a job."
-    : attempt.data
+    : attempt
       ? "Inspect the earlier training request before submitting another job."
     : !loaded || options.isPending || jobs.isPending
       ? "Loading…"
@@ -527,10 +552,13 @@ export function TrainingPanel({
                     ? modelIssue
                   : !runtime
                     ? "Choose an available GPU."
+                    : timingIssue
+                      ? timingIssue
                     : !resumeId && !recipeValid
                       ? "Check training settings."
                       : null;
   const mutation = useMutation({
+    retry: false,
     mutationFn: async () => {
       if (blocked || !runtime || !activeDataset || !model || !activeMethod)
         throw new Error(blocked ?? "Complete the training setup first.");
@@ -563,41 +591,16 @@ export function TrainingPanel({
           validation_fraction: recipe.validationFraction,
           eval_every: recipe.evalEvery,
           save_every: checkpointInterval,
+          ...temporalRecipe(timingFamily, timing),
         };
       }
-      if (submitting.current) throw new Error("A training request is already in progress.");
-      submitting.current = true;
-      attemptVersion.current += 1;
-      setHistoryReviewed(false);
-      try {
-        saveAttempt({ state: 'pending', message: 'Submitting one training request…' });
-        const job = await startTraining(projectId, body, options.data?.training_methods.map(item => item.id) ?? []);
-        // Keep the acknowledged result even if clearing recovery storage fails.
-        client.setQueryData<Job[]>(["jobs", projectId], previous => [job, ...(previous ?? []).filter(item => item.id !== job.id)]);
-        if (mounted.current) { setSelectedRunId(job.id); setView("run"); }
-        saveAttempt(null);
-        return job;
-      } catch (error) {
-        attemptVersion.current += 1;
-        if (mounted.current) setHistoryReviewed(false);
-        if (!(error instanceof TrainingJournalUnavailable)) {
-          try { saveAttempt(error instanceof UncertainPolicyJob ? { state: 'uncertain', message: error.message } : null); }
-          catch { /* Preserve the storage error and any acknowledged job. */ }
-        }
-        throw error;
-      } finally {
-        submitting.current = false;
-        void client.invalidateQueries({ queryKey: ["jobs", projectId] });
-      }
-    },
-    onSuccess: (job) => {
-      setSelectedRunId(job.id);
-      setView("run");
-      client.setQueryData<Job[]>(["jobs", projectId], (previous) => [
-        job,
-        ...(previous ?? []).filter((item) => item.id !== job.id),
-      ]);
-      void client.invalidateQueries({ queryKey: ["jobs", projectId] });
+      const generation = selectionGeneration.current;
+      setHistoryReviewed(null);
+      const job = await submission.submit(body, validateReceipt);
+      // The shared hook retains the verified ACK before fallible storage cleanup.
+      // A late completion may add history, but never replace a manual selection.
+      if (job) retainJob(job, generation);
+      return job;
     },
   });
   const selectedRun =
@@ -610,10 +613,10 @@ export function TrainingPanel({
     },
   });
   const submittedRun = mutation.data
-    ? trainingRuns.find((job) => job.id === mutation.data.id) ?? mutation.data
+    ? trainingRuns.find((job) => job.id === mutation.data?.id) ?? mutation.data
     : undefined;
   const runStarting = !!submittedRun && isActive(submittedRun);
-  const busy = mutation.isPending || runStarting || !!attempt.data;
+  const busy = mutation.isPending || submission.busy || runStarting || !!attempt;
   const startLabel = mutation.isPending ? "Starting…"
     : runStarting ? (submittedRun?.stage === "preparing" || submittedRun?.status === "queued" ? "Preparing GPU…" : "Training…")
     : resumeId ? "Resume fine-tuning" : "Start fine-tuning";
@@ -622,6 +625,7 @@ export function TrainingPanel({
     : (model?.label ?? "Choose a model");
 
   function openNew(dataset?: string) {
+    selectionGeneration.current += 1;
     if (dataset) setDatasetId(dataset);
     setResumeId("");
     mutation.reset();
@@ -637,13 +641,13 @@ export function TrainingPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startNew?.id]);
   useEffect(() => {
-    if (!startNew) setView("jobs");
+    if (!startNew) showHistory();
     // Sidebar navigation changes the view while preserving the creation draft.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showJobsRequest]);
 
   useEffect(() => {
-    if (preferredRunId) { setSelectedRunId(preferredRunId); setView("run"); }
+    if (preferredRunId) chooseRun(preferredRunId);
   }, [preferredRunId]);
 
   const historyEntries: JobHistoryEntry[] = trainingRuns.map(job => {
@@ -670,28 +674,39 @@ export function TrainingPanel({
 
   return (
     <>
-      {(attempt.data || journalError) && <section className="warning-box training-recovery" aria-label="Training submission recovery">
-        <h2>{attempt.data?.state === 'pending' && !journalError ? 'Starting training' : 'Check your training request'}</h2>
-        <p role={attempt.data?.state === 'pending' ? 'status' : 'alert'}>{journalError || attempt.data?.message}</p>
-        {attempt.data?.state === 'uncertain' && <>
-          <p>New submissions are paused. Check the recorded jobs for the original request; navigating away does not cancel it.</p>
-          <div className="training-recovery-actions">
-            <button type="button" className="secondary-button" disabled={jobs.isFetching} onClick={() => { setView("jobs"); void reviewHistory(); }}>Refresh training jobs</button>
-            <button type="button" className="secondary-button" disabled={!journalReady || !historyReviewed || jobs.isError || mutation.isPending} onClick={() => {
-              try { saveAttempt(null); setHistoryReviewed(false); mutation.reset(); } catch { /* Recovery remains visible. */ }
-            }}>I checked the jobs; allow a new request</button>
-          </div>
-          {jobs.isError && <p role="alert">Training history could not refresh. {jobs.error.message}</p>}
+      {(attempt || (!submission.available && submission.error)) && <section className="warning-box training-recovery" aria-label="Training submission recovery">
+        <h2>{attempt?.state === 'pending' && !submission.error ? 'Starting training' : 'Check your training request'}</h2>
+        <p role={attempt?.state === 'pending' ? 'status' : 'alert'}>{submission.error || attempt?.message}</p>
+        {attempt?.state === 'uncertain' && <>
+          <p>New submissions are paused. Navigating away does not cancel the original request.</p>
+          {keyedAttempt ? <>
+            <p>The saved request keeps its original dataset, model and settings. Checking it does not start training.</p>
+            <div className="training-recovery-actions">
+              <button type="button" className="secondary-button" disabled={!submission.available || submission.busy} onClick={() => void recoverSubmission()}>Check saved request</button>
+              <button type="button" className="secondary-button" disabled={!submission.canRetry || submission.busy} onClick={() => void recoverSubmission(true)}>Retry same request</button>
+            </div>
+            <p className="training-recovery-note">Retry sends the same saved recipe and key only after the server confirms it has no matching job. It does not use later edits to this form.</p>
+          </> : <>
+            <p>This older browser record has no server request key. Refresh and inspect recorded jobs before explicitly allowing a new request.</p>
+            <div className="training-recovery-actions">
+              <button type="button" className="secondary-button" disabled={jobs.isFetching} onClick={() => { showHistory(); void reviewHistory(); }}>Refresh training jobs</button>
+              <button type="button" className="secondary-button" disabled={!submission.available || historyReviewed !== attempt || jobs.isError || mutation.isPending} onClick={() => {
+                if (submission.clearLegacy(attempt)) { setHistoryReviewed(null); mutation.reset(); }
+              }}>I checked the jobs; allow a new request</button>
+            </div>
+            {jobs.isError && <p role="alert">Training history could not refresh. {jobs.error.message}</p>}
+          </>}
         </>}
+        {submission.receipt && <div className="training-recovery-actions"><button type="button" className="secondary-button" onClick={() => chooseRun(submission.receipt!.id)}>View saved request {submission.receipt.id}</button></div>}
       </section>}
       {view === "jobs" && <JobHistory title="Fine-tuning jobs" newLabel="Start a new fine-tuning"
         entries={historyEntries} onNew={() => openNew()}
-        onSelect={id => { setSelectedRunId(id); setView("run"); }}
+        onSelect={chooseRun}
         loading={!!projectId && jobs.isPending} error={jobs.error}
         emptyMessage="No fine-tuning jobs yet." disabled={!projectId || mutation.isPending} />}
       {view === "new" && <>
       <div className="training-view-toolbar">
-        <button type="button" className="text-button training-back" onClick={() => setView("jobs")}><Icon name="arrow" size={14} />Back to jobs</button>
+        <button type="button" className="text-button training-back" onClick={showHistory}><Icon name="arrow" size={14} />Back to jobs</button>
       </div>
       <form
         className="training-workspace"
@@ -1039,16 +1054,16 @@ export function TrainingPanel({
               </h2>
 
             </div>
-            <div className="training-review">
-              <span>
-                {activeDataset?.result.repo_id?.split("/").at(-1) ??
-                  "No dataset"}
-              </span>
-              <span>
-                {summaryModel} · {activeMethod?.toUpperCase()}
-              </span>
-              <span>{activeCameraKeys.length} {activeCameraKeys.length === 1 ? "camera" : "cameras"}</span>
-            </div>
+            <section className="training-recipe-review" aria-label="Training recipe review">
+              <div className="training-recipe-title"><span>{resumeId ? 'Resume saved training' : 'Your training recipe'}</span><strong>{summaryModel} · {activeMethod?.toUpperCase()}</strong></div>
+              <dl>
+                <div><dt>Dataset</dt><dd>{activeDataset?.result.repo_id ?? (activeDataset ? 'Local training snapshot' : 'Choose a dataset')}{activeDataset && <small className="training-recipe-identity" title={activeDataset.result.snapshot?.manifest_sha256 ?? activeDataset.result.revision}>{activeDataset.result.snapshot ? 'Snapshot' : 'Pinned revision'} {(activeDataset.result.snapshot?.manifest_sha256 ?? activeDataset.result.revision).slice(0, 12)}</small>}</dd></div>
+                <div><dt>Observations</dt><dd>{activeCameraKeys.length} {activeCameraKeys.length === 1 ? 'camera' : 'cameras'}{activeDataset ? ` · ${number(activeDataset.result.total_episodes)} episodes` : ''}</dd></div>
+                <div><dt>Training budget</dt><dd>{resumeId ? 'Saved recipe' : `${number(recipe.trainingSteps)} steps · batch ${recipe.batchSize}`}</dd></div>
+                <div><dt>Action timing</dt><dd>{resumeId ? checkpointTiming(originalTraining) : effectiveTiming ? `Predict ${effectiveTiming.prediction} · execute ${effectiveTiming.execution}${timing?.enabled ? '' : ' · default'}` : 'Model-owned settings'}</dd></div>
+              </dl>
+              <p>{resumeId ? 'Dataset, model and timing stay bound to the saved checkpoint.' : 'Requested settings are checked by the worker. Training loss does not measure robot task success.'}</p>
+            </section>
             <GpuPicker
               value={selectedGpu}
               onChange={setRuntimeId}
@@ -1069,8 +1084,9 @@ export function TrainingPanel({
                 </span>
               </summary>
               {resumeId ? (
-                <p>Original recipe preserved.</p>
+                <div className="training-saved-recipe"><p>Original recipe preserved.</p><p>{checkpointTiming(originalTraining)}</p><p>Resume loads the saved architecture and processors. Start a new run to request different horizons.</p></div>
               ) : (
+                <>
                 <div className="training-fields">
                   <label>
                     Steps
@@ -1140,6 +1156,19 @@ export function TrainingPanel({
                     </small>}
                   </label>
                 </div>
+                {timing && <fieldset className="training-temporal" aria-describedby="training-timing-help">
+                  <legend>Action timing</legend>
+                  <p id="training-timing-help">Prediction is how many future actions the model learns together. Execution is how many are used before the next observation.</p>
+                  <label className="training-temporal-toggle"><input type="checkbox" checked={timing.enabled} disabled={busy} onChange={event => updateTiming({ enabled: event.target.checked })} />Customize action horizons</label>
+                  {timing.enabled ? <div className="training-temporal-fields">
+                    <label htmlFor="training-prediction">Prediction horizon<input id="training-prediction" aria-label="Prediction horizon" type="number" min="1" max="1024" step="1" value={timing.prediction} disabled={busy} aria-invalid={!!timingIssue} aria-describedby="training-timing-help training-prediction-help" onChange={event => updateTiming({ prediction: Number(event.target.value) })} /><small id="training-prediction-help">Actions predicted together</small></label>
+                    <label htmlFor="training-execution">Execution horizon<input id="training-execution" aria-label="Execution horizon" type="number" min="1" max={timing.prediction >= 1 ? timing.prediction : 1024} step="1" value={timing.execution} disabled={busy} aria-invalid={!!timingIssue} aria-describedby="training-timing-help training-execution-help" onChange={event => updateTiming({ execution: Number(event.target.value) })} /><small id="training-execution-help">Actions used before observing again</small></label>
+                  </div> : <p className="training-temporal-default">Model default: predict and execute {defaultTemporal(timingFamily!).prediction} actions.</p>}
+                  {timingIssue && <p className="error-notice" role="alert">{timingIssue}</p>}
+                  <p className="training-temporal-note">One observation at a time, using consecutive frames. New runs only; existing checkpoints are not reshaped. These settings do not establish a safe robot control rate.</p>
+                </fieldset>}
+                {!timing && <p className="training-native-timing">Action timing follows this model’s native configuration.</p>}
+                </>
               )}
             </details>
             <div className="training-footer">
@@ -1202,6 +1231,7 @@ export function TrainingPanel({
             </fieldset>
           </details>
         )}
+        {submission.error && submission.available && !attempt && <p className="error-notice" role="alert">{submission.error}</p>}
         {[options.error, jobs.error, artifacts.error, mutation.error]
           .filter(Boolean)
           .map((error, index) => (
@@ -1229,7 +1259,7 @@ export function TrainingPanel({
           className="training-activity training-job-detail"
           aria-label="Fine-tuning job"
         >
-          <button type="button" className="text-button training-back" onClick={() => setView("jobs")}><Icon name="arrow" size={14} />Back to jobs</button>
+          <button type="button" className="text-button training-back" onClick={showHistory}><Icon name="arrow" size={14} />Back to jobs</button>
           <div className="training-heading">
             <h2 ref={headingRef} tabIndex={-1}>{selectedRun ? trainingRunModelLabel(selectedRun, models, artifacts.data ?? [], trainingRuns) ?? "Fine-tuning job" : "Fine-tuning job"}</h2>
             <button
@@ -1257,6 +1287,7 @@ export function TrainingPanel({
               onQuantize={onQuantize}
               onNativeQuantize={onNativeQuantize}
               onResume={resumeOptions.some(item => item.jobId === selectedRun.id) ? () => {
+                selectionGeneration.current += 1;
                 setResumeId(resumeOptions.find(item => item.jobId === selectedRun.id)!.id);
                 setStep(2);
                 mutation.reset();

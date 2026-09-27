@@ -156,3 +156,33 @@
 .training-model-grid { align-items: stretch; }
 
 .training-model-tile { min-height: 76px; align-items: center; }
+
+/* Recipe context stays readable before the advanced controls are opened. */
+.training-recipe-review { margin-bottom: 22px; padding: 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.training-recipe-title { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px 20px; margin-bottom: 18px; }
+.training-recipe-title > span { color: var(--muted); font-size: 11px; }
+.training-recipe-title > strong { font-size: 14px; font-weight: 600; }
+.training-recipe-review dl { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 24px; margin: 0; }
+.training-recipe-review dt { color: var(--muted); font-size: 10px; margin-bottom: 5px; }
+.training-recipe-review dd { margin: 0; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.training-recipe-review > p { margin-top: 18px; color: var(--muted); font-size: 11px; line-height: 1.65; }
+.training-workspace .training-temporal { border-top: 1px solid var(--line); margin-top: 22px; padding-top: 18px; }
+.training-temporal legend { font-size: 12px; font-weight: 600; padding-top: 18px; }
+.training-temporal > p, .training-native-timing, .training-saved-recipe p { margin-top: 10px; color: var(--muted); font-size: 11px; line-height: 1.7; max-width: 680px; }
+.training-temporal-toggle { display: flex; align-items: center; gap: 9px; margin: 16px 0; font-size: 12px; cursor: pointer; }
+.training-temporal-toggle input { width: 16px; height: 16px; accent-color: var(--ink); }
+.training-temporal-fields { display: grid; grid-template-columns: 1fr 1fr; max-width: 560px; gap: 16px; }
+.training-temporal-fields label { display: grid; gap: 7px; font-size: 11px; }
+.training-temporal-fields input { width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink); font-size: 13px; }
+.training-temporal-fields small { color: var(--muted); line-height: 1.5; }
+.training-temporal-fields input[aria-invalid=true] { border-color: var(--error, #b54646); }
+@media (max-width: 480px) {
+  .training-recipe-review { padding: 16px; }
+  .training-recipe-review dl { grid-template-columns: 1fr; gap: 14px; }
+  .training-temporal-fields { grid-template-columns: 1fr; }
+  .training-temporal-toggle { min-height: 44px; }
+}
+
+.training-recipe-identity { display: block; color: var(--muted); font-size: 10px; margin-top: 3px; overflow-wrap: anywhere; }
+.training-temporal-fields input { min-height: 44px; }
+.training-recovery-note { font-size: 12px; line-height: 1.65; }

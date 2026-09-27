@@ -19,8 +19,8 @@ class JournalUnavailable extends Error {
 
 function ActionTrace({ values, name, unit }: { values: number[]; name: string; unit: string }) {
   const low = Math.min(...values), high = Math.max(...values), extent = high - low;
-  const points = values.map((value, index) => `${4 + index * 252 / 99},${extent ? 50 - (value - low) * 44 / extent : 28}`).join(' ');
-  return <figure className="replay-action-trace"><figcaption>{name}<span>{unit}</span></figcaption><svg viewBox="0 0 260 56" role="img" aria-label={`${name}: 100 predicted actions, minimum ${low.toPrecision(4)}, maximum ${high.toPrecision(4)} ${unit}`}><line x1="4" y1="52" x2="256" y2="52" stroke="var(--line)" /><polyline points={points} fill="none" stroke="currentColor" strokeWidth="2" /></svg><small>{low.toPrecision(4)} to {high.toPrecision(4)} · actions 1–100</small></figure>;
+  const points = values.map((value, index) => `${4 + index * 252 / Math.max(values.length - 1, 1)},${extent ? 50 - (value - low) * 44 / extent : 28}`).join(' ');
+  return <figure className="replay-action-trace"><figcaption>{name}<span>{unit}</span></figcaption><svg viewBox="0 0 260 56" role="img" aria-label={`${name}: ${values.length} predicted actions, minimum ${low.toPrecision(4)}, maximum ${high.toPrecision(4)} ${unit}`}><line x1="4" y1="52" x2="256" y2="52" stroke="var(--line)" /><polyline points={points} fill="none" stroke="currentColor" strokeWidth="2" /></svg><small>{low.toPrecision(4)} to {high.toPrecision(4)} · actions 1–{values.length}</small></figure>;
 }
 
 export function NativeReplayPanel({ projectId, preferredArtifactId, preferredJobId, onJobSelected, onDataset }: { projectId: string; preferredArtifactId?: string; preferredJobId?: string; onJobSelected?: (id: string) => void; onDataset: () => void }) {
@@ -128,7 +128,7 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, preferredJob
     {selected && <article className="native-simulation-result" aria-label="Observation replay details" data-job-id={selected.id}>
       <div className="native-result-header"><h3>CPU observation replay</h3><span className={`status status-${selected.status}`}>{selected.status}</span></div><p className="native-result-summary">{isActive(selected) ? selected.stage ?? selected.status : 'Recorded job'} · {selected.id}</p>
       {selected.error && <p role="alert">{selected.error}</p>}
-      {report && <><p>{report.observation_source.kind === 'generated_fixture' ? 'Generated observations · software verification only' : 'Dataset observations · execution check only'}</p><dl className="cloud-run-facts"><div><dt>Observations</dt><dd>{report.observations}</dd></div><div><dt>Predictions per observation</dt><dd>100 × 6</dd></div><div><dt>Reset repeatability</dt><dd>Exact repeat</dd></div></dl><p>Reset reproduced the same action chunk. This does not measure task success, action accuracy, GPU performance or calibration.</p></>}
+      {report && <><p>{report.observation_source.kind === 'generated_fixture' ? 'Generated observations · software verification only' : 'Dataset observations · execution check only'}</p><dl className="cloud-run-facts"><div><dt>Observations</dt><dd>{report.observations}</dd></div><div><dt>Predictions per observation</dt><dd>{report.action_shape[0]} × {report.action_shape[1]}</dd></div><div><dt>Reset repeatability</dt><dd>Exact repeat</dd></div></dl><p>Reset reproduced the same action chunk. This does not measure task success, action accuracy, GPU performance or calibration.</p></>}
       {selected.status === 'succeeded' && !report && <p role="alert">Complete replay evidence is unavailable. Job completion alone does not verify the output.</p>}
       {preview.isError && <p role="alert">Saved action preview unavailable. {preview.error.message}</p>}
       {report && preview.isPending && output && <p role="status">Verifying the saved action record…</p>}

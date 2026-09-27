@@ -58,7 +58,7 @@ binding for local use; this server does not add an authentication layer.
 
 The supported recipe inherits the existing native ACT exporter boundary:
 ResNet18, no VAE/PEFT/AMP/temporal ensembling, one RGB camera, six state/action
-coordinates and chunk100. Existing bounds on image size and architecture still
+coordinates and `1 <= execution <= prediction <= 1024`. Existing bounds on image size and architecture still
 apply. A different model needs a separately verified adapter.
 
 ## Evidence and limits
@@ -80,3 +80,13 @@ from FP32 remains in each package and is not replaced by a parity claim.
 Application selection, local execution ownership and any simulator route must
 be integrated and reviewed separately. No cloud image, credentials, room,
 provider settings, original weights or physical robot were changed here.
+
+
+Changed-horizon ACT software proof uses separate full-prediction and execution
+prefix HTTP configurations. For an 8/3 checkpoint, `--action-steps 8` returns the
+full prediction for inspection; `--action-steps 3` returns its execution prefix.
+Observation replay deliberately retains all eight predictions and applies none.
+The native policy queue is independently checked to recompute every three
+`select_action` calls; HTTP chunk prediction itself does not consume that queue.
+The source `temporal-contract.json` remains in the packed model identity. These
+CPU checks do not establish a changed-horizon Isaac/GPU rollout.

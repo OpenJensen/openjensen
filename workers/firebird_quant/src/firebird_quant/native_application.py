@@ -13,6 +13,8 @@ import time
 from pathlib import Path
 
 from .native_package import (
+    EVIDENCE_LIMIT,
+    JSON_LIMIT,
     RUNTIME,
     SHA,
     admit_source,
@@ -220,10 +222,10 @@ def _probe(owner, mode, source, result, *, destination=None, bits=None):
             raise ValueError(
                 f"{error}\nOffline worker diagnostic (last 4 KiB):\n{detail}"
             ) from error
-    return read_json(result)
+    return read_json(result, limit=EVIDENCE_LIMIT)
 
 
-def _fixtures(value):
+def _fixtures(value, prediction=100):
     from .native_probe import SEEDS
 
     if not isinstance(value, list) or len(value) != len(SEEDS):
@@ -258,10 +260,10 @@ def _fixtures(value):
             chunk = row[key]
             if (
                 not isinstance(chunk, list)
-                or len(chunk) != 100
+                or len(chunk) != prediction
                 or any(not isinstance(action, list) or len(action) != 6 for action in chunk)
             ):
-                raise ValueError("Expected full 100x6 chunk measurements")
+                raise ValueError("Expected full prediction-horizon x 6 chunk measurements")
             if any(
                 type(v) not in {int, float} or not math.isfinite(v)
                 for action in chunk
@@ -284,9 +286,10 @@ def verify_reports(conversion, reload, info):
             or report.get("network_disabled") is not True
         ):
             raise ValueError("Probe runtime/package identity differs")
-    baseline = _fixtures(conversion.get("baseline"))
-    candidate = _fixtures(conversion.get("packed"))
-    restored = _fixtures(reload.get("packed"))
+    prediction = info.get("prediction_horizon", 100)
+    baseline = _fixtures(conversion.get("baseline"), prediction)
+    candidate = _fixtures(conversion.get("packed"), prediction)
+    restored = _fixtures(reload.get("packed"), prediction)
     if restored != candidate or reload.get("floating_master_reads_blocked") is not True:
         raise ValueError("Fresh packed-only replay differs from the tested candidate")
     differences = []
@@ -303,7 +306,7 @@ def verify_reports(conversion, reload, info):
             delta[key] = {
                 "rmse": math.sqrt(math.fsum(v * v for v in values) / len(values)),
                 "maximum_absolute_difference": max(values),
-                "coordinates": 600,
+                "coordinates": prediction * 6,
             }
             if not all(math.isfinite(v) for v in delta[key].values()):
                 raise ValueError("Nonfinite action drift")
@@ -313,6 +316,8 @@ def verify_reports(conversion, reload, info):
         "scope": "generated observations; no calibration or task-quality acceptance",
         "units": "saved processor output coordinates; physical units unverified",
         "model_id": info["model_id"],
+        "prediction_horizon": prediction,
+        "execution_horizon": info.get("execution_horizon", 100),
         "versions": conversion["versions"],
         "floating": baseline,
         "packed": candidate,
@@ -380,6 +385,11 @@ def run_job(job):
                 write_new(bundle / "source-manifest.json", read(snapshot / "manifest.json"))
             metadata = {
                 "architecture": "act",
+                "prediction_horizon": info["prediction_horizon"],
+                "execution_horizon": info["execution_horizon"],
+                "temporal_contract_sha256": info["files"]
+                .get("temporal-contract.json", {})
+                .get("sha256"),
                 "format": "firebird_quant",
                 "format_version": 1,
                 "model_id": info["model_id"],
@@ -401,7 +411,8 @@ def run_job(job):
             files = {"policy/" + name: item["sha256"] for name, item in info["files"].items()}
             for path in bundle.iterdir():
                 if path.is_file():
-                    files[path.name] = sha(read(path))
+                    limit = EVIDENCE_LIMIT if path.name == "verification.json" else JSON_LIMIT
+                    files[path.name] = sha(read(path, limit))
             write_new(
                 bundle / "manifest.json",
                 canonical({"schema_version": 1, "metadata": metadata, "files": files}),

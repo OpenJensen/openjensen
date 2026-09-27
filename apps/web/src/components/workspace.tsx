@@ -1,7 +1,7 @@
 'use client';
 
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { isAugmentationSource } from '@/lib/augmentation-source';
 import { api, isActive, isDatasetJob, type DatasetJob, type DatasetProfile, type Job, type Project } from '@/lib/api';
 import { engineRuntime, initialQuantizeEntry, initialRunEntry, runJobMode, type Entry, type ProjectEntry, type QuantizeMode, type RunMode } from '@/lib/workflow-entry';
@@ -28,6 +28,9 @@ import { DatasetStarters } from '@/components/dataset-starters';
 import { datasetStarters, type DatasetStarter } from '@/lib/dataset-starters';
 import { publicPath } from '@/lib/base-path';
 import { guideSectionId } from '@/lib/guide-section';
+import { useDurableSubmission } from '@/lib/durable-submission';
+import { intakeAcknowledgement, validatedProjectHistory } from '@/lib/dataset-submission';
+import { DatasetSubmissionRecovery } from '@/components/dataset-submission-recovery';
 import { WorkbenchDisclosure } from '@/components/workbench-disclosure';
 
 const stages = [
@@ -103,33 +106,46 @@ function DatasetResult({ profile }: { profile: DatasetProfile }) {
   </section>;
 }
 
-function IntakeForm({ project, readinessMessage, localAvailable, onCreated, starter, onSourceEdited }: { project: Project | undefined; readinessMessage: string; localAvailable: boolean; onCreated: (job: Job) => void; starter: DatasetStarter; onSourceEdited: () => void }) {
+function IntakeForm({ project, readinessMessage, localAvailable, onCreated, starter, onSourceEdited, navigationToken }: { navigationToken: string; project: Project | undefined; readinessMessage: string; localAvailable: boolean; onCreated: (job: Job) => void; starter: DatasetStarter; onSourceEdited: () => void }) {
   const queryClient = useQueryClient();
   const [source, setSource] = useState<'huggingface' | 'local'>('huggingface');
   const [repoId, setRepoId] = useState(starter.repoId);
   const [revision, setRevision] = useState(starter.revision);
   const [path, setPath] = useState('');
   const [snapshotForTraining, setSnapshotForTraining] = useState(false);
+  const submission = useDurableSubmission({ project: project?.id ?? '', operation: 'dataset.inspect' });
+  const selection = useRef({ token: navigationToken, generation: 0 });
+  if (selection.current.token !== navigationToken) selection.current = { token: navigationToken, generation: selection.current.generation + 1 };
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const validate = (value: unknown, body: unknown) => intakeAcknowledgement(value, project?.id ?? '', body);
+  function accept(job: Job | null, generation: number) {
+    if (!job) return;
+    queryClient.setQueryData<Job[]>(['jobs', job.project_id], previous => [job, ...(previous ?? []).filter(item => item.id !== job.id)]);
+    void queryClient.invalidateQueries({ queryKey: ['jobs', job.project_id] });
+    if (mounted.current && selection.current.generation === generation) onCreated(job);
+  }
+  const blocked = !project || !submission.hydrated || !submission.available || !!submission.attempt || submission.busy;
+
   useEffect(() => {
     if (!localAvailable && source === 'local') setSource('huggingface');
   }, [localAvailable, source]);
   const mutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       if (!project) throw new Error('Create or select a project first.');
       if (source === 'local' && !localAvailable) throw new Error('Local intake is not enabled on this application.');
-      return api.inspect(project.id, source === 'huggingface'
+      if (blocked) throw new Error('Verify the saved request before starting another inspection.');
+      const generation = selection.current.generation;
+      const job = await submission.submit(source === 'huggingface'
         ? { source, repo_id: repoId.trim(), revision: revision.trim() || 'main' }
-        : { source, path: path.trim(), revision: 'main', snapshot_for_training: snapshotForTraining });
-    },
-    onSuccess: (job) => {
-      queryClient.setQueryData<Job[]>(['jobs', job.project_id], previous => [job, ...(previous ?? []).filter(item => item.id !== job.id)]);
-      void queryClient.invalidateQueries({ queryKey: ['jobs', job.project_id] });
-      onCreated(job);
+        : { source, path: path.trim(), revision: 'main', snapshot_for_training: snapshotForTraining }, validate);
+      accept(job, generation);
+      return job;
     },
   });
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    mutation.mutate();
+    if (!blocked && !mutation.isPending) mutation.mutate();
   }
   return <section className="panel intake-panel" aria-labelledby="intake-title">
     <div className="panel-title"><h2 id="intake-title">Import a dataset</h2></div>
@@ -158,8 +174,15 @@ function IntakeForm({ project, readinessMessage, localAvailable, onCreated, star
         <p className="field-help">Validate all rows and videos in a finalized LeRobot v3 dataset, then copy it into this workspace. Up to 16 GiB; source files stay unchanged.</p>
       </>}
       <ErrorNotice error={mutation.error} />
+      <DatasetSubmissionRecovery submission={submission} onReconcile={async () => { const generation = selection.current.generation; accept(await submission.reconcile(validate), generation); }}
+        onRetry={async () => { const generation = selection.current.generation; accept(await submission.retry(validate), generation); }} onReviewHistory={async () => {
+          if (!project) return false;
+          const fresh = validatedProjectHistory(await api.jobs(project.id), project.id);
+          queryClient.setQueryData(['jobs', project.id], fresh);
+          return true;
+        }} />
       {!project && <p className="form-note" role="status">{readinessMessage}</p>}
-            <button className="primary-button inspect-button" type="submit" disabled={!project || mutation.isPending}>{mutation.isPending ? 'Checking dataset…' : 'Inspect dataset'}<Icon name="arrow" size={17} /></button>
+            <button className="primary-button inspect-button" type="submit" disabled={blocked || mutation.isPending}>{mutation.isPending || submission.busy ? 'Checking dataset…' : 'Inspect dataset'}<Icon name="arrow" size={17} /></button>
     </form>
   </section>;
 }
@@ -360,7 +383,7 @@ function Workbench() {
         <div className="dataset-view" hidden={activeStage !== 0}>
           <div className="section-tabs"><nav className="dataset-tab-buttons" aria-label="Dataset views"><button type="button" className={`section-tab${datasetView === 'sources' ? ' active' : ''}`} aria-pressed={datasetView === 'sources'} onClick={() => setDatasetView('sources')}>Sources</button><button type="button" className={`section-tab${datasetView === 'inspection' ? ' active' : ''}`} aria-pressed={datasetView === 'inspection'} disabled={!selectedJob} onClick={() => setDatasetView('inspection')}>Inspection{sortedJobs.length > 0 && <span className="tab-count">{sortedJobs.length}</span>}</button></nav><span className="section-note">LeRobot v2 / v3</span></div>
           <div className="content-grid source-grid" hidden={datasetView !== 'sources'}>
-            <div className="intake-column"><IntakeForm key={`${projectId}-${starterSelection}`} project={workflowProjectId ? project : undefined} readinessMessage={projects.isPending ? 'Loading projects before importing a dataset.' : projects.isError ? 'Project list unavailable. Retry projects to continue.' : 'Create or select a project to import a dataset.'} starter={starter} onSourceEdited={() => setActiveStarterId('')} localAvailable={capabilities.data?.some(item => item.operation === 'dataset.inspect.local' && (item.status === 'available' || item.status === 'untested')) ?? false} onCreated={job => { setSelectedJobId(job.id); setDatasetView('inspection'); }} /></div>
+            <div className="intake-column"><IntakeForm key={`${projectId}-${starterSelection}`} navigationToken={`${workflowNavigation}:${activeStage}:${datasetView}:${selectedJobId}`} project={workflowProjectId ? project : undefined} readinessMessage={projects.isPending ? 'Loading projects before importing a dataset.' : projects.isError ? 'Project list unavailable. Retry projects to continue.' : 'Create or select a project to import a dataset.'} starter={starter} onSourceEdited={() => setActiveStarterId('')} localAvailable={capabilities.data?.some(item => item.operation === 'dataset.inspect.local' && (item.status === 'available' || item.status === 'untested')) ?? false} onCreated={job => { setSelectedJobId(job.id); setDatasetView('inspection'); }} /></div>
             <DatasetStarters selected={activeStarterId} onSelect={item => { setStarter(item); setActiveStarterId(item.id); setStarterSelection(previous => previous + 1); }} />
           </div>
           <div className="inspection-view" hidden={datasetView !== 'inspection'}>
