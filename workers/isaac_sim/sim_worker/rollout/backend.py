@@ -107,6 +107,9 @@ class LeRobotPolicy:
                 pretrained_path=str(checkpoint),
                 preprocessor_overrides={"device_processor": {"device": device}},
             )
+        # Bind loaded config/processors/contract to the pre-load identity.
+        if inspect_checkpoint(checkpoint) != info:
+            raise ValueError("Checkpoint changed during native policy loading")
         self.reset()
 
     def model_id(self) -> str:

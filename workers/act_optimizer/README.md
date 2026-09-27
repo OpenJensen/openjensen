@@ -201,8 +201,12 @@ quantization or unimplemented simulator execution.
 
 The Fine-tune checkpoint monitor offers **Export ACT inference package** for ACT.
 It requires a ready project, enabled local export worker and complete native
-checkpoint with pinned Hugging Face dataset lineage. Local dataset snapshot
-lineage is explicitly unsupported by this export recipe. Cloud descriptors fail before worker launch; operators must first
+checkpoint with pinned Hugging Face lineage or a complete, content-bound local
+LeRobot snapshot. Local admission verifies the saved snapshot profile and canonical
+recipe; older complete checkpoints may omit the newer duplicate top-level snapshot
+claims. Exported local metadata contains only the snapshot ID, manifest digest and
+original source revision, with no source path or private dataset profile. Cloud
+descriptors fail before worker launch; operators must first
 materialize and register the complete verified checkpoint. No automatic model
 or cloud download is started by this action.
 
@@ -272,3 +276,19 @@ synthetic observations, runs the real owned observation-replay worker and checks
 its saved full predictions. It applies no robot or simulator actions. CPU proof
 of 8/3 portability does not establish SmolVLA compatibility, GPU performance,
 calibration, task quality, or a simulator rollout.
+
+## Simulator coordinate provenance
+
+When a training source carries `control-contract.json`, source admission requires
+the same canonical bytes at both checkpoint levels, in the saved recipe, and in
+registered metadata and fresh-reload evidence. The inference package retains the
+policy copy unchanged; all three fresh export probes must report its exact record
+and SHA256. Missing or conflicting claims are rejected, including a rehashed
+package that attempts to discard a known contract.
+
+The [simulator contract](../isaac_sim/CONTROL_CONTRACT.md) binds declared joint
+order, radians, cadence, camera and snapshot provenance. It does not establish
+physical calibration, scene asset compatibility or task success. Contract-bearing
+packages are currently rejected by distillation and packed quantization, whose
+end-to-end contract propagation remains unimplemented. The new pure tests use
+stubbed probe outputs; they are not native model or Isaac acceptance evidence.

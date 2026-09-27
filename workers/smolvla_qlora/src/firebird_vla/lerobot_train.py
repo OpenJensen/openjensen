@@ -26,6 +26,8 @@ from .accumulation import (
     validate_progress,
 )
 from .checkpoint import commit_checkpoint_directory, sha256, verify_bundle, write_json
+from .control_contract import check_checkpoint, check_resolved
+from .control_contract import save as save_control
 from .lerobot_application import cli_arguments
 from .local_dataset import (
     load_operation_snapshot,
@@ -90,6 +92,7 @@ def commit_checkpoint(source, destination, recipe, *, step):
     """Commit a complete upstream snapshot, including optimizer state, atomically."""
     if destination.exists():
         raise FileExistsError(f"Checkpoint already exists: {destination.name}")
+    check_checkpoint(source, recipe)
     if any(path.is_symlink() for path in source.rglob("*")):
         raise ValueError("Native checkpoint contains a symlink")
     staging = Path(tempfile.mkdtemp(prefix=".native-checkpoint-", dir=destination.parent))
@@ -282,6 +285,14 @@ def install_training_hooks(
         if resume and (resume / "temporal-contract.json").exists():
             if json.loads((resume / "temporal-contract.json").read_text()) != temporal:
                 raise ValueError("Resume temporal contract differs from the saved checkpoint")
+        control = recipe.get("control_contract")
+        if control is not None and datasets[0].meta.fps != control["action_fps"]:
+            raise ValueError("Dataset FPS differs from simulator control contract")
+        state["dataset_fps"] = datasets[0].meta.fps
+        if resume:
+            check_checkpoint(resume, recipe)
+        state["control"] = control
+        save_control(training, control)
         state["temporal"] = temporal
         write_json(training / "temporal-contract.json", temporal)
         state["validation"] = datasets[1]
@@ -305,6 +316,15 @@ def install_training_hooks(
         )
         return datasets
 
+    if recipe.get("control_contract") is not None:
+        original_policy = trainer.make_policy
+
+        def make_policy(*args, **kwargs):
+            policy = original_policy(*args, **kwargs)
+            check_resolved(state.get("control"), policy.config, state.get("dataset_fps"))
+            return policy
+
+        trainer.make_policy = make_policy
     original_loaders = trainer.make_dataloaders
 
     def make_loaders(cfg, dataset, eval_dataset, step, parallel_dims):
@@ -443,6 +463,8 @@ def install_training_hooks(
             write_json(directory / CONTRACT_FILE, optimization)
             write_json(directory / STATE_FILE, optimization_state)
         write_json(directory / "temporal-contract.json", state["temporal"])
+        save_control(directory, state.get("control"))
+        save_control(directory / "pretrained_model", state.get("control"))
         torch.save(raw_batch, directory / "probe-batch.pt")
         torch.save(action, directory / "probe-action.pt")
         destination = commit_checkpoint(

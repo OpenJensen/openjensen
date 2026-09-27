@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .accumulation import checkpoint_optimization
 from .checkpoint import verify_bundle, write_json
+from .control_contract import check_checkpoint
 from .lerobot_train import probe
 from .temporal import resolved_temporal
 
@@ -20,6 +21,9 @@ def main():
 
     recipe = json.loads((checkpoint / "recipe.json").read_text())
     model_dir = checkpoint / "pretrained_model"
+    control, control_sha = check_checkpoint(
+        checkpoint, recipe, json.loads((model_dir / "config.json").read_text())
+    )
     config = PreTrainedConfig.from_pretrained(model_dir)
     temporal_path = checkpoint / "temporal-contract.json"
     temporal = None
@@ -39,6 +43,11 @@ def main():
         report_path,
         {
             "reload_verified": True,
+            **(
+                {"control_contract": control, "control_contract_sha256": control_sha}
+                if control is not None
+                else {}
+            ),
             "optimization": optimization,
             "temporal_contract": temporal,
             "max_abs_action_difference": (actual - expected).abs().max().item(),

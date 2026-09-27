@@ -18,6 +18,7 @@ from .bundle import (
     temporal_dimensions,
     verify_export,
 )
+from .control_schema import metadata as control_metadata
 from .export import RECIPE, export_policy
 from .training_source import TRAINING_REVISION, ActTrainingSource, admit_training_source
 
@@ -63,6 +64,12 @@ def _checked_export(
             != admission.temporal_sha256
         ):
             raise ValueError("Exported temporal contract differs from registered source")
+    control = control_metadata(policy)
+    if (
+        control.get("control_contract") != admission.control_contract
+        or control.get("control_contract_sha256") != admission.control_contract_sha256
+    ):
+        raise ValueError("Exported simulator contract differs from registered source")
     parity = read_json(policy / "parity.json")
     recipe = read_json(policy / "recipe.json")
     if parity.get("source_checkpoint_files") != selected or recipe.get("source_files") != selected:
@@ -133,6 +140,15 @@ def run_job(job: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("Training source changed before export publication")
         metadata = {
             "architecture": "act",
+            **control_metadata(policy),
+            **(
+                {
+                    "dataset_snapshot_id": admission.dataset_revision,
+                    "dataset_manifest_sha256": admission.dataset_manifest_sha256,
+                }
+                if admission.dataset_manifest_sha256 is not None
+                else {}
+            ),
             **temporal_dimensions(read_json(policy / "config.json")),
             "temporal_contract_sha256": admission.temporal_sha256,
             "inference_only": True,
@@ -146,11 +162,24 @@ def run_job(job: dict[str, Any]) -> dict[str, Any]:
             "checkpoint_manifest_sha256": admission.checkpoint_manifest_sha256,
             "checkpoint_step": admission.step,
             "base_model": {"repository": "code://lerobot/act", "revision": TRAINING_REVISION},
-            "dataset": {
-                "source": "huggingface",
-                "repo_id": admission.dataset_id,
-                "revision": admission.dataset_revision,
-            },
+            "dataset": (
+                {
+                    "source": "local",
+                    "snapshot_id": admission.dataset_revision,
+                    "manifest_sha256": admission.dataset_manifest_sha256,
+                    **{
+                        k: admission.dataset_metadata[k]
+                        for k in ("repo_id", "revision")
+                        if isinstance(admission.dataset_metadata.get(k), str)
+                    },
+                }
+                if admission.dataset_manifest_sha256 is not None
+                else {
+                    "source": "huggingface",
+                    "repo_id": admission.dataset_id,
+                    "revision": admission.dataset_revision,
+                }
+            ),
             "camera_keys": [admission.camera],
             "synthetic_parity_verified": True,
             "fresh_reload_verified": True,

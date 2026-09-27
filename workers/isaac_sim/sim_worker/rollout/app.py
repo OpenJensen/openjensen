@@ -3,7 +3,7 @@ import logging
 import uuid
 from pathlib import Path
 
-from sim_worker.rollout.calibration import CalibrationUse, JointMap
+from sim_worker.rollout.calibration import CalibrationUse, mapping_for
 from sim_worker.rollout.client import RemotePolicy
 from sim_worker.rollout.config import load
 from sim_worker.rollout.experimental import MotionGuard
@@ -13,7 +13,7 @@ from sim_worker.rollout.trace import Trace, save_result
 
 def validate(path: Path, use: CalibrationUse = CalibrationUse.VERIFIED) -> None:
     spec = load(path)
-    JointMap(spec.calibration, spec.sim.joints, use)
+    mapping_for(spec, use)
 
 
 def execute(
@@ -24,7 +24,7 @@ def execute(
 ) -> dict:
     # Validate before acquiring a GPU runtime or creating output files.
     spec = load(path)
-    mapping = JointMap(spec.calibration, spec.sim.joints, use)
+    mapping = mapping_for(spec, use)
     output_dir.mkdir(parents=True, exist_ok=True)
     if any(output_dir.iterdir()):
         raise ValueError("Rollout output directory must be empty")
@@ -34,7 +34,8 @@ def execute(
         "model_id": spec.model_id,
         "calibration_sha256": mapping.digest,
         "calibration_status": mapping.status,
-        "experimental": use is CalibrationUse.EXPERIMENTAL,
+        "experimental": mapping.use is CalibrationUse.EXPERIMENTAL,
+        **getattr(mapping, "control_metadata", {}),
         "manifest_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
         "endpoint": spec.endpoint,
     }
@@ -49,7 +50,7 @@ def execute(
         with IsaacSim(spec.sim, evaluation=spec.evaluation) as simulation:
             try:
                 guard = None
-                if use is CalibrationUse.EXPERIMENTAL:
+                if mapping.use is CalibrationUse.EXPERIMENTAL:
                     guard = MotionGuard(lambda: simulation.joint_limits, spec.sim.fps)
                 with Trace(output_dir, spec) as trace:
                     result = Rollout(spec, simulation, policy, mapping, guard).run(
