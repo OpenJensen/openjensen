@@ -6,9 +6,19 @@ import sys
 
 import httpx
 from typer.testing import CliRunner
-from vla_platform import cli
+from vla_platform import cli, cli_client
 
 runner = CliRunner()
+
+
+def mock_api(monkeypatch, handler):
+    from vla_platform.tui_client import ApiClient
+
+    monkeypatch.setattr(
+        cli_client,
+        "client",
+        lambda: ApiClient("http://127.0.0.1", transport=httpx.MockTransport(handler)),
+    )
 
 
 def test_help_version_and_no_textual_import():
@@ -28,7 +38,7 @@ def test_help_version_and_no_textual_import():
 
 
 def test_json_stdout_and_transport_error_stderr(monkeypatch):
-    monkeypatch.setattr(httpx, "request", lambda *a, **kw: httpx.Response(200, json=[{"id": "p"}]))
+    mock_api(monkeypatch, lambda request: httpx.Response(200, json=[{"id": "p"}]))
     result = runner.invoke(cli.app, ["projects", "list"])
     assert result.exit_code == 0 and json.loads(result.stdout) == [{"id": "p"}]
     assert not result.stderr
@@ -36,14 +46,14 @@ def test_json_stdout_and_transport_error_stderr(monkeypatch):
     def offline(*a, **kw):
         raise httpx.ConnectError("fixture offline")
 
-    monkeypatch.setattr(httpx, "request", offline)
+    mock_api(monkeypatch, offline)
     result = runner.invoke(cli.app, ["projects", "list"])
     assert result.exit_code == 1 and not result.stdout
     assert "Cannot reach" in result.stderr
 
 
 def test_bad_json_and_recipe_are_actionable_without_tracebacks(tmp_path, monkeypatch):
-    monkeypatch.setattr(httpx, "request", lambda *a, **kw: httpx.Response(200, text="not json"))
+    mock_api(monkeypatch, lambda request: httpx.Response(200, text="not json"))
     result = runner.invoke(cli.app, ["jobs", "list", "p"])
     assert result.exit_code == 1 and "invalid JSON" in result.stderr
     for raw in ("{", "[]"):
@@ -110,13 +120,32 @@ def test_recipe_bound_and_fifo_reject_before_http(tmp_path, monkeypatch):
     result = runner.invoke(cli.app, ["policy", "submit", "p", str(large)])
     assert result.exit_code == 2 and "1 MiB" in result.output
     if hasattr(os, "mkfifo"):
+        import select
+
         fifo = tmp_path / "pipe"
         os.mkfifo(fifo)
-        result = subprocess.run(
-            [sys.executable, "-m", "vla_platform.cli", "policy", "submit", "p", str(fifo)],
-            capture_output=True,
+        # Bound cold CLI imports separately; the FIFO operation still gets five seconds.
+        child = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                "from vla_platform.cli import app; print('ready', flush=True); app()",
+                "policy",
+                "submit",
+                "p",
+                str(fifo),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=5,
         )
-        assert result.returncode == 2 and "regular JSON" in result.stderr
+        try:
+            assert select.select([child.stdout], [], [], 30)[0], "CLI startup deadline"
+            assert child.stdout.readline() == "ready\n"
+            stdout, stderr = child.communicate(timeout=5)
+            assert child.returncode == 2 and not stdout and "regular JSON" in stderr
+        finally:
+            if child.poll() is None:
+                child.kill()
+                child.communicate(timeout=3)
     assert not calls

@@ -8,13 +8,17 @@ import { storedAttempt, storeAttempt, type PolicyJobAttempt } from '@/lib/policy
 import { cancelReplay, readReplay, replayDataset, replayJob, replayPolicy, replayReport, replayRuntime, replaySelection, startReplay, type ReplayJob, type ReplayRecipe } from '@/lib/native-replay';
 import { WorkbenchDisclosure } from './workbench-disclosure';
 
+class JournalUnavailable extends Error {
+  constructor() { super('Browser session storage is unavailable. Restore it and reload, then inspect recorded jobs before submitting again.'); }
+}
+
 function ActionTrace({ values, name, unit }: { values: number[]; name: string; unit: string }) {
   const low = Math.min(...values), high = Math.max(...values), extent = high - low;
   const points = values.map((value, index) => `${4 + index * 252 / 99},${extent ? 50 - (value - low) * 44 / extent : 28}`).join(' ');
   return <figure className="replay-action-trace"><figcaption>{name}<span>{unit}</span></figcaption><svg viewBox="0 0 260 56" role="img" aria-label={`${name}: 100 predicted actions, minimum ${low.toPrecision(4)}, maximum ${high.toPrecision(4)} ${unit}`}><line x1="4" y1="52" x2="256" y2="52" stroke="var(--line)" /><polyline points={points} fill="none" stroke="currentColor" strokeWidth="2" /></svg><small>{low.toPrecision(4)} to {high.toPrecision(4)} · actions 1–100</small></figure>;
 }
 
-export function NativeReplayPanel({ projectId, preferredArtifactId, onDataset }: { projectId: string; preferredArtifactId?: string; onDataset: () => void }) {
+export function NativeReplayPanel({ projectId, preferredArtifactId, preferredJobId, onJobSelected, onDataset }: { projectId: string; preferredArtifactId?: string; preferredJobId?: string; onJobSelected?: (id: string) => void; onDataset: () => void }) {
   const client = useQueryClient();
   const options = useQuery({ queryKey: ['policy-options'], queryFn: api.policyOptions, retry: false, refetchInterval: 10000 });
   const jobs = useQuery({ queryKey: ['jobs', projectId], queryFn: () => api.jobs(projectId), enabled: !!projectId, retry: false, refetchInterval: 2000 });
@@ -24,9 +28,10 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, onDataset }:
   const [journalReady, setJournalReady] = useState(false), [reviewed, setReviewed] = useState(false);
   const [policyId, setPolicy] = useState(''), [datasetId, setDataset] = useState(''), [runtimeId, setRuntime] = useState('');
   const [selection, setSelection] = useState(''), [units, setUnits] = useState(''), [generated, setGenerated] = useState(false), [attested, setAttested] = useState(false);
-  const [timeout, setTimeoutValue] = useState('600'), [selectedId, setSelectedId] = useState(''), [accepted, setAccepted] = useState<ReplayJob | null>(null);
+  const [timeout, setTimeoutValue] = useState('600'), [selectedId, setSelectedId] = useState(preferredArtifactId ? '' : preferredJobId ?? ''), [accepted, setAccepted] = useState<ReplayJob | null>(null);
   const [error, setError] = useState(''), [cancelId, setCancelId] = useState(''), [cancelling, setCancelling] = useState(false), [observationIndex, setObservationIndex] = useState(0);
-  const mounted = useRef(true), busy = useRef(false), currentId = useRef(''), attemptVersion = useRef(0), preferred = useRef('');
+  const mounted = useRef(true), busy = useRef(false), currentId = useRef(preferredArtifactId ? '' : preferredJobId ?? ''), attemptVersion = useRef(0), preferred = useRef('');
+  const policyChosenManually = useRef(false);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
     try { if (!client.getQueryData(attemptKey)) client.setQueryData(attemptKey, storedAttempt('policy.run.replay', projectId)); setJournalReady(true); }
@@ -38,7 +43,7 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, onDataset }:
   const policy = policies.find(item => item.id === policyId);
   const datasets = (jobs.data ?? []).filter(isDatasetJob).filter(item => replayDataset(item, projectId));
   const dataset = datasets.find(item => item.id === datasetId);
-  useEffect(() => { if (preferredArtifactId && preferred.current !== preferredArtifactId && policies.some(item => item.id === preferredArtifactId)) { preferred.current = preferredArtifactId; setPolicy(preferredArtifactId); setAttested(false); } }, [preferredArtifactId, artifacts.data, projectId]);
+  useEffect(() => { if (!policyChosenManually.current && preferredArtifactId && preferred.current !== preferredArtifactId && policies.some(item => item.id === preferredArtifactId)) { preferred.current = preferredArtifactId; setPolicy(preferredArtifactId); setAttested(false); } }, [preferredArtifactId, artifacts.data, projectId]);
   const history = (jobs.data ?? []).filter(replayJob).filter(item => item.project_id === projectId).sort((a, b) => b.created_at.localeCompare(a.created_at));
   const picked = history.find(item => item.id === selectedId) ?? (accepted?.id === selectedId ? accepted : undefined);
   const selected = picked?.project_id === projectId ? picked : undefined;
@@ -49,8 +54,17 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, onDataset }:
   const output = outputs[0];
   const preview = useQuery({ queryKey: ['native-replay-record', projectId, selected?.id, output?.id, output?.manifest_sha256], queryFn: () => readReplay(projectId, output!.id, selected!, report!), enabled: !!selected && !!output && !!report, retry: false });
   const observed = preview.data?.records[observationIndex];
-  function selectJob(id: string) { currentId.current = id; setSelectedId(id); setCancelId(''); setObservationIndex(0); }
-  function saveAttempt(value: PolicyJobAttempt) { storeAttempt('policy.run.replay', projectId, value); client.setQueryData(attemptKey, value); }
+  function selectJob(id: string) { onJobSelected?.(id); currentId.current = id; setSelectedId(id); setCancelId(''); setObservationIndex(0); }
+  function saveAttempt(value: PolicyJobAttempt) {
+    try { storeAttempt('policy.run.replay', projectId, value); }
+    catch {
+      const failure = new JournalUnavailable();
+      if (client.getQueryData<PolicyJobAttempt>(attemptKey)?.state === 'pending') client.setQueryData<PolicyJobAttempt>(attemptKey, (): PolicyJobAttempt => ({ state: 'uncertain', message: failure.message }));
+      if (mounted.current) setJournalReady(false);
+      throw failure;
+    }
+    client.setQueryData(attemptKey, value);
+  }
   let recipe: ReplayRecipe | undefined, invalid = '';
   try {
     const rows = replaySelection(selection), coordinates = units.split(',').map(item => item.trim());
@@ -71,12 +85,15 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, onDataset }:
     try {
       saveAttempt({ state: 'pending', message: 'Submitting one CPU observation replay…' });
       const job = await startReplay(projectId, { operation: 'policy.run', runtime_id: runtime!.id, artifact_id: policy!.id, dataset_job_id: dataset!.id, native_replay: recipe!, timeout_seconds: Number(timeout) });
-      saveAttempt(null); if (mounted.current) { setAccepted(job); selectJob(job.id); }
+      if (mounted.current) { setAccepted(job); selectJob(job.id); }
+      saveAttempt(null);
       await client.invalidateQueries({ queryKey: ['jobs', projectId] });
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'Replay could not be submitted.';
       attemptVersion.current += 1; if (mounted.current) { setReviewed(false); setError(message); }
-      try { saveAttempt(cause instanceof UncertainPolicyJob ? { state: 'uncertain', message } : null); } catch { if (mounted.current) setJournalReady(false); }
+      if (!(cause instanceof JournalUnavailable)) {
+        try { saveAttempt(cause instanceof UncertainPolicyJob ? { state: 'uncertain', message } : null); } catch { if (mounted.current) setJournalReady(false); }
+      }
     } finally { busy.current = false; }
   }
   async function cancel() {
@@ -90,10 +107,10 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, onDataset }:
     finally { busy.current = false; if (mounted.current) { setCancelling(false); setCancelId(''); } }
   }
   return <section className="panel native-simulation native-replay" aria-label="CPU observation replay">
-    <div className="cloud-heading"><div><h2>Inspect the actions your policy predicts</h2><p>Run a packed ACT policy on selected dataset observations. Each observation starts from a reset policy and produces a complete 100-action chunk.</p></div><button className="secondary-button" disabled={!projectId || jobs.isFetching} onClick={() => void refresh()}>Refresh replay jobs</button></div>
+    <div className="cloud-heading"><div><h2>Inspect the actions your policy predicts</h2>{!selected && <p>Run a packed ACT policy on selected dataset observations. Each observation starts from a reset policy and produces a complete 100-action chunk.</p>}</div><button className="secondary-button" disabled={!projectId || jobs.isFetching} onClick={() => void refresh()}>Refresh replay jobs</button></div>
     <p>Local CPU · INT8 / INT4 ACT · actions are saved, never applied to a robot or simulator. Use Native Isaac for a scene rollout.</p>
     {selected && <article className="native-simulation-result" aria-label="Observation replay details" data-job-id={selected.id}>
-      <div className="native-result-header"><h3>CPU observation replay</h3><span className={`status status-${selected.status}`}>{selected.status}</span></div><p className="native-result-summary">{selected.stage ?? 'Queued'} · {selected.id}</p>
+      <div className="native-result-header"><h3>CPU observation replay</h3><span className={`status status-${selected.status}`}>{selected.status}</span></div><p className="native-result-summary">{isActive(selected) ? selected.stage ?? selected.status : 'Recorded job'} · {selected.id}</p>
       {selected.error && <p role="alert">{selected.error}</p>}
       {report && <><p>{report.observation_source.kind === 'generated_fixture' ? 'Generated observations · software verification only' : 'Dataset observations · execution check only'}</p><dl className="cloud-run-facts"><div><dt>Observations</dt><dd>{report.observations}</dd></div><div><dt>Predictions per observation</dt><dd>100 × 6</dd></div><div><dt>Reset repeatability</dt><dd>Exact repeat</dd></div></dl><p>The saved policy returned the same full chunk after reset. This does not measure task success, action accuracy, GPU performance, or calibration.</p></>}
       {selected.status === 'succeeded' && !report && <p role="alert">Complete replay evidence is unavailable. Job completion alone does not verify the output.</p>}
@@ -107,13 +124,13 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, onDataset }:
     </article>}
     {history.length > 0 && <label className="distillation-history">Saved replay<select aria-label="Saved replay" value={selected?.id ?? ''} onChange={event => selectJob(event.target.value)}><option value="">Choose a recorded replay</option>{history.map(item => <option key={item.id} value={item.id}>{item.id.slice(0, 8)} · {item.status}</option>)}</select></label>}
     {jobs.isError && <p role="alert">Job updates are unavailable; displayed status may be stale.</p>}{options.isError && <p role="alert">Worker options are unavailable.</p>}{artifacts.isError && <p role="alert">Saved policies are unavailable.</p>}{error && <p role="alert">{error}</p>}
-    {attempt.data?.state === 'pending' && <p role="status">{attempt.data.message}</p>}
+    {journalReady && attempt.data?.state === 'pending' && <p role="status">{attempt.data.message}</p>}
     {attempt.data?.state === 'uncertain' && <div className="warning-box"><p>{attempt.data.message}</p><button className="secondary-button" disabled={!reviewed || jobs.isError} onClick={() => { try { saveAttempt(null); setReviewed(false); setError(''); } catch { setJournalReady(false); setError('Browser session storage is unavailable.'); } }}>I checked replay jobs; allow a new request</button></div>}
     <WorkbenchDisclosure key={selected ? 'another' : 'first'} title={selected ? 'Prepare another replay' : 'Choose policy and observations'} initiallyOpen={!selected}>
       {options.isSuccess && !runtimes.length && <p role="status">No local CPU replay worker is configured. Its isolated model environment and dataset reader must be registered first.</p>}
       <fieldset className="native-simulation-form" disabled={!projectId || !!attempt.data || cancelling}><legend>Explicit observation selection</legend>
         <label>Replay worker<select aria-label="Replay worker" value={runtime?.id ?? ''} onChange={event => setRuntime(event.target.value)}><option value="">Choose a local worker</option>{runtimes.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
-        <label>Packed ACT policy<select aria-label="Packed ACT policy" value={policyId} onChange={event => { setPolicy(event.target.value); setAttested(false); }}><option value="">Choose a complete local INT8 or INT4 policy</option>{policies.map(item => <option key={item.id} value={item.id}>{item.label} · {item.id.slice(0, 8)}</option>)}</select></label>
+        <label>Packed ACT policy<select aria-label="Packed ACT policy" value={policyId} onChange={event => { policyChosenManually.current = true; setPolicy(event.target.value); setAttested(false); }}><option value="">Choose a complete local INT8 or INT4 policy</option>{policies.map(item => <option key={item.id} value={item.id}>{item.label} · {item.id.slice(0, 8)}</option>)}</select></label>
         <label>Observation dataset<select aria-label="Observation dataset" value={datasetId} onChange={event => { setDataset(event.target.value); setSelection(''); setAttested(false); }}><option value="">Choose a complete dataset snapshot</option>{datasets.map(item => <option key={item.id} value={item.id}>{item.result!.repo_id ?? 'Local robotics dataset'} · {item.result!.total_episodes} episodes · {item.id.slice(0, 8)}</option>)}</select></label>
         <button className="text-link" type="button" onClick={onDataset}>Open Dataset intake</button>
         <label>Episode and frame pairs<input value={selection} onChange={event => setSelection(event.target.value)} placeholder="For example: 0:3, 2:1" /></label><p>Choose 1–32 distinct observations. Original camera resolution, raw states, exact frame identity, and a 128 MiB input limit are verified before execution.</p>

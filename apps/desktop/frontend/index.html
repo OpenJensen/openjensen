@@ -5,13 +5,19 @@
 <main>
   <p class="eyebrow">OPEN JENSEN / DESKTOP</p>
   <h1>Your local workbench.</h1>
-  <p class="intro">Connect to the OPEN JENSEN application running on this computer.</p>
+  <p class="intro">Use a dedicated desktop workspace or connect to the application already running on this computer.</p>
   <section aria-label="Application connection">
     <span class="dot" aria-hidden="true"></span><h2 id="heading">Ready to connect</h2>
     <p id="message" role="status" aria-live="polite">The desktop connects to your existing application. Start OPEN JENSEN locally, then connect.</p>
     <button id="connect" type="button">Connect to OPEN JENSEN</button>
   </section>
-  <p class="note">Closing this window leaves your application and cloud jobs running.</p>
+  <section aria-label="Dedicated desktop workspace">
+    <h2>Separate desktop workspace</h2>
+    <p id="owned-message" role="status" aria-live="polite">Checking whether this build includes a verified backend…</p>
+    <label class="confirmation"><input id="confirm" type="checkbox" disabled> Create or reopen this build’s dedicated workspace. Existing application data will not be imported.</label>
+    <div class="actions"><button id="start" type="button" disabled>Start desktop workspace</button><button id="open-owned" type="button" hidden>Open workspace</button><button id="stop" type="button" disabled>Stop desktop backend</button><button id="restart" type="button" disabled>Restart desktop backend</button></div>
+  </section>
+  <p class="note">Attached applications keep running when this window closes. A desktop-owned backend receives a shutdown request; its workspace data is preserved.</p>
   <details><summary>Connection help</summary><p>Start the local application with <code>firebird serve</code>. It must also serve the built web interface. The default address is <code>http://127.0.0.1:8000</code>.</p><p>Use the native <strong>OPEN JENSEN → Connection</strong> menu to return here. A different local port can be selected before launch with <code>FIREBIRD_DESKTOP_PORT</code>.</p></details>
 </main><script src="connection.js"></script>
 </body></html>

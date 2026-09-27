@@ -169,7 +169,7 @@ test('shows path parameters, JSON request bodies, status codes, and referenced r
   await expect(intake).toContainText('202');
   await expect(intake).toContainText('422');
   await expect(intake).toContainText('Job');
-  await expect(intake.locator('pre').first()).toContainText('http://127.0.0.1:8765/api/v1/projects/{project_id}/intakes');
+  await expect(intake.locator('pre').first()).toContainText(`${new URL(page.url()).origin}/api/v1/projects/{project_id}/intakes`);
   await expect(intake.locator('pre').first()).toContainText('--data @request.json');
   const requestModel = page.locator('[id="schema-IntakeRequest"]');
   await requestModel.locator('summary').first().click();
@@ -1315,7 +1315,9 @@ test('Spatial settings require explicit task and parity choices in the submitted
     await expect(page.getByLabel('Diagnostic mode')).toBeDisabled();
     await expect(page.getByRole('heading', { name: 'Recorded benchmark comparison' })).toBeVisible();
     await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'New quantization', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'SmolVLA · GGUF', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Native ACT · INT8 / INT4', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'New quantization', exact: true })).toHaveCount(0);
     await expect(page.getByLabel('Checkpoint or policy')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toHaveCount(0);
     expect(await page.evaluate(() => localStorage.getItem('firebird.workflow.'))).toBeNull();
@@ -1462,7 +1464,9 @@ for (const state of ['empty', 'error'] as const) {
     await page.getByLabel('Reference hardware').selectOption('rtx3070');
     await expect(page.getByRole('table', { name: 'NVIDIA RTX 3070 · recorded reference results' })).toBeVisible();
     await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'New quantization', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'SmolVLA · GGUF', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Native ACT · INT8 / INT4', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'New quantization', exact: true })).toHaveCount(0);
     await expect(page.getByLabel('Checkpoint or policy')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toHaveCount(0);
     expect(fixture.requests).toEqual([]);
@@ -1520,7 +1524,9 @@ test('a project removed during refetch cannot submit with its stale selection', 
   // React Query refetches stale project data when the browser regains visibility.
   await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
   await expect.poll(() => emptyResponses).toBeGreaterThan(0);
-  await expect(page.getByRole('button', { name: 'New quantization', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'SmolVLA · GGUF', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Native ACT · INT8 / INT4', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'New quantization', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toHaveCount(0);
   await expect(page.getByLabel('Checkpoint or policy')).toHaveCount(0);
   expect(fixture.requests).toEqual([]);

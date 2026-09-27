@@ -10,7 +10,7 @@ export function record(value: unknown): value is Record<string, unknown> { retur
 export async function policyJobRequest(path: string, body?: unknown): Promise<unknown> {
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 15_000);
   try {
-    const response = await fetch(`${apiOrigin}/api/v1${path}`, { method: body === undefined ? 'GET' : 'POST', body: body === undefined ? undefined : JSON.stringify(body), signal: controller.signal, cache: 'no-store', headers: { 'Content-Type': 'application/json' } });
+    const response = await fetch(`${apiOrigin}/api/v1${path}`, { method: body === undefined ? 'GET' : 'POST', body: body === undefined ? undefined : JSON.stringify(body), signal: controller.signal, cache: 'no-store', redirect: 'error', headers: { 'Content-Type': 'application/json' } });
     const reader = response.body?.getReader();
     if (!reader) throw new Error('Application returned an empty response.');
     const parts: Uint8Array[] = []; let bytes = 0;

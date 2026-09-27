@@ -149,3 +149,7 @@
 .training-gpu-select > label { font-size: 11px; color: var(--muted); }
 .training-gpu-select > select { width: 100%; min-width: 0; border: 1px solid var(--line-strong); border-radius: 7px; padding: 12px; background: var(--surface); color: var(--ink); font-size: 12px; }
 .training-gpu-select > p { color: var(--muted); font-size: 11px; line-height: 1.7; }
+.training-recovery { margin-bottom: 24px; }
+.training-recovery h2 { font-size: 15px; }
+.training-recovery-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.training-recovery-actions > button { white-space: normal; }

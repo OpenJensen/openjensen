@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-restart-owned"
+description = "Enables the restart_owned command without any pre-configured scope."
+commands.allow = ["restart_owned"]
+
+[[permission]]
+identifier = "deny-restart-owned"
+description = "Denies the restart_owned command without any pre-configured scope."
+commands.deny = ["restart_owned"]

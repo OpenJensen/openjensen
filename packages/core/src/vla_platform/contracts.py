@@ -354,6 +354,7 @@ IMPLEMENTED_OPERATIONS = frozenset(
         "dataset.inspect.local",
         "dataset.augment",
         "policy.finetune",
+        "policy.distill",
         "policy.export",
         "policy.quantize",
         "policy.evaluate",

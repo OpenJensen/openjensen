@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-stop-owned"
+description = "Enables the stop_owned command without any pre-configured scope."
+commands.allow = ["stop_owned"]
+
+[[permission]]
+identifier = "deny-stop-owned"
+description = "Denies the stop_owned command without any pre-configured scope."
+commands.deny = ["stop_owned"]

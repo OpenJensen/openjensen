@@ -7,7 +7,7 @@ const dataset = { id: 'data', project_id: 'alpha', kind: 'dataset.inspect', stat
 const panel = (page: Page) => page.getByRole('region', { name: 'CPU observation replay', exact: true });
 const submit = (page: Page) => page.getByRole('button', { name: 'Run CPU observation replay', exact: true });
 async function fixture(page: Page) {
-  const state = { jobs: [dataset] as Record<string, any>[], posts: [] as Record<string, any>[], cancelled: [] as string[], outcome: 'ok', invalid: false, workers: [runtime] as Record<string, unknown>[] };
+  const state = { jobs: [dataset] as Record<string, any>[], posts: [] as Record<string, any>[], cancelled: [] as string[], outcome: 'ok', postGate: null as Promise<void> | null, invalid: false, workers: [runtime] as Record<string, unknown>[] };
   await page.route('**/api/v1/**', async route => {
     const req = route.request(), path = new URL(req.url()).pathname;
     if (path === '/api/v1/projects') return route.fulfill({ json: [{ id: 'alpha', name: 'CPU replay fixture', created_at: time }] });
@@ -15,6 +15,7 @@ async function fixture(page: Page) {
     if (path.endsWith('/artifacts')) return route.fulfill({ json: [policy, { ...policy, id: 'remote', metadata: { architecture: 'act', storage: 'gcs' } }, { ...policy, id: 'wrong', project_id: 'beta' }, { ...policy, id: 'float', format: 'native_checkpoint' }] });
     if (path.endsWith('/policy-jobs') && req.method() === 'POST') {
       const body = req.postDataJSON(); state.posts.push(body);
+      if (state.postGate) await state.postGate;
       const job = { id: 'replay-001', project_id: 'alpha', kind: 'policy.run', status: 'running', request: body, created_at: time, updated_at: time, result: null };
       state.jobs.push(job);
       if (state.outcome === 'lost') return route.abort('failed');
@@ -92,4 +93,67 @@ test('a mismatched saved record is withheld, and unmeasured report claims are re
   await page.getByRole('button', { name: 'Refresh replay jobs' }).click(); await expect(panel(page).getByRole('alert')).toContainText('does not match'); await expect(page.getByRole('region', { name: 'Predicted action chunks' })).toHaveCount(0);
   job.result.reports[0].quality_verified = true; await page.getByRole('button', { name: 'Refresh replay jobs' }).click();
   await expect(panel(page).getByRole('alert')).toContainText('Complete replay evidence is unavailable'); await expect(page.getByRole('link', { name: 'Download verified replay record' })).toHaveCount(0);
+});
+
+
+test('journal write failure blocks submission even when removal still works', async ({ page }) => {
+  const state = await fixture(page); await prepare(page);
+  await page.evaluate(() => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (key.startsWith('firebird:job-attempt:')) throw new DOMException('Journal write denied', 'SecurityError');
+      return original.call(this, key, value);
+    };
+  });
+  await submit(page).click();
+  await expect(submit(page)).toBeDisabled();
+  expect(state.posts).toHaveLength(0);
+  await page.getByRole('button', { name: 'Refresh replay jobs' }).click();
+  await expect(submit(page)).toBeDisabled();
+  expect(state.posts).toHaveLength(0);
+});
+
+test('acknowledged job remains visible when journal cleanup fails', async ({ page }) => {
+  const state = await fixture(page); await prepare(page);
+  await page.evaluate(() => {
+    const original = Storage.prototype.removeItem;
+    Storage.prototype.removeItem = function (key: string) {
+      if (key.startsWith('firebird:job-attempt:')) throw new DOMException('Journal removal denied', 'SecurityError');
+      return original.call(this, key);
+    };
+  });
+  await submit(page).click();
+  await expect(page.getByRole('article', { name: 'Observation replay details' })).toHaveAttribute('data-job-id', 'replay-001');
+  expect(state.posts).toHaveLength(1);
+  await page.getByText('Prepare another replay', { exact: true }).click();
+  await expect(submit(page)).toBeDisabled();
+  const pending = await page.evaluate(() => Object.keys(sessionStorage).filter(key => key.startsWith('firebird:job-attempt:')).map(key => JSON.parse(sessionStorage.getItem(key)!)));
+  expect(pending).toHaveLength(1);
+  expect(pending[0].state).toBe('pending');
+  await expect(page.getByText(/^Submitting one /)).toHaveCount(0);
+});
+
+
+test('journal cleanup failure after navigation preserves recovery guidance', async ({ page }) => {
+  const state = await fixture(page); await prepare(page);
+  let release!: () => void; state.postGate = new Promise<void>(resolve => { release = resolve; });
+  await page.evaluate(() => {
+    const original = Storage.prototype.removeItem;
+    Storage.prototype.removeItem = function (key: string) {
+      if (key.startsWith('firebird:job-attempt:')) {
+        (window as unknown as { journalCleanupFailures: number }).journalCleanupFailures = 1;
+        throw new DOMException('Journal removal denied', 'SecurityError');
+      }
+      return original.call(this, key);
+    };
+  });
+  await submit(page).click(); await expect.poll(() => state.posts.length).toBe(1);
+  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); release();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { journalCleanupFailures?: number }).journalCleanupFailures)).toBe(1);
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await page.getByRole('button', { name: 'Observation replay · ACT', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'I checked replay jobs; allow a new request' })).toBeVisible();
+  await expect(page.getByText(/^Submitting one /)).toHaveCount(0);
+  await expect(submit(page)).toBeDisabled();
+  expect(state.posts).toHaveLength(1);
 });

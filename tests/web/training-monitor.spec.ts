@@ -115,6 +115,7 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
     if (request.method() === 'GET') {
       const replies: Record<string, unknown> = {
         '/api/v1/health': { status: 'ok', version: 'training-fixture' }, '/api/v1/capabilities': [],
+        '/api/v1/simulation-options': { profiles: [] },
         '/api/v1/projects': [{ id: projectId, name: 'Training visibility', created_at: timestamp() }],
         [`/api/v1/projects/${projectId}/jobs`]: jobs,
         [`/api/v1/projects/${projectId}/artifacts`]: artifacts,
@@ -153,7 +154,7 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
     await page.locator('.job-history-entry[data-job-id="run-001"]').click();
     await expect(monitor).toBeVisible();
   }
-  return { telemetry, job, jobs, monitor, submitted, unexpected, cancelled, telemetryRequests };
+  return { telemetry, job, jobs, artifacts, monitor, submitted, unexpected, cancelled, telemetryRequests };
 }
 
 async function noOverflow(page: Page) {
@@ -501,12 +502,480 @@ test('completed cloud ACT checkpoint explicitly downloads and exports with separ
 });
 
 test('ACT export-only computer never appears as an engine execution target', async ({ page }) => {
-  await workspace(page, 'running', true, 'local');
+  const { submitted } = await workspace(page, 'running', true, 'local');
   for (const [stage, create] of [['Run', 'New run'], ['Evaluate', 'New evaluation'], ['Quantize', 'New quantization']]) {
     await page.getByRole('button', { name: stage, exact: true }).click();
+    if (stage === 'Run') await page.getByRole('button', { name: 'Engine checks · GGUF', exact: true }).click();
+    if (stage === 'Quantize') await page.getByRole('button', { name: 'SmolVLA · GGUF', exact: true }).click();
     await page.getByRole('button', { name: create, exact: true }).click();
     const target = page.getByRole('combobox', { name: 'Execution target', exact: true });
     await expect(target).not.toContainText('Local CPU export');
     if (stage !== 'Quantize') await expect(target).toBeDisabled();
   }
+  expect(submitted).toEqual([]);
+});
+
+async function newTraining(page: Page) {
+  await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Compute', exact: true }).click();
+  return page.getByRole('button', { name: 'Start fine-tuning', exact: true });
+}
+
+for (const fault of ['lost', 'wrong-project', 'changed-budget', 'redirect'] as const) {
+  test(`training submission recovery retains ${fault} uncertainty across navigation and reload`, async ({ page }, testInfo) => {
+    const { jobs } = await workspace(page, 'empty', false);
+    let posts = 0, redirected = 0;
+    await page.route('**/api/v1/training-redirect-target', async route => {
+      redirected += 1;
+      await route.fulfill({ json: { detail: 'Must not follow a mutation redirect' } });
+    });
+    await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => {
+      posts += 1;
+      const body = route.request().postDataJSON();
+      const accepted = { id: 'accepted-on-server', project_id: projectId, kind: 'policy.finetune', status: 'queued', request: body, created_at: timestamp(), updated_at: timestamp() };
+      jobs.unshift(accepted);
+      if (fault === 'lost') await route.abort();
+      else if (fault === 'redirect') await route.fulfill({ status: 307, headers: { location: '/api/v1/training-redirect-target' }, body: '' });
+      else await route.fulfill({ status: 202, json: fault === 'wrong-project' ? { ...accepted, project_id: 'another-project' } : { ...accepted, request: { ...body, training: { ...body.training, steps: body.training.steps + 1 } } } });
+    });
+    const start = await newTraining(page);
+    await start.click();
+    const recovery = page.getByRole('region', { name: 'Training submission recovery' });
+    await expect(recovery).toContainText('unverified');
+    await expect(start).toBeDisabled();
+    const acknowledge = recovery.getByRole('button', { name: 'I checked the jobs; allow a new request' });
+    await expect(acknowledge).toBeDisabled();
+    await page.getByRole('navigation', { name: 'Policy lifecycle' }).getByRole('button', { name: 'Dataset', exact: true }).click();
+    await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+    await expect(recovery).toBeVisible();
+    await page.reload();
+    await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+    await expect(recovery).toBeVisible();
+    await expect(acknowledge).toBeDisabled();
+    await recovery.getByRole('button', { name: 'Refresh training jobs' }).click();
+    await expect(page.locator('.job-history-entry[data-job-id="accepted-on-server"]')).toBeVisible();
+    await expect(acknowledge).toBeEnabled();
+    if (fault === 'lost') {
+      await noOverflow(page);
+      await page.screenshot({ path: testInfo.outputPath('training-submission-recovery.png'), fullPage: true });
+    }
+    await acknowledge.click();
+    await expect(recovery).toHaveCount(0);
+    expect(posts).toBe(1);
+    expect(redirected).toBe(0);
+  });
+}
+
+test('training journal write failure sends no request', async ({ page }) => {
+  await page.addInitScript(() => {
+    const set = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key.startsWith('firebird:job-attempt:policy.finetune:')) throw new Error('Storage unavailable');
+      return set.call(this, key, value);
+    };
+  });
+  const { submitted } = await workspace(page, 'empty', false);
+  const start = await newTraining(page);
+  await start.click();
+  await expect(page.getByRole('region', { name: 'Training submission recovery' })).toContainText('storage is unavailable');
+  await expect(start).toBeDisabled();
+  expect(submitted).toEqual([]);
+});
+
+test('training acknowledgement survives journal cleanup failure', async ({ page }) => {
+  await page.addInitScript(() => {
+    const remove = Storage.prototype.removeItem;
+    Storage.prototype.removeItem = function (key) {
+      if (key.startsWith('firebird:job-attempt:policy.finetune:')) throw new Error('Storage unavailable');
+      return remove.call(this, key);
+    };
+  });
+  const { submitted } = await workspace(page, 'empty', false);
+  await (await newTraining(page)).click();
+  await expect(page.getByRole('article', { name: 'Training run monitor' })).toHaveAttribute('data-run-id', 'new-run-1');
+  await expect(page.getByRole('region', { name: 'Training submission recovery' })).toContainText('storage is unavailable');
+  expect(submitted).toHaveLength(1);
+});
+
+for (const malformed of ['status', 'method', 'dataset', 'timestamp', 'recipe'] as const) {
+  test(`training resume rejects malformed ${malformed} acknowledgement without losing recovery`, async ({ page }) => {
+    const { monitor } = await workspace(page, 'failed');
+    let posts = 0;
+    await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => {
+      posts += 1;
+      const body = route.request().postDataJSON();
+      expect(body.artifact_id || body.resume_job_id).toBeTruthy();
+      const job: Record<string, any> = { id: 'resumed', project_id: projectId, kind: 'policy.finetune', status: 'queued', request: body, created_at: timestamp(), updated_at: timestamp() };
+      if (malformed === 'status') job.status = ['queued'];
+      if (malformed === 'method') delete job.request.training_method;
+      if (malformed === 'dataset') job.request.dataset_job_id = null;
+      if (malformed === 'timestamp') job.updated_at = 'invalid';
+      if (malformed === 'recipe') job.request.training = ['invalid'];
+      await route.fulfill({ status: 202, json: job });
+    });
+    await monitor.getByRole('button', { name: 'Resume from checkpoint' }).click();
+    await page.getByRole('button', { name: 'Resume fine-tuning', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Training submission recovery' })).toContainText('unverified');
+    await expect(page.getByRole('button', { name: 'Resume fine-tuning', exact: true })).toBeDisabled();
+    expect(posts).toBe(1);
+  });
+}
+
+test('training recovery requires a successful history refresh and an explicit acknowledgement', async ({ page }) => {
+  await workspace(page, 'empty', false);
+  let posts = 0;
+  await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => { posts += 1; await route.abort(); });
+  await (await newTraining(page)).click();
+  const recovery = page.getByRole('region', { name: 'Training submission recovery' });
+  await expect(recovery).toContainText('unverified');
+  await page.route(`**/api/v1/projects/${projectId}/jobs`, async route => route.fulfill({ status: 503, json: { detail: 'History unavailable' } }));
+  await recovery.getByRole('button', { name: 'Refresh training jobs' }).click();
+  await expect(recovery).toContainText('Training history could not refresh');
+  await expect(recovery.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toBeDisabled();
+  expect(posts).toBe(1);
+});
+
+test('a definite training rejection reports its reason without inventing a saved job', async ({ page }) => {
+  const { jobs } = await workspace(page, 'empty', false);
+  let posts = 0;
+  await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => {
+    posts += 1;
+    await route.fulfill({ status: 422, json: { detail: 'The selected dataset is not admitted for training.' } });
+  });
+  const start = await newTraining(page);
+  await start.click();
+  await expect(page.getByRole('main').getByRole('alert')).toContainText('The selected dataset is not admitted for training.');
+  await expect(start).toBeEnabled();
+  await expect(page.getByRole('region', { name: 'Training submission recovery' })).toHaveCount(0);
+  expect(jobs.filter(job => job.kind === 'policy.finetune')).toEqual([]);
+  expect(posts).toBe(1);
+});
+
+
+async function exportRecoveryFixture(page: Page) {
+  const state = await workspace(page, 'running', true, 'remote-complete');
+  const originalJobs = structuredClone(state.jobs);
+  await page.route(`**/api/v1/projects/${projectId}/jobs`, route => route.fulfill({ json: originalJobs }));
+  return { ...state, originalJobs };
+}
+const exportButton = (page: Page) => page.getByRole('button', { name: 'Download checkpoint and export', exact: true });
+async function reopenExport(page: Page) {
+  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.locator('.job-history-entry[data-job-id="run-001"]').click();
+  await expect(page.getByRole('article', { name: 'Training run monitor' })).toBeVisible();
+}
+function exportReceipt(state: Awaited<ReturnType<typeof exportRecoveryFixture>>, body: Record<string, unknown>) {
+  return { ...state.job, id: 'acknowledged-export', kind: 'policy.export', request: body, status: 'queued', stage: 'preparing', error: null };
+}
+
+test('ACT export lost acknowledgment remains paused after reload without another POST', async ({ page }, testInfo) => {
+  const state = await exportRecoveryFixture(page);
+  await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => {
+    state.submitted.push(route.request().postDataJSON()); await route.abort('failed');
+  });
+  await exportButton(page).click();
+  await expect(page.getByRole('region', { name: 'ACT inference export' })).toContainText('outcome is unverified');
+  await expect(exportButton(page)).toBeDisabled();
+  await page.reload(); await reopenExport(page);
+  await expect(exportButton(page)).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'I checked the export jobs; allow a new request' })).toBeDisabled();
+  expect(state.submitted).toHaveLength(1);
+  const image = testInfo.outputPath('export-recovery.png');
+  await page.getByRole('region', { name: 'ACT inference export' }).screenshot({ path: image });
+  await testInfo.attach('Export recovery', { path: image, contentType: 'image/png' });
+});
+
+test('ACT export retains acknowledged job while history is stale and prevents another submission', async ({ page }, testInfo) => {
+  const state = await exportRecoveryFixture(page);
+  await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => {
+    const body = route.request().postDataJSON(); state.submitted.push(body);
+    await route.fulfill({ status: 202, json: exportReceipt(state, body) });
+  });
+  await exportButton(page).click();
+  await expect(page.getByRole('region', { name: 'ACT export receipt' })).toContainText('acknowledged-export');
+  await expect(page.getByRole('region', { name: 'ACT export receipt' })).toContainText('queued');
+  await expect(page.getByRole('button', { name: 'Exporting ACT policy…', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await reopenExport(page);
+  await expect(page.getByRole('region', { name: 'ACT export receipt' })).toContainText('acknowledged-export');
+  await expect(page.getByRole('button', { name: 'Exporting ACT policy…', exact: true })).toBeDisabled();
+  expect(state.submitted).toHaveLength(1);
+  const image = testInfo.outputPath('export-receipt.png');
+  await page.getByRole('region', { name: 'ACT inference export' }).screenshot({ path: image });
+  await testInfo.attach('Export receipt', { path: image, contentType: 'image/png' });
+});
+
+test('ACT export unmount during submission preserves pending identity and late acknowledgment', async ({ page }) => {
+  const state = await exportRecoveryFixture(page); let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => {
+    const body = route.request().postDataJSON(); state.submitted.push(body); await gate;
+    await route.fulfill({ status: 202, json: exportReceipt(state, body) });
+  });
+  try {
+    await exportButton(page).click(); await expect.poll(() => state.submitted.length).toBe(1);
+    await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await reopenExport(page);
+    await expect(page.getByRole('button', { name: 'Exporting ACT policy…', exact: true })).toBeDisabled();
+    release();
+    await expect(page.getByRole('region', { name: 'ACT export receipt' })).toContainText('acknowledged-export');
+    expect(state.submitted).toHaveLength(1);
+  } finally { release(); }
+});
+
+test('ACT export mismatched acknowledgment is uncertain and never promoted to a receipt', async ({ page }) => {
+  const state = await exportRecoveryFixture(page);
+  await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => {
+    const body = route.request().postDataJSON(); state.submitted.push(body);
+    await route.fulfill({ status: 202, json: exportReceipt(state, { ...body, artifact_id: 'another-checkpoint' }) });
+  });
+  await exportButton(page).click();
+  await expect(page.getByRole('region', { name: 'ACT inference export' })).toContainText('outcome is unverified');
+  await expect(page.getByRole('region', { name: 'ACT export receipt' })).toHaveCount(0);
+  await expect(exportButton(page)).toBeDisabled(); expect(state.submitted).toHaveLength(1);
+});
+
+for (const field of ['project', 'runtime', 'operation', 'budget', 'status', 'timestamp', 'empty'] as const) {
+  test(`ACT export rejects a malformed ${field} acknowledgment without retry`, async ({ page }) => {
+    const state = await exportRecoveryFixture(page);
+    await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => {
+      const body = route.request().postDataJSON(); state.submitted.push(body);
+      const receipt: Record<string, any> = exportReceipt(state, { ...body });
+      if (field === 'project') receipt.project_id = 'foreign-project';
+      if (field === 'runtime') receipt.request.runtime_id = 'another-worker';
+      if (field === 'operation') receipt.kind = receipt.request.operation = 'policy.quantize';
+      if (field === 'budget') receipt.request.timeout_seconds = 7200;
+      if (field === 'status') receipt.status = ['queued'];
+      if (field === 'timestamp') receipt.updated_at = 'not-a-date';
+      await route.fulfill({ status: 202, json: field === 'empty' ? {} : receipt });
+    });
+    await exportButton(page).click();
+    await expect(page.getByRole('region', { name: 'ACT export recovery' })).toContainText('unverified');
+    await expect(page.getByRole('region', { name: 'ACT export receipt' })).toHaveCount(0);
+    await expect(exportButton(page)).toBeDisabled(); expect(state.submitted).toHaveLength(1);
+  });
+}
+
+test('ACT export cannot POST when its pending journal cannot be written', async ({ page }) => {
+  await page.addInitScript(() => {
+    const write = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key.startsWith('firebird:job-attempt:policy.export:')) throw new Error('Storage unavailable');
+      return write.call(this, key, value);
+    };
+  });
+  const state = await exportRecoveryFixture(page);
+  await exportButton(page).click();
+  await expect(page.getByRole('region', { name: 'ACT inference export' })).toContainText('storage is unavailable');
+  await expect(exportButton(page)).toBeDisabled();
+  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await reopenExport(page);
+  await expect(exportButton(page)).toBeDisabled(); expect(state.submitted).toHaveLength(0);
+});
+
+for (const failure of ['receipt-write', 'cleanup', 'unmounted-cleanup'] as const) {
+  test(`ACT export retains accepted receipt after ${failure} storage failure`, async ({ page }) => {
+    await page.addInitScript(failure => {
+      const write = Storage.prototype.setItem, remove = Storage.prototype.removeItem;
+      Storage.prototype.setItem = function (key, value) {
+        if (failure === 'receipt-write' && key.startsWith('firebird:act-export-receipt:')) throw new Error('Storage unavailable');
+        return write.call(this, key, value);
+      };
+      Storage.prototype.removeItem = function (key) {
+        if (failure !== 'receipt-write' && key.startsWith('firebird:job-attempt:policy.export:')) throw new Error('Storage unavailable');
+        return remove.call(this, key);
+      };
+    }, failure);
+    const state = await exportRecoveryFixture(page); let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => {
+      const body = route.request().postDataJSON(); state.submitted.push(body);
+      if (failure === 'unmounted-cleanup') await gate;
+      await route.fulfill({ status: 202, json: exportReceipt(state, body) });
+    });
+    try {
+      await exportButton(page).click(); await expect.poll(() => state.submitted.length).toBe(1);
+      if (failure === 'unmounted-cleanup') {
+        await page.getByRole('button', { name: 'Dataset', exact: true }).click(); release(); await reopenExport(page);
+      }
+      await expect(page.getByRole('region', { name: 'ACT export receipt' })).toContainText('acknowledged-export');
+      await expect(page.getByRole('region', { name: 'ACT export recovery' })).toContainText('storage is unavailable');
+      await expect(page.getByRole('button', { name: 'Exporting ACT policy…', exact: true })).toBeDisabled();
+      await expect(page.getByRole('region', { name: 'ACT inference export' })).not.toContainText('Submitting one');
+      expect(await page.evaluate(project => JSON.parse(sessionStorage.getItem(`firebird:job-attempt:policy.export:${project}`)!).state, projectId)).toBe('pending');
+      expect(state.submitted).toHaveLength(1);
+    } finally { release(); }
+  });
+}
+
+test('ACT export retained active receipt survives reload even when history omits it', async ({ page }) => {
+  const state = await exportRecoveryFixture(page);
+  await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => {
+    const body = route.request().postDataJSON(); state.submitted.push(body);
+    await route.fulfill({ status: 202, json: exportReceipt(state, body) });
+  });
+  await exportButton(page).click();
+  await expect(page.getByRole('region', { name: 'ACT export receipt' })).toContainText('acknowledged-export');
+  await page.reload(); await reopenExport(page);
+  await expect(page.getByRole('region', { name: 'ACT export receipt' })).toContainText('acknowledged-export');
+  await expect(page.getByRole('button', { name: 'Exporting ACT policy…', exact: true })).toBeDisabled();
+  expect(state.submitted).toHaveLength(1);
+});
+
+test('ACT export history refresh begun before uncertainty cannot authorize another request', async ({ page }) => {
+  const state = await exportRecoveryFixture(page); let release!: () => void; let reads = 0;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route(`**/api/v1/projects/${projectId}/jobs`, async route => {
+    reads += 1; if (reads === 1) await gate; await route.fulfill({ json: state.originalJobs });
+  });
+  await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => { state.submitted.push(route.request().postDataJSON()); await route.abort(); });
+  try {
+    await page.getByRole('button', { name: 'Refresh export jobs', exact: true }).click();
+    await expect.poll(() => reads).toBe(1); await exportButton(page).click();
+    const allow = page.getByRole('button', { name: 'I checked the export jobs; allow a new request' });
+    await expect(page.getByRole('region', { name: 'ACT export recovery' })).toContainText('unverified');
+    release();
+    await expect(page.getByRole('button', { name: 'Refresh export jobs', exact: true })).toBeEnabled();
+    await expect(allow).toBeDisabled();
+    await page.getByRole('button', { name: 'Refresh export jobs', exact: true }).click();
+    await expect(allow).toBeEnabled(); await allow.click();
+    await expect(exportButton(page)).toBeEnabled(); expect(state.submitted).toHaveLength(1);
+  } finally { release(); }
+});
+
+test('ACT export failed history refresh cannot clear uncertainty', async ({ page }) => {
+  const state = await exportRecoveryFixture(page);
+  await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => { state.submitted.push(route.request().postDataJSON()); await route.abort(); });
+  await exportButton(page).click();
+  await expect(page.getByRole('region', { name: 'ACT export recovery' })).toContainText('unverified');
+  await page.route(`**/api/v1/projects/${projectId}/jobs`, route => route.fulfill({ status: 503, json: { detail: 'History unavailable' } }));
+  await page.getByRole('button', { name: 'Refresh export jobs', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'ACT inference export' })).toContainText('job updates are unavailable');
+  await expect(page.getByRole('button', { name: 'I checked the export jobs; allow a new request' })).toBeDisabled();
+  expect(state.submitted).toHaveLength(1);
+});
+
+test('ACT export definite rejection permits an explicit request without a false receipt', async ({ page }) => {
+  const state = await exportRecoveryFixture(page);
+  await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => {
+    state.submitted.push(route.request().postDataJSON()); await route.fulfill({ status: 422, json: { detail: 'Checkpoint does not meet export requirements.' } });
+  });
+  await exportButton(page).click();
+  await expect(page.getByRole('region', { name: 'ACT inference export' })).toContainText('Checkpoint does not meet export requirements.');
+  await expect(exportButton(page)).toBeEnabled();
+  await expect(page.getByRole('region', { name: 'ACT export receipt' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'ACT export recovery' })).toHaveCount(0);
+  expect(state.submitted).toHaveLength(1);
+});
+
+test('ACT export double activation and checkpoint switching keep the original request identity', async ({ page }) => {
+  const state = await exportRecoveryFixture(page);
+  state.artifacts.push({ ...state.artifacts.find(item => item.id === 'checkpoint-artifact')!, id: 'second-complete-checkpoint', label: 'Second completed checkpoint' });
+  await page.reload(); await reopenExport(page);
+  await page.getByRole('combobox', { name: 'Checkpoint', exact: true }).selectOption('checkpoint-artifact');
+  let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => {
+    const body = route.request().postDataJSON(); state.submitted.push(body); await gate;
+    await route.fulfill({ status: 202, json: exportReceipt(state, body) });
+  });
+  try {
+    await exportButton(page).evaluate((element: HTMLButtonElement) => { element.click(); element.click(); });
+    await expect.poll(() => state.submitted.length).toBe(1);
+    await page.getByRole('combobox', { name: 'Checkpoint', exact: true }).selectOption('second-complete-checkpoint');
+    await expect(page.getByRole('button', { name: 'Exporting ACT policy…', exact: true })).toBeDisabled();
+    release();
+    await expect(exportButton(page)).toBeEnabled();
+    await expect(page.getByRole('region', { name: 'ACT export receipt' })).toHaveCount(0);
+    await page.getByRole('combobox', { name: 'Checkpoint', exact: true }).selectOption('checkpoint-artifact');
+    await expect(page.getByRole('region', { name: 'ACT export receipt' })).toContainText('acknowledged-export');
+    await expect(page.getByRole('button', { name: 'Exporting ACT policy…', exact: true })).toBeDisabled();
+    expect(state.submitted).toEqual([{ operation: 'policy.export', runtime_id: 'act-cpu', artifact_id: 'checkpoint-artifact', training_method: 'full', timeout_seconds: 600 }]);
+  } finally { release(); }
+});
+
+test('ACT export ignores another project receipt and download ancestry', async ({ page }) => {
+  const state = await workspace(page, 'running', true, 'remote-complete');
+  state.jobs.unshift({ ...state.job, id: 'foreign-export', project_id: 'foreign-project', kind: 'policy.export', status: 'queued', request: { operation: 'policy.export', artifact_id: 'checkpoint-artifact', runtime_id: 'act-cpu', training_method: 'full', timeout_seconds: 600 } });
+  state.artifacts.push({ ...state.artifacts.find(item => item.id === 'checkpoint-artifact')!, id: 'foreign-output', project_id: 'foreign-project', format: 'inference_export', parent_ids: ['checkpoint-artifact'] });
+  state.artifacts.push({ ...state.artifacts.find(item => item.id === 'checkpoint-artifact')!, id: 'foreign-copy', project_id: 'foreign-project', format: 'native_checkpoint', parent_ids: ['checkpoint-artifact'] });
+  state.artifacts.push({ ...state.artifacts.find(item => item.id === 'checkpoint-artifact')!, id: 'unbound-output', format: 'inference_export', parent_ids: ['foreign-copy'] });
+  await page.reload(); await reopenExport(page);
+  await expect(exportButton(page)).toBeEnabled();
+  const control = page.getByRole('region', { name: 'ACT inference export' });
+  await expect(control.getByRole('region', { name: 'ACT export receipt' })).toHaveCount(0);
+  await expect(control.getByRole('link', { name: 'Download ACT inference package' })).toHaveCount(0);
+  expect(state.submitted).toHaveLength(0);
+});
+
+test('ACT export corrupt stored receipt blocks submission without claiming acceptance', async ({ page }) => {
+  await page.addInitScript(project => sessionStorage.setItem(`firebird:act-export-receipt:${project}:checkpoint-artifact`, '{broken'), projectId);
+  const state = await exportRecoveryFixture(page);
+  await expect(page.getByRole('region', { name: 'ACT inference export' })).toContainText('receipt is unreadable');
+  await expect(exportButton(page)).toBeDisabled();
+  await expect(page.getByRole('region', { name: 'ACT export receipt' })).toHaveCount(0);
+  expect(state.submitted).toHaveLength(0);
+});
+
+test('ACT export lost acknowledgment retains its original checkpoint and worker after another selection and reload', async ({ page }) => {
+  const state = await exportRecoveryFixture(page);
+  state.artifacts.push({ ...state.artifacts.find(item => item.id === 'checkpoint-artifact')!, id: 'second-complete-checkpoint', label: 'Second completed checkpoint' });
+  await page.reload(); await reopenExport(page);
+  await page.getByRole('combobox', { name: 'Checkpoint', exact: true }).selectOption('checkpoint-artifact');
+  await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => { state.submitted.push(route.request().postDataJSON()); await route.abort(); });
+  await exportButton(page).click();
+  const recovery = page.getByRole('region', { name: 'ACT export recovery' });
+  await expect(recovery).toContainText('Checkpoint: checkpoint-artifact');
+  await page.getByRole('combobox', { name: 'Checkpoint', exact: true }).selectOption('second-complete-checkpoint');
+  await expect(recovery).toContainText(`Project: ${projectId}`);
+  await expect(recovery).toContainText('Checkpoint: checkpoint-artifact');
+  await expect(recovery).toContainText('Worker: act-cpu');
+  await expect(recovery).toContainText('full FP32, 600 seconds');
+  await expect(exportButton(page)).toBeDisabled();
+  await page.reload(); await reopenExport(page);
+  await page.getByRole('combobox', { name: 'Checkpoint', exact: true }).selectOption('second-complete-checkpoint');
+  await expect(recovery).toContainText('Checkpoint: checkpoint-artifact');
+  await expect(recovery).toContainText('Worker: act-cpu');
+  await expect(page.getByRole('button', { name: 'I checked the export jobs; allow a new request' })).toBeDisabled();
+  expect(state.submitted).toHaveLength(1);
+});
+
+test('ACT export pending reload retains exact original request context as uncertain', async ({ page }) => {
+  const state = await exportRecoveryFixture(page); let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => {
+    state.submitted.push(route.request().postDataJSON()); await gate;
+    await route.abort().catch(() => undefined); // Reload may already have closed this one request.
+  });
+  try {
+    await exportButton(page).click(); await expect.poll(() => state.submitted.length).toBe(1);
+    expect(await page.evaluate(project => JSON.parse(sessionStorage.getItem(`firebird:job-attempt:policy.export:${project}`)!).state, projectId)).toBe('pending');
+    await page.reload(); await reopenExport(page);
+    const recovery = page.getByRole('region', { name: 'ACT export recovery' });
+    await expect(recovery).toContainText(`Project: ${projectId}`);
+    await expect(recovery).toContainText('Checkpoint: checkpoint-artifact');
+    await expect(recovery).toContainText('Worker: act-cpu');
+    await expect(recovery).toContainText('full FP32, 600 seconds');
+    await expect(recovery).toContainText('outcome is unverified');
+    await expect(exportButton(page)).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'I checked the export jobs; allow a new request' })).toBeDisabled();
+    expect(state.submitted).toHaveLength(1);
+  } finally { release(); }
+});
+
+test('ACT export recovery at another checkpoint cannot clear a known active project export', async ({ page }) => {
+  const state = await exportRecoveryFixture(page);
+  state.artifacts.push({ ...state.artifacts.find(item => item.id === 'checkpoint-artifact')!, id: 'second-complete-checkpoint', label: 'Second completed checkpoint' });
+  await page.reload(); await reopenExport(page);
+  await page.getByRole('combobox', { name: 'Checkpoint', exact: true }).selectOption('checkpoint-artifact');
+  await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => {
+    const body = route.request().postDataJSON(); state.submitted.push(body);
+    state.originalJobs.unshift({ ...exportReceipt(state, body), status: 'running' });
+    await route.abort();
+  });
+  await exportButton(page).click();
+  const recovery = page.getByRole('region', { name: 'ACT export recovery' });
+  await expect(recovery).toContainText('outcome is unverified');
+  await page.getByRole('combobox', { name: 'Checkpoint', exact: true }).selectOption('second-complete-checkpoint');
+  await page.getByRole('button', { name: 'Refresh export jobs', exact: true }).click();
+  await expect(recovery).toContainText('Recorded export acknowledged-export for checkpoint checkpoint-artifact is running');
+  await expect(recovery).toContainText('Wait for active project exports to finish');
+  await expect(page.getByRole('button', { name: 'I checked the export jobs; allow a new request' })).toBeDisabled();
+  await expect(exportButton(page)).toBeDisabled(); expect(state.submitted).toHaveLength(1);
 });

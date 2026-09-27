@@ -13,6 +13,10 @@ function coordinateNames(value: unknown): string { return record(value) && Array
 type Attempt = PolicyJobAttempt;
 const size = (bytes: number) => `${(bytes / 1024 ** 2).toFixed(1)} MiB`;
 
+class JournalUnavailable extends Error {
+  constructor() { super('Browser session storage is unavailable. Restore it and reload, then inspect recorded jobs before submitting again.'); }
+}
+
 export function NativeDistillationPanel({ projectId, onDataset, onQuantize }: { projectId: string; onDataset: () => void; onQuantize: (artifactId: string) => void }) {
   const client = useQueryClient();
   const options = useQuery({ queryKey: ['policy-options'], queryFn: api.policyOptions, retry: false, refetchInterval: 10_000 });
@@ -36,7 +40,16 @@ export function NativeDistillationPanel({ projectId, onDataset, onQuantize }: { 
       setJournalReady(true);
     } catch { setError('Browser session storage is unavailable. Enable it before submitting a job so uncertain requests can be recovered after a reload.'); }
   }, [client, projectId]);
-  function saveAttempt(value: Attempt) { storeAttempt('policy.distill', projectId, value); client.setQueryData<Attempt>(attemptKey, value); }
+  function saveAttempt(value: Attempt) {
+    try { storeAttempt('policy.distill', projectId, value); }
+    catch {
+      const failure = new JournalUnavailable();
+      if (client.getQueryData<PolicyJobAttempt>(attemptKey)?.state === 'pending') client.setQueryData<PolicyJobAttempt>(attemptKey, (): PolicyJobAttempt => ({ state: 'uncertain', message: failure.message }));
+      if (mounted.current) setJournalReady(false);
+      throw failure;
+    }
+    client.setQueryData<Attempt>(attemptKey, value);
+  }
   const runtimes = (options.data?.runtimes ?? []).filter(studentRuntime);
   const runtime = runtimeId ? runtimes.find(item => item.id === runtimeId) : runtimes[0];
   const teachers = (artifacts.data ?? []).filter(item => studentTeacher(item, projectId));
@@ -79,14 +92,16 @@ export function NativeDistillationPanel({ projectId, onDataset, onQuantize }: { 
     try {
       saveAttempt({ state: 'pending', message: 'Submitting one local distillation job…' });
       const job = await startStudent(projectId, request);
-      saveAttempt(null);
       if (mounted.current) { setAccepted(job); selectJob(job.id); }
+      saveAttempt(null);
       await client.invalidateQueries({ queryKey: ['jobs', projectId] });
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'The request failed.';
       attemptVersion.current += 1;
       if (mounted.current) setReviewed(false);
-      try { saveAttempt(cause instanceof UncertainPolicyJob ? { state: 'uncertain', message } : null); } catch { if (mounted.current) setJournalReady(false); }
+      if (!(cause instanceof JournalUnavailable)) {
+        try { saveAttempt(cause instanceof UncertainPolicyJob ? { state: 'uncertain', message } : null); } catch { if (mounted.current) setJournalReady(false); }
+      }
       if (mounted.current) setError(message);
     } finally { busy.current = false; }
   }
@@ -101,16 +116,15 @@ export function NativeDistillationPanel({ projectId, onDataset, onQuantize }: { 
     finally { busy.current = false; if (mounted.current) { setCancelling(false); setCancelId(''); } }
   }
   return <section className="panel native-simulation native-distillation" aria-label="ACT distillation">
-    <div className="cloud-heading"><div><h2>Teach a smaller ACT policy</h2><p>Train an ACT256 student to imitate your teacher’s action chunks, then reload the saved student in a fresh process.</p></div><button className="secondary-button" disabled={!projectId || jobs.isFetching} onClick={() => void refresh()}>Refresh distillation jobs</button></div>
-    <p>ACT → ACT256 · local CPU · saved inference policy. SmolVLA and cross-family distillation are not supported yet.</p>
+    <div className="cloud-heading"><div><h2>Teach a smaller ACT policy</h2>{!selected && <p>Train an ACT256 student to imitate your teacher’s action chunks, then reload the saved student in a fresh process.</p>}</div><button className="secondary-button" disabled={!projectId || jobs.isFetching} onClick={() => void refresh()}>Refresh distillation jobs</button></div>
+    {!selected && <p>ACT → ACT256 · local CPU · saved inference policy. SmolVLA and cross-family distillation are not supported yet.</p>}
     {selected && <article className="native-simulation-result" aria-label="Distillation job details" data-job-id={selected.id}>
       <div className="native-result-header"><h3>ACT256 student</h3><span className={`status status-${selected.status}`}>{selected.status}</span></div>
-      <p className="native-result-summary">{selected.stage ?? 'Queued'} · {selected.id}</p>
+      <p className="native-result-summary">{isActive(selected) ? selected.stage ?? selected.status : 'Recorded job'} · {selected.id}</p>
       {selected.error && <p role="alert">{selected.error}</p>}
       {report && <><p>{report.dataset_kind === 'generated_fixture' ? 'Generated observations · software verification only' : 'Recorded observations · offline imitation only'}</p><dl className="cloud-run-facts distillation-facts"><div><dt>Teacher inference tensors</dt><dd title={`${report.teacher_inference_tensor_bytes.toLocaleString()} bytes`}>{size(report.teacher_inference_tensor_bytes)}</dd></div><div><dt>Student weights</dt><dd title={`${report.student_weights_bytes.toLocaleString()} bytes`}>{size(report.student_weights_bytes)}</dd><small>{(100 * (1 - report.student_weights_bytes / report.teacher_inference_tensor_bytes)).toFixed(1)}% fewer weight bytes</small></div><div><dt>Validation imitation error</dt><dd>{report.trained_student.validation.teacher_normalized_l1.toPrecision(5)}</dd></div><div><dt>Final imitation error</dt><dd>{report.trained_student.final.teacher_normalized_l1.toPrecision(5)}</dd></div></dl><p>Masked normalized L1 against teacher actions. Smaller weights and lower imitation error do not prove task success or faster execution. Calibration and simulation performance remain unverified.</p></>}
       {selected.status === 'succeeded' && !report && <p role="alert">Complete distillation measurements are unavailable. Job completion alone does not establish student quality.</p>}
-      {selected.status === 'succeeded' && outputs.map(item => <p key={item.id}><a className="secondary-button" href={artifactDownloadUrl(projectId, item.id)}>Download tested student package</a></p>)}
-      {selected.status === 'succeeded' && outputs.length > 0 && <button className="text-link" onClick={() => onQuantize(outputs[0].id)}>Open ACT quantization</button>}
+      {selected.status === 'succeeded' && outputs.length > 0 && <div className="native-result-actions"><button className="primary-button" onClick={() => onQuantize(outputs[0].id)}>Open ACT quantization</button>{outputs.map(item => <a key={item.id} className="secondary-button" href={artifactDownloadUrl(projectId, item.id)}>Download tested student package</a>)}</div>}
       {isActive(selected) && <><progress aria-label="Distillation in progress" /><button className="secondary-button" disabled={cancelling || jobs.isError} onClick={() => setCancelId(selected.id)}>Cancel selected distillation</button></>}
       {cancelId === selected.id && isActive(selected) && <div className="warning-box" role="group" aria-label="Confirm distillation cancellation"><p>Stop this job and its owned local processes?</p><button className="secondary-button" disabled={cancelling || jobs.isError} onClick={() => void cancel()}>Confirm cancellation</button><button className="text-link" disabled={cancelling} onClick={() => setCancelId('')}>Keep running</button></div>}
       <WorkbenchDisclosure title="Activity and measurements"><p>Inference-only output; interrupted training cannot resume from this student.</p>{events.isError && <p role="alert">Activity unavailable. {events.error.message}</p>}<pre className="cloud-log-tail" aria-label="Distillation activity">{events.data?.map(item => `${item.timestamp} · ${item.stage} · ${item.message}`).join('\n') || 'No recorded activity yet.'}</pre>{result && <pre className="cloud-log-tail">{JSON.stringify(result.reports, null, 2)}</pre>}</WorkbenchDisclosure>
@@ -120,7 +134,7 @@ export function NativeDistillationPanel({ projectId, onDataset, onQuantize }: { 
     {options.isError && <p role="alert">Worker options are unavailable. {options.error.message}</p>}
     {artifacts.isError && <p role="alert">Teacher policies are unavailable. {artifacts.error.message}</p>}
     {error && <p role="alert">{error}</p>}
-    {attempt.data?.state === 'pending' && <p role="status">{attempt.data.message}</p>}
+    {journalReady && attempt.data?.state === 'pending' && <p role="status">{attempt.data.message}</p>}
     {attempt.data?.state === 'uncertain' && <div className="warning-box"><p>{attempt.data.message}</p><button className="secondary-button" disabled={!reviewed || jobs.isError} onClick={() => { try { saveAttempt(null); setReviewed(false); setError(''); } catch { setJournalReady(false); setError('Browser session storage is unavailable.'); } }}>I checked recorded jobs; allow a new request</button></div>}
     <WorkbenchDisclosure key={selected ? 'another' : 'first'} title={selected ? 'Prepare another student' : 'Prepare a student'} initiallyOpen={!selected}>
       {!projectId && <p role="status">Select a project to prepare a student.</p>}

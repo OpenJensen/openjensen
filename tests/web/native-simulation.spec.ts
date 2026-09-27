@@ -59,7 +59,7 @@ test('native Run preserves engine navigation and fails closed when profiles are 
   await expect(page.getByRole('button', { name: 'Upload and validate policy' })).toBeDisabled();
   expect(state.posts).toEqual([]);
   await page.getByRole('button', { name: 'Evaluate', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Evaluation purpose' })).toContainText('scored Isaac evaluation is not configured');
+  await expect(page.getByRole('region', { name: 'Evaluation purpose' })).toContainText('scored ACT / Isaac evaluation is not configured');
 });
 
 test('native import sends exact TAR bytes once and does not start a GPU run', async ({ page }) => {
@@ -156,6 +156,8 @@ test('failed run and project changes cannot reuse selected source or expose succ
   await page.getByText('Prepare another run', { exact: true }).click();
   await page.getByLabel('Native policy', { exact: true }).selectOption('smol-export'); await acknowledge(page);
   await page.getByLabel('Current project').selectOption('beta');
+  await expect(page.getByRole('button', { name: 'Engine checks · GGUF', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Native Isaac · ACT / SmolVLA', exact: true }).click();
   await expect(page.getByLabel('Native policy', { exact: true })).toHaveValue('');
   await expect(page.getByRole('checkbox', { name: /experimental, paid cloud rollout/ })).not.toBeChecked();
   await expect(page.getByRole('button', { name: 'Start experimental simulation' })).toBeDisabled();

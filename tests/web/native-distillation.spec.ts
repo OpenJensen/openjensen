@@ -83,8 +83,9 @@ test('clear admission failures stay actionable and missing workers never enable 
 test('completed generated evidence has scoped metrics and missing report never implies quality', async ({ page }, testInfo) => {
   const state = await fixture(page); await prepare(page); await page.getByRole('checkbox', { name: 'This snapshot contains generated test observations.' }).check(); await page.getByRole('checkbox', { name: /I verified that/ }).check(); await submit(page).click();
   const saved = state.jobs.find(item => item.id === 'student-001')!;
-  saved.status = 'succeeded'; saved.stage = 'completed'; saved.result = { artifacts: [{ ...teacher, id: 'student-001:distilled', job_id: 'student-001', label: 'ACT256 student', metadata: { architecture: 'act', recipe: 'act-action-distillation-v1' } }], reports: [{ operation: 'policy.distill', adapter: 'act-act-v1', teacher_artifact_id: teacher.id, dataset_job_id: 'data', steps: 100, fresh_reload_verified: true, quality_verified: false, calibration_verified: false, speedup_verified: false, task_success: null, dataset_kind: 'generated_fixture', student_weights_bytes: 55971416, teacher_inference_tensor_bytes: 136972568, trained_student: { validation: { teacher_normalized_l1: .33 }, final: { teacher_normalized_l1: .39 } } }] };
+  saved.status = 'succeeded'; saved.stage = 'distilling'; saved.result = { artifacts: [{ ...teacher, id: 'student-001:distilled', job_id: 'student-001', label: 'ACT256 student', metadata: { architecture: 'act', recipe: 'act-action-distillation-v1' } }], reports: [{ operation: 'policy.distill', adapter: 'act-act-v1', teacher_artifact_id: teacher.id, dataset_job_id: 'data', steps: 100, fresh_reload_verified: true, quality_verified: false, calibration_verified: false, speedup_verified: false, task_success: null, dataset_kind: 'generated_fixture', student_weights_bytes: 55971416, teacher_inference_tensor_bytes: 136972568, trained_student: { validation: { teacher_normalized_l1: .33 }, final: { teacher_normalized_l1: .39 } } }] };
   await refresh(page); await expect(page.getByText('Generated observations · software verification only')).toBeVisible();
+  await expect(page.getByRole('article', { name: 'Distillation job details' }).locator('.native-result-summary')).toHaveText('Recorded job · student-001');
   await expect(page.getByRole('link', { name: 'Download tested student package' })).toHaveAttribute('href', /student-001%3Adistilled\/download$/);
   await expect(page.getByText(/do not prove task success/)).toBeVisible();
   const widths = await page.evaluate(() => ({ inner: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth })); expect(widths.scroll).toBeLessThanOrEqual(widths.inner + 1);
@@ -141,5 +142,68 @@ test('switching project during admission never displays another project job', as
   await page.getByLabel('Current project').selectOption('alpha'); await refresh(page);
   await page.getByLabel('Saved distillation job', { exact: true }).selectOption('student-001');
   await expect(page.getByRole('article', { name: 'Distillation job details' })).toHaveAttribute('data-job-id', 'student-001');
+  expect(state.posts).toHaveLength(1);
+});
+
+
+test('journal write failure blocks submission even when removal still works', async ({ page }) => {
+  const state = await fixture(page); await prepare(page);
+  await page.evaluate(() => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (key.startsWith('firebird:job-attempt:')) throw new DOMException('Journal write denied', 'SecurityError');
+      return original.call(this, key, value);
+    };
+  });
+  await submit(page).click();
+  await expect(submit(page)).toBeDisabled();
+  expect(state.posts).toHaveLength(0);
+  await page.getByRole('button', { name: 'Refresh distillation jobs' }).click();
+  await expect(submit(page)).toBeDisabled();
+  expect(state.posts).toHaveLength(0);
+});
+
+test('acknowledged job remains visible when journal cleanup fails', async ({ page }) => {
+  const state = await fixture(page); await prepare(page);
+  await page.evaluate(() => {
+    const original = Storage.prototype.removeItem;
+    Storage.prototype.removeItem = function (key: string) {
+      if (key.startsWith('firebird:job-attempt:')) throw new DOMException('Journal removal denied', 'SecurityError');
+      return original.call(this, key);
+    };
+  });
+  await submit(page).click();
+  await expect(page.getByRole('article', { name: 'Distillation job details' })).toHaveAttribute('data-job-id', 'student-001');
+  expect(state.posts).toHaveLength(1);
+  await page.getByText('Prepare another student', { exact: true }).click();
+  await expect(submit(page)).toBeDisabled();
+  const pending = await page.evaluate(() => Object.keys(sessionStorage).filter(key => key.startsWith('firebird:job-attempt:')).map(key => JSON.parse(sessionStorage.getItem(key)!)));
+  expect(pending).toHaveLength(1);
+  expect(pending[0].state).toBe('pending');
+  await expect(page.getByText(/^Submitting one /)).toHaveCount(0);
+});
+
+
+test('journal cleanup failure after navigation preserves recovery guidance', async ({ page }) => {
+  const state = await fixture(page); await prepare(page);
+  let release!: () => void; state.postGate = new Promise<void>(resolve => { release = resolve; });
+  await page.evaluate(() => {
+    const original = Storage.prototype.removeItem;
+    Storage.prototype.removeItem = function (key: string) {
+      if (key.startsWith('firebird:job-attempt:')) {
+        (window as unknown as { journalCleanupFailures: number }).journalCleanupFailures = 1;
+        throw new DOMException('Journal removal denied', 'SecurityError');
+      }
+      return original.call(this, key);
+    };
+  });
+  await submit(page).click(); await expect.poll(() => state.posts.length).toBe(1);
+  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); release();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { journalCleanupFailures?: number }).journalCleanupFailures)).toBe(1);
+  await page.getByRole('button', { name: 'Distill', exact: true }).click();
+
+  await expect(page.getByRole('button', { name: 'I checked recorded jobs; allow a new request' })).toBeVisible();
+  await expect(page.getByText(/^Submitting one /)).toHaveCount(0);
+  await expect(submit(page)).toBeDisabled();
   expect(state.posts).toHaveLength(1);
 });

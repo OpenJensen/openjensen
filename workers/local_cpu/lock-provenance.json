@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "uv_version": "0.12.19",
+  "python": "3.12",
+  "reader_revision": "e595b7902714ba51f91e47523f66f89c5181b649",
+  "reader_archive_sha256": "a750c65130a5ebf2cd72b98189f1ab5b5918c00b1713111ee93188b8065e8c77",
+  "scope": "Exact-version dependency closure checked against native0.6.2 dataset metadata, then resolved with all distribution hashes via public metadata. No packages installed. LeRobot archive separate hash-pinned no-deps install.",
+  "files": {
+    "reader-macos-arm64.in": "3b46c52653c0f0e4367ebd4a0bee64dbf838bfe385a55d53fa3c548cd83aec4e",
+    "reader-linux-x86_64.in": "a54650fb881833bc3e9e9c1c534df51c518764bf2c9e42bb748477285096e07b",
+    "reader-macos-arm64.lock": "53b826d9f399a439e288b42a27671dfbffd4a521b18dcfa419256b9ccb930428",
+    "reader-linux-x86_64.lock": "fe2471e51454daf1a512c6fb09b9ef62242fc2c2b871837aba2364a50acff10d"
+  },
+  "checks": {
+    "metadata_version_constraints_satisfied": true,
+    "dependency_distributions": 62,
+    "cpu_wheels_from_existing_act_lock": true,
+    "fresh_install_performed": false
+  }
+}

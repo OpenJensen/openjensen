@@ -83,8 +83,11 @@ class ApiClient:
                             detail = json.loads(raw).get("detail", "Request was not accepted")
                         except ValueError, AttributeError:
                             detail = "Request was not accepted"
-                        # A server error may occur after accepting a mutation.
-                        suffix = uncertain if response.status_code >= 500 else ""
+                        # A server error or redirect may follow an accepted mutation.
+                        ambiguous = response.status_code >= 500 or (
+                            method != "GET" and 300 <= response.status_code < 400
+                        )
+                        suffix = uncertain if ambiguous else ""
                         raise ApiError(
                             f"API {response.status_code}: {plain(detail)[:600]}" + suffix
                         )

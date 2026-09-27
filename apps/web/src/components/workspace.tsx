@@ -3,6 +3,11 @@
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, isActive, isDatasetJob, type DatasetJob, type DatasetProfile, type Job, type Project } from '@/lib/api';
+import { engineRuntime, initialQuantizeEntry, initialRunEntry, runJobMode, type Entry, type ProjectEntry, type QuantizeMode, type RunMode } from '@/lib/workflow-entry';
+import { storedAttempt, type PolicyJobAttempt } from '@/lib/policy-job-attempt';
+import { replayRuntime } from '@/lib/native-replay';
+import { availableNativeQuantizer } from '@/lib/native-quantization';
+import { simulationOptions } from '@/lib/native-simulation';
 import { NativeQuantizationPanel } from '@/components/native-quantization-panel';
 import { NativeReplayPanel } from '@/components/native-replay-panel';
 import { NativeDistillationPanel } from '@/components/native-distillation-panel';
@@ -168,10 +173,11 @@ function Workbench() {
   const [projectName, setProjectName] = useState('');
   const [selectedJobId, setSelectedJobId] = useState('');
   const [activeStage, setActiveStage] = useState(0);
-  const [quantizeMode, setQuantizeMode] = useState<'gguf' | 'native'>('gguf');
-  const [runMode, setRunMode] = useState<'engine' | 'native' | 'replay'>('engine');
+  const [entries, setEntries] = useState<Record<string, ProjectEntry>>({});
+  const [entryError, setEntryError] = useState<{ projectId: string; stage: number; message: string } | null>(null);
   const [openSimulation, setOpenSimulation] = useState<{ projectId: string; id: string } | null>(null);
   const [quantizeArtifact, setQuantizeArtifact] = useState<{ projectId: string; artifactId: string } | null>(null);
+  const [replayArtifact, setReplayArtifact] = useState<{ projectId: string; artifactId: string } | null>(null);
   const [trainingNavigation, setTrainingNavigation] = useState(0);
   const [openTrainingRun, setOpenTrainingRun] = useState<{ projectId: string; id: string } | null>(null);
   const [workflowNavigation, setWorkflowNavigation] = useState(0);
@@ -209,6 +215,7 @@ function Workbench() {
     setOpenTrainingRun(null);
     setOpenSimulation(null);
     setQuantizeArtifact(null);
+    setReplayArtifact(null);
     setWorkflowNavigation(value => value + 1);
     if (index === 1) {
       setStartTraining(undefined);
@@ -226,6 +233,7 @@ function Workbench() {
     setOpenTrainingRun(null);
     setOpenSimulation(null);
     setQuantizeArtifact(null);
+    setReplayArtifact(null);
     setStartTraining(undefined);
     setProjectId(id);
     setSelectedJobId('');
@@ -243,6 +251,53 @@ function Workbench() {
   const project = projects.data?.find(item => item.id === projectId);
   // Only confirmed membership may enable project-scoped workflow controls.
   const workflowProjectId = projects.isSuccess ? project?.id ?? '' : '';
+  const choosingWorkflow = [3, 4, 5].includes(activeStage);
+  const options = useQuery({ queryKey: ['policy-options'], queryFn: api.policyOptions, enabled: choosingWorkflow, retry: false, refetchInterval: choosingWorkflow ? 10_000 : false });
+  const simulation = useQuery({ queryKey: ['simulation-options'], queryFn: simulationOptions, enabled: activeStage === 4 || activeStage === 5, retry: false, refetchInterval: activeStage === 4 || activeStage === 5 ? 10_000 : false });
+  const context = workflowProjectId ? entries[workflowProjectId] : undefined;
+  const quantizeMode = context?.quantize?.mode;
+  const runMode = context?.run?.mode;
+  function chooseQuantize(mode: QuantizeMode, origin: Entry<QuantizeMode>['origin'] = 'manual', jobId?: string) {
+    if (!workflowProjectId) return;
+    setEntries(previous => ({ ...previous, [workflowProjectId]: { ...previous[workflowProjectId], quantize: { mode, origin, jobId: jobId ?? (origin === 'manual' && previous[workflowProjectId]?.quantize?.mode === mode ? previous[workflowProjectId].quantize?.jobId : undefined) } } }));
+    setEntryError(null);
+  }
+  function chooseRun(mode: RunMode, origin: Entry<RunMode>['origin'] = 'manual', jobId?: string) {
+    if (!workflowProjectId) return;
+    setEntries(previous => ({ ...previous, [workflowProjectId]: { ...previous[workflowProjectId], run: { mode, origin, jobId: jobId ?? (origin === 'manual' && previous[workflowProjectId]?.run?.mode === mode ? previous[workflowProjectId].run?.jobId : undefined) } } }));
+    setEntryError(null);
+  }
+  useEffect(() => {
+    const stage = activeStage === 3 ? 'quantize' : activeStage === 5 ? 'run' : null;
+    if (!stage || !workflowProjectId || context?.[stage]) return;
+    // An unfinished request has priority over automatic history/capability selection.
+    // Read only: the child owns its journal and explicit recovery acknowledgement.
+    let recovery = false;
+    try {
+      const operation = stage === 'quantize' ? 'policy.quantize' : 'policy.run.replay';
+      const cacheKey = [stage === 'quantize' ? 'native-quantization-attempt' : 'native-replay-attempt', workflowProjectId];
+      recovery = !!queryClient.getQueryData<PolicyJobAttempt>(cacheKey) || !!storedAttempt(operation, workflowProjectId);
+    } catch {
+      setEntryError({ projectId: workflowProjectId, stage: activeStage, message: 'Saved request recovery could not be read. Choose a workflow to inspect its history; automatic selection is paused.' });
+      return;
+    }
+    if (!recovery && (!jobs.isSuccess || jobs.isError || !options.isSuccess || options.isError || (stage === 'run' && (!simulation.isSuccess || simulation.isError)))) return;
+    const next = stage === 'quantize'
+      ? recovery ? { mode: 'native' as const, origin: 'recovery' as const } : initialQuantizeEntry(workflowProjectId, jobs.data!, options.data!)
+      : recovery ? { mode: 'replay' as const, origin: 'recovery' as const } : initialRunEntry(workflowProjectId, jobs.data!, options.data!, simulation.data!.profiles);
+    setEntries(previous => previous[workflowProjectId]?.[stage] ? previous : { ...previous, [workflowProjectId]: { ...previous[workflowProjectId], [stage]: next } });
+    setEntryError(null);
+  }, [activeStage, workflowProjectId, context, jobs.data, jobs.isSuccess, jobs.isError, options.data, options.isSuccess, options.isError, simulation.data, simulation.isSuccess, simulation.isError, queryClient]);
+  const ownedJobs = (jobs.data ?? []).filter(job => job.project_id === workflowProjectId);
+  const replayHistory = ownedJobs.some(job => runJobMode(job, workflowProjectId) === 'replay');
+  const simulationHistory = ownedJobs.some(job => runJobMode(job, workflowProjectId) === 'native');
+  const replayConfigured = options.isSuccess && !options.isError && options.data.runtimes.some(replayRuntime);
+  const simulationConfigured = simulation.isSuccess && !simulation.isError && simulation.data.profiles.length > 0;
+  const engineConfigured = options.isSuccess && !options.isError && options.data.runtimes.some(item => engineRuntime(item, activeStage === 4 ? 'Evaluate' : activeStage === 3 ? 'Quantize' : 'Run'));
+  const nativeQuantConfigured = options.isSuccess && !options.isError && options.data.runtimes.some(availableNativeQuantizer);
+  const entryPending = (activeStage === 3 && !quantizeMode) || (activeStage === 5 && !runMode);
+  const entryFailed = jobs.isError || options.isError || (activeStage === 5 && simulation.isError);
+  const recoveryError = entryError?.projectId === workflowProjectId && entryError.stage === activeStage ? entryError.message : null;
   const sortedJobs = [...(jobs.data ?? [])].filter(isDatasetJob).sort((a, b) => b.created_at.localeCompare(a.created_at));
   const selectedJob = sortedJobs.find(job => job.id === selectedJobId) ?? sortedJobs[0];
   const connected = health.isSuccess && !health.isError;
@@ -305,16 +360,26 @@ function Workbench() {
           {activeStage === 0 && datasetView === 'augmentation' && <AugmentationPanel key={projectId} projectId={workflowProjectId} preferredDatasetId={selectedJob?.id} onChooseDataset={() => setDatasetView('sources')} />}
           {jobs.error && datasetView === 'sources' && <ErrorNotice error={jobs.error} />}
         </div>
-        {(activeStage === 1 || activeStage === 6) && <div className="training-view" hidden={activeStage !== 1}><TrainingPanel active={activeStage === 1} key={projectId} projectId={workflowProjectId} startNew={startTraining} showJobsRequest={trainingNavigation} preferredRunId={openTrainingRun?.projectId === projectId ? openTrainingRun.id : undefined} preferredDatasetId={selectedJob?.id} onChooseDataset={() => { setActiveStage(0); setDatasetView('sources'); }} onDiagnostics={() => { setSettingsTab('diagnostics'); setActiveStage(6); }} onComputeSettings={() => { setSettingsTab('compute'); setActiveStage(6); }} onQuantize={artifactId => { setQuantizeMode('gguf'); setQuantizeArtifact({ projectId, artifactId }); setWorkflowNavigation(value => value + 1); setActiveStage(3); }} /></div>}
-        {activeStage === 7 && <CloudRuns key={workflowProjectId} projectId={workflowProjectId} onOpenSimulation={id => { setOpenSimulation({ projectId: workflowProjectId, id }); setRunMode('native'); setActiveStage(5); }} onOpenTraining={id => { setStartTraining(undefined); setOpenTrainingRun({ projectId: workflowProjectId, id }); setActiveStage(1); }} />}
-        {activeStage === 3 && <section className="panel run-modes" aria-label="Quantization workflow"><div role="group" aria-label="Quantization mode"><button className="secondary-button" aria-pressed={quantizeMode === 'gguf'} onClick={() => setQuantizeMode('gguf')}>SmolVLA · GGUF</button><button className="secondary-button" aria-pressed={quantizeMode === 'native'} onClick={() => setQuantizeMode('native')}>Native ACT · INT8 / INT4</button></div><p>{quantizeMode === 'native' ? 'Create a local packed ACT download with measured generated-input drift. Native Isaac loading is not implemented for this format.' : 'Prepare SmolVLA GGUF policies using the existing engine workflow.'}</p></section>}
-        {activeStage === 3 && quantizeMode === 'native' && <NativeQuantizationPanel key={workflowProjectId} projectId={workflowProjectId} onPrepare={() => navigateStage(1)} />}
-        {activeStage === 4 && <section className="panel workflow-purpose" aria-label="Evaluation purpose"><p>Engine checks measure loading, finite actions and runtime performance. LIBERO measures closed-loop task success only with a configured benchmark runtime. Native ACT / SmolVLA Isaac rollouts are available under Run; scored Isaac evaluation is not configured.</p><button className="text-link" onClick={() => { setRunMode('native'); navigateStage(5); }}>Open native Isaac Run</button></section>}
-        {activeStage === 5 && <section className="panel run-modes" aria-label="Run workflow"><div role="group" aria-label="Run mode"><button className="secondary-button" aria-pressed={runMode === 'native'} onClick={() => setRunMode('native')}>Native Isaac · ACT / SmolVLA</button><button className="secondary-button" aria-pressed={runMode === 'replay'} onClick={() => setRunMode('replay')}>Observation replay · ACT</button><button className="secondary-button" aria-pressed={runMode === 'engine'} onClick={() => setRunMode('engine')}>Engine checks · GGUF</button></div><p>{runMode === 'native' ? 'Recorded cup-scene rollouts and complete native policy packages.' : runMode === 'replay' ? 'Inspect packed ACT predictions on immutable dataset observations. Actions stay offline and do not advance a scene.' : 'Reload a prepared engine policy and check its execution. For ACT or native SmolVLA in the cup scene, choose Native Isaac.'}</p></section>}
-        {activeStage === 5 && runMode === 'replay' && <NativeReplayPanel key={workflowProjectId} projectId={workflowProjectId} onDataset={() => { setDatasetView('sources'); navigateStage(0); }} />}
-        {activeStage === 5 && runMode === 'native' && <NativeSimulationPanel key={workflowProjectId} projectId={workflowProjectId} preferredJobId={openSimulation?.projectId === workflowProjectId ? openSimulation.id : undefined} onTraining={() => navigateStage(1)} />}
-        {activeStage > 1 && activeStage !== 2 && activeStage !== 7 && (activeStage !== 3 || quantizeMode === 'gguf') && (activeStage !== 5 || runMode === 'engine') && <WorkflowPanel key={`${workflowProjectId}-${activeStage}-${workflowNavigation}`} projectId={workflowProjectId} tab={settingsTab} onTabChange={setSettingsTab} onOpenQuantize={() => navigateStage(3)} stage={activeStage === 6 ? 'settings' : stage.name} preferredArtifactId={activeStage === 3 && quantizeArtifact?.projectId === projectId ? quantizeArtifact.artifactId : undefined} onViewTraining={() => navigateStage(1)} />}
-        {activeStage === 2 && <NativeDistillationPanel key={workflowProjectId} projectId={workflowProjectId} onDataset={() => { setDatasetView('sources'); navigateStage(0); }} onQuantize={artifactId => { navigateStage(3); setQuantizeArtifact({ projectId, artifactId }); setQuantizeMode('native'); }} />}
+        {(activeStage === 1 || activeStage === 6) && <div className="training-view" hidden={activeStage !== 1}><TrainingPanel active={activeStage === 1} key={projectId} projectId={workflowProjectId} startNew={startTraining} showJobsRequest={trainingNavigation} preferredRunId={openTrainingRun?.projectId === projectId ? openTrainingRun.id : undefined} preferredDatasetId={selectedJob?.id} onChooseDataset={() => { setActiveStage(0); setDatasetView('sources'); }} onDiagnostics={() => { setSettingsTab('diagnostics'); setActiveStage(6); }} onComputeSettings={() => { setSettingsTab('compute'); setActiveStage(6); }} onQuantize={artifactId => { chooseQuantize('gguf', 'handoff'); setQuantizeArtifact({ projectId, artifactId }); setWorkflowNavigation(value => value + 1); setActiveStage(3); }} /></div>}
+        {activeStage === 7 && <CloudRuns key={workflowProjectId} projectId={workflowProjectId} onOpenSimulation={id => { setOpenSimulation({ projectId: workflowProjectId, id }); chooseRun('native', 'handoff', id); setActiveStage(5); }} onOpenTraining={id => { setStartTraining(undefined); setOpenTrainingRun({ projectId: workflowProjectId, id }); setActiveStage(1); }} />}
+        {activeStage === 3 && <section className="panel run-modes" aria-label="Quantization workflow"><div role="group" aria-label="Quantization mode"><button className="secondary-button" disabled={!workflowProjectId} aria-pressed={quantizeMode === 'gguf'} onClick={() => { if (quantizeMode !== 'gguf') setQuantizeArtifact(null); chooseQuantize('gguf'); }}>SmolVLA · GGUF</button><button className="secondary-button" disabled={!workflowProjectId} aria-pressed={quantizeMode === 'native'} onClick={() => { if (quantizeMode !== 'native') setQuantizeArtifact(null); chooseQuantize('native'); }}>Native ACT · INT8 / INT4</button></div><p>{!quantizeMode ? 'Choose a workflow, or wait for this project’s history and configured workers.' : quantizeMode === 'native' ? 'Create a local packed ACT download with measured generated-input drift. Native Isaac loading is not implemented for this format.' : 'Prepare SmolVLA GGUF policies using the existing engine workflow.'}</p></section>}
+        {entryPending && <section className="panel" aria-label="Workflow selection status"><p role={entryFailed || recoveryError ? 'alert' : 'status'}>{!workflowProjectId ? 'Select a project to see its workflow history.' : recoveryError ?? (entryFailed ? 'Workflow availability or history could not be loaded. Choose a mode to inspect it, or retry these reads.' : 'Loading this project’s workflow history and configured workers…')}</p>{entryFailed && <button className="secondary-button" onClick={() => { void jobs.refetch(); void options.refetch(); if (activeStage === 5) void simulation.refetch(); }}>Retry workflow context</button>}</section>}
+        {(activeStage === 3 || (activeStage === 5 && simulation.isSuccess && !simulation.isError)) && options.isSuccess && !options.isError && <p className="field-help" role="status">{activeStage === 3 ? `Configured workflows: ${[engineConfigured && 'SmolVLA GGUF', nativeQuantConfigured && 'Native ACT'].filter(Boolean).join(', ') || 'none'}.` : `Configured workflows: ${[engineConfigured && 'Engine checks', replayConfigured && 'Observation replay', simulationConfigured && 'Native Isaac'].filter(Boolean).join(', ') || 'none'}.`} Saved results remain readable when a worker is unavailable.</p>}
+        {activeStage === 3 && quantizeMode === 'native' && <NativeQuantizationPanel key={workflowProjectId} projectId={workflowProjectId} preferredJobId={context?.quantize?.jobId} onJobSelected={id => chooseQuantize('native', 'manual', id)} preferredArtifactId={quantizeArtifact?.projectId === workflowProjectId ? quantizeArtifact.artifactId : undefined} onPrepare={() => navigateStage(1)} onReplay={artifactId => { navigateStage(5); setReplayArtifact({ projectId: workflowProjectId, artifactId }); chooseRun('replay', 'handoff'); }} />}
+        {activeStage === 4 && <section className="panel workflow-purpose" aria-label="Evaluation purpose"><h2>Execution checks and scored benchmarks</h2><p>Engine checks measure loading, finite actions and runtime performance. LIBERO measures closed-loop task success with a configured benchmark runtime. Observation replay and experimental Isaac rollouts do not establish task success; scored ACT / Isaac evaluation is not configured.</p>
+          {options.isPending ? <p role="status">Checking evaluation targets…</p> : options.isError ? <p role="alert">Evaluation targets could not be loaded. Availability is unknown.</p> : <p role="status">{engineConfigured ? 'Engine evaluation is configured.' : 'No engine evaluation target is configured.'} {options.data?.runtimes.some(item => engineRuntime(item, 'Evaluate') && item.simulation) ? 'A LIBERO target is configured; its policy and protocol still require validation.' : 'No LIBERO evaluation target is configured.'}</p>}
+          {simulation.isError && <p role="alert">Isaac profile availability could not be loaded.</p>}
+          {jobs.isError && <p role="alert">Saved workflow history could not be refreshed; previously received records may be stale.</p>}
+          <div className="native-result-actions">
+            {(replayConfigured || replayHistory) && <button className="text-link" onClick={() => { navigateStage(5); chooseRun('replay', 'handoff'); }}>Open observation replay</button>}
+            {(simulationConfigured || simulationHistory) && <button className="text-link" onClick={() => { navigateStage(5); chooseRun('native', 'handoff'); }}>Open native Isaac Run</button>}
+          </div>
+        </section>}
+        {activeStage === 5 && <section className="panel run-modes" aria-label="Run workflow"><div role="group" aria-label="Run mode"><button className="secondary-button" disabled={!workflowProjectId} aria-pressed={runMode === 'native'} onClick={() => { if (runMode !== 'native') { setOpenSimulation(null); setReplayArtifact(null); } chooseRun('native'); }}>Native Isaac · ACT / SmolVLA</button><button className="secondary-button" disabled={!workflowProjectId} aria-pressed={runMode === 'replay'} onClick={() => { if (runMode !== 'replay') { setOpenSimulation(null); setReplayArtifact(null); } chooseRun('replay'); }}>Observation replay · ACT</button><button className="secondary-button" disabled={!workflowProjectId} aria-pressed={runMode === 'engine'} onClick={() => { if (runMode !== 'engine') { setOpenSimulation(null); setReplayArtifact(null); } chooseRun('engine'); }}>Engine checks · GGUF</button></div><p>{!runMode ? 'Choose a workflow, or wait for this project’s history and configured workers.' : runMode === 'native' ? 'Recorded cup-scene rollouts and complete native policy packages.' : runMode === 'replay' ? 'Inspect packed ACT predictions on immutable dataset observations. Actions stay offline and do not advance a scene.' : 'Reload a prepared engine policy and check its execution. For ACT or native SmolVLA in the cup scene, choose Native Isaac.'}</p></section>}
+        {activeStage === 5 && runMode === 'replay' && <NativeReplayPanel key={workflowProjectId} projectId={workflowProjectId} preferredJobId={context?.run?.mode === 'replay' ? context.run.jobId : undefined} onJobSelected={id => chooseRun('replay', 'manual', id)} preferredArtifactId={replayArtifact?.projectId === workflowProjectId ? replayArtifact.artifactId : undefined} onDataset={() => { setDatasetView('sources'); navigateStage(0); }} />}
+        {activeStage === 5 && runMode === 'native' && <NativeSimulationPanel key={workflowProjectId} projectId={workflowProjectId} onJobSelected={id => { setOpenSimulation(null); chooseRun('native', 'manual', id); }} preferredJobId={openSimulation?.projectId === workflowProjectId ? openSimulation.id : context?.run?.mode === 'native' ? context.run.jobId : undefined} onTraining={() => navigateStage(1)} />}
+        {activeStage > 1 && activeStage !== 2 && activeStage !== 7 && (activeStage !== 3 || quantizeMode === 'gguf') && (activeStage !== 5 || runMode === 'engine') && <WorkflowPanel key={`${workflowProjectId}-${activeStage}-${workflowNavigation}`} projectId={workflowProjectId} tab={settingsTab} onTabChange={setSettingsTab} onOpenQuantize={() => { navigateStage(3); chooseQuantize('gguf', 'handoff'); }} stage={activeStage === 6 ? 'settings' : stage.name} preferredArtifactId={activeStage === 3 && quantizeArtifact?.projectId === projectId ? quantizeArtifact.artifactId : undefined} onViewTraining={() => navigateStage(1)} />}
+        {activeStage === 2 && <NativeDistillationPanel key={workflowProjectId} projectId={workflowProjectId} onDataset={() => { setDatasetView('sources'); navigateStage(0); }} onQuantize={artifactId => { navigateStage(3); setQuantizeArtifact({ projectId, artifactId }); chooseQuantize('native', 'handoff'); }} />}
   </WorkspaceShell>;
 }
 
