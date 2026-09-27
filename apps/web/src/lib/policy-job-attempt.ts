@@ -1,6 +1,9 @@
 import { record } from './policy-job-mutation';
 
-export type PolicyJobAttempt = { state: 'pending' | 'uncertain'; message: string } | null;
+export type SubmissionOperation = 'dataset.inspect' | 'dataset.augment' | 'policy.finetune';
+export type SubmissionIdentity = { version: 1; key: string; project: string; operation: SubmissionOperation; body: Record<string, unknown> };
+// Optional identity is additive: legacy journals and other policy panels keep their behavior.
+export type PolicyJobAttempt = { state: 'pending' | 'uncertain'; message: string; submission?: SubmissionIdentity } | null;
 const interrupted: PolicyJobAttempt = { state: 'uncertain', message: 'An earlier request did not return a verified outcome in this browser session. Refresh and inspect the recorded jobs before submitting again. No automatic retry was made.' };
 const key = (operation: string, project: string) => `firebird:job-attempt:${operation}:${project}`;
 
