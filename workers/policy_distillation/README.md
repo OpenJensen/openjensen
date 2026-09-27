@@ -155,8 +155,9 @@ its observation corpus. This establishes a reloadable inference artifact, not an
 optimizer/RNG checkpoint: `training_resume_supported=false`.
 
 The student is already `use_vae=false`; do **not** send it through ACT VAE-removal
-export. Native import/runtime integration is separate. No API/UI dispatch, CUDA,
-Isaac rollout, timing speedup, calibration or task-quality claim is enabled here.
+export. The API snapshot-to-distillation job and checkpoint download are verified
+in [application evidence](evidence/app-integration.json). Web UI integration, CUDA,
+Isaac rollout, timing speedup, calibration and task quality remain unverified.
 `quality_verified`, `calibration_verified`, `speedup_verified` and
 `isaac_runtime_verified` remain false; `task_success` is null. Offline teacher
 imitation error can improve while robot success worsens. Teacher failure may be
