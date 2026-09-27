@@ -17,7 +17,7 @@ export function episodeSelection(value: string): number[] {
   return ids;
 }
 function accepted(value: unknown, project: string, expected: DistillationRequest, id?: string): Job {
-  if (!record(value) || typeof value.id !== 'string' || !value.id || (id && value.id !== id) || value.project_id !== project || value.kind !== 'policy.distill' || !['queued', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted'].includes(String(value.status)) || !record(value.request) ||
+  if (!record(value) || typeof value.id !== 'string' || !value.id || (id && value.id !== id) || value.project_id !== project || value.kind !== 'policy.distill' || typeof value.status !== 'string' || !['queued', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted'].includes(value.status) || !record(value.request) ||
       !['operation', 'runtime_id', 'artifact_id', 'dataset_job_id', 'timeout_seconds', 'native_distillation'].every(key => sameJson(value.request && (value.request as Record<string, unknown>)[key], expected[key as keyof DistillationRequest]))) throw new UncertainPolicyJob();
   return value as unknown as Job;
 }
