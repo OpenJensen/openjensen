@@ -1,0 +1,351 @@
+{
+  "schema_version": 1,
+  "verified_at": "2026-09-27T11:22:05.885814+00:00",
+  "reviewer": "workers_audit",
+  "status": "passed",
+  "scope": "Actual browser-triggered isolated local ACT distillation and browser download; generated software verification only",
+  "browser_actions": "Parent root drove actual CUA form submission and download; reviewer inspected resulting screenshot, read-only GET records and immutable files",
+  "application_source_commit": "6ba70bda06f54c56e61028bb90f5ceabe9c2a917",
+  "application_source_binding": "Build commit reported by root browser operator; all seven executed worker implementation hashes independently matched to this commit. Historical app process not independently reconstructed.",
+  "job_id": "3012c2fa-2cc7-4746-9684-df0614912638",
+  "project_id": "a4943fde-ff34-43c7-9ba1-873b054fc02a",
+  "status_verified": "succeeded",
+  "expected_request": {
+    "operation": "policy.distill",
+    "runtime_id": "distill-cpu",
+    "artifact_id": "teacher:operation",
+    "dataset_job_id": "dataset",
+    "timeout_seconds": 600,
+    "native_distillation": {
+      "adapter": "act-act-v1",
+      "student": "act-256",
+      "steps": 12,
+      "learning_rate": 0.0001,
+      "seed": 1729,
+      "frame_stride": 2,
+      "splits": {
+        "train": [
+          0,
+          1
+        ],
+        "validation": [
+          2,
+          3
+        ],
+        "final": [
+          4,
+          5
+        ]
+      },
+      "coordinate_attestation": "generated_fixture",
+      "units": [
+        "generated_fixture_radians",
+        "generated_fixture_radians",
+        "generated_fixture_radians",
+        "generated_fixture_radians",
+        "generated_fixture_radians",
+        "generated_fixture_radians"
+      ]
+    }
+  },
+  "persisted_request_matches": true,
+  "job_created_at": "2026-09-27T10:57:08.378599+00:00",
+  "job_updated_at": "2026-09-27T10:59:58.804655+00:00",
+  "job_elapsed_seconds": 170.426056,
+  "worker_training_elapsed_seconds": 83.43580712500261,
+  "teacher": {
+    "artifact_id": "teacher:operation",
+    "artifact_manifest_sha256": "34bc141a208fa22d31c5092bf2c1b763e733cb49eca32ffc62c5ff5112bc0b9c",
+    "files": {
+      "model.safetensors": {
+        "sha256": "2fb4fd92a923ef2fd58a6aa787d305081174f3966e82e003a7a82f65b6d43719",
+        "bytes": 75509360
+      },
+      "policy_preprocessor_step_3_normalizer_processor.safetensors": {
+        "sha256": "ae1e255d00209ed7dfbd83163089ea55eb63aebe57c0e8e92497914ba56a4d71",
+        "bytes": 584
+      },
+      "config.json": {
+        "sha256": "646f374294842de9e64baf1f7a36f5577a0cc78f18ab8b128a6c775c4f6c619a",
+        "bytes": 1494
+      },
+      "policy_postprocessor.json": {
+        "sha256": "648b415125a183dfd6cbc47c1dc04ab3f2d912654ef22a12ca5e8b93d7d85cdd",
+        "bytes": 660
+      },
+      "policy_preprocessor.json": {
+        "sha256": "0708a2a86799db24a2c4076be30ac17d82898e6606eddfa4bae9af1cdb1b7a3d",
+        "bytes": 1151
+      },
+      "policy_postprocessor_step_0_unnormalizer_processor.safetensors": {
+        "sha256": "ae1e255d00209ed7dfbd83163089ea55eb63aebe57c0e8e92497914ba56a4d71",
+        "bytes": 584
+      }
+    },
+    "original_and_registered_copy_unchanged": true
+  },
+  "dataset": {
+    "snapshot_id": "sha256:4a698269e1858e233268c2776f637ee9e6ff1e0d0a1be5b389c9d93811a88c31",
+    "snapshot_manifest_sha256": "4a698269e1858e233268c2776f637ee9e6ff1e0d0a1be5b389c9d93811a88c31",
+    "kind": "generated_fixture",
+    "total_frames": 24,
+    "total_episodes": 6,
+    "selected_frames": 12,
+    "splits": {
+      "train": [
+        0,
+        1
+      ],
+      "validation": [
+        2,
+        3
+      ],
+      "final": [
+        4,
+        5
+      ]
+    },
+    "lineage_groups": {
+      "train": [
+        "synthetic-scene-1729"
+      ],
+      "validation": [
+        "synthetic-scene-4919"
+      ],
+      "final": [
+        "synthetic-scene-902"
+      ]
+    },
+    "all_three_original_registered_staged_copies_verified": [
+      {
+        "manifest_sha256": "4a698269e1858e233268c2776f637ee9e6ff1e0d0a1be5b389c9d93811a88c31",
+        "files_verified": 8
+      },
+      {
+        "manifest_sha256": "4a698269e1858e233268c2776f637ee9e6ff1e0d0a1be5b389c9d93811a88c31",
+        "files_verified": 8
+      },
+      {
+        "manifest_sha256": "4a698269e1858e233268c2776f637ee9e6ff1e0d0a1be5b389c9d93811a88c31",
+        "files_verified": 8
+      }
+    ]
+  },
+  "student": {
+    "artifact_id": "3012c2fa-2cc7-4746-9684-df0614912638:operation",
+    "manifest_sha256": "088374fd014b58f6d80d553494407d0441c38c525fd2c121ee04a7771323ad4e",
+    "model_id": "sha256:26b60646d17219cfd45a54cfa0d80268c32b9861d9b6a7ec748f46ddd89bd8d2",
+    "family": "act",
+    "weights_bytes": 55946840,
+    "teacher_inference_tensor_bytes": 75493144,
+    "payload_bytes": 55974429,
+    "payload_files": {
+      "lineage.json": {
+        "bytes": 7386,
+        "sha256": "ec917720a1d5415919a2eed9bd435b7b7266682a8947b91e1c40c159eea7fd28"
+      },
+      "policy/config.json": {
+        "bytes": 1494,
+        "sha256": "b1c50740187ef4d270ab80ea727bb93df74be2d0e1c60cc88464b060f6e0188a"
+      },
+      "policy/model.safetensors": {
+        "bytes": 55946840,
+        "sha256": "cf20bad715be4595cbf9dce68d1e48e25049c253a15f44f276712d5f371c96e3"
+      },
+      "policy/policy_postprocessor.json": {
+        "bytes": 660,
+        "sha256": "648b415125a183dfd6cbc47c1dc04ab3f2d912654ef22a12ca5e8b93d7d85cdd"
+      },
+      "policy/policy_postprocessor_step_0_unnormalizer_processor.safetensors": {
+        "bytes": 584,
+        "sha256": "ae1e255d00209ed7dfbd83163089ea55eb63aebe57c0e8e92497914ba56a4d71"
+      },
+      "policy/policy_preprocessor.json": {
+        "bytes": 1151,
+        "sha256": "0708a2a86799db24a2c4076be30ac17d82898e6606eddfa4bae9af1cdb1b7a3d"
+      },
+      "policy/policy_preprocessor_step_3_normalizer_processor.safetensors": {
+        "bytes": 584,
+        "sha256": "ae1e255d00209ed7dfbd83163089ea55eb63aebe57c0e8e92497914ba56a4d71"
+      },
+      "training.json": {
+        "bytes": 10388,
+        "sha256": "0f56297aa2b68265bce29cebca07a6564704d1dd38d7d85c095fec3b1b14c5b7"
+      },
+      "verification.json": {
+        "bytes": 5342,
+        "sha256": "a5f8f059a568b7dd79dc129c32a24854026e65181d4ed106a35e21f746e7f644"
+      }
+    },
+    "policy_dimensions": {
+      "image_shape": [
+        3,
+        32,
+        32
+      ],
+      "state_dim": 6,
+      "action_dim": 6,
+      "chunk_size": 100
+    },
+    "fresh_process_policy_inventory_and_all12_prediction_hashes_match": true,
+    "queue_and_reset_exact": true,
+    "teacher_gradients_absent": true,
+    "copied_backbone_unchanged": true,
+    "action_head_changed": true
+  },
+  "measurements": {
+    "steps": 12,
+    "untuned_student": {
+      "train": {
+        "demonstration_per_coordinate_l1": [
+          0.6189046079913775,
+          1.9162611564000447,
+          2.074871838092804,
+          1.9980925520261128,
+          5.499654452006022,
+          2.88959809144338
+        ],
+        "teacher_normalized_l1": 0.40747833251953125,
+        "teacher_normalized_rmse": 0.5417242875384789,
+        "valid_action_coordinates": 72
+      },
+      "validation": {
+        "demonstration_per_coordinate_l1": [
+          0.7231421172618866,
+          1.7934054533640544,
+          2.252298355102539,
+          2.443956653277079,
+          5.424818833669026,
+          3.1852709452311196
+        ],
+        "teacher_normalized_l1": 0.4171968301137288,
+        "teacher_normalized_rmse": 0.5173452177173806,
+        "valid_action_coordinates": 72
+      }
+    },
+    "trained_student": {
+      "final": {
+        "demonstration_per_coordinate_l1": [
+          0.5192184944947561,
+          1.2988782326380413,
+          0.6294053693612417,
+          2.577476660410563,
+          4.233235438664754,
+          3.6687353452046714
+        ],
+        "teacher_normalized_l1": 0.19362070825364855,
+        "teacher_normalized_rmse": 0.24479024967838617,
+        "valid_action_coordinates": 72
+      },
+      "train": {
+        "demonstration_per_coordinate_l1": [
+          0.5472177962462107,
+          1.3156754573186238,
+          0.631926546494166,
+          2.4974276622136435,
+          4.220431248346965,
+          3.7023037672042847
+        ],
+        "teacher_normalized_l1": 0.16804809040493435,
+        "teacher_normalized_rmse": 0.22179358007797811,
+        "valid_action_coordinates": 72
+      },
+      "validation": {
+        "demonstration_per_coordinate_l1": [
+          0.44652218619982403,
+          1.3246772686640422,
+          0.6905914346377054,
+          2.601589322090149,
+          4.2996712525685625,
+          3.767812728881836
+        ],
+        "teacher_normalized_l1": 0.20918122927347818,
+        "teacher_normalized_rmse": 0.24851834803055467,
+        "valid_action_coordinates": 72
+      }
+    },
+    "versions": {
+      "lerobot": "0.6.1",
+      "safetensors": "0.8.0",
+      "torch": "2.11.0",
+      "torchvision": "0.26.0"
+    }
+  },
+  "download": {
+    "original_basename": "tmp0nhu1o58.tar",
+    "bytes": 56002560,
+    "sha256": "d7a0ea549748037f8cc1d8dc6a1378779a73ec7e0e66f1ea5ce245cdfd7bb76b",
+    "regular_files": 10,
+    "directories": 1,
+    "all_archive_payloads_match_registered_artifact": true,
+    "server_archive_identical": true,
+    "original_unchanged": true,
+    "extracted": false,
+    "files": {
+      "manifest.json": {
+        "bytes": 1845,
+        "sha256": "088374fd014b58f6d80d553494407d0441c38c525fd2c121ee04a7771323ad4e"
+      },
+      "lineage.json": {
+        "bytes": 7386,
+        "sha256": "ec917720a1d5415919a2eed9bd435b7b7266682a8947b91e1c40c159eea7fd28"
+      },
+      "policy/config.json": {
+        "bytes": 1494,
+        "sha256": "b1c50740187ef4d270ab80ea727bb93df74be2d0e1c60cc88464b060f6e0188a"
+      },
+      "policy/model.safetensors": {
+        "bytes": 55946840,
+        "sha256": "cf20bad715be4595cbf9dce68d1e48e25049c253a15f44f276712d5f371c96e3"
+      },
+      "policy/policy_postprocessor.json": {
+        "bytes": 660,
+        "sha256": "648b415125a183dfd6cbc47c1dc04ab3f2d912654ef22a12ca5e8b93d7d85cdd"
+      },
+      "policy/policy_postprocessor_step_0_unnormalizer_processor.safetensors": {
+        "bytes": 584,
+        "sha256": "ae1e255d00209ed7dfbd83163089ea55eb63aebe57c0e8e92497914ba56a4d71"
+      },
+      "policy/policy_preprocessor.json": {
+        "bytes": 1151,
+        "sha256": "0708a2a86799db24a2c4076be30ac17d82898e6606eddfa4bae9af1cdb1b7a3d"
+      },
+      "policy/policy_preprocessor_step_3_normalizer_processor.safetensors": {
+        "bytes": 584,
+        "sha256": "ae1e255d00209ed7dfbd83163089ea55eb63aebe57c0e8e92497914ba56a4d71"
+      },
+      "training.json": {
+        "bytes": 10388,
+        "sha256": "0f56297aa2b68265bce29cebca07a6564704d1dd38d7d85c095fec3b1b14c5b7"
+      },
+      "verification.json": {
+        "bytes": 5342,
+        "sha256": "a5f8f059a568b7dd79dc129c32a24854026e65181d4ed106a35e21f746e7f644"
+      }
+    }
+  },
+  "worker_source_hashes_match_commit": {
+    "workers/act_optimizer/src/firebird_act/bundle.py": "9b62e0318f8a078e663f8b2171a1e8ddd67ba48ff38d78028b1a725c126da029",
+    "workers/act_optimizer/src/firebird_act/probe.py": "089406e6ffcfcb97587dd0d4077db112c8a147ee1578f6f924c95902a7c69524",
+    "workers/policy_distillation/src/firebird_distill/__init__.py": "6e692853220b6a5d748bfc3f86cdf452441839efa0a853528d484be469141cae",
+    "workers/policy_distillation/src/firebird_distill/application.py": "dbe20d4fca39c7c097f6f98b46cac22f36505f1d8414b6548a7ece7a2b417a73",
+    "workers/policy_distillation/src/firebird_distill/contracts.py": "de16f7998ed223e33224e6d4850ef09676545c9ce87d4bccbf7a7ee04c4e972f",
+    "workers/policy_distillation/src/firebird_distill/prepare.py": "e00c000431c226531a7c99bb07865a8ce4deea245398f2ce196832331b662883",
+    "workers/policy_distillation/src/firebird_distill/runtime.py": "e2dee8698f9712f82e20ef3f78ba16d640439068bfebc8fe198ebc1121ca1a36"
+  },
+  "evidence_sha256": {
+    "expected-request.json": "e14f1f9f554962c67f7e3f98d312ba7b82c2405f81d34ed416a165eb30dc55e2",
+    "actual-job.json": "280dda4694fb158e87b78326a636b7d3453d64c409e6e37a4a3dc9448eb97324",
+    "actual-artifacts.json": "3fdb190e677a046e70d17c66ac3aa87d224e4f79707160658a134f828f0b3a38",
+    "succeeded.png": "55b9819aefe895ca116d7b11f8474146a1d2e55d70ec4600e56be87e5b9194f9"
+  },
+  "verification_script_sha256": "b038ed66ff0947daa9c4b07d4f247c063d29ac3984e970ef0d84d25539492643",
+  "limitations": [
+    "Generated teacher and generated observations are software proof, not real robot learning or task quality",
+    "Student-only disjoint splits; teacher training overlap remains unknown",
+    "Fresh reload compares saved student predictions; it does not guarantee retained teacher task success",
+    "No simulator, GPU, cloud, provider or real robot action performed by this proof",
+    "No speedup, calibration, task success or training-resume claim",
+    "Reviewer did not retrain/reload the model; verified worker-recorded fresh-process evidence and independently recomputed artifact/model/archive identities"
+  ]
+}
