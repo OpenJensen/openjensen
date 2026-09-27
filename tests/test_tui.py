@@ -347,3 +347,29 @@ def test_invalid_url_does_not_reflect_secret_port_or_credentials():
         with pytest.raises(ValueError) as error:
             endpoint(value)
         assert "SECRET" not in str(error.value)
+
+
+@pytest.mark.parametrize("mismatch", ["project", "operation"])
+def test_intake_does_not_acknowledge_another_project_or_operation(mismatch):
+    async def scenario():
+        server = Server()
+        original = server.handle
+
+        async def handle(request):
+            if request.method == "POST" and request.url.path.endswith("/intakes"):
+                server.calls.append((request.method, request.url.path, request.content))
+                wrong = job(pid="other") if mismatch == "project" else job(policy=True)
+                return httpx.Response(202, json=wrong)
+            return await original(request)
+
+        server.handle = handle
+        app = FirebirdApp(client=server.client(), poll_seconds=100)
+        async with app.run_test() as pilot:
+            await choose_project(app, pilot)
+            app.mutate("intake", {"source": "huggingface", "repo_id": "fixture/data"}, "p")
+            await until(lambda: not app.writing)
+            message = str(app.query_one("#notice", Static).content)
+            assert "identity differs" in message and "Intake accepted" not in message
+            assert len([call for call in server.calls if call[0] == "POST"]) == 1
+
+    asyncio.run(scenario())

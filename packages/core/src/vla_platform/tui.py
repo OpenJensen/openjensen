@@ -440,6 +440,10 @@ class FirebirdApp(App):
                     "POST", f"/projects/{segment(project_id)}/intakes", payload
                 )
                 result = self.client.validate(Job, result)
+                if result["project_id"] != project_id or result["kind"] != "dataset.inspect":
+                    raise ApiError(
+                        "Intake response identity differs; inspect jobs before retrying."
+                    )
                 self.notice(f"Intake accepted: {result['id']}. Follow its actual status in Jobs.")
             else:
                 current = await self.client.job(payload["id"])
