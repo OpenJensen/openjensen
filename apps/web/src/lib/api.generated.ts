@@ -1684,6 +1684,28 @@ export interface components {
             timeout_seconds: number;
         };
         /**
+         * NativeQuantization
+         * @description Explicit local packed ACT recipe; separate from GGUF precision.
+         */
+        NativeQuantization: {
+            /**
+             * Bits
+             * @enum {integer}
+             */
+            bits: 4 | 8;
+            /**
+             * Format
+             * @constant
+             */
+            format: "firebird_quant";
+            /**
+             * Group Size
+             * @default 64
+             * @constant
+             */
+            group_size: 64;
+        };
+        /**
          * ParityLimits
          * @description Operator-declared tolerances; no unmeasured universal default.
          */
@@ -1703,7 +1725,7 @@ export interface components {
              * Format
              * @enum {string}
              */
-            format: "gguf" | "training_checkpoint" | "native_checkpoint" | "deployment_package" | "inference_export" | "simulation_record";
+            format: "gguf" | "training_checkpoint" | "native_checkpoint" | "deployment_package" | "inference_export" | "simulation_record" | "native_quantized";
             /** Id */
             id: string;
             /** Job Id */
@@ -1733,6 +1755,7 @@ export interface components {
             dataset_job_id?: string | null;
             evaluation?: components["schemas"]["Evaluation"];
             limits?: components["schemas"]["Limits"] | null;
+            native_quantization?: components["schemas"]["NativeQuantization"] | null;
             /**
              * Operation
              * @enum {string}
@@ -1834,6 +1857,16 @@ export interface components {
              * @default true
              */
             launchable: boolean;
+            /**
+             * Native Quantization
+             * @default false
+             */
+            native_quantization: boolean;
+            /**
+             * Native Quantization Only
+             * @default false
+             */
+            native_quantization_only: boolean;
             /**
              * Needs Preparation
              * @default false
