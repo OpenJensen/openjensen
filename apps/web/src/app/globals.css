@@ -533,3 +533,12 @@ input::placeholder { color: var(--muted); opacity: .8; }
 .cloud-log-caption { margin: 12px 0 8px; }
 .cloud-log-tail { max-height: 36rem; min-height: 10rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font: 12px/1.6 ui-monospace, monospace; }
 @media (max-width: 700px) { .cloud-heading { flex-direction: column; } .cloud-run-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.cloud-runs { display: grid; gap: 24px; }
+.managed-cloud-jobs, .external-cloud-observations, .teaching-preview { min-width: 0; }
+.teaching-preview { margin-block: 24px; padding: 16px; border: 1px solid var(--line); border-radius: 8px; }
+.teaching-preview canvas { display: block; width: 100%; height: auto; max-height: 540px; object-fit: contain; background: var(--surface); }
+.teaching-preview canvas[hidden] { display: none; }
+.teaching-preview-stale canvas { opacity: .45; }
+.teaching-preview p, .teaching-setup { font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.teaching-setup summary { cursor: pointer; }

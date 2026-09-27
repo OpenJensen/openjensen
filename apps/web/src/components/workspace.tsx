@@ -155,6 +155,7 @@ function Workbench() {
   const [activeStage, setActiveStage] = useState(0);
   const [quantizeArtifact, setQuantizeArtifact] = useState<{ projectId: string; artifactId: string } | null>(null);
   const [trainingNavigation, setTrainingNavigation] = useState(0);
+  const [openTrainingRun, setOpenTrainingRun] = useState<{ projectId: string; id: string } | null>(null);
   const [workflowNavigation, setWorkflowNavigation] = useState(0);
   const [startTraining, setStartTraining] = useState<{ id: number; datasetId?: string }>();
   const [settingsTab, setSettingsTab] = useState<'compute' | 'settings' | 'diagnostics'>('compute');
@@ -187,6 +188,7 @@ function Workbench() {
     setProjectId(selected?.id ?? '');
   }, [projects.data, projectId]);
   function navigateStage(index: number) {
+    setOpenTrainingRun(null);
     setQuantizeArtifact(null);
     setWorkflowNavigation(value => value + 1);
     if (index === 1) {
@@ -202,6 +204,7 @@ function Workbench() {
     setActiveStage(1);
   }
   function selectProject(id: string) {
+    setOpenTrainingRun(null);
     setQuantizeArtifact(null);
     setStartTraining(undefined);
     setProjectId(id);
@@ -255,7 +258,7 @@ function Workbench() {
       </section>
     </>}
   >
-        <div className={`page-heading${activeStage === 1 ? ' training-page-heading' : ''}`}><div><h1>{stage.name}</h1></div><div className={`connection ${connected ? 'connected' : ''}`} role="status"><span />{health.isPending ? 'Connecting' : connected ? 'Connected' : 'Offline'}</div></div>
+        <div className={`page-heading${activeStage === 1 ? ' training-page-heading' : ''}`}><div><h1>{stage.name}</h1></div><div className={`connection ${connected ? 'connected' : ''}`} role="status" aria-label="Application API connection" title="Application API connection; simulator and voice connections are shown separately."><span />{health.isPending ? 'Connecting' : connected ? 'App connected' : 'App offline'}</div></div>
         {!connected && !health.isPending && <div className="connection-notice"><ErrorNotice error={health.error} /><button className="text-button" onClick={() => { void health.refetch(); void projects.refetch(); void capabilities.refetch(); }}>Retry connection</button></div>}
         {capabilities.error && connected && <div className="connection-notice"><ErrorNotice error={capabilities.error} /><button className="text-button" onClick={() => void capabilities.refetch()} disabled={capabilities.isFetching}>Retry capabilities</button></div>}
         <div className="dataset-view" hidden={activeStage !== 0}>
@@ -282,8 +285,8 @@ function Workbench() {
           {activeStage === 0 && datasetView === 'augmentation' && <AugmentationPanel key={projectId} projectId={workflowProjectId} preferredDatasetId={selectedJob?.id} onChooseDataset={() => setDatasetView('sources')} />}
           {jobs.error && datasetView === 'sources' && <ErrorNotice error={jobs.error} />}
         </div>
-        {(activeStage === 1 || activeStage === 6) && <div className="training-view" hidden={activeStage !== 1}><TrainingPanel active={activeStage === 1} key={projectId} projectId={workflowProjectId} startNew={startTraining} showJobsRequest={trainingNavigation} preferredDatasetId={selectedJob?.id} onChooseDataset={() => { setActiveStage(0); setDatasetView('sources'); }} onDiagnostics={() => { setSettingsTab('diagnostics'); setActiveStage(6); }} onComputeSettings={() => { setSettingsTab('compute'); setActiveStage(6); }} onQuantize={artifactId => { setQuantizeArtifact({ projectId, artifactId }); setWorkflowNavigation(value => value + 1); setActiveStage(3); }} /></div>}
-        {activeStage === 7 && <CloudRuns />}
+        {(activeStage === 1 || activeStage === 6) && <div className="training-view" hidden={activeStage !== 1}><TrainingPanel active={activeStage === 1} key={projectId} projectId={workflowProjectId} startNew={startTraining} showJobsRequest={trainingNavigation} preferredRunId={openTrainingRun?.projectId === projectId ? openTrainingRun.id : undefined} preferredDatasetId={selectedJob?.id} onChooseDataset={() => { setActiveStage(0); setDatasetView('sources'); }} onDiagnostics={() => { setSettingsTab('diagnostics'); setActiveStage(6); }} onComputeSettings={() => { setSettingsTab('compute'); setActiveStage(6); }} onQuantize={artifactId => { setQuantizeArtifact({ projectId, artifactId }); setWorkflowNavigation(value => value + 1); setActiveStage(3); }} /></div>}
+        {activeStage === 7 && <CloudRuns key={workflowProjectId} projectId={workflowProjectId} onOpenTraining={id => { setStartTraining(undefined); setOpenTrainingRun({ projectId: workflowProjectId, id }); setActiveStage(1); }} />}
         {activeStage > 1 && activeStage !== 2 && activeStage !== 7 && <WorkflowPanel key={`${workflowProjectId}-${activeStage}-${workflowNavigation}`} projectId={workflowProjectId} tab={settingsTab} onTabChange={setSettingsTab} onOpenQuantize={() => navigateStage(3)} stage={activeStage === 6 ? 'settings' : stage.name} preferredArtifactId={activeStage === 3 && quantizeArtifact?.projectId === projectId ? quantizeArtifact.artifactId : undefined} onViewTraining={() => navigateStage(1)} />}
         {activeStage === 2 && <section className="planned-panel" aria-labelledby="planned-title"><span className="empty-icon"><Icon name={stage.icon} size={28} /></span><span className="planned-badge">Planned</span><h2 id="planned-title">{stage.name}</h2><button className="secondary-button" onClick={() => setActiveStage(0)}>Go to Dataset <Icon name="arrow" size={15} /></button></section>}
   </WorkspaceShell>;

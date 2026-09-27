@@ -163,6 +163,7 @@ export function TrainingPanel({
   onQuantize,
   startNew,
   showJobsRequest,
+  preferredRunId,
   active = true,
 }: {
   projectId: string;
@@ -173,6 +174,7 @@ export function TrainingPanel({
   onQuantize?: (artifactId: string) => void;
   startNew?: { id: number; datasetId?: string };
   showJobsRequest?: number;
+  preferredRunId?: string;
   active?: boolean;
 }) {
   const client = useQueryClient();
@@ -571,6 +573,10 @@ export function TrainingPanel({
     // Sidebar navigation changes the view while preserving the creation draft.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showJobsRequest]);
+
+  useEffect(() => {
+    if (preferredRunId) { setSelectedRunId(preferredRunId); setView("run"); }
+  }, [preferredRunId]);
 
   const historyEntries: JobHistoryEntry[] = trainingRuns.map(job => {
     const request = "training_method" in job.request ? job.request : undefined;
