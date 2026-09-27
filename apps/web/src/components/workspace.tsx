@@ -148,6 +148,9 @@ function Workbench() {
   const [selectedJobId, setSelectedJobId] = useState('');
   const [activeStage, setActiveStage] = useState(0);
   const [quantizeArtifact, setQuantizeArtifact] = useState<{ projectId: string; artifactId: string } | null>(null);
+  const [trainingNavigation, setTrainingNavigation] = useState(0);
+  const [workflowNavigation, setWorkflowNavigation] = useState(0);
+  const [startTraining, setStartTraining] = useState<{ id: number; datasetId?: string }>();
   const [settingsTab, setSettingsTab] = useState<'compute' | 'settings' | 'diagnostics'>('compute');
   const [datasetView, setDatasetView] = useState<'sources' | 'inspection' | 'augmentation'>('sources');
   const [starter, setStarter] = useState(datasetStarters[0]);
@@ -177,7 +180,24 @@ function Workbench() {
     const selected = projects.data.find(project => project.id === stored) ?? projects.data[0];
     setProjectId(selected?.id ?? '');
   }, [projects.data, projectId]);
+  function navigateStage(index: number) {
+    setQuantizeArtifact(null);
+    setWorkflowNavigation(value => value + 1);
+    if (index === 1) {
+      setStartTraining(undefined);
+      setTrainingNavigation(value => value + 1);
+    }
+    setActiveStage(index);
+  }
+  function startTrainingOnDataset(datasetId: string) {
+    const id = trainingNavigation + 1;
+    setTrainingNavigation(id);
+    setStartTraining({ id, datasetId });
+    setActiveStage(1);
+  }
   function selectProject(id: string) {
+    setQuantizeArtifact(null);
+    setStartTraining(undefined);
     setProjectId(id);
     setSelectedJobId('');
     setDatasetView('sources');
@@ -206,7 +226,7 @@ function Workbench() {
       <nav className="stage-navigation" aria-label="Policy lifecycle">
         <p className="sidebar-section-label">Workspace</p>
         <ul className="stage-list">{stages.map((item, index) => <li key={item.name}>
-          <button type="button" className={`stage-button${activeStage === index ? ' selected' : ''}`} onClick={() => setActiveStage(index)} aria-current={activeStage === index ? 'page' : undefined}>
+          <button type="button" className={`stage-button${activeStage === index ? ' selected' : ''}`} onClick={() => navigateStage(index)} aria-current={activeStage === index ? 'page' : undefined}>
             <Icon name={item.icon} size={19} /><span>{item.name}</span>{index === 2 && <small>Planned</small>}
           </button>
         </li>)}</ul>
@@ -247,16 +267,16 @@ function Workbench() {
                 {sortedJobs.length > 1 && <div className="history-control"><label htmlFor="inspection-history">History</label><select id="inspection-history" value={selectedJob.id} onChange={event => setSelectedJobId(event.target.value)}>{sortedJobs.map(job => <option key={job.id} value={job.id}>{job.request.repo_id || 'Local dataset'} · {displayDate(job.created_at)} · {job.status}</option>)}</select></div>}
                 <JobDetail key={selectedJob.id} job={selectedJob} projectId={projectId} />
                 {selectedJob.result && <DatasetExplorer key={`explorer-${selectedJob.id}`} job={selectedJob} active={activeStage === 0 && datasetView === 'inspection'} />}
-                {selectedJob.status === 'succeeded' && selectedJob.result?.source === 'huggingface' && <div className="dataset-train-action"><button className="primary-button" onClick={() => setActiveStage(1)}>Train on this dataset <Icon name="arrow" size={16} /></button></div>}
+                {selectedJob.status === 'succeeded' && selectedJob.result?.source === 'huggingface' && <div className="dataset-train-action"><button className="primary-button" onClick={() => startTrainingOnDataset(selectedJob.id)}>Train on this dataset <Icon name="arrow" size={16} /></button></div>}
               </>}
             </section>
           </div>
           {activeStage === 0 && datasetView === 'augmentation' && <AugmentationPanel key={`${projectId}-${selectedJob?.id ?? ''}`} projectId={projectId} preferredDatasetId={selectedJob?.id} onChooseDataset={() => setDatasetView('sources')} />}
           {jobs.error && datasetView === 'sources' && <ErrorNotice error={jobs.error} />}
         </div>
-        {(activeStage === 1 || activeStage === 6) && <div className="training-view" hidden={activeStage !== 1}><TrainingPanel active={activeStage === 1} key={projectId} projectId={workflowProjectId} preferredDatasetId={selectedJob?.id} onChooseDataset={() => { setActiveStage(0); setDatasetView('sources'); }} onDiagnostics={() => { setSettingsTab('diagnostics'); setActiveStage(6); }} onComputeSettings={() => { setSettingsTab('compute'); setActiveStage(6); }} onQuantize={artifactId => { setQuantizeArtifact({ projectId, artifactId }); setActiveStage(3); }} /></div>}
+        {(activeStage === 1 || activeStage === 6) && <div className="training-view" hidden={activeStage !== 1}><TrainingPanel active={activeStage === 1} key={projectId} projectId={workflowProjectId} startNew={startTraining} showJobsRequest={trainingNavigation} preferredDatasetId={selectedJob?.id} onChooseDataset={() => { setActiveStage(0); setDatasetView('sources'); }} onDiagnostics={() => { setSettingsTab('diagnostics'); setActiveStage(6); }} onComputeSettings={() => { setSettingsTab('compute'); setActiveStage(6); }} onQuantize={artifactId => { setQuantizeArtifact({ projectId, artifactId }); setWorkflowNavigation(value => value + 1); setActiveStage(3); }} /></div>}
         {activeStage === 7 && <CloudRuns />}
-        {activeStage > 1 && activeStage !== 2 && activeStage !== 7 && <WorkflowPanel key={`${workflowProjectId}-${activeStage}`} projectId={workflowProjectId} tab={settingsTab} onTabChange={setSettingsTab} onOpenQuantize={() => setActiveStage(3)} stage={activeStage === 6 ? 'settings' : stage.name} preferredArtifactId={activeStage === 3 && quantizeArtifact?.projectId === projectId ? quantizeArtifact.artifactId : undefined} onViewTraining={() => setActiveStage(1)} />}
+        {activeStage > 1 && activeStage !== 2 && activeStage !== 7 && <WorkflowPanel key={`${workflowProjectId}-${activeStage}-${workflowNavigation}`} projectId={workflowProjectId} tab={settingsTab} onTabChange={setSettingsTab} onOpenQuantize={() => navigateStage(3)} stage={activeStage === 6 ? 'settings' : stage.name} preferredArtifactId={activeStage === 3 && quantizeArtifact?.projectId === projectId ? quantizeArtifact.artifactId : undefined} onViewTraining={() => navigateStage(1)} />}
         {activeStage === 2 && <section className="planned-panel" aria-labelledby="planned-title"><span className="empty-icon"><Icon name={stage.icon} size={28} /></span><span className="planned-badge">Planned</span><h2 id="planned-title">{stage.name}</h2><button className="secondary-button" onClick={() => setActiveStage(0)}>Go to Dataset <Icon name="arrow" size={15} /></button></section>}
   </WorkspaceShell>;
 }

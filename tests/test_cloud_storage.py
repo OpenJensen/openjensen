@@ -193,3 +193,89 @@ def test_non_mapping_or_incomplete_descriptor_is_a_clear_integrity_error(tmp_pat
     storage.write_json(tmp_path / "remote.json", pointer)
     with pytest.raises(ValueError, match="Invalid stored cloud artifact descriptor"):
         storage.read_descriptor(tmp_path)
+
+
+@pytest.mark.parametrize("operation", ["policy.evaluate", "policy.run"])
+def test_cloud_result_preserves_bounded_inference_evidence_without_weights(
+    tmp_path, cloud, operation
+):
+    output, stage = tmp_path / "output", tmp_path / "host"
+    output.mkdir()
+    prefix = "gs://test-bucket/jobs/inference"
+    nested = "package-verification/" if operation == "policy.run" else ""
+    result = {
+        "schema_version": 1,
+        "job_id": "inference",
+        "report": {
+            "scope": "engine_diagnostics",
+            "p95_ms": 12,
+            "measurement": {"gpu_telemetry": str(output / (nested + "timing.gpu.csv"))},
+            "measurements": {
+                "reload": {"gpu_telemetry": str(output / (nested + "reload.gpu.csv"))}
+            },
+        },
+    }
+    expected = {
+        "inference-report.json": '{"p95_ms": 12}',
+        nested + "actions.json": '{"values": [0.1, 0.2]}',
+        nested + "timing.log": "actual per-call timing fixture\n",
+        nested + "reload.log": "actual reload fixture\n",
+        nested + "timing.gpu.csv": "timestamp, 123\n",
+        nested + "reload.gpu.csv": "timestamp, 125\n",
+    }
+    if operation == "policy.run":
+        expected["package-verification/result.json"] = json.dumps(result)
+        expected["package-verification/worker.log"] = "fresh process fixture\n"
+        package = output / "package"
+        package.mkdir()
+        (package / "model.gguf").write_bytes(b"model fixture stays in GCS")
+        storage.write_json(
+            package / "manifest.json",
+            {
+                "files": {"model.gguf": storage.digest(package / "model.gguf")},
+                "metadata": {"architecture": "smolvla"},
+            },
+        )
+        result["artifact"] = {
+            "path": str(package),
+            "format": "deployment_package",
+            "label": "Package",
+        }
+    for name, content in expected.items():
+        path = output / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+    (output / "unlisted-weights.bin").write_bytes(b"must never be returned")
+    storage.write_json(output / "result.json", result)
+    storage.publish_result(output, prefix)
+    cloud.downloads.clear()
+    assert storage.sync(prefix, stage)
+    for name, content in expected.items():
+        assert (stage / name).read_text() == content
+    assert not list(stage.rglob("*.gguf")) and not list(stage.rglob("*.bin"))
+    assert cloud.downloads == ["jobs/inference/result.json"]
+    restored = json.loads((stage / "result.json").read_text())
+    assert restored["report"]["measurement"]["gpu_telemetry"] == nested + "timing.gpu.csv"
+    assert (
+        restored["report"]["measurement"]["gpu_telemetry_uri"]
+        == prefix + "/evidence/" + nested + "timing.gpu.csv"
+    )
+    assert {item["path"] for item in restored["report"]["retained_evidence"]} == set(expected)
+
+
+def test_inference_evidence_is_bounded_and_tampering_fails_sync(tmp_path, cloud):
+    output = tmp_path / "output"
+    output.mkdir()
+    storage.write_json(output / "result.json", {"report": {"scope": "engine_diagnostics"}})
+    (output / "timing.log").write_text("x" * (storage.INFERENCE_EVIDENCE_BYTES + 20))
+    (output / "actions.json").write_text("x" * (storage.INFERENCE_EVIDENCE_BYTES + 20))
+    storage.publish_result(output, "gs://test-bucket/jobs/inference")
+    data = json.loads(cloud.objects["jobs/inference/result.json"])
+    assert "actions.json" not in data["summaries"]
+    item = data["report"]["retained_evidence"][0]
+    assert item["path"] == "timing.log" and item["truncated"] is True
+    assert item["bytes"] == storage.INFERENCE_EVIDENCE_BYTES
+    data["summaries"]["timing.log"] = "tampered"
+    cloud.objects["jobs/inference/result.json"] = storage.encoded(data)
+    with pytest.raises(ValueError, match="evidence differs"):
+        storage.sync("gs://test-bucket/jobs/inference", tmp_path / "host")

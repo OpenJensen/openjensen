@@ -45,6 +45,7 @@ async function openGpuPicker(page: Page, local = false) {
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
   await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Compute', exact: true }).click();
   const picker = page.getByRole('combobox', { name: 'GPU', exact: true });
   await expect(picker).toBeVisible();
@@ -215,6 +216,7 @@ async function trainingAdmission(page: Page, { format = 'lerobot_v3', dimensions
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
   await expect(page.getByRole('radio', { name: 'fixture/admission', exact: true })).toBeVisible();
   const setup = page.getByRole('navigation', { name: 'Training setup' });
   async function chooseModel(label: string) {

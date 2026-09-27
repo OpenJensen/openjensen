@@ -153,8 +153,13 @@ def prepare(payload: dict, stage_dir: Path, target: dict) -> tuple[Path, dict]:
         raise ValueError("Cloud disk must be between 100 and 2048 GiB")
     if type(idle) is not int or not 1 <= idle <= 60:
         raise ValueError("Cloud idle teardown must be between 1 and 60 minutes")
-    if payload.get("operation") not in {"policy.finetune", "policy.quantize"}:
-        raise ValueError("SkyPilot supports fine-tuning and quantization")
+    if payload.get("operation") not in {
+        "policy.finetune",
+        "policy.quantize",
+        "policy.evaluate",
+        "policy.run",
+    }:
+        raise ValueError("SkyPilot supports training, quantization, engine evaluation and run")
     recipe = effective_training_recipe(payload)
     steps = recipe.get("steps", 20000)
     every = recipe.get("save_every", max(1, (steps + 4) // 5) if type(steps) is int else 4000)
@@ -221,6 +226,11 @@ def prepare(payload: dict, stage_dir: Path, target: dict) -> tuple[Path, dict]:
 
         worker_module = WORKER_MODULE
         extra_setup = stage_psi(bundle, root)
+    elif payload["operation"] in {"policy.evaluate", "policy.run"}:
+        from vla_platform.lifecycle.sky_inference import WORKER_MODULE, stage_inference
+
+        worker_module = WORKER_MODULE
+        extra_setup = stage_inference(bundle, root, accelerator)
     elif payload["operation"] == "policy.quantize":
         from vla_platform.lifecycle.sky_quantization import WORKER_MODULE, stage_quantization
 
@@ -247,7 +257,7 @@ def prepare(payload: dict, stage_dir: Path, target: dict) -> tuple[Path, dict]:
             "assert torchvision.__version__ == '0.26.0+cu128'; "
             "assert torch.version.cuda == '12.8'\"",
         ]
-    elif not psi_training:
+    elif not psi_training and payload["operation"] not in {"policy.evaluate", "policy.run"}:
         dependency_setup = [
             "python3 -m uv pip install --python .venv/bin/python "
             "-r worker/requirements-smolvla-linux.txt"
@@ -272,7 +282,7 @@ def prepare(payload: dict, stage_dir: Path, target: dict) -> tuple[Path, dict]:
         "memory": "32+"
         if psi_training
         else "16+"
-        if payload["operation"] == "policy.quantize"
+        if payload["operation"] in {"policy.quantize", "policy.evaluate", "policy.run"}
         else "4+",
         "disk_size": disk,
         "use_spot": False,
@@ -436,6 +446,8 @@ async def _command(
                                 prefix = (
                                     "_quantization:"
                                     if item.get("operation") == "policy.quantize"
+                                    else "_inference:"
+                                    if item.get("operation") in {"policy.evaluate", "policy.run"}
                                     else "_telemetry:"
                                 )
                                 await on_event(prefix + json.dumps(item))
@@ -1101,6 +1113,10 @@ async def _run(
         await on_event(
             "Quantizing on Google Cloud"
             if payload["operation"] == "policy.quantize"
+            else "Evaluating on Google Cloud"
+            if payload["operation"] == "policy.evaluate"
+            else "Running policy on Google Cloud"
+            if payload["operation"] == "policy.run"
             else "Training on Google Cloud"
         )
         await follow_training(sky, stage_dir, state, timeout, on_event)

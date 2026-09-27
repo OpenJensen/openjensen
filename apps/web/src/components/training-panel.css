@@ -1,4 +1,8 @@
 .training-workspace { max-width: 1060px; }
+.training-view-toolbar { max-width: 1060px; margin-bottom: 20px; }
+.training-view-toolbar h2 { margin-top: 18px; font-size: 17px; font-weight: 600; }
+.training-back { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; }
+.training-back > svg { transform: rotate(180deg); }
 .training-workspace fieldset { min-width: 0; border: 0; padding: 0; margin-inline: 0; }
 .training-nav { display: flex; gap: 24px; margin-bottom: 28px; border-bottom: 1px solid var(--line); }
 .training-nav button { display: inline-flex; align-items: center; gap: 9px; padding: 11px 2px 13px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font-size: 12px; }
@@ -55,6 +59,9 @@
 .training-model-copy > span { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .training-model-copy strong { font-size: 12px; font-weight: 600; white-space: nowrap; }
 .training-model-copy > small { color: var(--muted); font-size: 10px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+.training-model-copy > .training-model-memory { margin-top: 4px; color: var(--muted); font-size: 11px; gap: 5px; }
+.training-model-memory strong { color: var(--ink); font-size: 13px; font-weight: 750; }
+.training-memory-help { color: var(--muted); font-size: 11px; line-height: 1.5; margin: 12px 0 0; }
 .training-model-status { font-size: 9px; color: var(--muted); border: 1px solid var(--line); padding: 1px 4px; border-radius: 4px; white-space: nowrap; }
 .training-methods { display: flex; gap: 7px; margin-top: 24px; }
 .training-methods legend { margin-bottom: 10px; font-size: 12px; font-weight: 500; }
@@ -89,6 +96,8 @@
 .training-resume-options label { display: flex; align-items: center; gap: 9px; font-size: 11px; }
 .training-resume-options input { accent-color: var(--ink); }
 .training-activity { margin-top: 32px; padding-top: 22px; border-top: 1px solid var(--line); }
+.training-activity.training-job-detail { max-width: 1060px; margin-top: 0; padding-top: 0; border: 0; }
+.training-job-detail > .training-back { margin-bottom: 22px; }
 .training-run-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .training-run-list button { display: flex; align-items: center; gap: 10px; padding: 9px 11px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; font-size: 11px; }
 .training-run-list button[aria-pressed=true] { border-color: var(--ink); color: var(--ink); }

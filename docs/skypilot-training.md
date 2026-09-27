@@ -81,3 +81,22 @@ metadata.
 The separate [Cloud runs view](cloud-runs.md) reads operator-published snapshots
 for standalone cloud workloads, including upstream Isaac rollout runners. It does
 not replace the training monitor or control Firebird-managed jobs.
+
+## Evaluate and Run on cloud GPUs
+
+The application now advertises `engine_evaluation` and `run` on supported GCP
+runtimes. Evaluate accepts a saved SmolVLA GGUF or deployment package, retrieves
+it on the worker, and measures real CUDA inference with a fresh reload, finite
+actions, per-call latency samples and sampled GPU memory. It uses the model's
+recorded camera count and reports the real action dimensions separately from
+padded channels.
+
+Run executes the selected GGUF in an independent process and publishes a
+reload-verified package. Selecting an existing package executes that exact
+package again without repacking it. The app keeps its control plane on Xbox;
+model files and packages remain in GCS.
+
+These cloud actions currently support synthetic-input engine checks. They do
+not run a simulator, establish task success, or drive a physical robot. LIBERO
+and Spatial protocols continue to require a separately prepared compatible
+native runtime. Requests for unsupported cloud simulation fail before allocation.

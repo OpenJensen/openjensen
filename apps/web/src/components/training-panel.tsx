@@ -13,11 +13,12 @@ import {
 } from "@/lib/api";
 import { datasetStarters } from "@/lib/dataset-starters";
 import { trainingModels, type TrainingModel } from "@/lib/training-models";
-import { trainingRunModelLabel } from "@/lib/checkpoints";
+import { checkpointStep, trainingRunModelLabel } from "@/lib/checkpoints";
 import { CameraPlayer } from "@/components/dataset-explorer";
 import { Icon } from "@/components/icon";
 import { GpuPicker } from "@/components/gpu-picker";
 import { TrainingMonitor } from "@/components/training-monitor";
+import { JobHistory, type JobHistoryEntry } from "@/components/job-history";
 import "./training-panel.css";
 
 const steps = ["Dataset", "Model", "Compute"];
@@ -158,6 +159,8 @@ export function TrainingPanel({
   onDiagnostics,
   onComputeSettings,
   onQuantize,
+  startNew,
+  showJobsRequest,
   active = true,
 }: {
   projectId: string;
@@ -166,9 +169,12 @@ export function TrainingPanel({
   onDiagnostics: () => void;
   onComputeSettings: () => void;
   onQuantize?: (artifactId: string) => void;
+  startNew?: { id: number; datasetId?: string };
+  showJobsRequest?: number;
   active?: boolean;
 }) {
   const client = useQueryClient();
+  const [view, setView] = useState<"jobs" | "new" | "run">(startNew ? "new" : "jobs");
   const [step, setStep] = useState(0);
   const [datasetId, setDatasetId] = useState(preferredDatasetId ?? "");
   const [cameraSelections, setCameraSelections] = useState<
@@ -191,7 +197,7 @@ export function TrainingPanel({
     if (!active) return;
     window.scrollTo({ top: 0, behavior: "instant" });
     headingRef.current?.focus({ preventScroll: true });
-  }, [step, active]);
+  }, [step, active, view]);
   const options = useQuery({
     queryKey: ["policy-options"],
     queryFn: api.policyOptions,
@@ -420,7 +426,7 @@ export function TrainingPanel({
     queryKey: ["training-episodes", activeDataset?.id],
     queryFn: () => api.episodes(activeDataset!.id, 0, 6),
     enabled:
-      active && step === 0 &&
+      active && view === "new" && step === 0 &&
       !!activeDataset &&
       activeDataset.result.source === "huggingface",
     retry: false,
@@ -433,7 +439,7 @@ export function TrainingPanel({
   const preview = useQuery({
     queryKey: ["training-preview", activeDataset?.id, episodeIndex],
     queryFn: () => api.episode(activeDataset!.id, episodeIndex!),
-    enabled: active && step === 0 && !!activeDataset && episodeIndex !== undefined,
+    enabled: active && view === "new" && step === 0 && !!activeDataset && episodeIndex !== undefined,
     retry: false,
     staleTime: 60000,
   });
@@ -514,7 +520,7 @@ export function TrainingPanel({
     },
     onSuccess: (job) => {
       setSelectedRunId(job.id);
-      window.requestAnimationFrame(() => document.querySelector(".training-activity")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+      setView("run");
       client.setQueryData<Job[]>(["jobs", projectId], (previous) => [
         job,
         ...(previous ?? []).filter((item) => item.id !== job.id),
@@ -523,7 +529,8 @@ export function TrainingPanel({
     },
   });
   const selectedRun =
-    trainingRuns.find((job) => job.id === selectedRunId) ?? trainingRuns[0];
+    trainingRuns.find((job) => job.id === selectedRunId) ??
+    (mutation.data?.id === selectedRunId ? mutation.data : undefined);
   const cancel = useMutation({
     mutationFn: (jobId: string) => api.cancel(jobId),
     onSuccess: () => {
@@ -542,8 +549,61 @@ export function TrainingPanel({
     ? String(model?.label ?? originalTraining?.model_id ?? "Original model")
     : (model?.label ?? "Choose a model");
 
+  function openNew(dataset?: string) {
+    if (dataset) setDatasetId(dataset);
+    setResumeId("");
+    mutation.reset();
+    setView("new");
+  }
+  useEffect(() => {
+    if (startNew) {
+      setStep(0);
+      openNew(startNew.datasetId ?? preferredDatasetId);
+    }
+    // An entry action is identified by its id; ordinary dataset refreshes must
+    // not pull someone out of an existing job or reset a creation draft.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startNew?.id]);
+  useEffect(() => {
+    if (!startNew) setView("jobs");
+    // Sidebar navigation changes the view while preserving the creation draft.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showJobsRequest]);
+
+  const historyEntries: JobHistoryEntry[] = trainingRuns.map(job => {
+    const request = "training_method" in job.request ? job.request : undefined;
+    const recordedModel = trainingRunModelLabel(job, models, artifacts.data ?? [], trainingRuns);
+    const dataset = allInspections.find(item => item.id === request?.dataset_job_id);
+    const targetSteps = positiveInteger(request?.training?.steps) ? request.training.steps : null;
+    const savedSteps = (artifacts.data ?? []).filter(item => item.job_id === job.id)
+      .map(checkpointStep).filter((value): value is number => value !== null);
+    const reportedSteps = job.result && "reports" in job.result
+      ? (job.result.reports ?? []).map(report => report.steps).filter(positiveInteger) : [];
+    const completedSteps = reportedSteps.length ? Math.max(...reportedSteps)
+      : job.status === "succeeded" ? targetSteps : null;
+    const progress = completedSteps !== null ? `${number(completedSteps)} steps completed`
+      : savedSteps.length ? `Saved step ${number(Math.max(...savedSteps))}${targetSteps ? ` / ${number(targetSteps)}` : ""}`
+        : targetSteps ? `${number(targetSteps)} steps planned` : undefined;
+    return {
+      id: job.id,
+      title: [recordedModel ?? "Fine-tuning", request?.training_method.toUpperCase()].filter(Boolean).join(" · "),
+      subtitle: dataset?.result.repo_id ?? (dataset ? "Local dataset" : "Dataset not recorded"),
+      status: job.status, createdAt: job.created_at, progress,
+    };
+  });
+
   return (
     <>
+      {view === "jobs" && <JobHistory title="Fine-tuning jobs" newLabel="Start a new fine-tuning"
+        entries={historyEntries} onNew={() => openNew()}
+        onSelect={id => { setSelectedRunId(id); setView("run"); }}
+        loading={!!projectId && jobs.isPending} error={jobs.error}
+        emptyMessage="No fine-tuning jobs yet." disabled={!projectId || mutation.isPending} />}
+      {view === "new" && <>
+      <div className="training-view-toolbar">
+        <button type="button" className="text-button training-back" onClick={() => setView("jobs")}><Icon name="arrow" size={14} />Back to jobs</button>
+        <h2>New fine-tuning</h2>
+      </div>
       <form
         className="training-workspace"
         onSubmit={(event) => {
@@ -800,6 +860,7 @@ export function TrainingPanel({
               <legend className="visually-hidden">Base model</legend>
               {models.map((item) => {
                 const statusLabel = modelStatusLabel(item, modelSupported(item));
+                const memory = item.minimum_gpu_memory_gb ?? item.suggested_gpu_memory_gb;
                 return (
                 <label
                   key={item.id}
@@ -842,11 +903,17 @@ export function TrainingPanel({
                       )}
                     </span>
                     <small title={item.description}>{item.description}</small>
+                    <span className="training-model-memory">
+                      {typeof memory === "number" && Number.isFinite(memory) && memory > 0
+                        ? <>GPU budget: <strong>{number(memory)} GB+</strong></>
+                        : <strong>GPU budget not verified</strong>}
+                    </span>
                   </span>
                 </label>
                 );
               })}
             </fieldset>
+            <p className="training-memory-help">GPU memory budget for training; usage varies with method and batch size.</p>
             <fieldset className="training-methods">
               <legend>Method</legend>
               {availableMethods.map((item) => (
@@ -1077,14 +1144,16 @@ export function TrainingPanel({
           </button>
         )}
       </form>
+      </>}
 
-      {!!trainingRuns.length && (
+      {view === "run" && (
         <section
-          className="training-activity"
-          aria-labelledby="training-activity-title"
+          className="training-activity training-job-detail"
+          aria-label="Fine-tuning job"
         >
+          <button type="button" className="text-button training-back" onClick={() => setView("jobs")}><Icon name="arrow" size={14} />Back to jobs</button>
           <div className="training-heading">
-            <h2 id="training-activity-title">Runs</h2>
+            <h2 ref={headingRef} tabIndex={-1}>{selectedRun ? trainingRunModelLabel(selectedRun, models, artifacts.data ?? [], trainingRuns) ?? "Fine-tuning job" : "Fine-tuning job"}</h2>
             <button
               type="button"
               className="text-button"
@@ -1092,30 +1161,6 @@ export function TrainingPanel({
             >
               Diagnostics <Icon name="arrow" size={14} />
             </button>
-          </div>
-          <div className="training-run-list">
-            {trainingRuns.map((job) => {
-              const recordedModel = trainingRunModelLabel(job, models, artifacts.data ?? [], trainingRuns);
-              return (
-              <button
-                type="button"
-                key={job.id}
-                aria-pressed={selectedRun?.id === job.id}
-                onClick={() => setSelectedRunId(job.id)}
-              >
-                <span>
-                  {recordedModel && <>{recordedModel} · </>}
-                  {"training_method" in job.request
-                    ? job.request.training_method.toUpperCase()
-                    : "Training"}{" "}
-                  · {new Date(job.created_at).toLocaleString()}
-                </span>
-                <span className={`status status-${job.status}`}>
-                  {job.status}
-                </span>
-              </button>
-              );
-            })}
           </div>
           {selectedRun && (
             <TrainingMonitor
@@ -1133,10 +1178,12 @@ export function TrainingPanel({
                 setResumeId(resumeOptions.find(item => item.jobId === selectedRun.id)!.id);
                 setStep(2);
                 mutation.reset();
+                setView("new");
                 window.scrollTo({ top: 0, behavior: "smooth" });
               } : undefined}
             />
           )}
+          {!selectedRun && <p className="muted">This job is no longer available.</p>}
         </section>
       )}
     </>

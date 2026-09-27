@@ -13,6 +13,7 @@ export type TrainingModel = {
   backend?: string;
   required_cameras?: number | null;
   minimum_gpu_memory_gb?: number | null;
+  suggested_gpu_memory_gb?: number | null;
 };
 
 // Keep the picker visible when connected to an older API. Runtime availability

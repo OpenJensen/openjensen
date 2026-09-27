@@ -328,13 +328,9 @@ test('shared workspace shell preserves training, defaults, and separate diagnost
   await page.route('**/api/v1/projects', route => route.fulfill({ json: [] }));
   await page.goto('/');
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
-  await expect(page.getByRole('navigation', { name: 'Training setup' })).toBeVisible();
-  await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Model', exact: true }).click();
-  await expect(page.getByRole('radio', { name: 'LoRA', exact: true })).toBeChecked();
-  await page.getByRole('radio', { name: 'QLoRA', exact: true }).locator('..').click();
-  await expect(page.getByRole('radio', { name: 'QLoRA', exact: true })).toBeChecked();
-  await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Compute', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Start fine-tuning' })).toBeDisabled();
+  await expect(page.getByRole('region', { name: 'Fine-tuning jobs', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start a new fine-tuning', exact: true })).toBeDisabled();
+  await expect(page.getByRole('navigation', { name: 'Training setup' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
   await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
   await expect(page.getByLabel('Quantization recipe')).toHaveValue('recommended');
@@ -658,6 +654,7 @@ async function mockTrainingWorkspace(page: Page, {
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Dataset', level: 2, exact: true })).toBeVisible();
   await expect(page.getByRole('radio', { name: 'fixture/pick-and-place', exact: true })).toBeVisible();
   await expect.poll(() => previews.length).toBeGreaterThanOrEqual(2);
@@ -964,20 +961,24 @@ test('a saved account starts training in one click while setup happens in the qu
   await form.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0].runtime_id).toBe('skypilot-gcp-L4');
-  await expect(form.getByRole('button', { name: 'Preparing GPU…', exact: true })).toBeDisabled();
-  await expect(picker).toBeDisabled();
+  await expect(page.getByRole('region', { name: 'Fine-tuning job', exact: true })).toBeVisible();
+  await expect(form).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Preparing your GPU', exact: true })).toBeVisible();
-  // Enter/form events cannot launch a duplicate while preparation is active.
-  await form.dispatchEvent('submit');
+  // Submission leaves the form, so a second Enter cannot submit a duplicate.
+  await page.keyboard.press('Enter');
   expect(submitted).toHaveLength(1);
   const run = jobs.find(job => job.id === 'mock-training-1')!;
   run.status = 'running';
   run.stage = 'operation';
-  await expect(form.getByRole('button', { name: 'Training…', exact: true })).toBeDisabled();
+  await expect(page.getByRole('region', { name: 'Fine-tuning job', exact: true }).getByText('running', { exact: true })).toBeVisible();
   expect(submitted).toHaveLength(1);
   run.status = 'succeeded';
   run.stage = null;
   run.result = { artifacts: [], reports: [], decision: 'completed' };
+  await expect(page.getByRole('region', { name: 'Fine-tuning job', exact: true }).getByText('succeeded', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Back to jobs', exact: true }).click();
+  await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Compute', exact: true }).click();
   await expect(form.getByRole('button', { name: 'Start fine-tuning', exact: true })).toBeEnabled();
   await expect(picker).toBeEnabled();
   expect(submitted).toHaveLength(1);
@@ -1144,7 +1145,7 @@ test('blank dataset revision uses latest and reused inspections keep one history
 });
 
 
-test('visiting compute settings preserves the fine-tuning draft and current step', async ({ page }) => {
+test('visiting compute settings preserves the draft through the jobs-first entry', async ({ page }) => {
   const { submitted, unexpectedRequests } = await mockTrainingWorkspace(page, {
     runtimes: trainingRuntimes.filter(runtime => runtime.accelerator !== 'T4'),
   });
@@ -1160,8 +1161,11 @@ test('visiting compute settings preserves the fine-tuning draft and current step
   await expect(page.getByRole('heading', { name: 'Cloud providers', exact: true })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Training setup', exact: true })).toBeHidden();
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Compute', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Compute', level: 2, exact: true })).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'GPU', exact: true })).toHaveAttribute('value', 'T4');
+  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
   await expect(page.getByRole('spinbutton', { name: 'Steps', exact: true })).toHaveValue('123');
   await expect(page.getByRole('spinbutton', { name: 'Batch size', exact: true })).toHaveValue('2');
   await expect(page.getByRole('button', { name: 'Start fine-tuning', exact: true })).toBeDisabled();
@@ -1224,7 +1228,7 @@ test('training summarizes the latest checkpoint and keeps full activity behind d
   await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Compute', exact: true }).click();
   await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
-  const runs = page.getByRole('region', { name: 'Runs', exact: true });
+  const runs = page.getByRole('region', { name: 'Fine-tuning job', exact: true });
   await expect(runs.locator('.training-current-action')).toHaveText('Training complete');
   await expect(runs.getByText('Latest checkpoint: step 10', { exact: true })).toBeVisible();
   await expect(runs.getByLabel('Persisted training activity')).toHaveCount(0);
@@ -1254,6 +1258,7 @@ test('quantization submits Q4 only after an explicit experimental choice', async
   });
   async function submitQuantization(count: number) {
     await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+    await page.getByRole('button', { name: 'New quantization', exact: true }).click();
     await page.getByLabel('Checkpoint or policy').selectOption('source:source');
     await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
     await expect.poll(() => requests.length).toBe(count);
@@ -1310,8 +1315,9 @@ test('Spatial settings require explicit task and parity choices in the submitted
     await expect(page.getByLabel('Diagnostic mode')).toBeDisabled();
     await expect(page.getByRole('heading', { name: 'Recorded benchmark comparison' })).toBeVisible();
     await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-    await expect(page.getByLabel('Checkpoint or policy')).toBeDisabled();
-    await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'New quantization', exact: true })).toBeDisabled();
+    await expect(page.getByLabel('Checkpoint or policy')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toHaveCount(0);
     expect(await page.evaluate(() => localStorage.getItem('firebird.workflow.'))).toBeNull();
     expect(submitted).toEqual([]);
   } finally {
@@ -1331,6 +1337,7 @@ test('Spatial settings require explicit task and parity choices in the submitted
   await page.getByLabel('Maximum action RMSE').fill('0');
   await page.getByLabel('Maximum absolute action error').fill('0');
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+    await page.getByRole('button', { name: 'New quantization', exact: true }).click();
   await page.getByLabel('Checkpoint or policy').selectOption('source:source');
   await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
@@ -1349,6 +1356,7 @@ test('Spatial settings require explicit task and parity choices in the submitted
   await expect(page.getByRole('combobox', { name: 'Protocol', exact: true })).toHaveValue('libero');
   await expect(page.getByLabel('Episode step limit')).toHaveValue('280');
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+    await page.getByRole('button', { name: 'New quantization', exact: true }).click();
   await page.getByLabel('Checkpoint or policy').selectOption('source:source');
   await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(2);
@@ -1378,6 +1386,7 @@ async function workflowPreferenceFixture(page: Page) {
   async function submit() {
     const count = requests.length;
     await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+    await page.getByRole('button', { name: 'New quantization', exact: true }).click();
     await page.getByLabel('Checkpoint or policy').selectOption('source:source');
     await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
     await expect.poll(() => requests.length).toBe(count + 1);
@@ -1453,10 +1462,9 @@ for (const state of ['empty', 'error'] as const) {
     await page.getByLabel('Reference hardware').selectOption('rtx3070');
     await expect(page.getByRole('table', { name: 'NVIDIA RTX 3070 · recorded reference results' })).toBeVisible();
     await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-    await expect(page.getByLabel('Checkpoint or policy')).toBeDisabled();
-    await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toBeDisabled();
-    // Programmatic submission must also respect readiness, not just disabled UI.
-    await page.getByLabel('Checkpoint or policy').evaluate(element => element.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+    await expect(page.getByRole('button', { name: 'New quantization', exact: true })).toBeDisabled();
+    await expect(page.getByLabel('Checkpoint or policy')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toHaveCount(0);
     expect(fixture.requests).toEqual([]);
     expect(await page.evaluate(() => localStorage.getItem('firebird.workflow.'))).toBeNull();
     recovered = true;
@@ -1503,6 +1511,7 @@ test('a project removed during refetch cannot submit with its stale selection', 
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+    await page.getByRole('button', { name: 'New quantization', exact: true }).click();
   await page.getByLabel('Checkpoint or policy').selectOption('source:source');
   await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toBeEnabled();
   removed = true;
@@ -1511,8 +1520,9 @@ test('a project removed during refetch cannot submit with its stale selection', 
   // React Query refetches stale project data when the browser regains visibility.
   await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
   await expect.poll(() => emptyResponses).toBeGreaterThan(0);
-  await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toBeDisabled();
-  await expect(page.getByLabel('Checkpoint or policy')).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'New quantization', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('Checkpoint or policy')).toHaveCount(0);
   expect(fixture.requests).toEqual([]);
   expect(await page.evaluate(() => localStorage.getItem('firebird.workflow.'))).toBeNull();
 });

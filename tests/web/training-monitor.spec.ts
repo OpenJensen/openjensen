@@ -5,7 +5,7 @@ const projectId = 'training-monitor-fixture';
 const revision = 'a'.repeat(40);
 const timestamp = () => new Date().toISOString();
 
-async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 'stale' | 'unavailable' | 'legacy' | 'validating' = 'running') {
+async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 'stale' | 'unavailable' | 'legacy' | 'validating' | 'history' | 'empty' = 'running', openDetails = true) {
   const submitted: Record<string, any>[] = [];
   const unexpected: string[] = [];
   const cancelled: string[] = [];
@@ -56,7 +56,12 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
     const phaseMetric = { step: 20, elapsed_seconds: 60, train_loss: null, validation_loss: null, learning_rate: null, timestamp: timestamp() };
     Object.assign(telemetry, { phase: 'validation', completed_steps: 20, percent: 20, elapsed_seconds: 60, latest: phaseMetric, metrics: [firstMetric, phaseMetric] });
   }
-  const jobs = [job, dataset];
+  const jobs = mode === 'empty' ? [dataset] : [job, dataset];
+  if (mode === 'history') jobs.push({ ...job, id: 'older-run', status: 'succeeded',
+    created_at: new Date(Date.now() - 3600000).toISOString(),
+    request: { ...job.request, training_method: 'full', training: { ...job.request.training, model_id: 'code://lerobot/act', steps: 40 } },
+    result: { artifacts: [], reports: [{ steps: 40 }], decision: 'completed' },
+  });
   const artifact = { id: 'checkpoint-artifact', project_id: projectId, job_id: job.id, format: 'training_checkpoint', label: 'Checkpoint step 20', file_bytes: 100, path: 'checkpoint', manifest_sha256: 'c'.repeat(64), parent_ids: [], metadata: {} };
   await page.route('**/api/v1/**', async route => {
     const request = route.request();
@@ -84,11 +89,14 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
         '/api/v1/projects': [{ id: projectId, name: 'Training visibility', created_at: timestamp() }],
         [`/api/v1/projects/${projectId}/jobs`]: jobs,
         [`/api/v1/projects/${projectId}/artifacts`]: [artifact],
-        '/api/v1/jobs/dataset/episodes': { episodes: [], total: 10, offset: 0, limit: 6 },
+        '/api/v1/jobs/dataset/episodes': { repo_id: 'fixture/robot', revision, episodes: [], total_episodes: 10, offset: 0, limit: 6, warnings: [] },
         '/api/v1/policy-options': {
           runtimes: [{ id: 'skypilot-gcp-A100', label: 'A100', accelerator: 'A100', execution: 'skypilot', provider: 'gcp', device: 'cuda', enabled: true, training: true, simulation: false, training_model_ids: ['smolvla'] }],
           compute: { local: { enabled: false, label: 'Local' }, gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 } },
-          training_models: [], sources: [], training_methods: [{ id: 'lora', label: 'LoRA', description: 'Train adapters.' }], default_training_method: 'lora',
+          training_models: [
+            { id: 'smolvla', label: 'SmolVLA', description: 'Compact policy', model_id: 'lerobot/smolvla_base', model_revision: revision, methods: ['lora'], suggested_gpu_memory_gb: 16 },
+            { id: 'pi05', label: 'π₀.₅', description: 'Flow policy', model_id: 'lerobot/pi05_base', model_revision: revision, methods: ['full'], minimum_gpu_memory_gb: 40 },
+          ], sources: [], training_methods: [{ id: 'lora', label: 'LoRA', description: 'Train adapters.' }], default_training_method: 'lora',
           quantization_defaults: { cuda: { language: 'Q8_0', vision: null }, cpu: { language: 'Q8_0', vision: null }, note: '' },
         },
       };
@@ -111,13 +119,89 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
   await page.goto('/');
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
   const monitor = page.getByRole('article', { name: 'Training run monitor' });
-  await expect(monitor).toBeVisible();
-  return { telemetry, job, monitor, submitted, unexpected, cancelled, telemetryRequests };
+  if (openDetails) {
+    await page.locator('.job-history-entry[data-job-id="run-001"]').click();
+    await expect(monitor).toBeVisible();
+  }
+  return { telemetry, job, jobs, monitor, submitted, unexpected, cancelled, telemetryRequests };
 }
 
 async function noOverflow(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(() => document.documentElement.clientWidth) + 1);
 }
+
+test('Fine-tune opens newest jobs first and opens details only after choosing a job', async ({ page }, testInfo) => {
+  const { monitor, telemetryRequests, submitted, unexpected } = await workspace(page, 'history', false);
+  const history = page.getByRole('region', { name: 'Fine-tuning jobs', exact: true });
+  await expect(history).toBeVisible();
+  const entries = history.locator('.job-history-entry');
+  await expect(entries).toHaveCount(2);
+  await expect(entries.first()).toHaveAttribute('data-job-id', 'run-001');
+  await expect(entries.first()).toContainText('SmolVLA · LORA');
+  await expect(entries.first()).toContainText('fixture/robot');
+  await expect(entries.first()).toContainText('Saved step 20 / 100');
+  await expect(entries.first()).toContainText('running');
+  await expect(entries.last()).toContainText('ACT · FULL');
+  await expect(entries.last()).toContainText('40 steps completed');
+  await expect(monitor).toHaveCount(0);
+  await expect(page.getByRole('navigation', { name: 'Training setup' })).toHaveCount(0);
+  expect(telemetryRequests).toEqual([]);
+  await page.setViewportSize({ width: 320, height: 740 });
+  await noOverflow(page);
+  await page.screenshot({ path: testInfo.outputPath('fine-tuning-jobs-320.png'), fullPage: true });
+  await entries.first().click();
+  await expect(monitor).toBeVisible();
+  await expect(monitor).toHaveAttribute('data-run-id', 'run-001');
+  await page.getByRole('button', { name: 'Back to jobs', exact: true }).click();
+  await expect(history).toBeVisible();
+  await expect(monitor).toHaveCount(0);
+  expect(submitted).toEqual([]);
+  expect(unexpected).toEqual([]);
+});
+
+test('new fine-tuning is a separate view with bold catalog memory budgets and a preserved draft', async ({ page }) => {
+  const { submitted, unexpected } = await workspace(page, 'history', false);
+  await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Fine-tuning jobs', exact: true })).toHaveCount(0);
+  const setup = page.getByRole('navigation', { name: 'Training setup' });
+  await expect(setup).toBeVisible();
+  await setup.getByRole('button', { name: 'Model', exact: true }).click();
+  const budget = (model: string) => page.getByRole('radio', { name: model, exact: true }).locator('..').locator('.training-model-memory strong');
+  await expect(budget('SmolVLA')).toHaveText('16 GB+');
+  await expect(budget('π₀.₅')).toHaveText('40 GB+');
+  await expect(budget('OpenVLA')).toHaveText('GPU budget not verified');
+  expect(await budget('SmolVLA').evaluate(element => Number(getComputedStyle(element).fontWeight))).toBeGreaterThanOrEqual(700);
+  await setup.getByRole('button', { name: 'Compute', exact: true }).click();
+  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  await page.getByRole('spinbutton', { name: 'Batch size', exact: true }).fill('3');
+  await page.getByRole('button', { name: 'Back to jobs', exact: true }).click();
+  await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
+  await setup.getByRole('button', { name: 'Compute', exact: true }).click();
+  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  await expect(page.getByRole('spinbutton', { name: 'Batch size', exact: true })).toHaveValue('3');
+  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Fine-tuning jobs', exact: true })).toBeVisible();
+  await expect(setup).toHaveCount(0);
+  expect(submitted).toEqual([]);
+  expect(unexpected).toEqual([]);
+});
+
+test('empty history offers an explicit new job and repeated dataset shortcuts open the selected dataset', async ({ page }) => {
+  const { submitted, unexpected } = await workspace(page, 'empty', false);
+  await expect(page.getByText('No fine-tuning jobs yet.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start a new fine-tuning', exact: true })).toBeEnabled();
+  await expect(page.getByRole('navigation', { name: 'Training setup' })).toHaveCount(0);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await page.getByRole('button', { name: 'Dataset', exact: true }).click();
+    await page.getByRole('button', { name: /^Inspection/ }).click();
+    await page.getByRole('button', { name: 'Train on this dataset', exact: true }).click();
+    await expect(page.getByRole('navigation', { name: 'Training setup' })).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'fixture/robot', exact: true })).toBeChecked();
+    await page.getByRole('button', { name: 'Back to jobs', exact: true }).click();
+  }
+  expect(submitted).toEqual([]);
+  expect(unexpected).toEqual([]);
+});
 
 test('shows observed progress, loss curves, saved activity, worker output and downloadable run evidence', async ({ page }, testInfo) => {
   const { telemetry, monitor, unexpected } = await workspace(page);
@@ -236,6 +320,8 @@ test('reports telemetry failure without misrepresenting progress', async ({ page
 
 test('submits explicit reproducible training settings supported by the worker', async ({ page }) => {
   const { submitted, unexpected } = await workspace(page);
+  await page.getByRole('button', { name: 'Back to jobs', exact: true }).click();
+  await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
   await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Compute', exact: true }).click();
   await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
   await page.getByLabel('Steps', { exact: true }).fill('200');
@@ -248,6 +334,8 @@ test('submits explicit reproducible training settings supported by the worker', 
   await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0].training).toMatchObject({ steps: 200, batch_size: 8, learning_rate: 0.0002, gradient_accumulation_steps: 2, seed: 7, validation_fraction: 0.3, eval_every: 20 });
+  await expect(page.getByRole('article', { name: 'Training run monitor' })).toHaveAttribute('data-run-id', 'new-run-1');
+  await expect(page.getByRole('navigation', { name: 'Training setup' })).toHaveCount(0);
   expect(unexpected).toEqual([]);
 });
 

@@ -169,6 +169,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     r.training_python and r.training_root
                     for r in execution.lifecycle.catalog.runtimes
                 ),
+                cloud_configured=bool(execution.lifecycle.compute.cloud_runtimes()),
             ),
             Capability(
                 stage="Dataset",
