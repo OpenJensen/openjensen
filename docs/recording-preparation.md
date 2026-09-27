@@ -1,6 +1,6 @@
 # Prepare a dataset from local teaching captures
 
-The backend can prepare explicitly selected finalized teaching episodes as one saved `dataset.inspect` job. It uses the existing LeRobot 0.6.2 converter, verifies every converted row and video, and registers the existing immutable dataset snapshot. This does not start a simulator, voice provider, training run, or cloud resource. The Teaching UI handoff is a separate integration step.
+The backend can prepare explicitly selected finalized teaching episodes as one saved `dataset.inspect` job. It uses the existing LeRobot 0.6.2 converter, verifies every converted row and video, and registers the existing immutable dataset snapshot. This does not start a simulator, voice provider, training run, or cloud resource. The Teaching page exposes the same project-owned preparation flow beside the live teaching controls. Changing the project does not remount those global controls.
 
 Only finalized captures already present on the API host are available. An operator must copy or mount remote Isaac captures before admission; neither the Teaching relay nor this API transfers remote files. Keep published capture folders quiescent. There is no inferred “session closed” flag: complete source inventories are checked by the converter and rechecked before a result is registered.
 
@@ -28,6 +28,16 @@ Configuration, captures, metadata and output paths use no-follow directory trave
 `GET /api/v1/projects/{project_id}/recordings/options` returns configuration presence, its identity, limits and setup guidance. `runtime_verified: false` deliberately distinguishes structural setup from a successful native job. No public runtime-ready capability is advertised by this slice.
 
 `GET /api/v1/projects/{project_id}/recordings` returns bounded metadata candidates: session/episode identities, metadata/receipt hashes, declared lineage and origin, joint order, radians/controller/timebase, dimensions/rates and unknown or operator-reported-failure outcome. It returns no capture filesystem paths or images. Unfinished episodes are not candidates. Catalog limits are 100 session directories, 1,000 child entries, 16 MiB aggregate metadata and a 1 MiB response.
+
+## Prepare in the web workspace
+
+Open **Teaching** and choose the project that owns the operator-published captures. The preparation panel lists finalized metadata only; a configured catalog does not prove that the writer is ready. Select the exact episodes, review the unchanged-capture requirement, and explicitly choose **Prepare selected recordings**. Nothing is selected or submitted automatically. Synthetic captures are labelled as synthetic; that label alone does not identify them as software test fixtures.
+
+A saved result shows its exact job, snapshot, episode/frame counts and declared lineage groups. **View this dataset** opens that inspection. **Train on this dataset** opens a new training draft with the exact saved dataset selected; neither action starts training. An explicitly requested dataset or inspection missing from current project history remains unavailable rather than silently selecting another one. A subsequent manual dataset choice takes precedence when later history reads arrive. Single-group snapshots remain inspectable, but their Training handoff is disabled because they cannot supply the required held-out split.
+
+Draft selection, minimal accepted job identity and request uncertainty are stored per project in this browser tab's session storage. They survive reload in that tab; this is not cross-device recovery or server-side idempotency. A lost or invalid acknowledgment requires a fresh successful saved-jobs review and explicit recovery before another request. Storage failures disable preparation and cancellation until the user explicitly restores session recovery. A late response from an earlier mounted panel cannot overwrite a newer attempt, even when both requests selected the same episodes.
+
+Cancellation refreshes the selected saved job and binds the request to that exact identity. Navigating to another record during that check prevents the stale cancellation. Project changes, navigation and result handoffs never submit a preparation, training or control command by themselves.
 
 ## Submit and inspect
 

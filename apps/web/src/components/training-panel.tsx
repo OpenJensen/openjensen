@@ -189,7 +189,7 @@ export function TrainingPanel({
   const client = useQueryClient();
   const [view, setView] = useState<"jobs" | "new" | "run">(startNew ? "new" : "jobs");
   const [step, setStep] = useState(0);
-  const [datasetId, setDatasetId] = useState(preferredDatasetId ?? "");
+  const [datasetId, setDatasetId] = useState(startNew?.datasetId ?? preferredDatasetId ?? "");
   const [cameraSelections, setCameraSelections] = useState<
     Record<string, string[]>
   >({});
@@ -332,7 +332,7 @@ export function TrainingPanel({
     .filter(isDatasetJob)
     .filter(
       (job): job is InspectedDataset =>
-        job.status === "succeeded" && !!job.result,
+        job.project_id === projectId && job.status === "succeeded" && !!job.result,
     )
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
   // Keep the selected inspection's exact ID, while avoiding repeated cards for the same snapshot.
@@ -346,9 +346,11 @@ export function TrainingPanel({
       unique.set(key, job);
   }
   const datasets = [...unique.values()];
-  const dataset =
-    datasets.find((job) => job.id === datasetId) ??
-    datasets.find((job) => !datasetIssue(job.result));
+  // Explicit handoffs and manual choices retain their exact identity when history
+  // is delayed or changes. A fresh form may default only without a requested ID.
+  const dataset = datasetId
+    ? datasets.find((job) => job.id === datasetId)
+    : datasets.find((job) => !datasetIssue(job.result));
   const cameraOptions = cameras(dataset?.result);
   const selectedCameras =
     dataset && cameraSelections[dataset.id] !== undefined
@@ -733,6 +735,7 @@ export function TrainingPanel({
                 <Icon name="plus" size={14} /> Import
               </button>
             </div>
+            {!resumeId && datasetId && !dataset && !jobs.isPending && <p className="warning-box" role="alert">Selected dataset {datasetId} is unavailable in this project. Another dataset has not been substituted. Refresh or select a dataset explicitly.</p>}
             {jobs.isPending && projectId ? (
               <p role="status">Loading datasets…</p>
             ) : datasets.length ? (
@@ -755,6 +758,7 @@ export function TrainingPanel({
                       <input
                         type="radio"
                         name="training-dataset"
+                        value={job.id}
                         aria-label={profile.repo_id ?? "Local dataset"}
                         checked={activeDataset?.id === job.id}
                         disabled={!!issue || !!resumeId || busy}
