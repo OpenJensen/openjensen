@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 from test_act_export import application as _application
-from test_act_export import submit
+from test_act_export import replace_catalog, submit
 from test_cloud_storage import Blob
 from test_cloud_storage import cloud as _cloud
 from test_lifecycle import wait
@@ -138,7 +138,9 @@ def test_failed_copy_or_parity_never_registers_local_child(
     application, cloud, tmp_path, monkeypatch
 ):
     app, client, pid, source, remote, _ = prepare(application, cloud, tmp_path, monkeypatch)
-    app.state.execution.lifecycle.catalog.runtimes[0].env["FIXTURE_FAULT"] = "reload"
+    catalog = app.state.execution.lifecycle.catalog
+    catalog.runtimes[0].env["FIXTURE_FAULT"] = "reload"
+    replace_catalog(app, catalog)
     accepted = submit(client, pid, source)
     completed = wait(client, accepted.json()["id"])
     assert completed["status"] == "failed"
@@ -200,7 +202,9 @@ def test_export_only_runtime_needs_no_fake_engine_paths_and_cannot_run_engine_jo
         }
     )
     assert configured.vendor is None and configured.build is None and configured.worker_root is None
-    app.state.execution.lifecycle.catalog.runtimes = [configured]
+    catalog = app.state.execution.lifecycle.catalog
+    catalog.runtimes = [configured]
+    replace_catalog(app, catalog)
     options = client.get("/api/v1/policy-options").json()["runtimes"]
     assert options[0]["export_only"] is True and options[0]["training"] is False
     assert options[0]["engine_evaluation"] is False and options[0]["run"] is False

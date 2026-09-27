@@ -137,6 +137,8 @@ def dataset_allowed(job, mode):
 
 
 def runtime_allowed(runtime, mode):
+    if runtime.get("training_only") and mode not in {"train", "resume"}:
+        return False
     capability = runtime[OPERATIONS[mode][2]] is True
     if mode == "export":
         capability = runtime["act_export"] or (

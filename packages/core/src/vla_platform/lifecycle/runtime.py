@@ -23,6 +23,7 @@ class Runtime(StrictRecord):
     region: str | None = Field(default=None, min_length=1, max_length=64, pattern=r"^[\w-]+$")
     python: str = "python"
     worker_root: str | None = None
+    training_only: bool = Field(default=False, strict=True)
     export_only: bool = False
     native_quantization_only: bool = False
     native_quantization_python: str | None = Field(default=None, min_length=1)
@@ -95,6 +96,7 @@ class Runtime(StrictRecord):
                     self.native_distillation_only,
                     self.native_quantization_only,
                     self.export_only,
+                    self.training_only,
                 )
             )
             > 1
@@ -106,7 +108,34 @@ class Runtime(StrictRecord):
             self.execution != "native" or self.provider != "local" or self.device != "cpu"
         ):
             raise ValueError("Native quantization requires a local CPU runtime")
-        if self.native_replay_only:
+        if self.training_only:
+            if (
+                self.execution != "native"
+                or self.provider != "local"
+                or self.device != "cuda"
+                or not self.training_python
+                or not self.training_root
+                or self.worker_root
+                or self.vendor
+                or self.build
+                or self.conversion_python
+                or self.conversion_image
+                or self.conversion_vendor
+                or self.evaluation_python
+                or self.evaluation_image
+                or self.act_export_python
+                or self.act_export_root
+                or self.native_quantization_python
+                or any(replay)
+                or any(distillation)
+                or self.simulator_lane
+                or self.image
+                or self.training_image
+                or self.mounts
+                or self.tokenizer
+            ):
+                raise ValueError("Training-only runtime requires a local CUDA trainer only")
+        elif self.native_replay_only:
             if (
                 not all(replay)
                 or any(distillation)
@@ -219,6 +248,7 @@ class PublicRuntime(StrictRecord):
     enabled: bool
     device: Literal["cpu", "cuda"]
     training: bool
+    training_only: bool = False
     act_export: bool = False
     native_quantization: bool = False
     native_quantization_only: bool = False
@@ -277,6 +307,7 @@ class RuntimeCatalog(StrictRecord):
                     "enabled": local_enabled if x.provider == "local" else True,
                     "device": x.device,
                     "training": bool(x.training_python and x.training_root),
+                    "training_only": x.training_only,
                     "act_export": bool(x.act_export_python and x.act_export_root),
                     "export_only": x.export_only,
                     "native_quantization": native_quantization_ready(x),
@@ -294,12 +325,14 @@ class RuntimeCatalog(StrictRecord):
                         or x.native_quantization_only
                         or x.native_distillation_only
                         or x.native_replay_only
+                        or x.training_only
                     ),
                     "run": not (
                         x.export_only
                         or x.native_quantization_only
                         or x.native_distillation_only
                         or x.native_replay_only
+                        or x.training_only
                     ),
                     "gpu_name": x.gpu_name,
                     "gpu_memory_mib": x.gpu_memory_mib,
@@ -401,9 +434,14 @@ def command(
     conversion: bool = False,
     evaluation: bool = False,
     act_export: bool = False,
+    operation: str | None = None,
 ):
     if runtime.execution != "native":
         raise ValueError("SkyPilot targets must execute through the cloud runner")
+    if runtime.training_only and (
+        operation != "policy.finetune" or not training or conversion or evaluation or act_export
+    ):
+        raise ValueError("This runtime supports fine-tuning only")
     if runtime.native_replay_only:
         raise ValueError("This runtime supports explicit native observation replay only")
     if runtime.native_distillation_only:

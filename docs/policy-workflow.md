@@ -37,8 +37,10 @@ completed runs remain visible after reload. A project without a GGUF policy link
 to **Quantize** to create one. An unavailable API, missing runtime or missing
 simulator is shown explicitly and blocks the relevant launch.
 
-The application host must already have a working native worker configured through
-`FIREBIRD_RUNTIME_CONFIG`; these controls do not provision GPUs. Registering a
+Engine diagnostics require a working native worker configured on the application
+host through `FIREBIRD_RUNTIME_CONFIG`; these controls do not provision GPUs.
+Workers added through **Check this machine** support fine-tuning only and cannot
+run these diagnostics. Registering an operator-configured
 target advertises its configuration, not a live hardware health check. Worker
 startup failures are reported by the job. The retired benchmark rental and failed
 RTX host are not available execution targets.
@@ -175,7 +177,21 @@ prediction latency, not control-loop latency. Small samples are diagnostic.
 
 Run the application on the machine that owns the workers/GPU. The web client can
 be reached through an SSH tunnel; native requests never run arbitrary SSH or shell
-commands. Install the workers separately, following [quantization setup](../workers/vla_cpp/README.md)
+commands.
+
+For SmolVLA fine-tuning, install the
+[pinned training environment](../workers/smolvla_qlora/docs/training/smolvla-qlora.md#install-on-the-training-machine)
+under `workers/smolvla_qlora/.venv` in this source checkout. On Linux x86_64 with a
+compatible NVIDIA GPU, open **Settings & diagnostics → Compute → Local runs**,
+select **Check this machine**, then **Add worker**. Enable local runs and save
+settings separately. The app checks its host's first visible GPU and installed
+dependencies without downloads or jobs; it saves a training-only worker in
+`local-workers.json`, leaving operator configuration untouched. See
+[discovery scope and prerequisites](compute-settings.md#add-a-local-training-worker).
+
+Discovery does not configure native export, quantization, evaluation or Run.
+For these operations and other local worker adapters, install the workers
+separately, following [quantization setup](../workers/vla_cpp/README.md)
 and [pinned training setup](../workers/smolvla_qlora/docs/training/smolvla-qlora.md).
 Use the patched, instrumented native build described in [GPU setup](../workers/vla_cpp/docs/gpu-setup.md).
 Do not use an uninstrumented `vla-bench`: the adapter requires per-call samples.
@@ -186,15 +202,17 @@ from `workers/vla_cpp`. Importing an existing GGUF and packing it do not need To
 
 Copy [runtime.example.json](runtime.example.json), replace every absolute path and
 source SHA-256 with real values, and set `FIREBIRD_RUNTIME_CONFIG` before serving.
-An omitted runtime config keeps dataset intake usable and policy execution disabled.
+Without operator configuration or a registered managed worker, dataset intake
+remains usable and policy execution stays unavailable.
 A runtime without a training environment cannot advertise fine-tuning.
 
 Optional `gpu_name` and `gpu_memory_mib` fields describe the GPU assigned to a
 runtime. Replace the example specifications with your actual hardware, or omit
 these fields when unknown. `gpu_memory_mib` must be a positive integer in MiB.
 The public runtime includes both fields as `null` when unspecified. These are
-operator-configured specifications, not live availability or free-memory readings;
-these local native runtime fields do not discover or provision GPUs. Cloud training
+operator-configured specifications, not live availability or free-memory readings.
+Discovered workers instead record the checked GPU's name and total capacity;
+neither path reports current free VRAM or provisions GPUs. Cloud training
 uses the separate SkyPilot connection and provisioning path. `training_gpu_count` is `1`
 for a CUDA runtime with a configured training environment, otherwise `null`. It
 describes the current recipe's GPU count per run, not the host's GPU inventory.

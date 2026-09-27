@@ -32,6 +32,7 @@ from vla_platform.lifecycle.contracts import (
 )
 from vla_platform.lifecycle.runtime import RuntimeCatalog, command
 from vla_platform.lifecycle.training_catalog import training_model_for_recipe
+from vla_platform.local_worker_registry import LocalWorkerRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -278,10 +279,15 @@ class Lifecycle:
     def __init__(self, execution):
         self.execution = execution
         self.settings = execution.settings
-        self.catalog = RuntimeCatalog.load(self.settings.runtime_config)
+        self._operator_catalog = RuntimeCatalog.load(self.settings.runtime_config)
+        self.local_workers = LocalWorkerRegistry(self.settings.data_dir, self._operator_catalog)
         self.compute = ComputeSettings(self.settings.data_dir)
         self.event_lock = threading.Lock()
         self.export_lock = threading.Lock()
+
+    @property
+    def catalog(self) -> RuntimeCatalog:
+        return self.local_workers.merge()
 
     def runtime(self, runtime_id: str):
         return self.compute.runtime(runtime_id) or self.catalog.runtime(runtime_id)
@@ -582,6 +588,19 @@ class Lifecycle:
         raise ValueError("Checkpoint lineage is too deep")
 
     async def validate(self, project_id: str, request: PolicyRequest):
+        selected_runtime = self.runtime(request.runtime_id)
+        if (
+            selected_runtime
+            and selected_runtime.training_only
+            and (
+                request.operation != "policy.finetune"
+                or request.native_replay is not None
+                or request.native_distillation is not None
+                or request.native_quantization is not None
+                or request.simulation is not None
+            )
+        ):
+            raise ValueError("This runtime supports fine-tuning only")
         if request.native_replay is not None:
             from vla_platform.lifecycle.native_replay import validate
 
@@ -1233,6 +1252,7 @@ class Lifecycle:
                 operation in {"policy.import", "policy.quantize"},
                 operation in {"policy.evaluate", "policy.run"},
                 act_export=act_export,
+                operation=operation,
             )
             image = None if act_export else runtime.training_image if training else runtime.image
             if operation in {"policy.import", "policy.quantize"} and runtime.conversion_python:

@@ -44,4 +44,4 @@ Review jobs with saved cloud targets or inspect separate external rollout observ
 
 ## Settings & diagnostics
 
-Use **Compute** for Google Cloud, optional Hugging Face access and local-worker preferences; **Workflow settings** for project recipes; **Diagnostics** for policy checks and benchmark references. Saved configuration does not establish quota, model access or a live simulator. [Compute](compute-settings.md) · [Cloud connections](cloud-connections.md) · [Diagnostics](policy-workflow.md)
+Use **Compute** for Google Cloud, Hugging Face access and local workers. For an installed SmolVLA CUDA worker, choose **Check this machine → Add worker**, then enable local runs and save. This checks the app host; it does not install dependencies or start jobs. Use **Workflow settings** for recipes and **Diagnostics** for policy checks. [Local setup and limits](compute-settings.md#add-a-local-training-worker) · [Cloud connections](cloud-connections.md) · [Diagnostics](policy-workflow.md)

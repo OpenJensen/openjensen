@@ -178,6 +178,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/compute-settings/local/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check Local Workers */
+        post: operations["check_local_workers_api_v1_compute_settings_local_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compute-settings/local/workers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Local Worker */
+        post: operations["add_local_worker_api_v1_compute_settings_local_workers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/decision/score": {
         parameters: {
             query?: never;
@@ -1976,6 +2010,65 @@ export interface components {
              */
             timeout_seconds: number;
         };
+        /** LocalWorkerAddRequest */
+        LocalWorkerAddRequest: {
+            /** Candidate Id */
+            candidate_id: string;
+        };
+        /** LocalWorkerAddResponse */
+        LocalWorkerAddResponse: {
+            compute: components["schemas"]["ComputeSettingsResponse"];
+            discovery: components["schemas"]["LocalWorkerDiscovery"];
+            runtime: components["schemas"]["PublicRuntime"];
+        };
+        /** LocalWorkerCandidate */
+        LocalWorkerCandidate: {
+            /** Gpu Memory Mib */
+            gpu_memory_mib?: number | null;
+            /** Gpu Name */
+            gpu_name?: string | null;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Reason */
+            reason?: string | null;
+            /** Runtime Id */
+            runtime_id?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ready" | "registered" | "setup_required";
+            /** Training Model Ids */
+            training_model_ids?: string[];
+        };
+        /** LocalWorkerDiscovery */
+        LocalWorkerDiscovery: {
+            /** Candidates */
+            candidates?: components["schemas"]["LocalWorkerCandidate"][];
+            /** Checked At */
+            checked_at: string;
+            host: components["schemas"]["LocalWorkerHost"];
+            /** Issues */
+            issues?: string[];
+            /** Message */
+            message?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ready" | "unavailable" | "error";
+        };
+        /** LocalWorkerHost */
+        LocalWorkerHost: {
+            /** Architecture */
+            architecture: string;
+            /** Name */
+            name: string;
+            /** Platform */
+            platform: string;
+        };
         /**
          * NativeDistillation
          * @description Recorded-data selection and a fixed ACT teacher/student recipe; no paths.
@@ -2300,6 +2393,11 @@ export interface components {
             training_gpu_count: number | null;
             /** Training Model Ids */
             training_model_ids: string[];
+            /**
+             * Training Only
+             * @default false
+             */
+            training_only: boolean;
             /** Unavailable Reason */
             unavailable_reason?: string | null;
         };
@@ -2995,6 +3093,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ComputeSettingsResponse"];
+                };
+            };
+        };
+    };
+    check_local_workers_api_v1_compute_settings_local_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalWorkerDiscovery"];
+                };
+            };
+        };
+    };
+    add_local_worker_api_v1_compute_settings_local_workers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocalWorkerAddRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalWorkerAddResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
