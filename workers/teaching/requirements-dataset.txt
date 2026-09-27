@@ -1,0 +1,9 @@
+# Separate Python3.12 CPU writer runtime; exact native training source, not ACT exporter0.6.1.
+lerobot[dataset] @ git+https://github.com/huggingface/lerobot.git@e595b7902714ba51f91e47523f66f89c5181b649
+torch==2.11.0
+torchvision==0.26.0
+torchcodec==0.11.1
+datasets==4.8.5
+pandas==2.3.3
+pyarrow==25.0.1
+av==15.1.0

@@ -1,0 +1,13 @@
+{
+  "scene": "../isaac_sim/scenes/so101-pickup/scene.experimental.usda",
+  "camera": "/World/Cameras/Front",
+  "articulation": "/World/Robot/joints/root_joint",
+  "joints": ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"],
+  "width": 640,
+  "height": 360,
+  "fps": 30,
+  "physics_hz": 120,
+  "lineage_group": "so101-experimental-authored-scene-1",
+  "max_steps": 300,
+  "max_episode_bytes": 536870912
+}
