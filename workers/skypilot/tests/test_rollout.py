@@ -19,6 +19,7 @@ _IMAGE = "us-east4-docker.pkg.dev/project/simulation/worker@sha256:" + "a" * 64
 _RUN_ID = "b" * 32
 _NETWORK = "https://www.googleapis.com/compute/v1/projects/test/global/networks/sim-network"
 
+sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str((_ROOT / "../isaac_sim").resolve()))
 from sim_worker.rollout.checkpoint import inspect_checkpoint  # noqa: E402
 
@@ -40,6 +41,11 @@ class RolloutLaunchTests(unittest.TestCase):
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
         root = Path(self.stack.enter_context(tempfile.TemporaryDirectory())).resolve()
+        self.receipt_dir = root / "submission"
+        self.receipt_dir.mkdir()
+        self.stack.enter_context(
+            patch.object(launcher.tempfile, "mkdtemp", return_value=str(self.receipt_dir))
+        )
         self.worker = root / "isaac_sim"
         self.worker.mkdir()
         self.checkpoint = root / "checkpoint"
@@ -127,6 +133,7 @@ class RolloutLaunchTests(unittest.TestCase):
             patch.dict(os.environ, {"SIM_PROJECT_ID": "project", "ACCEPT_EULA": "Y"})
         )
         self.dispatch = self.stack.enter_context(patch.object(launcher.subprocess, "run"))
+        self.stack.enter_context(patch.object(launcher, "_run_sdk", self.dispatch))
 
     def _prepare(self, mode=launcher._Mode.ROLLOUT):
         self.task.write_text(yaml.safe_dump_all(self.documents))
@@ -412,6 +419,44 @@ class RolloutLaunchTests(unittest.TestCase):
         self.assertEqual(self.dispatch.call_args_list[0].kwargs["timeout"], 7200)
         cancel = self.dispatch.call_args_list[1].args[0]
         self.assertEqual(cancel[-4:], ["cancel", "--name", "isaac-ready-unique", "--yes"])
+
+    def test_timeout_cancels_exact_known_job_and_retains_uncertain_cleanup(self):
+        submitted = {
+            "schema_version": 1,
+            "skypilot": "0.13.0",
+            "job_id": 7,
+            "group_name": "isaac-ready-unique",
+            "request_id": "request-1",
+            "tasks": [
+                {"task_id": 0, "task_name": "isaac", "is_primary_in_job_group": True},
+                {"task_id": 1, "task_name": "vla", "is_primary_in_job_group": False},
+            ],
+        }
+        (self.receipt_dir / "submission.json").write_text(json.dumps(submitted))
+        self.dispatch.side_effect = [subprocess.TimeoutExpired("launch", 7200), None]
+        with self.assertRaises(subprocess.TimeoutExpired):
+            launcher._launch([{"name": "isaac-ready-unique"}], self.task, launcher._Mode.READINESS)
+        self.assertEqual(self.dispatch.call_args_list[1].args[0][-3:], ["cancel", "7", "--yes"])
+        result = json.loads((self.receipt_dir / "cancellation.json").read_text())
+        self.assertEqual(result["job_id"], 7)
+        self.assertEqual(result["status"], "requested")
+        self.assertEqual(result["resource_deletion"], "unverified")
+
+    def test_failed_cancellation_and_interruption_never_become_success(self):
+        self.dispatch.side_effect = [KeyboardInterrupt(), subprocess.TimeoutExpired("cancel", 120)]
+        with self.assertRaises(subprocess.TimeoutExpired):
+            launcher._launch([{"name": "isaac-ready-unique"}], self.task, launcher._Mode.READINESS)
+        result = json.loads((self.receipt_dir / "cancellation.json").read_text())
+        self.assertEqual(result["status"], "failed_or_unknown")
+        self.assertEqual(result["reason"], "KeyboardInterrupt")
+        self.assertEqual(self.dispatch.call_args_list[1].kwargs["timeout"], 120)
+
+    def test_ordinary_interruption_keeps_existing_no_auto_cancellation(self):
+        self.dispatch.side_effect = KeyboardInterrupt()
+        with self.assertRaises(KeyboardInterrupt):
+            launcher._launch([{"name": "ordinary"}], self.task, launcher._Mode.ROLLOUT)
+        self.assertEqual(self.dispatch.call_count, 1)
+        self.assertIsNone(self.dispatch.call_args.kwargs["timeout"])
 
     def test_launch_options(self):
         launcher._launch(

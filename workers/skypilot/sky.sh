@@ -66,4 +66,10 @@ for sim_argument in "$@"; do
   esac
 done
 
+# Fixed internal adapter; it shares exactly the CLI's isolated configuration.
+if [[ "${1:-}" == rollout-sdk ]]; then
+  shift
+  exec "$SIM_PYTHON" "$SIM_DIR/rollout_sdk.py" "$@"
+fi
+
 exec "$SIM_SKY" "$@"

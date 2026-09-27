@@ -24,7 +24,7 @@ def main():
     cfg = TrainConfig.load(args.checkpoint / "recipe.json")
     splits = json.loads((args.checkpoint / "splits.json").read_text())
     _, validation, _, _ = load_data(cfg, splits)
-    batch = prepare_batch(default_collate([validation[0]]), pre)
+    batch = prepare_batch(default_collate([validation[0]]), pre, cfg.selected_camera_keys)
     actual = predict(policy, batch, post, cfg.seed)
     expected = load_file(str(args.checkpoint / "probe.safetensors"))["action"]
     torch.testing.assert_close(actual, expected, rtol=1e-3, atol=1e-3)

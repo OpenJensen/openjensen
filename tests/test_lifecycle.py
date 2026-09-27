@@ -14,7 +14,10 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from vla_platform.api import create_app
+from vla_platform.compute_settings import ComputeSettings, ComputeSettingsUpdate
+from vla_platform.lifecycle.runtime import Runtime, RuntimeCatalog
 from vla_platform.settings import Settings
 
 
@@ -47,7 +50,11 @@ def configured(tmp_path):
             }
         )
     )
-    return Settings(data_dir=tmp_path / "workspace", runtime_config=config)
+    settings = Settings(data_dir=tmp_path / "workspace", runtime_config=config)
+    ComputeSettings(settings.data_dir).update(
+        ComputeSettingsUpdate.model_validate({"local": {"enabled": True}})
+    )
+    return settings
 
 
 def wait(client, job_id):
@@ -129,7 +136,7 @@ def test_default_recipe_requires_validation_and_training_is_a_method_choice(conf
     configured.runtime_config.write_text(json.dumps(catalog))
     with TestClient(create_app(configured)) as client:
         options = client.get("/api/v1/policy-options").json()
-        assert {x["id"] for x in options["training_methods"]} == {"lora", "qlora"}
+        assert {x["id"] for x in options["training_methods"]} == {"lora", "qlora", "full"}
         assert options["default_training_method"] == "lora"
         assert options["quantization_defaults"]["cuda"]["language"] == "Q8_0"
         assert options["quantization_defaults"]["cpu"]["language"] == "Q8_0"
@@ -145,6 +152,124 @@ def test_default_recipe_requires_validation_and_training_is_a_method_choice(conf
             "language": "Q8_0",
             "vision": None,
         }
+
+
+def test_training_options_separate_supported_base_from_native_sources(configured):
+    with TestClient(create_app(configured)) as client:
+        options = client.get("/api/v1/policy-options").json()
+    models = {model["id"]: model for model in options["training_models"]}
+    from vla_platform.lifecycle.training_catalog import TRAINING_MODEL_BY_ID
+
+    assert set(models) == set(TRAINING_MODEL_BY_ID)
+    assert models["smolvla"]["model_id"] == "lerobot/smolvla_base"
+    assert models["smolvla"]["model_revision"] == "d9f33c94a60fb382c90dea2164c96845bd955e28"
+    assert models["smolvla"]["methods"] == ["lora", "qlora"]
+    assert all(not model["available"] for model in models.values())
+    assert models["smolvla"]["status"] == "connect_account"
+    assert all(
+        model["status"] == "coming_soon"
+        for key, model in models.items()
+        if key in {"openvla", "openvla_oft"}
+    )
+    assert models["pi05"]["model_revision"]
+    assert models["act"]["methods"] == ["full"]
+    assert [source["id"] for source in options["sources"]] == ["source"]
+    legacy_runtime = options["runtimes"][0]
+    assert legacy_runtime["gpu_name"] is None
+    assert legacy_runtime["gpu_memory_mib"] is None
+    assert legacy_runtime["training_gpu_count"] is None
+
+
+def test_training_options_expose_configured_gpu_specs_without_private_runtime_fields(configured):
+    catalog = json.loads(configured.runtime_config.read_text())
+    catalog["runtimes"][0].update(
+        device="cuda",
+        training_python=sys.executable,
+        training_root="fixture",
+        gpu_name="NVIDIA GeForce RTX 3070",
+        gpu_memory_mib=8192,
+        env={"PRIVATE_RUNTIME_VALUE": "not-public"},
+    )
+    configured.runtime_config.write_text(json.dumps(catalog))
+    with TestClient(create_app(configured)) as client:
+        runtime = client.get("/api/v1/policy-options").json()["runtimes"][0]
+    assert runtime == {
+        "id": "fixture",
+        "label": "protocol fixture",
+        "execution": "native",
+        "accelerator": None,
+        "unavailable_reason": None,
+        "launchable": True,
+        "needs_preparation": False,
+        "provider": "local",
+        "provider_label": "Local machine",
+        "region": None,
+        "enabled": True,
+        "device": "cuda",
+        "training": True,
+        "act_export": False,
+        "training_model_ids": ["smolvla"],
+        "simulation": True,
+        "gpu_name": "NVIDIA GeForce RTX 3070",
+        "gpu_memory_mib": 8192,
+        "training_gpu_count": 1,
+    }
+
+
+@pytest.mark.parametrize(
+    "device,training_python,training_root,expected",
+    [
+        ("cpu", "python", "training", None),
+        ("cuda", None, None, None),
+        ("cuda", "python", None, None),
+        ("cuda", None, "training", None),
+        ("cuda", "python", "training", 1),
+    ],
+)
+def test_training_gpu_count_is_a_recipe_constraint(
+    device, training_python, training_root, expected
+):
+    runtime = Runtime(
+        id="fixture",
+        label="An unspecified GPU",
+        worker_root="worker",
+        vendor="vendor",
+        build="build",
+        device=device,
+        training_python=training_python,
+        training_root=training_root,
+    )
+    public = RuntimeCatalog(runtimes=[runtime]).public()["runtimes"][0]
+    assert public["training_gpu_count"] == expected
+    assert public["gpu_name"] is None
+    assert public["gpu_memory_mib"] is None
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("gpu_name", ""),
+        ("gpu_name", "   "),
+        ("gpu_name", "x" * 201),
+        ("gpu_memory_mib", 0),
+        ("gpu_memory_mib", -1),
+        ("gpu_memory_mib", 8192.5),
+        ("gpu_memory_mib", True),
+        ("gpu_memory_mib", "8192"),
+    ],
+)
+def test_runtime_gpu_specifications_are_validated(field, value):
+    with pytest.raises(ValidationError):
+        Runtime.model_validate(
+            {
+                "id": "fixture",
+                "label": "GPU fixture",
+                "worker_root": "worker",
+                "vendor": "vendor",
+                "build": "build",
+                field: value,
+            }
+        )
 
 
 @pytest.mark.parametrize(
@@ -735,3 +860,46 @@ def test_overflow_worker_json_fails_before_publishing_report(configured):
         assert "non-finite number" in job["error"]
         assert job["result"]["selected_artifact_id"] is None
         assert not any(x["stage"] == "final-evaluation" for x in job["result"]["reports"])
+
+
+def test_large_training_event_remains_bounded_and_redacted(configured):
+    app = create_app(configured)
+    with TestClient(app) as client:
+        pid = project(client)
+        jid = submit(client, pid, operation="policy.import")
+        wait(client, jid)
+        lifecycle = app.state.execution.lifecycle
+        job = client.portal.call(app.state.execution.get, jid)
+        client.portal.call(
+            lifecycle.event,
+            job,
+            "training",
+            "Optimizer step 3",
+            {
+                "step": 3,
+                "train_loss": 0.1,
+                "environment": {"large": "x" * 20000, "evaluation_python": "/private/python"},
+                "api_key": "never-publish",
+            },
+        )
+        events = client.get(f"/api/v1/jobs/{jid}/events")
+        assert events.status_code == 200
+        record = events.json()[-1]
+        assert record["data"] == {"step": 3, "train_loss": 0.1, "event_data_truncated": True}
+        raw = (configured.data_dir / "jobs" / jid / "events.jsonl").read_bytes()
+        assert max(map(len, raw.splitlines(keepends=True))) <= 16384
+        assert b"never-publish" not in raw and b"/private/python" not in raw
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Symlink privileges differ on Windows")
+def test_remote_descriptor_cannot_bypass_artifact_symlink_guard(tmp_path):
+    from vla_platform.lifecycle.service import validate_bundle
+
+    descriptor = tmp_path / "artifact"
+    descriptor.mkdir()
+    target = tmp_path / "outside.json"
+    target.write_text("not an artifact descriptor")
+    (descriptor / "manifest.json").write_text("{}")
+    (descriptor / "remote.json").symlink_to(target)
+    with pytest.raises(ValueError, match="symlinks"):
+        validate_bundle(descriptor, tmp_path)

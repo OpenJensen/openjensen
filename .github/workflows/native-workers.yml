@@ -1,10 +1,39 @@
 name: Native worker contract checks
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+# Supersede obsolete PR revisions, but retain every main/manual verification.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
-  quantization:
+  scope:
     runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      application: ${{ steps.changes.outputs.application }}
+      quantization: ${{ steps.changes.outputs.quantization }}
+      training: ${{ steps.changes.outputs.training }}
+      benchmark: ${{ steps.changes.outputs.benchmark }}
+      act: ${{ steps.changes.outputs.act }}
+      teaching: ${{ steps.changes.outputs.teaching }}
+      decision: ${{ steps.changes.outputs.decision }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: changes
+        run: python3 .github/scripts/ci_scope.py
+  quantization:
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.quantization != 'false') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: workers/vla_cpp
@@ -14,10 +43,16 @@ jobs:
         with:
           version: '0.12.19'
           python-version: '3.11'
+          enable-cache: true
+          cache-suffix: quantization
+          cache-dependency-glob: workers/vla_cpp/uv.lock
       - run: uv sync --locked --extra quantize --extra test
       - run: uv run --no-sync python -m pytest -q -rs
   training:
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.training != 'false') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: workers/smolvla_qlora
@@ -27,12 +62,18 @@ jobs:
         with:
           version: '0.12.19'
           python-version: '3.11'
+          enable-cache: true
+          cache-suffix: training
+          cache-dependency-glob: workers/smolvla_qlora/pyproject.toml
       - run: uv venv --python 3.11
       - run: uv pip install --python .venv/bin/python -e '.[dev]'
       - run: .venv/bin/python -m pytest -q -rs
       - run: .venv/bin/ruff check src tests
   benchmark:
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.benchmark != 'false') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: workers/benchmark_gpu
@@ -42,6 +83,9 @@ jobs:
         with:
           version: '0.12.19'
           python-version: '3.11'
+          enable-cache: true
+          cache-suffix: benchmark
+          cache-dependency-glob: .github/workflows/native-workers.yml
       - run: uv venv --python 3.11
       - run: uv pip install --python .venv/bin/python pytest==8.4.2 ruff==0.13.2
       - run: .venv/bin/python -m pytest -q -rs
@@ -49,3 +93,115 @@ jobs:
       - name: Verify preserved evidence
         working-directory: workers/benchmark_gpu/evidence/2026-09-26
         run: sha256sum -c SHA256SUMS
+  act-inference-export:
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.act != 'false') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: workers/act_optimizer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.19'
+          python-version: '3.12'
+          enable-cache: true
+          cache-suffix: act-inference-export
+          cache-dependency-glob: workers/act_optimizer/uv.lock
+      - run: uv sync --locked --extra cpu --extra dev
+      - run: uv run --no-sync python -m pytest -q -rs
+        env:
+          HF_HUB_OFFLINE: '1'
+          CUDA_VISIBLE_DEVICES: ''
+      - run: uv run --no-sync ruff check --target-version py312 src tests
+      - run: uv run --no-sync ruff format --check src tests
+      - run: uv run --no-sync mypy --config-file pyproject.toml src --follow-imports=silent
+  teaching:
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.teaching != 'false') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.19'
+          python-version: '3.12.14'
+          enable-cache: true
+          cache-suffix: teaching
+          cache-dependency-glob: |
+            workers/teaching/requirements-*.txt
+            .github/workflows/native-workers.yml
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Install isolated CPU dataset writer
+        run: |
+          uv venv --python 3.12.14 workers/teaching/.venv-dataset
+          uv pip install --python workers/teaching/.venv-dataset/bin/python --index-url https://download.pytorch.org/whl/cpu 'torch==2.11.0+cpu' 'torchvision==0.26.0+cpu'
+          uv pip install --python workers/teaching/.venv-dataset/bin/python -r workers/teaching/requirements-dataset.txt -r workers/teaching/requirements-providers.txt pytest==8.4.2
+          uv pip check --python workers/teaching/.venv-dataset/bin/python
+      - name: Recorder and real LeRobot data boundaries
+        run: workers/teaching/.venv-dataset/bin/python -m pytest -q -rs workers/teaching/tests/test_teaching.py workers/teaching/tests/test_multicapture.py workers/teaching/tests/test_providers.py workers/smolvla_qlora/tests/test_local_dataset.py
+        env:
+          HF_HUB_OFFLINE: '1'
+          CUDA_VISIBLE_DEVICES: ''
+          PYTHONPATH: workers/smolvla_qlora/src
+      - name: Install separate voice SDK environment
+        run: |
+          uv venv --python 3.12.14 workers/teaching/.venv-voice
+          uv pip install --python workers/teaching/.venv-voice/bin/python -r workers/teaching/requirements-voice.txt pytest==8.4.2
+          uv pip check --python workers/teaching/.venv-voice/bin/python
+      - name: Voice contract and failure handling (no provider call)
+        run: workers/teaching/.venv-voice/bin/python -m pytest -q -rs workers/teaching/tests/test_voice.py
+  decision:
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.decision != 'false') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.19'
+          python-version: '3.12.14'
+          enable-cache: true
+          cache-suffix: decision-contracts
+          cache-dependency-glob: .github/workflows/native-workers.yml
+      - run: uv venv --python 3.12.14 workers/decision/.venv-ci
+      - run: uv pip install --python workers/decision/.venv-ci/bin/python pytest==8.4.2
+      - name: Advisory worker contracts without model downloads
+        run: workers/decision/.venv-ci/bin/python -m pytest -q -rs workers/decision/tests
+        env:
+          PYTHONPATH: workers/decision/src
+          HF_HUB_OFFLINE: '1'
+          CUDA_VISIBLE_DEVICES: ''
+  native-worker-verification:
+    needs: [scope, quantization, training, benchmark, act-inference-export, teaching, decision]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Verify every selected check completed
+        env:
+          CHECK_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY_GATE'
+          import json, os
+          results = json.loads(os.environ['CHECK_RESULTS'])
+          scope = results['scope']
+          required = {'quantization': 'quantization', 'training': 'training', 'benchmark': 'benchmark', 'act-inference-export': 'act', 'teaching': 'teaching', 'decision': 'decision'}
+          failures = []
+          for job, output in required.items():
+              result = results[job]['result']
+              legitimate_skip = (scope['result'] == 'success'
+                                 and scope['outputs'].get(output) == 'false'
+                                 and result == 'skipped')
+              if result != 'success' and not legitimate_skip:
+                  failures.append(job + ': ' + result)
+          if scope['result'] != 'success':
+              failures.append('scope: ' + scope['result'])
+          if failures:
+              raise SystemExit('; '.join(failures))
+          print('All selected checks passed; unrelated scopes were explicitly skipped.')
+          PY_GATE

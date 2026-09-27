@@ -1,19 +1,31 @@
 name: Simulation worker checks
 on:
   push:
+    branches: [main]
     paths: ['workers/isaac_sim/**', 'workers/skypilot/**', '.github/workflows/simulation.yml']
   pull_request:
     paths: ['workers/isaac_sim/**', 'workers/skypilot/**', '.github/workflows/simulation.yml']
+  workflow_dispatch:
+# Do not cancel another workflow, PR or a main-branch verification.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
   simulation:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            workers/isaac_sim/calibration.requirements.txt
+            workers/skypilot/requirements.txt
+            .github/workflows/simulation.yml
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg jq
       - run: >-
           python -m pip install PyYAML==6.0.3 usd-core==26.8
@@ -23,8 +35,16 @@ jobs:
         env:
           SIM_REQUIRE_VIDEO_TOOLS: '1'
         run: python -m unittest discover -s tests -v
+      - name: Install pinned SkyPilot SDK for offline launcher compatibility
+        run: >-
+          python -m pip install -r workers/skypilot/requirements.txt
+          -c workers/isaac_sim/calibration.requirements.txt PyYAML==6.0.3 usd-core==26.8
+      - name: Check combined simulation dependency compatibility
+        run: python -m pip check
       - name: Launcher tests
         working-directory: workers/skypilot
+        env:
+          SIM_REQUIRE_SKYPILOT: '1'
         run: python -m unittest discover -s tests -v
       - name: Experimental scene checks
         run: python workers/isaac_sim/scenes/so101-pickup/test_experiment.py

@@ -11,10 +11,12 @@ from pydantic import (
     Field,
     JsonValue,
     StringConstraints,
+    field_validator,
     model_validator,
 )
 
-from vla_platform.lifecycle.contracts import LifecycleResult, PolicyRequest
+from vla_platform.augmentation.contracts import AugmentationRequest, AugmentationResult
+from vla_platform.lifecycle.contracts import CloudExecutionTarget, LifecycleResult, PolicyRequest
 
 NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 RepositoryId = Annotated[
@@ -63,11 +65,23 @@ class Project(ProjectCreate):
 class IntakeRequest(Record):
     source: Literal["huggingface", "local"] = "huggingface"
     repo_id: RepositoryId | None = None
-    revision: NonEmptyString = Field(default="main", max_length=200)
+    revision: NonEmptyString = Field(
+        default="main",
+        max_length=200,
+        description="Branch, tag or commit. Omitted or blank uses the latest main revision.",
+    )
     path: NonEmptyString | None = Field(default=None, max_length=4096)
+    snapshot_for_training: bool = Field(default=False, strict=True)
+
+    @field_validator("revision", mode="before")
+    @classmethod
+    def default_revision(cls, value):
+        return "main" if value is None or (isinstance(value, str) and not value.strip()) else value
 
     @model_validator(mode="after")
     def validate_source(self) -> IntakeRequest:
+        if self.snapshot_for_training and self.source != "local":
+            raise ValueError("Training snapshots require a local dataset")
         if self.source == "huggingface" and (not self.repo_id or self.path is not None):
             raise ValueError("Hugging Face intake requires repo_id and no local path")
         if self.source == "local" and (not self.path or self.repo_id is not None):
@@ -182,6 +196,27 @@ class LocalPreviewFailure(Record):
     message: NonEmptyString = Field(max_length=300)
 
 
+class DatasetSnapshot(Record):
+    """Path-free identity; only the application can resolve the snapshot store."""
+
+    schema_version: Literal[1] = 1
+    id: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    manifest_sha256: Sha256
+    format: Literal["lerobot_v3"] = "lerobot_v3"
+    total_bytes: int = Field(gt=0, le=16 * 1024**3, strict=True)
+    file_count: int = Field(gt=0, le=4096, strict=True)
+    total_episodes: int = Field(gt=0, le=20000, strict=True)
+    total_frames: int = Field(gt=0, le=2000000, strict=True)
+    lineage_validated: bool = Field(strict=True)
+    warnings: list[str] = Field(max_length=100)
+
+    @model_validator(mode="after")
+    def matching_identity(self):
+        if self.id != f"sha256:{self.manifest_sha256}":
+            raise ValueError("Snapshot ID must match its manifest")
+        return self
+
+
 class DatasetProfile(Record):
     schema_version: Literal[1] = 1
     source: Literal["huggingface", "local"]
@@ -197,15 +232,26 @@ class DatasetProfile(Record):
     metadata_sha256: Sha256
     inspected_at: Timestamp
     warnings: list[str]
-    inspection_scope: Literal["metadata_only", "bounded_parquet_rows"] = "metadata_only"
+    inspection_scope: Literal["metadata_only", "bounded_parquet_rows", "complete_snapshot"] = (
+        "metadata_only"
+    )
     # Keep existing v1 metadata-only JSON unchanged when there is no preview.
     preview: LocalDatasetPreview | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
 
+    snapshot: DatasetSnapshot | None = Field(default=None, exclude_if=lambda value: value is None)
+
     @model_validator(mode="after")
     def validate_provenance(self) -> DatasetProfile:
         """Require pinned HF identity or the matching local metadata identity."""
+        if self.snapshot is not None and (
+            self.source != "local"
+            or self.format != "lerobot_v3"
+            or self.total_episodes != self.snapshot.total_episodes
+            or self.total_frames != self.snapshot.total_frames
+        ):
+            raise ValueError("Training snapshot must match the local dataset profile")
         if self.source == "huggingface":
             if self.repo_id is None:
                 raise ValueError("Hugging Face profiles require repo_id")
@@ -215,7 +261,12 @@ class DatasetProfile(Record):
             raise ValueError(
                 "Local profiles require no repo_id and a matching metadata-sha256 revision"
             )
-        if self.inspection_scope == "metadata_only":
+        if self.inspection_scope == "complete_snapshot":
+            if self.snapshot is None or self.preview is not None:
+                raise ValueError(
+                    "Complete snapshot inspection requires a snapshot and no row preview"
+                )
+        elif self.inspection_scope == "metadata_only":
             if self.preview is not None:
                 raise ValueError("Metadata-only profiles cannot carry a row preview")
         elif (
@@ -237,23 +288,31 @@ class Job(Record):
     project_id: NonEmptyString
     kind: NonEmptyString = "dataset.inspect"
     status: JobStatus = "queued"
-    request: IntakeRequest | PolicyRequest
+    request: IntakeRequest | PolicyRequest | AugmentationRequest
+    compute_target: CloudExecutionTarget | None = None
     created_at: Timestamp
     updated_at: Timestamp
-    result: DatasetProfile | LifecycleResult | None = None
+    result: DatasetProfile | LifecycleResult | AugmentationResult | None = None
     error: str | None = None
     stage: str | None = None
 
     @model_validator(mode="after")
     def validate_operation(self):
         expected = (
-            self.request.operation if isinstance(self.request, PolicyRequest) else "dataset.inspect"
+            self.request.operation
+            if isinstance(self.request, (PolicyRequest, AugmentationRequest))
+            else "dataset.inspect"
         )
         if self.kind != expected:
             raise ValueError("Job kind must match its registered request operation")
-        if self.result is not None and isinstance(self.request, PolicyRequest) != isinstance(
-            self.result, LifecycleResult
-        ):
+        result_type = (
+            AugmentationResult
+            if isinstance(self.request, AugmentationRequest)
+            else LifecycleResult
+            if isinstance(self.request, PolicyRequest)
+            else DatasetProfile
+        )
+        if self.result is not None and not isinstance(self.result, result_type):
             raise ValueError("Job result must match its operation family")
         return self
 
@@ -262,8 +321,10 @@ Stage = Literal["Dataset", "Fine-tune", "Distill", "Quantize", "Evaluate", "Run"
 Operation = Literal[
     "dataset.inspect",
     "dataset.inspect.local",
+    "dataset.augment",
     "policy.finetune",
     "policy.distill",
+    "policy.export",
     "policy.quantize",
     "policy.evaluate",
     "policy.run",
@@ -271,8 +332,10 @@ Operation = Literal[
 OPERATION_STAGES: dict[Operation, Stage] = {
     "dataset.inspect": "Dataset",
     "dataset.inspect.local": "Dataset",
+    "dataset.augment": "Dataset",
     "policy.finetune": "Fine-tune",
     "policy.distill": "Distill",
+    "policy.export": "Run",
     "policy.quantize": "Quantize",
     "policy.evaluate": "Evaluate",
     "policy.run": "Run",
@@ -283,7 +346,9 @@ IMPLEMENTED_OPERATIONS = frozenset(
     {
         "dataset.inspect",
         "dataset.inspect.local",
+        "dataset.augment",
         "policy.finetune",
+        "policy.export",
         "policy.quantize",
         "policy.evaluate",
         "policy.run",
@@ -447,6 +512,7 @@ class WorkerRequest(Record):
     operation: Literal["dataset.inspect"] = "dataset.inspect"
     intake: IntakeRequest
     local_root: str | None = None
+    snapshot_store: str | None = None
 
 
 class WorkerResult(Record):

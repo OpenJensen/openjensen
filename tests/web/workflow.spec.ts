@@ -36,7 +36,7 @@ class WorkflowPage {
   async quantize(runtime: string) {
     await this.page.getByRole('button', { name: 'Quantize', exact: true }).click();
     await this.page.getByLabel('Execution target').selectOption(runtime);
-    await this.page.getByLabel('Input policy').selectOption('source:synthetic-source');
+    await this.page.getByLabel('Checkpoint or policy').selectOption('source:synthetic-source');
     const created = this.page.waitForResponse(response => response.url().endsWith('/policy-jobs') && response.request().method() === 'POST');
     await this.page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
     const response = await created;
@@ -64,7 +64,8 @@ test('browser intake reads local metadata and preserves its limits after reload'
   await expect(page.getByLabel('Current project')).toHaveValue(project.id);
   await page.getByRole('button', { name: /^Inspection/ }).click();
   await expect(page.getByRole('heading', { name: 'Local dataset', exact: true })).toBeVisible();
-  await page.getByText('Inspection notes & source provenance', { exact: true }).click();
+  await page.getByText('Source details', { exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Inspection notes', exact: true })).toBeVisible();
   await expect(page.getByText('Metadata-only inspection: episode counts and schemas are source-declared, not validated against frames.', { exact: true })).toBeVisible();
   await expect(page.getByText(job.result.revision, { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Load visual preview', exact: true })).toHaveCount(0);
@@ -127,7 +128,7 @@ test('cancelling a started worker remains cancelled after browser reload and in 
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
   await expect(page.getByText('cancelled', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Cancel run', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'Download', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /^Download / })).toHaveCount(0);
   expect((await cli('jobs', 'show', submitted.id)).result).toBeNull();
 });
 

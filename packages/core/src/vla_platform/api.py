@@ -6,14 +6,20 @@ from typing import Annotated
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from filelock import FileLock, Timeout
+from starlette.background import BackgroundTask
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from vla_platform import __version__
+from vla_platform.augmentation.contracts import AugmentationOptions, AugmentationRequest
 from vla_platform.capabilities import registry
+from vla_platform.cloud_api import router as cloud_connections_router
+from vla_platform.cloud_connections import CloudConnections
 from vla_platform.cloud_runs import CloudRunsFeed, read_cloud_runs
+from vla_platform.compute_api import router as compute_settings_router
+from vla_platform.decision_api import router as decision_router
 from vla_platform.contracts import (
     Capability,
     EpisodePage,
@@ -25,10 +31,20 @@ from vla_platform.contracts import (
 )
 from vla_platform.datasets.explore import DatasetExplorer, ExplorationError
 from vla_platform.execution import Execution
-from vla_platform.lifecycle.contracts import JobEvent, PolicyArtifact, PolicyRequest
+from vla_platform.huggingface_api import router as huggingface_router
+from vla_platform.huggingface_connection import HuggingFaceConnection
+from vla_platform.lifecycle import telemetry
+from vla_platform.lifecycle.contracts import (
+    JobEvent,
+    PolicyArtifact,
+    PolicyRequest,
+    TrainingTelemetry,
+)
+from vla_platform.lifecycle.training_catalog import public_training_models
 from vla_platform.projects import Projects
 from vla_platform.settings import Settings
 from vla_platform.storage import Storage
+from vla_platform.teaching_api import router as teaching_router
 
 LOCAL_ORIGINS = {
     "http://127.0.0.1:3000",
@@ -60,6 +76,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await execution.reconcile()
             app.state.projects, app.state.execution = Projects(storage), execution
             app.state.explorer = explorer
+            app.state.cloud_connections = CloudConnections(settings.data_dir)
+            app.state.huggingface_connection = HuggingFaceConnection(settings.data_dir)
             yield
         finally:
             try:
@@ -83,13 +101,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         docs_url=None,
         redoc_url=None,
     )
+    app.include_router(cloud_connections_router)
+    app.include_router(compute_settings_router)
+    app.include_router(huggingface_router)
+    app.include_router(teaching_router)
+    app.include_router(decision_router)
     app.add_middleware(
         TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]", "testserver"]
     )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=sorted(LOCAL_ORIGINS),
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["Content-Type"],
     )
 
@@ -150,6 +173,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     r.training_python and r.training_root
                     for r in execution.lifecycle.catalog.runtimes
                 ),
+                any(
+                    r.act_export_python and r.act_export_root
+                    for r in execution.lifecycle.catalog.runtimes
+                ),
+            ),
+            Capability(
+                stage="Dataset",
+                operation="dataset.augment",
+                status="untested" if execution.augmentation.options().configured else "planned",
+                description=(
+                    "Gemini Omni appearance edits for selected camera clips; review required."
+                ),
             ),
             Capability(
                 stage="Dataset",
@@ -190,12 +225,68 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(404, "Project not found")
         if payload.source == "local" and settings.local_root is None:
             raise HTTPException(422, "Local intake is disabled; configure FIREBIRD_LOCAL_DATA_ROOT")
-        return await execution.submit(project_id, payload)
+        try:
+            return await execution.inspections.submit(project_id, payload)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        except (TimeoutError, httpx.TimeoutException) as exc:
+            raise HTTPException(
+                504, "Checking the latest dataset revision timed out; try again"
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                502, "Hugging Face could not resolve this dataset revision"
+            ) from exc
+
+    @app.get("/api/v1/augmentation-options", response_model=AugmentationOptions)
+    async def augmentation_options(execution: ExecutionDep):
+        return execution.augmentation.options()
+
+    @app.post("/api/v1/projects/{project_id}/augmentations", response_model=Job, status_code=202)
+    async def augment_dataset(
+        project_id: str,
+        payload: AugmentationRequest,
+        projects: ProjectsDep,
+        execution: ExecutionDep,
+    ) -> Job:
+        if await projects.get(project_id) is None:
+            raise HTTPException(404, "Project not found")
+        try:
+            return await execution.submit(project_id, payload)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.get("/api/v1/jobs/{job_id}/augmentation/download")
+    async def download_augmentation(job_id: str, execution: ExecutionDep):
+        try:
+            path = await execution.augmentation.download(job_id)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return FileResponse(
+            path, media_type="application/zip", filename=f"augmentation-{job_id}.zip"
+        )
+
+    @app.get("/api/v1/jobs/{job_id}/augmentation/clips/{index}")
+    async def augmentation_clip(
+        job_id: str,
+        index: int,
+        execution: ExecutionDep,
+        original: bool = False,
+    ):
+        try:
+            path = await execution.augmentation.download(job_id, index, original)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return FileResponse(path, media_type="video/mp4")
 
     @app.get("/api/v1/policy-options")
     async def policy_options(execution: ExecutionDep) -> dict:
         return {
-            **execution.lifecycle.catalog.public(),
+            **execution.lifecycle.compute.public_catalog(execution.lifecycle.catalog),
+            "compute": execution.lifecycle.compute.preferences().model_dump(),
+            "training_models": public_training_models(
+                execution.lifecycle.compute.available_catalog(execution.lifecycle.catalog)
+            ),
             "training_methods": [
                 {
                     "id": "lora",
@@ -206,6 +297,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "id": "qlora",
                     "label": "QLoRA",
                     "description": "Train adapters over an NF4 base to reduce memory",
+                },
+                {
+                    "id": "full",
+                    "label": "Native training",
+                    "description": "Use the architecture's native training recipe",
                 },
             ],
             "default_training_method": "lora",
@@ -243,6 +339,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             path = await execution.lifecycle.download(project_id, artifact_id)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
+        from vla_platform.lifecycle.cloud_download import CloudDownload
+
+        if isinstance(path, CloudDownload):
+            return StreamingResponse(
+                path,
+                media_type="application/x-tar",
+                headers={"Content-Disposition": f'attachment; filename="{path.filename}"'},
+                background=BackgroundTask(path.aclose),
+            )
         return FileResponse(path, media_type="application/x-tar", filename=path.name)
 
     @app.get("/api/v1/jobs/{job_id}/events", response_model=list[JobEvent])
@@ -255,6 +360,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(
                 422, "Job event history is corrupt; preserve it for inspection"
             ) from exc
+
+    @app.get("/api/v1/jobs/{job_id}/training", response_model=TrainingTelemetry)
+    async def training_telemetry(job_id: str, execution: ExecutionDep):
+        job = await execution.get(job_id)
+        if job is None:
+            raise HTTPException(404, "Job not found")
+        try:
+            return await telemetry.snapshot(execution.lifecycle, job)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.get("/api/v1/jobs/{job_id}/training/reproducibility")
+    async def training_reproducibility(job_id: str, execution: ExecutionDep):
+        job = await execution.get(job_id)
+        if job is None:
+            raise HTTPException(404, "Job not found")
+        if not telemetry.training_job(job):
+            raise HTTPException(422, "This job is not a training run")
+        return JSONResponse(
+            await telemetry.reproducibility(execution.lifecycle, job),
+            headers={"Content-Disposition": f'attachment; filename="training-{job.id}.json"'},
+        )
 
     @app.get("/api/v1/jobs/{job_id}", response_model=Job)
     async def get_job(job_id: str, execution: ExecutionDep) -> Job:

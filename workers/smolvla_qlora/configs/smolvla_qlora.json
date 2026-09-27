@@ -7,9 +7,9 @@
   "dataset_revision": "ecef85bc07005f771ad86deeff1427f9d72953ed",
   "camera_key": "observation.images.front",
   "output_dir": "outputs/smolvla-qlora",
-  "steps": 1000,
-  "batch_size": 1,
-  "gradient_accumulation_steps": 8,
+  "steps": 20000,
+  "batch_size": 64,
+  "gradient_accumulation_steps": 1,
   "learning_rate": 0.0001,
   "warmup_steps": 50,
   "lora_rank": 16,
@@ -18,6 +18,6 @@
   "validation_fraction": 0.2,
   "eval_every": 100,
   "eval_batches": 20,
-  "save_every": 100,
+  "save_every": 4000,
   "seed": 42
 }

@@ -1,12 +1,11 @@
 """Check local configuration failures before dispatching cloud commands."""
 
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import tempfile
 import unittest
-
+from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
 _PROJECT = "simulation-test-project"
@@ -30,7 +29,7 @@ class LauncherTests(unittest.TestCase):
             expected = [str(root), str(worker / "rollout_launch.py")]
             self.assertEqual(result.stdout.splitlines(), expected)
 
-    def _run(self, args, files=None, missing=None):
+    def _run(self, args, files=None, missing=None, environment_probe=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for name in ("sky.sh", "launch.sh"):
@@ -40,9 +39,14 @@ class LauncherTests(unittest.TestCase):
             for name in ("python", "sky", "gcloud"):
                 script = binaries / name
                 script.write_text(
-                    '#!/usr/bin/env bash\n'
-                    'if [[ "${0##*/}" == python ]]; then exit 0; fi\n'
+                    "#!/usr/bin/env bash\n"
+                    'if [[ "${0##*/}" == python && "${1:-}" == - ]]; then exit 0; fi\n'
                     'printf "%s\\n" "$@" > "$SIM_TEST_CALLS"\n'
+                    'if [[ "${SIM_TEST_ENV:-}" == 1 ]]; then\n'
+                    '  printf "%s\\n" "$SKYPILOT_GLOBAL_CONFIG" "$SKYPILOT_PROJECT_CONFIG" '
+                    '"$CLOUDSDK_CORE_PROJECT" "$PWD" "${SKYPILOT_CONFIG-unset}" '
+                    '>> "$SIM_TEST_CALLS"\n'
+                    "fi\n"
                 )
                 script.chmod(0o755)
             for name, content in (files or {}).items():
@@ -51,12 +55,17 @@ class LauncherTests(unittest.TestCase):
             environment = os.environ | {
                 "SIM_PROJECT_ID": _PROJECT,
                 "SIM_TEST_CALLS": str(calls),
+                "SIM_TEST_ENV": "1" if environment_probe else "0",
+                "SKYPILOT_CONFIG": "/unrelated/config.yaml",
             }
             if missing:
                 environment.pop(missing, None)
             result = subprocess.run(
-                ["bash", str(root / "sky.sh"), *args], env=environment,
-                capture_output=True, text=True, check=False,
+                ["bash", str(root / "sky.sh"), *args],
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
             )
             return result, calls.read_text() if calls.exists() else None
 
@@ -80,8 +89,10 @@ class LauncherTests(unittest.TestCase):
         self.assertIsNone(calls)
 
     def test_unedited_task_stops(self):
-        files = {"config.yaml": "allowed_clouds: [gcp]\n",
-                 "task.yaml": "SIM_IMAGE: CHANGE_ME_IMAGE\n"}
+        files = {
+            "config.yaml": "allowed_clouds: [gcp]\n",
+            "task.yaml": "SIM_IMAGE: CHANGE_ME_IMAGE\n",
+        }
         result, calls = self._run(["launch", "task.yaml"], files)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("task.yaml", result.stderr)
@@ -100,12 +111,41 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(calls, "auth\nlogin\n--update-adc\n")
 
     def test_manifest_env_dispatches(self):
-        files = {"config.yaml": "allowed_clouds: [gcp]\n",
-                 "task.yaml": "name: recording\n"}
+        files = {"config.yaml": "allowed_clouds: [gcp]\n", "task.yaml": "name: recording\n"}
         args = ["exec", "isaac-sim", "task.yaml", "--env", "SIM_MANIFEST=scene.yaml"]
         result, calls = self._run(args, files)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(calls.splitlines(), args)
+
+    def test_fixed_sdk_dispatch_keeps_isolated_environment_and_launch_flags(self):
+        files = {"config.yaml": "allowed_clouds: [gcp]\n", "task.yaml": "name: fixture\n"}
+        args = [
+            "rollout-sdk",
+            "launch",
+            "task.yaml",
+            "--receipt",
+            "receipt.json",
+            "--yes",
+            "--detach-run",
+        ]
+        result, calls = self._run(args, files, environment_probe=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        values = calls.splitlines()
+        self.assertEqual(Path(values[0]).name, "rollout_sdk.py")
+        self.assertEqual(values[1:7], args[1:])
+        config, project_config, project, cwd, old_config = values[7:]
+        self.assertEqual(config, str(Path(cwd) / "config.yaml"))
+        self.assertEqual(project_config, config)
+        self.assertEqual(project, _PROJECT)
+        self.assertEqual(old_config, "unset")
+
+    def test_internal_sdk_cannot_bypass_yaml_validation(self):
+        result, calls = self._run(
+            ["rollout-sdk", "launch", "task.yaml", "--receipt", "receipt.json"],
+            {"config.yaml": "allowed_clouds: [gcp]\n", "task.yaml": "name: CHANGE_ME\n"},
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIsNone(calls)
 
     def test_ready_config_dispatches(self):
         files = {"config.yaml": "allowed_clouds: [gcp]\n"}

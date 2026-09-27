@@ -211,10 +211,10 @@ It never loads the simulation or applies robot actions; verified calibration is
 still mandatory for normal rollouts.
 
 The readiness task has a 30-minute run limit. The local launcher waits at most two
-hours for provisioning and execution, then requests cancellation of that uniquely
-named group. Keep the launcher running: SkyPilot otherwise retries capacity or
-preemption indefinitely. On completion, managed jobs remove the GPU VMs; the CPU
-controller autostops separately. Use this check to validate deployability, not to
+hours for provisioning and execution, then requests cancellation of that exact job
+ID if known, otherwise its unique group name. Keep the launcher running: SkyPilot
+otherwise retries capacity or preemption indefinitely. Managed jobs attempt GPU VM
+cleanup; verify resource inventory separately. The CPU controller autostops separately. Use this check to validate deployability, not to
 leave idle GPU VMs running. Readiness JSON remains in the managed job logs.
 
 The auxiliary `vla` task is expected to finish as `CANCELLED` after Isaac completes.
@@ -225,6 +225,52 @@ says `ready`, and both GPU VMs are removed.
 timeout then covers submission only. Monitor the printed unique group name and
 cancel it explicitly if capacity stays unavailable; detached managed jobs can
 otherwise keep retrying indefinitely.
+
+### Attached completion and submission receipts
+
+The launcher uses the pinned SkyPilot 0.13.0 SDK through the same isolated
+`sky.sh` environment. It loads the prepared parallel Job Group using SkyPilot's
+internal YAML loader and CLI defaults; it does not replace the scheduler.
+Without `--yes`, SkyPilot's resource optimization and interactive confirmation
+remain enabled. Declining returns failure before submission. `--detach-run`
+returns after the job ID is received, with no log following or completion check;
+its zero exit means **submitted**, not completed.
+
+Every launch prints a private temporary receipt directory outside the repository.
+`submission.json` records the prepared YAML digest, pinned SDK version, launch
+request ID, returned job ID, group name and task IDs/roles. The request ID is saved
+before waiting for submission, and the job ID before attaching logs. Both IDs are
+also printed in case a later disk write fails. A lost response is an uncertain
+submission: inspect that request; the launcher never automatically resubmits or
+falls back to a latest-job lookup. Copy receipts to your experiment evidence
+before your operating system clears temporary files.
+
+SkyPilot can stop attached log following with exit `101` (`NOT_FINISHED`) while
+the auxiliary is cancelling. Only that code triggers up to 120 seconds of final
+status checks, every two seconds between completed reads, each read limited to
+40 seconds or the remaining deadline. The readiness/experimental two-hour outer
+limit still includes this check. Timeout stops owned local processes, with up to
+five seconds of graceful shutdown followed by bounded forced cleanup. This local
+cleanup precedes the cloud cancellation request: it is a supervised cancellation
+guard, not an exact VM-runtime or billing cap. Other attached exit codes are preserved.
+
+The check queries only the submitted job ID and validates the exact group,
+task-ID/name bindings, parallel execution and explicit primary/auxiliary roles.
+It never refreshes or restarts a stopped cloud controller. Exit 101 becomes zero
+only when `isaac` is `SUCCEEDED` and `vla` is terminal `CANCELLED` or `SUCCEEDED`.
+The group status is **derived from the single primary task**, matching the pinned
+SkyPilot rule; it is not a separate status returned by the queue API. Cancellation
+observed before primary success, failed tasks, missing metadata (including older
+controller role fields), identity mismatches, unknown states, failed reads and
+deadlines remain unresolved with exit 101. The receipt retains the original
+attached exit and the first and last validated observations.
+
+An interrupted/timed-out readiness or experimental launch requests cancellation
+with its existing 120-second cancellation bound and records `cancellation.json`.
+A successful cancellation request or terminal auxiliary `CANCELLED` is **not**
+evidence that VMs were deleted or billing stopped; inspect cloud resources
+separately. Queue rows also do not identify who initiated cancellation. These
+outcomes concern execution only, not calibration, pickup success or model quality.
 
 Validation checks local files, model fingerprint, policy type, state/action/image
 dimensions, referenced processor statistics, calibration, resource choices and
@@ -255,8 +301,8 @@ directory before cancelling or deleting the job.
 
 Setup, policy discovery and inference are bounded. The Isaac container has a
 one-hour timeout; VLA has a 75-minute limit and is normally terminated sooner by
-the group. GPU tasks are cleaned up by managed jobs. Inspect `sky status` for the
-CPU controller and any failed provisioning before leaving; the controller is a
+the group. Managed jobs attempt GPU cleanup; verify the resource inventory,
+including failed cleanup or provisioning. Inspect `sky status` for the CPU controller and any failed provisioning before leaving; the controller is a
 separate reusable resource and is not the auxiliary VLA task.
 
 Spot interruption during an episode fails that episode after its request timeout.
@@ -266,8 +312,16 @@ start a new episode with a reset simulation and empty action history.
 ## Local checks
 
 ```bash
-.venv/bin/python -m unittest discover -s tests -v
+SIM_REQUIRE_SKYPILOT=1 .venv/bin/python -m unittest discover -s tests -v
 ```
+
+The launcher suite uses synthetic queue/submission responses and the real pinned
+SDK's local YAML parser, typed queue records and declined-confirmation path with
+network/submission calls blocked. Real local subprocess tests cover query and
+outer-wall deadlines, creation-window interruption, repeated interruption and
+owned-child cleanup. CI requires the SDK compatibility tests rather than silently
+skipping them. These are offline contract tests: live reconciliation of a newly
+submitted cloud job remains unverified until a separately authorized run.
 
 On 2026-09-26, managed job 2 passed readiness in `us-central1-a`: L4
 `10.43.0.3` sent a recorded observation to the ACT step-29000 checkpoint on H100

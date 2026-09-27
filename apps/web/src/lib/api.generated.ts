@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/v1/augmentation-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Augmentation Options */
+        get: operations["augmentation_options_api_v1_augmentation_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/capabilities": {
         parameters: {
             query?: never;
@@ -15,6 +32,74 @@ export interface paths {
         get: operations["capabilities_api_v1_capabilities_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cloud-connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Cloud Connections */
+        get: operations["list_cloud_connections_api_v1_cloud_connections_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cloud-connections/{provider}/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Connect Cloud Provider */
+        post: operations["connect_cloud_provider_api_v1_cloud_connections__provider__connect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cloud-connections/{provider}/disconnect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disconnect Cloud Provider */
+        post: operations["disconnect_cloud_provider_api_v1_cloud_connections__provider__disconnect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cloud-connections/{provider}/recheck": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Recheck Cloud Provider */
+        post: operations["recheck_cloud_provider_api_v1_cloud_connections__provider__recheck_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -41,6 +126,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/compute-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Compute Settings */
+        get: operations["get_compute_settings_api_v1_compute_settings_get"];
+        /** Update Compute Settings */
+        put: operations["update_compute_settings_api_v1_compute_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compute-settings/gcp/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check Gcp Compute */
+        post: operations["check_gcp_compute_api_v1_compute_settings_gcp_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compute-settings/gcp/prepare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Prepare Gcp Compute */
+        post: operations["prepare_gcp_compute_api_v1_compute_settings_gcp_prepare_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/decision/score": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Score */
+        post: operations["score_api_v1_decision_score_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/decision/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Status */
+        get: operations["status_api_v1_decision_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/health": {
         parameters: {
             query?: never;
@@ -58,6 +229,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/huggingface-connection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Huggingface Status */
+        get: operations["huggingface_status_api_v1_huggingface_connection_get"];
+        /** Save Huggingface Token */
+        put: operations["save_huggingface_token_api_v1_huggingface_connection_put"];
+        /** Save Huggingface Token */
+        post: operations["save_huggingface_token_api_v1_huggingface_connection_post"];
+        /** Delete Huggingface Token */
+        delete: operations["delete_huggingface_token_api_v1_huggingface_connection_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/jobs/{job_id}": {
         parameters: {
             query?: never;
@@ -67,6 +258,40 @@ export interface paths {
         };
         /** Get Job */
         get: operations["get_job_api_v1_jobs__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{job_id}/augmentation/clips/{index}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Augmentation Clip */
+        get: operations["augmentation_clip_api_v1_jobs__job_id__augmentation_clips__index__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{job_id}/augmentation/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Augmentation */
+        get: operations["download_augmentation_api_v1_jobs__job_id__augmentation_download_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -135,6 +360,40 @@ export interface paths {
         };
         /** Job Events */
         get: operations["job_events_api_v1_jobs__job_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{job_id}/training": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Training Telemetry */
+        get: operations["training_telemetry_api_v1_jobs__job_id__training_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{job_id}/training/reproducibility": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Training Reproducibility */
+        get: operations["training_reproducibility_api_v1_jobs__job_id__training_reproducibility_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -212,6 +471,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/augmentations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Augment Dataset */
+        post: operations["augment_dataset_api_v1_projects__project_id__augmentations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/intakes": {
         parameters: {
             query?: never;
@@ -263,10 +539,238 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teaching/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Command */
+        post: operations["command_api_v1_teaching_commands_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teaching/commands/{command_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Receipt */
+        get: operations["receipt_api_v1_teaching_commands__command_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teaching/frame": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Frame */
+        get: operations["frame_api_v1_teaching_frame_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teaching/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** State */
+        get: operations["state_api_v1_teaching_state_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teaching/voice/join": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Voice Join */
+        post: operations["voice_join_api_v1_teaching_voice_join_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AugmentationClip */
+        AugmentationClip: {
+            /** Camera Key */
+            camera_key: string;
+            /** Episode Index */
+            episode_index: number;
+            /** Index */
+            index: number;
+            /** Input Sha256 */
+            input_sha256: string;
+            /** Interaction Id */
+            interaction_id?: string | null;
+            /** Output Sha256 */
+            output_sha256: string;
+            /** Source End Seconds */
+            source_end_seconds: number;
+            /** Source Start Seconds */
+            source_start_seconds: number;
+        };
+        /** AugmentationOptions */
+        AugmentationOptions: {
+            /** Auth Message */
+            auth_message?: string | null;
+            /**
+             * Auth Mode
+             * @default unconfigured
+             * @enum {string}
+             */
+            auth_mode: "google_cloud" | "gemini_api_key" | "unconfigured";
+            /** Configured */
+            configured: boolean;
+            /** Google Cloud Project */
+            google_cloud_project?: string | null;
+            /**
+             * Max Clips
+             * @default 4
+             */
+            max_clips: number;
+            /**
+             * Max Duration Seconds
+             * @default 10
+             */
+            max_duration_seconds: number;
+            /**
+             * Model
+             * @default gemini-omni-1.1-flash
+             */
+            model: string;
+            /** Presets */
+            presets?: components["schemas"]["AugmentationPreset"][];
+            /** Setup Message */
+            setup_message?: string | null;
+        };
+        /** AugmentationPreset */
+        AugmentationPreset: {
+            /**
+             * Id
+             * @enum {string}
+             */
+            id: "lighting" | "texture" | "custom";
+            /** Label */
+            label: string;
+            /** Prompt */
+            prompt: string;
+        };
+        /** AugmentationRequest */
+        AugmentationRequest: {
+            /** Camera Key */
+            camera_key: string;
+            /**
+             * Duration Seconds
+             * @default 5
+             */
+            duration_seconds: number;
+            /** Episode Indices */
+            episode_indices: number[];
+            /**
+             * Operation
+             * @default dataset.augment
+             * @constant
+             */
+            operation: "dataset.augment";
+            /**
+             * Preset
+             * @default lighting
+             * @enum {string}
+             */
+            preset: "lighting" | "texture" | "custom";
+            /**
+             * Prompt
+             * @default
+             */
+            prompt: string;
+            /** Source Job Id */
+            source_job_id: string;
+            /**
+             * Start Seconds
+             * @default 0
+             */
+            start_seconds: number;
+        };
+        /** AugmentationResult */
+        AugmentationResult: {
+            /**
+             * Auth Mode
+             * @default gemini_api_key
+             * @enum {string}
+             */
+            auth_mode: "google_cloud" | "gemini_api_key";
+            /** Clips */
+            clips: components["schemas"]["AugmentationClip"][];
+            /** Google Cloud Project */
+            google_cloud_project?: string | null;
+            /** Metadata Sha256 */
+            metadata_sha256: string;
+            /**
+             * Model
+             * @default gemini-omni-1.1-flash
+             */
+            model: string;
+            /**
+             * Operation
+             * @default dataset.augment
+             * @constant
+             */
+            operation: "dataset.augment";
+            /** Prompt */
+            prompt: string;
+            /** Repo Id */
+            repo_id: string;
+            /**
+             * Review Required
+             * @default true
+             * @constant
+             */
+            review_required: true;
+            /** Revision */
+            revision: string;
+            /** Source Job Id */
+            source_job_id: string;
+            /** Warnings */
+            warnings: string[];
+        };
         /** CameraPreview */
         CameraPreview: {
             /** End Seconds */
@@ -295,7 +799,7 @@ export interface components {
              * Operation
              * @enum {string}
              */
-            operation: "dataset.inspect" | "dataset.inspect.local" | "policy.finetune" | "policy.distill" | "policy.quantize" | "policy.evaluate" | "policy.run";
+            operation: "dataset.inspect" | "dataset.inspect.local" | "dataset.augment" | "policy.finetune" | "policy.distill" | "policy.export" | "policy.quantize" | "policy.evaluate" | "policy.run";
             /**
              * Schema Version
              * @default 1
@@ -377,12 +881,108 @@ export interface components {
              */
             os: "linux" | "windows" | "macos";
         };
+        /** CloudConnection */
+        CloudConnection: {
+            /** Checked At */
+            checked_at?: string | null;
+            config?: components["schemas"]["GcpConnectionConfig"] | null;
+            identity?: components["schemas"]["CloudIdentity"] | null;
+            /** Message */
+            message?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Provider
+             * @constant
+             */
+            provider: "gcp";
+            /** Setup Commands */
+            setup_commands?: string[];
+            /**
+             * Status
+             * @default disconnected
+             * @enum {string}
+             */
+            status: "disconnected" | "unverified" | "connected" | "setup_required" | "error";
+        };
+        /** CloudConnectionsResponse */
+        CloudConnectionsResponse: {
+            /** Providers */
+            providers: components["schemas"]["CloudConnection"][];
+        };
+        /**
+         * CloudExecutionTarget
+         * @description Server-owned selection captured when a job is accepted; no credentials.
+         */
+        CloudExecutionTarget: {
+            /** Accelerator */
+            accelerator: string;
+            /** Disk Size Gb */
+            disk_size_gb: number;
+            /**
+             * Gpu Count
+             * @default 1
+             * @constant
+             */
+            gpu_count: 1;
+            /** Idle Minutes */
+            idle_minutes: number;
+            /** Instance Type */
+            instance_type?: string | null;
+            /** Project Id */
+            project_id: string;
+            /** Region */
+            region: string;
+            /** Sky Api Endpoint */
+            sky_api_endpoint: string;
+            /** Workspace */
+            workspace: string;
+        };
         /** CloudFeedIssue */
         CloudFeedIssue: {
             /** Message */
             message: string;
             /** Run Id */
             run_id?: string | null;
+        };
+        /** CloudGpuOption */
+        CloudGpuOption: {
+            /** Accelerator */
+            accelerator: string;
+            /** Available */
+            available: boolean;
+            /**
+             * Gpu Count
+             * @default 1
+             */
+            gpu_count: number;
+            /** Gpu Memory Mib */
+            gpu_memory_mib: number;
+            /** Id */
+            id: string;
+            /** Instance Type */
+            instance_type: string | null;
+            /** Label */
+            label: string;
+            /**
+             * Launchable
+             * @default false
+             */
+            launchable: boolean;
+            /**
+             * Needs Preparation
+             * @default false
+             */
+            needs_preparation: boolean;
+            /** Supported */
+            supported: boolean;
+            /** Unavailable Reason */
+            unavailable_reason: string | null;
+        };
+        /** CloudIdentity */
+        CloudIdentity: {
+            /** Account */
+            account?: string | null;
         };
         /** CloudRunLogs */
         CloudRunLogs: {
@@ -451,6 +1051,21 @@ export interface components {
              */
             stale_after_seconds: number;
         };
+        /** ComputeSettingsResponse */
+        ComputeSettingsResponse: {
+            gcp?: components["schemas"]["GcpComputeSettings"];
+            gcp_status: components["schemas"]["GcpComputeStatus"];
+            /** Gpu Options */
+            gpu_options: components["schemas"]["CloudGpuOption"][];
+            local?: components["schemas"]["LocalComputeSettings"];
+            /** Runtimes */
+            runtimes: components["schemas"]["PublicRuntime"][];
+        };
+        /** ComputeSettingsUpdate */
+        ComputeSettingsUpdate: {
+            gcp?: components["schemas"]["GcpComputeSettings"] | null;
+            local?: components["schemas"]["LocalComputeSettings"] | null;
+        };
         /** DatasetProfile */
         DatasetProfile: {
             /** Features */
@@ -474,7 +1089,7 @@ export interface components {
              * @default metadata_only
              * @enum {string}
              */
-            inspection_scope: "metadata_only" | "bounded_parquet_rows";
+            inspection_scope: "metadata_only" | "bounded_parquet_rows" | "complete_snapshot";
             /** License */
             license?: string | null;
             /** Metadata Sha256 */
@@ -492,6 +1107,7 @@ export interface components {
              * @constant
              */
             schema_version: 1;
+            snapshot?: components["schemas"]["DatasetSnapshot"] | null;
             /**
              * Source
              * @enum {string}
@@ -503,6 +1119,72 @@ export interface components {
             total_frames: number;
             /** Warnings */
             warnings: string[];
+        };
+        /**
+         * DatasetSnapshot
+         * @description Path-free identity; only the application can resolve the snapshot store.
+         */
+        DatasetSnapshot: {
+            /** File Count */
+            file_count: number;
+            /**
+             * Format
+             * @default lerobot_v3
+             * @constant
+             */
+            format: "lerobot_v3";
+            /** Id */
+            id: string;
+            /** Lineage Validated */
+            lineage_validated: boolean;
+            /** Manifest Sha256 */
+            manifest_sha256: string;
+            /**
+             * Schema Version
+             * @default 1
+             * @constant
+             */
+            schema_version: 1;
+            /** Total Bytes */
+            total_bytes: number;
+            /** Total Episodes */
+            total_episodes: number;
+            /** Total Frames */
+            total_frames: number;
+            /** Warnings */
+            warnings: string[];
+        };
+        /** DecisionStatus */
+        DecisionStatus: {
+            /**
+             * Advisory Only
+             * @default true
+             * @constant
+             */
+            advisory_only: true;
+            /** Available */
+            available: boolean;
+            /** Busy */
+            busy: boolean;
+            /** Configured */
+            configured: boolean;
+            /**
+             * License
+             * @default CC-BY-NC-SA-4.0
+             */
+            license: string;
+            /** Message */
+            message: string;
+            /**
+             * Model
+             * @default muose/Muose-50M-Decision
+             */
+            model: string;
+            /**
+             * Revision
+             * @default 5afb8eeff127621fea2d66fc63f56798ada12eda
+             */
+            revision: string;
         };
         /** EpisodePage */
         EpisodePage: {
@@ -615,10 +1297,97 @@ export interface components {
             /** Timestamp */
             timestamp: number;
         };
+        /** GcpComputeSettings */
+        GcpComputeSettings: {
+            /**
+             * Default Gpu
+             * @default A100
+             */
+            default_gpu: string;
+            /**
+             * Disk Size Gb
+             * @default 200
+             */
+            disk_size_gb: number;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Idle Minutes
+             * @default 10
+             */
+            idle_minutes: number;
+        };
+        /** GcpComputeStatus */
+        GcpComputeStatus: {
+            /** Checked At */
+            checked_at?: string | null;
+            /**
+             * Configured
+             * @default false
+             */
+            configured: boolean;
+            /** Message */
+            message: string;
+            /** Project Id */
+            project_id?: string | null;
+            /** Region */
+            region?: string | null;
+            /** Setup Commands */
+            setup_commands?: string[];
+            /** Sky Api Endpoint */
+            sky_api_endpoint?: string | null;
+            /**
+             * Skypilot Installed
+             * @default false
+             */
+            skypilot_installed: boolean;
+            /**
+             * Status
+             * @default unchecked
+             * @enum {string}
+             */
+            status: "unchecked" | "ready" | "setup_required" | "error";
+            /** Workspace */
+            workspace?: string | null;
+        };
+        /** GcpConnectionConfig */
+        GcpConnectionConfig: {
+            /** Project Id */
+            project_id: string;
+            /** Region */
+            region: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HuggingFaceStatus */
+        HuggingFaceStatus: {
+            /** Checked At */
+            checked_at?: string | null;
+            /**
+             * Configured
+             * @default false
+             */
+            configured: boolean;
+            /** Message */
+            message?: string | null;
+            /** Token Hint */
+            token_hint?: string | null;
+            /** Username */
+            username?: string | null;
+        };
+        /** HuggingFaceTokenInput */
+        HuggingFaceTokenInput: {
+            /**
+             * Token
+             * Format: password
+             */
+            token: string;
         };
         /** IntakeRequest */
         IntakeRequest: {
@@ -628,9 +1397,15 @@ export interface components {
             repo_id?: string | null;
             /**
              * Revision
+             * @description Branch, tag or commit. Omitted or blank uses the latest main revision.
              * @default main
              */
             revision: string;
+            /**
+             * Snapshot For Training
+             * @default false
+             */
+            snapshot_for_training: boolean;
             /**
              * Source
              * @default huggingface
@@ -640,6 +1415,7 @@ export interface components {
         };
         /** Job */
         Job: {
+            compute_target?: components["schemas"]["CloudExecutionTarget"] | null;
             /**
              * Created At
              * Format: date-time
@@ -657,9 +1433,9 @@ export interface components {
             /** Project Id */
             project_id: string;
             /** Request */
-            request: components["schemas"]["IntakeRequest"] | components["schemas"]["PolicyRequest"];
+            request: components["schemas"]["IntakeRequest"] | components["schemas"]["PolicyRequest"] | components["schemas"]["AugmentationRequest"];
             /** Result */
-            result?: components["schemas"]["DatasetProfile"] | components["schemas"]["LifecycleResult"] | null;
+            result?: components["schemas"]["DatasetProfile"] | components["schemas"]["LifecycleResult"] | components["schemas"]["AugmentationResult"] | null;
             /** Stage */
             stage?: string | null;
             /**
@@ -676,6 +1452,10 @@ export interface components {
         };
         /** JobEvent */
         JobEvent: {
+            /** Data */
+            data?: {
+                [key: string]: unknown;
+            };
             /** Message */
             message: string;
             /** Sequence */
@@ -725,6 +1505,19 @@ export interface components {
              * @default 1
              */
             min_success_rate: number;
+        };
+        /** LocalComputeSettings */
+        LocalComputeSettings: {
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * Label
+             * @default Local machine
+             */
+            label: string;
         };
         /** LocalDatasetPreview */
         LocalDatasetPreview: {
@@ -855,7 +1648,7 @@ export interface components {
              * Format
              * @enum {string}
              */
-            format: "gguf" | "training_checkpoint" | "native_checkpoint" | "deployment_package";
+            format: "gguf" | "training_checkpoint" | "native_checkpoint" | "deployment_package" | "inference_export";
             /** Id */
             id: string;
             /** Job Id */
@@ -940,6 +1733,246 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** PublicRuntime */
+        PublicRuntime: {
+            /** Accelerator */
+            accelerator?: string | null;
+            /**
+             * Act Export
+             * @default false
+             */
+            act_export: boolean;
+            /**
+             * Device
+             * @enum {string}
+             */
+            device: "cpu" | "cuda";
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Execution
+             * @default native
+             * @enum {string}
+             */
+            execution: "native" | "skypilot";
+            /** Gpu Memory Mib */
+            gpu_memory_mib: number | null;
+            /** Gpu Name */
+            gpu_name: string | null;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Launchable
+             * @default true
+             */
+            launchable: boolean;
+            /**
+             * Needs Preparation
+             * @default false
+             */
+            needs_preparation: boolean;
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "local" | "gcp";
+            /** Provider Label */
+            provider_label: string;
+            /** Region */
+            region: string | null;
+            /** Simulation */
+            simulation: boolean;
+            /** Training */
+            training: boolean;
+            /** Training Gpu Count */
+            training_gpu_count: number | null;
+            /** Training Model Ids */
+            training_model_ids: string[];
+            /** Unavailable Reason */
+            unavailable_reason?: string | null;
+        };
+        /** Score */
+        Score: {
+            /** Id */
+            id: string;
+            /** Logit */
+            logit: number;
+            /** Relative Weight */
+            relative_weight: number;
+            /** Tokens */
+            tokens: number;
+        };
+        /** ScoreResult */
+        ScoreResult: {
+            /**
+             * Advisory Only
+             * @constant
+             */
+            advisory_only: true;
+            /**
+             * Calibrated
+             * @constant
+             */
+            calibrated: false;
+            /** Caveats */
+            caveats: string[];
+            /**
+             * Device
+             * @constant
+             */
+            device: "cpu";
+            /**
+             * License
+             * @constant
+             */
+            license: "CC-BY-NC-SA-4.0";
+            /**
+             * Model
+             * @constant
+             */
+            model: "muose/Muose-50M-Decision";
+            /** Model Sha256 */
+            model_sha256: string;
+            /**
+             * Prompt Template
+             * @constant
+             */
+            prompt_template: "firebird-experimental-sections-v1";
+            /** Prompt Template Sha256 */
+            prompt_template_sha256: string;
+            /** Request Sha256 */
+            request_sha256: string;
+            /**
+             * Revision
+             * @constant
+             */
+            revision: "5afb8eeff127621fea2d66fc63f56798ada12eda";
+            /** Runtime Versions */
+            runtime_versions: {
+                [key: string]: string;
+            };
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: 1;
+            /** Scores */
+            scores: components["schemas"]["Score"][];
+            /** Selected Id */
+            selected_id: string;
+            /**
+             * Threads
+             * @constant
+             */
+            threads: 2;
+            timing_ms: components["schemas"]["Timing"];
+        };
+        /** TeachingCommand */
+        TeachingCommand: {
+            /** Arguments */
+            arguments?: {
+                [key: string]: unknown;
+            };
+            /** Command Id */
+            command_id: string;
+            /** Episode Id */
+            episode_id?: string | null;
+            /** Expected Revision */
+            expected_revision: number;
+            /**
+             * Operation
+             * @enum {string}
+             */
+            operation: "task" | "start" | "pause" | "reset" | "correct" | "mark_failure" | "finish";
+            /** Session Id */
+            session_id: string;
+        };
+        /** Timing */
+        Timing: {
+            /** Load */
+            load: number;
+            /** Score */
+            score: number;
+        };
+        /** TrainingCheckpoint */
+        TrainingCheckpoint: {
+            /** Artifact Id */
+            artifact_id?: string | null;
+            /** Name */
+            name: string;
+            /** Remote Uri */
+            remote_uri?: string | null;
+            /** Step */
+            step: number;
+            /** Storage */
+            storage?: string | null;
+            /** Timestamp */
+            timestamp?: string | null;
+        };
+        /** TrainingMetric */
+        TrainingMetric: {
+            /** Elapsed Seconds */
+            elapsed_seconds?: number | null;
+            /** Grad Norm */
+            grad_norm?: number | null;
+            /** Learning Rate */
+            learning_rate?: number | null;
+            /** Step */
+            step: number;
+            /** Timestamp */
+            timestamp?: string | null;
+            /** Train Loss */
+            train_loss?: number | null;
+            /** Validation Action Mse */
+            validation_action_mse?: number | null;
+            /** Validation Loss */
+            validation_loss?: number | null;
+        };
+        /** TrainingTelemetry */
+        TrainingTelemetry: {
+            /** Checkpoints */
+            checkpoints?: components["schemas"]["TrainingCheckpoint"][];
+            /** Completed Steps */
+            completed_steps?: number | null;
+            /** Current Action */
+            current_action: string;
+            /** Elapsed Seconds */
+            elapsed_seconds?: number | null;
+            /** Eta Seconds */
+            eta_seconds?: number | null;
+            /** Events */
+            events?: components["schemas"]["JobEvent"][];
+            /** Job Id */
+            job_id: string;
+            latest?: components["schemas"]["TrainingMetric"] | null;
+            /** Logs */
+            logs?: string[];
+            /** Metrics */
+            metrics?: components["schemas"]["TrainingMetric"][];
+            /**
+             * Metrics Truncated
+             * @default false
+             */
+            metrics_truncated: boolean;
+            /** Percent */
+            percent?: number | null;
+            /** Phase */
+            phase: string;
+            /** Reproducibility */
+            reproducibility?: {
+                [key: string]: unknown;
+            };
+            /** Status */
+            status: string;
+            /** Total Steps */
+            total_steps?: number | null;
+            /** Updated At */
+            updated_at: string;
+            /** Wall Seconds */
+            wall_seconds?: number | null;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -953,6 +1986,11 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /** VoiceJoin */
+        VoiceJoin: {
+            /** Session Id */
+            session_id: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -962,6 +2000,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    augmentation_options_api_v1_augmentation_options_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AugmentationOptions"];
+                };
+            };
+        };
+    };
     capabilities_api_v1_capabilities_get: {
         parameters: {
             query?: never;
@@ -982,6 +2040,123 @@ export interface operations {
             };
         };
     };
+    list_cloud_connections_api_v1_cloud_connections_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudConnectionsResponse"];
+                };
+            };
+        };
+    };
+    connect_cloud_provider_api_v1_cloud_connections__provider__connect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: "gcp";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GcpConnectionConfig"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudConnection"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    disconnect_cloud_provider_api_v1_cloud_connections__provider__disconnect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: "gcp";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudConnection"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recheck_cloud_provider_api_v1_cloud_connections__provider__recheck_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: "gcp";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudConnection"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     cloud_runs_api_v1_cloud_runs_get: {
         parameters: {
             query?: never;
@@ -998,6 +2173,160 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CloudRunsFeed"];
+                };
+            };
+        };
+    };
+    get_compute_settings_api_v1_compute_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComputeSettingsResponse"];
+                };
+            };
+        };
+    };
+    update_compute_settings_api_v1_compute_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComputeSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComputeSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_gcp_compute_api_v1_compute_settings_gcp_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComputeSettingsResponse"];
+                };
+            };
+        };
+    };
+    prepare_gcp_compute_api_v1_compute_settings_gcp_prepare_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComputeSettingsResponse"];
+                };
+            };
+        };
+    };
+    score_api_v1_decision_score_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Criteria */
+                    criteria: {
+                        /** Id */
+                        id: string;
+                        /** Text */
+                        text: string;
+                    }[];
+                    /** Instructions */
+                    instructions: string;
+                    /**
+                     * Schema Version
+                     * @constant
+                     */
+                    schema_version: 1;
+                    /** State */
+                    state: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScoreResult"];
+                };
+            };
+        };
+    };
+    status_api_v1_decision_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionStatus"];
                 };
             };
         };
@@ -1024,6 +2353,112 @@ export interface operations {
             };
         };
     };
+    huggingface_status_api_v1_huggingface_connection_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HuggingFaceStatus"];
+                };
+            };
+        };
+    };
+    save_huggingface_token_api_v1_huggingface_connection_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HuggingFaceTokenInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HuggingFaceStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_huggingface_token_api_v1_huggingface_connection_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HuggingFaceTokenInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HuggingFaceStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_huggingface_token_api_v1_huggingface_connection_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HuggingFaceStatus"];
+                };
+            };
+        };
+    };
     get_job_api_v1_jobs__job_id__get: {
         parameters: {
             query?: never;
@@ -1042,6 +2477,71 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Job"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    augmentation_clip_api_v1_jobs__job_id__augmentation_clips__index__get: {
+        parameters: {
+            query?: {
+                original?: boolean;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+                index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_augmentation_api_v1_jobs__job_id__augmentation_download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -1172,6 +2672,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobEvent"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    training_telemetry_api_v1_jobs__job_id__training_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrainingTelemetry"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    training_reproducibility_api_v1_jobs__job_id__training_reproducibility_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -1323,6 +2885,41 @@ export interface operations {
             };
         };
     };
+    augment_dataset_api_v1_projects__project_id__augmentations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AugmentationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     inspect_dataset_api_v1_projects__project_id__intakes_post: {
         parameters: {
             query?: never;
@@ -1411,6 +3008,143 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Job"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    command_api_v1_teaching_commands_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeachingCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    receipt_api_v1_teaching_commands__command_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                command_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    frame_api_v1_teaching_frame_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    state_api_v1_teaching_state_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    voice_join_api_v1_teaching_voice_join_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoiceJoin"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

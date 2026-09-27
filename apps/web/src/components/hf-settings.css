@@ -1,0 +1,21 @@
+.hf-settings { border: 1px solid var(--line); border-radius: 9px; padding: 20px; margin-top: 24px; }
+.hf-settings-heading { display: flex; align-items: center; gap: 12px; }
+.hf-settings-heading > div { flex: 1; }
+.hf-settings-heading h2 { font-size: 15px; margin: 0; }
+.hf-settings-heading p, .hf-settings-note { font-size: 11px; color: var(--muted); line-height: 1.6; margin-top: 6px; }
+.hf-settings-note a { color: var(--ink); white-space: nowrap; text-underline-offset: 3px; }
+.hf-settings-note a svg { vertical-align: -1px; }
+.hf-settings-badge { color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 4px 8px; font-size: 10px; }
+.hf-settings-account { display: flex; gap: 12px; align-items: center; margin: 15px 0; font-size: 12px; }
+.hf-settings-account span { color: var(--muted); letter-spacing: 1px; }
+.hf-settings-fields { display: flex; gap: 14px; align-items: flex-end; margin: 18px 0 12px; }
+.hf-settings-fields label { display: grid; gap: 8px; flex: 1; max-width: 420px; min-width: 0; color: var(--muted); font-size: 11px; }
+.hf-settings-fields input { background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); border-radius: 6px; padding: 9px 11px; width: 100%; font-size: 12px; }
+.hf-settings-error { color: var(--error, #b42318); font-size: 12px; line-height: 1.6; }
+.hf-settings-feedback { color: var(--success); font-size: 12px; }
+@media (max-width: 650px) {
+  .hf-settings { padding: 15px; }
+  .hf-settings-fields { flex-direction: column; align-items: stretch; }
+  .hf-settings-fields label { max-width: none; }
+  .hf-settings-heading { flex-wrap: wrap; }
+}

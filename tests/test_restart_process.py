@@ -295,9 +295,11 @@ def test_sigkill_restart_fences_real_queued_running_and_late_results():
         assert all(child["ppid"] == first.pid for child in children.values())
         harness.event("workers_blocked", server_pid=first.pid, workers=children)
 
-        queued_id = harness.submit(project_id, "ready")
+        harness.fixture("queued")
+        queued_id = harness.submit(project_id, "queued")
         queued = harness.wait_job(queued_id, "queued")
-        cancelled_id = harness.submit(project_id, "ready")
+        harness.fixture("cancelled")
+        cancelled_id = harness.submit(project_id, "cancelled")
         cancelled = harness.api("POST", f"/jobs/{cancelled_id}/cancel")
         assert cancelled["status"] == "cancelled"
         terminal = {success_id: succeeded, failed_id: failed, cancelled_id: cancelled}

@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import json
 import re
@@ -81,24 +82,38 @@ async def bounded_get(client: httpx.AsyncClient, url: str) -> bytes:
         return bytes(content)
 
 
-async def inspect_hub(request: IntakeRequest) -> DatasetProfile:
+async def hub_identity(client: httpx.AsyncClient, request: IntakeRequest) -> tuple[str, str | None]:
+    """Resolve a mutable ref before reading or reusing its immutable snapshot."""
     repo = quote(request.repo_id or "", safe="/")
     revision = quote(request.revision, safe="")
+    response = json.loads(
+        await bounded_get(client, f"https://huggingface.co/api/datasets/{repo}/revision/{revision}")
+    )
+    sha = response.get("sha", "") if isinstance(response, dict) else ""
+    if not isinstance(sha, str) or not re.fullmatch(r"[a-f0-9]{40}", sha):
+        raise ValueError("Hub did not provide an immutable dataset revision")
+    card = response.get("cardData") or {}
+    license_name = card.get("license") if isinstance(card, dict) else None
+    return sha, license_name if isinstance(license_name, str) else None
+
+
+async def resolve_hub_revision(request: IntakeRequest) -> str:
+    if re.fullmatch(r"[a-f0-9]{40}", request.revision):
+        return request.revision
+    async with asyncio.timeout(20):
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True, max_redirects=5) as client:
+            sha, _ = await hub_identity(client, request)
+            return sha
+
+
+async def inspect_hub(request: IntakeRequest) -> DatasetProfile:
+    repo = quote(request.repo_id or "", safe="/")
     async with httpx.AsyncClient(timeout=20, follow_redirects=True, max_redirects=5) as client:
-        response = json.loads(
-            await bounded_get(
-                client, f"https://huggingface.co/api/datasets/{repo}/revision/{revision}"
-            )
-        )
-        sha = response.get("sha", "")
-        if not re.fullmatch(r"[a-f0-9]{40}", sha):
-            raise ValueError("Hub did not provide an immutable dataset revision")
+        sha, license_name = await hub_identity(client, request)
         raw = await bounded_get(
             client, f"https://huggingface.co/datasets/{repo}/resolve/{sha}/meta/info.json"
         )
-        card = response.get("cardData") or {}
-        license_name = card.get("license") if isinstance(card, dict) else None
-        return profile(raw, request, sha, license_name if isinstance(license_name, str) else None)
+        return profile(raw, request, sha, license_name)
 
 
 def inspect_local(request: IntakeRequest, allowed_root: str | None) -> DatasetProfile:

@@ -1,5 +1,5 @@
 diff --git a/src/models/smolvla.cpp b/src/models/smolvla.cpp
-index 62c062c..78a9908 100644
+index 62c062c..0ca6e33 100644
 --- a/src/models/smolvla.cpp
 +++ b/src/models/smolvla.cpp
 @@ -183,6 +183,48 @@ struct gguf_source {
@@ -51,7 +51,15 @@ index 62c062c..78a9908 100644
      static bool shape_matches(const ggml_tensor * t, const std::vector<int64_t> & pt_shape) {
          const int nd_used = std::max(1, (int) pt_shape.size());
          if (nd_used > GGML_MAX_DIMS)
-@@ -949,7 +991,7 @@ SmolVLAModelArch* smolvla_load_impl(ggml_type weight_dtype,
+@@ -243,6 +285,7 @@ struct gguf_source {
+         const int64_t id    = gguf_find_tensor(gctx, name.c_str());
+         const size_t  bytes = gguf_get_tensor_size(gctx, id);
+         const bool ok_dtype = (std::strcmp(expected_dtype, "BF16") == 0 && t->type == GGML_TYPE_BF16)
++                            || (std::strcmp(expected_dtype, "F16") == 0 && t->type == GGML_TYPE_F16)
+                             || (std::strcmp(expected_dtype, "F32") == 0 && t->type == GGML_TYPE_F32);
+         if (bytes != expected_bytes || !ok_dtype) {
+             std::fprintf(stderr, "vla: gguf bad raw read for %s\n", name.c_str());
+@@ -949,7 +992,7 @@ SmolVLAModelArch* smolvla_load_impl(ggml_type weight_dtype,
      gguf_source  gst;
  
      if (use_gguf) {
@@ -60,7 +68,7 @@ index 62c062c..78a9908 100644
              delete m;
              return nullptr;
          }
-@@ -1088,6 +1130,16 @@ SmolVLAModelArch* smolvla_load_impl(ggml_type weight_dtype,
+@@ -1088,14 +1131,39 @@ SmolVLAModelArch* smolvla_load_impl(ggml_type weight_dtype,
      auto * ctx = m->ctx_weights;
      const auto & cfg = m->cfg;
      const ggml_type wdt = m->weight_dtype;
@@ -76,8 +84,35 @@ index 62c062c..78a9908 100644
 +    };
  
      struct PendingF32  { std::string name; ggml_tensor * t; std::vector<int64_t> shape; };
-     struct PendingBF16 { std::string name; ggml_tensor * t; };
-@@ -1126,12 +1178,12 @@ SmolVLAModelArch* smolvla_load_impl(ggml_type weight_dtype,
+-    struct PendingBF16 { std::string name; ggml_tensor * t; };
++    struct PendingRaw { std::string name; ggml_tensor * t; };
+     std::vector<PendingF32>  pending_f32;
+-    std::vector<PendingBF16> pending_bf16;
++    std::vector<PendingRaw> pending_raw;
+ 
+-    m->E_lang = ggml_new_tensor_2d(ctx, GGML_TYPE_BF16, cfg.hidden,  49280);
+-    pending_bf16.push_back({
++    // Exported policies materialize their frozen embedding in F32; original
++    // Hub policies often use BF16. Keep its exact floating storage type so
++    // the native row lookup never rejects or silently rounds trained values.
++    ggml_type embedding_type = GGML_TYPE_BF16;
++    if (use_gguf) {
++        const ggml_tensor * embedding = ggml_get_tensor(gst.meta_ctx, "token_embd.weight");
++        if (!embedding || (embedding->type != GGML_TYPE_F32 &&
++                           embedding->type != GGML_TYPE_F16 &&
++                           embedding->type != GGML_TYPE_BF16)) {
++            std::fprintf(stderr, "vla: token embedding must be a floating tensor\n");
++            delete m;
++            return nullptr;
++        }
++        embedding_type = embedding->type;
++    }
++    m->E_lang = ggml_new_tensor_2d(ctx, embedding_type, cfg.hidden,  49280);
++    pending_raw.push_back({
+         "model.vlm_with_expert.vlm.model.text_model.embed_tokens.weight", m->E_lang});
+ 
+     m->Wstate = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, cfg.max_state_dim, cfg.hidden);
+@@ -1126,12 +1194,12 @@ SmolVLAModelArch* smolvla_load_impl(ggml_type weight_dtype,
              const std::string pf = pb;
              w.ln1w = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, H); w.ln1b = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, H);
              w.ln2w = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, H); w.ln2b = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, H);
@@ -96,7 +131,7 @@ index 62c062c..78a9908 100644
              pending_f32.push_back({pf + "layer_norm1.weight", w.ln1w, {H}}); pending_f32.push_back({pf + "layer_norm1.bias", w.ln1b, {H}});
              pending_f32.push_back({pf + "layer_norm2.weight", w.ln2w, {H}}); pending_f32.push_back({pf + "layer_norm2.bias", w.ln2b, {H}});
              pending_f32.push_back({pf + "self_attn.q_proj.weight", w.Wq, {H, H}}); pending_f32.push_back({pf + "self_attn.q_proj.bias", w.bq, {H}});
-@@ -1149,19 +1201,17 @@ SmolVLAModelArch* smolvla_load_impl(ggml_type weight_dtype,
+@@ -1149,19 +1217,17 @@ SmolVLAModelArch* smolvla_load_impl(ggml_type weight_dtype,
      m->vlm_layers.resize(cfg.n_layers);
      for (int i=0; i<cfg.n_layers; ++i) {
          VlmLayerW & w = m->vlm_layers[i];
@@ -124,7 +159,7 @@ index 62c062c..78a9908 100644
          pending_f32.push_back({pf + "input_layernorm.weight",          w.Wln_in,   {cfg.hidden}});
          pending_f32.push_back({pf + "self_attn.q_proj.weight",         w.Wq,       {cfg.q_full_dim,  cfg.hidden}});
          pending_f32.push_back({pf + "self_attn.k_proj.weight",         w.Wk,       {cfg.kv_full_dim, cfg.hidden}});
-@@ -1241,6 +1291,8 @@ SmolVLAModelArch* smolvla_load_impl(ggml_type weight_dtype,
+@@ -1241,6 +1307,8 @@ SmolVLAModelArch* smolvla_load_impl(ggml_type weight_dtype,
                                                     cfg.expert_h, cfg.n_suffix);
      }
  
@@ -133,7 +168,7 @@ index 62c062c..78a9908 100644
      m->weight_buf = ggml_backend_alloc_ctx_tensors(m->ctx_weights, m->backend);
      if (!m->weight_buf) {
          std::fprintf(stderr, "vla: ggml_backend_alloc_ctx_tensors (weights) failed\n");
-@@ -1253,6 +1305,8 @@ SmolVLAModelArch* smolvla_load_impl(ggml_type weight_dtype,
+@@ -1253,6 +1321,8 @@ SmolVLAModelArch* smolvla_load_impl(ggml_type weight_dtype,
  
      auto stream_f32 = [&](const std::string & hf_name, ggml_tensor * t,
                            const std::vector<int64_t> & shape) -> bool {
@@ -142,6 +177,33 @@ index 62c062c..78a9908 100644
          std::vector<float> hbuf(ggml_nelements(t));
          const bool ok = use_gguf
              ? gst.read_to_f32(hf_to_gguf(hf_name), hbuf.data(), shape)
+@@ -1264,10 +1334,12 @@ SmolVLAModelArch* smolvla_load_impl(ggml_type weight_dtype,
+         backend_set_from_f32(t, hbuf.data(), ggml_nelements(t));
+         return true;
+     };
+-    auto stream_bf16 = [&](const std::string & hf_name, ggml_tensor * t) -> bool {
+-        std::vector<ggml_bf16_t> hbuf(ggml_nelements(t));
++    auto stream_raw = [&](const std::string & hf_name, ggml_tensor * t) -> bool {
++        std::vector<uint8_t> hbuf(ggml_nbytes(t));
++        const char * dtype = t->type == GGML_TYPE_BF16 ? "BF16"
++                           : t->type == GGML_TYPE_F16 ? "F16" : "F32";
+         const bool ok = use_gguf
+-            ? gst.read_raw(hf_to_gguf(hf_name), hbuf.data(), ggml_nbytes(t), "BF16")
++            ? gst.read_raw(hf_to_gguf(hf_name), hbuf.data(), ggml_nbytes(t), dtype)
+             : st .read_raw(hf_name,             hbuf.data(), ggml_nbytes(t), "BF16");
+         if (!ok) {
+             std::fprintf(stderr, "vla: read_raw failed for %s\n", hf_name.c_str());
+@@ -1283,8 +1355,8 @@ SmolVLAModelArch* smolvla_load_impl(ggml_type weight_dtype,
+             return nullptr;
+         }
+     }
+-    for (auto & p : pending_bf16) {
+-        if (!stream_bf16(p.name, p.t))         {
++    for (auto & p : pending_raw) {
++        if (!stream_raw(p.name, p.t))         {
+             delete m;
+             return nullptr;
+         }
 diff --git a/src/serving/vla-bench.cpp b/src/serving/vla-bench.cpp
 index d3aeb88..5767982 100644
 --- a/src/serving/vla-bench.cpp

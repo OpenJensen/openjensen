@@ -2,17 +2,21 @@
 
 import json
 import os
+import stat
+import sys
+from importlib.metadata import version
 from pathlib import Path
 from typing import Annotated
 
 import httpx
 import typer
-import uvicorn
 
 app = typer.Typer(no_args_is_help=True, help="Local VLA projects and robotics dataset intake.")
 projects = typer.Typer(no_args_is_help=True)
 jobs = typer.Typer(no_args_is_help=True)
 policy = typer.Typer(no_args_is_help=True)
+augmentation = typer.Typer(no_args_is_help=True)
+app.add_typer(augmentation, name="augmentation")
 app.add_typer(policy, name="policy")
 app.add_typer(projects, name="projects")
 app.add_typer(jobs, name="jobs")
@@ -26,6 +30,11 @@ def call(method: str, path: str, payload: dict | None = None) -> None:
             typer.echo(f"API error ({response.status_code}): {response.text}", err=True)
             raise typer.Exit(1)
         typer.echo(json.dumps(response.json(), indent=2, ensure_ascii=False))
+    except ValueError as exc:
+        typer.echo(
+            "Application returned invalid JSON; check the API URL and server logs.", err=True
+        )
+        raise typer.Exit(1) from exc
     except httpx.HTTPError as exc:
         typer.echo(f"Cannot reach the application. Start 'firebird serve'. {exc}", err=True)
         raise typer.Exit(1) from exc
@@ -34,6 +43,8 @@ def call(method: str, path: str, payload: dict | None = None) -> None:
 @app.command()
 def serve(port: Annotated[int, typer.Option(min=1, max=65535)] = 8000) -> None:
     """Start one loopback application owner. Remote hosting is not enabled yet."""
+    import uvicorn
+
     uvicorn.run("vla_platform.api:create_app", factory=True, host="127.0.0.1", port=port, workers=1)
 
 
@@ -58,16 +69,20 @@ def inspect(
     repo_id: Annotated[str | None, typer.Option()] = None,
     revision: str = "main",
     path: Annotated[str | None, typer.Option()] = None,
+    snapshot_for_training: Annotated[bool, typer.Option()] = False,
 ) -> None:
-    """Inspect public HF or allowed local LeRobot metadata, without downloading media."""
+    """Inspect LeRobot metadata; optionally validate and freeze local training data/media."""
     if bool(repo_id) == bool(path):
         raise typer.BadParameter("Specify exactly one of --repo-id or --path")
+    if snapshot_for_training and not path:
+        raise typer.BadParameter("--snapshot-for-training requires --path")
     payload = (
         {"source": "huggingface", "repo_id": repo_id, "revision": revision}
         if repo_id
         else {
             "source": "local",
             "path": path,
+            "snapshot_for_training": snapshot_for_training,
         }
     )
     call("POST", f"/projects/{project_id}/intakes", payload)
@@ -94,10 +109,22 @@ def policy_options() -> None:
     call("GET", "/policy-options")
 
 
+@augmentation.command("options")
+def augmentation_options() -> None:
+    """Show Gemini Omni setup and appearance presets."""
+    call("GET", "/augmentation-options")
+
+
+@augmentation.command("submit")
+def submit_augmentation(project_id: str, recipe: Path) -> None:
+    """Augment selected dataset clips through the shared application API."""
+    call("POST", f"/projects/{project_id}/augmentations", read_recipe(recipe))
+
+
 @policy.command("submit")
 def submit_policy(project_id: str, recipe: Path) -> None:
     """Submit a policy operation/workflow through the shared application API."""
-    call("POST", f"/projects/{project_id}/policy-jobs", json.loads(recipe.read_text()))
+    call("POST", f"/projects/{project_id}/policy-jobs", read_recipe(recipe))
 
 
 @policy.command("artifacts")
@@ -108,6 +135,66 @@ def policy_artifacts(project_id: str) -> None:
 @jobs.command("events")
 def job_events(job_id: str) -> None:
     call("GET", f"/jobs/{job_id}/events")
+
+
+def read_recipe(path: Path) -> dict:
+    try:
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
+        with os.fdopen(descriptor, "rb") as source:
+            metadata = os.fstat(source.fileno())
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > 1024 * 1024:
+                raise ValueError("Recipe must be a regular JSON file of at most 1 MiB")
+            raw = source.read(1024 * 1024 + 1)
+            if len(raw) > 1024 * 1024:
+                raise ValueError("Recipe exceeds 1 MiB")
+        value = json.loads(raw)
+        if not isinstance(value, dict):
+            raise ValueError("Recipe must contain a JSON object")
+        return value
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(f"Cannot read recipe: {exc}") from exc
+
+
+def show_version(value: bool):
+    if value:
+        typer.echo(version("vla-platform"))
+        raise typer.Exit()
+
+
+@app.callback()
+def main(
+    version_flag: Annotated[
+        bool, typer.Option("--version", callback=show_version, is_eager=True)
+    ] = False,
+):
+    """One application API shared by web, terminal commands and the optional TUI."""
+
+
+@app.command()
+def tui(
+    api_url: Annotated[
+        str | None, typer.Option(help="Application URL; defaults to FIREBIRD_API_URL.")
+    ] = None,
+):
+    """Open the keyboard workbench. Install with: uv sync --all-packages --extra tui."""
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        typer.echo(
+            "The TUI needs an interactive terminal. Use projects/jobs/inspect for JSON output.",
+            err=True,
+        )
+        raise typer.Exit(2)
+    try:
+        from vla_platform.tui import FirebirdApp
+    except ModuleNotFoundError as exc:
+        if exc.name != "textual":
+            raise
+        typer.echo("Install the optional client: uv sync --all-packages --extra tui", err=True)
+        raise typer.Exit(2) from exc
+    try:
+        terminal = FirebirdApp(api_url or os.getenv("FIREBIRD_API_URL", "http://127.0.0.1:8000"))
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    terminal.run()
 
 
 if __name__ == "__main__":

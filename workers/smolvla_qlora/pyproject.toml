@@ -35,7 +35,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-markers = ["cuda: requires the training extra and a BF16 CUDA GPU"]
+markers = ["cuda: requires the training extra and a compatible CUDA GPU"]
 
 [tool.ruff]
 line-length = 100

@@ -19,14 +19,49 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
+from urllib.parse import unquote_plus
 
 LOG_BYTES = 48 * 1024
 TASKS = ("isaac", "vla")
 RUN_ID = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}\Z")
 ANSI = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
 SECRET = re.compile(
-    r"(?i)(\b(?:access_token|refresh_token|client_secret|api_key|password)\b[\"']?\s*[:=]\s*[\"']?)[^\s\"',}]+"
+    r"(\b(?:access_token|refresh_token|client_secret|api[-_]key|password|token|secret|"
+    r"hf_token|huggingface_token|hugging_face_hub_token|cloudsdk_auth_access_token|"
+    r"authorization|proxy[-_]authorization|cookie|set[-_]cookie|x[-_]api[-_]key)"
+    r"\b[\"']?\s*[:=]\s*)"
+    r"(?:\"(?:\\.|[^\"\\\r\n])*(?:\"|$)|'(?:\\.|[^'\\\r\n])*(?:'|$)|[^\s\"',}&#]+)",
+    re.I | re.M,
 )
+HEADERS = re.compile(
+    r"((?<!\S)(?:authorization|proxy[-_]authorization|cookie|set[-_]cookie|"
+    r"x[-_]api[-_]key)\s*[:=]\s*)[^\r\n]*",
+    re.I,
+)
+QUERY_KEYS = {
+    "access_token",
+    "refresh_token",
+    "client_secret",
+    "api_key",
+    "apikey",
+    "password",
+    "token",
+    "secret",
+    "hf_token",
+    "signature",
+    "sig",
+    "x_goog_signature",
+    "x_goog_credential",
+    "x_goog_security_token",
+    "x_amz_signature",
+    "x_amz_credential",
+    "x_amz_security_token",
+}
+
+
+def _redact_query(match):
+    key = unquote_plus(match[2]).casefold().replace("-", "_")
+    return match[1] + match[2] + "=[redacted]" if key in QUERY_KEYS else match[0]
 
 
 def clean_log(text):
@@ -37,8 +72,13 @@ def clean_log(text):
         text,
         flags=re.S,
     )
+    text = HEADERS.sub(r"\1[redacted]", text)
     text = SECRET.sub(r"\1[redacted]", text)
+    text = re.sub(r"(?<![A-Za-z0-9_])hf_[A-Za-z0-9_-]{8,509}(?![A-Za-z0-9_-])", "[redacted]", text)
+    text = re.sub(r"\bya29\.[A-Za-z0-9._~-]+", "[redacted]", text)
     text = re.sub(r"(?i)\bBearer\s+[A-Za-z0-9._~+/-]+=*", "Bearer [redacted]", text)
+    text = re.sub(r"(https?://)[^/\s:@]*(?::[^/\s@]*)?@", r"\1[redacted]@", text)
+    text = re.sub(r"([?&#])([^=&?#\s\"'<>]+)=([^&#\s\"'<>]*)", _redact_query, text)
     text = "".join(c for c in text if c in "\n\t" or ord(c) >= 32)
     return text.encode("utf-8")[-LOG_BYTES:].decode("utf-8", errors="ignore")
 

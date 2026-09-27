@@ -1,0 +1,123 @@
+{
+  "checked_at": "2026-09-26T18:57:52.485381+00:00",
+  "scope": "native_policy_configuration_parsing",
+  "gpu_execution": false,
+  "weights_downloaded": false,
+  "python": "3.12.13",
+  "upstream_revision": "e595b7902714ba51f91e47523f66f89c5181b649",
+  "packages": {
+    "lerobot": "0.6.2",
+    "torch": "2.11.0",
+    "torchvision": "0.26.0",
+    "transformers": "5.5.4",
+    "draccus": "0.11.6",
+    "huggingface-hub": "1.33.0"
+  },
+  "method": "Resolve Firebird recipe, build native CLI arguments, load real released model config JSON, parse and validate TrainPipelineConfig against pinned upstream. EO-1 explicit legacy config migration applied. No models instantiated or trained.",
+  "results": [
+    {
+      "model": "act",
+      "policy_type": "act",
+      "initialization": "scratch",
+      "model_id": "code://lerobot/act",
+      "model_revision": "e595b7902714ba51f91e47523f66f89c5181b649",
+      "config_valid": true
+    },
+    {
+      "model": "diffusion",
+      "policy_type": "diffusion",
+      "initialization": "scratch",
+      "model_id": "code://lerobot/diffusion",
+      "model_revision": "e595b7902714ba51f91e47523f66f89c5181b649",
+      "config_valid": true
+    },
+    {
+      "model": "eo1",
+      "policy_type": "eo1",
+      "initialization": "pretrained",
+      "model_id": "lerobot/eo1-base",
+      "model_revision": "bba306bb0095693f1b8f318450efed3ee7466590",
+      "config_valid": true
+    },
+    {
+      "model": "evo1",
+      "policy_type": "evo1",
+      "initialization": "pretrained",
+      "model_id": "zuoxingdong/evo1_libero",
+      "model_revision": "515921f4a2c1d3f3ad523721eafa26fdf2af315b",
+      "config_valid": true
+    },
+    {
+      "model": "gr00t_n17",
+      "policy_type": "groot",
+      "initialization": "base_model_path",
+      "model_id": "nvidia/GR00T-N1.7-LIBERO",
+      "model_revision": "2ea293aa20ba7cf5bbf3ba17a5fbcb1a01cbfe21",
+      "config_valid": true
+    },
+    {
+      "model": "multi_task_dit",
+      "policy_type": "multi_task_dit",
+      "initialization": "scratch",
+      "model_id": "code://lerobot/multi_task_dit",
+      "model_revision": "e595b7902714ba51f91e47523f66f89c5181b649",
+      "config_valid": true
+    },
+    {
+      "model": "pi0",
+      "policy_type": "pi0",
+      "initialization": "pretrained",
+      "model_id": "lerobot/pi0_libero_finetuned_v044",
+      "model_revision": "45dcc8fc0e02601c8ccf0554fbd1d26a55070c1f",
+      "config_valid": true
+    },
+    {
+      "model": "pi0_fast",
+      "policy_type": "pi0_fast",
+      "initialization": "pretrained",
+      "model_id": "lerobot/pi0fast-base",
+      "model_revision": "acbfee34e383700f64ede42e3ac7e89027dd43c2",
+      "config_valid": true
+    },
+    {
+      "model": "pi05",
+      "policy_type": "pi05",
+      "initialization": "pretrained",
+      "model_id": "lerobot/pi05_base",
+      "model_revision": "b211f3d44c36b6acfcf7ae94a64e8e96f75a64ba",
+      "config_valid": true
+    },
+    {
+      "model": "vla_jepa",
+      "policy_type": "vla_jepa",
+      "initialization": "pretrained",
+      "model_id": "lerobot/VLA-JEPA-Pretrain",
+      "model_revision": "e946c3e5b538d760f4b4ff239d1b1c12090c041d",
+      "config_valid": true
+    },
+    {
+      "model": "vqbet",
+      "policy_type": "vqbet",
+      "initialization": "scratch",
+      "model_id": "code://lerobot/vqbet",
+      "model_revision": "e595b7902714ba51f91e47523f66f89c5181b649",
+      "config_valid": true
+    },
+    {
+      "model": "wall_x",
+      "policy_type": "wall_x",
+      "initialization": "pretrained_name_or_path",
+      "model_id": "x-square-robot/wall-oss-flow",
+      "model_revision": "44e827683819957d8c574e8b746a1a97e77f518a",
+      "config_valid": true
+    },
+    {
+      "model": "xvla",
+      "policy_type": "xvla",
+      "initialization": "pretrained",
+      "model_id": "lerobot/xvla-base",
+      "model_revision": "cdb7964e4fe842935d671bfab5a5ebe00a96648c",
+      "config_valid": true
+    }
+  ]
+}

@@ -1,25 +1,40 @@
 {
-  "runtimes": [{
-    "id": "rtx3070",
-    "label": "RTX 3070",
-    "device": "cuda",
-    "python": "/absolute/firebird/workers/vla_cpp/.venv/bin/python",
-    "worker_root": "/absolute/firebird/workers/vla_cpp",
-    "training_python": "/absolute/firebird/workers/smolvla_qlora/.venv/bin/python",
-    "training_root": "/absolute/firebird/workers/smolvla_qlora",
-    "vendor": "/absolute/native/vla.cpp",
-    "build": "/absolute/native/build",
-    "tokenizer": "/absolute/models/pinned-tokenizer",
-    "simulator_lane": "/absolute/simulator/artifacts/docker",
-    "env": {"LD_LIBRARY_PATH": "/absolute/native/build/bin"}
-  }],
-  "sources": [{
-    "id": "smolvla-libero",
-    "label": "Pinned SmolVLA LIBERO policy",
-    "path": "/absolute/models/smolvla-float.gguf",
-    "sha256": "REPLACE_WITH_THE_ACTUAL_64_CHARACTER_SHA256",
-    "task": "libero_object",
-    "action_dim": 7,
-    "provenance": {"repository": "HuggingFaceVLA/smolvla_libero", "revision": "REPLACE_WITH_PINNED_REVISION"}
-  }]
+  "runtimes": [
+    {
+      "id": "rtx3070",
+      "label": "RTX 3070",
+      "provider": "local",
+      "region": null,
+      "device": "cuda",
+      "gpu_name": "NVIDIA GeForce RTX 3070",
+      "gpu_memory_mib": 8192,
+      "python": "/absolute/firebird/workers/vla_cpp/.venv/bin/python",
+      "worker_root": "/absolute/firebird/workers/vla_cpp",
+      "training_python": "/absolute/firebird/workers/smolvla_qlora/.venv/bin/python",
+      "training_root": "/absolute/firebird/workers/smolvla_qlora",
+      "vendor": "/absolute/native/vla.cpp",
+      "build": "/absolute/native/build",
+      "tokenizer": "/absolute/models/pinned-tokenizer",
+      "simulator_lane": "/absolute/simulator/artifacts/docker",
+      "env": {
+        "LD_LIBRARY_PATH": "/absolute/native/build/bin"
+      },
+      "act_export_python": "/absolute/firebird/workers/act_optimizer/.venv/bin/python",
+      "act_export_root": "/absolute/firebird/workers/act_optimizer"
+    }
+  ],
+  "sources": [
+    {
+      "id": "smolvla-libero",
+      "label": "Pinned SmolVLA LIBERO policy",
+      "path": "/absolute/models/smolvla-float.gguf",
+      "sha256": "REPLACE_WITH_THE_ACTUAL_64_CHARACTER_SHA256",
+      "task": "libero_object",
+      "action_dim": 7,
+      "provenance": {
+        "repository": "HuggingFaceVLA/smolvla_libero",
+        "revision": "REPLACE_WITH_PINNED_REVISION"
+      }
+    }
+  ]
 }

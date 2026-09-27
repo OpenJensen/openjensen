@@ -12,6 +12,7 @@ from enum import Enum
 from pathlib import Path
 from urllib.parse import urlsplit
 
+import rollout_sdk
 import yaml
 
 _ROOT = Path(__file__).resolve().parent
@@ -344,8 +345,29 @@ def _prepare(path, mode=_Mode.ROLLOUT):
     return documents
 
 
+def _run_sdk(command, *, timeout, check=False):
+    # Stop the adapter gracefully so it can reap an in-flight observation.
+    # This bounded local cleanup precedes any cloud cancellation request; it is
+    # not an exact remote runtime or billing cap.
+    try:
+        return rollout_sdk.run_owned(command, timeout=timeout, terminate_grace=5)
+    except subprocess.CalledProcessError as error:
+        return subprocess.CompletedProcess(command, error.returncode)
+
+
 def _launch(documents, path, mode, options=()):
-    command = ["bash", str(_ROOT / "sky.sh"), "jobs", "launch", str(path), *options]
+    receipt_dir = Path(tempfile.mkdtemp(prefix="firebird-rollout-"))
+    receipt_path = receipt_dir / "submission.json"
+    command = [
+        "bash",
+        str(_ROOT / "sky.sh"),
+        "rollout-sdk",
+        "launch",
+        str(path),
+        "--receipt",
+        str(receipt_path),
+        *options,
+    ]
     timeout = _TEST_WALL_SECONDS if mode != _Mode.ROLLOUT else None
     if mode != _Mode.ROLLOUT and "--detach-run" in options:
         name = documents[0]["name"]
@@ -355,16 +377,55 @@ def _launch(documents, path, mode, options=()):
             flush=True,
         )
     try:
-        return subprocess.run(command, check=False, timeout=timeout).returncode
-    except (subprocess.TimeoutExpired, KeyboardInterrupt):
+        return _run_sdk(command, check=False, timeout=timeout).returncode
+    except (subprocess.TimeoutExpired, KeyboardInterrupt) as error:
         if mode != _Mode.ROLLOUT:
             name = documents[0]["name"]
-            print(f"Cancelling {mode.value} group {name} after timeout/interruption.", flush=True)
-            subprocess.run(
-                ["bash", str(_ROOT / "sky.sh"), "jobs", "cancel", "--name", name, "--yes"],
-                check=True,
-                timeout=_CANCEL_SECONDS,
+            target = ["--name", name]
+            attempt = {
+                "group_name": name,
+                "job_id": None,
+                "reason": type(error).__name__,
+                "status": "requesting",
+                "resource_deletion": "unverified",
+            }
+            try:
+                receipt = rollout_sdk.validate_receipt(rollout_sdk.read_json(receipt_path))
+                if receipt["group_name"] == name:
+                    target = [str(receipt["job_id"])]
+                    attempt["job_id"] = receipt["job_id"]
+            except (OSError, ValueError, TypeError, KeyError):
+                pass  # Submission may not yet have returned an ID; the unique name is best effort.
+            cancellation_path = receipt_dir / "cancellation.json"
+
+            # A full disk must not prevent the already-authorized timeout cancellation.
+            def record_attempt():
+                try:
+                    rollout_sdk.write_json(cancellation_path, attempt)
+                except (OSError, ValueError) as record_error:
+                    print(
+                        f"Cancellation receipt unavailable ({type(record_error).__name__}).",
+                        file=sys.stderr,
+                    )
+
+            record_attempt()
+            print(
+                f"Requesting cancellation of {mode.value} group {name}; "
+                "resource deletion remains unverified.",
+                flush=True,
             )
+            try:
+                subprocess.run(
+                    ["bash", str(_ROOT / "sky.sh"), "jobs", "cancel", *target, "--yes"],
+                    check=True,
+                    timeout=_CANCEL_SECONDS,
+                )
+            except (subprocess.SubprocessError, OSError, KeyboardInterrupt) as cancel_error:
+                attempt.update(status="failed_or_unknown", error=type(cancel_error).__name__)
+                record_attempt()
+                raise
+            attempt["status"] = "requested"
+            record_attempt()
         raise
 
 

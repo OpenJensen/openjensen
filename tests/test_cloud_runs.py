@@ -226,3 +226,26 @@ def test_snapshot_encoding_must_be_utf8(tmp_path):
     (tmp_path / "test-run.json").write_bytes(json.dumps(snapshot()).encode("utf-16"))
     feed = read_cloud_runs(tmp_path)
     assert not feed.runs and "invalid versioned JSON" in feed.errors[0].message
+
+
+def test_snapshot_feed_coexists_with_cloud_training_and_connection_apis(tmp_path):
+    directory = tmp_path / "feed"
+    directory.mkdir()
+    write(directory)
+    with TestClient(
+        create_app(Settings(data_dir=tmp_path / "app", cloud_runs_dir=directory))
+    ) as client:
+        feed = client.get("/api/v1/cloud-runs")
+        assert feed.status_code == 200 and feed.json()["runs"][0]["run_id"] == "test-run"
+        assert feed.headers["cache-control"] == "no-store"
+        for endpoint in ("cloud-connections", "huggingface-connection", "compute-settings"):
+            response = client.get("/api/v1/" + endpoint)
+            assert response.status_code == 200, response.text
+        compute = client.get("/api/v1/compute-settings").json()
+        assert compute["local"]["enabled"] is False
+        options = client.get("/api/v1/policy-options").json()
+        assert {"smolvla", "act", "psi0"}.issubset(
+            {model["id"] for model in options["training_models"]}
+        )
+        assert options["quantization_defaults"]["cuda"]["language"] == "Q8_0"
+        assert client.post("/api/v1/cloud-runs").status_code == 405
