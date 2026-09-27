@@ -1,16 +1,12 @@
 # Read-only cloud run monitor
 
-The **Cloud runs** workspace view reads snapshots published by a separate operator
-monitor. This read-only snapshot view does not load cloud credentials, connect to SkyPilot,
-launch jobs, refresh cloud resources, cancel jobs or accept a browser-supplied
-filesystem path. Existing local host and origin restrictions apply to its API.
+The **Cloud runs** workspace has two distinct sources. **Application cloud jobs** lists the selected project's jobs with a persisted cloud execution target, using the existing job and event APIs. It shows the recorded status, accelerator, region, update time and latest 100 events. Training jobs open their exact saved Fine-tune detail. Jobs poll every three seconds; selected active job events also poll. Failed requests remain visible, with previous information labeled as potentially out of date. A runtime name or a cloud-stored input alone does not classify a job as cloud execution. Local CPU exports therefore remain in Fine-tune even when their input checkpoint came from GCS.
 
-Firebird-managed training and quantization use the separate compute connection
-and SkyPilot dispatch path. Follow those jobs in **Fine-tune** and **Quantize**;
-this view preserves the standalone operator monitor for runs such as Isaac
-rollouts. See [cloud training](skypilot-training.md) for the managed lifecycle.
+**External rollout observations** retains the standalone operator snapshot feed described below. It does not load cloud credentials, connect to SkyPilot, launch a job or accept a browser-supplied filesystem path. Existing local host and origin restrictions apply. An old terminal snapshot is historical evidence, not a live simulator connection. Neither application job completion nor a snapshot proves cloud resource cleanup, pickup success or calibration.
 
-Monitoring is disabled unless the operator sets `FIREBIRD_CLOUD_RUNS_DIR` to a
+See [cloud training](skypilot-training.md) for the managed lifecycle and [Teaching connections](teaching-connections.md) for the separate simulator connection.
+
+The external observer feed is disabled unless the operator sets `FIREBIRD_CLOUD_RUNS_DIR` to a
 dedicated external directory before starting the application. Keep this directory
 outside Git. The application only reads it; the operator owns retention and access.
 Use a real absolute directory, without symlinks in its path.
