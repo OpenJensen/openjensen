@@ -1137,6 +1137,156 @@ test('ACT export handoff preserves an unresolved quantization request without re
 });
 
 
+// Generated completed exports only; these cases never run a model or provider.
+async function teacherHandoffFixture(page: Page, configured = true) {
+  const state = await exportedPackageFixture(page);
+  if (configured) state.extraRuntimes.push({ id: 'student-cpu', label: 'Generated ACT distillation worker', provider: 'local', execution: 'native', device: 'cpu', enabled: true, launchable: true, native_distillation: true, native_distillation_only: true, training: false, simulation: false, engine_evaluation: false, run: false });
+  const prepared = structuredClone(state.jobs.find(job => job.id === 'dataset')!);
+  prepared.id = 'prepared-observations';
+  Object.assign(prepared.result, { source: 'local', repo_id: null, inspection_scope: 'complete_snapshot', snapshot: { id: `sha256:${'b'.repeat(64)}`, manifest_sha256: 'b'.repeat(64), lineage_validated: true, total_episodes: 10 } });
+  state.jobs.push(prepared);
+  await page.reload(); await reopenExport(page);
+  return state;
+}
+const teacherChoices = (page: Page) => page.getByRole('group', { name: 'Teacher', exact: true });
+const useTeacher = (page: Page, id: string) => exportedPackage(page, id).getByRole('button', { name: 'Use as ACT teacher', exact: true });
+
+test('training export continues to Distill with the exact second same-label package and explicit recipe', async ({ page }, testInfo) => {
+  const state = await teacherHandoffFixture(page);
+  for (const item of state.packages) {
+    await expect(useTeacher(page, item.id)).toBeEnabled();
+    await expect(exportedPackage(page, item.id).getByRole('button', { name: 'Quantize this package' })).toBeEnabled();
+    await expect(exportedPackage(page, item.id).getByRole('link', { name: 'Download ACT inference package' })).toHaveAttribute('href', `/api/v1/projects/${projectId}/artifacts/${encodeURIComponent(item.id)}/download`);
+  }
+  await noOverflow(page);
+  await page.getByRole('region', { name: 'ACT inference export', exact: true }).screenshot({ path: testInfo.outputPath('training-distill-continuation-light.png') });
+  const chosen = state.packages[1];
+  await useTeacher(page, chosen.id).click();
+  const panel = page.getByRole('region', { name: 'ACT distillation', exact: true });
+  await expect(panel).toBeVisible();
+  await expect(teacherChoices(page).locator('input:checked')).toHaveValue(chosen.id);
+  await expect(page.getByLabel('Teacher from training', { exact: true })).toContainText(chosen.id);
+  await expect(page.getByLabel('Teacher from training', { exact: true })).toContainText(`Export ${chosen.job_id.slice(0, 8)}`);
+  await expect(page.getByRole('group', { name: 'Dataset', exact: true }).locator('input:checked')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
+  expect(state.submitted).toEqual([]);
+  await page.getByRole('button', { name: 'Dark', exact: true }).click();
+  await noOverflow(page);
+  await panel.screenshot({ path: testInfo.outputPath('training-distill-destination-dark.png') });
+  await page.getByRole('button', { name: 'Light', exact: true }).click();
+  await page.getByRole('group', { name: 'Dataset', exact: true }).locator('input[value="prepared-observations"]').check();
+  const consent = page.getByRole('checkbox', { name: /I verified that the dataset/ });
+  await expect(consent).not.toBeChecked();
+  const units = ['degrees', 'degrees', 'degrees', 'degrees', 'degrees', 'recorded_gripper'];
+  for (const [label, value] of [['Training episodes', '0, 1'], ['Validation episodes', '2, 3'], ['Final episodes', '4, 5'], ['Six coordinate units', units.join(', ')]]) await page.getByLabel(label, { exact: true }).fill(value);
+  await page.getByRole('checkbox', { name: 'This snapshot contains generated test observations.' }).check();
+  await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
+  await consent.check();
+  await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => {
+    const request = route.request().postDataJSON(); state.submitted.push(request);
+    await route.fulfill({ status: 202, json: { ...state.job, id: 'explicit-student', kind: 'policy.distill', status: 'queued', request } });
+  });
+  await page.getByRole('button', { name: 'Train ACT256 student', exact: true }).click();
+  await expect(page.getByRole('article', { name: 'Distillation job details' })).toHaveAttribute('data-job-id', 'explicit-student');
+  expect(state.submitted).toEqual([{ operation: 'policy.distill', runtime_id: 'student-cpu', artifact_id: chosen.id, dataset_job_id: 'prepared-observations', timeout_seconds: 600, native_distillation: { adapter: 'act-act-v1', student: 'act-256', steps: 100, learning_rate: .0001, seed: 1729, frame_stride: 30, splits: { train: [0, 1], validation: [2, 3], final: [4, 5] }, units, coordinate_attestation: 'generated_fixture' } }]);
+  expect(state.unexpected).toEqual([]);
+});
+
+test('training export explains unavailable distillation without changing quantization or download', async ({ page }) => {
+  const state = await teacherHandoffFixture(page, false), item = state.packages[1];
+  await expect(useTeacher(page, item.id)).toBeDisabled();
+  await expect(exportedPackage(page, item.id)).toContainText('A local ACT distillation worker is not available');
+  await expect(exportedPackage(page, item.id).getByRole('button', { name: 'Quantize this package' })).toBeEnabled();
+  await expect(exportedPackage(page, item.id).getByRole('link', { name: 'Download ACT inference package' })).toBeVisible();
+  expect(state.submitted).toEqual([]);
+});
+
+for (const fault of ['remote', 'architecture', 'unrecorded', 'manifest', 'foreign-output', 'pending', 'prediction-horizon'] as const) test(`training export refuses ${fault} teacher handoff`, async ({ page }) => {
+  const state = await teacherHandoffFixture(page), item = state.packages[1];
+  const saved = state.jobs.find(job => job.id === item.job_id)!;
+  if (fault === 'remote') Object.assign(item.metadata, { storage: 'gcs' });
+  if (fault === 'architecture') Object.assign(item.metadata, { architecture: 'smolvla' });
+  if (fault === 'unrecorded') saved.result.artifacts = [];
+  if (fault === 'manifest') saved.result.artifacts[0].manifest_sha256 = 'f'.repeat(64);
+  if (fault === 'foreign-output') saved.result.artifacts[0].project_id = 'another-project';
+  if (fault === 'pending') saved.status = 'running';
+  if (fault === 'prediction-horizon') Object.assign(item.metadata, { prediction_horizon: 32 });
+  await page.reload(); await reopenExport(page);
+  await expect(useTeacher(page, item.id)).toBeDisabled();
+  await expect(exportedPackage(page, item.id).getByRole('link', { name: 'Download ACT inference package' })).toBeVisible();
+  if (fault === 'prediction-horizon') await expect(exportedPackage(page, item.id)).toContainText('requires a 100-action prediction horizon');
+  expect(state.submitted).toEqual([]);
+});
+
+test('manual Distill teacher choices reject a known non-100 horizon and preserve legacy timing metadata', async ({ page }) => {
+  const state = await teacherHandoffFixture(page), changed = state.packages[1];
+  Object.assign(changed.metadata, { prediction_horizon: 32 });
+  await page.reload(); await reopenExport(page);
+  await expect(useTeacher(page, changed.id)).toBeDisabled();
+  await page.getByRole('button', { name: 'Distill', exact: true }).click();
+  await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  await expect(teacherChoices(page).locator(`input[value="${changed.id}"]`)).toHaveCount(0);
+  await expect(teacherChoices(page).locator(`input[value="${state.packages[0].id}"]`)).toHaveCount(1);
+  await expect(teacherChoices(page).locator('input:checked')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
+  expect(state.submitted).toEqual([]);
+});
+
+test('training teacher continuation never replaces a manual selection when the package returns after a missing read', async ({ page }) => {
+  const state = await teacherHandoffFixture(page), chosen = state.packages[1], manual = state.packages[0];
+  await useTeacher(page, chosen.id).click();
+  await expect(teacherChoices(page).locator('input:checked')).toHaveValue(chosen.id);
+  const index = state.artifacts.findIndex(item => item.id === chosen.id); state.artifacts.splice(index, 1);
+  await page.getByRole('button', { name: 'Refresh distillation jobs', exact: true }).click();
+  await expect(teacherChoices(page).locator(`input[value="${chosen.id}"]`)).toHaveCount(0);
+  await expect(teacherChoices(page).locator('input:checked')).toHaveCount(0);
+  await teacherChoices(page).locator(`input[value="${manual.id}"]`).check();
+  state.artifacts.push(chosen);
+  await page.getByRole('button', { name: 'Refresh distillation jobs', exact: true }).click();
+  await expect(teacherChoices(page).locator(`input[value="${chosen.id}"]`)).toHaveCount(1);
+  await expect(teacherChoices(page).locator('input:checked')).toHaveValue(manual.id);
+  await expect(page.getByLabel('Teacher from training', { exact: true })).toHaveCount(0);
+  expect(state.submitted).toEqual([]);
+});
+
+test('training teacher handoff preserves an unresolved distillation submission journal', async ({ page }) => {
+  const state = await teacherHandoffFixture(page);
+  const key = `firebird:job-attempt:policy.distill:${projectId}`;
+  const stored = JSON.stringify({ state: 'uncertain', message: 'Earlier student request has an unverified outcome.' });
+  await page.evaluate(({ key, stored }) => sessionStorage.setItem(key, stored), { key, stored });
+  await useTeacher(page, state.packages[1].id).click();
+  await expect(page.getByText('Earlier student request has an unverified outcome.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'I checked recorded jobs; allow a new request', exact: true })).toBeDisabled();
+  await expect(teacherChoices(page).locator('input:checked')).toHaveValue(state.packages[1].id);
+  expect(await page.evaluate(key => sessionStorage.getItem(key), key)).toBe(stored);
+  expect(state.submitted).toEqual([]);
+});
+
+test('training teacher handoff is cleared by a manual model choice or project switch', async ({ page }) => {
+  const state = await teacherHandoffFixture(page);
+  await page.route('**/api/v1/projects', route => route.fulfill({ json: [{ id: projectId, name: 'Training visibility', created_at: timestamp() }, { id: 'other-project', name: 'Other project', created_at: timestamp() }] }));
+  // Deliberately return foreign records; the destination must apply project ownership.
+  await page.route('**/api/v1/projects/other-project/jobs', route => route.fulfill({ json: state.jobs }));
+  await page.route('**/api/v1/projects/other-project/artifacts', route => route.fulfill({ json: state.artifacts }));
+  await page.reload(); await reopenExport(page);
+  await useTeacher(page, state.packages[1].id).click();
+  await expect(teacherChoices(page).locator('input:checked')).toHaveValue(state.packages[1].id);
+  await page.getByRole('button', { name: 'All models', exact: true }).click();
+  await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  await expect(teacherChoices(page).locator('input:checked')).toHaveCount(0);
+  await reopenExport(page);
+  await useTeacher(page, state.packages[1].id).click();
+  await page.getByLabel('Current project', { exact: true }).selectOption('other-project');
+  await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  await expect(teacherChoices(page).locator('input:checked')).toHaveCount(0);
+  await expect(teacherChoices(page).locator(`input[value="${state.packages[1].id}"]`)).toHaveCount(0);
+  await expect(page.getByLabel('Teacher from training', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
+  expect(state.submitted).toEqual([]);
+});
+
+
 // Generated browser fixtures exercise admission and exact requests; no training runs.
 async function temporalTraining(page: Page, model = 'ACT') {
   const state = await workspace(page, 'local-snapshot', false);

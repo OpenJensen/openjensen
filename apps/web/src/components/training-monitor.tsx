@@ -92,7 +92,7 @@ function LossChart({ metrics }: { metrics: TrainingMetric[] }) {
   );
 }
 
-export function TrainingMonitor({ run, projectId, active, artifacts, onCancel, cancelling, cancelError, onResume, onQuantize, onNativeQuantize, modelCatalog = [], exportRuntimes = [], exportJobs = [], exportArtifacts = [] }: {
+export function TrainingMonitor({ run, projectId, active, artifacts, onCancel, cancelling, cancelError, onResume, onQuantize, onNativeQuantize, onNativeDistill, modelCatalog = [], exportRuntimes = [], exportJobs = [], exportArtifacts = [] }: {
   run: Job;
   projectId: string;
   active: boolean;
@@ -103,6 +103,7 @@ export function TrainingMonitor({ run, projectId, active, artifacts, onCancel, c
   onResume?: () => void;
   onQuantize?: (artifactId: string) => void;
   onNativeQuantize?: (artifactId: string) => void;
+  onNativeDistill?: (artifactId: string) => void;
   modelCatalog?: TrainingModel[];
   exportRuntimes?: PolicyOptions["runtimes"];
   exportJobs?: Job[];
@@ -221,7 +222,7 @@ export function TrainingMonitor({ run, projectId, active, artifacts, onCancel, c
         </select></label>
         {chosenCheckpoint?.metadata?.architecture === "act" ? <ActExportControl
           projectId={projectId} checkpoint={chosenCheckpoint} runtimes={exportRuntimes}
-          jobs={exportJobs} artifacts={exportArtifacts} active={active} onNativeQuantize={onNativeQuantize}
+          jobs={exportJobs} artifacts={exportArtifacts} active={active} onNativeQuantize={onNativeQuantize} onNativeDistill={onNativeDistill}
         /> : <><button type="button" className="primary-button" disabled={!!checkpointIssue} onClick={() => chosenCheckpoint && onQuantize(chosenCheckpoint.id)}>Quantize checkpoint</button>
         {checkpointIssue && <p className="training-monitor-note" role="status">{checkpointIssue}</p>}</>}
       </section>}
