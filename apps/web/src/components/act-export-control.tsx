@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, artifactDownloadUrl, isActive, type Job, type PolicyArtifact, type PolicyOptions } from "@/lib/api";
 import { isCloudArtifact } from "@/lib/checkpoints";
+import { availableNativeQuantizer, nativeQuantizationInput } from "@/lib/native-quantization";
 import { actExportContext, startActExport, storedActExportAttempt, storeActExportReceipt, storedActExportReceipt } from "@/lib/act-export";
 import { storeAttempt, type PolicyJobAttempt } from "@/lib/policy-job-attempt";
 import { UncertainPolicyJob } from "@/lib/policy-job-mutation";
@@ -12,13 +13,14 @@ class ExportJournalUnavailable extends Error {
   constructor() { super("Browser session storage is unavailable or its export receipt is unreadable. Restore it and reload, then inspect recorded export jobs before submitting again."); }
 }
 
-export function ActExportControl({ projectId, checkpoint, runtimes, jobs, artifacts, active }: {
+export function ActExportControl({ projectId, checkpoint, runtimes, jobs, artifacts, active, onNativeQuantize }: {
   projectId: string;
   checkpoint: PolicyArtifact;
   runtimes: PolicyOptions["runtimes"];
   jobs: Job[];
   artifacts: PolicyArtifact[];
   active: boolean;
+  onNativeQuantize?: (artifactId: string) => void;
 }) {
   const client = useQueryClient();
   const [selectedRuntime, setSelectedRuntime] = useState("");
@@ -58,6 +60,7 @@ export function ActExportControl({ projectId, checkpoint, runtimes, jobs, artifa
   const latest = receipt ?? related[0];
   const exports = artifacts.filter(item => item.project_id === projectId && item.format === "inference_export" && item.parent_ids?.some(id =>
     id === checkpoint.id || artifacts.some(parent => parent.project_id === projectId && parent.id === id && parent.parent_ids?.includes(checkpoint.id))));
+  const quantizerAvailable = runtimes.some(availableNativeQuantizer);
   const cloud = isCloudArtifact(checkpoint);
   const sourceJob = observed.find(item => item.project_id === projectId && item.id === checkpoint.job_id);
   const dataset = checkpoint.metadata?.dataset as { source?: string } | undefined;
@@ -131,6 +134,24 @@ export function ActExportControl({ projectId, checkpoint, runtimes, jobs, artifa
     {(storageError.data || error) && <p role="alert">{storageError.data || error}</p>}
     {submitting && <p role="status">{attempt.data?.message}</p>}
     {attempt.data?.state === "uncertain" && <section aria-label="ACT export recovery" className="warning-box"><p>{attempt.data.message} Further submissions are paused.</p>{recoveryPending && <p role="status">Recorded export {recoveryPending.id} for checkpoint {"artifact_id" in recoveryPending.request ? recoveryPending.request.artifact_id : "unknown"} is {recoveryPending.status}. Wait for active project exports to finish before clearing this recovery record.</p>}<button className="secondary-button" disabled={!active || !journalReady || !!pending || !!recoveryPending || history.isError || reviewedAttempt !== attempt.data} onClick={acknowledge}>I checked the export jobs; allow a new request</button></section>}
-    {exports.map(item => <p key={item.id}><a className="text-link" href={artifactDownloadUrl(projectId, item.id)}>Download ACT inference package</a><span className="training-monitor-note"> · Inference only; keep the original checkpoint for training.</span></p>)}
+    {exports.map(item => {
+      const exportJob = related.find(job => job.id === item.job_id);
+      const outputs = exportJob?.result && "artifacts" in exportJob.result ? exportJob.result.artifacts ?? [] : [];
+      const recordedOutput = outputs.some(output => output.id === item.id && output.project_id === projectId && output.job_id === item.job_id && output.format === "inference_export" && output.manifest_sha256 === item.manifest_sha256);
+      const quantizeIssue = exportJob?.status !== "succeeded" ? "Wait for this export to finish and appear in recorded history."
+        : !recordedOutput ? "This package is not recorded in the completed export result. Refresh the export jobs before continuing."
+        : !nativeQuantizationInput(item, projectId) ? "This package is not a supported local ACT inference input for quantization."
+        : !quantizerAvailable ? "A local native ACT quantization worker is not available. The package can still be downloaded."
+        : null;
+      return <section key={item.id} aria-label={`ACT inference package ${item.id}`}>
+        <p className="training-monitor-note">ACT FP32 inference package · Export {item.job_id.slice(0, 8)}</p>
+        <div className="native-result-actions">
+          <a className="text-link" href={artifactDownloadUrl(projectId, item.id)}>Download ACT inference package</a>
+          {onNativeQuantize && <button type="button" className="secondary-button" disabled={!active || !!quantizeIssue} onClick={() => { if (active && !quantizeIssue) onNativeQuantize(item.id); }}>Quantize this package</button>}
+        </div>
+        <p className="training-monitor-note">Inference only; keep the original checkpoint for training.</p>
+        {onNativeQuantize && (quantizeIssue ? <p role="status" className="training-monitor-note">{quantizeIssue}</p> : <p className="training-monitor-note">Next: review INT8 or INT4 settings. Opening the form does not start a job; task quality remains unverified.</p>)}
+      </section>;
+    })}
   </section>;
 }

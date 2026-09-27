@@ -167,6 +167,7 @@ export function TrainingPanel({
   onDiagnostics,
   onComputeSettings,
   onQuantize,
+  onNativeQuantize,
   startNew,
   showJobsRequest,
   preferredRunId,
@@ -178,6 +179,7 @@ export function TrainingPanel({
   onDiagnostics: () => void;
   onComputeSettings: () => void;
   onQuantize?: (artifactId: string) => void;
+  onNativeQuantize?: (artifactId: string) => void;
   startNew?: { id: number; datasetId?: string };
   showJobsRequest?: number;
   preferredRunId?: string;
@@ -1262,6 +1264,7 @@ export function TrainingPanel({
               cancelling={cancel.isPending && cancel.variables === selectedRun.id}
               cancelError={cancel.variables === selectedRun.id ? cancel.error : null}
               onQuantize={onQuantize}
+              onNativeQuantize={onNativeQuantize}
               onResume={resumeOptions.some(item => item.jobId === selectedRun.id) ? () => {
                 setResumeId(resumeOptions.find(item => item.jobId === selectedRun.id)!.id);
                 setStep(2);
