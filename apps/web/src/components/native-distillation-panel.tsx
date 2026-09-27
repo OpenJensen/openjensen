@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, artifactDownloadUrl, isActive, isDatasetJob, type Job } from '@/lib/api';
 import { cancelStudent, episodeSelection, startStudent, studentDataset, studentJob, studentReport, studentRuntime, studentTeacher, type DistillationRecipe, type DistillationRequest } from '@/lib/native-distillation';
 import { record, UncertainPolicyJob } from '@/lib/policy-job-mutation';
+import { hasSimulatorControlContract } from '@/lib/native-quantization';
 import { storeAttempt, storedAttempt, type PolicyJobAttempt } from '@/lib/policy-job-attempt';
 import { useNativeCancellation } from '@/lib/native-cancellation-attempt';
 import { WorkflowChoiceGrid } from './workflow-choice-grid';
@@ -61,6 +62,7 @@ export function NativeDistillationPanel({ projectId, preferredJobId, preferredTe
   const runtimes = (options.data?.runtimes ?? []).filter(studentRuntime);
   const runtime = runtimeId ? runtimes.find(item => item.id === runtimeId) : runtimes[0];
   const teachers = (artifacts.data ?? []).filter(item => studentTeacher(item, projectId));
+  const contractTeachers = (artifacts.data ?? []).some(item => item.project_id === projectId && ['native_checkpoint', 'inference_export'].includes(item.format) && item.metadata?.architecture === 'act' && hasSimulatorControlContract(item));
   const teacher = teachers.find(item => item.id === teacherId);
   useEffect(() => {
     if (preference.current.id !== preferredTeacherArtifactId) { preference.current = { id: preferredTeacherArtifactId, consumed: false }; setPendingTeacher(!!preferredTeacherArtifactId); }
@@ -179,6 +181,7 @@ export function NativeDistillationPanel({ projectId, preferredJobId, preferredTe
           <p>Choose a prepared dataset and independent episode splits, then confirm its coordinates. Training starts only when you submit.</p>
         </div>}
         <WorkflowChoiceGrid name="teacher" label="Teacher" value={teacherId} onChange={chooseTeacher} options={teachers.map(item => ({ value: item.id, label: item.label, meta: item.id.slice(0, 8), icon: 'layers' }))} emptyMessage="No ACT teacher policies. Import or export a complete policy first." />
+        {contractTeachers && <p role="status">Simulator-bound ACT packages are excluded because distillation cannot preserve their control contract yet. Keep the original package for Run compatibility checks.</p>}
         <WorkflowChoiceGrid name="student-dataset" label="Dataset" value={datasetId} onChange={value => { setDataset(value); setAttested(false); setTrain(''); setValidation(''); setFinal(''); }} options={datasets.map(item => ({ value: item.id, label: item.result!.repo_id ?? 'Local robotics dataset', description: `${item.result!.total_episodes} episodes`, icon: 'database' }))} emptyMessage="Import a complete dataset snapshot to continue." />
         {!datasets.length && <button type="button" className="text-link" onClick={onDataset}>Open Dataset intake</button>}
         {(runtimes.length > 1 || !runtime) && <WorkflowChoiceGrid name="student-worker" label="Compute" value={runtime?.id ?? ''} onChange={setRuntime} options={runtimes.map(item => ({ value: item.id, label: item.label, icon: 'sliders' }))} />}

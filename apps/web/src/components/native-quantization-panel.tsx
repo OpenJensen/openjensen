@@ -8,7 +8,7 @@ import { WorkflowChoiceGrid } from './workflow-choice-grid';
 import { NativePreparation } from './native-preparation';
 import { publicPath } from '@/lib/base-path';
 import { WorkbenchDisclosure } from './workbench-disclosure';
-import { availableNativeQuantizer, cancelNativeQuantization, nativeQuantizationInput, nativeQuantizationOf, measuredNativeReport, replayableNativeOutput, object, startNativeQuantization, UncertainQuantization, type NativeQuantizationRuntime, type PackedArtifact } from '@/lib/native-quantization';
+import { availableNativeQuantizer, hasSimulatorControlContract, cancelNativeQuantization, nativeQuantizationInput, nativeQuantizationOf, measuredNativeReport, replayableNativeOutput, object, startNativeQuantization, UncertainQuantization, type NativeQuantizationRuntime, type PackedArtifact } from '@/lib/native-quantization';
 
 class QuantizationJournalUnavailable extends Error {
   constructor() { super('Browser session storage is unavailable. Restore it and reload, then inspect recorded jobs before submitting again.'); }
@@ -25,6 +25,7 @@ export function NativeQuantizationPanel({ projectId, preferredArtifactId, prefer
   const runtime = runtimeId ? runtimes.find(item => item.id === runtimeId) : runtimes[0];
   const [artifactId, setArtifactId] = useState('');
   const inputs = (artifacts.data ?? []).filter(item => nativeQuantizationInput(item, projectId));
+  const contractInputs = (artifacts.data ?? []).some(item => item.project_id === projectId && ['native_checkpoint', 'inference_export'].includes(item.format) && item.metadata?.architecture === 'act' && hasSimulatorControlContract(item));
   const input = inputs.find(item => item.id === artifactId);
   const [bits, setBits] = useState<4 | 8>(8);
   const [timeout, setTimeoutValue] = useState('600');
@@ -153,6 +154,7 @@ export function NativeQuantizationPanel({ projectId, preferredArtifactId, prefer
       </div> : <>
         <fieldset disabled={!editable} className="native-simulation-form"><legend className="visually-hidden">ACT quantization setup</legend>
           <WorkflowChoiceGrid name="act-policy" label="Policy" value={input?.id ?? ''} onChange={chooseArtifact} options={inputs.map(item => ({ value: item.id, label: item.label, meta: item.id.slice(0, 8), icon: 'layers' }))} emptyMessage="No ACT inference policies. Import or export a complete policy first." />
+          {contractInputs && <p role="status">Simulator-bound ACT packages are excluded because quantization cannot preserve their control contract yet. Keep the original package for Run compatibility checks.</p>}
           {(runtimes.length > 1 || !runtime) && <WorkflowChoiceGrid name="act-worker" label="Compute" value={runtime?.id ?? ''} onChange={setRuntimeId} options={runtimes.map(item => ({ value: item.id, label: item.label, icon: 'sliders' }))} />}
           <WorkflowChoiceGrid name="act-precision" label="Compression" value={String(bits)} onChange={value => setBits(value === '4' ? 4 : 8)} options={[{ value: '8', label: '8-bit', description: 'Balanced', icon: 'compress' }, { value: '4', label: '4-bit', description: 'Smaller package', icon: 'compress' }]} />
           <label className="simulation-timeout">Timeout (seconds)<input aria-label="Quantization timeout (seconds)" type="number" min="30" max="600" step="1" value={timeout} onChange={event => setTimeoutValue(event.target.value)} /></label>

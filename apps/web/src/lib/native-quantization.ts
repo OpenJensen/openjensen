@@ -23,9 +23,15 @@ export function availableNativeQuantizer(runtime: NativeQuantizationRuntime): bo
   return runtime.native_quantization === true && runtime.enabled !== false && runtime.launchable !== false &&
     runtime.execution === 'native' && runtime.provider === 'local' && !runtime.unavailable_reason;
 }
+/** Imported legacy checkpoints may serialize both optional fields as null. */
+export function hasSimulatorControlContract(artifact: Pick<PolicyArtifact, 'metadata'>): boolean {
+  const metadata = artifact.metadata;
+  return [metadata, object(metadata) ? metadata.checkpoint : null].some(value =>
+    object(value) && (value.control_contract != null || value.control_contract_sha256 != null));
+}
 export function nativeQuantizationInput(artifact: PackedArtifact, projectId: string): boolean {
   return artifact.project_id === projectId && ['native_checkpoint', 'inference_export'].includes(artifact.format) &&
-    artifact.metadata?.architecture === 'act' && artifact.metadata?.storage !== 'gcs' && !artifact.metadata?.remote && !artifact.metadata?.remote_uri &&
+    artifact.metadata?.architecture === 'act' && !hasSimulatorControlContract(artifact) && artifact.metadata?.storage !== 'gcs' && !artifact.metadata?.remote && !artifact.metadata?.remote_uri &&
     artifact.metadata?.inference_only !== false && artifact.metadata?.method !== 'full' && artifact.metadata?.training_backend !== 'lerobot' && artifact.metadata?.use_vae !== true;
 }
 function uncertain() { return new UncertainQuantization('The submission outcome is unverified. Check recorded jobs before making another request. This request was not retried.'); }
