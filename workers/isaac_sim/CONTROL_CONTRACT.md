@@ -4,8 +4,11 @@ A policy trained from an admitted simulator recording can carry the canonical
 `control-contract.json` sidecar. The record is optional for legacy policies. If a
 known record is present, training resume, ACT inference export, checkpoint import
 and Run must preserve it and its exact SHA256; absence is not a request to fall
-back to physical calibration. Distillation and packed quantization reject these
-policies until they can preserve this provenance throughout their own pipelines.
+back to physical calibration. Packed ACT structural admission preserves the exact
+record and temporal file through the CPU quantizer, independent reload reports
+and importer. Distillation and application transform admission remain gated until
+their own reviewed implementations preserve this provenance; structural packed
+admission alone does not activate an application or cloud Run route.
 
 ## Version 1 record
 

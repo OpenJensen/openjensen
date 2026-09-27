@@ -16,13 +16,23 @@ WORKERS = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(WORKERS / "isaac_sim"))
 sys.path.insert(0, str(WORKERS / "act_optimizer/src"))
 sys.path.insert(0, str(WORKERS / "isaac_sim/tests"))
+from test_native_runtime import make_real_act
 from test_native_runtime import real_act as _real_act
-from test_packed_checkpoint import packed_fixture
+from test_packed_checkpoint import add_control_contract, packed_fixture
 
 from firebird_quant.native_consumer import load_packed_act
 from firebird_quant.native_package import inspect_policy
 
 native_act_source = _real_act
+
+
+@pytest.fixture(scope="module")
+def controlled_act_source(tmp_path_factory):
+    source = make_real_act(
+        tmp_path_factory.mktemp("native-controlled-act-source"), prediction=8, execution=3
+    )
+    add_control_contract(source)
+    return source
 
 
 def test_consumer_rejects_unverified_device_without_model_import(tmp_path):
@@ -109,7 +119,8 @@ def test_backend_cannot_relabel_removed_packed_format_as_float(tmp_path):
     reason="Requires unchanged pinned ACT0.6.1 environment",
 )
 @pytest.mark.parametrize("bits", [8, 4])
-def test_generated_act_http_full_chunk_and_reset(native_act_source, tmp_path, bits):
+@pytest.mark.parametrize("controlled", [False, True])
+def test_generated_act_http_full_chunk_and_reset(request, tmp_path, bits, controlled):
     import torch
     from sim_worker.rollout.backend import LeRobotPolicy
     from sim_worker.rollout.checkpoint import inspect_checkpoint
@@ -118,6 +129,10 @@ def test_generated_act_http_full_chunk_and_reset(native_act_source, tmp_path, bi
     from firebird_quant.native_application import run_job
     from firebird_quant.native_package import inventory
 
+    native_act_source = request.getfixturevalue(
+        "controlled_act_source" if controlled else "native_act_source"
+    )
+    source_before = inventory(native_act_source)
     result = run_job(
         {
             "schema_version": 1,
@@ -125,7 +140,7 @@ def test_generated_act_http_full_chunk_and_reset(native_act_source, tmp_path, bi
             "operation": "policy.quantize",
             "source": {
                 "path": str(native_act_source),
-                "files": inventory(native_act_source),
+                "files": source_before,
                 "manifest_sha256": None,
                 "artifact_id": "generated",
                 "artifact_manifest_sha256": "a" * 64,
@@ -140,8 +155,16 @@ def test_generated_act_http_full_chunk_and_reset(native_act_source, tmp_path, bi
     before = inventory(policy)
     expected = json.loads((package / "verification.json").read_text())["packed"][0]
     info = inspect_checkpoint(policy)
-    backend = LeRobotPolicy(policy, "cpu", 100, 6, info.camera_key)
-    server = create_server(("127.0.0.1", 0), backend, info.model_id, 6, 100)
+    if controlled:
+        assert (info.chunk_size, info.action_steps) == (8, 3)
+        assert info.control_contract == result["report"]["control_contract"]
+        assert info.control_contract_sha256 == result["report"]["control_contract_sha256"]
+        for name in ("control-contract.json", "temporal-contract.json"):
+            assert (policy / name).read_bytes() == (native_act_source / name).read_bytes()
+    else:
+        assert info.control_contract is info.control_contract_sha256 is None
+    backend = LeRobotPolicy(policy, "cpu", info.chunk_size, 6, info.camera_key)
+    server = create_server(("127.0.0.1", 0), backend, info.model_id, 6, info.chunk_size)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -188,6 +211,7 @@ def test_generated_act_http_full_chunk_and_reset(native_act_source, tmp_path, bi
         thread.join(timeout=5)
         assert not thread.is_alive()
     assert inventory(policy) == before
+    assert inventory(native_act_source) == source_before
     # Encoding cannot relabel packed INT8 storage as INT4 (or the reverse).
     from firebird_quant.native_package import encoding
 

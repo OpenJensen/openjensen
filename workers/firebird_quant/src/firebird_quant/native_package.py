@@ -19,6 +19,7 @@ NAME = re.compile(r"[A-Za-z0-9_.-]{1,120}\Z")
 SHA = re.compile(r"[a-f0-9]{64}\Z")
 RUNTIME = {"lerobot": "0.6.1", "torch": "2.11.0", "torchvision": "0.26.0", "safetensors": "0.8.0"}
 BASE = {"config.json", "policy_preprocessor.json", "policy_postprocessor.json"}
+CONTROL_FIELDS = ("control_contract", "control_contract_sha256")
 
 
 def canonical(value):
@@ -138,6 +139,7 @@ def validate_inventory(value):
 
 def admit_source(root, expected, manifest_sha):
     from firebird_act.bundle import (
+        control_files,
         temporal_files,
         tensor_header,
         validate_config,
@@ -173,6 +175,7 @@ def admit_source(root, expected, manifest_sha):
         BASE
         | validate_processors(root, config)
         | temporal_files(root, config)
+        | control_files(root, config)
         | {"model.safetensors"}
     )
     if not required <= set(expected) or not set(expected) <= required | {
@@ -224,11 +227,14 @@ def model_identity(files):
 
 def inspect_policy(root):
     from firebird_act.bundle import (
+        control_files,
         temporal_dimensions,
         temporal_files,
         validate_config,
         validate_processors,
     )
+    from firebird_act.control_schema import FILE as CONTROL_FILE
+    from firebird_act.control_schema import metadata as control_metadata
 
     files = inventory(root)
     encoded = read_json(root / "encoding.json")
@@ -243,23 +249,33 @@ def inspect_policy(root):
         or canonical(encoded) != canonical(encoding(bits))
     ):
         raise ValueError("Unsupported native packed encoding")
-    config = read_json(root / "config.json")
+    config_raw = read(root / "config.json")
+    if sha(config_raw) != files["config.json"]["sha256"]:
+        raise ValueError("Packed configuration changed during inspection")
+    config = decode(config_raw)
     validate_config(config, source=False)
     required = (
         BASE
         | validate_processors(root, config)
         | temporal_files(root, config)
+        | control_files(root, config)
         | {"model.fbq", "encoding.json"}
     )
     if set(files) != required:
         raise ValueError(
             "Native package must contain exactly its inference files and no float master"
         )
+    control = control_metadata(root, config)
+    if (CONTROL_FILE in files) != bool(control) or (
+        control and control["control_contract_sha256"] != files[CONTROL_FILE]["sha256"]
+    ):
+        raise ValueError("Packed simulator control contract changed during inspection")
     return {
         "model_id": model_identity(files),
         "files": files,
         "encoding": encoded,
         **temporal_dimensions(config),
+        **control,
         "quality_verified": False,
         "calibration_verified": False,
         "speedup_verified": False,
