@@ -1,0 +1,7 @@
+# Separate Python3.12 voice runtime. Do not install into NVIDIA's Isaac environment.
+livekit-agents==1.8.3
+livekit==1.1.18
+livekit-api==1.2.1
+livekit-plugins-openai==1.8.3
+livekit-plugins-silero==1.8.3
+python-dotenv==1.2.2
