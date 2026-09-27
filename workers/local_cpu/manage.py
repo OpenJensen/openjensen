@@ -514,7 +514,11 @@ def config(root: Path, output: Path, base: Path | None) -> dict[str, Any]:
         if len({x["id"] for x in entries}) != len(entries):
             raise ValueError("Duplicate base registry IDs")
     ids = {x["id"] for x in value["runtimes"]}
-    for name, folder in (("replay", "isaac_sim"), ("distillation", "policy_distillation")):
+    for name, folder in (
+        ("replay", "isaac_sim"),
+        ("distillation", "policy_distillation"),
+        ("quantization", "firebird_quant"),
+    ):
         identifier = f"local-act-{name}-cpu"
         if identifier in ids:
             raise ValueError(f"Runtime already exists: {identifier}; no entry will be overwritten")
@@ -528,8 +532,12 @@ def config(root: Path, output: Path, base: Path | None) -> dict[str, Any]:
                 "python": str(root / "act-model/bin/python"),
                 f"native_{name}_only": True,
                 f"native_{name}_python": str(root / "act-model/bin/python"),
-                f"native_{name}_dataset_python": str(root / "dataset-reader/bin/python"),
                 f"native_{name}_root": str(REPO / "workers" / folder),
+                **(
+                    {f"native_{name}_dataset_python": str(root / "dataset-reader/bin/python")}
+                    if name != "quantization"
+                    else {}
+                ),
             }
         )
     write_new(output, value)

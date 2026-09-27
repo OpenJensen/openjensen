@@ -1,8 +1,8 @@
 # Persistent local ACT CPU runtimes
 
-Use this explicit setup command for the application’s **ACT distillation** and
-**packed ACT observation replay** lanes. It creates two separate Python3.12
-environments beneath a new persistent directory:
+Use this explicit setup command for the application’s **ACT distillation**,
+**ACT INT8/INT4 quantization** and **packed ACT observation replay** lanes. It
+creates two separate Python3.12 environments beneath a new persistent directory:
 
 - `act-model/`: LeRobot0.6.1, Torch2.11.0, torchvision0.26.0 and safetensors0.8.0,
   installed from the existing ACT worker’s frozen lock.
@@ -21,7 +21,8 @@ for a packaged desktop app or an offline wheel bundle.
 - Apple Silicon macOS or Linux x86_64. Windows and other architectures are deferred.
 - An existing **Python3.12** interpreter and **uv0.12.19** executable. Supply their
   absolute paths. This command never installs or upgrades Python/uv itself.
-- A complete checkout containing the model, dataset, replay and distillation workers.
+- A complete checkout containing the model, dataset, quantization, replay and
+  distillation workers.
 - Network access and disk space for the initial explicit installation. The reader
   is several packages; do not assume it is a small download. Policy weights and
   datasets are not downloaded by setup.
@@ -157,20 +158,25 @@ permissions and contains no newly discovered credentials. Existing operator data
 a base registry is copied to the requested new file but never printed to the console.
 Do not commit a private registry containing credentials.
 
-The two added IDs are `local-act-distillation-cpu` and `local-act-replay-cpu`.
-Both are dedicated local CPU lanes; they do not enable generic engine Run/Evaluate,
-SmolVLA distillation, native CUDA or Isaac. The command **does not activate the file**.
+The three added IDs are `local-act-distillation-cpu`, `local-act-quantization-cpu`
+and `local-act-replay-cpu`. Quantization uses `act-model/bin/python` and the
+`workers/firebird_quant` worker root; it needs no dataset-reader interpreter.
+All three are dedicated local CPU lanes; they do not enable generic engine
+Run/Evaluate, SmolVLA distillation, native CUDA or Isaac. The command **does not activate the file**.
 Review it, then explicitly launch/restart the app with `FIREBIRD_RUNTIME_CONFIG`
 pointing to the new path. Preserve the existing data directory and other settings.
 Do not restart while an owned job is active. Google Cloud settings are stored and
 managed separately; this command does not read or modify them.
 
 Distillation still requires an admitted complete ACT teacher and explicit disjoint
-train/validation/final episode groups. Replay still requires a registered complete
+train/validation/final episode groups. Quantization requires an admitted complete
+inference-ready ACT policy and an explicit INT8/INT4 recipe; the worker verifies
+packed reload and reports action drift against generated inputs, not robot quality
+or GPU memory/latency. Replay still requires a registered complete
 INT4/INT8 ACT artifact, an immutable matching dataset, explicit selected frames and
 coordinate attestation. Setup cannot make an incompatible model/data pair compatible.
 Replay returns full predicted actions; it never executes them on a robot/simulator.
-Neither lane claims task quality or calibration from successful setup.
+No lane claims task quality or calibration from successful setup.
 
 ## Reproduce and review dependency locks
 
