@@ -1,12 +1,23 @@
 import { type DatasetJob, type Job, type PolicyArtifact, type PolicyOptions, type PolicyRequest } from './api';
 import { policyJobRequest, record, sameJson, UncertainPolicyJob } from './policy-job-mutation';
+import { nativeTransformIssue, nativeTransformMetadata } from './native-quantization';
 
 export type DistillationRecipe = NonNullable<PolicyRequest['native_distillation']>;
 export type DistillationRequest = Pick<PolicyRequest, 'operation' | 'runtime_id' | 'artifact_id' | 'dataset_job_id' | 'native_distillation' | 'timeout_seconds'>;
 export type StudentJob = Job & { request: PolicyRequest & { native_distillation: DistillationRecipe } };
 export function studentJob(job: Job): job is StudentJob { const value: unknown = job.request; return job.kind === 'policy.distill' && record(value) && value.operation === 'policy.distill' && record(value.native_distillation) && value.native_distillation.adapter === 'act-act-v1'; }
 export function studentTeacher(artifact: PolicyArtifact, project: string): boolean {
-  return artifact.project_id === project && ['native_checkpoint', 'inference_export'].includes(artifact.format) && artifact.metadata?.architecture === 'act' && (artifact.metadata?.prediction_horizon === undefined || artifact.metadata.prediction_horizon === 100) && artifact.metadata?.storage !== 'gcs' && !artifact.metadata?.remote && !artifact.metadata?.remote_uri;
+  return artifact.project_id === project && ['native_checkpoint', 'inference_export'].includes(artifact.format) && artifact.metadata?.architecture === 'act' && !nativeTransformIssue(artifact) && artifact.metadata?.storage !== 'gcs' && !artifact.metadata?.remote && !artifact.metadata?.remote_uri;
+}
+export function studentDatasetIssue(teacher: PolicyArtifact, dataset: DatasetJob, units: string[]): string | null {
+  const control = nativeTransformMetadata(teacher)?.control_contract;
+  if (!control) return null;
+  const profile = dataset.result, snapshot = profile?.snapshot;
+  if (dataset.project_id !== teacher.project_id || !profile || !snapshot || snapshot.id !== control.source.dataset_snapshot_id || snapshot.manifest_sha256 !== control.source.dataset_manifest_sha256)
+    return 'This simulator-bound teacher requires its exact original dataset snapshot. Choose the matching prepared dataset; another snapshot cannot replace it.';
+  if (profile.fps !== control.action_fps) return 'The selected dataset cadence differs from this teacher’s simulator contract.';
+  if (units.length !== 6 || units.some(unit => unit !== 'radians')) return 'This simulator-bound teacher requires radians for all six joint units.';
+  return null;
 }
 export function studentDataset(job: DatasetJob, project: string): boolean { return job.project_id === project && job.status === 'succeeded' && job.result?.inspection_scope === 'complete_snapshot' && job.result.format === 'lerobot_v3' && job.result.snapshot?.lineage_validated === true && job.result.snapshot.total_episodes >= 3; }
 export function studentRuntime(runtime: PolicyOptions['runtimes'][number]): boolean { return runtime.native_distillation === true && runtime.provider === 'local' && runtime.execution === 'native' && runtime.enabled !== false && runtime.launchable !== false && !runtime.unavailable_reason; }

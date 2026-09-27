@@ -500,11 +500,51 @@ test('ACT export failure stays visible without a download or quality claim', asy
 });
 
 
-test('ACT export does not mislabel local snapshot lineage as Hugging Face', async ({ page }) => {
+test('ACT export refuses local lineage without a verified complete snapshot', async ({ page }) => {
   const { monitor, submitted } = await workspace(page, 'running', true, 'local-dataset');
   await expect(monitor.getByRole('button', { name: 'Export ACT inference package' })).toBeDisabled();
-  await expect(monitor.getByText('ACT export from local dataset snapshots is not supported yet.')).toBeVisible();
+  await expect(monitor.getByText('Export needs Hugging Face lineage or a complete, reload-verified local LeRobot v3 snapshot with matching snapshot identity.')).toBeVisible();
   expect(submitted).toEqual([]);
+});
+
+
+function localExportMetadata(): Record<string, any> {
+  return { architecture: 'act', training_backend: 'lerobot', method: 'full', reload_verified: true,
+    dataset_snapshot_id: `sha256:${'d'.repeat(64)}`, dataset_manifest_sha256: 'd'.repeat(64),
+    dataset: { source: 'local', format: 'lerobot_v3', inspection_scope: 'complete_snapshot', repo_id: null, revision: `local:${'b'.repeat(64)}`,
+      snapshot: { schema_version: 1, id: `sha256:${'d'.repeat(64)}`, manifest_sha256: 'd'.repeat(64), format: 'lerobot_v3',
+        total_bytes: 1000, file_count: 5, total_episodes: 10, total_frames: 1000, lineage_validated: true, warnings: [] } } };
+}
+
+test('completed local ACT snapshot exports its exact checkpoint without rewriting lineage', async ({ page }) => {
+  const state = await workspace(page, 'running', true, 'local-dataset');
+  const checkpoint = state.artifacts[0]; checkpoint.metadata = localExportMetadata();
+  state.job.status = 'succeeded'; state.telemetry.status = 'succeeded';
+  const original = structuredClone(checkpoint.metadata);
+  await page.reload(); await reopenExport(page);
+  await expect(exportButton(page)).toBeEnabled();
+  expect(state.submitted).toEqual([]);
+  await exportButton(page).click();
+  await expect(state.monitor.getByRole('link', { name: 'Download ACT inference package' })).toBeVisible();
+  expect(state.submitted).toEqual([{ operation: 'policy.export', runtime_id: 'act-cpu', artifact_id: checkpoint.id, training_method: 'full', timeout_seconds: 600 }]);
+  expect(checkpoint.metadata).toEqual(original);
+  expect(checkpoint.metadata.dataset.source).toBe('local');
+  expect(state.unexpected).toEqual([]);
+});
+
+for (const fault of ['snapshot-identity', 'manifest', 'incomplete', 'not-reloaded', 'format'] as const) test(`local ACT export refuses ${fault} snapshot metadata`, async ({ page }) => {
+  const state = await workspace(page, 'running', true, 'local-dataset');
+  const metadata = localExportMetadata(); state.artifacts[0].metadata = metadata;
+  state.job.status = 'succeeded'; state.telemetry.status = 'succeeded';
+  if (fault === 'snapshot-identity') metadata.dataset.snapshot.id = `sha256:${'e'.repeat(64)}`;
+  if (fault === 'manifest') metadata.dataset.snapshot.manifest_sha256 = 'invalid';
+  if (fault === 'incomplete') metadata.dataset.inspection_scope = 'metadata_only';
+  if (fault === 'not-reloaded') metadata.reload_verified = false;
+  if (fault === 'format') metadata.dataset.format = 'lerobot_v2';
+  await page.reload(); await reopenExport(page);
+  await expect(exportButton(page)).toBeDisabled();
+  await expect(state.monitor.getByText('Export needs Hugging Face lineage or a complete, reload-verified local LeRobot v3 snapshot with matching snapshot identity.')).toBeVisible();
+  expect(state.submitted).toEqual([]);
 });
 
 
@@ -1221,11 +1261,11 @@ for (const fault of ['remote', 'architecture', 'unrecorded', 'manifest', 'foreig
   await page.reload(); await reopenExport(page);
   await expect(useTeacher(page, item.id)).toBeDisabled();
   await expect(exportedPackage(page, item.id).getByRole('link', { name: 'Download ACT inference package' })).toBeVisible();
-  if (fault === 'prediction-horizon') await expect(exportedPackage(page, item.id)).toContainText('requires a 100-action prediction horizon');
+  if (fault === 'prediction-horizon') await expect(exportedPackage(page, item.id)).toContainText('model format, timing or simulator details are incomplete or unsupported');
   expect(state.submitted).toEqual([]);
 });
 
-test('manual Distill teacher choices reject a known non-100 horizon and preserve legacy timing metadata', async ({ page }) => {
+test('manual Distill teacher choices reject partial timing metadata and preserve legacy timing metadata', async ({ page }) => {
   const state = await teacherHandoffFixture(page), changed = state.packages[1];
   Object.assign(changed.metadata, { prediction_horizon: 32 });
   await page.reload(); await reopenExport(page);
@@ -1237,6 +1277,66 @@ test('manual Distill teacher choices reject a known non-100 horizon and preserve
   await expect(teacherChoices(page).locator('input:checked')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
   expect(state.submitted).toEqual([]);
+});
+
+for (const location of ['metadata', 'checkpoint'] as const) for (const field of ['control_contract', 'control_contract_sha256'] as const) test(`incomplete simulator ${location} ${field} preserves download but excludes both transformation paths`, async ({ page }) => {
+  const state = await teacherHandoffFixture(page), guarded = state.packages[1], legacy = state.packages[0];
+  const contract = { [field]: field === 'control_contract' ? { kind: 'simulator_joint_position', schema_version: 1 } : 'f'.repeat(64) };
+  Object.assign(guarded.metadata, location === 'metadata' ? contract : { checkpoint: contract });
+  // Optional legacy import fields carry no active contract claim.
+  Object.assign(legacy.metadata, { control_contract: null, control_contract_sha256: null, checkpoint: { control_contract: null, control_contract_sha256: null } });
+  await page.reload(); await reopenExport(page);
+  const card = exportedPackage(page, guarded.id);
+  await expect(useTeacher(page, guarded.id)).toBeDisabled();
+  await expect(card.getByRole('button', { name: 'Quantize this package' })).toBeDisabled();
+  await expect(card).toContainText('model format, timing or simulator details are incomplete or unsupported');
+  await expect(card.getByRole('link', { name: 'Download ACT inference package' })).toHaveAttribute('href', `/api/v1/projects/${projectId}/artifacts/${encodeURIComponent(guarded.id)}/download`);
+  await expect(useTeacher(page, legacy.id)).toBeEnabled();
+  await expect(exportedPackage(page, legacy.id).getByRole('button', { name: 'Quantize this package' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Distill', exact: true }).click();
+  await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  await expect(teacherChoices(page).locator(`input[value="${guarded.id}"]`)).toHaveCount(0);
+  await expect(page.getByText('Some ACT packages are excluded because their model format, timing or simulator details are incomplete or unsupported. Refresh or export a complete inference package.', { exact: true })).toBeVisible();
+  await expect(teacherChoices(page).locator(`input[value="${legacy.id}"]`)).toHaveCount(1);
+  await expect(teacherChoices(page).locator('input:checked')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  const policies = page.getByRole('group', { name: 'Policy', exact: true });
+  await expect(policies.locator(`input[value="${guarded.id}"]`)).toHaveCount(0);
+  await expect(page.getByText('Some ACT packages are excluded because their model format, timing or simulator details are incomplete or unsupported. Refresh or export a complete inference package.', { exact: true })).toBeVisible();
+  await expect(policies.locator(`input[value="${legacy.id}"]`)).toHaveCount(1);
+  await expect(policies.locator('input:checked')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Create ACT quantized package', exact: true })).toBeDisabled();
+  expect(state.submitted).toEqual([]);
+});
+
+test('complete simulator-bound export keeps exact Distill and Quantize handoffs without dispatch', async ({ page }) => {
+  const state = await teacherHandoffFixture(page), item = state.packages[1];
+  Object.assign(item.metadata, { prediction_horizon: 32, execution_horizon: 8, temporal_contract_sha256: 'e'.repeat(64), control_contract_sha256: 'd'.repeat(64),
+    control_contract: { schema_version: 1, kind: 'simulator_joint_position', controller: 'joint_position_targets', state_key: 'observation.state', action_key: 'action', state_units: 'radians', action_units: 'radians', timebase: 'simulation_seconds',
+      joint_order: ['j0', 'j1', 'j2', 'j3', 'j4', 'gripper'], action_fps: 30, camera: { key: 'observation.images.front', width: 32, height: 32, prim: '/World/Camera' },
+      source: { dataset_snapshot_id: `sha256:${'b'.repeat(64)}`, dataset_manifest_sha256: 'b'.repeat(64), demonstrations_sha256: 'b'.repeat(64), scene_sha256: ['c'.repeat(64)], scene_hash_scope: 'root USD bytes; referenced assets not inventoried', origins: ['synthetic'] }, physical_calibration_verified: false, task_success_verified: false } });
+  const original = structuredClone(item.metadata);
+  await page.reload(); await reopenExport(page);
+  await expect(useTeacher(page, item.id)).toBeEnabled();
+  await expect(exportedPackage(page, item.id).getByRole('button', { name: 'Quantize this package' })).toBeEnabled();
+  await useTeacher(page, item.id).click();
+  await expect(teacherChoices(page).locator('input:checked')).toHaveValue(item.id);
+  await expect(page.getByText('Inherited action timing: plans 32 actions and applies 8 per update.', { exact: false })).toBeVisible();
+  await expect(page.getByText(/Use the dataset this teacher was trained from and enter radians for all six joint units/)).toBeVisible();
+  const datasetChoices = page.getByRole('group', { name: 'Dataset', exact: true });
+  await expect(datasetChoices.locator('label').filter({ has: page.locator('input[value="prepared-observations"]') })).toContainText('Teacher source dataset');
+  await expect(datasetChoices.locator('input:checked')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
+  await page.reload(); await reopenExport(page);
+  await exportedPackage(page, item.id).getByRole('button', { name: 'Quantize this package' }).click();
+  await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator('input:checked')).toHaveValue(item.id);
+  await expect(page.getByText('Inherited action timing: plans 32 actions and applies 8 per update.', { exact: false })).toBeVisible();
+  await expect(page.getByText(/A compatible Run profile and separate rollout consent are still required/)).toBeVisible();
+  expect(item.metadata).toEqual(original);
+  expect(state.submitted).toEqual([]);
+  expect(state.unexpected).toEqual([]);
 });
 
 test('training teacher continuation never replaces a manual selection when the package returns after a missing read', async ({ page }) => {

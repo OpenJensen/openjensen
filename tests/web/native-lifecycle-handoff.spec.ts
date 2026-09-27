@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { initialQuantizeEntry, initialRunEntry } from '../../apps/web/src/lib/workflow-entry';
 import type { Job, PolicyArtifact } from '../../apps/web/src/lib/api';
 import { studentTeacher } from '../../apps/web/src/lib/native-distillation';
+import { hasSimulatorControlContract, nativeQuantizationInput } from '../../apps/web/src/lib/native-quantization';
 
 // Generated API records exercise real workspace navigation; no model or cloud work runs.
 const time = '2026-09-27T12:00:00Z', model = `sha256:${'f'.repeat(64)}`;
@@ -438,14 +439,33 @@ for (const failedRead of ['profiles', 'history'] as const) test(`Evaluate keeps 
 });
 
 
-test('teacher eligibility preserves legacy ACT inputs while rejecting explicit incompatible prediction horizons', () => {
+test('teacher eligibility preserves legacy timing and admits complete bounded horizon metadata', () => {
   const source = artifact('registered-teacher') as PolicyArtifact;
   expect(studentTeacher(source, 'alpha')).toBe(true);
-  expect(studentTeacher({ ...source, metadata: { ...source.metadata, prediction_horizon: 100 } }, 'alpha')).toBe(true);
-  for (const prediction_horizon of [32, 101, 0, '100', null, [100], true]) {
+  for (const prediction_horizon of [1, 32, 100, 1024]) expect(studentTeacher({ ...source, metadata: { ...source.metadata, prediction_horizon, execution_horizon: 1, temporal_contract_sha256: null } }, 'alpha')).toBe(true);
+  for (const prediction_horizon of [32, 100, 101, 0, '100', null, [100], true]) {
     expect(studentTeacher({ ...source, metadata: { ...source.metadata, prediction_horizon } }, 'alpha')).toBe(false);
   }
   expect(studentTeacher(source, 'beta')).toBe(false);
   expect(studentTeacher({ ...source, metadata: { architecture: 'smolvla' } }, 'alpha')).toBe(false);
   expect(studentTeacher({ ...source, metadata: { ...source.metadata, storage: 'gcs' } }, 'alpha')).toBe(false);
+});
+
+
+test('ACT transform eligibility preserves null legacy imports and rejects incomplete or malformed simulator claims', () => {
+  const source = artifact('contract-policy') as PolicyArtifact;
+  for (const metadata of [{}, { control_contract: null }, { control_contract_sha256: null }, { control_contract: null, control_contract_sha256: null }, { checkpoint: { control_contract: null, control_contract_sha256: null } }]) {
+    const legacy = { ...source, metadata: { ...source.metadata, ...metadata } };
+    expect(hasSimulatorControlContract(legacy)).toBe(false);
+    expect(studentTeacher(legacy, 'alpha')).toBe(true);
+    expect(nativeQuantizationInput(legacy, 'alpha')).toBe(true);
+  }
+  for (const field of ['control_contract', 'control_contract_sha256']) for (const value of [{ kind: 'simulator_joint_position', schema_version: 1 }, 'f'.repeat(64), {}, [], '', 0, false]) {
+    for (const claim of [{ [field]: value }, { control_contract: null, control_contract_sha256: null, checkpoint: { [field]: value } }]) {
+      const guarded = { ...source, metadata: { ...source.metadata, ...claim } };
+      expect(hasSimulatorControlContract(guarded)).toBe(true);
+      expect(studentTeacher(guarded, 'alpha')).toBe(false);
+      expect(nativeQuantizationInput(guarded, 'alpha')).toBe(false);
+    }
+  }
 });

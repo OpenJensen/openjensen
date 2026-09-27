@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, artifactDownloadUrl, isActive, type Job, type PolicyArtifact, type PolicyOptions } from "@/lib/api";
 import { studentRuntime, studentTeacher } from "@/lib/native-distillation";
 import { isCloudArtifact } from "@/lib/checkpoints";
-import { availableNativeQuantizer, nativeQuantizationInput } from "@/lib/native-quantization";
+import { availableNativeQuantizer, hasSimulatorControlContract, nativeTransformIssue, nativeQuantizationInput, object } from "@/lib/native-quantization";
 import { actExportContext, startActExport, storedActExportAttempt, storeActExportReceipt, storedActExportReceipt } from "@/lib/act-export";
 import { storeAttempt, type PolicyJobAttempt } from "@/lib/policy-job-attempt";
 import { UncertainPolicyJob } from "@/lib/policy-job-mutation";
@@ -66,12 +66,18 @@ export function ActExportControl({ projectId, checkpoint, runtimes, jobs, artifa
   const distillerAvailable = runtimes.some(studentRuntime);
   const cloud = isCloudArtifact(checkpoint);
   const sourceJob = observed.find(item => item.project_id === projectId && item.id === checkpoint.job_id);
-  const dataset = checkpoint.metadata?.dataset as { source?: string } | undefined;
+  const dataset = object(checkpoint.metadata?.dataset) ? checkpoint.metadata.dataset : null;
+  const snapshot = object(dataset?.snapshot) ? dataset.snapshot : null;
+  // Admission is metadata-only here; the exporter verifies the saved snapshot and files.
+  const localSnapshot = dataset?.source === "local" && dataset.format === "lerobot_v3" &&
+    dataset.inspection_scope === "complete_snapshot" && snapshot?.schema_version === 1 && snapshot.format === "lerobot_v3" &&
+    typeof snapshot.manifest_sha256 === "string" && /^[a-f0-9]{64}$/.test(snapshot.manifest_sha256) &&
+    snapshot.id === `sha256:${snapshot.manifest_sha256}` && checkpoint.metadata?.reload_verified === true;
   const issue = !projectId || checkpoint.project_id !== projectId ? "Select a ready project to export." : cloud && (sourceJob?.status !== "succeeded" || checkpoint.metadata?.reload_verified !== true)
     ? "Wait for the completed, reload-verified ACT checkpoint. Intermediate saves cannot be exported."
     : checkpoint.format !== "training_checkpoint" || checkpoint.metadata?.training_backend !== "lerobot" || checkpoint.metadata?.method !== "full"
       ? "This export requires a complete native ACT training checkpoint."
-      : dataset?.source !== "huggingface" ? "ACT export from local dataset snapshots is not supported yet."
+      : dataset?.source !== "huggingface" && !localSnapshot ? "Export needs Hugging Face lineage or a complete, reload-verified local LeRobot v3 snapshot with matching snapshot identity."
       : !runtime ? "Ask the app operator to configure the local ACT export worker." : null;
   const journalReady = readyContext === context && !storageError.data;
   const submitting = journalReady && attempt.data?.state === "pending";
@@ -144,18 +150,18 @@ export function ActExportControl({ projectId, checkpoint, runtimes, jobs, artifa
       const sourceIssue = exportJob?.status !== "succeeded" ? "Wait for this export to finish and appear in recorded history."
         : !recordedOutput ? "This package is not recorded in the completed export result. Refresh the export jobs before continuing."
         : null;
-      const quantizeIssue = sourceIssue ?? (!nativeQuantizationInput(item, projectId) ? "This package is not a supported local ACT inference input for quantization."
+      const metadataIssue = nativeTransformIssue(item);
+      const quantizeIssue = sourceIssue ?? metadataIssue ?? (!nativeQuantizationInput(item, projectId) ? "This package is not a supported local ACT inference input for quantization."
         : !quantizerAvailable ? "A local native ACT quantization worker is not available. The package can still be downloaded."
         : null);
-      const distillIssue = sourceIssue ?? (item.metadata?.prediction_horizon !== undefined && item.metadata.prediction_horizon !== 100
-        ? "ACT distillation currently requires a 100-action prediction horizon. This package keeps its original timing."
-        : !studentTeacher(item, projectId) ? "This package is not a supported local ACT teacher input."
+      const distillIssue = sourceIssue ?? metadataIssue ?? (!studentTeacher(item, projectId) ? "This package is not a supported local ACT teacher input."
           : !distillerAvailable ? "A local ACT distillation worker is not available. The package can still be downloaded."
           : null);
       const continuationIssues = [...new Set([onNativeDistill && distillIssue, onNativeQuantize && quantizeIssue].filter(Boolean))];
       return <section key={item.id} aria-label={`ACT inference package ${item.id}`}>
         <p className="training-monitor-note">ACT FP32 inference package · Export {item.job_id.slice(0, 8)}</p>
-        {onNativeDistill && <p className="training-monitor-note">Train a smaller ACT student, or quantize this package directly.</p>}
+        {onNativeDistill && !metadataIssue && <p className="training-monitor-note">Train a smaller ACT student, or quantize this package directly. Saved action timing is retained.</p>}
+        {!metadataIssue && hasSimulatorControlContract(item) && <p className="training-monitor-note">The simulator control contract must be retained. Distillation requires the original dataset snapshot; Run still needs its own compatibility checks and explicit consent.</p>}
         <div className="native-result-actions">
           {onNativeDistill && <button type="button" className="secondary-button" disabled={!active || !!distillIssue} onClick={() => { if (active && !distillIssue) onNativeDistill(item.id); }}>Use as ACT teacher</button>}
           <a className="text-link" href={artifactDownloadUrl(projectId, item.id)}>Download ACT inference package</a>

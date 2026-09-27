@@ -1,10 +1,10 @@
 .workflow-run-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; margin: 18px 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 7px; background: var(--subtle); }
-.workflow-run-summary > strong { font-size: 13px; font-weight: 550; }
-.workflow-run-summary > span { color: var(--muted); font-size: 12px; }
+.workflow-run-summary > strong { min-width: 0; font-size: 13px; font-weight: 550; overflow-wrap: anywhere; }
+.workflow-run-summary > span { min-width: 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 .workflow-activity-details > summary { cursor: pointer; font-size: 12px; }
 .workflow-activity-details > summary > span { margin-left: 10px; color: var(--muted); font-size: 11px; }
 .workflow-activity-details .workflow-events { max-height: 320px; overflow: auto; margin: 12px 0 0; padding: 0; list-style: none; }
-.workflow-activity-details .workflow-events li { display: grid; grid-template-columns: 145px 1fr; gap: 12px; border-bottom: 1px solid var(--line); padding: 8px 0; font-size: 11px; }
+.workflow-activity-details .workflow-events li { display: grid; grid-template-columns: 145px minmax(0, 1fr); gap: 12px; border-bottom: 1px solid var(--line); padding: 8px 0; font-size: 11px; }
 .workflow-activity-details .workflow-events time { color: var(--muted); }
 .workflow-activity-details .workflow-events span { overflow-wrap: anywhere; white-space: pre-wrap; }
 .workflow-input-help { margin: -7px 0 0; font-size: 12px; line-height: 1.6; color: var(--muted); }
@@ -13,26 +13,28 @@
 .workflow-advanced > label { margin-top: 12px; }
 .workflow-progress { width: 100%; height: 6px; margin-bottom: 14px; }
 .workflow-live-events { list-style: none; padding: 0; margin: 12px 0 20px; }
-.workflow-live-events > li { display: grid; grid-template-columns: auto 1fr; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
+.workflow-live-events > li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
 .workflow-live-events time { color: var(--muted); }
 .workflow-live-events span { overflow-wrap: anywhere; white-space: pre-wrap; }
-.workflow-panel select { max-width: 100%; text-overflow: ellipsis; }
+.workflow-panel select { min-width: 0; max-width: 100%; text-overflow: ellipsis; }
+.workflow-panel .workflow-fields, .workflow-form-row > label { min-width: 0; }
 .workflow-new-job { max-width: 760px; }
 .workflow-new-job .workflow-fields { max-width: none; }
-.workflow-new-job .workflow-fields > .primary-button { justify-self: start; margin-top: 18px; min-width: 180px; }
+.workflow-new-job .workflow-fields > .primary-button { justify-self: start; margin-top: 18px; min-width: min(180px, 100%); max-width: 100%; white-space: normal; }
 .workflow-new-job .workflow-fields > .workflow-advanced { margin: 4px 0 8px; }
 .workflow-new-job .workflow-fields > label { margin: 8px 0; }
 .workflow-view-navigation { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
 .workflow-view-navigation .text-link { padding: 0; border: 0; background: none; font-size: 12px; text-align: left; }
 .workflow-view-navigation .secondary-button { font-size: 12px; }
 .workflow-job-detail { max-width: 1060px; }
-.workflow-job-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: 28px 0 20px; }
+.workflow-job-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 18px; margin: 28px 0 20px; }
+.workflow-job-heading > div { min-width: 0; }
 .workflow-job-heading .workflow-job-type { color: var(--muted); font-size: 11px; margin-bottom: 5px; }
-.workflow-job-heading h2 { font-size: 22px; font-weight: 600; letter-spacing: -.4px; margin: 0; }
+.workflow-job-heading h2 { font-size: 22px; font-weight: 600; letter-spacing: -.4px; line-height: 1.4; overflow-wrap: anywhere; margin: 0; }
 .workflow-job-heading .status { flex-shrink: 0; margin: 0; text-transform: capitalize; }
 .workflow-current-stage { border: 1px solid var(--line); background: var(--subtle); border-radius: 8px; padding: 22px; }
 .workflow-current-stage > div { display: flex; align-items: center; gap: 10px; }
-.workflow-current-stage h3 { font-size: 21px; font-weight: 600; letter-spacing: -.3px; }
+.workflow-current-stage h3 { min-width: 0; font-size: 21px; font-weight: 600; letter-spacing: -.3px; line-height: 1.4; overflow-wrap: anywhere; }
 .workflow-current-stage > p { margin: 9px 0 0; color: var(--muted); overflow-wrap: anywhere; }
 .workflow-current-stage .workflow-progress { display: block; margin: 18px 0 0; accent-color: var(--ink); }
 .workflow-stage-indicator { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
@@ -51,16 +53,18 @@
 .workflow-output-list > li > div { display: grid; gap: 5px; min-width: 0; }
 .workflow-output-list strong { font-size: 13px; font-weight: 550; overflow-wrap: anywhere; }
 .workflow-output-list span { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
-.workflow-output-list a { font-size: 12px; flex-shrink: 0; text-decoration: none; }
+.workflow-output-list a { min-width: 0; max-width: 100%; font-size: 12px; flex-shrink: 0; text-decoration: none; overflow-wrap: anywhere; white-space: normal; }
 .workflow-job-technical { border-top: 1px solid var(--line); margin-top: 28px; padding-top: 18px; }
 .workflow-job-technical > summary { cursor: pointer; color: var(--muted); font-size: 12px; }
 .workflow-job-technical .workflow-events { max-height: 340px; overflow-y: auto; list-style: none; margin: 18px 0; padding: 0; }
 .workflow-job-technical .workflow-events > li { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 11px; }
 .workflow-job-technical .workflow-events time { color: var(--muted); }
 .workflow-job-technical .workflow-events span { overflow-wrap: anywhere; white-space: pre-wrap; }
+.workflow-panel .workflow-events li > *, .workflow-live-events > li > * { min-width: 0; overflow-wrap: anywhere; }
 .workflow-form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 @media (max-width: 700px) {
   .workflow-activity-details .workflow-events li { grid-template-columns: 1fr; gap: 3px; }
+  .workflow-live-events > li { grid-template-columns: minmax(0, 1fr); gap: 3px; }
   .workflow-activity-details > summary > span { display: block; margin: 5px 0 0 15px; }
   .workflow-job-detail, .workflow-new-job { padding: 18px; }
   .workflow-job-heading { align-items: start; gap: 12px; }

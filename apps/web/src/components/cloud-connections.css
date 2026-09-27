@@ -5,7 +5,7 @@
 .settings-tabs .section-tab { white-space: nowrap; }
 .cloud-settings { max-width: 1040px; }
 .cloud-settings > h2, .cloud-workers h2 { font-size: 16px; font-weight: 600; letter-spacing: -.2px; margin: 0 0 18px; }
-.cloud-provider-grid { display: grid; grid-template-columns: minmax(0, 1fr); max-width: 510px; gap: 16px; }
+.cloud-provider-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .cloud-provider-card { min-width: 0; display: flex; flex-direction: column; padding: 21px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .cloud-provider-top { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .cloud-provider-top h3 { margin: 0; min-width: 0; color: var(--ink); font-size: 14px; font-weight: 550; letter-spacing: -.2px; }
@@ -45,7 +45,8 @@
 .cloud-dialog header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
 .cloud-dialog h2 { font-size: 17px; font-weight: 600; letter-spacing: -.3px; margin: 0; }
 .cloud-dialog .cloud-provider-mark { width: 36px; height: 36px; }
-.cloud-dialog-close { margin-left: auto; padding: 0; width: 25px; height: 25px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font-size: 24px; line-height: 1; }
+.cloud-dialog-close { display: grid; place-items: center; flex-shrink: 0; margin-left: auto; padding: 0; width: 36px; height: 36px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 24px; line-height: 1; }
+.cloud-dialog-close:hover { color: var(--ink); background: var(--hover); }
 .cloud-dialog-fields { display: grid; gap: 17px; margin-bottom: 16px; }
 .cloud-dialog-fields label { display: grid; gap: 7px; font-size: 12px; color: var(--ink); }
 .cloud-dialog-fields input { width: 100%; min-width: 0; min-height: 40px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 9px 11px; color: var(--ink); background: var(--canvas); font-size: 13px; }
@@ -68,6 +69,7 @@
   .cloud-provider-top h3 { font-size: 13px; }
   .cloud-provider-top .cloud-status { margin-left: 51px; }
   .cloud-provider-actions { padding-top: 20px; }
+  .cloud-provider-actions .secondary-button, .cloud-dialog-close, .cloud-dialog footer button { min-width: 44px; min-height: 44px; }
   .settings-tabs { gap: 18px; }
   .settings-tabs .section-tab { font-size: 11px; }
   .cloud-dialog form { padding: 19px; }
