@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 import uuid
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from enum import Enum
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -450,10 +450,17 @@ def _submit(args, path):
 def _main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("task", nargs="?", type=Path, default=Path("rollout.local.yaml"))
-    parser.add_argument("--checkpoint", type=Path, help="Select a local ACT or SmolVLA export")
+    checkpoints = parser.add_mutually_exclusive_group()
+    checkpoints.add_argument(
+        "--checkpoint", type=Path, help="Select a complete local ACT or SmolVLA export"
+    )
+    checkpoints.add_argument(
+        "--checkpoint-archive", type=Path, help="Select a bounded ACT or SmolVLA TAR package"
+    )
     parser.add_argument(
-        "--execute-steps", type=int,
-        help="Actions to execute before replanning; requires --checkpoint",
+        "--execute-steps",
+        type=int,
+        help="Actions to execute before replanning; requires a checkpoint directory or archive",
     )
     parser.add_argument("--validate-only", action="store_true")
     parser.add_argument("--yes", action="store_true", help="Skip SkyPilot's launch confirmation")
@@ -475,14 +482,26 @@ def _main():
         help="Allow candidate calibration for an experimental rollout of at most 300 steps",
     )
     args = parser.parse_args()
-    if args.checkpoint is not None:
-        args.checkpoint = args.checkpoint.expanduser().resolve()
+    source = args.checkpoint or args.checkpoint_archive
+    if source is not None:
+        # Resolve relative inputs before the historical task-directory change.
+        source = source.expanduser().absolute()
     os.chdir(_ROOT)
     try:
-        with _select_checkpoint(
-            args.task, args.checkpoint, args.mode, args.execute_steps
-        ) as selected:
-            return _submit(args, selected)
+        sys.path.insert(0, str(_WORKER))
+        from sim_worker.rollout.checkpoint_package import resolve_checkpoint
+
+        lifetime = (
+            resolve_checkpoint(source, archive=args.checkpoint_archive is not None)
+            if source is not None
+            else nullcontext(None)
+        )
+        with lifetime as resolved:
+            checkpoint = resolved.directory if resolved is not None else None
+            with _select_checkpoint(
+                args.task, checkpoint, args.mode, args.execute_steps
+            ) as selected:
+                return _submit(args, selected)
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
         print(f"Rollout launch refused: {error}", file=sys.stderr)
         return 1

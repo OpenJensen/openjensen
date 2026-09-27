@@ -333,3 +333,63 @@ must opt in explicitly.
 
 References: [SkyPilot Job Groups](https://docs.skypilot.ai/en/latest/examples/job-groups.html),
 [LeRobot SmolVLA](https://huggingface.co/docs/lerobot/smolvla).
+
+### Import a complete policy folder or downloaded package
+
+`--checkpoint` now admits a private, byte-preserving snapshot of a complete ACT
+or SmolVLA export. Use `--checkpoint-archive` for a TAR (including gzip/bzip2/xz
+compression) instead. These flags are mutually exclusive:
+
+```bash
+bash launch-rollout.sh rollout.experimental.local.yaml \
+  --checkpoint-archive /path/to/ACT-inference-package.tar \
+  --experimental --validate-only
+```
+
+A Firebird download contains an outer `policy/` envelope and an inner policy
+folder; the resolver locates exactly one checkpoint without rewriting config,
+weights or processors. External exports do **not** need a Firebird manifest.
+When any `manifest.json` is present, its complete inventory and hashes must match.
+Imported parity, task-success or calibration claims never become verified merely
+because the file hashes match. Bare weights are insufficient: the config, saved
+processors and every required normalization statistic must accompany them.
+
+Admission is CPU-only and does not load Torch, unpickle data, import custom model
+code, download anything or start a cloud job. It verifies safetensors layout and
+required finite normalization statistics. A successful strict runtime reload is
+still required to prove that the tensor names/shapes form an executable model.
+Only the built-in ACT/SmolVLA processor registries are admitted. SmolVLA can still
+need its backbone config/tokenizer when the inference server starts, as described
+above; this import step does not establish offline inference readiness.
+
+Limits: 256 total members, 4 GiB archive/expanded payload, 2 GiB per file,
+2 MiB JSON/statistics files, 16 MiB tensor headers, eight path levels and 512
+characters per path. Links, devices, FIFOs, traversal, duplicate/case-colliding
+paths, sparse files and ambiguous multiple policies are rejected. Unknown ordinary
+extra files are retained but never executed. Directory snapshots require
+POSIX directory-FD support (tested on macOS; Linux validation is recorded
+separately). The private copy is removed after launcher submission/attached run,
+including errors; originals stay unchanged. Job imports use an exclusive new
+output directory and complete only after their receipt has been written.
+
+Inspect without launching:
+
+```bash
+PYTHONPATH=workers/isaac_sim python -m sim_worker.rollout.checkpoint_package \
+  --checkpoint-archive /path/to/package.tar --inspect-only
+```
+
+The fixed application bridge can persist an admitted copy using
+`--source PATH [--archive] --output-dir NEW_DIR --json-output NEW_RECEIPT`.
+Both output paths must be absent; the receipt is outside the payload. The JSON
+contains `schema_version: 1`, a relative `directory` below `NEW_DIR`, the existing
+`checkpoint` fields (`policy_type`, `model_id`, camera/dimensions/horizons), the
+archive `source_sha256` (null for folders), verified manifest hashes, and exact
+`files` with SHA-256/byte counts. `runtime_verified` and `calibration_verified`
+remain false, and `task_success` remains null. The caller must verify this receipt
+and inventory before registering or running the copied policy.
+
+The current scene object is a **cup**. Some historical dataset/task strings say
+“cube”; those recorded labels are preserved as evidence, not silently corrected.
+Changing the live task prompt or admitting another policy does not establish
+cup-pickup success or fix the still-unverified joint calibration.
