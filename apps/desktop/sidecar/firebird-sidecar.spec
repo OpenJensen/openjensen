@@ -7,7 +7,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 sidecar = Path(SPECPATH).resolve()
 repository = sidecar.parents[2]
-sys.path.insert(0, str(sidecar))
+sys.path[:0] = [str(sidecar), str(repository / "packages/core/src")]
 from sidecar_resources import load_resources
 
 resources = load_resources(Path(os.environ["FIREBIRD_DESKTOP_RESOURCES"]))
@@ -29,6 +29,6 @@ a = Analysis(
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz, a.scripts, [], exclude_binaries=True, name="firebird-sidecar", debug=False,
-    bootloader_ignore_signals=False, strip=False, upx=False, console=True,
+    bootloader_ignore_signals=False, strip=False, upx=False, console=True, target_arch="arm64" if sys.platform == "darwin" else None,
 )
 coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="firebird-sidecar")
