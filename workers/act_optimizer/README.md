@@ -34,8 +34,10 @@ The first recipe supports a full, non-PEFT ACT checkpoint with ResNet18, one RGB
 camera, six state/action coordinates, one observation, a 100-step chunk and
 100 executed actions, MEAN_STD normalization, no temporal ensemble, no AMP,
 ReLU and post-normalized transformer blocks. Bounded transformer dimensions
-support the supplied checkpoint and a small real-policy test fixture. Other
-architectures/configurations are rejected explicitly.
+support the supplied checkpoint and a small real-policy test fixture. RGB dimensions
+must be integers from 32 through 2048, with at most 2,073,600 pixels (1920 × 1080)
+per image. The saved image shape is preserved exactly; export does not resize it.
+Other architectures/configurations are rejected explicitly.
 
 The checkpoint contains `config.json`, `model.safetensors`, saved pre/postprocessor
 JSON and their referenced statistics files. `train_config.json` is optional,

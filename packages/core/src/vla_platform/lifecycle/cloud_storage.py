@@ -19,6 +19,31 @@ MAX_BYTES = 100 * 1024**3
 STREAM_CHUNK_BYTES = 1024**2
 GCS_READ_AHEAD_BYTES = 16 * 1024**2
 
+INFERENCE_EVIDENCE_BYTES = 256 * 1024
+INFERENCE_EVIDENCE_FILES = (
+    "inference-report.json",
+    "actions.json",
+    "reload.log",
+    "timing.log",
+    "reload.gpu.csv",
+    "timing.gpu.csv",
+    "package-verification/result.json",
+    "package-verification/worker.log",
+    "package-verification/actions.json",
+    "package-verification/reload.log",
+    "package-verification/timing.log",
+    "package-verification/reload.gpu.csv",
+    "package-verification/timing.gpu.csv",
+)
+TRAINING_SUMMARY_FILES = (
+    "recipe.json",
+    "training/environment.json",
+    "training/metrics.jsonl",
+    "training/splits.json",
+    "resource-preflight.json",
+)
+SUMMARY_FILES = frozenset((*TRAINING_SUMMARY_FILES, *INFERENCE_EVIDENCE_FILES))
+
 
 def digest(path):
     result = hashlib.sha256()
@@ -387,21 +412,69 @@ def publish_result(output, prefix):
             label=artifact["label"],
             kind=artifact["format"],
         )
-    # Persist lightweight reproducibility alongside artifacts, never full checkpoints.
-    summaries = {}
-    for name in (
-        "recipe.json",
-        "training/environment.json",
-        "training/metrics.jsonl",
-        "training/splits.json",
-        "resource-preflight.json",
-    ):
+    # Persist only fixed, bounded metadata paths. No wildcard can include model weights.
+    summaries, evidence = {}, []
+    for name in (*TRAINING_SUMMARY_FILES, *INFERENCE_EVIDENCE_FILES):
         path = output / name
-        if path.is_file() and path.stat().st_size <= MAX_METADATA:
-            summaries[name] = path.read_text()
+        if not path.is_file():
+            continue
+        if path.is_symlink() or not path.resolve().is_relative_to(output.resolve()):
+            raise ValueError("Unsafe result evidence path")
+        size = path.stat().st_size
+        limit = INFERENCE_EVIDENCE_BYTES if name in INFERENCE_EVIDENCE_FILES else MAX_METADATA
+        if size > limit and path.suffix == ".json":
+            continue  # Never publish invalid partial JSON as a complete report.
+        with path.open("rb") as stream:
+            if size > limit:
+                stream.seek(size - limit)
+            raw = stream.read(limit)
+        value = raw.decode("utf-8", errors="replace")
+        value = value.encode("utf-8")[:limit].decode("utf-8", errors="ignore")
+        captured = value.encode("utf-8")
+        candidate = {**summaries, name: value}
+        # Leave room for the evidence index added below and JSON escaping.
+        if len(encoded({**result, "summaries": candidate})) > MAX_METADATA - 64 * 1024:
+            continue
+        summaries = candidate
+        if name in INFERENCE_EVIDENCE_FILES:
+            uri = prefix + "/evidence/" + name
+            bucket.blob(object_prefix + "/evidence/" + name).upload_from_string(
+                captured,
+                content_type="application/json" if path.suffix == ".json" else "text/plain",
+            )
+            evidence.append(
+                {
+                    "path": name,
+                    "uri": uri,
+                    "sha256": hashlib.sha256(captured).hexdigest(),
+                    "bytes": len(captured),
+                    "original_bytes": size,
+                    "truncated": size > len(captured),
+                }
+            )
+    if evidence:
+        report = result.setdefault("report", {})
+        report["retained_evidence"] = evidence
+        report["evidence_scope"] = (
+            "Paths are relative to the application job operation directory; URI fields "
+            "identify durable GCS copies. Raw reports may retain original VM execution paths."
+        )
+        retained = {entry["path"]: entry for entry in evidence}
+        measurements = [report.get("measurement"), *report.get("measurements", {}).values()]
+        for measurement in measurements:
+            if not isinstance(measurement, dict) or not measurement.get("gpu_telemetry"):
+                continue
+            original = Path(measurement["gpu_telemetry"])
+            if original.is_absolute() and original.is_relative_to(output.resolve()):
+                name = original.relative_to(output.resolve()).as_posix()
+                measurement["gpu_telemetry"] = name
+                measurement["gpu_telemetry_uri"] = retained.get(name, {}).get("uri")
     result["summaries"] = summaries
+    document = encoded(result)
+    if len(document) > MAX_METADATA:
+        raise ValueError("Result metadata exceeds the supported size")
     bucket.blob(object_prefix + "/result.json").upload_from_string(
-        encoded(result), content_type="application/json"
+        document, content_type="application/json"
     )
 
 
@@ -441,16 +514,28 @@ def sync(prefix, stage):
             raise ValueError("Cloud output escaped job prefix")
         install_descriptor(stage / "bundle", descriptor)
         result["artifact"]["path"] = str((stage / "bundle").resolve())
+    evidence = {
+        entry["path"]: entry for entry in result.get("report", {}).get("retained_evidence", [])
+    }
     for name, value in result.pop("summaries", {}).items():
-        if name not in {
-            "recipe.json",
-            "training/environment.json",
-            "training/metrics.jsonl",
-            "training/splits.json",
-            "resource-preflight.json",
-        }:
+        if name not in SUMMARY_FILES:
             continue
+        if not isinstance(value, str) or len(value.encode("utf-8")) > MAX_METADATA:
+            raise ValueError("Invalid result summary")
+        if name in INFERENCE_EVIDENCE_FILES:
+            item = evidence.get(name)
+            raw = value.encode("utf-8")
+            if (
+                not item
+                or item.get("uri") != prefix + "/evidence/" + name
+                or len(raw) > INFERENCE_EVIDENCE_BYTES
+                or item.get("bytes") != len(raw)
+                or item.get("sha256") != hashlib.sha256(raw).hexdigest()
+            ):
+                raise ValueError("Inference evidence differs from its published receipt")
         path = stage / name
+        if path.is_symlink() or not path.resolve().is_relative_to(stage.resolve()):
+            raise ValueError("Unsafe result summary path")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(value)
     write_json(stage / "result.json", result)

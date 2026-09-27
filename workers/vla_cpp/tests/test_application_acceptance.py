@@ -359,3 +359,31 @@ def test_export_cannot_overwrite_any_tested_payload_file(tmp_path, monkeypatch):
     monkeypatch.setattr(application, "evaluate_package", lambda *_: {"runtime": {"fixture": True}})
     with pytest.raises(ValueError, match="reserved export"):
         application.run_policy(job)
+
+
+def test_engine_honors_single_selected_camera_and_reports_real_action_preview(
+    tmp_path, monkeypatch
+):
+    source = bundle(tmp_path)
+    manifest = application.verify(source)
+    application.publish(
+        source,
+        {**manifest["metadata"], "camera_keys": ["observation.images.front"]},
+        "Single camera",
+    )
+    request = engine_job(tmp_path, source)
+    mock_engine(monkeypatch)
+    original = application.cpu_measure
+    commands = []
+
+    def measure(command, log, runtime):
+        commands.append(command)
+        return original(command, log, runtime)
+
+    monkeypatch.setattr(application, "cpu_measure", measure)
+    report = application.engine(request)
+    assert commands[0][-2:] == ["", "1"]
+    assert commands[1][commands[1].index("--images") + 1] == "1"
+    assert report["synthetic_input"]["camera_count"] == 1
+    assert report["action_preview"] == [0.0] * 7
+    assert report["task_success"] is None

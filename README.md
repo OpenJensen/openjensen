@@ -8,6 +8,8 @@ The optional [terminal workbench](docs/terminal.md) and [Tauri desktop shell](ap
 
 Start with [cloud training and quantization](docs/skypilot-training.md), [model adapters](docs/native-training.md), or the [Xbox deployment guide](deploy/xbox/README.md). The [live verification record](docs/cloud-training-verification.md) separates completed GPU runs from configuration/dependency checks and pending validation. Local evaluation and robot execution require separately configured native workers; the UI exposes only compatible targets. See the [native policy workflow](docs/policy-workflow.md), [Spatial workflow](docs/spatial-workflow.md) and [upstream validation evidence](docs/workflow-validation.md) for their setup and acceptance scope.
 
+Fine-tune, Quantize, Evaluate and Run open saved jobs first, with separate creation forms. SmolVLA cloud Evaluate and Run execute real CUDA engine checks and package verification; see the [workflow and live inference verification](docs/jobs-first-verification.md) for measured results and limits.
+
 **Dataset → Augmentation** supports Gemini Omni lighting, texture and custom appearance edits for selected camera clips, with before/after review and provenance exports. See the [augmentation setup and scope](docs/augmentation.md); this optional feature uses the saved Google Cloud login or a server-side Gemini API key, plus FFmpeg.
 
 Application Git root: this directory. The nested `firebird-hackathon-prep/` directory remains a separate, ignored Git repository. Its [accepted plan](firebird-hackathon-prep/docs/idea/18_stack-and-phased-build-plan.md) and [task register](firebird-hackathon-prep/docs/tasks/README.md) hold planning and coordination records; they are not included in an application-only clone.

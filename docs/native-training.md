@@ -72,3 +72,15 @@ disabled in the general training profile so a LIBERO gripper index is not impose
 on a different robot. World-model camera-count constraints remain explicit.
 
 All native profile dependencies pass the [Linux CUDA dependency audit](native-dependency-resolution.md).
+
+## GPU memory labels
+
+Model cards show a **GPU budget**, not a checkpoint download size or a promise of
+peak usage. Native/Psi budgets come from the configured training profiles. SmolVLA
+suggests 16 GB, consistent with the upstream [LeRobot hardware guidance](https://github.com/huggingface/lerobot/blob/main/AGENT_GUIDE.md#6-which-policy-should-i-train).
+This suggestion does not raise the adapter's admission floor; smaller tested
+recipes remain usable on operator-configured workers. Batch size, cameras,
+precision and trainable layers change memory use. Models without an installed
+adapter show that their GPU budget is unverified.
+
+Completed native ACT checkpoints have an explicit [local CPU inference export](cloud-act-export.md) path from the Fine-tune checkpoint panel.

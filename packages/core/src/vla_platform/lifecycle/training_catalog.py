@@ -28,6 +28,7 @@ class TrainingModel:
     initialization: str = "pretrained"
     minimum_gpu_memory_gb: int | None = None
     required_cameras: int | None = None
+    suggested_gpu_memory_gb: int | None = None
 
 
 TRAINING_MODELS = (
@@ -37,6 +38,7 @@ TRAINING_MODELS = (
         "Compact vision-language-action policy",
         "lerobot/smolvla_base",
         "d9f33c94a60fb382c90dea2164c96845bd955e28",
+        suggested_gpu_memory_gb=16,
     ),
     TrainingModel(
         "openvla_oft",

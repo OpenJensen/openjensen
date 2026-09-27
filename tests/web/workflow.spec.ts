@@ -35,6 +35,7 @@ class WorkflowPage {
 
   async quantize(runtime: string) {
     await this.page.getByRole('button', { name: 'Quantize', exact: true }).click();
+    await this.page.getByRole('button', { name: 'New quantization', exact: true }).click();
     await this.page.getByLabel('Execution target').selectOption(runtime);
     await this.page.getByLabel('Checkpoint or policy').selectOption('source:synthetic-source');
     const created = this.page.waitForResponse(response => response.url().endsWith('/policy-jobs') && response.request().method() === 'POST');
@@ -78,7 +79,7 @@ test('browser workflow persists real subprocess results and downloads the same a
   const project = await workflow.createProject(`Synthetic workflow ${testInfo.testId}`);
   const submitted = await workflow.quantize('browser-success');
   const job = await waitForJob(request, submitted.id, 'succeeded');
-  await expect(page.getByText('Diagnostics complete. Task-quality approval is still required.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Diagnostics complete.', { exact: true })).toBeVisible();
   expect(job.result.decision).toBe('diagnostics_only');
   expect(job.result.selected_artifact_id).toBeNull();
   expect(job.result.artifacts.length).toBeGreaterThan(1);
@@ -91,8 +92,9 @@ test('browser workflow persists real subprocess results and downloads the same a
   await page.reload();
   await expect(page.getByLabel('Current project')).toHaveValue(project.id);
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-  await expect(page.getByRole('combobox', { name: /^Run/ })).toHaveValue(submitted.id);
-  await expect(page.getByText('Diagnostics complete. Task-quality approval is still required.', { exact: true })).toBeVisible();
+  await page.locator(`.job-history-entry[data-job-id="${submitted.id}"]`).click();
+  await expect(page.getByRole('article', { name: 'Quantize job details' })).toBeVisible();
+  await expect(page.getByText('Diagnostics complete.', { exact: true })).toBeVisible();
   const artifact = job.result.artifacts.find((item: { parent_ids: string[] }) => item.parent_ids.length > 0);
   expect(artifact).toBeTruthy();
   const path = `/api/v1/projects/${project.id}/artifacts/${encodeURIComponent(artifact.id)}/download`;
@@ -126,7 +128,8 @@ test('cancelling a started worker remains cancelled after browser reload and in 
   expect(await cli('jobs', 'show', submitted.id)).toEqual(cancelled);
   await page.reload();
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-  await expect(page.getByText('cancelled', { exact: true })).toBeVisible();
+  await expect(page.locator(`.job-history-entry[data-job-id="${submitted.id}"]`)).toContainText('cancelled');
+  await page.locator(`.job-history-entry[data-job-id="${submitted.id}"]`).click();
   await expect(page.getByRole('button', { name: 'Cancel run', exact: true })).toHaveCount(0);
   await expect(page.getByRole('link', { name: /^Download / })).toHaveCount(0);
   expect((await cli('jobs', 'show', submitted.id)).result).toBeNull();
@@ -140,16 +143,19 @@ test('a real worker failure is visible and does not prevent a subsequent success
   expect(await cli('jobs', 'show', failed.id)).toEqual(failure);
   // A known wrong terminal state must fail as such, not as a completion timeout.
   await expect(waitForJob(request, failed.id, 'succeeded')).rejects.toThrow('Job reached failed; expected succeeded');
-  await expect(page.getByRole('alert').filter({ hasText: 'Intentional synthetic browser worker failure' })).toBeVisible();
+  await page.getByText('Details and logs', { exact: true }).click();
+  await expect(page.locator('.workflow-job-technical')).toContainText('Intentional synthetic browser worker failure');
   expect((await cli('jobs', 'show', failed.id)).status).toBe('failed');
   await page.reload();
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-  await expect(page.getByRole('alert').filter({ hasText: 'Intentional synthetic browser worker failure' })).toBeVisible();
+  await page.locator(`.job-history-entry[data-job-id="${failed.id}"]`).click();
+  await page.getByText('Details and logs', { exact: true }).click();
+  await expect(page.locator('.workflow-job-technical')).toContainText('Intentional synthetic browser worker failure');
   const retryStarted = performance.now();
   const retried = await workflow.quantize('browser-delayed-success');
   const completed = await waitForJob(request, retried.id, 'succeeded');
   expect(await cli('jobs', 'show', retried.id)).toEqual(completed);
-  await expect(page.getByText('Diagnostics complete. Task-quality approval is still required.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Diagnostics complete.', { exact: true })).toBeVisible();
   expect(performance.now() - retryStarted).toBeGreaterThanOrEqual(7_000);
   expect((await cli('jobs', 'show', failed.id)).status).toBe('failed');
 });

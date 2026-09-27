@@ -1750,11 +1750,21 @@ export interface components {
             /** Enabled */
             enabled: boolean;
             /**
+             * Engine Evaluation
+             * @default false
+             */
+            engine_evaluation: boolean;
+            /**
              * Execution
              * @default native
              * @enum {string}
              */
             execution: "native" | "skypilot";
+            /**
+             * Export Only
+             * @default false
+             */
+            export_only: boolean;
             /** Gpu Memory Mib */
             gpu_memory_mib: number | null;
             /** Gpu Name */
@@ -1782,6 +1792,11 @@ export interface components {
             provider_label: string;
             /** Region */
             region: string | null;
+            /**
+             * Run
+             * @default false
+             */
+            run: boolean;
             /** Simulation */
             simulation: boolean;
             /** Training */

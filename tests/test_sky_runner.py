@@ -404,6 +404,7 @@ def test_dispatch_always_tears_down_owned_cluster(payload, target, tmp_path, mon
         if argv[1:3] == ["api", "logs"]:
             if failure == "cancel":
                 raise asyncio.CancelledError
+            await kwargs["on_line"]("(setup) [ 35%] Building CUDA object fixture.cu.o")
             return (1 if failure == "setup" else 0), ""
         if "--sync-down" in argv and failure == "download":
             return 1, ""
@@ -440,6 +441,17 @@ def test_dispatch_always_tears_down_owned_cluster(payload, target, tmp_path, mon
     if failure == "cleanup":
         assert any("needs attention" in item for item in events)
     if failure is None:
+        progress = [
+            json.loads(item.split(":", 1)[1]) for item in events if item.startswith("_cloud_setup:")
+        ]
+        assert progress == [
+            {
+                "phase": "compiling",
+                "message": "Compiling native engine · build progress 35%",
+                "scope": "native_build",
+                "build_percent": 35,
+            }
+        ]
         assert (
             next(i for i, argv in enumerate(calls) if "checkpoint-download" in argv)
             < len(calls) - 1

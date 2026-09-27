@@ -266,3 +266,17 @@ orphan before resuming GPU work; ordinary cancellation and shutdown clean up wor
 All execution remains local and single-owner. Windows GPU and robot deployment
 acceptance remain separate gates. See [validation evidence](workflow-validation.md)
 for what was actually executed on this integration branch.
+
+## Job history and creation
+
+Fine-tune, Quantize, Evaluate and Run open the project's saved jobs first. Select
+a row to inspect its status, results and evidence, or use the New action to open
+a separate job form. Successful submission opens that job's detail view. Logs and
+technical details stay behind an explicit disclosure; input, checkpoint, target,
+current stage and measured results remain immediately visible.
+
+A dataset's **Train on this dataset** action opens a new fine-tuning form with
+that dataset selected. A saved training checkpoint's **Quantize** action opens a
+new quantization form for that exact checkpoint. Ordinary sidebar navigation
+returns to history. Moving temporarily to Compute settings preserves the training
+draft. Model-card memory labels describe GPU budgets, not file download sizes.

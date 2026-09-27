@@ -7,6 +7,7 @@ import logging
 import math
 import os
 import re
+import shutil
 import signal
 import tarfile
 import tempfile
@@ -585,10 +586,19 @@ class Lifecycle:
         if runtime is None:
             raise ValueError("Runtime is not configured on this application host")
         self.compute.require_enabled(runtime)
+        if runtime.export_only and request.operation != "policy.export":
+            raise ValueError("This runtime supports ACT inference export only")
         cloud_target = None
         if runtime.execution == "skypilot":
-            if request.operation not in {"policy.finetune", "policy.quantize"}:
-                raise ValueError("SkyPilot cloud GPUs support fine-tuning and quantization")
+            if request.operation not in {
+                "policy.finetune",
+                "policy.quantize",
+                "policy.evaluate",
+                "policy.run",
+            }:
+                raise ValueError(
+                    "SkyPilot cloud GPUs support training, quantization, engine evaluation and run"
+                )
         if request.source_id and self.catalog.source(request.source_id) is None:
             raise ValueError("Policy source is not configured")
         if request.evaluation.suite == "libero_spatial" and request.operation in {
@@ -634,12 +644,38 @@ class Lifecycle:
                 request.operation == "policy.export"
                 and artifact.metadata.get("architecture") == "act"
             ):
-                check_source(runtime, artifact, self.settings.data_dir / artifact.path)
+                directory = self.settings.data_dir / artifact.path
+                check_source(runtime, artifact, directory, allow_cloud=True)
+                if (directory / "remote.json").is_file():
+                    await self.completed_cloud_act(artifact)
             elif (
                 request.operation == "policy.export"
                 and artifact.metadata.get("architecture", "smolvla") != "smolvla"
             ):
                 raise ValueError("No export adapter is registered for this policy architecture")
+            if runtime.execution == "skypilot" and request.operation in {
+                "policy.evaluate",
+                "policy.run",
+            }:
+                if (
+                    request.evaluation.mode != "engine"
+                    or request.evaluation.suite != "libero_object"
+                ):
+                    raise ValueError(
+                        "Cloud Evaluate and Run support engine inference tests; "
+                        "simulator task evaluation is not configured"
+                    )
+                if artifact.metadata.get("architecture", "smolvla") != "smolvla":
+                    raise ValueError("Cloud inference currently supports SmolVLA artifacts")
+                if artifact.format not in {"gguf", "deployment_package"}:
+                    raise ValueError(
+                        "Quantize the trained checkpoint first, then select its GGUF or package"
+                    )
+                if request.training is not None or request.limits is not None:
+                    raise ValueError(
+                        "Engine inference does not accept training recipes "
+                        "or robot task-success limits"
+                    )
             if request.operation == "policy.quantize":
                 if artifact.format not in {"training_checkpoint", "native_checkpoint", "gguf"}:
                     raise ValueError("Choose a trained checkpoint or floating GGUF to quantize")
@@ -965,6 +1001,34 @@ class Lifecycle:
                 except ProcessLookupError:
                     pass
 
+    async def act_stop_owned(self, process):
+        """Finish ACT child cleanup despite repeated cancellation, then propagate it."""
+        finish = asyncio.create_task(self.stop(process, None))
+        interrupted = False
+        while not finish.done():
+            try:
+                await asyncio.shield(finish)
+            except asyncio.CancelledError:
+                interrupted = True
+        finish.result()
+        if interrupted:
+            raise asyncio.CancelledError
+
+    async def act_spawn_owned(self, *args, **kwargs):
+        """Register an ACT copy/export child before honouring cancellation."""
+        spawning = asyncio.create_task(asyncio.create_subprocess_exec(*args, **kwargs))
+        interrupted = False
+        while not spawning.done():
+            try:
+                await asyncio.shield(spawning)
+            except asyncio.CancelledError:
+                interrupted = True
+        process = spawning.result()
+        if interrupted:
+            await self.act_stop_owned(process)
+            raise asyncio.CancelledError
+        return process
+
     async def native(
         self,
         job,
@@ -1080,8 +1144,13 @@ class Lifecycle:
 
             async def progress(message):
                 nonlocal cloud_stage
-                if message.startswith("_quantization:"):
-                    detail = json.loads(message[len("_quantization:") :])
+                if message.startswith("_cloud_setup:"):
+                    detail = json.loads(message.split(":", 1)[1])
+                    cloud_stage = detail["phase"]
+                    await self.event(job, cloud_stage, detail["message"], detail)
+                    return
+                if message.startswith(("_quantization:", "_inference:")):
+                    detail = json.loads(message.split(":", 1)[1])
                     cloud_stage = detail.get("phase", "quantizing")
                     await self.event(
                         job, cloud_stage, detail.get("message", "Quantizing checkpoint")
@@ -1098,8 +1167,16 @@ class Lifecycle:
                     return
                 if message.startswith("Optimizer step"):
                     cloud_stage = "training"
-                elif message.startswith("Downloading training"):
+                elif message.startswith(("Downloading training", "Saving cloud artifacts")):
                     cloud_stage = "saving"
+                elif message == "Quantizing on Google Cloud":
+                    cloud_stage = "quantizing"
+                elif message == "Evaluating on Google Cloud":
+                    cloud_stage = "evaluating"
+                elif message == "Running policy on Google Cloud":
+                    cloud_stage = "running"
+                elif message == "Training on Google Cloud":
+                    cloud_stage = "training"
                 elif message.startswith("Stopping Google Cloud"):
                     cloud_stage = "finishing"
                 await self.event(job, cloud_stage, message)
@@ -1135,7 +1212,8 @@ class Lifecycle:
             # Settings may change while a queued run waits, or during an earlier
             # workflow stage. Check again immediately before starting each worker.
             self.compute.require_enabled(runtime)
-            process = await asyncio.create_subprocess_exec(
+            spawn = self.act_spawn_owned if act_export else asyncio.create_subprocess_exec
+            process = await spawn(
                 *argv,
                 cwd=cwd,
                 env=env,
@@ -1167,7 +1245,10 @@ class Lifecycle:
                                 await self.event(job, output, f"Optimizer step {progress['step']}")
                 await process.wait()
             finally:
-                await self.stop(process, container_name if image else None)
+                if act_export:
+                    await self.act_stop_owned(process)
+                else:
+                    await self.stop(process, container_name if image else None)
             returncode = process.returncode
         if not result_path.exists() or result_path.stat().st_size > 4 * 1024 * 1024:
             raise ValueError("Worker did not produce a bounded result")
@@ -1220,6 +1301,106 @@ class Lifecycle:
         await self.event(job, output, f"Completed {operation}")
         return created, report
 
+    async def completed_cloud_act(self, artifact):
+        original = await self.execution.get(artifact.job_id)
+        if (
+            original is None
+            or original.project_id != artifact.project_id
+            or original.kind != "policy.finetune"
+            or original.status != "succeeded"
+        ):
+            raise ValueError("Wait for the ACT training run to complete before exporting")
+
+    async def materialize_act(self, job, artifact, directory):
+        """An explicit export owns this download and its entire child lifetime."""
+        from vla_platform import cloud_compute_catalog
+        from vla_platform.lifecycle import cloud_materialize, sky_runner
+
+        await self.completed_cloud_act(artifact)
+        source = self.settings.data_dir / artifact.path
+        check_source(self.runtime(job.request.runtime_id), artifact, source, allow_cloud=True)
+        content, pointer, original_manifest = cloud_materialize.descriptor(
+            source, artifact.manifest_sha256
+        )
+        descriptor = directory / "descriptor"
+        descriptor.mkdir()
+        (descriptor / "manifest.json").write_bytes(content)
+        (descriptor / "remote.json").write_bytes(cloud_materialize.cloud_storage.encoded(pointer))
+        python = cloud_compute_catalog.sky_python(sky_runner.executable())
+        if not python:
+            raise ValueError("The verified cloud download environment is unavailable")
+        await self.event(
+            job, "downloading", "Downloading the completed ACT checkpoint for local CPU export"
+        )
+        destination = directory / "local-checkpoint"
+        process = await self.act_spawn_owned(
+            python,
+            str(Path(cloud_materialize.__file__).resolve()),
+            str(descriptor.resolve()),
+            str(destination.resolve()),
+            artifact.manifest_sha256,
+            artifact.id,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+            start_new_session=os.name == "posix",
+        )
+        try:
+            await process.wait()
+        finally:
+            await self.act_stop_owned(process)
+        if process.returncode:
+            raise ValueError(
+                "Completed ACT checkpoint download failed; "
+                "check private storage access, integrity and local disk space"
+            )
+        # Recheck the original registered descriptor after the child has exited.
+        current, final_pointer, _ = cloud_materialize.descriptor(source, artifact.manifest_sha256)
+        if current != content or final_pointer != pointer:
+            raise ValueError("Registered cloud checkpoint changed during download")
+        manifest, sha, total = await asyncio.to_thread(validate_bundle, destination, directory)
+        expected = {
+            "source_artifact_id": artifact.id,
+            "source_manifest_sha256": artifact.manifest_sha256,
+            "remote_uri": pointer["uri"],
+            "file_bytes": pointer["file_bytes"],
+        }
+        expected_metadata = {
+            key: value
+            for key, value in original_manifest["metadata"].items()
+            if key not in {"storage", "remote", "remote_uri"}
+        } | {"cloud_source": expected}
+        receipt = cloud_materialize.decode(
+            cloud_materialize.read_bytes(destination / cloud_materialize.RESERVED)
+        )
+        files = manifest.get("files", {})
+        generations = receipt.get("object_generations", {})
+        if (
+            manifest.get("metadata") != expected_metadata
+            or {key: value for key, value in files.items() if key != cloud_materialize.RESERVED}
+            != original_manifest["files"]
+            or cloud_materialize.RESERVED not in files
+            or receipt.get("payload_files") != original_manifest["files"]
+            or any(receipt.get(key) != value for key, value in expected.items())
+            or set(generations) != set(original_manifest["files"])
+            or any(
+                not isinstance(value, str) or not value.isdecimal()
+                for value in generations.values()
+            )
+        ):
+            raise ValueError("Local ACT checkpoint source provenance or payload differs")
+        return PolicyArtifact(
+            id=f"{job.id}:local-checkpoint",
+            project_id=job.project_id,
+            job_id=job.id,
+            label="Complete ACT checkpoint (verified local copy)",
+            format="training_checkpoint",
+            path=destination.resolve().relative_to(self.settings.data_dir.resolve()).as_posix(),
+            manifest_sha256=sha,
+            file_bytes=total,
+            parent_ids=[artifact.id],
+            metadata=manifest["metadata"],
+        )
+
     async def run(self, job: Job):
         request = job.request
         result = LifecycleResult()
@@ -1228,6 +1409,29 @@ class Lifecycle:
             if request.artifact_id
             else None
         )
+        if (
+            request.operation == "policy.export"
+            and artifact is not None
+            and artifact.metadata.get("architecture") == "act"
+            and (self.settings.data_dir / artifact.path / "remote.json").is_file()
+        ):
+            directory = self.settings.data_dir / "jobs" / job.id / "checkpoint-download"
+            directory.mkdir(parents=True, exist_ok=False)
+            accepted = False
+            try:
+                local = await self.materialize_act(job, artifact, directory)
+                # Keep the local child unregistered until the actual ACT worker
+                # validates its complete source and completes fresh CPU parity.
+                created, _ = await self.native(
+                    job, request.operation, local, "operation", result, register_artifact=False
+                )
+                result.artifacts.extend([local, created])
+                await self.publish(job, result)
+                accepted = True
+                return result
+            finally:
+                if not accepted:
+                    shutil.rmtree(directory)
         if request.operation != "policy.workflow":
             # Native runtimes can use distinct training and conversion environments.
             # Cloud workers perform these steps together beside the remote checkpoint.

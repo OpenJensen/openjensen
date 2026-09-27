@@ -26,6 +26,13 @@ test('prefixed export loads bundles, API, dataset posters and docs without escap
   await page.getByRole('button', { name: 'Cloud runs', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Cloud run monitor', exact: true })).toBeVisible();
   await expect(page.getByText('Cloud monitoring is not configured.', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Dataset', exact: true }).click();
+  const teachingState = page.waitForResponse(response => new URL(response.url()).pathname === `${prefix}/api/v1/teaching/state`);
+  await page.getByRole('button', { name: 'Teaching', exact: true }).click();
+  expect((await teachingState).status()).toBe(200);
+  await expect(page.getByRole('heading', { name: 'Teach in simulation', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start recording', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Connect voice', exact: true })).toBeDisabled();
   await page.getByRole('link', { name: 'API reference', exact: true }).first().click();
   await expect(page).toHaveURL(new RegExp(`${prefix}/docs/$`));
   await expect(page.getByRole('heading', { name: 'API reference', exact: true })).toBeVisible();

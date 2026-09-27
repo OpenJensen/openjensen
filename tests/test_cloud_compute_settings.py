@@ -597,6 +597,22 @@ def test_import_check_locates_windows_console_script_environment_without_executi
     assert catalog.sky_python(str(launcher)) == str(python)
 
 
+def test_cloud_only_capabilities_describe_implemented_flows_without_inventing_evidence(
+    tmp_path, probes
+):
+    save_connection(tmp_path)
+    with TestClient(create_app(Settings(data_dir=tmp_path))) as client:
+        response = client.get("/api/v1/capabilities")
+        assert response.status_code == 200
+        capabilities = {item["operation"]: item for item in response.json()}
+        for operation in ("policy.finetune", "policy.quantize", "policy.evaluate", "policy.run"):
+            assert capabilities[operation]["status"] == "untested"
+            assert capabilities[operation]["support"] == []
+        assert capabilities["policy.distill"]["status"] == "planned"
+        assert capabilities["policy.export"]["status"] == "planned"
+    assert probes[0] == []
+
+
 def test_reconnect_between_polls_revokes_readiness_despite_identical_file_metadata(
     tmp_path, probes, monkeypatch
 ):
