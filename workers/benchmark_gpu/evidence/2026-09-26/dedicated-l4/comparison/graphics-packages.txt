@@ -1,0 +1,4 @@
+libegl1:amd64	1.4.0-1
+libnvidia-common-580-server	580.178.04-0ubuntu0.22.04.1
+libnvidia-compute-580-server:amd64	580.178.04-0ubuntu0.22.04.1
+libnvidia-gl-580-server:amd64	580.178.04-0ubuntu0.22.04.1

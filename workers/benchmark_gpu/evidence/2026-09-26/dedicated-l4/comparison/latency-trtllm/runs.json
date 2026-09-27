@@ -1,0 +1,110 @@
+[
+  {
+    "name": "native-fp16",
+    "backend": "native-fp16",
+    "command": [
+      "/home/xbox-363-i9mac/smolvla-benchmark/.venv-trtllm/bin/python",
+      "-u",
+      "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/smolvla_cross_stack.py",
+      "--backend",
+      "native-fp16",
+      "--output",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/latency-trtllm/native-fp16",
+      "--fixtures",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures",
+      "--samples",
+      "5",
+      "--warmup",
+      "1"
+    ],
+    "pids": [
+      7373,
+      7464,
+      7472,
+      7474,
+      7476,
+      7477,
+      7479,
+      7481,
+      7484,
+      7486
+    ],
+    "returncode": 0,
+    "wall_s": 74.16331505775452,
+    "sampled_process_peak_mib": 1186.0
+  },
+  {
+    "name": "trtllm-fp16",
+    "backend": "trtllm-fp16",
+    "command": [
+      "/home/xbox-363-i9mac/smolvla-benchmark/.venv-trtllm/bin/python",
+      "-u",
+      "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/smolvla_cross_stack.py",
+      "--backend",
+      "trtllm-fp16",
+      "--output",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/latency-trtllm/trtllm-fp16",
+      "--fixtures",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures",
+      "--samples",
+      "5",
+      "--warmup",
+      "1"
+    ],
+    "pids": [
+      18619,
+      18873,
+      18954,
+      19015,
+      19017,
+      19021,
+      19023,
+      19026,
+      19027,
+      19030,
+      19033,
+      19131,
+      19567,
+      19765,
+      19767,
+      19799
+    ],
+    "returncode": 0,
+    "wall_s": 98.57707381248474,
+    "sampled_process_peak_mib": 1632.0
+  },
+  {
+    "name": "native-fp16-repeat",
+    "backend": "native-fp16",
+    "command": [
+      "/home/xbox-363-i9mac/smolvla-benchmark/.venv-trtllm/bin/python",
+      "-u",
+      "/home/xbox-363-i9mac/smolvla-benchmark/workers/benchmark_gpu/scripts/smolvla_cross_stack.py",
+      "--backend",
+      "native-fp16",
+      "--output",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/latency-trtllm/native-fp16-repeat",
+      "--fixtures",
+      "/home/xbox-363-i9mac/smolvla-benchmark/comparison/fixtures",
+      "--samples",
+      "5",
+      "--warmup",
+      "1"
+    ],
+    "pids": [
+      19828,
+      19850,
+      19858,
+      19860,
+      19862,
+      19863,
+      19865,
+      19867,
+      19870,
+      19872
+    ],
+    "returncode": 0,
+    "wall_s": 71.46587252616882,
+    "sampled_process_peak_mib": 1186.0
+  }
+]

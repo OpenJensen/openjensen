@@ -24,8 +24,14 @@ private connection configuration, or credentials belong in this directory.
 - Timing includes checkpoint preprocessing, CPU/GPU copies, all ten denoising
   steps, postprocessing, and C++ RPC or custom engine dispatch where used. It
   excludes simulator stepping and camera acquisition.
-- Startup is cached, in-process model/processor setup, including quantization;
-  imports, downloads, first-inference warmup and subprocess launch are excluded.
+- Startup is cached runtime initialization timed inside the harness process. It
+  includes model/processor setup, quantization, C++ server launch and engine-worker
+  initialization where applicable. Parent-process backend imports before the
+  runtime timer, downloads and the harness's first-inference warmup are excluded;
+  engine-internal profiling is included. This is not process-start-to-first-action
+  time. `measure_startup.py` separately measures a fresh Python process through
+  its first valid CPU action chunk, including interpreter/backend imports,
+  initialization and first inference, with cached assets.
 - Each candidate gets a fresh process. NVIDIA memory sampling tracks the process
   and its children at 100 ms intervals. This is a sampled peak, not an exact
   allocator maximum. PyTorch allocator counters are recorded separately.
@@ -38,10 +44,28 @@ private connection configuration, or credentials belong in this directory.
 
 ## Prepare native execution
 
+On a minimal Ubuntu image, install the compiler/build tools and EGL libraries
+before creating the Python environments. The TensorRT-LLM environment also needs
+OpenMPI:
+
+```sh
+sudo apt-get update
+sudo apt-get install -y build-essential libegl1 libgl1 libgl1-mesa-dev libosmesa6-dev libopenmpi-dev
+```
+
+CUDA-only VM images may omit NVIDIA's EGL library even when `nvidia-smi` works.
+LIBERO needs a working headless rendering context. Install the graphics/EGL
+package matching the existing NVIDIA driver and verify hardware rendering before
+starting quality runs. On the recorded GCP CUDA M132 image, adding
+`libnvidia-gl-580-server=580.178.04-0ubuntu0.22.04.1` supplied the missing EGL vendor
+without changing the compute driver. This example is specific to that Ubuntu
+image; WSL and other driver installations have different graphics packages.
+
 ```sh
 uv venv --python 3.11 .venv
 uv pip install --python .venv/bin/python cmake==3.31.6
-PATH="$PWD/.venv/bin:$PATH" uv pip install --python .venv/bin/python -r requirements-native.txt
+PATH="$PWD/.venv/bin:$PATH" uv pip install --python .venv/bin/python \
+  --index-strategy unsafe-best-match -r requirements-native.txt
 ```
 
 Cache these exact Hugging Face snapshots before timing:
@@ -94,6 +118,20 @@ be new. Keep the captured fixture directory immutable for compared runs. The
 matrix repeats native BF16 at the end to expose drift. Run each GPU separately.
 Do not combine contention-affected timings with isolated measurements.
 
+Measure full process startup separately in the appropriate backend environment:
+
+```sh
+"$PYTHON" "$SCRIPTS/measure_startup.py" \
+  --backend native-bf16 --root "$PWD" \
+  --fixture fixtures/task0-init0-chunk0.npz --output outputs/startup-native-bf16
+```
+
+This uses a fresh child process and a shared monotonic clock, stopping the timer
+after the first complete, finite CPU action chunk. It excludes teardown and
+artifact writes. Assets are already cached, and OS/file/driver caches are not
+flushed. Keep these startup values separate from the harness's cached runtime
+initialization field.
+
 `scripts/with_paused_collection.py` is an optional administrative helper for an
 explicitly authorized brief collection pause. It requires the exact collector
 user/script, records PID/start-time identities, uses a detached resume watchdog,
@@ -119,7 +157,16 @@ also accepts `--backend vllm-bf16` for shared fixtures and paired quality.
 
 TensorRT-LLM remains the requested target. Its experimental probe is
 `probe_trtllm_smolvla.py`; install `requirements-trtllm.txt` separately, plus system
-OpenMPI. When using portable Python, expose its `LIBDIR` through `LD_LIBRARY_PATH`.
+OpenMPI. TensorRT-LLM 0.21 pins `datasets==3.1.0`, while LeRobot 0.4.4 requires
+`datasets>=4`; its `numpy<2` constraint also conflicts with LeRobot's `rerun-sdk`.
+The tested custom inference adapter uses `datasets==4.8.5` and `numpy==2.5.3` and
+does not exercise TensorRT-LLM's dataset pipeline. Apply the explicit overrides with
+`uv pip install --python .venv-trtllm/bin/python --index-strategy unsafe-best-match
+--override requirements-trtllm-overrides.txt -r requirements-trtllm.txt` after
+installing CMake 3.31.6 and putting that environment's `bin` on `PATH`.
+This overrides an upstream declared constraint; full-action admission and quality
+checks are required for the custom adapter, and do not validate unrelated engine
+features. When using portable Python, expose its `LIBDIR` through `LD_LIBRARY_PATH`.
 The validated FP16 adapter uses TensorRT-LLM's PyTorch executor, its context-logit-capable
 sampler (`enable_trtllm_sampler=True`), and a custom context-output
 buffer for continuous actions. Its first 350 entries are an action payload,
@@ -139,6 +186,11 @@ patch tests run without GPU dependencies. Keep raw result JSON, action arrays,
 logs, dependency freezes, hashes and measurement commands alongside each report.
 
 Latest committed measurements: [September 26 evidence](evidence/2026-09-26/REPORT.md).
+Each host's `actions.tar.gz` contains the saved FP32 action arrays beside the
+corresponding result paths. Extract it into that host's evidence directory to
+rerun `compare_results.py` without loading a model. Input fixtures and complete
+execution logs remain in the local run archive; their hashes identify the paired
+inputs. The action archives contain no model weights.
 
 RTX 3070 TensorRT-LLM setup is deferred by user decision: the host drive had
 2.2 GiB free and WSL 6.6 GiB before cleaning this task's temporary transfer

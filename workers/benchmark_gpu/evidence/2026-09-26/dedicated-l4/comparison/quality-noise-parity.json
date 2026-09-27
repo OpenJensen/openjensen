@@ -1,0 +1,38 @@
+{
+  "status": "passed",
+  "initial_states": [
+    0,
+    1
+  ],
+  "chunks_per_initial_state": 128,
+  "seed_rule": "42 + 1000 * initial_state + chunk_index",
+  "shape": [
+    1,
+    50,
+    32
+  ],
+  "dtype": "float32",
+  "environments": {
+    "native": {
+      "numpy": "2.2.6",
+      "noise_sha256": {
+        "0": "c8232bb1fb32999b30743a6f05f5a25ddf9c92ce95a4b7d3e2c44da29d534aea",
+        "1": "4bea38a97395bda7dbee6f37e699c2f7f614840238813ff49ab710d2522d56be"
+      }
+    },
+    "vllm": {
+      "numpy": "2.2.6",
+      "noise_sha256": {
+        "0": "c8232bb1fb32999b30743a6f05f5a25ddf9c92ce95a4b7d3e2c44da29d534aea",
+        "1": "4bea38a97395bda7dbee6f37e699c2f7f614840238813ff49ab710d2522d56be"
+      }
+    },
+    "trtllm": {
+      "numpy": "2.5.3",
+      "noise_sha256": {
+        "0": "c8232bb1fb32999b30743a6f05f5a25ddf9c92ce95a4b7d3e2c44da29d534aea",
+        "1": "4bea38a97395bda7dbee6f37e699c2f7f614840238813ff49ab710d2522d56be"
+      }
+    }
+  }
+}
