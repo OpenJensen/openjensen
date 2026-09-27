@@ -1,6 +1,7 @@
 """Validate local rollout inputs before submitting a managed GPU Job Group."""
 
 import argparse
+import hashlib
 import os
 import re
 import subprocess
@@ -355,8 +356,8 @@ def _run_sdk(command, *, timeout, check=False):
         return subprocess.CompletedProcess(command, error.returncode)
 
 
-def _launch(documents, path, mode, options=()):
-    receipt_dir = Path(tempfile.mkdtemp(prefix="firebird-rollout-"))
+def _launch(documents, path, mode, options=(), receipt_dir=None):
+    receipt_dir = receipt_dir or Path(tempfile.mkdtemp(prefix="firebird-rollout-"))
     receipt_path = receipt_dir / "submission.json"
     command = [
         "bash",
@@ -394,7 +395,7 @@ def _launch(documents, path, mode, options=()):
                 if receipt["group_name"] == name:
                     target = [str(receipt["job_id"])]
                     attempt["job_id"] = receipt["job_id"]
-            except (OSError, ValueError, TypeError, KeyError):
+            except (OSError, ValueError, TypeError, KeyError) as _error:
                 pass  # Submission may not yet have returned an ID; the unique name is best effort.
             cancellation_path = receipt_dir / "cancellation.json"
 
@@ -431,9 +432,45 @@ def _launch(documents, path, mode, options=()):
 
 def _submit(args, path):
     documents = _prepare(path, args.mode)
+    expected_model = getattr(args, "expected_model_id", None)
+    if expected_model is not None:
+        tasks = {task["name"]: task for task in documents[1:]}
+        if (
+            not re.fullmatch(r"sha256:[a-f0-9]{64}", expected_model)
+            or tasks["vla"]["envs"]["MODEL_ID"] != expected_model
+        ):
+            raise ValueError("Checkpoint differs from the application accepted model fingerprint")
+    expected_prefix = getattr(args, "expected_results_prefix", None)
+    if expected_prefix is not None:
+        tasks = {task["name"]: task for task in documents[1:]}
+        if tasks["isaac"]["envs"]["SIM_RESULTS_URI"].rstrip("/") != expected_prefix:
+            raise ValueError("Result prefix differs from the application accepted profile")
     if args.validate_only:
         print("Local rollout inputs validated. Cloud network, quota and capacity are not checked.")
         return 0
+    receipt_dir = getattr(args, "receipt_dir", None)
+    if receipt_dir is not None:
+        if args.mode != _Mode.EXPERIMENTAL:
+            raise ValueError("Persistent application receipts require experimental mode")
+        receipt_dir.mkdir(parents=True, exist_ok=False)
+        tasks = {task["name"]: task for task in documents[1:]}
+        env = tasks["isaac"]["envs"]
+        manifest = _inside(env["SIM_MANIFEST"], _WORKER, "SIM_MANIFEST")
+        data = yaml.safe_load(manifest.read_text())
+        # Each app job owns a distinct prefix even if the operator's template
+        # is shared. The remote runner adds its own episode UUID beneath it.
+        env["SIM_RESULTS_URI"] = env["SIM_RESULTS_URI"].rstrip("/") + "/" + env["ROLLOUT_ID"]
+        rollout_sdk.write_json(
+            receipt_dir / "launch-context.json",
+            {
+                "schema_version": 1,
+                "group_name": documents[0]["name"],
+                "rollout_id": env["ROLLOUT_ID"],
+                "results_prefix": env["SIM_RESULTS_URI"],
+                "model_id": data["policy"]["model_id"],
+                "manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
+            },
+        )
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".yaml", prefix=".rollout-", dir=_ROOT
     ) as task:
@@ -444,7 +481,7 @@ def _submit(args, path):
             for enabled, flag in ((args.yes, "--yes"), (args.detach_run, "--detach-run"))
             if enabled
         )
-        return _launch(documents, task.name, args.mode, options)
+        return _launch(documents, task.name, args.mode, options, receipt_dir)
 
 
 def _main():
@@ -461,6 +498,15 @@ def _main():
         "--execute-steps",
         type=int,
         help="Actions to execute before replanning; requires a checkpoint directory or archive",
+    )
+    parser.add_argument(
+        "--receipt-dir", type=Path, help="New private directory for application ownership receipts"
+    )
+    parser.add_argument(
+        "--expected-model-id", help="Require the accepted model fingerprint before submission"
+    )
+    parser.add_argument(
+        "--expected-results-prefix", help="Require the configured result prefix before submission"
     )
     parser.add_argument("--validate-only", action="store_true")
     parser.add_argument("--yes", action="store_true", help="Skip SkyPilot's launch confirmation")
@@ -486,6 +532,8 @@ def _main():
     if source is not None:
         # Resolve relative inputs before the historical task-directory change.
         source = source.expanduser().absolute()
+    if args.receipt_dir is not None:
+        args.receipt_dir = args.receipt_dir.expanduser().resolve()
     os.chdir(_ROOT)
     try:
         sys.path.insert(0, str(_WORKER))
