@@ -24,7 +24,7 @@ export function DatasetSubmissionRecovery({ submission, onReconcile, onRetry, on
   async function review() {
     if (reviewBusy.current || submission.busy) return;
     const expected = submission.attempt;
-    reviewBusy.current = true; setReviewing(true); setReviewError('');
+    reviewBusy.current = true; setReviewed(null); setReviewing(true); setReviewError('');
     try {
       if (await onReviewHistory() && latestAttempt.current === expected) setReviewed(expected);
       else setReviewError('Job history could not be verified. Keep this request unresolved.');

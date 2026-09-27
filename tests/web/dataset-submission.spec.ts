@@ -157,3 +157,30 @@ test('late intake acknowledgement records the job without replacing later stage 
   await expect(page.getByRole('heading', { name: 'Waiting to inspect' })).not.toBeVisible();
   expect(state.writes).toHaveLength(1);
 });
+
+for (const failure of ['unavailable', 'foreign'] as const) test(`legacy intake recovery withdraws prior approval after ${failure} history reread`, async ({ page }) => {
+  const state = await fixture(page);
+  await page.evaluate(projectId => sessionStorage.setItem(`firebird:job-attempt:dataset.inspect:${projectId}`, JSON.stringify({ state: 'uncertain', message: 'Legacy inspection outcome is unverified.' })), project);
+  await page.reload();
+  const recovery = page.getByRole('complementary', { name: 'Request recovery' });
+  const refresh = recovery.getByRole('button', { name: 'Refresh job history', exact: true });
+  const acknowledge = recovery.getByRole('button', { name: 'I reviewed the jobs; allow a new request', exact: true });
+  await expect(acknowledge).toBeDisabled();
+  await refresh.click();
+  await expect(acknowledge).toBeEnabled();
+  const historyPath = `**/api/v1/projects/${project}/jobs`;
+  await page.route(historyPath, route => route.fulfill({
+    status: failure === 'unavailable' ? 503 : 200,
+    json: failure === 'unavailable' ? { detail: 'Generated history reread unavailable.' } : [{ id: 'foreign-inspection', project_id: 'another-project', kind: 'dataset.inspect', status: 'succeeded', created_at: timestamp, updated_at: timestamp, request: { source: 'huggingface', repo_id: 'foreign/dataset', revision: 'main' } }],
+  }));
+  await refresh.click();
+  await expect(recovery.getByRole('alert')).toBeVisible();
+  await expect(acknowledge).toBeDisabled();
+  expect(state.writes).toEqual([]);
+  await page.unroute(historyPath);
+  await refresh.click();
+  await expect(acknowledge).toBeEnabled();
+  await acknowledge.click();
+  await expect(recovery).toHaveCount(0);
+  expect(state.writes).toEqual([]);
+});
