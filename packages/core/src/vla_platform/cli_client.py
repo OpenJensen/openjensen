@@ -37,6 +37,21 @@ async def request_json(method: str, path: str, payload=None):
         await api.close()
 
 
+def same_json_value(left, right) -> bool:
+    """JSON booleans are not numeric budgets; allow genuine int/float normalization."""
+    if isinstance(left, bool) or isinstance(right, bool):
+        return type(left) is type(right) and left == right
+    if isinstance(left, dict) and isinstance(right, dict):
+        return left.keys() == right.keys() and all(
+            same_json_value(left[key], right[key]) for key in left
+        )
+    if isinstance(left, list) and isinstance(right, list):
+        return len(left) == len(right) and all(
+            same_json_value(a, b) for a, b in zip(left, right, strict=True)
+        )
+    return left == right
+
+
 def validate_acknowledgment(api: ApiClient, path: str, payload, value) -> None:
     """Validate write receipts without retrying or changing their public JSON."""
     parts = [unquote(part) for part in path.strip("/").split("/")]
@@ -113,12 +128,15 @@ def validate_acknowledgment(api: ApiClient, path: str, payload, value) -> None:
                 if expected["training"] is not None:
                     recipe = recorded.get("training")
                     if not isinstance(recipe, dict) or any(
-                        recipe.get(key) != value
+                        not same_json_value(recipe.get(key), value)
                         for key, value in expected["training"].items()
                         if key != "checkpoint_subdirectory"  # Catalog-owned path, not a budget.
                     ):
                         raise ApiError("Acknowledged training recipe changed submitted values")
-        if any(recorded.get(key) != expected[key] for key in keys):
+        if any(
+            not same_json_value(value["request"].get(key, recorded.get(key)), expected[key])
+            for key in keys
+        ):
             raise ApiError("Acknowledged input does not match the submitted identity")
     except ApiError:
         raise ApiError(
