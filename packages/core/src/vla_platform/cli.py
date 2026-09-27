@@ -1,5 +1,6 @@
 """CLI client. Only `serve` owns the application; all other commands use its API."""
 
+import asyncio
 import json
 import os
 import stat
@@ -8,10 +9,14 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import Annotated
 
-import httpx
 import typer
 
-app = typer.Typer(no_args_is_help=True, help="Local VLA projects and robotics dataset intake.")
+from vla_platform import cli_client
+from vla_platform.tui_client import ApiError, segment
+
+app = typer.Typer(
+    no_args_is_help=True, help="Local robotics projects, lifecycle jobs and artifacts."
+)
 projects = typer.Typer(no_args_is_help=True)
 jobs = typer.Typer(no_args_is_help=True)
 policy = typer.Typer(no_args_is_help=True)
@@ -22,22 +27,31 @@ app.add_typer(projects, name="projects")
 app.add_typer(jobs, name="jobs")
 
 
-def call(method: str, path: str, payload: dict | None = None) -> None:
-    base = os.getenv("FIREBIRD_API_URL", "http://127.0.0.1:8000").rstrip("/")
+def execute(operation):
     try:
-        response = httpx.request(method, base + "/api/v1" + path, json=payload, timeout=15)
-        if response.is_error:
-            typer.echo(f"API error ({response.status_code}): {response.text}", err=True)
-            raise typer.Exit(1)
-        typer.echo(json.dumps(response.json(), indent=2, ensure_ascii=False))
-    except ValueError as exc:
+        return asyncio.run(operation)
+    except cli_client.WaitDeadline as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(124) from None
+    except (ApiError, ValueError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from None
+    except OSError, TimeoutError:
         typer.echo(
-            "Application returned invalid JSON; check the API URL and server logs.", err=True
+            "Local file or download operation failed; no completed download is claimed.", err=True
         )
-        raise typer.Exit(1) from exc
-    except httpx.HTTPError as exc:
-        typer.echo(f"Cannot reach the application. Start 'firebird serve'. {exc}", err=True)
-        raise typer.Exit(1) from exc
+        raise typer.Exit(1) from None
+    except KeyboardInterrupt:
+        typer.echo(
+            "Client interrupted. No job cancellation was requested; inspect recorded jobs.",
+            err=True,
+        )
+        raise typer.Exit(130) from None
+
+
+def call(method: str, path: str, payload: dict | None = None) -> None:
+    value = execute(cli_client.request_json(method, path, payload))
+    typer.echo(json.dumps(value, indent=2, ensure_ascii=False))
 
 
 @app.command()
@@ -85,22 +99,22 @@ def inspect(
             "snapshot_for_training": snapshot_for_training,
         }
     )
-    call("POST", f"/projects/{project_id}/intakes", payload)
+    call("POST", f"/projects/{segment(project_id)}/intakes", payload)
 
 
 @jobs.command("list")
 def list_jobs(project_id: str) -> None:
-    call("GET", f"/projects/{project_id}/jobs")
+    call("GET", f"/projects/{segment(project_id)}/jobs")
 
 
 @jobs.command("show")
 def show_job(job_id: str) -> None:
-    call("GET", f"/jobs/{job_id}")
+    call("GET", f"/jobs/{segment(job_id)}")
 
 
 @jobs.command("cancel")
 def cancel_job(job_id: str) -> None:
-    call("POST", f"/jobs/{job_id}/cancel")
+    call("POST", f"/jobs/{segment(job_id)}/cancel")
 
 
 @policy.command("options")
@@ -118,23 +132,60 @@ def augmentation_options() -> None:
 @augmentation.command("submit")
 def submit_augmentation(project_id: str, recipe: Path) -> None:
     """Augment selected dataset clips through the shared application API."""
-    call("POST", f"/projects/{project_id}/augmentations", read_recipe(recipe))
+    call("POST", f"/projects/{segment(project_id)}/augmentations", read_recipe(recipe))
 
 
 @policy.command("submit")
 def submit_policy(project_id: str, recipe: Path) -> None:
     """Submit a policy operation/workflow through the shared application API."""
-    call("POST", f"/projects/{project_id}/policy-jobs", read_recipe(recipe))
+    call("POST", f"/projects/{segment(project_id)}/policy-jobs", read_recipe(recipe))
 
 
 @policy.command("artifacts")
 def policy_artifacts(project_id: str) -> None:
-    call("GET", f"/projects/{project_id}/artifacts")
+    call("GET", f"/projects/{segment(project_id)}/artifacts")
 
 
 @jobs.command("events")
 def job_events(job_id: str) -> None:
-    call("GET", f"/jobs/{job_id}/events")
+    call("GET", f"/jobs/{segment(job_id)}/events")
+
+
+@jobs.command("wait")
+def wait_for_job(
+    job_id: str,
+    timeout: Annotated[int, typer.Option(min=1, max=86400)] = 600,
+    interval: Annotated[float, typer.Option(min=0.1, max=30)] = 2,
+) -> None:
+    """Observe an existing job until terminal; never submit, retry or cancel it."""
+    job = execute(cli_client.wait_job(job_id, timeout, interval))
+    typer.echo(json.dumps(job, indent=2, ensure_ascii=False))
+    if job["status"] != "succeeded":
+        raise typer.Exit(1)
+
+
+@policy.command("download")
+def download_policy(
+    project_id: str,
+    artifact_id: str,
+    output: Annotated[
+        Path, typer.Option(help="New destination file; existing files are never replaced.")
+    ],
+    max_bytes: Annotated[
+        int, typer.Option(min=1, max=cli_client.MAX_DOWNLOAD_LIMIT)
+    ] = cli_client.DEFAULT_DOWNLOAD_LIMIT,
+    timeout: Annotated[int, typer.Option(min=1, max=3600)] = 600,
+    expected_sha256: Annotated[
+        str | None, typer.Option(help="Optional independently known archive SHA256.")
+    ] = None,
+) -> None:
+    """Download registered artifact bytes with bounds and an explicit checksum receipt."""
+    result = execute(
+        cli_client.download_artifact(
+            project_id, artifact_id, output, max_bytes, timeout, expected_sha256
+        )
+    )
+    typer.echo(json.dumps(result, indent=2, ensure_ascii=False))
 
 
 def read_recipe(path: Path) -> dict:
