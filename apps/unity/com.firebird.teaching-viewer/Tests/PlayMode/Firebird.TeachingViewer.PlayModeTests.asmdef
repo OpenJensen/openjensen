@@ -1,0 +1,16 @@
+{
+  "name": "Firebird.TeachingViewer.PlayModeTests",
+  "references": [
+    "Firebird.TeachingViewer",
+    "Firebird.TeachingViewer.TestFixtures"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "includePlatforms": [],
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "Newtonsoft.Json.dll",
+    "nunit.framework.dll"
+  ]
+}
