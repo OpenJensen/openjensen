@@ -6,7 +6,7 @@ import { api, artifactDownloadUrl, isActive } from '@/lib/api';
 import { WorkbenchDisclosure } from '@/components/workbench-disclosure';
 import { cancelSimulation, isSimulationJob, nativeInput, simulationOptions, simulationTarget, simulationTaskSummary, simulationVideoUrl, startSimulation, UncertainSubmission, uploadModel, type NativeArtifact, type SimulationJob } from '@/lib/native-simulation';
 
-export function NativeSimulationPanel({ projectId, preferredJobId, onTraining }: { projectId: string; preferredJobId?: string; onTraining: () => void }) {
+export function NativeSimulationPanel({ projectId, preferredJobId, onJobSelected, onTraining }: { projectId: string; preferredJobId?: string; onJobSelected?: (id: string) => void; onTraining: () => void }) {
   const client = useQueryClient();
   const options = useQuery({ queryKey: ['simulation-options'], queryFn: simulationOptions, retry: false, refetchInterval: 10_000 });
   const jobs = useQuery({ queryKey: ['jobs', projectId], queryFn: () => api.jobs(projectId), enabled: !!projectId, retry: false, refetchInterval: 3_000 });
@@ -57,7 +57,7 @@ export function NativeSimulationPanel({ projectId, preferredJobId, onTraining }:
     if (selected) void events.refetch();
     if (!response.isError) setReviewed(true);
   };
-  function showJob(id: string) { setJobId(id); setConfirmCancel(null); setVideoFailed(false); setPreparing(!id); }
+  function showJob(id: string) { onJobSelected?.(id); setJobId(id); setConfirmCancel(null); setVideoFailed(false); setPreparing(!id); }
   async function mutate(kind: 'upload' | 'run' | 'cancel') {
     if (busy.current || !projectId || (kind !== 'cancel' && !ready)) return;
     if (kind === 'upload' && (!file || !profile || !file.size || file.size > (options.data?.max_archive_bytes ?? 0))) return;

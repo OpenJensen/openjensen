@@ -149,6 +149,8 @@ test('project switching resets precision/source and failed history blocks mutati
   const state = await fixture(page); await page.getByLabel('ACT inference policy', { exact: true }).selectOption('act-export'); await page.getByLabel('Native precision', { exact: true }).selectOption('4');
   state.jobsError = true; await refresh(page); await expect(page.getByText(/Job updates are unavailable/)).toBeVisible(); await expect(submit(page)).toBeDisabled();
   state.jobsError = false; await page.getByLabel('Current project').selectOption('beta');
+  await expect(page.getByRole('button', { name: 'SmolVLA · GGUF', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Native ACT · INT8 / INT4', exact: true }).click();
   await expect(page.getByLabel('ACT inference policy', { exact: true })).toHaveValue(''); await expect(page.getByLabel('Native precision', { exact: true })).toHaveValue('8'); await expect(submit(page)).toBeDisabled(); expect(state.posts).toEqual([]);
 });
 
