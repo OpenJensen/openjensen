@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       windows_browser:
-        description: Also run the complete browser/build suite on Windows
+        description: Also run Windows core, terminal, and complete browser/build checks
         type: boolean
         default: false
 # Supersede obsolete PR revisions, but retain every main/manual verification.
@@ -41,7 +41,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        # Hackathon default is Linux. Windows is an explicit manual opt-in.
+        os: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.windows_browser && '["ubuntu-latest","windows-latest"]' || '["ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

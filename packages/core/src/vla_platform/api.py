@@ -19,6 +19,7 @@ from vla_platform.cloud_api import router as cloud_connections_router
 from vla_platform.cloud_connections import CloudConnections
 from vla_platform.cloud_runs import CloudRunsFeed, read_cloud_runs
 from vla_platform.compute_api import router as compute_settings_router
+from vla_platform.decision_api import router as decision_router
 from vla_platform.contracts import (
     Capability,
     EpisodePage,
@@ -104,6 +105,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(compute_settings_router)
     app.include_router(huggingface_router)
     app.include_router(teaching_router)
+    app.include_router(decision_router)
     app.add_middleware(
         TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]", "testserver"]
     )

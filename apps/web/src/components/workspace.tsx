@@ -6,6 +6,7 @@ import { api, isActive, isDatasetJob, type DatasetJob, type DatasetProfile, type
 import { CloudRuns } from '@/components/cloud-runs';
 import { WorkflowPanel } from '@/components/workflow-panel';
 import { TeachingPanel } from '@/components/teaching-panel';
+import { DecisionPanel } from '@/components/decision-panel';
 import { TrainingPanel } from '@/components/training-panel';
 import { AugmentationPanel } from '@/components/augmentation-panel';
 import { Icon } from '@/components/icon';
@@ -154,7 +155,7 @@ function Workbench() {
   const [activeStage, setActiveStage] = useState(0);
   const [quantizeArtifact, setQuantizeArtifact] = useState<{ projectId: string; artifactId: string } | null>(null);
   const [settingsTab, setSettingsTab] = useState<'compute' | 'settings' | 'diagnostics'>('compute');
-  const [datasetView, setDatasetView] = useState<'sources' | 'inspection' | 'augmentation' | 'teaching'>('sources');
+  const [datasetView, setDatasetView] = useState<'sources' | 'inspection' | 'augmentation' | 'teaching' | 'decision'>('sources');
   const [starter, setStarter] = useState(datasetStarters[0]);
   const [starterSelection, setStarterSelection] = useState(0);
   const [activeStarterId, setActiveStarterId] = useState(datasetStarters[0].id);
@@ -238,7 +239,7 @@ function Workbench() {
         {!connected && !health.isPending && <div className="connection-notice"><ErrorNotice error={health.error} /><button className="text-button" onClick={() => { void health.refetch(); void projects.refetch(); void capabilities.refetch(); }}>Retry connection</button></div>}
         {capabilities.error && connected && <div className="connection-notice"><ErrorNotice error={capabilities.error} /><button className="text-button" onClick={() => void capabilities.refetch()} disabled={capabilities.isFetching}>Retry capabilities</button></div>}
         <div className="dataset-view" hidden={activeStage !== 0}>
-          <div className="section-tabs"><nav className="dataset-tab-buttons" aria-label="Dataset views"><button type="button" className={`section-tab${datasetView === 'sources' ? ' active' : ''}`} aria-pressed={datasetView === 'sources'} onClick={() => setDatasetView('sources')}>Sources</button><button type="button" className={`section-tab${datasetView === 'inspection' ? ' active' : ''}`} aria-pressed={datasetView === 'inspection'} disabled={!selectedJob} onClick={() => setDatasetView('inspection')}>Inspection{sortedJobs.length > 0 && <span className="tab-count">{sortedJobs.length}</span>}</button><button type="button" className={`section-tab${datasetView === 'augmentation' ? ' active' : ''}`} aria-pressed={datasetView === 'augmentation'} onClick={() => setDatasetView('augmentation')}>Augmentation</button><button type="button" className={`section-tab${datasetView === 'teaching' ? ' active' : ''}`} aria-pressed={datasetView === 'teaching'} onClick={() => setDatasetView('teaching')}>Teaching</button></nav><span className="section-note">LeRobot v2 / v3</span></div>
+          <div className="section-tabs"><nav className="dataset-tab-buttons" aria-label="Dataset views"><button type="button" className={`section-tab${datasetView === 'sources' ? ' active' : ''}`} aria-pressed={datasetView === 'sources'} onClick={() => setDatasetView('sources')}>Sources</button><button type="button" className={`section-tab${datasetView === 'inspection' ? ' active' : ''}`} aria-pressed={datasetView === 'inspection'} disabled={!selectedJob} onClick={() => setDatasetView('inspection')}>Inspection{sortedJobs.length > 0 && <span className="tab-count">{sortedJobs.length}</span>}</button><button type="button" className={`section-tab${datasetView === 'augmentation' ? ' active' : ''}`} aria-pressed={datasetView === 'augmentation'} onClick={() => setDatasetView('augmentation')}>Augmentation</button><button type="button" className={`section-tab${datasetView === 'teaching' ? ' active' : ''}`} aria-pressed={datasetView === 'teaching'} onClick={() => setDatasetView('teaching')}>Teaching</button><button type="button" className={`section-tab${datasetView === 'decision' ? ' active' : ''}`} aria-pressed={datasetView === 'decision'} onClick={() => setDatasetView('decision')}>Decision lab</button></nav><span className="section-note">LeRobot v2 / v3</span></div>
           <div className="content-grid source-grid" hidden={datasetView !== 'sources'}>
             <div className="intake-column"><IntakeForm key={`${projectId}-${starterSelection}`} project={workflowProjectId ? project : undefined} readinessMessage={projects.isPending ? 'Loading projects before importing a dataset.' : projects.isError ? 'Project list unavailable. Retry projects to continue.' : 'Create or select a project to import a dataset.'} starter={starter} onSourceEdited={() => setActiveStarterId('')} localAvailable={capabilities.data?.some(item => item.operation === 'dataset.inspect.local' && (item.status === 'available' || item.status === 'untested')) ?? false} onCreated={job => { setSelectedJobId(job.id); setDatasetView('inspection'); }} /></div>
             <DatasetStarters selected={activeStarterId} onSelect={item => { setStarter(item); setActiveStarterId(item.id); setStarterSelection(previous => previous + 1); }} />
@@ -257,6 +258,7 @@ function Workbench() {
             </section>
           </div>
           {activeStage === 0 && datasetView === 'teaching' && <TeachingPanel />}
+          {activeStage === 0 && datasetView === 'decision' && <DecisionPanel />}
           {activeStage === 0 && datasetView === 'augmentation' && <AugmentationPanel key={projectId} projectId={workflowProjectId} preferredDatasetId={selectedJob?.id} onChooseDataset={() => setDatasetView('sources')} />}
           {jobs.error && datasetView === 'sources' && <ErrorNotice error={jobs.error} />}
         </div>

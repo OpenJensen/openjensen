@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import hmac
 import queue
@@ -26,6 +25,7 @@ class Mailbox:
         self.receipts = OrderedDict()
         self.state = {"mode": "starting", "episode_id": None, "revision": 0}
         self.frame = None
+        self.frame_published_monotonic_ns = None
 
     def submit(self, payload: dict) -> dict:
         command = Command.parse(payload)
@@ -63,6 +63,7 @@ class Mailbox:
             return dict(self.receipts[ident])
 
     def publish(self, session) -> None:
+        session._owned()
         with self.lock:
             self.state = session.snapshot()
             if session.mode in {"faulted", "closed"}:
@@ -84,19 +85,22 @@ class Mailbox:
                         "applied_step": session.last_applied_step,
                     }
                 )
-            obs = session.observation
-            self.frame = (
-                None
-                if obs is None
-                else {
-                    "episode_id": obs.episode_id,
-                    "step": obs.step,
-                    "sim_time": obs.sim_time,
-                    "published_monotonic_ns": time.monotonic_ns(),
-                    "width": obs.frame.width,
-                    "height": obs.frame.height,
-                    "rgb_base64": base64.b64encode(obs.frame.rgb).decode(),
-                }
+            self.frame = session.frame_snapshot
+            self.frame_published_monotonic_ns = time.monotonic_ns()
+
+    def frame_payload(self) -> dict:
+        """One locked response binds frozen acquisition context and current executor state."""
+        with self.lock:
+            if self.frame is None:
+                return {"available": False, "schema_version": 1}
+            current = {
+                "session_id": self.state["session_id"],
+                "revision": self.state["revision"],
+                "active_episode_id": self.state["episode_id"],
+                "mode": self.state["mode"],
+            }
+            return self.frame.payload(
+                current, self.frame_published_monotonic_ns, time.monotonic_ns()
             )
 
     def drain(self, session) -> None:
@@ -121,6 +125,9 @@ class Mailbox:
             }
             if command.operation != "correct":
                 update["acknowledged_monotonic_ns"] = time.monotonic_ns()
+        # Publish invalidation before acknowledging a changed command context.
+        # Waiting for the next tick could otherwise expose old pixels as current.
+        self.publish(session)
         with self.lock:
             self.receipts[ident].update(update)
 
@@ -158,8 +165,7 @@ def server(mailbox: Mailbox, token: str, port: int = 0) -> ThreadingHTTPServer:
                     with mailbox.lock:
                         value = dict(mailbox.state)
                 elif self.path == "/frame":
-                    with mailbox.lock:
-                        value = dict(mailbox.frame) if mailbox.frame else {"available": False}
+                    value = mailbox.frame_payload()
                 elif self.path.startswith("/commands/"):
                     value = mailbox.get(self.path.removeprefix("/commands/"))
                 else:
