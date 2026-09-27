@@ -432,8 +432,29 @@ def native_quantization_ready(runtime: Runtime) -> bool:
         and python.is_file()
         and os.access(python, os.X_OK)
         and root.is_absolute()
-        and (root / "src/firebird_quant/native_application.py").is_file()
-        and (root.parent / "act_optimizer/src/firebird_act/application.py").is_file()
+        and all(
+            (root / "src/firebird_quant" / name).is_file()
+            for name in (
+                "__init__.py",
+                "native_application.py",
+                "native_package.py",
+                "native_probe.py",
+                "native_consumer.py",
+                "codec.py",
+                "model.py",
+                "state.py",
+            )
+        )
+        and all(
+            (root.parent / "act_optimizer/src/firebird_act" / name).is_file()
+            for name in (
+                "__init__.py",
+                "application.py",
+                "bundle.py",
+                "probe.py",
+                "control_schema.py",
+            )
+        )
     )
 
 
