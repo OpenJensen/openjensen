@@ -4,12 +4,23 @@ from vla_platform.contracts import Capability
 def registry(
     native_configured: bool = False,
     training_configured: bool = False,
+    act_export_configured: bool = False,
     cloud_configured: bool = False,
 ) -> list[Capability]:
     configured = {"Quantize", "Evaluate", "Run"} if native_configured or cloud_configured else set()
     if training_configured or cloud_configured:
         configured.add("Fine-tune")
     return [
+        Capability(
+            stage="Run",
+            operation="policy.export",
+            status="untested" if act_export_configured else "planned",
+            description=(
+                "ACT FP32 export removes only the training VAE and checks synthetic CPU parity. "
+                "Requires a complete local native checkpoint and a separately configured worker. "
+                "No task success, calibration or GPU speed claim."
+            ),
+        ),
         Capability(
             stage="Dataset",
             operation="dataset.inspect",

@@ -14,6 +14,11 @@ from pathlib import Path
 
 from .checkpoint import commit_checkpoint_directory, sha256, write_json
 from .lerobot_application import cli_arguments
+from .local_dataset import (
+    load_operation_snapshot,
+    make_local_datasets,
+    offline_dataset_loading,
+)
 from .native_profiles import LEROBOT_REVISION, native_profile_for_recipe
 from .telemetry import emit, environment_report
 
@@ -190,6 +195,9 @@ def main():
     profile = native_profile_for_recipe(recipe)
     if profile is None or recipe.get("upstream_revision") != LEROBOT_REVISION:
         raise ValueError("Unregistered native worker recipe or upstream revision")
+    local_root = None
+    if recipe.get("dataset_source") == "local":
+        local_root, _ = load_operation_snapshot(operation, recipe)
     import torch
     from huggingface_hub import snapshot_download
     from lerobot.datasets.lerobot_dataset import LeRobotDatasetMetadata
@@ -214,17 +222,26 @@ def main():
     )
     emit(
         "preparing",
-        "Downloading the pinned dataset on the GPU worker",
+        "Verifying the staged local dataset"
+        if local_root
+        else "Downloading the pinned dataset on the GPU worker",
         step=0,
         total_steps=recipe["steps"],
         recipe=recipe,
     )
-    dataset_root = snapshot_download(
-        recipe["dataset_id"], repo_type="dataset", revision=recipe["dataset_revision"]
-    )
-    meta = LeRobotDatasetMetadata(
-        recipe["dataset_id"], root=dataset_root, revision=recipe["dataset_revision"]
-    )
+    if local_root:
+        dataset_root = str(local_root)
+        with offline_dataset_loading():
+            meta = LeRobotDatasetMetadata(
+                recipe["dataset_id"], root=dataset_root, revision=recipe["dataset_revision"]
+            )
+    else:
+        dataset_root = snapshot_download(
+            recipe["dataset_id"], repo_type="dataset", revision=recipe["dataset_revision"]
+        )
+        meta = LeRobotDatasetMetadata(
+            recipe["dataset_id"], root=dataset_root, revision=recipe["dataset_revision"]
+        )
     features = {
         key: {"type": value.type.value, "shape": list(value.shape)}
         for key, value in dataset_to_policy_features(meta.features).items()
@@ -291,13 +308,18 @@ def main():
     original_data = trainer.make_train_eval_datasets
 
     def make_data(cfg):
-        datasets = original_data(cfg)
+        datasets = make_local_datasets(cfg, recipe) if local_root else original_data(cfg)
         state["validation"] = datasets[1]
         if state["validation"] is None or len(state["validation"]) == 0:
             raise ValueError("The selected dataset has no held-out evaluation frames")
         splits = {"train": list(datasets[0].episodes), "validation": list(datasets[1].episodes)}
         if set(splits["train"]) & set(splits["validation"]):
             raise ValueError("Training and held-out episodes overlap")
+        if local_root:
+            expected = recipe["dataset_splits"]
+            if any(splits[key] != expected[key] for key in ("train", "validation")):
+                raise ValueError("Native dataset selection differs from the saved lineage split")
+            splits.update({key: value for key, value in expected.items() if key not in splits})
         write_json(training / "splits.json", splits)
         emit(
             "preparing",

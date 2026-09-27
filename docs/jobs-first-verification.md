@@ -16,6 +16,9 @@ show bold GPU budgets; these are not model download sizes.
 
 Both jobs were submitted using the actual buttons in Chrome, selecting the
 existing SmolVLA Q4 policy derived from the trained step-100 checkpoint.
+Their implementation provenance is `b0b7c85` (jobs-first workflows and cloud
+inference). Commit `d892956` adds preparation-progress reporting and this live
+verification record; it does not expand the GPU execution scope.
 
 | Measurement | Evaluate | Run |
 | --- | ---: | ---: |
@@ -61,12 +64,25 @@ text. This change does not alter the worker or inference code used above.
 
 ## Software checks
 
-- Core: 1,037 passed, two optional/platform skips.
-- Native quantization/evaluation worker: 253 passed, four platform/vendor skips.
-- Application browsers: 247 passed on the final source, including desktop/mobile
-  build-progress checks.
+Upstream `018ade0` was integrated after the live checks above, including immutable
+local dataset training copies, ACT inference export and the Teaching view. The
+merge preserves saved-job landing pages, separate creation forms, training drafts,
+GPU-budget labels and the `/firebird` mount. No additional GPU execution is
+claimed for this integration.
+
+Post-merge checks:
+
+- Core: 1,122 passed, two optional/platform skips. The skipped checks require the
+  optional GCS file-reader package or a Windows host.
+- Application browsers: 275 passed, including desktop/mobile jobs-first flows,
+  local snapshot admission, ACT export controls, Teaching session conditions and
+  preparation-progress checks.
 - Dedicated diagnostics: 18 passed; prefixed export smoke: one passed.
 - Ruff, formatting, TypeScript, generated API contracts and production builds passed.
+
+Previously completed supporting checks, recorded before this upstream merge:
+
+- Native quantization/evaluation worker: 253 passed, four platform/vendor skips.
 
 Actual execution coverage remains SmolVLA for cloud Evaluate/Run. Other model
 training adapters, simulation setups and physical robot integration have their

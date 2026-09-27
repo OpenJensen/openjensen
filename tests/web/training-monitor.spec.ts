@@ -5,7 +5,7 @@ const projectId = 'training-monitor-fixture';
 const revision = 'a'.repeat(40);
 const timestamp = () => new Date().toISOString();
 
-async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 'stale' | 'unavailable' | 'legacy' | 'validating' | 'history' | 'empty' = 'running', openDetails = true) {
+async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 'stale' | 'unavailable' | 'legacy' | 'validating' | 'history' | 'empty' | 'local-snapshot' | 'local-unprepared' = 'running', openDetails = true, exportMode?: 'local' | 'remote' | 'unconfigured' | 'failed' | 'local-dataset') {
   const submitted: Record<string, any>[] = [];
   const unexpected: string[] = [];
   const cancelled: string[] = [];
@@ -21,6 +21,15 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
       metadata_sha256: 'b'.repeat(64), inspected_at: timestamp(), warnings: [],
     },
   };
+  const localDataset = mode === 'local-snapshot' || mode === 'local-unprepared';
+  if (localDataset) {
+    Object.assign(dataset, { request: { source: 'local', path: 'fixture/local', revision: 'main', snapshot_for_training: mode === 'local-snapshot' } });
+    Object.assign(dataset.result, { source: 'local', repo_id: null, revision: `local:${'b'.repeat(64)}` });
+    if (mode === 'local-snapshot') Object.assign(dataset.result, { inspection_scope: 'complete_snapshot', snapshot: {
+      schema_version: 1, id: `sha256:${'d'.repeat(64)}`, manifest_sha256: 'd'.repeat(64), format: 'lerobot_v3',
+      total_bytes: 1000, file_count: 5, total_episodes: 10, total_frames: 1000, lineage_validated: true, warnings: [],
+    } });
+  }
   const job: Record<string, any> = {
     id: 'run-001', project_id: projectId, kind: 'policy.finetune', status: mode === 'failed' ? 'failed' : 'running',
     stage: mode === 'preparing' ? 'preparing' : 'training', created_at: timestamp(), updated_at: timestamp(),
@@ -56,19 +65,33 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
     const phaseMetric = { step: 20, elapsed_seconds: 60, train_loss: null, validation_loss: null, learning_rate: null, timestamp: timestamp() };
     Object.assign(telemetry, { phase: 'validation', completed_steps: 20, percent: 20, elapsed_seconds: 60, latest: phaseMetric, metrics: [firstMetric, phaseMetric] });
   }
-  const jobs = mode === 'empty' ? [dataset] : [job, dataset];
+  const jobs = mode === 'empty' || localDataset ? [dataset] : [job, dataset];
   if (mode === 'history') jobs.push({ ...job, id: 'older-run', status: 'succeeded',
     created_at: new Date(Date.now() - 3600000).toISOString(),
     request: { ...job.request, training_method: 'full', training: { ...job.request.training, model_id: 'code://lerobot/act', steps: 40 } },
     result: { artifacts: [], reports: [{ steps: 40 }], decision: 'completed' },
   });
-  const artifact = { id: 'checkpoint-artifact', project_id: projectId, job_id: job.id, format: 'training_checkpoint', label: 'Checkpoint step 20', file_bytes: 100, path: 'checkpoint', manifest_sha256: 'c'.repeat(64), parent_ids: [], metadata: {} };
+  const artifact: Record<string, any> = { id: 'checkpoint-artifact', project_id: projectId, job_id: job.id, format: 'training_checkpoint', label: 'Checkpoint step 20', file_bytes: 100, path: 'checkpoint', manifest_sha256: 'c'.repeat(64), parent_ids: [], metadata: {} };
+  if (exportMode) artifact.metadata = { architecture: 'act', training_backend: 'lerobot', method: 'full',
+    dataset: { source: exportMode === 'local-dataset' ? 'local' : 'huggingface' },
+    ...(exportMode === 'remote' ? { storage: 'gcs' } : {}) };
+  const artifacts: Record<string, any>[] = [artifact];
   await page.route('**/api/v1/**', async route => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (request.method() === 'POST' && path === `/api/v1/projects/${projectId}/policy-jobs`) {
       const body = request.postDataJSON();
       submitted.push(body);
+      if (body.operation === 'policy.export') {
+        const created = { ...job, id: 'export-job', kind: 'policy.export', request: body,
+          status: exportMode === 'failed' ? 'failed' : 'succeeded', error: exportMode === 'failed' ? 'Synthetic CPU parity did not match.' : null,
+          stage: 'operation', created_at: timestamp() };
+        jobs.unshift(created);
+        if (exportMode !== 'failed') artifacts.push({ ...artifact, id: 'inference-export', job_id: created.id,
+          format: 'inference_export', label: 'ACT inference export', parent_ids: [artifact.id], metadata: { inference_only: true } });
+        await route.fulfill({ status: 202, json: created });
+        return;
+      }
       const created = { ...job, id: `new-run-${submitted.length}`, request: body, status: 'queued', stage: 'preparing', error: null, created_at: timestamp() };
       jobs.unshift(created);
       await route.fulfill({ status: 202, json: created });
@@ -88,15 +111,16 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
         '/api/v1/health': { status: 'ok', version: 'training-fixture' }, '/api/v1/capabilities': [],
         '/api/v1/projects': [{ id: projectId, name: 'Training visibility', created_at: timestamp() }],
         [`/api/v1/projects/${projectId}/jobs`]: jobs,
-        [`/api/v1/projects/${projectId}/artifacts`]: [artifact],
+        [`/api/v1/projects/${projectId}/artifacts`]: artifacts,
         '/api/v1/jobs/dataset/episodes': { repo_id: 'fixture/robot', revision, episodes: [], total_episodes: 10, offset: 0, limit: 6, warnings: [] },
         '/api/v1/policy-options': {
-          runtimes: [{ id: 'skypilot-gcp-A100', label: 'A100', accelerator: 'A100', execution: 'skypilot', provider: 'gcp', device: 'cuda', enabled: true, training: true, simulation: false, training_model_ids: ['smolvla'] }],
+          runtimes: [...(exportMode && exportMode !== 'unconfigured' ? [{ id: 'act-cpu', label: 'Local CPU export', provider: 'local', execution: 'native', device: 'cpu', enabled: true, training: false, act_export: true, simulation: false }] : []), { id: 'skypilot-gcp-A100', label: 'A100', accelerator: 'A100', execution: 'skypilot', provider: 'gcp', device: 'cuda', enabled: true, training: true, simulation: false, training_model_ids: localDataset ? ['smolvla', 'act'] : ['smolvla'] }],
           compute: { local: { enabled: false, label: 'Local' }, gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 } },
           training_models: [
             { id: 'smolvla', label: 'SmolVLA', description: 'Compact policy', model_id: 'lerobot/smolvla_base', model_revision: revision, methods: ['lora'], suggested_gpu_memory_gb: 16 },
             { id: 'pi05', label: 'π₀.₅', description: 'Flow policy', model_id: 'lerobot/pi05_base', model_revision: revision, methods: ['full'], minimum_gpu_memory_gb: 40 },
-          ], sources: [], training_methods: [{ id: 'lora', label: 'LoRA', description: 'Train adapters.' }], default_training_method: 'lora',
+            ...(localDataset ? [{ id: 'act', label: 'ACT', description: 'Native policy', model_id: 'code://lerobot/act', model_revision: revision, methods: ['full'], backend: 'lerobot', minimum_gpu_memory_gb: 16 }] : []),
+          ], sources: [], training_methods: [{ id: 'lora', label: 'LoRA', description: 'Train adapters.' }, { id: 'full', label: 'Full training', description: 'Train policy.' }], default_training_method: 'lora',
           quantization_defaults: { cuda: { language: 'Q8_0', vision: null }, cpu: { language: 'Q8_0', vision: null }, note: '' },
         },
       };
@@ -199,6 +223,38 @@ test('empty history offers an explicit new job and repeated dataset shortcuts op
     await expect(page.getByRole('radio', { name: 'fixture/robot', exact: true })).toBeChecked();
     await page.getByRole('button', { name: 'Back to jobs', exact: true }).click();
   }
+  expect(submitted).toEqual([]);
+  expect(unexpected).toEqual([]);
+});
+
+test('local training copies open the jobs-first wizard and retain native model admission', async ({ page }) => {
+  const { submitted, unexpected } = await workspace(page, 'local-snapshot', false);
+  await page.getByRole('button', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('button', { name: /^Inspection/ }).click();
+  await page.getByRole('button', { name: 'Train on this dataset', exact: true }).click();
+  await expect(page.getByRole('radio', { name: 'Local dataset', exact: true })).toBeChecked();
+  const setup = page.getByRole('navigation', { name: 'Training setup' });
+  await setup.getByRole('button', { name: 'Model', exact: true }).click();
+  await expect(page.getByText('Local snapshots currently support native LeRobot models, including ACT.')).toBeVisible();
+  await page.getByRole('radio', { name: 'ACT', exact: true }).locator('..').click();
+  await setup.getByRole('button', { name: 'Compute', exact: true }).click();
+  await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
+  await expect.poll(() => submitted.length).toBe(1);
+  expect(submitted[0]).toMatchObject({ operation: 'policy.finetune', dataset_job_id: 'dataset', training_method: 'full', training: { model_id: 'code://lerobot/act' } });
+  expect(submitted[0].training).not.toHaveProperty('dataset_id');
+  await expect(page.getByRole('article', { name: 'Training run monitor' })).toHaveAttribute('data-run-id', 'new-run-1');
+  expect(unexpected).toEqual([]);
+});
+
+test('metadata-only local inspections cannot enter the training creation flow', async ({ page }) => {
+  const { submitted, unexpected } = await workspace(page, 'local-unprepared', false);
+  await page.getByRole('button', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('button', { name: /^Inspection/ }).click();
+  await expect(page.getByRole('button', { name: 'Train on this dataset', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
+  await expect(page.getByRole('radio', { name: 'Local dataset', exact: true })).toBeDisabled();
+  await expect(page.getByText('Prepare an immutable training copy when importing this local dataset.')).toBeVisible();
   expect(submitted).toEqual([]);
   expect(unexpected).toEqual([]);
 });
@@ -383,4 +439,39 @@ test('diagnostics summarizes a stopped run and opens repeated events only on req
   await diagnostics.locator('.workflow-activity-details > summary').click();
   await expect(activity).toHaveCount(0);
   expect(unexpected).toEqual([]);
+});
+
+
+test('ACT checkpoint exports inference-only package through local registered runtime', async ({ page }) => {
+  const { monitor, submitted, unexpected } = await workspace(page, 'running', true, 'local');
+  await expect(monitor.getByRole('button', { name: 'Quantize checkpoint' })).toHaveCount(0);
+  await expect(monitor.getByText('This does not establish robot task success', { exact: false })).toBeVisible();
+  await monitor.getByRole('button', { name: 'Export ACT inference package' }).click();
+  await expect(monitor.getByRole('link', { name: 'Download ACT inference package' })).toHaveAttribute('href', /artifacts\/inference-export\/download$/);
+  expect(submitted).toEqual([{ operation: 'policy.export', runtime_id: 'act-cpu', artifact_id: 'checkpoint-artifact', training_method: 'full', timeout_seconds: 600 }]);
+  expect(unexpected).toEqual([]);
+  await noOverflow(page);
+});
+
+for (const mode of ['remote', 'unconfigured'] as const) test(`ACT export refuses ${mode} checkpoint without a job`, async ({ page }) => {
+  const { monitor, submitted } = await workspace(page, 'running', true, mode);
+  await expect(monitor.getByRole('button', { name: 'Export ACT inference package' })).toBeDisabled();
+  await expect(monitor.getByText(mode === 'remote' ? 'Download and register the complete checkpoint locally before exporting.' : 'Ask the app operator to configure the local ACT export worker.', { exact: false })).toBeVisible();
+  expect(submitted).toEqual([]);
+});
+
+test('ACT export failure stays visible without a download or quality claim', async ({ page }) => {
+  const { monitor, submitted } = await workspace(page, 'running', true, 'failed');
+  await monitor.getByRole('button', { name: 'Export ACT inference package' }).click();
+  await expect(monitor.getByRole('alert').filter({ hasText: 'Synthetic CPU parity did not match.' })).toBeVisible();
+  await expect(monitor.getByRole('link', { name: 'Download ACT inference package' })).toHaveCount(0);
+  expect(submitted).toHaveLength(1);
+});
+
+
+test('ACT export does not mislabel local snapshot lineage as Hugging Face', async ({ page }) => {
+  const { monitor, submitted } = await workspace(page, 'running', true, 'local-dataset');
+  await expect(monitor.getByRole('button', { name: 'Export ACT inference package' })).toBeDisabled();
+  await expect(monitor.getByText('ACT export from local dataset snapshots is not supported yet.')).toBeVisible();
+  expect(submitted).toEqual([]);
 });

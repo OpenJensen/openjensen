@@ -41,7 +41,7 @@ export type JobEvent = components['schemas']['JobEvent'];
 export type TrainingTelemetry = components['schemas']['TrainingTelemetry'];
 export type TrainingMetric = components['schemas']['TrainingMetric'];
 export type PolicyOptions = {
-  runtimes: { id: string; label: string; device: 'cpu' | 'cuda'; training: boolean; simulation: boolean; engine_evaluation?: boolean; run?: boolean; gpu_name?: string | null; gpu_memory_mib?: number | null; training_gpu_count?: number | null; training_model_ids?: string[]; provider?: ComputeProvider; provider_label?: string; region?: string | null; enabled?: boolean; execution?: 'native' | 'skypilot'; accelerator?: string | null; unavailable_reason?: string | null }[];
+  runtimes: { id: string; label: string; device: 'cpu' | 'cuda'; training: boolean; act_export?: boolean; simulation: boolean; engine_evaluation?: boolean; run?: boolean; gpu_name?: string | null; gpu_memory_mib?: number | null; training_gpu_count?: number | null; training_model_ids?: string[]; provider?: ComputeProvider; provider_label?: string; region?: string | null; enabled?: boolean; execution?: 'native' | 'skypilot'; accelerator?: string | null; unavailable_reason?: string | null }[];
   compute?: { local: LocalComputeSettings; gcp?: GcpComputeSettings };
   training_models?: TrainingModel[];
   sources: { id: string; label: string; task: string }[];
@@ -54,7 +54,7 @@ export type Project = components['schemas']['Project'];
 export type Job = components['schemas']['Job'];
 export type DatasetProfile = components['schemas']['DatasetProfile'];
 export type Capability = components['schemas']['Capability'];
-export type IntakeRequest = components['schemas']['IntakeRequest'];
+export type IntakeRequest = Omit<components['schemas']['IntakeRequest'], 'snapshot_for_training'> & { snapshot_for_training?: boolean };
 export type DatasetJob = Job & { kind: 'dataset.inspect'; request: IntakeRequest; result?: DatasetProfile | null };
 export type AugmentationRequest = components['schemas']['AugmentationRequest'];
 export type AugmentationResult = components['schemas']['AugmentationResult'];

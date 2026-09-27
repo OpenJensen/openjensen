@@ -14,6 +14,7 @@ from pathlib import Path
 
 from .application import publish
 from .checkpoint import verify_bundle, write_json
+from .local_dataset import bind_local_recipe, verify_local_snapshot
 from .native_profiles import LEROBOT_REVISION, native_profile_for_recipe, validate_native_dataset
 from .telemetry import emit
 
@@ -58,7 +59,9 @@ def resolve_recipe(job):
     if recipe.get("gradient_accumulation_steps", 1) != 1:
         raise ValueError("Native training currently requires gradient_accumulation_steps=1")
     data = job["dataset"]
-    if data.get("source") != "huggingface" or len(data.get("revision", "")) != 40:
+    if data.get("source") not in {"huggingface", "local"}:
+        raise ValueError("Native training requires a pinned Hub dataset or verified local snapshot")
+    if data.get("source") == "huggingface" and len(data.get("revision", "")) != 40:
         raise ValueError("Native training requires an immutable Hugging Face dataset")
     steps = recipe.setdefault("steps", 20000)
     for name, default in {
@@ -99,6 +102,8 @@ def resolve_recipe(job):
             "dataset_revision": data["revision"],
         }
     )
+    if data.get("source") == "local":
+        bind_local_recipe(job, recipe)
     return recipe, profile
 
 
@@ -179,16 +184,25 @@ def main():
             recipe = json.loads((resume / "recipe.json").read_text())
             profile = native_profile_for_recipe(recipe)
             data = job["dataset"]
+            identity = dict(recipe)
+            if data.get("source") == "local":
+                bind_local_recipe(job, identity)
+            else:
+                identity.update(dataset_id=data["repo_id"], dataset_revision=data["revision"])
             if (
                 profile is None
                 or recipe.get("method") != "full"
-                or recipe.get("dataset_id") != data["repo_id"]
-                or recipe.get("dataset_revision") != data["revision"]
+                or recipe.get("dataset_id") != identity["dataset_id"]
+                or recipe.get("dataset_revision") != identity["dataset_revision"]
+                or recipe.get("dataset_splits") != identity.get("dataset_splits")
                 or recipe.get("upstream_revision") != LEROBOT_REVISION
             ):
                 raise ValueError("Resume must preserve the saved worker, model and pinned dataset")
         else:
             recipe, profile = resolve_recipe(job)
+        if recipe.get("dataset_source") == "local":
+            verify_local_snapshot(job.get("dataset_snapshot"))
+            write_json(output / "dataset-snapshot.json", job["dataset_snapshot"])
         recipe_path = output / "recipe.json"
         write_json(recipe_path, recipe)
         command = [
@@ -201,6 +215,8 @@ def main():
         if resume:
             command += [str(resume)]
         subprocess.run(command, check=True)
+        if recipe.get("dataset_source") == "local":
+            verify_local_snapshot(job["dataset_snapshot"])
         latest = json.loads((output / "training/latest.json").read_text())
         checkpoint = output / "training" / latest["checkpoint"]
         emit(

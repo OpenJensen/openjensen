@@ -207,6 +207,7 @@ def test_training_options_expose_configured_gpu_specs_without_private_runtime_fi
         "enabled": True,
         "device": "cuda",
         "training": True,
+        "act_export": False,
         "training_model_ids": ["smolvla"],
         "simulation": True,
         "engine_evaluation": True,

@@ -67,6 +67,8 @@ def public_value(value):
         "output_dir",
         "python",
         "training_python",
+        "act_export_python",
+        "act_export_root",
         "conversion_python",
         "evaluation_python",
         "conversion_vendor",

@@ -20,6 +20,7 @@ from pydantic import ValidationError
 from vla_platform.compute_settings import ComputeSettings
 from vla_platform.contracts import TERMINAL, DatasetProfile, Job, now
 from vla_platform.lifecycle import telemetry
+from vla_platform.lifecycle.act_export import check_result, check_source
 from vla_platform.lifecycle.contracts import (
     CloudExecutionTarget,
     JobEvent,
@@ -625,6 +626,27 @@ class Lifecycle:
             await self.resume_checkpoint(project_id, request.resume_job_id)
         if request.artifact_id:
             artifact = await self.artifact(project_id, request.artifact_id)
+            if artifact.format == "inference_export":
+                raise ValueError(
+                    "Inference exports are downloadable policies, not training or evaluation inputs"
+                )
+            if artifact.metadata.get("architecture") == "act" and request.operation not in {
+                "policy.finetune",
+                "policy.export",
+            }:
+                raise ValueError(
+                    "ACT checkpoints support resume or inference export; GGUF is unsupported"
+                )
+            if (
+                request.operation == "policy.export"
+                and artifact.metadata.get("architecture") == "act"
+            ):
+                check_source(runtime, artifact, self.settings.data_dir / artifact.path)
+            elif (
+                request.operation == "policy.export"
+                and artifact.metadata.get("architecture", "smolvla") != "smolvla"
+            ):
+                raise ValueError("No export adapter is registered for this policy architecture")
             if runtime.execution == "skypilot" and request.operation in {
                 "policy.evaluate",
                 "policy.run",
@@ -682,6 +704,10 @@ class Lifecycle:
             if not runtime.training_python or not runtime.training_root:
                 raise ValueError("This runtime has no training environment")
             model = training_model_for_recipe(recipe)
+            if request.operation == "policy.workflow" and model.id == "act":
+                raise ValueError(
+                    "Train ACT separately, then export it; its GGUF workflow is unsupported"
+                )
             if not model.model_revision:
                 raise ValueError("This model needs a pinned checkpoint before training")
             if model.id not in runtime.training_model_ids:
@@ -749,8 +775,25 @@ class Lifecycle:
                 raise ValueError("Native LeRobot training currently requires a LeRobot v3 dataset")
             if model.backend == "psi0" and dataset.result.format != "lerobot_v2":
                 raise ValueError("Psi-Zero currently requires a LeRobot v2.1 dataset")
-            if dataset.result.source != "huggingface":
-                raise ValueError("The current native recipe requires a pinned Hugging Face dataset")
+            if dataset.result.source == "local":
+                if model.backend != "lerobot" or dataset.result.snapshot is None:
+                    raise ValueError(
+                        "Local training requires a verified v3 snapshot and a native LeRobot model"
+                    )
+                from vla_platform.datasets.snapshots import resolve_snapshot, training_split
+
+                snapshot_path = await asyncio.to_thread(
+                    resolve_snapshot,
+                    self.settings.data_dir / "dataset-snapshots",
+                    dataset.result.snapshot.model_dump(),
+                )
+                await asyncio.to_thread(
+                    training_split,
+                    snapshot_path,
+                    dataset.result.snapshot.manifest_sha256,
+                    recipe.get("validation_fraction", 0.2),
+                    recipe.get("seed", 42),
+                )
         if (
             request.operation in {"policy.evaluate", "policy.run", "policy.workflow"}
             and request.evaluation.mode == "libero"
@@ -974,7 +1017,14 @@ class Lifecycle:
         if job.compute_target is not None and runtime.execution != "skypilot":
             raise ValueError("Cloud run cannot be redirected to a local worker")
         stage_dir.mkdir(parents=True, exist_ok=False)
-        training = operation in {"policy.finetune", "policy.export"}
+        act_export = (
+            operation == "policy.export"
+            and artifact is not None
+            and artifact.metadata.get("architecture") == "act"
+        )
+        if act_export:
+            check_source(runtime, artifact, self.settings.data_dir / artifact.path)
+        training = operation in {"policy.finetune", "policy.export"} and not act_export
         payload = {
             "schema_version": 1,
             "operation": operation,
@@ -1011,11 +1061,30 @@ class Lifecycle:
         payload["prior_reports"] = result.reports
         if request.source_id:
             payload["source"] = self.catalog.source(request.source_id).model_dump()
-        chosen_precision = precision or request.precision or Precision()
-        payload["parameters"]["precision"] = chosen_precision.model_dump()
+        if not act_export:
+            chosen_precision = precision or request.precision or Precision()
+            payload["parameters"]["precision"] = chosen_precision.model_dump()
         if training and operation == "policy.finetune":
             dataset = await self.execution.get(request.dataset_job_id)
             payload["dataset"] = dataset.result.model_dump()
+            if dataset.result.source == "local":
+                from vla_platform.datasets.snapshots import resolve_snapshot, stage_snapshot
+
+                descriptor = dataset.result.snapshot.model_dump()
+                source = await asyncio.to_thread(
+                    resolve_snapshot, self.settings.data_dir / "dataset-snapshots", descriptor
+                )
+                staged = await asyncio.to_thread(
+                    stage_snapshot,
+                    source,
+                    stage_dir / "dataset-snapshot",
+                    descriptor["manifest_sha256"],
+                )
+                payload["dataset_snapshot"] = {
+                    "path": str(staged.resolve()),
+                    "id": descriptor["id"],
+                    "manifest_sha256": descriptor["manifest_sha256"],
+                }
         request_path, result_path = stage_dir / "request.json", stage_dir / "result.json"
         request_path.write_text(json.dumps(payload, allow_nan=False))
         if runtime.execution == "skypilot":
@@ -1096,8 +1165,9 @@ class Lifecycle:
                 training,
                 operation in {"policy.import", "policy.quantize"},
                 operation in {"policy.evaluate", "policy.run"},
+                act_export=act_export,
             )
-            image = runtime.training_image if training else runtime.image
+            image = None if act_export else runtime.training_image if training else runtime.image
             if operation in {"policy.import", "policy.quantize"} and runtime.conversion_python:
                 image = runtime.conversion_image
             if operation in {"policy.evaluate", "policy.run"} and (
@@ -1153,6 +1223,11 @@ class Lifecycle:
             raise ValueError("Worker response identity mismatch")
         if returncode or response.get("error"):
             raise RuntimeError(str(response.get("error", "Native worker failed"))[:2000])
+        if act_export and (
+            not isinstance(response.get("artifact"), dict)
+            or not isinstance(response.get("report"), dict)
+        ):
+            raise ValueError("ACT export worker did not return its tested artifact and receipt")
         report = {
             **response.get("report", {}),
             "stage": output,
@@ -1166,6 +1241,10 @@ class Lifecycle:
             info = response["artifact"]
             path = Path(info["path"])
             manifest, sha, total = await asyncio.to_thread(validate_bundle, path, stage_dir)
+            if act_export:
+                check_result(
+                    info, manifest, path, report, artifact, self.settings.data_dir / artifact.path
+                )
             created = PolicyArtifact(
                 id=f"{job.id}:{output}",
                 project_id=job.project_id,

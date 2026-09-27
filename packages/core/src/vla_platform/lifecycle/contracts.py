@@ -137,6 +137,14 @@ class PolicyRequest(StrictRecord):
                 raise ValueError(
                     "Import requires one configured source or native checkpoint artifact"
                 )
+        elif self.operation == "policy.export":
+            if (
+                not self.artifact_id
+                or self.source_id
+                or self.training is not None
+                or self.dataset_job_id
+            ):
+                raise ValueError("Export requires only one registered checkpoint artifact")
         elif self.operation == "policy.finetune":
             if not self.dataset_job_id:
                 raise ValueError("Fine-tuning requires a completed dataset intake")
@@ -159,7 +167,9 @@ class PolicyArtifact(StrictRecord):
     project_id: str
     job_id: str
     label: str
-    format: Literal["gguf", "training_checkpoint", "native_checkpoint", "deployment_package"]
+    format: Literal[
+        "gguf", "training_checkpoint", "native_checkpoint", "deployment_package", "inference_export"
+    ]
     path: str
     manifest_sha256: str
     file_bytes: int = Field(ge=0)

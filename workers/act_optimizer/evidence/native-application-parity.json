@@ -1,0 +1,95 @@
+{
+  "application": {
+    "archive_members_sha256": {
+      "policy/lineage.json": "c70132c574ebd0b0a2abc920bd8f0677f0152e3a5450399dcd8b750dbc67cf6c",
+      "policy/manifest.json": "9dfda6354426bbcdd8ddd0949a106d9b8c27a69a1e298314923f9003fced9b3d",
+      "policy/policy/config.json": "35c829f487eaaeedd0dfe5b61525b3d5aea3ff710892c54e7500fbf9f3c35bc5",
+      "policy/policy/manifest.json": "8489399e93fc34668d56a6e255fc9a5302f96533d565a70d5160858fd8427ee5",
+      "policy/policy/model.safetensors": "8b8a394277d8e6fe67cd17dc815195865e16411dbb19fdc615767bca2eea662a",
+      "policy/policy/parity.json": "ebf90cb7c68e432baa678589dbf120bc30c65ea39d7700bcbc173289d9f3d45f",
+      "policy/policy/policy_postprocessor.json": "648b415125a183dfd6cbc47c1dc04ab3f2d912654ef22a12ca5e8b93d7d85cdd",
+      "policy/policy/policy_postprocessor_step_0_unnormalizer_processor.safetensors": "ae1e255d00209ed7dfbd83163089ea55eb63aebe57c0e8e92497914ba56a4d71",
+      "policy/policy/policy_preprocessor.json": "0708a2a86799db24a2c4076be30ac17d82898e6606eddfa4bae9af1cdb1b7a3d",
+      "policy/policy/policy_preprocessor_step_3_normalizer_processor.safetensors": "ae1e255d00209ed7dfbd83163089ea55eb63aebe57c0e8e92497914ba56a4d71",
+      "policy/policy/recipe.json": "98e52492438855fe3fe8083b7f4d07e8a97f91a6f39bba237fec1c59f6ad05a3",
+      "policy/policy/train_config.json": "7d3787c4658ec59eca80d900406620440ee072a7a591a674c40c0f3634350d8f",
+      "policy/verification.json": "f330ec603e4c1ee503590947f477c04830cee07828e3b388b6f50f453cb82ca2"
+    },
+    "archive_sha256": "7f108f9e0d99dc7aa6d8f518faf5eb544190741ac5321d93f3ae959ef5dab7fb",
+    "artifact_format": "inference_export",
+    "decision": "completed",
+    "export_manifest_sha256": "9dfda6354426bbcdd8ddd0949a106d9b8c27a69a1e298314923f9003fced9b3d",
+    "operation": "policy.export",
+    "parent_ids": [
+      "synthetic-native:step1"
+    ],
+    "policy_manifest_sha256": "8489399e93fc34668d56a6e255fc9a5302f96533d565a70d5160858fd8427ee5",
+    "source_files_unchanged": true,
+    "source_manifest_sha256": "06e348186f86a69b874ea08d696a95f711c96dc9363b7f752c650405b0f603fe"
+  },
+  "base_application_revision": "34dd0990e5155aac42ed33e011dff1bfda9caaf1",
+  "consumer": {
+    "action_dimension": 6,
+    "actions_per_observation": 100,
+    "device": "cpu",
+    "dtype": "float32",
+    "fresh_processes": 3,
+    "lerobot": "0.6.1",
+    "queue_and_reset_exact": true,
+    "raw_and_postprocessed_exact": true,
+    "safetensors": "0.8.0",
+    "synthetic_observations": 2,
+    "torch": "2.11.0",
+    "torchvision": "0.26.0"
+  },
+  "evidence_sha256": {
+    "application-e2e/receipt.json": "5ef53595ca9231a54035cd31aeb0dc0584e5026dcc7caaffe8f2615f807b01c4",
+    "bundle.json": "14591ec3ed741e31a133973167e9cc5e26d777d22543f997989709dd3f2cf843",
+    "generated.json": "c585cc093298b626bc1bb788d9e5dd64ff3024a58e565c1dcf25755f8c0f3a70",
+    "resumed.json": "9f34901e7d61a1b073c61f2b3fcf5c04582791d13ab7dbd2e9aa0dd9119764be"
+  },
+  "implementation_revision": "d46b143b66e371c556630086ee3f256440be6b26",
+  "limitations": [
+    "Synthetic seeded batch and two CPU optimizer updates; no dataset-loader resume or trained task quality proof.",
+    "No GPU, native Windows, simulation, calibration, task success, latency or hardware-fit claim.",
+    "Exporter remains pinned0.6.1; producer0.6.2+Accelerate1.14 are scratch-only dependencies.",
+    "Python socket auditing and offline flags are not an OS network namespace.",
+    "Full checkpoint and exported tensor payloads are retained separately outside Git.",
+    "The current application export requires pinned Hugging Face dataset lineage; local snapshots are rejected."
+  ],
+  "producer": {
+    "device": "cpu",
+    "dtype": "float32",
+    "network_disabled": true,
+    "platform": "macOS-27.0-arm64-arm-64bit",
+    "python": "3.12.14",
+    "threads": 1,
+    "upstream_revision": "e595b7902714ba51f91e47523f66f89c5181b649",
+    "versions": {
+      "accelerate": "1.14.0",
+      "lerobot": "0.6.2",
+      "safetensors": "0.8.0",
+      "torch": "2.11.0",
+      "torchvision": "0.26.0"
+    }
+  },
+  "producer_proof": {
+    "first_loss": 15.826884269714355,
+    "max_abs_action_difference": 0.0,
+    "next_loss": 18.2276668548584,
+    "next_model_sha256": "4eaf278e307a9ef796defeddd4548ba6a5c1d95daa0b79d50f59158fb1dd9083",
+    "next_optimizer_sha256": "e51525170b9ea1d1e973536caed562778403ecbbfd5b2cc236f698c333c14651",
+    "next_update_exact": true,
+    "optimizer_resume_exact": true,
+    "reload_verified": true,
+    "rng_resume_exact": true,
+    "saved_step": 1
+  },
+  "schema_version": 1,
+  "scope": "Synthetic native0.6.2 full checkpoint through pinned0.6.1 CPU export and application artifact registration",
+  "sizes": {
+    "export_model_bytes": 44926632,
+    "policy_package_bytes": 44962023,
+    "source_model_bytes": 44980096
+  }
+}

@@ -294,10 +294,13 @@ def test_only_verified_single_gpu_instance_in_selected_region_is_offered():
     ) == {"A100", "L4"}
 
 
-def test_reconnecting_same_cloud_project_requires_new_check(tmp_path, probes):
+def test_reconnecting_same_cloud_project_requires_new_check(tmp_path, probes, monkeypatch):
     save_connection(tmp_path)
     compute = ComputeSettings(tmp_path)
     assert asyncio.run(compute.check_gcp()).status == "ready"
+    # Deterministically reproduce inode/time reuse on a fast Linux filesystem.
+    stamp = compute._gcp_connection_stamp()
+    monkeypatch.setattr(compute, "_gcp_connection_stamp", lambda: stamp)
     saved = tmp_path / "cloud-connections.json"
     saved.unlink()
     assert compute.gcp_status().status == "unchecked"
@@ -606,4 +609,99 @@ def test_cloud_only_capabilities_describe_implemented_flows_without_inventing_ev
             assert capabilities[operation]["status"] == "untested"
             assert capabilities[operation]["support"] == []
         assert capabilities["policy.distill"]["status"] == "planned"
+        assert capabilities["policy.export"]["status"] == "planned"
     assert probes[0] == []
+
+
+def test_reconnect_between_polls_revokes_readiness_despite_identical_file_metadata(
+    tmp_path, probes, monkeypatch
+):
+    from pathlib import Path
+
+    from vla_platform.cloud_connections import CloudConnections, GcpConnectionConfig
+
+    connections = CloudConnections(tmp_path)
+    config = GcpConnectionConfig(**GCP_CONFIG)
+    connections._save({"gcp": config})
+    compute = ComputeSettings(tmp_path)
+    saved = tmp_path / "cloud-connections.json"
+    stat = saved.stat()
+    original_stat = Path.stat
+    monkeypatch.setattr(
+        Path,
+        "stat",
+        lambda path, *a, **kw: stat if path == saved else original_stat(path, *a, **kw),
+    )
+    assert asyncio.run(compute.check_gcp()).status == "ready"
+    connections._save({})
+    connections._save({"gcp": config})
+    # No status poll observed the disconnected state; all stat fields are identical.
+    assert compute.gcp_status().status == "unchecked"
+    assert not any(option.available for option in compute.gpu_options())
+    assert asyncio.run(compute.check_gcp()).status == "ready"
+
+
+def test_connection_mutation_during_readiness_probe_cannot_finish_ready(
+    tmp_path, probes, monkeypatch
+):
+    save_connection(tmp_path)
+    compute = ComputeSettings(tmp_path)
+    original = catalog.run_readonly
+
+    async def invalidate(*args, **kwargs):
+        result = await original(*args, **kwargs)
+        compute.invalidate_cloud_check()
+        return result
+
+    monkeypatch.setattr(catalog, "run_readonly", invalidate)
+    state = asyncio.run(compute.check_gcp())
+    assert state.status == "setup_required"
+    assert "changed during the check" in state.message
+    assert not any(option.available for option in compute.gpu_options())
+
+
+def test_probe_started_during_failed_connection_recheck_never_claims_ready(
+    tmp_path, probes, monkeypatch
+):
+    from types import SimpleNamespace
+
+    from vla_platform.cloud_api import recheck_cloud_provider
+    from vla_platform.cloud_connections import CloudConnections, _CheckFailed
+
+    save_connection(tmp_path)
+    compute = ComputeSettings(tmp_path)
+    service = CloudConnections(tmp_path)
+    request = SimpleNamespace(
+        app=SimpleNamespace(
+            state=SimpleNamespace(
+                execution=SimpleNamespace(lifecycle=SimpleNamespace(compute=compute))
+            )
+        )
+    )
+
+    async def scenario():
+        started, finish = asyncio.Event(), asyncio.Event()
+
+        async def failed(*args):
+            started.set()
+            await finish.wait()
+            raise _CheckFailed("setup_required", "Sign in again.")
+
+        monkeypatch.setattr(service, "_verify", failed)
+        assert (await compute.check_gcp()).status == "ready"
+        pending = asyncio.create_task(recheck_cloud_provider("gcp", service, request))
+        await started.wait()
+        try:
+            probe_count = len(probes[0])
+            assert compute.gcp_status().status == "unchecked"
+            assert (await compute.check_gcp()).status == "setup_required"
+            assert len(probes[0]) == probe_count  # No CLI probe overlaps the connection edit.
+            assert not any(option.available for option in compute.gpu_options())
+        finally:
+            finish.set()
+        assert (await pending).status == "setup_required"
+        assert compute.gcp_status().status == "unchecked"
+        assert not any(option.available for option in compute.gpu_options())
+        assert (await compute.check_gcp()).status == "ready"  # Explicit retry remains usable.
+
+    asyncio.run(scenario())

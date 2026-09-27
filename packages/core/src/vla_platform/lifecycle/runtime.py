@@ -29,6 +29,9 @@ class Runtime(StrictRecord):
     evaluation_image: str | None = None
     training_python: str | None = None
     training_root: str | None = None
+    # Separate pinned CPU consumer; never a caller-selected module or cloud action.
+    act_export_python: str | None = Field(default=None, min_length=1)
+    act_export_root: str | None = Field(default=None, min_length=1)
     # An operator-installed module must implement the native application protocol.
     # API callers may select a registered model, never its executable/module.
     training_module: str = Field(
@@ -51,6 +54,10 @@ class Runtime(StrictRecord):
 
     @model_validator(mode="after")
     def registered_training_models(self):
+        if bool(self.act_export_python) != bool(self.act_export_root):
+            raise ValueError("ACT export interpreter and worker root must be configured together")
+        if self.act_export_python and (self.execution != "native" or self.provider != "local"):
+            raise ValueError("ACT inference export currently requires a local CPU worker")
         if len(self.training_model_ids) != len(set(self.training_model_ids)):
             raise ValueError("Training model IDs must be unique")
         if any(model_id not in TRAINING_MODEL_BY_ID for model_id in self.training_model_ids):
@@ -104,6 +111,7 @@ class PublicRuntime(StrictRecord):
     enabled: bool
     device: Literal["cpu", "cuda"]
     training: bool
+    act_export: bool = False
     training_model_ids: list[str]
     simulation: bool
     engine_evaluation: bool = False
@@ -154,6 +162,7 @@ class RuntimeCatalog(StrictRecord):
                     "enabled": local_enabled if x.provider == "local" else True,
                     "device": x.device,
                     "training": bool(x.training_python and x.training_root),
+                    "act_export": bool(x.act_export_python and x.act_export_root),
                     "training_model_ids": (
                         x.training_model_ids if x.training_python and x.training_root else []
                     ),
@@ -183,9 +192,29 @@ def command(
     training: bool = False,
     conversion: bool = False,
     evaluation: bool = False,
+    act_export: bool = False,
 ):
     if runtime.execution != "native":
         raise ValueError("SkyPilot targets must execute through the cloud runner")
+    if act_export:
+        if (
+            runtime.provider != "local"
+            or not runtime.act_export_root
+            or not runtime.act_export_python
+        ):
+            raise ValueError("This runtime has no local ACT inference export environment")
+        root = runtime.act_export_root
+        env = {**os.environ, **runtime.env, "PYTHONUNBUFFERED": "1"}
+        env.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1", CUDA_VISIBLE_DEVICES="")
+        env["PYTHONPATH"] = os.pathsep.join([root, str(Path(root) / "src")])
+        argv = [
+            runtime.act_export_python,
+            "-m",
+            "firebird_act.application",
+            str(request),
+            str(output),
+        ]
+        return argv, root, env
     root = runtime.training_root if training else runtime.worker_root
     python = runtime.training_python if training else runtime.python
     if not root or not python:

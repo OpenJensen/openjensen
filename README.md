@@ -12,6 +12,8 @@ Fine-tune, Quantize, Evaluate and Run open saved jobs first, with separate creat
 
 Application Git root: this directory. The nested `firebird-hackathon-prep/` directory remains a separate, ignored Git repository. Its [accepted plan](firebird-hackathon-prep/docs/idea/18_stack-and-phased-build-plan.md) and [task register](firebird-hackathon-prep/docs/tasks/README.md) hold planning and coordination records; they are not included in an application-only clone.
 
+**Dataset → Teaching** adds session-bound simulation controls and an optional LiveKit/OpenRouter voice connection. Finalized demonstrations can enter native LeRobot training through verified local copies. See [local training and teaching](docs/local-training.md) for setup and current acceptance limits.
+
 ## Run locally
 
 Use Node **24.21.0**, pnpm **12.6.0**, Python **3.14.7** and uv **0.12.19**. GPU dependencies are separate and are not needed for metadata intake. Parquet episode previews use an isolated CPU reader. First installation requires network access; no remote application service or API key is required.
@@ -51,7 +53,7 @@ uv run --frozen firebird capabilities
 
 Replace IDs with the returned values. CLI commands output JSON and call the same API. They do not open a second scheduler or write the database.
 
-Metadata counts and schemas are **source-declared**. Intake preserves their provenance, hashes the metadata and warns that action units, calibration, controller semantics, media integrity and simulator compatibility have not been verified. It does not infer task success or a training recipe from a dataset name. On-demand episode previews can now show camera videos and a small set of recorded action/state rows. Dataset-wide validation remains pending.
+Metadata counts and schemas are **source-declared**. Intake preserves their provenance, hashes the metadata and warns that action units, calibration, controller semantics, media integrity and simulator compatibility have not been verified. It does not infer task success or a training recipe from a dataset name. On-demand episode previews can now show camera videos and a small set of recorded action/state rows. Full local LeRobot v3 validation is available through the explicit immutable training-copy workflow; ordinary inspection remains metadata-only.
 
 Local metadata intake is disabled by default. Set `FIREBIRD_LOCAL_DATA_ROOT` to an explicitly permitted dataset directory before starting the server; paths must resolve within it. For example, if it contains `my-dataset/meta/info.json`, inspect with `--path my-dataset`. On PowerShell use `$env:FIREBIRD_LOCAL_DATA_ROOT = 'C:\robotics-data'`; on Linux/macOS use `export FIREBIRD_LOCAL_DATA_ROOT=/path/to/robotics-data`.
 

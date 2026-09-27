@@ -87,9 +87,9 @@ function cameras(profile?: DatasetProfile) {
     .map(([key]) => key);
 }
 function datasetIssue(profile: DatasetProfile) {
-  if (profile.source !== "huggingface")
-    return "Training currently needs a Hugging Face dataset.";
-  if (!/^[0-9a-f]{40}$/i.test(profile.revision))
+  if (profile.source === "local" && !profile.snapshot)
+    return "Prepare an immutable training copy when importing this local dataset.";
+  if (profile.source === "huggingface" && !/^[0-9a-f]{40}$/i.test(profile.revision))
     return "Inspect an immutable dataset revision before training.";
   if (profile.total_episodes < 2)
     return "At least two episodes are needed for training and validation.";
@@ -122,6 +122,8 @@ const dimensionLimits: Record<string, number> = {
 };
 function modelDatasetIssue(model: TrainingModel | undefined, profile: DatasetProfile | undefined, cameraKeys: string[]) {
   if (!model || !profile) return null;
+  if (profile.source === "local" && model.backend !== "lerobot")
+    return "Local snapshots currently support native LeRobot models, including ACT.";
   if (model.id === "psi0" && profile.format !== "lerobot_v2")
     return "Psi-Zero currently needs a LeRobot v2 dataset. Choose a v2 inspection or another model.";
   if (model.backend === "lerobot" && profile.format !== "lerobot_v3")
@@ -1170,6 +1172,9 @@ export function TrainingPanel({
               active={active}
               artifacts={(artifacts.data ?? []).filter(item => item.job_id === selectedRun.id)}
               modelCatalog={models}
+              exportRuntimes={options.isSuccess ? options.data.runtimes : []}
+              exportJobs={jobs.data ?? []}
+              exportArtifacts={artifacts.data ?? []}
               onCancel={() => cancel.mutate(selectedRun.id)}
               cancelling={cancel.isPending && cancel.variables === selectedRun.id}
               cancelError={cancel.variables === selectedRun.id ? cancel.error : null}

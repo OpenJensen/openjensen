@@ -5,6 +5,7 @@ import json
 import os
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
@@ -68,7 +69,9 @@ def test_gcp_verifies_active_identity_and_project_then_saves_selection(
         ["projects", "describe", "robot-project", "--format=json", "--quiet"],
     )
     saved = tmp_path / "cloud-connections.json"
-    assert json.loads(saved.read_text()) == {"version": 1, "providers": {"gcp": GCP}}
+    document = json.loads(saved.read_text())
+    assert str(UUID(document.pop("generation")))
+    assert document == {"version": 1, "providers": {"gcp": GCP}}
     if os.name == "posix":
         assert saved.stat().st_mode & 0o077 == 0
     assert cloud_client.get("/api/v1/cloud-connections").json()["providers"][0] == result
@@ -310,3 +313,16 @@ def test_provider_cli_invalid_json_is_not_returned(monkeypatch):
     with pytest.raises(_CheckFailed, match="invalid response") as exc:
         asyncio.run(run_cloud_cli("gcloud", ["auth", "list"]))
     assert "PRIVATE" not in str(exc.value)
+
+
+@pytest.mark.parametrize("action", ["connect", "recheck", "disconnect"])
+def test_operator_connection_action_invalidates_compute_check(cloud_client, cloud_cli, action):
+    compute = cloud_client.app.state.execution.lifecycle.compute
+    original = compute._gcp_revision
+    cloud_cli.side_effect = _CheckFailed("setup_required", "Sign in again.")
+    result = cloud_client.post(
+        f"/api/v1/cloud-connections/gcp/{action}", json=GCP if action == "connect" else None
+    )
+    assert result.status_code == 200
+    assert compute._gcp_revision > original
+    assert compute.gcp_status().status == "unchecked"

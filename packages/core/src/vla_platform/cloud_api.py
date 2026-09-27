@@ -30,10 +30,11 @@ async def connect_cloud_provider(
     provider: Provider, payload: ConnectionConfig, service: CloudConnectionsDep, request: Request
 ) -> CloudConnection:
     try:
-        result = await service.connect(provider, payload)
-        if result.status == "connected":
-            request.app.state.execution.lifecycle.compute.enable_cloud()
-        return result
+        with request.app.state.execution.lifecycle.compute.cloud_connection_update():
+            result = await service.connect(provider, payload)
+            if result.status == "connected":
+                request.app.state.execution.lifecycle.compute.enable_cloud()
+            return result
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     except OSError as exc:
@@ -44,16 +45,18 @@ async def connect_cloud_provider(
 
 @router.post("/{provider}/recheck", response_model=CloudConnection)
 async def recheck_cloud_provider(
-    provider: Provider, service: CloudConnectionsDep
+    provider: Provider, service: CloudConnectionsDep, request: Request
 ) -> CloudConnection:
-    return await service.recheck(provider)
+    with request.app.state.execution.lifecycle.compute.cloud_connection_update():
+        return await service.recheck(provider)
 
 
 @router.post("/{provider}/disconnect", response_model=CloudConnection)
 async def disconnect_cloud_provider(
-    provider: Provider, service: CloudConnectionsDep
+    provider: Provider, service: CloudConnectionsDep, request: Request
 ) -> CloudConnection:
     try:
-        return await service.disconnect(provider)
+        with request.app.state.execution.lifecycle.compute.cloud_connection_update():
+            return await service.disconnect(provider)
     except OSError as exc:
         raise HTTPException(500, "Could not remove the saved cloud connection") from exc
