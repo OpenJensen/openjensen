@@ -135,7 +135,9 @@ fn check(backend: &Backend, timeout: Duration) -> Result<String, String> {
     }
     let html = read_bounded(response, MAX_HTML_BYTES)?;
     if !String::from_utf8_lossy(&html).contains("<title>OPEN JENSEN") {
-        return Err("The local server is not serving the expected OPEN JENSEN web interface.".into());
+        return Err(
+            "The local server is not serving the expected OPEN JENSEN web interface.".into(),
+        );
     }
     Ok(health.version)
 }
@@ -355,7 +357,13 @@ mod tests {
         assert!(capability.get("remote").is_none());
         assert_eq!(
             capability["permissions"],
-            serde_json::json!(["allow-probe-backend"])
+            serde_json::json!([
+                "allow-probe-backend",
+                "allow-desktop-status",
+                "allow-start-owned",
+                "allow-stop-owned",
+                "allow-restart-owned"
+            ])
         );
     }
 }
