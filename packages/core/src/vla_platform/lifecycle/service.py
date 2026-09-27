@@ -1041,6 +1041,11 @@ class Lifecycle:
 
             async def progress(message):
                 nonlocal cloud_stage
+                if message.startswith("_cloud_setup:"):
+                    detail = json.loads(message.split(":", 1)[1])
+                    cloud_stage = detail["phase"]
+                    await self.event(job, cloud_stage, detail["message"], detail)
+                    return
                 if message.startswith(("_quantization:", "_inference:")):
                     detail = json.loads(message.split(":", 1)[1])
                     cloud_stage = detail.get("phase", "quantizing")
@@ -1059,8 +1064,16 @@ class Lifecycle:
                     return
                 if message.startswith("Optimizer step"):
                     cloud_stage = "training"
-                elif message.startswith("Downloading training"):
+                elif message.startswith(("Downloading training", "Saving cloud artifacts")):
                     cloud_stage = "saving"
+                elif message == "Quantizing on Google Cloud":
+                    cloud_stage = "quantizing"
+                elif message == "Evaluating on Google Cloud":
+                    cloud_stage = "evaluating"
+                elif message == "Running policy on Google Cloud":
+                    cloud_stage = "running"
+                elif message == "Training on Google Cloud":
+                    cloud_stage = "training"
                 elif message.startswith("Stopping Google Cloud"):
                     cloud_stage = "finishing"
                 await self.event(job, cloud_stage, message)

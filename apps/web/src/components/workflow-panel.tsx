@@ -101,7 +101,7 @@ function currentStage(job: Job, phase = job.stage): string {
   if (job.status === "interrupted") return "Interrupted";
   if (job.status === "queued") return "Queued";
   const labels: Record<string, string> = {
-    preparing: "Preparing worker", exporting: "Merging checkpoint", converting: "Converting policy",
+    preparing: "Preparing worker", setup: "Installing dependencies", compiling: "Compiling native engine", exporting: "Merging checkpoint", converting: "Converting policy",
     quantizing: "Quantizing weights", quantize: "Quantizing weights", verifying: "Verifying model",
     saving: "Saving output", finishing: "Finalizing", evaluating: "Evaluating policy", running: "Running policy",
     "training-export": "Exporting checkpoint", "floating-conversion": "Converting policy", baseline: "Checking reference",

@@ -379,6 +379,64 @@ async def _safe_output(stream, secrets: tuple[str, ...] = ()):
         yield pattern.sub(b"[REDACTED]", carry)
 
 
+class SetupProgress:
+    """Recognize bounded build milestones without publishing any setup log content."""
+
+    _ansi = re.compile(r"\x1b(?:\][^\x07\x1b]*(?:\x07|\x1b\\)|\[[0-?]*[ -/]*[@-~])")
+    _build = re.compile(r"\[\s*(\d{1,3})%\]\s+(?:Building (?:C|CXX|CUDA)|Linking|Built target)\b")
+
+    def __init__(self):
+        self.seen = set()
+        self.build_percent = -1
+        self.compiling = False
+
+    def observe(self, line: str) -> dict | None:
+        # _command already bounds lines. Do not retain package names, paths, URLs,
+        # credential-bearing commands, or arbitrary messages in the public event.
+        line = self._ansi.sub("", line[:16384])
+        build = self._build.search(line)
+        if build and 0 <= (percent := int(build[1])) <= 100:
+            self.compiling = True
+            percent = (percent // 5) * 5
+            if percent <= self.build_percent:
+                return None
+            self.build_percent = percent
+            return {
+                "phase": "compiling",
+                "message": f"Compiling native engine · build progress {percent}%",
+                "scope": "native_build",
+                "build_percent": percent,
+            }
+        if re.search(
+            r"-- (?:The (?:C|CXX|CUDA) compiler identification|"
+            r"Configuring done|Found CUDAToolkit:)",
+            line,
+        ):
+            self.compiling = True
+            key, phase, message = "configure", "compiling", "Configuring native engine"
+            if self.build_percent >= 0:
+                return None
+        elif not self.compiling and re.search(
+            r"(?:Setting up|Unpacking) (?:cuda-|libcublas-)", line
+        ):
+            key, phase, message = "cuda", "setup", "Installing CUDA dependencies"
+        elif not self.compiling and re.search(
+            r"(?:Reading package lists|Preparing to unpack|Setting up [a-z0-9][a-z0-9+.-]*[ :])",
+            line,
+        ):
+            key, phase, message = "system", "setup", "Installing system dependencies"
+        elif not self.compiling and re.search(
+            r"(?:Resolved|Prepared|Installed) \d+ packages? in ", line
+        ):
+            key, phase, message = "python", "setup", "Installing Python dependencies"
+        else:
+            return None
+        if key in self.seen:
+            return None
+        self.seen.add(key)
+        return {"phase": phase, "message": message, "scope": "cloud_setup"}
+
+
 async def _command(
     argv: list[str],
     stage_dir: Path,
@@ -409,6 +467,37 @@ async def _command(
     )
     captured = bytearray()
     pending = ""
+
+    async def process_line(line):
+        if not line:
+            return
+        if on_line:
+            await on_line(line)
+        if not on_event:
+            return
+        # SkyPilot may prefix job-log lines. Progress content is parsed strictly
+        # and never treated as executable text.
+        start = line.find("{")
+        if start < 0:
+            return
+        try:
+            item = json.loads(line[start:])
+        except ValueError:
+            return
+        if isinstance(item, dict) and (
+            type(item.get("step")) is int or isinstance(item.get("phase"), str)
+        ):
+            prefix = (
+                "_quantization:"
+                if item.get("operation") == "policy.quantize"
+                else "_inference:"
+                if item.get("operation") in {"policy.evaluate", "policy.run"}
+                else "_telemetry:"
+            )
+            await on_event(prefix + json.dumps(item))
+            if item.get("checkpoint_saved") and type(item.get("step")) is int:
+                await on_event(f"_checkpoint_ready:{item['step']}")
+
     log_path = stage_dir / "worker.log"
     written = log_path.stat().st_size if log_path.exists() else 0
     try:
@@ -424,35 +513,12 @@ async def _command(
                         written += len(part)
                     if on_event or on_line:
                         pending += chunk.decode("utf-8", errors="replace")
-                        lines = pending.split("\n")
+                        lines = re.split(r"\r\n|\r|\n", pending)
                         pending = lines.pop()[-16384:]
                         for line in lines:
-                            if on_line:
-                                await on_line(line)
-                            if not on_event:
-                                continue
-                            # SkyPilot may prefix job-log lines. Progress content is
-                            # parsed strictly and never treated as executable text.
-                            start = line.find("{")
-                            if start < 0:
-                                continue
-                            try:
-                                item = json.loads(line[start:])
-                            except ValueError:
-                                continue
-                            if isinstance(item, dict) and (
-                                type(item.get("step")) is int or isinstance(item.get("phase"), str)
-                            ):
-                                prefix = (
-                                    "_quantization:"
-                                    if item.get("operation") == "policy.quantize"
-                                    else "_inference:"
-                                    if item.get("operation") in {"policy.evaluate", "policy.run"}
-                                    else "_telemetry:"
-                                )
-                                await on_event(prefix + json.dumps(item))
-                                if item.get("checkpoint_saved") and type(item.get("step")) is int:
-                                    await on_event(f"_checkpoint_ready:{item['step']}")
+                            await process_line(line)
+                if pending:
+                    await process_line(pending)
                 await process.wait()
         return process.returncode, captured.decode("utf-8", errors="replace")
     finally:
@@ -1098,11 +1164,19 @@ async def _run(
             )
         state["request_id"] = request[1]
         _write_json(state_path, state)
+        setup_progress = SetupProgress()
+
+        async def setup_line(line):
+            detail = setup_progress.observe(line)
+            if detail:
+                await on_event("_cloud_setup:" + json.dumps(detail))
+
         code, setup_output = await _command(
             [sky, "api", "logs", request[1], *_args(state)],
             stage_dir,
             timeout=timeout,
             on_event=on_event,
+            on_line=setup_line,
         )
         if code:
             from vla_platform.lifecycle.cloud_errors import cloud_launch_error

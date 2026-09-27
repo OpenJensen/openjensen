@@ -824,3 +824,38 @@ def test_cloud_inference_rejects_incompatible_modes_before_allocating(cloud, inv
             assert len(calls) == 1
 
     asyncio.run(exercise())
+
+
+def test_cloud_setup_events_update_running_job_without_claiming_job_percentage(cloud):
+    _, runner, workspace = cloud
+
+    async def exercise():
+        async with workspace() as execution:
+
+            async def run(payload, stage_dir, target, on_event):
+                before = await execution.get(payload["job_id"])
+                progress = {
+                    "phase": "compiling",
+                    "message": "Compiling native engine · build progress 35%",
+                    "scope": "native_build",
+                    "build_percent": 35,
+                }
+                await on_event("_cloud_setup:" + json.dumps(progress))
+                current = await execution.get(payload["job_id"])
+                assert current.status == "running"
+                assert current.stage == "compiling"
+                assert current.updated_at > before.updated_at
+                event = execution.lifecycle.events(payload["job_id"])[-1]
+                assert event.stage == "compiling"
+                assert event.data == progress
+                assert "percent" not in event.data
+                await on_event("Training on Google Cloud")
+                assert (await execution.get(payload["job_id"])).stage == "training"
+                write_result(payload, stage_dir)
+                return 0
+
+            runner.run = run
+            result = await finished(execution, await execution.submit(PROJECT, request()))
+            assert result.status == "succeeded", result.error
+
+    asyncio.run(exercise())

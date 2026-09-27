@@ -270,3 +270,24 @@ for (const stage of ['Evaluate', 'Run']) {
     expect(unexpected).toEqual([]);
   });
 }
+
+test('shows native build progress as a setup stage without presenting it as overall job completion', async ({ page }) => {
+  await workspace(page, true, true, ({ jobs }) => {
+    jobs.unshift({ id: 'compiling-run', project_id: projectId, kind: 'policy.evaluate', status: 'running', stage: 'compiling',
+      created_at: '2026-09-26T14:00:00Z', updated_at: '2026-09-26T14:25:00Z',
+      request: { operation: 'policy.evaluate', runtime_id: 'gcp', artifact_id: 'recent-100', evaluation: { mode: 'engine' } } });
+  });
+  await page.route('**/api/v1/jobs/compiling-run/events', route => route.fulfill({ json: [{
+    sequence: 1, stage: 'compiling', message: 'Compiling native engine · build progress 35%',
+    timestamp: '2026-09-26T14:25:00Z', data: { scope: 'native_build', build_percent: 35 },
+  }] }));
+  await page.getByRole('button', { name: 'Evaluate', exact: true }).click();
+  const job = page.locator('.job-history-entry[data-job-id="compiling-run"]');
+  await expect(job).toContainText('Compiling native engine');
+  await job.click();
+  const stage = page.getByRole('region', { name: 'Current job stage' });
+  await expect(stage.getByRole('heading', { name: 'Compiling native engine', exact: true })).toBeVisible();
+  await expect(stage).toContainText('build progress 35%');
+  await expect(stage.getByRole('progressbar')).not.toHaveAttribute('value');
+  await expect(page.locator('.workflow-job-technical')).toHaveJSProperty('open', false);
+});
