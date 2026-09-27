@@ -1,11 +1,18 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
+import { gradientAccumulationAvailable, type TrainingModel } from '../../apps/web/src/lib/training-models';
 
 const projectId = 'training-monitor-fixture';
 const revision = 'a'.repeat(40);
 const timestamp = () => new Date().toISOString();
+type AccumulationCatalog = 'supported' | 'missing' | 'disabled' | 'wrong-runtime' | 'wrong-unit' | 'world-size';
+function accumulationCapabilities(mode: AccumulationCatalog) {
+  return mode === 'missing' ? {} : { gradient_accumulation_supported: mode !== 'disabled',
+    gradient_accumulation_runtime_ids: mode === 'wrong-runtime' ? ['not-the-selected-runtime'] : ['skypilot-gcp-A100', 'all-models-a100'],
+    training_step_unit: mode === 'wrong-unit' ? 'microbatches' : 'optimizer_updates', training_world_size: mode === 'world-size' ? 2 : 1 };
+}
 
-async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 'stale' | 'unavailable' | 'legacy' | 'validating' | 'history' | 'empty' | 'local-snapshot' | 'local-unprepared' = 'running', openDetails = true, exportMode?: 'local' | 'remote' | 'remote-complete' | 'unconfigured' | 'failed' | 'local-dataset') {
+async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 'stale' | 'unavailable' | 'legacy' | 'validating' | 'history' | 'empty' | 'local-snapshot' | 'local-unprepared' = 'running', openDetails = true, exportMode?: 'local' | 'remote' | 'remote-complete' | 'unconfigured' | 'failed' | 'local-dataset', accumulationCatalog: AccumulationCatalog = 'supported') {
   const submitted: Record<string, any>[] = [];
   const unexpected: string[] = [];
   const cancelled: string[] = [];
@@ -136,10 +143,10 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
           runtimes: [...extraRuntimes, ...(exportMode && exportMode !== 'unconfigured' ? [{ id: 'act-cpu', label: 'Local CPU export', provider: 'local', execution: 'native', device: 'cpu', enabled: true, training: false, act_export: true, export_only: true, engine_evaluation: false, run: false, simulation: false }] : []), { id: 'skypilot-gcp-A100', label: 'A100', accelerator: 'A100', execution: 'skypilot', provider: 'gcp', device: 'cuda', enabled: true, training: true, simulation: false, training_model_ids: localDataset ? ['smolvla', 'act'] : ['smolvla'] }],
           compute: { local: { enabled: false, label: 'Local' }, gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 } },
           training_models: [
-            { id: 'smolvla', label: 'SmolVLA', description: 'Compact policy', model_id: 'lerobot/smolvla_base', model_revision: revision, methods: ['lora'], suggested_gpu_memory_gb: 16 },
+            { id: 'smolvla', label: 'SmolVLA', description: 'Compact policy', model_id: 'lerobot/smolvla_base', model_revision: revision, methods: ['lora', 'qlora'], suggested_gpu_memory_gb: 16, ...accumulationCapabilities(accumulationCatalog) },
             { id: 'pi05', label: 'π₀.₅', description: 'Flow policy', model_id: 'lerobot/pi05_base', model_revision: revision, methods: ['full'], minimum_gpu_memory_gb: 40, runtime_ids: ['all-models-a100'] },
-            ...(localDataset ? [{ id: 'act', label: 'ACT', description: 'Native policy', model_id: 'code://lerobot/act', model_revision: revision, methods: ['full'], backend: 'lerobot', minimum_gpu_memory_gb: 16 }] : []),
-          ], sources: [], training_methods: [{ id: 'lora', label: 'LoRA', description: 'Train adapters.' }, { id: 'full', label: 'Full training', description: 'Train policy.' }], default_training_method: 'lora',
+            ...(localDataset ? [{ id: 'act', label: 'ACT', description: 'Native policy', model_id: 'code://lerobot/act', model_revision: revision, methods: ['full'], backend: 'lerobot', minimum_gpu_memory_gb: 16, ...accumulationCapabilities(accumulationCatalog) }] : []),
+          ], sources: [], training_methods: [{ id: 'lora', label: 'LoRA', description: 'Train adapters.' }, { id: 'qlora', label: 'QLoRA', description: 'Train quantized adapters.' }, { id: 'full', label: 'Full training', description: 'Train policy.' }], default_training_method: 'lora',
           quantization_defaults: { cuda: { language: 'Q8_0', vision: null }, cpu: { language: 'Q8_0', vision: null }, note: '' },
         },
       };
@@ -1288,11 +1295,12 @@ test('training teacher handoff is cleared by a manual model choice or project sw
 
 
 // Generated browser fixtures exercise admission and exact requests; no training runs.
-async function temporalTraining(page: Page, model = 'ACT') {
-  const state = await workspace(page, 'local-snapshot', false);
+async function temporalTraining(page: Page, model = 'ACT', accumulationCatalog: AccumulationCatalog = 'supported', savedAccumulation?: number) {
+  const state = await workspace(page, 'local-snapshot', false, undefined, accumulationCatalog);
   const dataset = state.jobs.find(item => item.id === 'dataset')!;
   Object.assign(dataset.result!, { source: 'huggingface', repo_id: 'fixture/robot', revision });
   state.extraRuntimes.push({ id: 'all-models-a100', label: 'A100', accelerator: 'A100', provider: 'gcp', execution: 'skypilot', device: 'cuda', enabled: true, training: true, training_model_ids: ['act', 'smolvla', 'pi05'], gpu_memory_mib: 40960 });
+  if (savedAccumulation !== undefined) await page.evaluate(({ projectId, savedAccumulation }) => { const key = `firebird.workflow.${projectId}`; localStorage.setItem(key, JSON.stringify({ ...JSON.parse(localStorage.getItem(key) ?? '{}'), gradientAccumulation: savedAccumulation })); }, { projectId, savedAccumulation });
   await page.reload();
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
@@ -1518,4 +1526,88 @@ for (const fault of ['malformed', 'foreign'] as const) test(`legacy training rec
   await recovery.getByRole('button', { name: 'Refresh training jobs' }).click();
   await expect(acknowledge).toBeEnabled();
   expect(state.submitted).toEqual([]);
+});
+
+
+// Generated catalog support proves browser admission only, not native/CUDA updates.
+for (const [model, method] of [['ACT', 'full'], ['SmolVLA', 'lora'], ['SmolVLA', 'qlora']] as const) test(`advertised accumulation submits exact ${model} ${method} optimizer-update recipe`, async ({ page }) => {
+  const state = await temporalTraining(page, model);
+  if (method === 'qlora') {
+    await state.setup.getByRole('button', { name: 'Model', exact: true }).click();
+    await page.getByRole('group', { name: 'Training method', exact: true }).getByRole('radio', { name: 'QLoRA', exact: true }).check();
+    await state.setup.getByRole('button', { name: 'Compute', exact: true }).click();
+    await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  }
+  await page.getByLabel('Steps', { exact: true }).fill('20');
+  await page.getByLabel('Batch size', { exact: true }).fill('3');
+  await page.getByLabel('Gradient accumulation', { exact: true }).fill('4');
+  await expect(page.getByText('Nominal effective batch: 12 examples (3 × 4 × 1 device). Short final windows contain fewer examples.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Training recipe review', exact: true })).toContainText('20 optimizer updates');
+  await expect(page.getByRole('region', { name: 'Training recipe review', exact: true })).toContainText('checkpoint/validation cadence count completed optimizer updates');
+  expect(state.submitted).toEqual([]);
+  await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
+  await expect.poll(() => state.submitted.length).toBe(1);
+  expect(state.submitted[0]).toMatchObject({ operation: 'policy.finetune', runtime_id: 'all-models-a100', dataset_job_id: 'dataset', training_method: method, training: { steps: 20, batch_size: 3, gradient_accumulation_steps: 4 } });
+});
+
+for (const capability of ['missing', 'disabled', 'wrong-runtime', 'wrong-unit', 'world-size'] as const) test(`accumulation ${capability} capability preserves a saved request value and requires explicit reset`, async ({ page }) => {
+  const state = await temporalTraining(page, 'ACT', capability, 4);
+  const accumulation = page.getByLabel('Gradient accumulation', { exact: true });
+  await expect(accumulation).toHaveValue('4'); await expect(accumulation).toBeDisabled();
+  await expect(page.getByRole('region', { name: 'Training recipe review', exact: true }).getByRole('alert')).toContainText('Accumulation 4 is not supported');
+  await expect(page.getByRole('button', { name: 'Start fine-tuning', exact: true })).toBeDisabled();
+  expect(state.submitted).toEqual([]);
+  await page.getByRole('button', { name: 'Use accumulation 1', exact: true }).click();
+  await expect(accumulation).toHaveValue('1'); await expect(accumulation).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Start fine-tuning', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
+  await expect.poll(() => state.submitted.length).toBe(1);
+  expect(state.submitted[0]).toMatchObject({ runtime_id: 'all-models-a100', training_method: 'full', training: { gradient_accumulation_steps: 1 } });
+});
+
+test('switching to another model keeps accumulation visible and blocked until an explicit correction', async ({ page }) => {
+  const state = await temporalTraining(page);
+  await page.getByLabel('Gradient accumulation', { exact: true }).fill('3');
+  await state.setup.getByRole('button', { name: 'Model', exact: true }).click();
+  await page.getByRole('radio', { name: 'π₀.₅', exact: true }).locator('..').click();
+  await state.setup.getByRole('button', { name: 'Compute', exact: true }).click();
+  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  await expect(page.getByLabel('Gradient accumulation', { exact: true })).toHaveValue('3');
+  await expect(page.getByLabel('Gradient accumulation', { exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Start fine-tuning', exact: true })).toBeDisabled();
+  await state.setup.getByRole('button', { name: 'Model', exact: true }).click();
+  await page.getByRole('radio', { name: 'ACT', exact: true }).locator('..').click();
+  await state.setup.getByRole('button', { name: 'Compute', exact: true }).click();
+  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  await expect(page.getByLabel('Gradient accumulation', { exact: true })).toHaveValue('3');
+  await expect(page.getByLabel('Gradient accumulation', { exact: true })).toBeEnabled();
+  expect(state.submitted).toEqual([]);
+});
+
+test('accumulation capability never rewrites an exact checkpoint resume recipe', async ({ page }) => {
+  const state = await workspace(page, 'failed', true, undefined, 'missing');
+  state.job.request.training.gradient_accumulation_steps = 4;
+  await state.monitor.getByRole('button', { name: 'Resume from checkpoint' }).click();
+  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  await expect(page.getByText('Original recipe preserved.', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Gradient accumulation', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Use accumulation 1', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Resume fine-tuning', exact: true }).click();
+  await expect.poll(() => state.submitted.length).toBe(1);
+  expect(state.submitted[0]).toMatchObject({ artifact_id: 'checkpoint-artifact', training: null });
+});
+
+test('accumulation predicate requires exact model method runtime and complete catalog semantics', () => {
+  const model: TrainingModel = { id: 'act', label: 'ACT', description: '', model_id: 'code://lerobot/act', model_revision: 'a'.repeat(40), methods: ['full'], gradient_accumulation_supported: true, gradient_accumulation_runtime_ids: ['worker'], training_step_unit: 'optimizer_updates', training_world_size: 1 };
+  expect(gradientAccumulationAvailable(model, 'worker', 'full')).toBe(true);
+  expect(gradientAccumulationAvailable(model, 'other', 'full')).toBe(false);
+  expect(gradientAccumulationAvailable(model, 'worker', 'lora')).toBe(false);
+  for (const key of ['gradient_accumulation_supported', 'gradient_accumulation_runtime_ids', 'training_step_unit', 'training_world_size'] as const) {
+    const partial = { ...model }; delete partial[key]; expect(gradientAccumulationAvailable(partial, 'worker', 'full')).toBe(false);
+  }
+  for (const patch of [{ gradient_accumulation_supported: 'true' }, { gradient_accumulation_runtime_ids: 'worker' }, { training_step_unit: 'microbatches' }, { training_world_size: true }, { training_world_size: 2 }, { id: 'custom' }]) expect(gradientAccumulationAvailable({ ...model, ...patch } as TrainingModel, 'worker', 'full')).toBe(false);
+  const smol = { ...model, id: 'smolvla', methods: ['lora', 'qlora', 'full'] };
+  expect(gradientAccumulationAvailable(smol, 'worker', 'lora')).toBe(true);
+  expect(gradientAccumulationAvailable(smol, 'worker', 'qlora')).toBe(true);
+  expect(gradientAccumulationAvailable(smol, 'worker', 'full')).toBe(false);
 });
