@@ -21,6 +21,7 @@ from .local_dataset import (
 )
 from .native_profiles import LEROBOT_REVISION, native_profile_for_recipe
 from .telemetry import emit, environment_report
+from .temporal import check_dataset_temporal, resolved_temporal
 
 
 def compatible_model_snapshot(source, destination, policy_type):
@@ -275,6 +276,7 @@ def main():
         dataset_root=dataset_root,
         model_root=model_root,
         features=features,
+        resume=bool(resume),
     )
     if resume:
         arguments = [arg for arg in arguments if not arg.startswith(("--policy.",))]
@@ -309,6 +311,20 @@ def main():
 
     def make_data(cfg):
         datasets = make_local_datasets(cfg, recipe) if local_root else original_data(cfg)
+        temporal = resolved_temporal(
+            cfg.policy,
+            datasets[0].meta.fps,
+            profile["policy_type"],
+            None if resume else recipe,
+        )
+        for dataset in datasets:
+            if dataset is not None:
+                check_dataset_temporal(temporal, dataset)
+        if resume and (resume / "temporal-contract.json").exists():
+            if json.loads((resume / "temporal-contract.json").read_text()) != temporal:
+                raise ValueError("Resume temporal contract differs from the saved checkpoint")
+        state["temporal"] = temporal
+        write_json(training / "temporal-contract.json", temporal)
         state["validation"] = datasets[1]
         if state["validation"] is None or len(state["validation"]) == 0:
             raise ValueError("The selected dataset has no held-out evaluation frames")
@@ -384,6 +400,7 @@ def main():
         action = probe(
             policy, raw_batch, kwargs["preprocessor"], kwargs["postprocessor"], recipe["seed"]
         )
+        write_json(directory / "temporal-contract.json", state["temporal"])
         torch.save(raw_batch, directory / "probe-batch.pt")
         torch.save(action, directory / "probe-action.pt")
         destination = commit_checkpoint(

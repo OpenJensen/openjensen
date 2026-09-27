@@ -4,7 +4,7 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import JSON, Column, MetaData, String, Table
+from sqlalchemy import JSON, Column, ForeignKey, Integer, MetaData, String, Table
 from sqlalchemy.engine import URL, Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -23,6 +23,19 @@ jobs = Table(
     Column("project_id", String, nullable=False, index=True),
     Column("status", String, nullable=False),
     Column("record", JSON, nullable=False),
+)
+job_submissions = Table(
+    "job_submissions",
+    metadata,
+    Column("project_id", String, primary_key=True),
+    Column("operation", String, primary_key=True),
+    Column("idempotency_key", String, primary_key=True),
+    Column("fingerprint_version", Integer, nullable=False),
+    Column("request_sha256", String, nullable=False),
+    Column("request_record", JSON, nullable=False),
+    Column("job_id", String, ForeignKey("jobs.id"), nullable=False, index=True),
+    Column("accepted_response", JSON, nullable=False),
+    Column("created_at", String, nullable=False),
 )
 
 

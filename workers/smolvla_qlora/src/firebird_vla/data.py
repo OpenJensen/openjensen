@@ -3,6 +3,7 @@
 import math
 
 from .config import split_episodes
+from .temporal import action_timestamps
 
 
 def vector_stats(rows, dimensions):
@@ -46,8 +47,7 @@ def load_data(cfg, splits=None):
     for camera_key in cfg.selected_camera_keys:
         if features.get(camera_key, {}).get("dtype") not in ("video", "image"):
             raise ValueError(f"Missing image/video camera {camera_key}")
-    if meta.fps <= 0:
-        raise ValueError("Dataset FPS must be positive")
+    timestamps = action_timestamps(cfg.temporal["prediction_horizon"], meta.fps)
     ids = [int(ep["episode_index"]) for ep in meta.episodes]
     expected = split_episodes(ids, cfg.validation_fraction, cfg.seed)
     if splits is not None and splits != expected:
@@ -57,7 +57,7 @@ def load_data(cfg, splits=None):
         repo_id=cfg.dataset_id,
         root=root,
         revision=cfg.dataset_revision,
-        delta_timestamps={"action": [i / meta.fps for i in range(cfg.chunk_size)]},
+        delta_timestamps={"action": timestamps},
         video_backend="pyav",
     )
     train = LeRobotDataset(**kwargs, episodes=splits["train"])

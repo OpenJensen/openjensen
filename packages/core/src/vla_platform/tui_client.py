@@ -60,7 +60,25 @@ class ApiClient:
     async def close(self):
         await self.http.aclose()
 
-    async def request(self, method: str, path: str, payload=None):
+    async def request(
+        self, method: str, path: str, payload=None, *, idempotency_key: str | None = None
+    ):
+        headers = {}
+        if idempotency_key is not None:
+            from vla_platform.submissions import validate_key
+
+            try:
+                headers["Idempotency-Key"] = validate_key(idempotency_key)
+            except ValueError:
+                raise ApiError(
+                    "Idempotency key must be 1–128 ASCII letters, digits, '.', '_', ':' or '-'."
+                ) from None
+            if method != "POST" or path.rsplit("/", 1)[-1] not in {
+                "intakes",
+                "augmentations",
+                "policy-jobs",
+            }:
+                raise ApiError("Idempotency keys apply only to JSON job submissions.")
         uncertain = (
             " Outcome unknown; the request was sent once. Refresh jobs before submitting again."
             if method != "GET"
@@ -69,7 +87,7 @@ class ApiClient:
         try:
             async with asyncio.timeout(self.deadline):
                 async with self.http.stream(
-                    method, self.base + "/api/v1" + path, json=payload
+                    method, self.base + "/api/v1" + path, json=payload, headers=headers
                 ) as response:
                     raw = bytearray()
                     async for chunk in response.aiter_bytes():

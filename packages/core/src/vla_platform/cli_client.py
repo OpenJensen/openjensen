@@ -26,13 +26,42 @@ def client() -> ApiClient:
     return ApiClient(os.getenv("FIREBIRD_API_URL", "http://127.0.0.1:8000"))
 
 
-async def request_json(method: str, path: str, payload=None):
+async def request_json(method: str, path: str, payload=None, *, idempotency_key: str | None = None):
     api = client()
     try:
-        value = await api.request(method, path, payload)
+        value = await api.request(
+            method,
+            path,
+            payload,
+            **({"idempotency_key": idempotency_key} if idempotency_key is not None else {}),
+        )
         if method == "POST":
             validate_acknowledgment(api, path, payload, value)
         return value
+    finally:
+        await api.close()
+
+
+async def submission_job(project_id: str, operation: str, key: str):
+    """Read the scoped accepted identity; this operation can never dispatch work."""
+    from pydantic import TypeAdapter
+
+    from vla_platform.submissions import SubmissionOperation, validate_key
+
+    key = validate_key(key)
+    operation = TypeAdapter(SubmissionOperation).validate_python(operation)
+    api = client()
+    try:
+        job = api.validate(
+            Job,
+            await api.request(
+                "GET",
+                f"/projects/{segment(project_id)}/submissions/{segment(key)}?operation={segment(operation)}",
+            ),
+        )
+        if job["project_id"] != project_id or job["kind"] != operation:
+            raise ApiError("Saved submission identifies another project or operation.")
+        return job
     finally:
         await api.close()
 
