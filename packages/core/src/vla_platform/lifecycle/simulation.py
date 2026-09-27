@@ -254,6 +254,9 @@ def check_receipt(destination, receipt_path):
         or not re.fullmatch(r"sha256:[a-f0-9]{64}", info["model_id"])
     ):
         raise ValueError("Invalid native policy metadata")
+    from .control_provenance import policy_claims
+
+    policy_claims(model, info)
     return model, receipt
 
 
@@ -425,7 +428,10 @@ async def run(lifecycle, job):
         if receipt.get("source_sha256") != ticket["sha256"]:
             raise ValueError("The imported archive differs from the uploaded bytes")
         info = receipt["checkpoint"]
+        from .control_provenance import policy_claims
+
         metadata = {
+            **policy_claims(model, info),
             "architecture": info["policy_type"],
             "model_id": info["model_id"],
             "policy_subdirectory": model.relative_to(artifact_dir).as_posix(),
@@ -483,6 +489,9 @@ async def run(lifecycle, job):
         or receipt["checkpoint"]["policy_type"] != artifact.metadata["architecture"]
     ):
         raise ValueError("The copied policy differs from the accepted artifact")
+    from .control_provenance import policy_claims
+
+    policy_claims(model, artifact.metadata)
     admission = isaac_runner.admit(profile, receipt["checkpoint"])
     target.model_id = receipt["checkpoint"]["model_id"]
     async with lifecycle.execution.lock:

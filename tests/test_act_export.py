@@ -283,3 +283,138 @@ def test_changed_source_cannot_omit_temporal_export_claims(application):
     assert record["status"] == "failed"
     assert "temporal claims" in record["error"]
     assert not record.get("result")
+
+
+def local_source(application, *, additive_claims=False):
+    """Protocol fixture: complete profile/recipe identity, never model-quality evidence."""
+    app, client, _, _, root = application
+    snapshot = {
+        "schema_version": 1,
+        "id": "sha256:" + "b" * 64,
+        "manifest_sha256": "b" * 64,
+        "format": "lerobot_v3",
+        "total_bytes": 1,
+        "file_count": 1,
+        "total_episodes": 2,
+        "total_frames": 8,
+        "lineage_validated": True,
+        "warnings": [],
+    }
+    dataset = {
+        "source": "local",
+        "repo_id": None,
+        "revision": "metadata-sha256:" + "c" * 64,
+        "format": "lerobot_v3",
+        "total_episodes": 2,
+        "total_frames": 8,
+        "fps": 30.0,
+        "features": {
+            "observation.state": {"dtype": "float32", "shape": [6]},
+            "action": {"dtype": "float32", "shape": [6]},
+            "observation.images.front": {"dtype": "video", "shape": [64, 64, 3]},
+        },
+        "metadata_sha256": "c" * 64,
+        "inspected_at": now(),
+        "warnings": [],
+        "inspection_scope": "complete_snapshot",
+        "snapshot": snapshot,
+    }
+    recipe = {
+        "dataset_source": "local",
+        "dataset_id": "firebird/local-" + "b" * 16,
+        "dataset_revision": snapshot["id"],
+        "dataset_manifest_sha256": snapshot["manifest_sha256"],
+        "dataset_lineage_validated": True,
+    }
+    recipe_path = root / "checkpoint/recipe.json"
+    recipe_path.write_text(json.dumps(recipe))
+    (root / "checkpoint/manifest.json").write_text(
+        json.dumps(
+            {
+                "step": 1,
+                "files": {"recipe.json": hashlib.sha256(recipe_path.read_bytes()).hexdigest()},
+            }
+        )
+    )
+    record = client.portal.call(app.state.execution.get, "source")
+    source = record.result.artifacts[0]
+    source.metadata["dataset"] = dataset
+    if additive_claims:
+        source.metadata.update(
+            dataset_snapshot_id=snapshot["id"], dataset_manifest_sha256=snapshot["manifest_sha256"]
+        )
+    (root / "manifest.json").write_text(json.dumps({"metadata": source.metadata}))
+    source.manifest_sha256 = hashlib.sha256((root / "manifest.json").read_bytes()).hexdigest()
+    client.portal.call(app.state.execution.save, record)
+    return source
+
+
+@pytest.mark.parametrize("additive_claims", [False, True])
+def test_local_snapshot_exports_with_portable_exact_lineage(application, additive_claims):
+    _, client, pid, _, _ = application
+    source = local_source(application, additive_claims=additive_claims)
+    accepted = submit(client, pid, source)
+    assert accepted.status_code == 202, accepted.text
+    completed = wait(client, accepted.json()["id"])
+    assert completed["status"] == "succeeded", completed
+    metadata = completed["result"]["artifacts"][0]["metadata"]
+    assert metadata["dataset"] == {
+        "source": "local",
+        "snapshot_id": "sha256:" + "b" * 64,
+        "manifest_sha256": "b" * 64,
+        "revision": "metadata-sha256:" + "c" * 64,
+    }
+    assert metadata["dataset_snapshot_id"] == "sha256:" + "b" * 64
+    assert metadata["dataset_manifest_sha256"] == "b" * 64
+    assert "path" not in json.dumps(metadata["dataset"])
+    assert metadata["task_success"] is None
+
+
+@pytest.mark.parametrize(
+    "fault", ["snapshot", "recipe", "manifest", "outer-claim", "partial-profile"]
+)
+def test_local_snapshot_export_refuses_inconsistent_lineage_before_dispatch(application, fault):
+    app, client, pid, _, root = application
+    local_source(application)
+    record = client.portal.call(app.state.execution.get, "source")
+    source = record.result.artifacts[0]
+    if fault == "snapshot":
+        source.metadata["dataset"]["snapshot"]["id"] = "sha256:" + "d" * 64
+    elif fault == "outer-claim":
+        source.metadata["dataset_manifest_sha256"] = "d" * 64
+    elif fault == "partial-profile":
+        source.metadata["dataset"].pop("snapshot")
+    elif fault == "manifest":
+        (root / "checkpoint/manifest.json").write_text(
+            json.dumps({"step": 1, "files": {"recipe.json": "d" * 64}})
+        )
+    else:
+        recipe_path = root / "checkpoint/recipe.json"
+        recipe = json.loads(recipe_path.read_text())
+        recipe["dataset_manifest_sha256"] = "d" * 64
+        recipe_path.write_text(json.dumps(recipe))
+        (root / "checkpoint/manifest.json").write_text(
+            json.dumps(
+                {
+                    "step": 1,
+                    "files": {"recipe.json": hashlib.sha256(recipe_path.read_bytes()).hexdigest()},
+                }
+            )
+        )
+    client.portal.call(app.state.execution.save, record)
+    response = submit(client, pid, source)
+    assert response.status_code == 422, response.text
+    assert len(client.get(f"/api/v1/projects/{pid}/jobs").json()) == 1
+
+
+def test_local_snapshot_export_rejects_worker_lineage_switch(application):
+    app, client, pid, _, _ = application
+    source = local_source(application)
+    catalog = app.state.execution.lifecycle.catalog
+    catalog.runtimes[0].env["FIXTURE_FAULT"] = "dataset-snapshot"
+    replace_catalog(app, catalog)
+    accepted = submit(client, pid, source)
+    assert accepted.status_code == 202, accepted.text
+    completed = wait(client, accepted.json()["id"])
+    assert completed["status"] == "failed", completed
+    assert len(client.get(f"/api/v1/projects/{pid}/artifacts").json()) == 1
