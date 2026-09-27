@@ -1,6 +1,6 @@
 # Workbench presentation
 
-OPEN JENSEN uses a shared visual system for the workspace and API reference: cool neutral surfaces, a restrained blue selection color, readable stage headings, consistent control spacing, and matching light/dark tokens. Focus indicators, reduced-motion preferences, existing accessible control names, and narrow-screen wrapping remain part of the shell. On narrow screens, Data, Train and Test form three visible navigation columns, with workspace tools below; project selection and creation share a compact row. Color indicates recorded state; decoration does not imply connectivity or model quality.
+OPEN JENSEN uses a shared visual system for the workspace and API reference: cool neutral surfaces, a restrained blue selection color, readable stage headings, consistent control spacing, and matching light/dark tokens. Focus indicators, reduced-motion preferences, existing accessible control names, and narrow-screen wrapping remain part of the shell. On narrow screens, the grouped Data, Train, Test and Workspace navigation forms a compact horizontally scrollable strip, with every destination keyboard reachable; project selection and creation share a compact row. Blue indicates selection; semantic green remains reserved for recorded success or connected status. Decoration does not imply connectivity or model quality.
 
 The sidebar groups work by purpose:
 

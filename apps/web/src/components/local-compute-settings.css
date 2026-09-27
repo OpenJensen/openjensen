@@ -16,14 +16,15 @@
 .local-discovery-issues { margin: 0; padding-left: 16px; color: var(--muted); font-size: 11px; line-height: 1.6; }
 .local-discovery-results > .text-link { justify-self: start; font-size: 12px; }
 .local-compute-toggle { display: flex; align-items: center; gap: 9px; font-size: 12px; margin-top: 20px; cursor: pointer; }
-.local-compute-toggle input { accent-color: var(--success); width: 15px; height: 15px; }
+.local-compute-toggle input { accent-color: var(--accent); width: 16px; height: 16px; flex-shrink: 0; }
 .local-compute-fields { display: flex; gap: 16px; align-items: flex-end; margin: 18px 0 12px; }
 .local-compute-fields label { display: grid; gap: 8px; flex: 1; max-width: 380px; min-width: 0; color: var(--muted); font-size: 11px; }
-.local-compute-fields input { background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); border-radius: 6px; padding: 9px 11px; width: 100%; font-size: 12px; }
+.local-compute-fields input { background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); border-radius: 6px; padding: 9px 11px; width: 100%; min-height: 44px; font-size: 12px; }
 @media (max-width: 600px) {
   .local-compute-settings { padding: 15px; }
   .local-compute-fields { flex-direction: column; align-items: stretch; }
   .local-compute-fields label { max-width: none; }
+  .local-compute-fields input { font-size: 16px; }
   .local-compute-heading { flex-wrap: wrap; }
   .local-worker-card { flex-wrap: wrap; gap: 12px; }
   .local-worker-details { flex-basis: 100%; }

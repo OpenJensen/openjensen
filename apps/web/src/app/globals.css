@@ -370,6 +370,7 @@ input::placeholder { color: var(--muted); opacity: .8; }
 .reference-endpoints:empty { display: none; }
 .reference-endpoint + .reference-endpoint { border-top: 1px solid var(--line); }
 .reference-endpoint > summary { display: flex; align-items: center; gap: 14px; padding: 18px; cursor: pointer; list-style: none; }
+.reference-endpoint > summary:focus-visible, .reference-model > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
 .reference-endpoint > summary:hover, .reference-model > summary:hover { background: var(--subtle); }
 .reference-endpoint > summary::-webkit-details-marker, .reference-model > summary::-webkit-details-marker { display: none; }
 .method-badge { min-width: 49px; border: 1px solid var(--line); border-radius: 4px; background: var(--subtle); color: var(--muted); font-family: ui-monospace, monospace; font-size: 10px; font-weight: 600; padding: 3px 5px; text-align: center; flex-shrink: 0; }
@@ -415,7 +416,8 @@ input::placeholder { color: var(--muted); opacity: .8; }
 .reference-model + .reference-model { border-top: 1px solid var(--line); }
 .reference-model > summary { display: flex; align-items: center; gap: 12px; padding: 16px 18px; font-size: 12px; list-style: none; cursor: pointer; }
 .reference-model > summary > svg { color: var(--muted); }
-.reference-model > summary > span:not(.endpoint-chevron) { color: var(--muted); font-size: 10px; margin-left: auto; }
+.reference-model > summary > code { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.reference-model > summary > span:not(.endpoint-chevron) { flex-shrink: 0; white-space: nowrap; color: var(--muted); font-size: 10px; margin-left: auto; }
 .reference-model-body { padding: 18px; border-top: 1px solid var(--line); }
 .reference-model-body > .reference-hint { margin-bottom: 15px; }
 .reference-raw { margin-top: 16px; }

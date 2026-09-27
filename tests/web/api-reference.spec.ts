@@ -494,6 +494,7 @@ async function mockTrainingWorkspace(page: Page, {
   queuedRun = false, needsPreparation = false,
 } = {}) {
   const submitted: Record<string, any>[] = [];
+  const submissions = new Map<string, { body: unknown; job: Record<string, any> }>();
   const previews: string[] = [];
   const availableRuntimes = runtimes.map(runtime => ({
     ...runtime,
@@ -553,9 +554,35 @@ async function mockTrainingWorkspace(page: Page, {
   // tests cannot submit compute work even if a new request path is introduced.
   await page.route('**/api/v1/**', async route => {
     const request = route.request();
-    const path = new URL(request.url()).pathname;
+    const url = new URL(request.url());
+    const path = url.pathname;
+    const submissionPath = `/api/v1/projects/${trainingProject}/submissions/`;
+    if (request.method() === 'GET' && path.startsWith(submissionPath) && url.searchParams.get('operation') === 'policy.finetune') {
+      const key = decodeURIComponent(path.slice(submissionPath.length));
+      if (key && request.headers()['idempotency-key'] === key) {
+        const saved = submissions.get(key);
+        await route.fulfill({ status: saved ? 200 : 404,
+          headers: { 'Idempotency-Key': key, 'Cache-Control': 'no-store' },
+          json: saved?.job ?? { detail: 'No accepted submission found for this project, operation and key' } });
+        return;
+      }
+    }
     if (request.method() === 'POST' && path === `/api/v1/projects/${trainingProject}/policy-jobs`) {
       const body = request.postDataJSON();
+      const key = request.headers()['idempotency-key'];
+      if (!key || body.operation !== 'policy.finetune') {
+        unexpectedRequests.push(`${request.method()} ${path}`);
+        await route.fulfill({ status: 405, json: { detail: 'Unkeyed or unsupported training request blocked by fixture.' } });
+        return;
+      }
+      const headers = { 'Idempotency-Key': key, 'Cache-Control': 'no-store' };
+      const saved = submissions.get(key);
+      if (saved) {
+        const same = JSON.stringify(saved.body) === JSON.stringify(body);
+        await route.fulfill({ status: same ? 202 : 409, headers,
+          json: same ? saved.job : { detail: 'Submission key already belongs to another request.' } });
+        return;
+      }
       submitted.push(body);
       const job: Record<string, any> = {
         id: `mock-training-${submitted.length}`, project_id: trainingProject, kind: 'policy.finetune',
@@ -564,7 +591,8 @@ async function mockTrainingWorkspace(page: Page, {
         result: queuedRun ? null : { artifacts: [], reports: [], decision: 'completed' },
       };
       jobs.unshift(job);
-      await route.fulfill({ status: 202, json: job });
+      submissions.set(key, { body, job });
+      await route.fulfill({ status: 202, headers, json: job });
       return;
     }
     if (request.method() === 'GET') {
@@ -1043,17 +1071,30 @@ test('dataset intake waits for a confirmed project and preserves its draft durin
   let projectError = false;
   const submitted: { projectId: string; body: unknown }[] = [];
   await page.route('**/api/v1/**', async route => {
-    const path = new URL(route.request().url()).pathname;
-    if (path === '/api/v1/projects') {
+    const request = route.request();
+    const url = new URL(request.url());
+    const path = url.pathname;
+    const lookup = /^\/api\/v1\/projects\/(first|second)\/submissions\/([^/]+)$/.exec(path);
+    if (request.method() === 'GET' && lookup && url.searchParams.get('operation') === 'dataset.inspect') {
+      const key = decodeURIComponent(lookup[2]);
+      if (request.headers()['idempotency-key'] === key) {
+        // This fixture rejects intake before allocation, so no key has an accepted binding.
+        return route.fulfill({ status: 404, headers: { 'Idempotency-Key': key, 'Cache-Control': 'no-store' },
+          json: { detail: 'No accepted submission found for this project, operation and key' } });
+      }
+    }
+    if (request.method() === 'GET' && path === '/api/v1/projects') {
       await pendingProjects;
       return route.fulfill(projectError
         ? { status: 503, json: { detail: 'Project fixture unavailable' } }
         : { json: ['first', 'second'].map(id => ({ id, name: `Project ${id}`, created_at: trainingTimestamp })) });
     }
-    if (path.endsWith('/intakes')) {
-      submitted.push({ projectId: path.split('/')[4], body: route.request().postDataJSON() });
-      return route.fulfill({ status: 422, json: { detail: 'Captured intake; no worker started' } });
+    if (request.method() === 'POST' && /^\/api\/v1\/projects\/(first|second)\/intakes$/.test(path) && request.headers()['idempotency-key']) {
+      submitted.push({ projectId: path.split('/')[4], body: request.postDataJSON() });
+      return route.fulfill({ status: 422, headers: { 'Idempotency-Key': request.headers()['idempotency-key'], 'Cache-Control': 'no-store' },
+        json: { detail: 'Captured intake; no worker started' } });
     }
+    if (request.method() !== 'GET' || path.includes('/submissions/')) return route.fulfill({ status: 405, json: { detail: 'Unexpected request blocked by intake fixture.' } });
     if (path === '/api/v1/health') return route.fulfill({ json: { status: 'ok', version: 'intake-fixture' } });
     return route.fulfill({ json: [] });
   });
@@ -1115,12 +1156,39 @@ test('blank dataset revision uses latest and reused inspections keep one history
     },
   };
   const submitted: unknown[] = [];
+  const submissions = new Map<string, { body: unknown; job: typeof job }>();
   const previews: string[] = [];
+  // Keep the existing live read-only bootstrap, but never let an unexpected write reach it.
+  await page.route('**/api/v1/**', route => route.request().method() === 'GET' ? route.fallback()
+    : route.fulfill({ status: 405, json: { detail: 'Unexpected mutation blocked by intake fixture.' } }));
   await page.route('**/api/v1/projects', route => route.fulfill({ json: [{ id: projectId, name: 'Saved inspections', created_at: stamp }] }));
   await page.route(`**/api/v1/projects/${projectId}/jobs`, route => route.fulfill({ json: [job] }));
+  await page.route(`**/api/v1/projects/${projectId}/submissions/*`, route => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const key = decodeURIComponent(url.pathname.split('/').at(-1)!);
+    if (request.method() !== 'GET' || url.searchParams.get('operation') !== 'dataset.inspect' || request.headers()['idempotency-key'] !== key) {
+      return route.fulfill({ status: 405, json: { detail: 'Unsupported submission lookup blocked by fixture.' } });
+    }
+    const saved = submissions.get(key);
+    return route.fulfill({ status: saved ? 200 : 404, headers: { 'Idempotency-Key': key, 'Cache-Control': 'no-store' },
+      json: saved?.job ?? { detail: 'No accepted submission found for this project, operation and key' } });
+  });
   await page.route(`**/api/v1/projects/${projectId}/intakes`, route => {
-    submitted.push(route.request().postDataJSON());
-    return route.fulfill({ status: 202, json: job });
+    const request = route.request();
+    const key = request.headers()['idempotency-key'];
+    if (request.method() !== 'POST' || !key) return route.fulfill({ status: 405, json: { detail: 'Unsupported intake request blocked by fixture.' } });
+    const body = request.postDataJSON();
+    const saved = submissions.get(key);
+    const headers = { 'Idempotency-Key': key, 'Cache-Control': 'no-store' };
+    if (saved) {
+      const same = JSON.stringify(saved.body) === JSON.stringify(body);
+      return route.fulfill({ status: same ? 202 : 409, headers,
+        json: same ? saved.job : { detail: 'Submission key already belongs to another request.' } });
+    }
+    submitted.push(body);
+    submissions.set(key, { body, job });
+    return route.fulfill({ status: 202, headers, json: job });
   });
   await page.route('**/api/v1/jobs/inspection-cached/episodes**', route => {
     const isIndex = new URL(route.request().url()).pathname.endsWith('/episodes');
