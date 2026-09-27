@@ -325,7 +325,11 @@ for (const width of [320, 390]) test(`compact ${width}px navigation keeps stage 
   // introduction must still fit in the first screen without scrolling.
   expect(bounds!.y + bounds!.height).toBeLessThan(844 * 0.6);
   const navigation = page.getByRole('navigation', { name: 'Policy lifecycle' });
-  expect(await navigation.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  // The compact navigation scrolls internally; its viewport must remain on-screen.
+  const navigationBounds = await navigation.boundingBox();
+  expect(navigationBounds!.x).toBeGreaterThanOrEqual(0);
+  expect(navigationBounds!.x + navigationBounds!.width).toBeLessThanOrEqual(width);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
   await page.getByRole('button', { name: 'Run', exact: true }).focus();
   await page.keyboard.press('Tab');
   await expect(page.getByRole('button', { name: 'Decision lab', exact: true })).toBeFocused();

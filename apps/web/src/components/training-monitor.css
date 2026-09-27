@@ -1,12 +1,15 @@
 .training-monitor { margin-top: 20px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); padding: 22px; min-width: 0; }
-.training-monitor-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.training-monitor-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+.training-monitor-header > div { min-width: 0; max-width: 100%; }
 .training-monitor-eyebrow { color: var(--muted); font-size: 10px; font-family: ui-monospace, monospace; }
-.training-monitor-header h3 { margin: 5px 0 0; font-size: 18px; font-weight: 550; }
+.training-monitor-header h3 { margin: 5px 0 0; font-size: 18px; font-weight: 550; line-height: 1.4; overflow-wrap: anywhere; }
 .training-monitor-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
-.training-monitor-actions .secondary-button { font-size: 11px; }
+.training-monitor-actions .secondary-button { min-width: 0; max-width: 100%; font-size: 12px; white-space: normal; text-align: center; }
+.training-monitor-actions .status { margin: 0; }
 .training-current-action { color: var(--muted); font-size: 12px; margin: 14px 0; overflow-wrap: anywhere; }
 .training-progress-heading { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; margin: 22px 0 9px; }
-.training-progress-heading strong { font-variant-numeric: tabular-nums; }
+.training-progress-heading > span { min-width: 0; overflow-wrap: anywhere; }
+.training-progress-heading strong { flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .training-progress { display: block; width: 100%; height: 7px; overflow: hidden; border: 0; border-radius: 4px; background: var(--subtle); accent-color: var(--success); }
 .training-progress::-webkit-progress-bar { background: var(--subtle); border-radius: 4px; }
 .training-progress::-webkit-progress-value { background: var(--success); border-radius: 4px; }
@@ -35,7 +38,7 @@
 .training-monitor-disclosure { border-top: 1px solid var(--line); padding-top: 16px; margin-top: 20px; }
 .training-monitor-disclosure > summary { cursor: pointer; font-size: 12px; font-weight: 500; }
 .training-monitor-disclosure > summary > span { color: var(--muted); margin-left: 10px; font-size: 10px; font-weight: 400; }
-.training-metric-table { overflow: auto; margin-top: 14px; }
+.training-metric-table { min-width: 0; max-width: 100%; overflow: auto; margin-top: 14px; }
 .training-metric-table table { width: 100%; border-collapse: collapse; font-size: 11px; text-align: right; font-variant-numeric: tabular-nums; }
 .training-metric-table th, .training-metric-table td { padding: 9px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .training-metric-table th { font-weight: 500; }
@@ -47,20 +50,22 @@
 .training-saved-checkpoints li span, .training-saved-checkpoints time { color: var(--muted); }
 .training-saved-checkpoints time { margin-left: auto; }
 .training-run-downloads { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; font-size: 12px; }
+.training-run-downloads > a { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .training-log-filter { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; color: var(--muted); font-size: 11px; margin: 14px 0; }
 .training-log-filter input { border: 1px solid var(--line); border-radius: 5px; color: var(--ink); background: var(--surface); padding: 7px 9px; min-width: 0; width: min(100%, 270px); font-size: 11px; }
 .training-event-log { list-style: none; padding: 0; margin: 0; max-height: 260px; overflow: auto; }
-.training-event-log li { display: grid; grid-template-columns: 152px 85px 1fr; align-items: start; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 11px; line-height: 1.6; }
+.training-event-log li { display: grid; grid-template-columns: 152px 85px minmax(0, 1fr); align-items: start; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 11px; line-height: 1.6; }
+.training-event-log li > * { min-width: 0; overflow-wrap: anywhere; }
 .training-event-log time, .training-event-log li > span { color: var(--muted); }
 .training-event-log p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.training-reproducibility-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; margin: 20px 0; }
+.training-reproducibility-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 20px; margin: 20px 0; }
 .training-reproducibility-facts > div { min-width: 0; }
 .training-reproducibility-facts dt { color: var(--muted); font-size: 10px; }
 .training-reproducibility-facts dd { margin: 6px 0 0; font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
 .training-monitor-limitations { margin: 12px 0; padding-left: 16px; font-size: 11px; color: var(--muted); line-height: 1.7; }
-.training-reproducibility-download { display: inline-flex; font-size: 11px; text-decoration: none; margin-bottom: 16px; }
+.training-reproducibility-download { display: inline-flex; min-width: 0; max-width: 100%; font-size: 12px; text-decoration: none; margin-bottom: 16px; white-space: normal; text-align: center; }
 .training-reproducibility details > summary { cursor: pointer; color: var(--muted); font-size: 11px; }
-.training-reproducibility pre, .training-worker-logs pre { overflow: auto; max-height: 400px; font-family: ui-monospace, monospace; font-size: 10px; line-height: 1.7; background: var(--subtle); border-radius: 5px; padding: 14px; margin-top: 12px; }
+.training-reproducibility pre, .training-worker-logs pre { min-width: 0; max-width: 100%; overflow: auto; max-height: 400px; font-family: ui-monospace, monospace; font-size: 10px; line-height: 1.7; background: var(--subtle); border-radius: 5px; padding: 14px; margin-top: 12px; }
 @media (max-width: 1100px) { .training-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 700px) {
   .training-monitor { padding: 15px; }
@@ -69,7 +74,7 @@
   .training-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 12px; }
   .training-metrics dd { font-size: 19px; }
   .training-reproducibility-facts { grid-template-columns: 1fr; }
-  .training-event-log li { grid-template-columns: 1fr auto; gap: 3px 10px; }
+  .training-event-log li { grid-template-columns: minmax(0, 1fr) minmax(0, auto); gap: 3px 10px; }
   .training-event-log p { grid-column: 1 / -1; }
   .training-monitor-disclosure > summary > span { display: block; margin: 5px 0 0 15px; }
   .training-saved-checkpoints time { width: 100%; margin-left: 0; }
@@ -79,9 +84,19 @@
 .training-detail-activity { border-top: 1px solid var(--line); padding-top: 16px; margin-top: 20px; }
 .training-error-detail { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow: auto; color: var(--error); background: var(--error-bg); padding: 12px; border-radius: 5px; font-size: 11px; margin: 14px 0; }
 .training-checkpoint-actions { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; margin: 22px 0; padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--subtle); }
-.training-checkpoint-actions > div { flex: 1 1 100%; }
+.training-checkpoint-actions > div { min-width: 0; max-width: 100%; flex: 1 1 100%; }
+.training-checkpoint-actions > section { display: grid; min-width: 0; max-width: 100%; flex: 1 1 100%; gap: 12px; overflow-wrap: anywhere; }
+.training-checkpoint-actions > section > label { display: grid; min-width: 0; gap: 7px; font-size: 12px; }
+.training-checkpoint-actions > section > button { justify-self: start; }
 .training-checkpoint-actions h4 { margin: 0 0 6px; font-size: 14px; }
 .training-checkpoint-actions p { margin: 0; font-size: 12px; line-height: 1.6; color: var(--muted); }
 .training-checkpoint-actions > label { flex: 1 1 240px; min-width: 0; display: grid; gap: 7px; font-size: 12px; }
-.training-checkpoint-actions select { width: 100%; min-width: 0; text-overflow: ellipsis; }
-.training-checkpoint-actions button { flex-shrink: 0; }
+.training-checkpoint-actions select { width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 7px; color: var(--ink); background: var(--surface); font: inherit; text-overflow: ellipsis; }
+.training-checkpoint-actions button { min-width: 0; max-width: 100%; flex-shrink: 0; white-space: normal; }
+@media (max-width: 480px) {
+  .training-checkpoint-actions { padding: 14px; gap: 14px; }
+  .training-checkpoint-actions > button { width: 100%; }
+  .training-checkpoint-actions > section > .primary-button { width: 100%; }
+  .training-checkpoint-actions select { font-size: 16px; }
+  .training-event-log li { grid-template-columns: minmax(0, 1fr); }
+}

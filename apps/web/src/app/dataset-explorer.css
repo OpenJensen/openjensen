@@ -32,7 +32,7 @@
 
 .dx-episode-list li button { display: flex; align-items: center; width: 100%; text-align: left; gap: 8px; border: 1px solid var(--line); background: transparent; border-radius: 6px; padding: 8px 11px; color: var(--ink); }
 .dx-episode-list li button:hover { background: var(--subtle); }
-.dx-episode-list li button.selected { background: var(--selected); border-color: var(--ink); }
+.dx-episode-list li button.selected { background: var(--selected); border-color: var(--accent); }
 .dx-episode-list li button > svg { width: 13px; color: var(--muted); margin-left: auto; }
 .dx-episode-number { font-family: ui-monospace, monospace; font-size: 10px; color: var(--muted); align-self: flex-start; margin-top: 3px; }
 .dx-episode-list-copy { display: flex; flex-direction: column; min-width: 0; gap: 4px; }
@@ -57,9 +57,9 @@
 .dx-camera-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
 .dx-camera-grid-single { grid-template-columns: 1fr; max-width: 760px; }
 .dx-camera { margin: 0; min-width: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
-.dx-camera-selected { border-color: var(--success, #287552); background: var(--selected); }
+.dx-camera-selected { border-color: var(--accent); background: var(--selected); }
 .dx-camera-choice { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-.dx-camera-choice input { width: 16px; height: 16px; margin: 0; accent-color: var(--success, #287552); }
+.dx-camera-choice input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
 .dx-video-wrap { position: relative; aspect-ratio: 4 / 3; background: #111; display: grid; place-items: center; }
 .dx-video-wrap video { display: block; width: 100%; height: 100%; position: absolute; inset: 0; object-fit: contain; }
 .dx-video-status { display: flex; align-items: center; justify-content: center; gap: 8px; position: absolute; bottom: 12px; left: 12px; right: 12px; border-radius: 5px; padding: 7px 10px; background: #202024e6; color: #fff; font-size: 11px; }
