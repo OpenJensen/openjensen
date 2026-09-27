@@ -20,3 +20,10 @@ These presentation changes preserve the distinction between engine execution che
 Native simulation separates reviewing work from preparing another paid run. Selecting a recorded job brings its status and video ahead of the preparation form. Pickup success and calibration stay explicitly unmeasured/unverified. Known worker states remain visible while activity, identity, and raw reports live in an expandable technical section. Polling preserves the user's disclosure choice. Failed activity refreshes leave a visible stale-state notice alongside cached worker observations, even when technical details are closed. The new-run form remains reachable by keyboard and retains source/profile selection, timeout bounds, ambiguous-submission handling, and explicit paid-run consent; no launch occurs on navigation.
 
 Browser regression suites cover desktop, mobile, API and real subprocess workflows, including exact requests, clip selection limits, result comparison and downloads, cancellation, recovery after uncertain submissions, project isolation, Distill → Quantize → Replay handoffs, keyboard use, theme switching and 320px overflow. Visual review uses the production export on a temporary local workspace. Generated API/media fixtures used for layout and browser checks are not robotics evidence or proof of live paid-provider access.
+
+
+Editable forms use explicit scoped layout: labels above full-width controls,
+borderless fieldsets, visible spacing between fields, and responsive action rows.
+Decision and Teaching share these rules; checkbox consent remains on its own row.
+Layout checks measure label/control bounds and widths, not only visibility or
+page overflow. Default comparison instructions must fit without being clipped.

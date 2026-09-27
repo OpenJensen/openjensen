@@ -1,0 +1,20 @@
+.teaching-panel { display: grid; gap: 24px; min-width: 0; max-width: 1100px; }
+.teaching-panel > .workflow-integration { margin-bottom: 0; }
+.teaching-panel p { margin: 0; line-height: 1.65; overflow-wrap: anywhere; }
+.teaching-panel .teaching-preview { margin-block: 0; }
+.teaching-panel .teaching-task-form { grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 12px; }
+.teaching-correction { display: grid; grid-template-columns: minmax(180px, 360px) auto; align-items: end; justify-content: start; gap: 12px; }
+.teaching-advice { display: grid; gap: 20px; min-width: 0; }
+.teaching-advice-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.teaching-advice-heading h3, .teaching-voice h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.teaching-services > summary { cursor: pointer; font-size: 13px; }
+.teaching-services-body { display: grid; gap: 20px; min-width: 0; padding-top: 20px; }
+.teaching-services-body p { margin: 0; line-height: 1.65; overflow-wrap: anywhere; }
+.teaching-voice { display: grid; gap: 12px; min-width: 0; padding-top: 20px; border-top: 1px solid var(--line); }
+.teaching-voice > [aria-label="Teaching room media"]:empty { display: none; }
+@media (max-width: 700px) {
+  .teaching-panel .teaching-task-form, .teaching-correction { grid-template-columns: minmax(0, 1fr); }
+  .teaching-correction { justify-content: stretch; }
+  .teaching-advice { padding: 16px; }
+  .teaching-panel .workbench-actions > button { max-width: 100%; white-space: normal; text-align: center; }
+}

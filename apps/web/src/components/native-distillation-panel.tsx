@@ -158,11 +158,13 @@ export function NativeDistillationPanel({ projectId, preferredJobId, onDataset, 
           <label className="distillation-check"><input type="checkbox" checked={generated} onChange={event => { setGenerated(event.target.checked); setAttested(false); }} /> This snapshot contains generated test observations.</label>
           <label className="distillation-check"><input type="checkbox" checked={attested} onChange={event => setAttested(event.target.checked)} /> I verified that the dataset coordinates, order and camera match this teacher’s saved processors. No implicit unit conversion is allowed.</label>
           <WorkbenchDisclosure title="Training recipe">
-            <label>Training steps<input type="number" min="1" max="10000" value={steps} onChange={event => setSteps(event.target.value)} /></label>
-            <label>Frame stride<input type="number" min="1" max="10000" value={stride} onChange={event => setStride(event.target.value)} /></label>
-            <label>Learning rate<input type="number" min="0.0000001" max="0.001" step="any" value={rate} onChange={event => setRate(event.target.value)} /></label>
-            <label>Random seed<input type="number" min="0" max="2147483647" value={seed} onChange={event => setSeed(event.target.value)} /></label>
-            <label>Distillation timeout (seconds)<input type="number" min="30" max="3600" value={timeout} onChange={event => setTimeoutValue(event.target.value)} /></label>
+            <div className="native-recipe-controls">
+              <label>Training steps<input type="number" min="1" max="10000" value={steps} onChange={event => setSteps(event.target.value)} /></label>
+              <label>Frame stride<input type="number" min="1" max="10000" value={stride} onChange={event => setStride(event.target.value)} /></label>
+              <label>Learning rate<input type="number" min="0.0000001" max="0.001" step="any" value={rate} onChange={event => setRate(event.target.value)} /></label>
+              <label>Random seed<input type="number" min="0" max="2147483647" value={seed} onChange={event => setSeed(event.target.value)} /></label>
+              <label>Distillation timeout (seconds)<input type="number" min="30" max="3600" value={timeout} onChange={event => setTimeoutValue(event.target.value)} /></label>
+            </div>
             <p>State order: {coordinateNames(dataset.result!.features['observation.state'])}. Action order: {coordinateNames(dataset.result!.features.action)}.</p>
             <p>Related demonstrations must stay in one partition. Final episodes are checked only after saving the last-step student; splits are never random.</p>
             <p>ACT256 · 2 encoder layers · 1 decoder layer · frozen visual backbone. At most 256 sampled observations. No optimizer-state resume.</p>

@@ -39,3 +39,10 @@ light theme. It was captured by the desktop model-choice browser test on
 September 27, 2026 from this UI revision. The test uses generated project and
 worker API records; the image demonstrates layout and explicit selection only.
 No training, distillation or cloud job was started for the capture.
+
+
+`decision-form.png` shows the repaired Decision lab layout at a 1440px desktop
+viewport. The generated browser fixture leaves the scorer unconfigured and
+submits no scoring request. It verifies layout only: labels above full-width
+fields, separated criteria, and the styled action row. Responsive geometry is
+also checked at 560px and 320px in light and dark themes.

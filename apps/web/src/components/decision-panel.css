@@ -1,0 +1,22 @@
+.decision-panel { min-width: 0; }
+.decision-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin: 0 0 24px; }
+.decision-toolbar > p { display: flex; align-items: center; gap: 7px; margin: 0; font-size: 12px; color: var(--muted); }
+.decision-toolbar > p::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+.decision-toolbar > .decision-ready::before { background: var(--success); }
+.decision-toolbar .text-button { padding: 5px 0; font-size: 12px; }
+.decision-criteria { display: grid; gap: 14px; min-width: 0; }
+.decision-criteria h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.decision-field-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 24px; }
+.decision-field-heading > label { font-size: 13px; font-weight: 500; }
+.decision-field-heading .text-button { padding: 0; font-size: 12px; color: var(--muted); }
+.decision-add { justify-self: start; }
+.decision-footer { padding-top: 20px; border-top: 1px solid var(--line); }
+.decision-model-details { margin-top: 24px; }
+.decision-model-details .workbench-disclosure-body { display: grid; gap: 12px; color: var(--muted); font-size: 13px; line-height: 1.7; }
+.decision-result { display: grid; gap: 14px; min-width: 0; margin-top: 24px; padding: 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--subtle); overflow-wrap: anywhere; }
+.decision-result > p { font-size: 13px; }
+.decision-result ol { display: grid; gap: 12px; margin: 0; padding-left: 20px; font-size: 13px; }
+@media (max-width: 700px) {
+  .decision-footer .primary-button { width: 100%; }
+  .decision-result { padding: 16px; }
+}

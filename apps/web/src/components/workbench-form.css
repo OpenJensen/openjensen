@@ -1,0 +1,16 @@
+/* Explicit form layout; browser defaults must not position labels or controls. */
+.workbench-form { display: grid; gap: 24px; min-width: 0; }
+.workbench-form fieldset { display: grid; gap: 20px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.workbench-field { display: grid; gap: 8px; min-width: 0; }
+.workbench-field > label, label.workbench-field { color: var(--ink); font-size: 13px; font-weight: 500; }
+.workbench-field :is(input:not([type=checkbox]):not([type=radio]), select, textarea) { display: block; box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--ink); background: var(--surface); font: inherit; font-size: 14px; font-weight: 400; line-height: 1.6; }
+.workbench-field textarea { resize: vertical; }
+.workbench-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; min-width: 0; }
+.workbench-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.workbench-check { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; line-height: 1.6; }
+.workbench-check input[type=checkbox] { width: 16px; height: 16px; min-height: 16px; margin: 3px 0 0; padding: 0; flex: 0 0 16px; }
+@media (max-width: 700px) {
+  .workbench-field-grid { grid-template-columns: minmax(0, 1fr); }
+  .workbench-field :is(input:not([type=checkbox]):not([type=radio]), select, textarea) { font-size: 16px; }
+}
+.workbench-field :is(input, select, textarea):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
