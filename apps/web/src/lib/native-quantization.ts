@@ -1,4 +1,5 @@
-import { apiOrigin, type Job, type PolicyArtifact, type PolicyOptions } from './api';
+import { type Job, type PolicyArtifact, type PolicyOptions } from './api';
+import { policyJobRequest, UncertainPolicyJob } from './policy-job-mutation';
 
 // Additive client boundary while the core-owned combined schema is generated.
 // Callers choose registered IDs; no executable, file path or provider is accepted.
@@ -8,8 +9,6 @@ export type NativeQuantizationRuntime = PolicyOptions['runtimes'][number] & {
 };
 export type PackedArtifact = Omit<PolicyArtifact, 'format'> & { format: PolicyArtifact['format'] | 'native_quantized' };
 export class UncertainQuantization extends Error {}
-class RejectedRequest extends Error {}
-const prefix = `${apiOrigin}/api/v1`;
 const encode = encodeURIComponent;
 const statuses = ['queued', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted'];
 export function object(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === 'object' && !Array.isArray(value); }
@@ -26,35 +25,13 @@ export function availableNativeQuantizer(runtime: NativeQuantizationRuntime): bo
 }
 export function nativeQuantizationInput(artifact: PackedArtifact, projectId: string): boolean {
   return artifact.project_id === projectId && ['native_checkpoint', 'inference_export'].includes(artifact.format) &&
-    artifact.metadata?.architecture === 'act' && artifact.metadata?.storage !== 'gcs' && !artifact.metadata?.remote_uri &&
+    artifact.metadata?.architecture === 'act' && artifact.metadata?.storage !== 'gcs' && !artifact.metadata?.remote && !artifact.metadata?.remote_uri &&
     artifact.metadata?.inference_only !== false && artifact.metadata?.method !== 'full' && artifact.metadata?.training_backend !== 'lerobot' && artifact.metadata?.use_vae !== true;
 }
 function uncertain() { return new UncertainQuantization('The submission outcome is unverified. Check recorded jobs before making another request. This request was not retried.'); }
 async function request(path: string, body?: unknown): Promise<unknown> {
-  const mutation = body !== undefined;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15_000);
-  try {
-    const response = await fetch(`${prefix}${path}`, { method: mutation ? 'POST' : 'GET', body: mutation ? JSON.stringify(body) : undefined, cache: 'no-store', signal: controller.signal, headers: { 'Content-Type': 'application/json' } });
-    const reader = response.body?.getReader();
-    if (!reader) throw new Error('Missing application response.');
-    const parts: Uint8Array[] = []; let length = 0;
-    try { while (true) { const part = await reader.read(); if (part.done) break; length += part.value.length; if (length > 1024 * 1024) throw new Error('Application response exceeds its limit.'); parts.push(part.value); } }
-    finally { await reader.cancel(); }
-    const bytes = new Uint8Array(length); let offset = 0;
-    for (const part of parts) { bytes.set(part, offset); offset += part.length; }
-    const value: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
-    if (!response.ok) {
-      if (mutation && response.status >= 500) throw uncertain();
-      const detail = object(value) && typeof value.detail === 'string' ? value.detail : object(value) && Array.isArray(value.detail) ? value.detail.filter(object).slice(0, 10).map(item => typeof item.msg === 'string' ? item.msg : 'Invalid input').join('; ') : '';
-      throw new RejectedRequest(detail ? detail.slice(0, 2000) : `Application returned HTTP ${response.status}.`);
-    }
-    return value;
-  } catch (error) {
-    if (error instanceof UncertainQuantization) throw error;
-    if (mutation && !(error instanceof RejectedRequest)) throw uncertain();
-    throw error instanceof Error ? error : new Error('The application is unavailable.');
-  } finally { clearTimeout(timer); }
+  try { return await policyJobRequest(path, body); }
+  catch (error) { if (error instanceof UncertainPolicyJob) throw uncertain(); throw error; }
 }
 type Expected = { project: string; runtime: string; artifact: string; bits: 4 | 8; timeout: number };
 function accepted(value: unknown, expected: Expected, id?: string): Job {
