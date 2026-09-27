@@ -20,6 +20,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["native_act: opt-in complete pinned ACT CPU runtime proof"]
 
 [tool.ruff]
 target-version = "py311"

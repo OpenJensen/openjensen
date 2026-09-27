@@ -2556,6 +2556,37 @@
         "title": "LocalPreviewLimits",
         "type": "object"
       },
+      "NativeQuantization": {
+        "additionalProperties": false,
+        "description": "Explicit local packed ACT recipe; separate from GGUF precision.",
+        "properties": {
+          "bits": {
+            "enum": [
+              4,
+              8
+            ],
+            "title": "Bits",
+            "type": "integer"
+          },
+          "format": {
+            "const": "firebird_quant",
+            "title": "Format",
+            "type": "string"
+          },
+          "group_size": {
+            "const": 64,
+            "default": 64,
+            "title": "Group Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "format",
+          "bits"
+        ],
+        "title": "NativeQuantization",
+        "type": "object"
+      },
       "ParityLimits": {
         "additionalProperties": false,
         "description": "Operator-declared tolerances; no unmeasured universal default.",
@@ -2600,7 +2631,8 @@
               "native_checkpoint",
               "deployment_package",
               "inference_export",
-              "simulation_record"
+              "simulation_record",
+              "native_quantized"
             ],
             "title": "Format",
             "type": "string"
@@ -2696,6 +2728,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/Limits"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "native_quantization": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NativeQuantization"
               },
               {
                 "type": "null"
@@ -2955,6 +2997,16 @@
           "launchable": {
             "default": true,
             "title": "Launchable",
+            "type": "boolean"
+          },
+          "native_quantization": {
+            "default": false,
+            "title": "Native Quantization",
+            "type": "boolean"
+          },
+          "native_quantization_only": {
+            "default": false,
+            "title": "Native Quantization Only",
             "type": "boolean"
           },
           "needs_preparation": {
