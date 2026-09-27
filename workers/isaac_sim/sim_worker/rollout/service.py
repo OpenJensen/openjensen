@@ -1,11 +1,12 @@
 import math
 import time
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import asdict, replace
 
 from sim_worker.rollout.calibration import CalibrationUse, JointMap
 from sim_worker.rollout.config import RolloutSpec
 from sim_worker.rollout.contracts import RGB_CHANNELS, Observation, Policy, Simulation
+from sim_worker.rollout.evaluation import EpisodeEvaluator
 from sim_worker.rollout.experimental import MAX_SPEED_RAD_S, MotionGuard
 
 _TIME_TOLERANCE_SECONDS = 1e-6
@@ -59,6 +60,12 @@ class Rollout:
         latency_seconds = 0.0
         bounds_report = {"action_extrapolations": 0, "joint_limit_clips": 0, "speed_limit_clips": 0}
         observed, policy_observation = self._observe(episode_id, step)
+        evaluator = None
+        if self._spec.evaluation is not None:
+            evaluator = EpisodeEvaluator(
+                self._spec.evaluation, fps=self._spec.sim.fps, steps=self._spec.steps
+            )
+            evaluator.observe(observed)
         while step < self._spec.steps:
             started = time.monotonic()
             chunk = self._policy.predict(policy_observation)
@@ -93,6 +100,13 @@ class Rollout:
                 self._simulation.apply(target)
                 self._simulation.step()
                 measured, next_policy = self._observe(episode_id, step + 1)
+                evaluation_trace = {}
+                if evaluator is not None:
+                    evaluation_trace = {
+                        "object_state": asdict(observed.object_state),
+                        "next_object_state": asdict(measured.object_state),
+                        "evaluation": evaluator.observe(measured),
+                    }
                 record(
                     {
                         "episode_id": episode_id,
@@ -107,6 +121,7 @@ class Rollout:
                         "prediction_step": chunk.step,
                         "inference_seconds": latency,
                         **bounds_trace,
+                        **evaluation_trace,
                     },
                     observed,
                 )
@@ -129,4 +144,6 @@ class Rollout:
         }
         if self._guard is not None:
             result.update(bounds_report | {"max_target_speed_rad_s": MAX_SPEED_RAD_S})
+        if evaluator is not None:
+            result["evaluation"] = evaluator.finish()
         return result

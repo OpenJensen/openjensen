@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 import yaml
 
 from sim_worker.rollout.contracts import API_VERSION, SimSpec
+from sim_worker.rollout.evaluation import EvaluationSpec
 
 _MAX_CONFIG_BYTES = 64 * 1024
 _MAX_CAPTURE_DIM = 1920
@@ -29,6 +30,7 @@ class RolloutSpec:
     task: str
     timeout_seconds: float
     calibration: Path
+    evaluation: EvaluationSpec | None = None
 
 
 class _Loader(yaml.SafeLoader):
@@ -111,8 +113,12 @@ def check_endpoint(endpoint: str) -> str:
 
 
 def load(path: Path) -> RolloutSpec:
+    document = read_document(path)
+    evaluation = None
+    if "evaluation" in document:
+        evaluation = EvaluationSpec.parse(document.pop("evaluation"))
     data = fields(
-        read_document(path),
+        document,
         {"api_version", "scene", "capture", "control", "policy", "calibration"},
         "rollout",
     )
@@ -165,4 +171,5 @@ def load(path: Path) -> RolloutSpec:
         _text(policy["task"], "task"),
         timeout,
         _path(data["calibration"], path.parent, "calibration"),
+        evaluation,
     )

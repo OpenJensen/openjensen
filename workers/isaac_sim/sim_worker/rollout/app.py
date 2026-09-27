@@ -46,7 +46,7 @@ def execute(
         # Import only after CPU preflight; Isaac's SDK remains in its driver.
         from sim_worker.rollout.isaac import IsaacSim
 
-        with IsaacSim(spec.sim) as simulation:
+        with IsaacSim(spec.sim, evaluation=spec.evaluation) as simulation:
             try:
                 guard = None
                 if use is CalibrationUse.EXPERIMENTAL:
