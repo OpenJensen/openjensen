@@ -230,5 +230,263 @@ for (const phase of ['submit', 'cancel-preflight', 'cancel-receipt'] as const) t
     await expect(details).toHaveAttribute('data-job-id', 'replay-001');
     await expect(details.locator('.status')).toHaveText('running');
     await expect(page.getByRole('button', { name: 'Confirm cancellation', exact: true })).toHaveCount(0);
+    const recovery = await page.evaluate(() => Object.keys(sessionStorage).filter(key => key.startsWith('firebird:cancel-attempt:')).map(key => JSON.parse(sessionStorage.getItem(key)!)));
+    expect(recovery).toHaveLength(1); expect(recovery[0]).toMatchObject({ jobId: 'replay-001', state: 'uncertain', action: 'cancel' });
   }
+});
+
+// Pure journal contract checks run without a browser or application server.
+test('cancellation journal contract keeps same-job successor ownership distinct', async () => {
+  const { readCancellation, transitionCancellation } = await import('../../apps/web/src/lib/native-cancellation-attempt');
+  const values = new Map<string, string>();
+  const store = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
+  const scope = { project: 'alpha', workflow: 'replay' as const };
+  const first = { ...scope, version: 1 as const, action: 'cancel' as const, id: 'first', jobId: 'same-job', requestSha256: 'a'.repeat(64), state: 'pending' as const };
+  expect(transitionCancellation(scope, null, first, store)).toBe(true);
+  const uncertain = { ...first, state: 'uncertain' as const };
+  expect(transitionCancellation(scope, first, uncertain, store)).toBe(true);
+  expect(transitionCancellation(scope, first, null, store)).toBe(false);
+  expect(transitionCancellation(scope, uncertain, null, store)).toBe(true);
+  const next = { ...first, id: 'different-attempt' };
+  expect(transitionCancellation(scope, null, next, store)).toBe(true);
+  expect(transitionCancellation(scope, first, uncertain, store)).toBe(false);
+  expect(transitionCancellation(scope, first, null, store)).toBe(false);
+  expect(readCancellation(scope, store)).toEqual(next);
+});
+
+test('cancellation journal contract distinguishes denied reads and never clears on failed cleanup', async () => {
+  const { readCancellation, transitionCancellation, CancellationStorageError } = await import('../../apps/web/src/lib/native-cancellation-attempt');
+  const scope = { project: 'alpha', workflow: 'replay' as const };
+  const attempt = { ...scope, version: 1 as const, action: 'cancel' as const, id: 'owned', jobId: 'job', requestSha256: 'b'.repeat(64), state: 'pending' as const };
+  const denied = () => { throw new Error('Denied'); };
+  expect(() => readCancellation(scope, { getItem: denied })).toThrow(CancellationStorageError);
+  let value: string | null = null;
+  const store = { getItem: () => value, setItem: (_: string, next: string) => { value = next; }, removeItem: denied };
+  expect(() => transitionCancellation(scope, null, attempt, { ...store, setItem: denied })).toThrow(CancellationStorageError);
+  expect(value).toBeNull();
+  expect(transitionCancellation(scope, null, attempt, store)).toBe(true);
+  expect(() => transitionCancellation(scope, attempt, null, store)).toThrow(CancellationStorageError);
+  expect(readCancellation(scope, store)).toEqual(attempt);
+});
+
+test('cancellation journal contract rejects malformed and oversized records and isolates scopes', async () => {
+  const { cancellationKey, readCancellation, transitionCancellation, CancellationJournalError } = await import('../../apps/web/src/lib/native-cancellation-attempt');
+  const scope = { project: 'alpha', workflow: 'replay' as const };
+  for (const raw of ['{', 'null', '[]', 'x'.repeat(4097), JSON.stringify({ version: 1, action: 'cancel', ...scope, id: 'id', jobId: 'job', requestSha256: 'a'.repeat(64), state: ['pending'] })]) expect(() => readCancellation(scope, { getItem: () => raw })).toThrow(CancellationJournalError);
+  expect(cancellationKey(scope)).not.toBe(cancellationKey({ ...scope, project: 'beta' }));
+  expect(cancellationKey(scope)).not.toBe(cancellationKey({ ...scope, workflow: 'distillation' }));
+  const other = { version: 1 as const, action: 'cancel' as const, project: 'beta', workflow: 'replay' as const, id: 'foreign', jobId: 'job', requestSha256: 'a'.repeat(64), state: 'pending' as const };
+  let writes = 0;
+  expect(() => transitionCancellation(scope, null, other, { getItem: () => null, setItem: () => { writes++; }, removeItem: () => { writes++; } })).toThrow(CancellationJournalError);
+  expect(writes).toBe(0);
+});
+
+test('cancellation journal contract hashes exact finite recipe values without storing them', async () => {
+  const { cancellationRequestSha } = await import('../../apps/web/src/lib/native-cancellation-attempt');
+  const first = await cancellationRequestSha({ steps: 1, source: 'owned', recipe: [true, 0.5] });
+  expect(first).toMatch(/^[a-f0-9]{64}$/);
+  expect(await cancellationRequestSha({ recipe: [true, 0.5], source: 'owned', steps: 1 })).toBe(first);
+  expect(await cancellationRequestSha({ steps: true, source: 'owned', recipe: [true, 0.5] })).not.toBe(first);
+  await expect(cancellationRequestSha({ value: Infinity })).rejects.toThrow();
+  await expect(cancellationRequestSha({ value: 'x'.repeat(32769) })).rejects.toThrow();
+});
+
+async function cancellationFixture(page: Page) {
+  const state = await fixture(page); await prepare(page); await submit(page).click();
+  await expect(page.getByRole('article', { name: 'Observation replay details' })).toHaveAttribute('data-job-id', 'replay-001');
+  return state;
+}
+async function confirmCancellation(page: Page) {
+  await page.getByRole('button', { name: 'Cancel selected replay', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirm cancellation', exact: true }).click();
+}
+async function reopenCancellationLane(page: Page) {
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  const choice = page.getByRole('button', { name: 'Replay observations', exact: true });
+  await expect(panel(page).or(choice).first()).toBeVisible();
+  if (await choice.isVisible()) await choice.click();
+  await expect(panel(page)).toBeVisible();
+}
+const cancellationRecovery = (page: Page) => page.getByRole('region', { name: 'Cancellation recovery', exact: true });
+const acknowledgeCancellation = (page: Page) => page.getByRole('button', { name: 'I reviewed cancellation history; allow another cancellation', exact: true });
+
+test('cancellation outcome survives stage navigation and reload without another POST', async ({ page }) => {
+  const state = await cancellationFixture(page);
+  await page.route('**/api/v1/jobs/replay-001/cancel', async route => { state.cancelled.push('replay-001'); await route.abort('failed'); });
+  await confirmCancellation(page);
+  await expect(cancellationRecovery(page)).toContainText('Cancellation outcome is unverified for replay-001');
+  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await reopenCancellationLane(page);
+  await expect(cancellationRecovery(page)).toContainText('replay-001');
+  await page.reload(); await reopenCancellationLane(page);
+  await expect(cancellationRecovery(page)).toContainText('replay-001');
+  await expect(acknowledgeCancellation(page)).toBeDisabled();
+  await page.getByRole('button', { name: 'Refresh replay jobs', exact: true }).click();
+  await expect(acknowledgeCancellation(page)).toBeDisabled();
+  await page.getByRole('button', { name: 'Refresh cancellation history', exact: true }).click();
+  await expect(acknowledgeCancellation(page)).toBeEnabled();
+  expect(state.cancelled).toEqual(['replay-001']); expect(state.posts).toHaveLength(1);
+});
+
+for (const method of ['getItem', 'setItem'] as const) test(`cancellation ${method} denial blocks all cancellation I/O and remains latched`, async ({ page }) => {
+  const state = await cancellationFixture(page); let reads = 0;
+  await page.route('**/api/v1/jobs/replay-001', route => { reads++; return route.fulfill({ json: state.jobs.find(item => item.id === 'replay-001') }); });
+  await page.evaluate(method => {
+    const original = Storage.prototype[method];
+    Object.defineProperty(Storage.prototype, method, { configurable: true, value: function (key: string, ...args: string[]) {
+      if (key.startsWith('firebird:cancel-attempt:')) throw new DOMException('Cancellation journal denied', 'SecurityError');
+      return Reflect.apply(original, this, [key, ...args]);
+    } });
+  }, method);
+  await confirmCancellation(page);
+  await expect(page.getByText(/Cancellation recovery storage is unavailable/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Cancel selected replay', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await reopenCancellationLane(page);
+  await page.getByLabel('Saved replay', { exact: true }).selectOption('replay-001');
+  await expect(page.getByText(/Cancellation recovery storage is unavailable/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Cancel selected replay', exact: true })).toBeDisabled();
+  expect(reads).toBe(0); expect(state.cancelled).toEqual([]);
+});
+
+test('cancellation acknowledgment survives failed journal cleanup and failed history', async ({ page }) => {
+  const state = await cancellationFixture(page); const original = state.jobs.find(item => item.id === 'replay-001');
+  await page.evaluate(() => { const original = Storage.prototype.removeItem; Storage.prototype.removeItem = function (key: string) { if (key.startsWith('firebird:cancel-attempt:')) throw new DOMException('Denied', 'SecurityError'); return original.call(this, key); }; });
+  let outage = false;
+  await page.route('**/api/v1/jobs/replay-001/cancel', route => { state.cancelled.push('replay-001'); outage = true; return route.fulfill({ json: { ...original, status: 'cancelled', result: { reports: [{ quality_verified: true }] } } }); });
+  await page.route('**/api/v1/projects/alpha/jobs', route => route.fulfill(outage ? { status: 503, json: { detail: 'History unavailable' } } : { json: state.jobs }));
+  await confirmCancellation(page);
+  await expect(page.getByText('Cancellation response for replay-001: cancelled. Recorded job history remains authoritative.', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Cancellation recovery storage is unavailable/)).toBeVisible();
+  await expect(cancellationRecovery(page)).toContainText('replay-001');
+  await expect(page.getByRole('button', { name: 'Cancel selected replay', exact: true })).toBeDisabled();
+  expect(state.cancelled).toEqual(['replay-001']);
+  const stored = await page.evaluate(() => Object.keys(sessionStorage).filter(key => key.startsWith('firebird:cancel-attempt:')).map(key => sessionStorage.getItem(key)));
+  expect(stored).toHaveLength(1); expect(stored[0]).not.toContain('reports'); expect(stored[0]).not.toContain('quality_verified');
+});
+
+test('validated cancellation acknowledgment survives a newly denied storage read', async ({ page }) => {
+  const state = await cancellationFixture(page); const original = state.jobs.find(item => item.id === 'replay-001');
+  let storedBeforeDenial: string[] = [];
+  await page.route('**/api/v1/jobs/replay-001/cancel', async route => {
+    state.cancelled.push('replay-001');
+    storedBeforeDenial = await page.evaluate(() => {
+      const original = Storage.prototype.getItem;
+      const entries = Object.keys(sessionStorage).filter(key => key.startsWith('firebird:cancel-attempt:')).map(key => original.call(sessionStorage, key)!);
+      Storage.prototype.getItem = function (key: string) { if (key.startsWith('firebird:cancel-attempt:')) throw new DOMException('Denied after acknowledgment', 'SecurityError'); return original.call(this, key); };
+      return entries;
+    });
+    return route.fulfill({ json: { ...original, status: 'cancelled', result: { reports: [{ quality_verified: true }] } } });
+  });
+  await confirmCancellation(page);
+  await expect(page.getByText('Cancellation response for replay-001: cancelled. Recorded job history remains authoritative.', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Cancellation recovery storage is unavailable/)).toBeVisible();
+  await expect(cancellationRecovery(page)).toContainText('replay-001');
+  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await reopenCancellationLane(page);
+  await page.getByLabel('Saved replay', { exact: true }).selectOption('replay-001');
+  await expect(page.getByText('Cancellation response for replay-001: cancelled. Recorded job history remains authoritative.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Cancel selected replay', exact: true })).toBeDisabled();
+  expect(state.cancelled).toEqual(['replay-001']); expect(state.posts).toHaveLength(1);
+  expect(storedBeforeDenial).toHaveLength(1); expect(JSON.parse(storedBeforeDenial[0])).toMatchObject({ jobId: 'replay-001', state: 'pending' });
+  expect(storedBeforeDenial[0]).not.toContain('reports'); expect(storedBeforeDenial[0]).not.toContain('quality_verified');
+});
+
+test('cancellation selection A to B to A invalidates the old preflight', async ({ page }) => {
+  const state = await cancellationFixture(page); const original = state.jobs.find(item => item.id === 'replay-001');
+  state.jobs.push({ ...original, id: 'replay-002' }); await page.getByRole('button', { name: 'Refresh replay jobs', exact: true }).click();
+  let reads = 0, release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/v1/jobs/replay-001', async route => { reads++; await gate; return route.fulfill({ json: original }); });
+  await confirmCancellation(page); await expect.poll(() => reads).toBe(1);
+  await page.getByLabel('Saved replay', { exact: true }).selectOption('replay-002');
+  await page.getByLabel('Saved replay', { exact: true }).selectOption('replay-001'); release();
+  await expect(cancellationRecovery(page)).toContainText('Cancellation outcome is unverified');
+  expect(state.cancelled).toEqual([]);
+});
+
+test('late cancellation receipt survives unmount without replacing a manual saved job', async ({ page }) => {
+  const state = await cancellationFixture(page); const original = state.jobs.find(item => item.id === 'replay-001');
+  state.jobs.push({ ...original, id: 'replay-002' }); await page.getByRole('button', { name: 'Refresh replay jobs', exact: true }).click();
+  let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/v1/jobs/replay-001/cancel', async route => { state.cancelled.push('replay-001'); await gate; return route.fulfill({ json: { ...original, status: 'cancelled' } }); });
+  await confirmCancellation(page); await expect.poll(() => state.cancelled.length).toBe(1);
+  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await reopenCancellationLane(page);
+  await page.getByLabel('Saved replay', { exact: true }).selectOption('replay-002'); release();
+  await expect(page.getByText('Cancellation response for replay-001: cancelled. Recorded job history remains authoritative.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('article', { name: 'Observation replay details' })).toHaveAttribute('data-job-id', 'replay-002');
+  expect(state.cancelled).toEqual(['replay-001']); expect(state.posts).toHaveLength(1);
+});
+
+test('cancellation recovery requires a fresh owned history read after uncertainty', async ({ page }) => {
+  const state = await cancellationFixture(page);
+  let releaseCancel!: () => void; const cancelGate = new Promise<void>(resolve => { releaseCancel = resolve; });
+  await page.route('**/api/v1/jobs/replay-001/cancel', async route => { state.cancelled.push('replay-001'); await cancelGate; return route.abort('failed'); });
+  await confirmCancellation(page); await expect.poll(() => state.cancelled.length).toBe(1);
+  let reads = 0, releaseHistory!: () => void; const historyGate = new Promise<void>(resolve => { releaseHistory = resolve; });
+  await page.route('**/api/v1/projects/alpha/jobs', async route => { const index = ++reads; if (index === 1) await historyGate; return route.fulfill({ json: index === 1 ? state.jobs : state.jobs.map(item => item.id === 'replay-001' ? { ...item, status: 'cancelled' } : item) }); });
+  // A normal shared history poll begins before the cancellation becomes uncertain.
+  await expect.poll(() => reads).toBe(1);
+  releaseCancel(); await expect(cancellationRecovery(page)).toContainText('Cancellation outcome is unverified');
+  await expect(acknowledgeCancellation(page)).toBeDisabled();
+  // The initial shared query remains unresolved; recovery must make its own GET.
+  await page.getByRole('button', { name: 'Refresh cancellation history', exact: true }).click();
+  await expect.poll(() => reads).toBeGreaterThanOrEqual(2); await expect(acknowledgeCancellation(page)).toBeEnabled();
+  await expect(cancellationRecovery(page).getByRole('status')).toHaveText('Fresh cancellation history for replay-001: cancelled. This is the status returned by your recovery refresh.');
+  releaseHistory();
+  await expect(cancellationRecovery(page).getByRole('status')).toContainText('replay-001: cancelled');
+  expect(state.cancelled).toEqual(['replay-001']);
+});
+
+test('cancellation review cannot authorize a changed selection generation', async ({ page }) => {
+  const state = await cancellationFixture(page); const original = state.jobs.find(item => item.id === 'replay-001');
+  state.jobs.push({ ...original, id: 'replay-002' }); await page.getByRole('button', { name: 'Refresh replay jobs', exact: true }).click();
+  await page.route('**/api/v1/jobs/replay-001/cancel', async route => { state.cancelled.push('replay-001'); return route.abort('failed'); });
+  await confirmCancellation(page); await expect(cancellationRecovery(page)).toContainText('Cancellation outcome is unverified');
+  let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; }); let reads = 0;
+  await page.route('**/api/v1/projects/alpha/jobs', async route => { reads++; await gate; return route.fulfill({ json: state.jobs }); });
+  await page.getByRole('button', { name: 'Refresh cancellation history', exact: true }).click(); await expect.poll(() => reads).toBeGreaterThan(0);
+  await page.getByLabel('Saved replay', { exact: true }).selectOption('replay-002'); await page.getByLabel('Saved replay', { exact: true }).selectOption('replay-001'); release();
+  await expect(page.getByRole('button', { name: 'Refresh cancellation history', exact: true })).toBeEnabled();
+  await expect(acknowledgeCancellation(page)).toBeDisabled(); expect(state.cancelled).toEqual(['replay-001']);
+});
+
+test('pending cancellation reload keeps the original unique attempt and never resends', async ({ page }) => {
+  const state = await cancellationFixture(page);
+  let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/v1/jobs/replay-001/cancel', async route => { state.cancelled.push('replay-001'); await gate; try { await route.abort('failed'); } catch { /* The original page was explicitly reloaded. */ } });
+  await confirmCancellation(page); await expect.poll(() => state.cancelled.length).toBe(1);
+  const before = await page.evaluate(() => JSON.parse(sessionStorage.getItem(Object.keys(sessionStorage).find(key => key.startsWith('firebird:cancel-attempt:'))!)!));
+  expect(before.state).toBe('pending'); expect(before.jobId).toBe('replay-001');
+  await page.reload(); await reopenCancellationLane(page);
+  await expect(cancellationRecovery(page)).toContainText('Cancellation outcome is unverified for replay-001');
+  const after = await page.evaluate(() => JSON.parse(sessionStorage.getItem(Object.keys(sessionStorage).find(key => key.startsWith('firebird:cancel-attempt:'))!)!));
+  expect(after).toEqual({ ...before, state: 'uncertain' });
+  await expect(acknowledgeCancellation(page)).toBeDisabled(); release(); expect(state.cancelled).toEqual(['replay-001']);
+});
+
+test('cancellation review rejects changed original identity and survives another project', async ({ page }) => {
+  const state = await cancellationFixture(page); const original = state.jobs.find(item => item.id === 'replay-001');
+  await page.route('**/api/v1/jobs/replay-001/cancel', async route => { state.cancelled.push('replay-001'); return route.abort('failed'); });
+  await confirmCancellation(page); await expect(cancellationRecovery(page)).toContainText('replay-001');
+  await page.route('**/api/v1/projects/alpha/jobs', route => route.fulfill({ json: [{ ...original, request: { ...original.request, artifact_id: 'changed-source' } }] }));
+  await page.getByRole('button', { name: 'Refresh cancellation history', exact: true }).click();
+  await expect(page.getByText(/Fresh history did not verify the original cancellation target/)).toBeVisible();
+  await expect(acknowledgeCancellation(page)).toBeDisabled();
+  await page.route('**/api/v1/projects', route => route.fulfill({ json: [{ id: 'alpha', name: 'Original project', created_at: time }, { id: 'beta', name: 'Another project', created_at: time }] }));
+  await page.reload(); await reopenCancellationLane(page);
+  await page.getByLabel('Current project').selectOption('beta'); await reopenCancellationLane(page);
+  await expect(cancellationRecovery(page)).toHaveCount(0);
+  await page.getByLabel('Current project').selectOption('alpha'); await reopenCancellationLane(page);
+  await expect(cancellationRecovery(page)).toContainText('replay-001');
+  await expect(acknowledgeCancellation(page)).toBeDisabled(); expect(state.cancelled).toEqual(['replay-001']);
+});
+
+
+test('a later history failure disables cancellation recovery acknowledgment', async ({ page }) => {
+  const state = await cancellationFixture(page);
+  await page.route('**/api/v1/jobs/replay-001/cancel', async route => { state.cancelled.push('replay-001'); return route.abort('failed'); });
+  await confirmCancellation(page); await expect(cancellationRecovery(page)).toContainText('replay-001');
+  await page.getByRole('button', { name: 'Refresh cancellation history', exact: true }).click();
+  await expect(acknowledgeCancellation(page)).toBeEnabled();
+  await page.route('**/api/v1/projects/alpha/jobs', route => route.fulfill({ status: 503, json: { detail: 'Current history unavailable' } }));
+  await page.getByRole('button', { name: 'Refresh replay jobs', exact: true }).click();
+  await expect(page.getByText(/Job updates are unavailable/)).toBeVisible();
+  await expect(acknowledgeCancellation(page)).toBeDisabled(); expect(state.cancelled).toEqual(['replay-001']);
 });
