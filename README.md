@@ -4,6 +4,8 @@ A self-hosted VLA workspace with persistent projects, visual dataset exploration
 
 The application can run on Xbox while SkyPilot provisions GCP workers. Models and datasets download on the worker; checkpoints stay in private GCS. The UI shows live training metrics, labels checkpoints by model and step, and lets you quantize the latest or an earlier checkpoint. Quantization merges the trained weights, packs Q4/Q8 language tensors, and requires an actual native inference sanity check before reporting success. It does not establish robot task success.
 
+The optional [terminal workbench](docs/terminal.md) and [Tauri desktop shell](apps/desktop/README.md) use the same projects, intake and job records. The desktop shell connects to a separately running local backend; it is not yet a bundled Python installer. Optional [Muose decision scoring](workers/decision/README.md) and [Jev/Mk1.5 proposals](workers/teaching/PROVIDERS.md) have isolated worker interfaces and explicit integration/quality gates.
+
 Start with [cloud training and quantization](docs/skypilot-training.md), [model adapters](docs/native-training.md), or the [Xbox deployment guide](deploy/xbox/README.md). The [live verification record](docs/cloud-training-verification.md) separates completed GPU runs from configuration/dependency checks and pending validation. Local evaluation and robot execution require separately configured native workers; the UI exposes only compatible targets. See the [native policy workflow](docs/policy-workflow.md), [Spatial workflow](docs/spatial-workflow.md) and [upstream validation evidence](docs/workflow-validation.md) for their setup and acceptance scope.
 
 Fine-tune, Quantize, Evaluate and Run open saved jobs first, with separate creation forms. SmolVLA cloud Evaluate and Run execute real CUDA engine checks and package verification; see the [workflow and live inference verification](docs/jobs-first-verification.md) for measured results and limits.
@@ -93,7 +95,7 @@ pnpm exec playwright install chromium
 pnpm test:web
 ```
 
-Do not hand-edit generated API types. Claim a task card before parallel work, coordinate shared schema/manifest/migration changes, and provide evidence plus independent review. CI runs application and browser checks on Linux/Windows, plus separate lightweight native-worker contract checks. Full GPU workflows and Windows GPU acceptance remain separate validation gates.
+Do not hand-edit generated API types. Claim a task card before parallel work, coordinate shared schema/manifest/migration changes, and provide evidence plus independent review. CI selects affected suites conservatively; Linux runs the full browser suite and Windows retains core/terminal checks, with full Windows browser checks available by manual dispatch. See [verification and local fallback](docs/ci.md). Full GPU workflows and Windows GPU acceptance remain separate validation gates.
 
 Connect Google Cloud once in **Settings → Compute**, then choose L4, T4, or A100 and click **Start fine-tuning**. Provider preparation and SkyPilot dispatch happen automatically. See [compute settings](docs/compute-settings.md) and [SkyPilot job lifecycle](docs/skypilot-training.md).
 

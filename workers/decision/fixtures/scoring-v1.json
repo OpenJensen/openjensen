@@ -1,0 +1,342 @@
+{
+  "schema_version": 1,
+  "provenance": "12 hand-authored examples, expectations frozen before first inference; no training or upstream benchmark equivalence.",
+  "cases": [
+    {
+      "id": "bank01",
+      "domain": "banking",
+      "expected_id": "lost_card",
+      "request": {
+        "schema_version": 1,
+        "state": "I misplaced my bank card on the bus. Can you help me block it?",
+        "instructions": "Select the criterion that best describes the requested task. This is advisory classification only.",
+        "criteria": [
+          {
+            "id": "lost_card",
+            "text": "The customer lost their payment card."
+          },
+          {
+            "id": "cash_fee",
+            "text": "The customer questions a cash withdrawal fee."
+          },
+          {
+            "id": "pending_transfer",
+            "text": "The customer asks why a bank transfer is still pending."
+          },
+          {
+            "id": "change_phone",
+            "text": "The customer wants to change their account phone number."
+          }
+        ]
+      }
+    },
+    {
+      "id": "bank02",
+      "domain": "banking",
+      "expected_id": "lost_card",
+      "request": {
+        "schema_version": 1,
+        "state": "My wallet was stolen and my debit card was inside.",
+        "instructions": "Select the criterion that best describes the requested task. This is advisory classification only.",
+        "criteria": [
+          {
+            "id": "lost_card",
+            "text": "The customer lost their payment card."
+          },
+          {
+            "id": "cash_fee",
+            "text": "The customer questions a cash withdrawal fee."
+          },
+          {
+            "id": "pending_transfer",
+            "text": "The customer asks why a bank transfer is still pending."
+          },
+          {
+            "id": "change_phone",
+            "text": "The customer wants to change their account phone number."
+          }
+        ]
+      }
+    },
+    {
+      "id": "bank03",
+      "domain": "banking",
+      "expected_id": "cash_fee",
+      "request": {
+        "schema_version": 1,
+        "state": "The ATM gave me cash but my account was charged an extra fee. Why?",
+        "instructions": "Select the criterion that best describes the requested task. This is advisory classification only.",
+        "criteria": [
+          {
+            "id": "lost_card",
+            "text": "The customer lost their payment card."
+          },
+          {
+            "id": "cash_fee",
+            "text": "The customer questions a cash withdrawal fee."
+          },
+          {
+            "id": "pending_transfer",
+            "text": "The customer asks why a bank transfer is still pending."
+          },
+          {
+            "id": "change_phone",
+            "text": "The customer wants to change their account phone number."
+          }
+        ]
+      }
+    },
+    {
+      "id": "bank04",
+      "domain": "banking",
+      "expected_id": "pending_transfer",
+      "request": {
+        "schema_version": 1,
+        "state": "I sent money yesterday and the transfer still shows pending.",
+        "instructions": "Select the criterion that best describes the requested task. This is advisory classification only.",
+        "criteria": [
+          {
+            "id": "lost_card",
+            "text": "The customer lost their payment card."
+          },
+          {
+            "id": "cash_fee",
+            "text": "The customer questions a cash withdrawal fee."
+          },
+          {
+            "id": "pending_transfer",
+            "text": "The customer asks why a bank transfer is still pending."
+          },
+          {
+            "id": "change_phone",
+            "text": "The customer wants to change their account phone number."
+          }
+        ]
+      }
+    },
+    {
+      "id": "bank05",
+      "domain": "banking",
+      "expected_id": "change_phone",
+      "request": {
+        "schema_version": 1,
+        "state": "I have a new mobile number and need to update my bank account.",
+        "instructions": "Select the criterion that best describes the requested task. This is advisory classification only.",
+        "criteria": [
+          {
+            "id": "lost_card",
+            "text": "The customer lost their payment card."
+          },
+          {
+            "id": "cash_fee",
+            "text": "The customer questions a cash withdrawal fee."
+          },
+          {
+            "id": "pending_transfer",
+            "text": "The customer asks why a bank transfer is still pending."
+          },
+          {
+            "id": "change_phone",
+            "text": "The customer wants to change their account phone number."
+          }
+        ]
+      }
+    },
+    {
+      "id": "bank06",
+      "domain": "banking",
+      "expected_id": "change_phone",
+      "request": {
+        "schema_version": 1,
+        "state": "How do I replace the phone number linked to this account?",
+        "instructions": "Select the criterion that best describes the requested task. This is advisory classification only.",
+        "criteria": [
+          {
+            "id": "lost_card",
+            "text": "The customer lost their payment card."
+          },
+          {
+            "id": "cash_fee",
+            "text": "The customer questions a cash withdrawal fee."
+          },
+          {
+            "id": "pending_transfer",
+            "text": "The customer asks why a bank transfer is still pending."
+          },
+          {
+            "id": "change_phone",
+            "text": "The customer wants to change their account phone number."
+          }
+        ]
+      }
+    },
+    {
+      "id": "work01",
+      "domain": "workflow_ood",
+      "expected_id": "inspect_data",
+      "request": {
+        "schema_version": 1,
+        "state": "Check whether this LeRobot dataset has valid episodes and complete videos.",
+        "instructions": "Select the criterion that best describes the requested task. This is advisory classification only.",
+        "criteria": [
+          {
+            "id": "inspect_data",
+            "text": "Inspect and validate the robotics dataset."
+          },
+          {
+            "id": "train",
+            "text": "Fine-tune a robot policy using the approved dataset."
+          },
+          {
+            "id": "evaluate",
+            "text": "Evaluate an existing robot policy in simulation."
+          },
+          {
+            "id": "clarify",
+            "text": "Ask the user to clarify the intended task; do not start a job."
+          }
+        ]
+      }
+    },
+    {
+      "id": "work02",
+      "domain": "workflow_ood",
+      "expected_id": "train",
+      "request": {
+        "schema_version": 1,
+        "state": "The approved snapshot is ready. Fine-tune an ACT policy on it.",
+        "instructions": "Select the criterion that best describes the requested task. This is advisory classification only.",
+        "criteria": [
+          {
+            "id": "inspect_data",
+            "text": "Inspect and validate the robotics dataset."
+          },
+          {
+            "id": "train",
+            "text": "Fine-tune a robot policy using the approved dataset."
+          },
+          {
+            "id": "evaluate",
+            "text": "Evaluate an existing robot policy in simulation."
+          },
+          {
+            "id": "clarify",
+            "text": "Ask the user to clarify the intended task; do not start a job."
+          }
+        ]
+      }
+    },
+    {
+      "id": "work03",
+      "domain": "workflow_ood",
+      "expected_id": "evaluate",
+      "request": {
+        "schema_version": 1,
+        "state": "Run this existing checkpoint in the simulator and measure task outcomes.",
+        "instructions": "Select the criterion that best describes the requested task. This is advisory classification only.",
+        "criteria": [
+          {
+            "id": "inspect_data",
+            "text": "Inspect and validate the robotics dataset."
+          },
+          {
+            "id": "train",
+            "text": "Fine-tune a robot policy using the approved dataset."
+          },
+          {
+            "id": "evaluate",
+            "text": "Evaluate an existing robot policy in simulation."
+          },
+          {
+            "id": "clarify",
+            "text": "Ask the user to clarify the intended task; do not start a job."
+          }
+        ]
+      }
+    },
+    {
+      "id": "work04",
+      "domain": "workflow_ood",
+      "expected_id": "clarify",
+      "request": {
+        "schema_version": 1,
+        "state": "Can you do the thing we discussed? No dataset or policy was specified.",
+        "instructions": "Select the criterion that best describes the requested task. This is advisory classification only.",
+        "criteria": [
+          {
+            "id": "inspect_data",
+            "text": "Inspect and validate the robotics dataset."
+          },
+          {
+            "id": "train",
+            "text": "Fine-tune a robot policy using the approved dataset."
+          },
+          {
+            "id": "evaluate",
+            "text": "Evaluate an existing robot policy in simulation."
+          },
+          {
+            "id": "clarify",
+            "text": "Ask the user to clarify the intended task; do not start a job."
+          }
+        ]
+      }
+    },
+    {
+      "id": "work05",
+      "domain": "workflow_ood",
+      "expected_id": "inspect_data",
+      "request": {
+        "schema_version": 1,
+        "state": "Before training, check the dataset for missing media and invalid joint values.",
+        "instructions": "Select the criterion that best describes the requested task. This is advisory classification only.",
+        "criteria": [
+          {
+            "id": "inspect_data",
+            "text": "Inspect and validate the robotics dataset."
+          },
+          {
+            "id": "train",
+            "text": "Fine-tune a robot policy using the approved dataset."
+          },
+          {
+            "id": "evaluate",
+            "text": "Evaluate an existing robot policy in simulation."
+          },
+          {
+            "id": "clarify",
+            "text": "Ask the user to clarify the intended task; do not start a job."
+          }
+        ]
+      }
+    },
+    {
+      "id": "work06",
+      "domain": "workflow_ood",
+      "expected_id": "clarify",
+      "request": {
+        "schema_version": 1,
+        "state": "I do not know whether I want training or evaluation. Please help me choose.",
+        "instructions": "Select the criterion that best describes the requested task. This is advisory classification only.",
+        "criteria": [
+          {
+            "id": "inspect_data",
+            "text": "Inspect and validate the robotics dataset."
+          },
+          {
+            "id": "train",
+            "text": "Fine-tune a robot policy using the approved dataset."
+          },
+          {
+            "id": "evaluate",
+            "text": "Evaluate an existing robot policy in simulation."
+          },
+          {
+            "id": "clarify",
+            "text": "Ask the user to clarify the intended task; do not start a job."
+          }
+        ]
+      }
+    }
+  ]
+}
