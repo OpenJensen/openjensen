@@ -7,6 +7,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from sqlalchemy import insert, select, update
+from sqlalchemy.exc import IntegrityError
 
 from vla_platform.augmentation.contracts import AugmentationRequest
 from vla_platform.augmentation.service import Augmentation
@@ -17,7 +18,8 @@ from vla_platform.frozen_commands import intake_command
 from vla_platform.lifecycle.contracts import PolicyRequest, SimulationTarget
 from vla_platform.lifecycle.service import Lifecycle
 from vla_platform.settings import Settings
-from vla_platform.storage import Storage, jobs
+from vla_platform.storage import Storage, job_submissions, jobs
+from vla_platform.submissions import Submission, SubmissionRequest, lookup
 
 # Recovery state machine: terminal states are absorbing; retries require a new job ID.
 RECOVERY_TRANSITIONS = {"queued": "interrupted", "running": "interrupted"}
@@ -41,6 +43,9 @@ class Execution:
         self.inspections = Inspections(self)
         self.recordings = Recordings(self)
         self.slots = asyncio.Semaphore(2)  # Metadata jobs only; not a GPU admission policy.
+        self._submission_locks = [asyncio.Lock() for _ in range(64)]
+        self._accepting: set[asyncio.Task] = set()
+        self._closing = False
 
     async def get(self, job_id: str) -> Job | None:
         async with self.storage.engine.connect() as connection:
@@ -70,7 +75,46 @@ class Execution:
             )
 
     async def submit(
-        self, project_id: str, request: IntakeRequest | PolicyRequest | AugmentationRequest
+        self, project_id: str, request: SubmissionRequest, *, idempotency_key: str | None = None
+    ) -> Job:
+        if idempotency_key is None:
+            return await self._submit(project_id, request)
+        submission = Submission.create(project_id, request, idempotency_key)
+        # Bounded stripes serialize a key without retaining unbounded client keys in memory.
+        import hashlib
+
+        scope = f"{project_id}\0{submission.operation}\0{submission.key}".encode()
+        lock = self._submission_locks[hashlib.sha256(scope).digest()[0] % 64]
+        async with lock:
+            previous = await lookup(
+                self.storage,
+                project_id,
+                submission.operation,
+                submission.key,
+                fingerprint=submission.request_sha256,
+            )
+            if previous is not None:
+                return previous
+            prepared = request.model_copy(deep=True)
+            if (
+                isinstance(prepared, IntakeRequest)
+                and prepared.source == "local"
+                and prepared.recordings is None
+                and self.settings.local_root is None
+            ):
+                raise ValueError("Local intake is disabled; configure FIREBIRD_LOCAL_DATA_ROOT")
+            if isinstance(prepared, IntakeRequest) and not prepared.snapshot_for_training:
+                resolved = await self.inspections.prepare(prepared)
+                if resolved is not None:
+                    async with self.inspections.lock:
+                        cached = await self.inspections.find(project_id, resolved)
+                        if cached is not None:
+                            return await self._accept(cached, submission, new_job=False)
+                        return await self._submit(project_id, resolved, submission)
+            return await self._submit(project_id, prepared, submission)
+
+    async def _submit(
+        self, project_id: str, request: SubmissionRequest, submission: Submission | None = None
     ) -> Job:
         compute_target = None
         if isinstance(request, PolicyRequest):
@@ -97,16 +141,78 @@ class Execution:
             from vla_platform.lifecycle.telemetry import capture
 
             await capture(self.lifecycle, job)
-        async with self.storage.engine.begin() as connection:
-            await connection.execute(
-                insert(jobs).values(
-                    id=job.id, project_id=project_id, status=job.status, record=job.model_dump()
+        return await self._accept(job, submission)
+
+    async def _accept(
+        self, job: Job, submission: Submission | None, *, new_job: bool = True
+    ) -> Job:
+        if self._closing:
+            raise RuntimeError("Application is stopping; no new job was accepted")
+        # Only the short durable commit + dispatch boundary is shielded. Source validation
+        # remains cancellable. Shutdown waits for this owner before draining worker tasks.
+        task = asyncio.create_task(self._commit_and_schedule(job, submission, new_job=new_job))
+        self._accepting.add(task)
+        task.add_done_callback(self._accepting.discard)
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            while not task.done():
+                try:
+                    await asyncio.shield(task)
+                except asyncio.CancelledError:
+                    continue
+            task.result()  # Surface a failed commit rather than losing its exception.
+            raise
+
+    async def _commit_and_schedule(
+        self, job: Job, submission: Submission | None, *, new_job: bool
+    ) -> Job:
+        try:
+            async with self.storage.engine.begin() as connection:
+                if new_job:
+                    await connection.execute(
+                        insert(jobs).values(
+                            id=job.id,
+                            project_id=job.project_id,
+                            status=job.status,
+                            record=job.model_dump(),
+                        )
+                    )
+                if submission is not None:
+                    await connection.execute(
+                        insert(job_submissions).values(
+                            project_id=submission.project_id,
+                            operation=submission.operation,
+                            idempotency_key=submission.key,
+                            fingerprint_version=1,
+                            request_sha256=submission.request_sha256,
+                            request_record=submission.request_record,
+                            job_id=job.id,
+                            accepted_response=job.model_dump(),
+                            created_at=now(),
+                        )
+                    )
+        except IntegrityError:
+            if submission is not None:
+                previous = await lookup(
+                    self.storage,
+                    submission.project_id,
+                    submission.operation,
+                    submission.key,
+                    fingerprint=submission.request_sha256,
                 )
-            )
-        task = asyncio.create_task(self.run(job.id))
-        self.tasks[job.id] = task
-        task.add_done_callback(lambda _: self.tasks.pop(job.id, None))
+                if previous is not None:
+                    return previous
+            raise
+        if new_job:
+            self._schedule(job.id)
         return job
+
+    def _schedule(self, job_id: str) -> None:
+        """Only the winning atomic insertion dispatches; existing receipts never dispatch."""
+        task = asyncio.create_task(self.run(job_id))
+        self.tasks[job_id] = task
+        task.add_done_callback(lambda _: self.tasks.pop(job_id, None))
 
     async def cancel(self, job_id: str) -> Job | None:
         async with self.lock:
@@ -479,6 +585,8 @@ class Execution:
             _LOG.warning("Native simulation recovery status could not be saved")
 
     async def close(self) -> None:
+        self._closing = True
+        await asyncio.gather(*list(self._accepting), return_exceptions=True)
         tasks = list(self.tasks.values())
         for task in tasks:
             task.cancel()

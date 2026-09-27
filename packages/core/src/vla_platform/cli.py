@@ -54,8 +54,18 @@ def execute(operation, *, mutation: bool = False):
         raise typer.Exit(130) from None
 
 
-def call(method: str, path: str, payload: dict | None = None) -> None:
-    value = execute(cli_client.request_json(method, path, payload), mutation=method != "GET")
+def call(
+    method: str, path: str, payload: dict | None = None, *, idempotency_key: str | None = None
+) -> None:
+    value = execute(
+        cli_client.request_json(
+            method,
+            path,
+            payload,
+            **({"idempotency_key": idempotency_key} if idempotency_key is not None else {}),
+        ),
+        mutation=method != "GET",
+    )
     typer.echo(json.dumps(value, indent=2, ensure_ascii=False))
 
 
@@ -89,6 +99,12 @@ def inspect(
     revision: str = "main",
     path: Annotated[str | None, typer.Option()] = None,
     snapshot_for_training: Annotated[bool, typer.Option()] = False,
+    idempotency_key: Annotated[
+        str | None,
+        typer.Option(
+            help="Persist one key per intended submission; reuse it only with the identical recipe."
+        ),
+    ] = None,
 ) -> None:
     """Inspect LeRobot metadata; optionally validate and freeze local training data/media."""
     if bool(repo_id) == bool(path):
@@ -104,7 +120,12 @@ def inspect(
             "snapshot_for_training": snapshot_for_training,
         }
     )
-    call("POST", f"/projects/{segment(project_id)}/intakes", payload)
+    call(
+        "POST",
+        f"/projects/{segment(project_id)}/intakes",
+        payload,
+        **({"idempotency_key": idempotency_key} if idempotency_key is not None else {}),
+    )
 
 
 @jobs.command("list")
@@ -122,6 +143,13 @@ def cancel_job(job_id: str) -> None:
     call("POST", f"/jobs/{segment(job_id)}/cancel")
 
 
+@jobs.command("submission")
+def show_submission(project_id: str, operation: str, key: str) -> None:
+    """Reconcile an explicit submission key using GET only; never retry work."""
+    value = execute(cli_client.submission_job(project_id, operation, key))
+    typer.echo(json.dumps(value, indent=2, ensure_ascii=False))
+
+
 @policy.command("options")
 def policy_options() -> None:
     """Show configured execution targets, policy sources and fine-tuning methods."""
@@ -135,15 +163,29 @@ def augmentation_options() -> None:
 
 
 @augmentation.command("submit")
-def submit_augmentation(project_id: str, recipe: Path) -> None:
+def submit_augmentation(
+    project_id: str, recipe: Path, idempotency_key: Annotated[str | None, typer.Option()] = None
+) -> None:
     """Augment selected dataset clips through the shared application API."""
-    call("POST", f"/projects/{segment(project_id)}/augmentations", read_recipe(recipe))
+    call(
+        "POST",
+        f"/projects/{segment(project_id)}/augmentations",
+        read_recipe(recipe),
+        **({"idempotency_key": idempotency_key} if idempotency_key is not None else {}),
+    )
 
 
 @policy.command("submit")
-def submit_policy(project_id: str, recipe: Path) -> None:
+def submit_policy(
+    project_id: str, recipe: Path, idempotency_key: Annotated[str | None, typer.Option()] = None
+) -> None:
     """Submit a policy operation/workflow through the shared application API."""
-    call("POST", f"/projects/{segment(project_id)}/policy-jobs", read_recipe(recipe))
+    call(
+        "POST",
+        f"/projects/{segment(project_id)}/policy-jobs",
+        read_recipe(recipe),
+        **({"idempotency_key": idempotency_key} if idempotency_key is not None else {}),
+    )
 
 
 @policy.command("artifacts")
