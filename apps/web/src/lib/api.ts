@@ -24,6 +24,23 @@ export type HuggingFaceConnectionStatus = {
 };
 export type ComputeProvider = CloudProvider | 'local';
 export type LocalComputeSettings = { enabled: boolean; label: string };
+export type LocalWorkerDiscovery = {
+  host: { name: string; platform: string; architecture: string };
+  checked_at: string;
+  status: 'ready' | 'unavailable' | 'error';
+  message: string | null;
+  candidates: {
+    id: string; label: string; gpu_name: string | null; gpu_memory_mib: number | null;
+    training_model_ids: string[]; status: 'ready' | 'registered' | 'setup_required';
+    runtime_id: string | null; reason: string | null;
+  }[];
+  issues: string[];
+};
+export type LocalWorkerRegistration = {
+  runtime: PolicyOptions['runtimes'][number];
+  compute: ComputeSettings;
+  discovery: LocalWorkerDiscovery;
+};
 export type GcpComputeSettings = { enabled: boolean; default_gpu: string; disk_size_gb: number; idle_minutes: number };
 export type CloudGpuOption = { id: string; label: string; accelerator: string; gpu_memory_mib: number; gpu_count: number; supported: boolean; available: boolean; unavailable_reason: string | null };
 export type ComputeSettings = {
@@ -41,7 +58,7 @@ export type JobEvent = components['schemas']['JobEvent'];
 export type TrainingTelemetry = components['schemas']['TrainingTelemetry'];
 export type TrainingMetric = components['schemas']['TrainingMetric'];
 export type PolicyOptions = {
-  runtimes: { id: string; label: string; device: 'cpu' | 'cuda'; training: boolean; act_export?: boolean; export_only?: boolean; native_replay?: boolean; native_replay_only?: boolean; native_distillation?: boolean; native_distillation_only?: boolean; simulation: boolean; engine_evaluation?: boolean; run?: boolean; gpu_name?: string | null; gpu_memory_mib?: number | null; training_gpu_count?: number | null; training_model_ids?: string[]; provider?: ComputeProvider; provider_label?: string; region?: string | null; enabled?: boolean; launchable?: boolean; execution?: 'native' | 'skypilot'; accelerator?: string | null; unavailable_reason?: string | null }[];
+  runtimes: { id: string; label: string; device: 'cpu' | 'cuda'; training: boolean; training_only?: boolean; act_export?: boolean; export_only?: boolean; native_replay?: boolean; native_replay_only?: boolean; native_distillation?: boolean; native_distillation_only?: boolean; simulation: boolean; engine_evaluation?: boolean; run?: boolean; gpu_name?: string | null; gpu_memory_mib?: number | null; training_gpu_count?: number | null; training_model_ids?: string[]; provider?: ComputeProvider; provider_label?: string; region?: string | null; enabled?: boolean; launchable?: boolean; execution?: 'native' | 'skypilot'; accelerator?: string | null; unavailable_reason?: string | null }[];
   compute?: { local: LocalComputeSettings; gcp?: GcpComputeSettings };
   training_models?: TrainingModel[];
   sources: { id: string; label: string; task: string }[];
@@ -150,6 +167,8 @@ export const api = {
   checkCloudCompute: () => request<ComputeSettings>('/compute-settings/gcp/check', { method: 'POST' }, 150_000),
   prepareCloudCompute: () => request<ComputeSettings>('/compute-settings/gcp/prepare', { method: 'POST' }, 260_000),
   saveComputeSettings: (local: LocalComputeSettings) => request<ComputeSettings>('/compute-settings', { method: 'PUT', body: JSON.stringify({ local }) }),
+  checkLocalWorkers: () => request<LocalWorkerDiscovery>('/compute-settings/local/check', { method: 'POST' }, 75_000),
+  addLocalWorker: (candidateId: string) => request<LocalWorkerRegistration>('/compute-settings/local/workers', { method: 'POST', body: JSON.stringify({ candidate_id: candidateId }) }, 75_000),
   cloudConnections: () => request<CloudConnections>('/cloud-connections'),
   connectCloud: (provider: CloudProvider, config: CloudConfig) => request<CloudConnection>(`/cloud-connections/${provider}/connect`, { method: 'POST', body: JSON.stringify(config) }, 45_000),
   recheckCloud: (provider: CloudProvider) => request<CloudConnection>(`/cloud-connections/${provider}/recheck`, { method: 'POST' }, 45_000),

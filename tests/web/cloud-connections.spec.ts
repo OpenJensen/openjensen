@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import type { LocalWorkerDiscovery, PolicyOptions } from '../../apps/web/src/lib/api';
 
 type Provider = 'gcp';
 type Connection = {
@@ -51,7 +52,7 @@ async function openCompute(page: Page) {
   await expect(page.getByRole('region', { name: 'Google Cloud', exact: true })).toBeVisible();
 }
 
-async function mockWorkspace(page: Page, initial: Connection[] = [], initialCompute: { gcp?: Partial<CloudPreferences>; status?: Partial<ComputeStatus> } = {}) {
+async function mockWorkspace(page: Page, initial: Connection[] = [], initialCompute: { gcp?: Partial<CloudPreferences>; status?: Partial<ComputeStatus>; discovery?: Partial<LocalWorkerDiscovery> } = {}) {
   const providers: Record<Provider, Connection> = { gcp: disconnected('gcp') };
   for (const item of initial) providers[item.provider] = item;
   const writes: { provider: Provider; action: string; body: unknown }[] = [];
@@ -64,6 +65,15 @@ async function mockWorkspace(page: Page, initial: Connection[] = [], initialComp
   const unexpected: string[] = [];
   const reads: string[] = [];
   const replies: { status?: number; connection?: Connection; detail?: string }[] = [];
+  let runtimes: PolicyOptions['runtimes'] = [];
+  let discovery: LocalWorkerDiscovery = {
+    host: { name: 'robotics-workstation', platform: 'Linux', architecture: 'x86_64' },
+    checked_at: timestamp, status: 'ready', message: null, issues: [],
+    candidates: [{ id: 'smolvla-cuda-0', label: 'SmolVLA training', gpu_name: 'NVIDIA RTX 3070', gpu_memory_mib: 8192, training_model_ids: ['smolvla'], status: 'ready', runtime_id: null, reason: null }],
+    ...initialCompute.discovery,
+  };
+  const localReplies: { status?: number; detail?: string; discovery?: LocalWorkerDiscovery }[] = [];
+  const localWrites: unknown[] = [];
   function computeResponse() {
     const config = providers.gcp.config;
     const gcp_status: ComputeStatus = {
@@ -80,7 +90,7 @@ async function mockWorkspace(page: Page, initial: Connection[] = [], initialComp
         : null;
       return { ...gpu, accelerator: gpu.id, gpu_count: 1, available: unavailable_reason === null, unavailable_reason };
     });
-    return { local, gcp, runtimes: [], gcp_status, gpu_options };
+    return { local, gcp, runtimes, gcp_status, gpu_options };
   }
   // Every application request is intercepted. These tests cannot authenticate
   // with a provider, alter real cloud configuration, or provision compute.
@@ -88,6 +98,30 @@ async function mockWorkspace(page: Page, initial: Connection[] = [], initialComp
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (request.method() !== 'GET') mutations.push(`${request.method()} ${path}`);
+    if (request.method() === 'POST' && ['/api/v1/compute-settings/local/check', '/api/v1/compute-settings/local/workers'].includes(path)) {
+      const reply = localReplies.shift();
+      if (path.endsWith('/workers')) localWrites.push(request.postDataJSON());
+      if (reply?.status && reply.status >= 400) {
+        await route.fulfill({ status: reply.status, json: { detail: reply.detail } });
+        return;
+      }
+      if (reply?.discovery) discovery = reply.discovery;
+      if (path.endsWith('/check')) {
+        await route.fulfill({ json: discovery });
+        return;
+      }
+      const candidate = discovery.candidates.find(item => item.id === request.postDataJSON().candidate_id)!;
+      const runtime: PolicyOptions['runtimes'][number] = {
+        id: 'local-smolvla', label: candidate.label, device: 'cuda', training: true, training_only: true,
+        simulation: false, run: false, engine_evaluation: false, gpu_name: candidate.gpu_name,
+        gpu_memory_mib: candidate.gpu_memory_mib, training_model_ids: candidate.training_model_ids,
+        provider: 'local', enabled: local.enabled,
+      };
+      runtimes = [runtime];
+      discovery = { ...discovery, candidates: discovery.candidates.map(item => item.id === candidate.id ? { ...item, status: 'registered', runtime_id: runtime.id } : item) };
+      await route.fulfill({ json: { runtime, compute: computeResponse(), discovery } });
+      return;
+    }
     if (request.method() === 'PUT' && path === '/api/v1/compute-settings') {
       const body = request.postDataJSON();
       computeWrites.push(body);
@@ -129,7 +163,7 @@ async function mockWorkspace(page: Page, initial: Connection[] = [], initialComp
         '/api/v1/cloud-connections': { providers: Object.values(providers) },
         '/api/v1/compute-settings': computeResponse(),
         '/api/v1/policy-options': {
-          runtimes: [], sources: [], training_models: [], training_methods: [], default_training_method: 'lora', compute: { local, gcp },
+          runtimes, sources: [], training_models: [], training_methods: [], default_training_method: 'lora', compute: { local, gcp },
           quantization_defaults: { cuda: { language: 'Q8_0', vision: null }, cpu: { language: 'Q8_0', vision: null }, note: '' },
         },
       };
@@ -140,7 +174,7 @@ async function mockWorkspace(page: Page, initial: Connection[] = [], initialComp
   });
   await page.goto('/');
   await openCompute(page);
-  return { providers, writes, unexpected, replies, reads, computeWrites, mutations };
+  return { providers, writes, unexpected, replies, reads, computeWrites, mutations, localReplies, localWrites };
 }
 
 async function noOverflow(page: Page) {
@@ -323,6 +357,124 @@ test('local run preferences and machine label persist after saving and reloading
   await noOverflow(page);
   await page.screenshot({ path: testInfo.outputPath('local-compute-settings.png'), fullPage: true });
   expect(writes).toEqual([]);
+  expect(unexpected).toEqual([]);
+});
+
+test('local discovery and registration are explicit, preserve preferences, and survive reload', async ({ page }, testInfo) => {
+  const { mutations, unexpected, localWrites, computeWrites } = await mockWorkspace(page);
+  const local = page.getByRole('region', { name: 'Local runs', exact: true });
+  await expect(local.getByRole('button', { name: 'Check this machine', exact: true })).toBeVisible();
+  await expect(page.getByText('Existing GPU workers', { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/FIREBIRD_RUNTIME_CONFIG|Local worker setup/)).toHaveCount(0);
+  expect(mutations).toEqual([]);
+  await local.getByRole('textbox', { name: 'Machine label', exact: true }).fill('My robotics workstation');
+  await local.getByRole('button', { name: 'Check this machine', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await expect(local.getByText('App host · robotics-workstation', { exact: true })).toBeVisible();
+  await expect(local.getByText('NVIDIA RTX 3070 · 8 GB', { exact: true })).toBeVisible();
+  await expect(local.getByRole('button', { name: 'Add SmolVLA training', exact: true })).toBeVisible();
+  expect(localWrites).toEqual([]);
+  await local.getByRole('button', { name: 'Add SmolVLA training', exact: true }).click();
+  await expect(local.getByText('Added', { exact: true })).toBeVisible();
+  await expect(local.getByRole('checkbox', { name: 'Enable local runs', exact: true })).not.toBeChecked();
+  await expect(local.getByRole('textbox', { name: 'Machine label', exact: true })).toHaveValue('My robotics workstation');
+  await expect(local.getByText('SmolVLA training added. Enable local runs when you’re ready.', { exact: true })).toBeVisible();
+  await expect(local.getByRole('button', { name: 'Add SmolVLA training', exact: true })).toHaveCount(0);
+  expect(localWrites).toEqual([{ candidate_id: 'smolvla-cuda-0' }]);
+  expect(computeWrites).toEqual([]);
+  await noOverflow(page);
+  await local.screenshot({ path: testInfo.outputPath('local-worker-added.png') });
+  await page.reload();
+  await openCompute(page);
+  await expect(local.getByText('SmolVLA training', { exact: true })).toBeVisible();
+  await expect(local.getByText('Configured', { exact: true })).toBeVisible();
+  await expect(local.getByRole('checkbox', { name: 'Enable local runs', exact: true })).not.toBeChecked();
+  expect(mutations).toEqual(['POST /api/v1/compute-settings/local/check', 'POST /api/v1/compute-settings/local/workers']);
+  await local.getByRole('button', { name: 'Check this machine', exact: true }).click();
+  await expect(local.getByText('Added', { exact: true })).toBeVisible();
+  await expect(local.locator('.local-worker-card')).toHaveCount(1);
+  expect(unexpected).toEqual([]);
+});
+
+test('local discovery without a compatible GPU provides setup guidance without an add action', async ({ page }) => {
+  const { mutations, unexpected, localWrites } = await mockWorkspace(page, [], { discovery: {
+    host: { name: 'application-server', platform: 'Darwin', architecture: 'arm64' },
+    status: 'unavailable', message: 'No NVIDIA GPU found on this app host.', candidates: [],
+  } });
+  const local = page.getByRole('region', { name: 'Local runs', exact: true });
+  await local.getByRole('button', { name: 'Check this machine', exact: true }).click();
+  await expect(local.getByText('App host · application-server', { exact: true })).toBeVisible();
+  await expect(local.getByText('No NVIDIA GPU found on this app host.', { exact: true })).toBeVisible();
+  await expect(local.getByRole('link', { name: 'Setup guide', exact: true })).toHaveAttribute('href', '/guide/#settings-diagnostics');
+  await expect(local.getByRole('button', { name: /^Add/ })).toHaveCount(0);
+  await expect(local.getByRole('button', { name: 'Check again', exact: true })).toBeEnabled();
+  expect(localWrites).toEqual([]);
+  expect(mutations).toEqual(['POST /api/v1/compute-settings/local/check']);
+  expect(unexpected).toEqual([]);
+});
+
+test('missing local worker dependencies are never represented as ready', async ({ page }, testInfo) => {
+  const { mutations, unexpected } = await mockWorkspace(page, [], { discovery: {
+    host: { name: 'robotics-workstation-with-a-long-hostname.example.test', platform: 'Linux', architecture: 'x86_64' },
+    status: 'unavailable', message: null,
+    candidates: [{ id: 'smolvla-cuda-0', label: 'SmolVLA training', gpu_name: 'NVIDIA RTX 3070', gpu_memory_mib: 8192, training_model_ids: ['smolvla'], status: 'setup_required', runtime_id: null, reason: 'Install the SmolVLA worker, then check again.' }],
+  } });
+  const local = page.getByRole('region', { name: 'Local runs', exact: true });
+  await local.getByRole('button', { name: 'Check this machine', exact: true }).click();
+  await expect(local.getByText('Setup needed', { exact: true })).toBeVisible();
+  await expect(local.getByText('Install the SmolVLA worker, then check again.', { exact: true })).toBeVisible();
+  await expect(local.getByRole('button', { name: /Add|Install/ })).toHaveCount(0);
+  await expect(local.getByRole('link', { name: 'Setup guide', exact: true })).toBeVisible();
+  await noOverflow(page);
+  await local.screenshot({ path: testInfo.outputPath('local-worker-setup-needed.png') });
+  expect(mutations).toEqual(['POST /api/v1/compute-settings/local/check']);
+  expect(unexpected).toEqual([]);
+});
+
+test('failed local checks and registration remain retryable without enabling compute', async ({ page }) => {
+  const { mutations, unexpected, localReplies, localWrites, computeWrites } = await mockWorkspace(page);
+  const local = page.getByRole('region', { name: 'Local runs', exact: true });
+  localReplies.push({ status: 503, detail: 'Local discovery is temporarily unavailable.' });
+  await local.getByRole('button', { name: 'Check this machine', exact: true }).click();
+  await expect(local.getByRole('alert')).toHaveText('Local discovery is temporarily unavailable.');
+  await local.getByRole('button', { name: 'Retry check', exact: true }).click();
+  const add = local.getByRole('button', { name: 'Add SmolVLA training', exact: true });
+  await expect(add).toBeEnabled();
+  localReplies.push({ status: 409, detail: 'Worker changed since discovery. Check the machine again.' });
+  await add.click();
+  await expect(local.getByRole('alert')).toHaveText('Worker changed since discovery. Check the machine again.');
+  await expect(local.getByText('Added', { exact: true })).toHaveCount(0);
+  await expect(local.getByRole('checkbox', { name: 'Enable local runs', exact: true })).not.toBeChecked();
+  await local.getByRole('button', { name: 'Check again', exact: true }).click();
+  await expect(local.getByRole('alert')).toHaveCount(0);
+  await add.click();
+  await expect(local.getByText('Added', { exact: true })).toBeVisible();
+  expect(computeWrites).toEqual([]);
+  expect(localWrites).toHaveLength(2);
+  expect(mutations.every(item => item.startsWith('POST /api/v1/compute-settings/local/'))).toBe(true);
+  expect(unexpected).toEqual([]);
+});
+
+test('a local check in progress blocks duplicate actions and announces the host scope', async ({ page }) => {
+  const { mutations, unexpected } = await mockWorkspace(page);
+  let release: () => void = () => {};
+  const held = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/v1/compute-settings/local/check', async route => {
+    await held;
+    await route.fallback();
+  });
+  const local = page.getByRole('region', { name: 'Local runs', exact: true });
+  try {
+    await local.getByRole('button', { name: 'Check this machine', exact: true }).click();
+    await expect(local.getByRole('button', { name: 'Checking…', exact: true })).toBeDisabled();
+    await expect(local.getByRole('status')).toHaveText('Checking the machine running this app…');
+    await expect(local.getByRole('checkbox', { name: 'Enable local runs', exact: true })).toBeDisabled();
+    await expect(local.getByRole('button', { name: /^Add/ })).toHaveCount(0);
+  } finally {
+    release();
+  }
+  await expect(local.getByRole('button', { name: 'Add SmolVLA training', exact: true })).toBeEnabled();
+  expect(mutations).toEqual(['POST /api/v1/compute-settings/local/check']);
   expect(unexpected).toEqual([]);
 });
 

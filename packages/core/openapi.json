@@ -2945,6 +2945,201 @@
         "title": "LocalPreviewLimits",
         "type": "object"
       },
+      "LocalWorkerAddRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "title": "Candidate Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidate_id"
+        ],
+        "title": "LocalWorkerAddRequest",
+        "type": "object"
+      },
+      "LocalWorkerAddResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "compute": {
+            "$ref": "#/components/schemas/ComputeSettingsResponse"
+          },
+          "discovery": {
+            "$ref": "#/components/schemas/LocalWorkerDiscovery"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/PublicRuntime"
+          }
+        },
+        "required": [
+          "runtime",
+          "compute",
+          "discovery"
+        ],
+        "title": "LocalWorkerAddResponse",
+        "type": "object"
+      },
+      "LocalWorkerCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "gpu_memory_mib": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gpu Memory Mib"
+          },
+          "gpu_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gpu Name"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "runtime_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime Id"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "registered",
+              "setup_required"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "training_model_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Training Model Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "status"
+        ],
+        "title": "LocalWorkerCandidate",
+        "type": "object"
+      },
+      "LocalWorkerDiscovery": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/LocalWorkerCandidate"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "checked_at": {
+            "title": "Checked At",
+            "type": "string"
+          },
+          "host": {
+            "$ref": "#/components/schemas/LocalWorkerHost"
+          },
+          "issues": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "unavailable",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "host",
+          "checked_at",
+          "status"
+        ],
+        "title": "LocalWorkerDiscovery",
+        "type": "object"
+      },
+      "LocalWorkerHost": {
+        "additionalProperties": false,
+        "properties": {
+          "architecture": {
+            "title": "Architecture",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "platform": {
+            "title": "Platform",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "platform",
+          "architecture"
+        ],
+        "title": "LocalWorkerHost",
+        "type": "object"
+      },
       "NativeDistillation": {
         "additionalProperties": false,
         "description": "Recorded-data selection and a fixed ACT teacher/student recipe; no paths.",
@@ -3764,6 +3959,11 @@
             },
             "title": "Training Model Ids",
             "type": "array"
+          },
+          "training_only": {
+            "default": false,
+            "title": "Training Only",
+            "type": "boolean"
           },
           "unavailable_reason": {
             "anyOf": [
@@ -5217,6 +5417,68 @@
           }
         },
         "summary": "Prepare Gcp Compute",
+        "tags": [
+          "Compute settings"
+        ]
+      }
+    },
+    "/api/v1/compute-settings/local/check": {
+      "post": {
+        "operationId": "check_local_workers_api_v1_compute_settings_local_check_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocalWorkerDiscovery"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Check Local Workers",
+        "tags": [
+          "Compute settings"
+        ]
+      }
+    },
+    "/api/v1/compute-settings/local/workers": {
+      "post": {
+        "operationId": "add_local_worker_api_v1_compute_settings_local_workers_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocalWorkerAddRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocalWorkerAddResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Local Worker",
         "tags": [
           "Compute settings"
         ]

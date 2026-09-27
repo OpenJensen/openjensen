@@ -209,6 +209,7 @@ def test_training_options_expose_configured_gpu_specs_without_private_runtime_fi
         "enabled": True,
         "device": "cuda",
         "training": True,
+        "training_only": False,
         "act_export": False,
         "export_only": False,
         "native_quantization": False,

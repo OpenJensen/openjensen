@@ -10,7 +10,7 @@ from test_tui import job
 from test_tui_lifecycle import LifecycleServer, context, recipe
 from vla_platform.contracts import Job
 from vla_platform.tui_client import ApiError
-from vla_platform.tui_lifecycle import canonical, template
+from vla_platform.tui_lifecycle import OPERATIONS, canonical, runtime_allowed, template
 
 MODES = ("resume", "export", "evaluate", "engine_run", "gguf_quantize")
 
@@ -91,6 +91,16 @@ def request(mode):
 
 def current(server=None):
     return asyncio.run(context(server or ExtendedServer()))
+
+
+def test_training_only_worker_is_available_for_training_and_resume_only():
+    runtime = ExtendedServer().runtimes[-1]
+    runtime.update(training_only=True, act_export=False, run=False, engine_evaluation=False)
+    for mode in OPERATIONS:
+        assert runtime_allowed(runtime, mode) is (mode in {"train", "resume"})
+    runtime["enabled"] = False
+    assert not runtime_allowed(runtime, "train")
+    assert not runtime_allowed(runtime, "resume")
 
 
 @pytest.mark.parametrize("suite", ["libero_object", "libero_spatial"])

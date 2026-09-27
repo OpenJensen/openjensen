@@ -20,6 +20,7 @@ from vla_platform.lifecycle.contracts import PolicyArtifact, PolicyRequest
 from vla_platform.lifecycle.runtime import Runtime, RuntimeCatalog
 from vla_platform.lifecycle.service import Lifecycle
 from vla_platform.lifecycle.training_catalog import TRAINING_MODEL_BY_ID, public_training_models
+from vla_platform.local_worker_registry import LocalWorkerRegistry
 from vla_platform.settings import Settings
 from vla_platform.storage import jobs
 
@@ -225,13 +226,16 @@ def test_resume_preserves_checkpoint_contract_and_null_recipe(
             }.get(jid)
         )
     )
-    lifecycle.catalog = RuntimeCatalog(
-        runtimes=[
-            runtime(
-                training_module="custom_training.application",
-                training_model_ids=[model_id],
-            )
-        ]
+    lifecycle.local_workers = LocalWorkerRegistry(
+        tmp_path,
+        RuntimeCatalog(
+            runtimes=[
+                runtime(
+                    training_module="custom_training.application",
+                    training_model_ids=[model_id],
+                )
+            ]
+        ),
     )
     directory = tmp_path / "jobs/prior/operation/training"
     checkpoint = directory / "checkpoint-000100"
@@ -296,7 +300,9 @@ def test_resume_preserves_checkpoint_contract_and_null_recipe(
     assert request.dataset_job_id == "dataset"
     assert original.request.training == recipe
     if model_id == "openvla":
-        lifecycle.catalog = RuntimeCatalog(runtimes=[runtime()])
+        lifecycle.local_workers = LocalWorkerRegistry(
+            tmp_path, RuntimeCatalog(runtimes=[runtime()])
+        )
         with pytest.raises(ValueError, match="no training adapter for OpenVLA"):
             asyncio.run(lifecycle.validate("project", request))
 
@@ -401,14 +407,17 @@ def test_chained_cloud_resume_uses_checkpoint_recipe_and_camera_lineage(
     lifecycle.settings = SimpleNamespace(data_dir=tmp_path)
     lifecycle.compute = ComputeSettings(tmp_path)
     lifecycle.compute.update(ComputeSettingsUpdate.model_validate({"local": {"enabled": True}}))
-    lifecycle.catalog = RuntimeCatalog(
-        runtimes=[
-            runtime(
-                training_module="custom_training.application",
-                training_model_ids=[model_id],
-                gpu_memory_mib=81920,
-            )
-        ]
+    lifecycle.local_workers = LocalWorkerRegistry(
+        tmp_path,
+        RuntimeCatalog(
+            runtimes=[
+                runtime(
+                    training_module="custom_training.application",
+                    training_model_ids=[model_id],
+                    gpu_memory_mib=81920,
+                )
+            ]
+        ),
     )
     lifecycle.execution = SimpleNamespace(
         get=AsyncMock(
