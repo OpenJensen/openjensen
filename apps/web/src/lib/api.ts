@@ -41,7 +41,7 @@ export type JobEvent = components['schemas']['JobEvent'];
 export type TrainingTelemetry = components['schemas']['TrainingTelemetry'];
 export type TrainingMetric = components['schemas']['TrainingMetric'];
 export type PolicyOptions = {
-  runtimes: { id: string; label: string; device: 'cpu' | 'cuda'; training: boolean; act_export?: boolean; export_only?: boolean; simulation: boolean; engine_evaluation?: boolean; run?: boolean; gpu_name?: string | null; gpu_memory_mib?: number | null; training_gpu_count?: number | null; training_model_ids?: string[]; provider?: ComputeProvider; provider_label?: string; region?: string | null; enabled?: boolean; execution?: 'native' | 'skypilot'; accelerator?: string | null; unavailable_reason?: string | null }[];
+  runtimes: { id: string; label: string; device: 'cpu' | 'cuda'; training: boolean; act_export?: boolean; export_only?: boolean; native_distillation?: boolean; native_distillation_only?: boolean; simulation: boolean; engine_evaluation?: boolean; run?: boolean; gpu_name?: string | null; gpu_memory_mib?: number | null; training_gpu_count?: number | null; training_model_ids?: string[]; provider?: ComputeProvider; provider_label?: string; region?: string | null; enabled?: boolean; execution?: 'native' | 'skypilot'; accelerator?: string | null; unavailable_reason?: string | null }[];
   compute?: { local: LocalComputeSettings; gcp?: GcpComputeSettings };
   training_models?: TrainingModel[];
   sources: { id: string; label: string; task: string }[];
