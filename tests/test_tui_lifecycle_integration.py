@@ -1,7 +1,6 @@
 """Real application/API and supervised CPU protocol worker, with no model-quality claim."""
 
 import asyncio
-import json
 
 import httpx
 import pytest
@@ -9,10 +8,11 @@ import pytest
 pytest.importorskip("textual")
 from test_native_quantization import application  # noqa: F401
 from test_tui import choose_project, until
-from textual.widgets import Button, Checkbox, Select, TextArea
+from textual.widgets import Button, Checkbox, Input, Select
 from vla_platform.tui import FirebirdApp
 from vla_platform.tui_client import ApiClient
 from vla_platform.tui_lifecycle_forms import LifecycleForm
+from vla_platform.tui_recipe_fields import RecipeFields
 
 
 def test_tui_real_application_submits_and_observes_supervised_protocol_job(application, tmp_path):  # noqa: F811
@@ -43,21 +43,17 @@ def test_tui_real_application_submits_and_observes_supervised_protocol_job(appli
             form = app.screen
             form.query_one("#lifecycle-mode", Select).value = "quantize"
             await pilot.pause()
-            form.query_one("#recipe-editor", TextArea).load_text(
-                json.dumps(
-                    {
-                        "operation": "policy.quantize",
-                        "runtime_id": "native-cpu",
-                        "artifact_id": source.id,
-                        "native_quantization": {
-                            "format": "firebird_quant",
-                            "bits": 8,
-                            "group_size": 64,
-                        },
-                        "timeout_seconds": 60,
-                    }
-                )
-            )
+            form.query_one("#recipe-runtime", Select).value = "native-cpu"
+            form.query_one("#recipe-artifact", Select).value = source.id
+            form.query_one("#recipe-build", Button).press()
+            await pilot.pause()
+            form.query_one("#recipe-fields", Button).press()
+            await until(lambda: isinstance(app.screen, RecipeFields) and app.screen.is_mounted)
+            editor = app.screen
+            editor.query_one("#field-timeout_seconds", Input).value = "60"
+            editor.query_one("#field-native_quantization-bits", Select).value = 8
+            editor.query_one("#fields-apply", Button).press()
+            await until(lambda: app.screen is form)
             await pilot.pause()
             form.query_one("#recipe-review", Button).press()
             await until(lambda: form.reviewed is not None and not form.busy)
