@@ -155,7 +155,8 @@ def test_new_config_preserves_base_bytes_all_fields_and_sources(configured):
     assert base.read_bytes() == before
     assert written["runtimes"][0] == original["runtimes"][0]
     assert written["sources"] == original["sources"]
-    assert len(written["runtimes"]) == 3
+    assert len(written["runtimes"]) == 4
+    assert result["runtime_count"] == 4
     assert result["activated"] is False and "PRIVATE" not in str(result)
     replay = written["runtimes"][1]
     assert replay["native_replay_only"] is True
@@ -167,6 +168,8 @@ def test_new_config_preserves_base_bytes_all_fields_and_sources(configured):
     "value",
     [
         {"runtimes": [{"id": "local-act-replay-cpu"}]},
+        {"runtimes": [{"id": "local-act-distillation-cpu"}]},
+        {"runtimes": [{"id": "local-act-quantization-cpu"}]},
         {"runtimes": [{"id": "x"}, {"id": "x"}]},
         {"runtimes": {}},
         {"runtimes": [1]},
@@ -177,9 +180,11 @@ def test_registry_collisions_bad_shapes_rejected_without_output(configured, valu
     root, repo, installation = configured
     base = root / "base.json"
     base.write_text(json.dumps(value))
+    before = base.read_bytes()
     with pytest.raises(ValueError):
         m.config(installation, root / "new.json", base)
     assert not (root / "new.json").exists()
+    assert base.read_bytes() == before
 
 
 def test_config_never_overwrites_base(configured):
@@ -288,9 +293,18 @@ def test_generated_registry_matches_actual_core_contract(configured):
     output = root / "registry.json"
     m.config(installation, output, None)
     registry = RuntimeCatalog.load(output)
-    assert len(registry.runtimes) == 2
+    assert len(registry.runtimes) == 3
     assert registry.runtimes[0].native_replay_only
     assert registry.runtimes[1].native_distillation_only
+    quantization = registry.runtimes[2]
+    assert quantization.id == "local-act-quantization-cpu"
+    assert quantization.native_quantization_only
+    assert quantization.native_quantization_python == str(installation / "act-model/bin/python")
+    assert quantization.native_quantization_root == str(repo / "workers/firebird_quant")
+    assert not quantization.native_replay_only and not quantization.native_distillation_only
+    raw = json.loads(output.read_text())["runtimes"][2]
+    assert not any("dataset_python" in key for key in raw)
+    assert not any("native_replay" in key or "native_distillation" in key for key in raw)
     assert all(item.provider == "local" and item.device == "cpu" for item in registry.runtimes)
 
 
