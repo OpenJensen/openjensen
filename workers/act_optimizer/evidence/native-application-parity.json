@@ -48,7 +48,7 @@
     "generated.json": "c585cc093298b626bc1bb788d9e5dd64ff3024a58e565c1dcf25755f8c0f3a70",
     "resumed.json": "9f34901e7d61a1b073c61f2b3fcf5c04582791d13ab7dbd2e9aa0dd9119764be"
   },
-  "implementation_revision": "uncommitted ACT application export slice; bind final reviewed commit separately",
+  "implementation_revision": "d46b143b66e371c556630086ee3f256440be6b26",
   "limitations": [
     "Synthetic seeded batch and two CPU optimizer updates; no dataset-loader resume or trained task quality proof.",
     "No GPU, native Windows, simulation, calibration, task success, latency or hardware-fit claim.",
