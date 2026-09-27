@@ -23,6 +23,7 @@ The default application URL is `http://127.0.0.1:8000`. Override it with `FIREBI
 | F2 | Jobs in the selected project |
 | F3 | Details and events for the selected job |
 | F4 | Dataset intake |
+| F5 | New lifecycle recipe |
 | Ctrl+N | Create a project |
 | Ctrl+R | Refresh |
 | F8 | Review cancellation of the highlighted job |
@@ -33,13 +34,63 @@ The default application URL is `http://127.0.0.1:8000`. Override it with `FIREBI
 
 Choose a project before intake. Hugging Face intake accepts a repository and revision. Local paths refer to the **application host's allowed dataset folder**, not necessarily the computer running the terminal. “Prepare immutable local training copy” requests the existing complete snapshot validator and copy; it does not start training or promise that a dataset satisfies split/admission requirements.
 
-The Jobs view includes intake, training and other native policy jobs submitted through any client. The details view shows the API record, its actual status, results, errors and events. It does not reinterpret job completion as robot task success. Training recipes and other policy operations can still be submitted through `firebird policy submit PROJECT RECIPE.json`; this first terminal slice does not include a training recipe editor.
+The Jobs view includes intake, training and other native policy jobs submitted through any client. The details view shows the API record, its actual status, results, errors and events. It does not reinterpret job completion as robot task success. Use F5 to prepare a lifecycle recipe in the terminal, or `firebird policy submit PROJECT RECIPE.json` for an existing recipe file.
 
 Reads poll every three seconds. Each request has a 15-second total deadline and an 8 MiB response limit; displayed job details are capped at 120,000 characters with an explicit truncation notice. Offline/error states retain the last data with its last refresh time. No write is retried automatically. If a write times out or returns an uncertain response, inspect the jobs/projects before submitting again. Closing the terminal stops observation, not application jobs.
 
 Cancellation requires an explicit confirmation whose safe default is “Keep job.” The client rereads the selected job before sending cancellation and refuses if its identity, project, selection or active state changed. The resulting status is the server's response; cancellation does not establish that cloud resources have been deleted.
 
 The noninteractive CLI continues to emit JSON to stdout and errors to stderr. `firebird --version` and command help work without the extra. `firebird inspect PROJECT --path DATASET --snapshot-for-training` exposes the same local snapshot request. Recipe files must be regular JSON objects of at most 1 MiB; reads are bounded and named pipes are rejected.
+
+## Review and submit lifecycle recipes
+
+F5 opens an editable composer for **Fine-tune / train**, **ACT teacher-to-student
+Distill**, **ACT INT8/INT4 Quantize**, and **CPU observation Replay**. It reads the
+selected project's saved datasets/artifacts and the application's advertised
+runtime/model catalog. An empty selector means there is no currently compatible
+choice; the terminal never installs a runtime or invents connectivity.
+
+Choose the workflow and inputs, then use **Build / replace draft**. Fixed adapter
+identifiers come from the API; required budgets, training method/model, episodes,
+frames, coordinate units and attestations remain null/empty until explicitly
+chosen. Edit the complete JSON in the terminal without creating a recipe file.
+The model catalog lists registered repository IDs and methods. The application
+still enforces model-specific camera, dataset and hardware requirements. **Copy
+selected job recipe** copies the entire saved request for editing; it neither
+retries nor resumes that job. This composer admits new jobs, not checkpoint resume.
+
+**Review exact recipe** rereads current context, validates the existing API
+schema, and shows the complete normalized recipe plus source manifest and compute
+identity. Review and consent are invalidated by an edit. Submission rereads the
+source/dataset/runtime again and refuses changed context. Authorize the exact
+source/recipe/compute explicitly; Google Cloud also requires a separate paid-job
+checkbox. Timeouts are not spending caps. Navigating, copying or reviewing never
+submits work. Each submission sends one POST and validates its acknowledgment.
+
+The client stores a small private attempt record per API endpoint/project under
+`$XDG_STATE_HOME/openjensen/tui` (default `~/.local/state/openjensen/tui`) or
+`%LOCALAPPDATA%/OpenJensen/state/tui` on Windows. Records contain attempt/recipe/context
+hashes and operation/runtime identities, not full recipes or credentials. On POSIX
+the directory is mode0700 and records mode0600. An OS lock prevents another TUI
+from clearing an active submission. A pending or uncertain record survives client
+closure/restart and blocks another submission. Storage errors also block writes.
+This is process-restart recovery, not a hardware power-loss guarantee: file and
+journal-directory changes are flushed, but first-use ancestor-directory creation
+is not independently certified durable through a system crash.
+
+To resolve uncertainty, reopen F5 for the same endpoint/project, load fresh saved
+job history, inspect it for the displayed exact attempt/recipe, then explicitly
+acknowledge that attempt. Clearing the block does not submit anything; every new
+request still needs review and consent. No client-generated idempotency key is
+promised by the server. If a server acknowledgment arrives but local cleanup fails,
+its accepted job ID remains visible and **Back to jobs** follows it; do not submit
+it again. Closing the terminal does not cancel an accepted application job.
+
+These four recipe paths are a bounded terminal milestone. CPU replay is not an
+Isaac rollout or task-success evaluation. Quantization reports drift/reload evidence,
+not calibration, hardware performance or robot quality. Dedicated Evaluate, export,
+resume, artifact download forms and complete structured editors remain follow-up
+work; existing CLI commands remain available where their APIs support them.
 
 ## Follow lifecycle jobs from the CLI
 
@@ -105,9 +156,16 @@ checkpoint-owned training settings; the CLI does not invent those identities.
 ## Verification
 
 ```sh
-uv run --frozen --extra tui pytest tests/test_tui.py tests/test_tui_cli.py tests/test_tui_integration.py tests/test_cli_client.py tests/test_cli_workflow.py -q
+uv run --frozen --extra tui pytest tests/test_tui.py tests/test_tui_cli.py tests/test_tui_integration.py tests/test_cli_client.py tests/test_cli_workflow.py tests/test_cli_ack_types.py tests/test_tui_lifecycle.py tests/test_tui_lifecycle_integration.py -q
 ```
 
 Pilot tests exercise keyboard navigation, forms, 48×18 terminal resizing, stale/invalid responses, selection changes, offline recovery, explicit cancellation and non-retried ambiguous writes. The integration test starts a disposable loopback API on an ephemeral port, creates a real project, runs actual local metadata intake and a supervised slow protocol fixture, cancels that fixture, reads the same records with the CLI, and restarts the API to verify persistence. It never contacts a model provider or cloud service. Fixture evidence is not training, robot-quality or hardware evidence.
+
+Lifecycle Pilot cases additionally exercise complete recipes for all four workflows,
+changed ownership/capabilities, separate cloud consent, persisted uncertainty and
+failed attempt storage. A second integration test uses the actual application API
+and its supervised CPU protocol fixture through an in-process HTTP adapter; it
+verifies one explicit quantization submission and persisted results without real
+model inference. This is application protocol evidence, not an ML benchmark.
 
 macOS testing is recorded with this implementation. Native Windows terminal behavior and a desktop installer require their own verification; this terminal slice does not establish those claims. [Textual testing](https://textual.textualize.io/guide/testing/) and [workers](https://textual.textualize.io/guide/workers/) describe the upstream UI/test APIs used here.
