@@ -48,10 +48,10 @@ const navigationGroups = [
   { name: 'Workspace', items: [7, 6] },
 ];
 
-function ModeCard({ title, detail, icon, selected, disabled, onClick }: { title: string; detail: string; icon: Parameters<typeof Icon>[0]['name']; selected: boolean; disabled: boolean; onClick: () => void }) {
-  return <button type="button" className={`mode-card${selected ? ' selected' : ''}`} aria-label={title} aria-pressed={selected} disabled={disabled} onClick={onClick}>
-    <span className="mode-card-top"><span className="mode-card-icon"><Icon name={icon} size={23} /></span><span className="mode-card-check">{selected && <Icon name="check" size={13} />}</span></span>
-    <strong>{title}</strong><span className="mode-card-detail">{detail}</span>
+function ModeCard({ title, detail, icon, selected, disabled, onClick }: { title: string; detail: string; icon?: Parameters<typeof Icon>[0]['name']; selected: boolean; disabled: boolean; onClick: () => void }) {
+  return <button type="button" className={`mode-card${icon ? '' : ' mode-card-plain'}${selected ? ' selected' : ''}`} aria-label={title} aria-pressed={selected} disabled={disabled} onClick={onClick}>
+    <span className="mode-card-top">{icon ? <span className="mode-card-icon"><Icon name={icon} size={23} /></span> : <strong>{title}</strong>}<span className="mode-card-check">{selected && <Icon name="check" size={13} />}</span></span>
+    {icon && <strong>{title}</strong>}<span className="mode-card-detail">{detail}</span>
   </button>;
 }
 
@@ -376,8 +376,8 @@ function Workbench() {
         {activeStage === 3 && <section className="workflow-choices" aria-label="Quantization workflow">
           <h2 className="workflow-choice-title">Supported models</h2>
           <div className="mode-card-grid two-columns" role="group" aria-label="Quantization mode">
-            <ModeCard title="SmolVLA" detail="GGUF · 4-bit or 8-bit" icon="spark" selected={quantizeMode === 'gguf'} disabled={!workflowProjectId} onClick={() => { if (quantizeMode !== 'gguf') setQuantizeArtifact(null); chooseQuantize('gguf'); }} />
-            <ModeCard title="ACT" detail="INT8 or INT4 · Local worker" icon="layers" selected={quantizeMode === 'native'} disabled={!workflowProjectId} onClick={() => { if (quantizeMode !== 'native') setQuantizeArtifact(null); chooseQuantize('native'); }} />
+            <ModeCard title="SmolVLA" detail="GGUF · 4-bit or 8-bit" selected={quantizeMode === 'gguf'} disabled={!workflowProjectId} onClick={() => { if (quantizeMode !== 'gguf') setQuantizeArtifact(null); chooseQuantize('gguf'); }} />
+            <ModeCard title="ACT" detail="INT8 or INT4 · Local worker" selected={quantizeMode === 'native'} disabled={!workflowProjectId} onClick={() => { if (quantizeMode !== 'native') setQuantizeArtifact(null); chooseQuantize('native'); }} />
           </div>
         </section>}
         {entryPending && (!workflowProjectId || jobs.isPending || entryFailed || recoveryError) && <section className="panel" aria-label="Workflow selection status"><p role={entryFailed || recoveryError ? 'alert' : 'status'}>{!workflowProjectId ? 'Select a project to see its workflow history.' : recoveryError ?? (entryFailed ? 'Workflow availability or history could not be loaded. Choose a mode to inspect it, or retry these reads.' : 'Loading this project’s workflow history and configured workers…')}</p>{entryFailed && <button className="secondary-button" onClick={() => { void jobs.refetch(); void options.refetch(); if (activeStage === 5) void simulation.refetch(); }}>Retry workflow context</button>}</section>}

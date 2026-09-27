@@ -91,3 +91,10 @@
 }
 
 .workflow-choice-title { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
+
+/* Model names identify quantization choices; only workflow actions use icons. */
+.mode-card-plain .mode-card-top { margin-bottom: 0; }
+@media (max-width: 700px) {
+  .mode-card-plain { grid-template-columns: minmax(0, 1fr); }
+  .mode-card-plain strong, .mode-card-plain .mode-card-detail { grid-column: 1; }
+}
