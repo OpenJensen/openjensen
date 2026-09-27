@@ -5651,6 +5651,57 @@
         "summary": "Download Artifact"
       }
     },
+    "/api/v1/projects/{project_id}/artifacts/{artifact_id}/replay": {
+      "get": {
+        "description": "Read verified saved CPU predictions; never execute a policy or simulator.",
+        "operationId": "replay_record_api_v1_projects__project_id__artifacts__artifact_id__replay_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Replay Record Api V1 Projects  Project Id  Artifacts  Artifact Id  Replay Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replay Record"
+      }
+    },
     "/api/v1/projects/{project_id}/augmentations": {
       "post": {
         "operationId": "augment_dataset_api_v1_projects__project_id__augmentations_post",
