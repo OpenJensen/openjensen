@@ -334,12 +334,13 @@ def native_replay_ready(runtime: Runtime) -> bool:
         and all(
             (root / name).is_file()
             for name in (
-                "native_replay.py",
-                "native_replay_prepare.py",
-                "native_replay_contracts.py",
-                "sim_worker/policy_http_server.py",
+                "sim_worker/rollout/native_replay.py",
+                "sim_worker/rollout/native_replay_prepare.py",
+                "sim_worker/rollout/native_replay_contracts.py",
+                "sim_worker/rollout/server.py",
             )
         )
+        and (root.parent / "firebird_quant/src/firebird_quant/native_consumer.py").is_file()
         and (root.parent / "act_optimizer/src/firebird_act/application.py").is_file()
         and (root.parent / "smolvla_qlora/src/firebird_vla/local_dataset.py").is_file()
     )

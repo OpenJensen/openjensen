@@ -106,10 +106,11 @@ def test_replay_only_runtime_has_no_implicit_engine_training_or_simulator(tmp_pa
     catalog = RuntimeCatalog(runtimes=[runtime])
     assert not catalog.public()["runtimes"][0]["native_replay"]
     for path in [
-        root / "native_replay.py",
-        root / "native_replay_prepare.py",
-        root / "native_replay_contracts.py",
-        root / "sim_worker/policy_http_server.py",
+        root / "sim_worker/rollout/native_replay.py",
+        root / "sim_worker/rollout/native_replay_prepare.py",
+        root / "sim_worker/rollout/native_replay_contracts.py",
+        root / "sim_worker/rollout/server.py",
+        root.parent / "firebird_quant/src/firebird_quant/native_consumer.py",
         root.parent / "act_optimizer/src/firebird_act/application.py",
         root.parent / "smolvla_qlora/src/firebird_vla/local_dataset.py",
     ]:

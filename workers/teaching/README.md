@@ -111,3 +111,7 @@ Primary references: [LiveKit voice tools](https://docs.livekit.io/agents/logic/t
 ## Optional provider proposals
 
 The separate [Jev/Mk1.5 adapters](PROVIDERS.md) support bounded, explicitly configured remote proposals. They do not execute controls or automatically join the voice loop. The worker now provides a strict atomic frame/session admission helper; application/provider wiring and live provider acceptance remain separate gates. Generated contract fixtures are not inference-quality evidence.
+
+## Optional intelligence workbench
+
+The web Teaching panel can explicitly request Jev review suggestions or Mk1.5 frame descriptions through the separate authenticated broker. [Configuration and bounded acceptance](../../docs/teaching-intelligence.md) explain the opt-in private settings file, voice readiness, consent, exact frame freshness and cancellation. Existing executor, LiveKit and cloud configuration are preserved; no provider is contacted by readiness checks.
