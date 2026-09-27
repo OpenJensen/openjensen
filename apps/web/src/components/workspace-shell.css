@@ -45,16 +45,17 @@
   .sidebar .brand { margin-bottom: 14px; }
   .sidebar .projects-section { margin: 0 0 14px; padding: 0 0 14px; border-top: 0; }
   .sidebar .project-picker, .sidebar .project-form { margin: 0; }
-  .grouped-navigation { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; gap: 12px 5px; padding: 0; margin: 0; overflow: visible; }
-  .grouped-navigation .navigation-group { min-width: 0; }
-  .grouped-navigation .sidebar-section-label { display: block; padding-inline: 8px; }
-  .grouped-navigation .stage-list { display: flex; flex-direction: column; gap: 2px; margin-top: 5px; }
-  .grouped-navigation .stage-button { width: 100%; min-height: 40px; font-size: 11px; gap: 6px; padding: 8px; white-space: normal; }
+  .grouped-navigation { display: flex; align-items: stretch; gap: 16px; overflow-x: auto; overscroll-behavior-x: contain; padding: 4px 3px 7px; margin: -4px -3px -7px; scroll-padding-inline: 6px; scrollbar-width: thin; }
+  .grouped-navigation .navigation-group { flex: 0 0 auto; min-width: 0; }
+  .grouped-navigation .sidebar-section-label { display: block; padding: 0 7px; font-size: 9px; }
+  .grouped-navigation .stage-list { display: flex; flex-direction: row; gap: 2px; margin-top: 3px; }
+  .grouped-navigation .stage-button { width: auto; min-height: 44px; font-size: 12px; gap: 6px; padding: 8px 10px; white-space: nowrap; }
   .grouped-navigation .stage-button svg { width: 14px; height: 14px; }
-  .grouped-navigation .navigation-group:last-child { grid-column: 1 / -1; border-top: 1px solid var(--line); padding-top: 7px; }
-  .grouped-navigation .navigation-group:last-child > p { display: none; }
-  .grouped-navigation .navigation-group:last-child .stage-list { flex-direction: row; margin-top: 0; }
-  .grouped-navigation .navigation-group:last-child .stage-button { min-height: 36px; }
+  .grouped-navigation .navigation-group:last-child { border: 0; padding: 0; }
+  .grouped-navigation .navigation-group:last-child > p { display: block; }
+  .grouped-navigation .navigation-group:last-child .stage-list { margin-top: 3px; }
+  .grouped-navigation .navigation-group:last-child .stage-button { min-height: 44px; }
+  .grouped-navigation .stage-order { display: none; }
   .mode-card-grid, .mode-card-grid.two-columns { grid-template-columns: 1fr; }
   .mode-card { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 4px 13px; padding: 16px; }
   .mode-card-top { display: contents; }
@@ -97,4 +98,11 @@
 @media (max-width: 700px) {
   .mode-card-plain { grid-template-columns: minmax(0, 1fr); }
   .mode-card-plain strong, .mode-card-plain .mode-card-detail { grid-column: 1; }
+}
+
+.stage-order { margin-left: auto; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; font-weight: 400; }
+@media (max-width: 700px) {
+  .sidebar .brand { margin-bottom: 10px; }
+  .sidebar .projects-section { margin-bottom: 10px; padding-bottom: 10px; }
+  .sidebar-content { min-width: 0; }
 }
