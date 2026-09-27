@@ -27,6 +27,7 @@ jobs:
       benchmark: ${{ steps.changes.outputs.benchmark }}
       act: ${{ steps.changes.outputs.act }}
       teaching: ${{ steps.changes.outputs.teaching }}
+      decision: ${{ steps.changes.outputs.decision }}
     steps:
       - uses: actions/checkout@v4
         with:

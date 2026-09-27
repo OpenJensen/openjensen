@@ -29,6 +29,7 @@ spec.loader.exec_module(ci_scope)
             ["workers/smolvla_qlora/src/firebird_vla/local_dataset.py"],
             {"application", "training", "act", "teaching"},
         ),
+        (["workers/decision/src/firebird_decision/contracts.py"], {"application", "decision"}),
         (["workers/teaching/requirements-voice.txt"], {"application", "teaching"}),
         (["packages/core/src/vla_platform/lifecycle/contracts.py"], set(ci_scope.SCOPES)),
         (

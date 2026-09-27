@@ -12,7 +12,7 @@ Application and native-worker workflows inspect the local Git diff with `.github
 - Documentation-only changes skip those application/native jobs. The independent simulation workflow keeps its existing behavior.
 - Linux runs core, optional terminal tests, generated API checks, type checking, production build, all browser tests and diagnostics. Windows retains core/terminal tests; a manual application run with **windows_browser** also runs the complete Windows web/build/browser checks. Native desktop packaging remains a separately recorded platform check.
 
-The teaching job checks the real CPU LeRobot recorder/readback in one environment and voice SDK contracts in another. It does not access voice providers, cloud credentials or GPUs. Dependencies are installed on every run; caches contain dependency downloads, not application workspaces, model weights, credentials or virtual environments.
+The teaching job checks the real CPU LeRobot recorder/readback and provider proposal contracts in one environment, and voice SDK contracts in another. A separate small decision-worker job runs contracts without installing Torch or downloading Muose; its opt-in real-model test is explicitly skipped. Actual model-scoring evidence remains a separate local receipt. It does not access voice providers, cloud credentials or GPUs. Dependencies are installed on every run; caches contain dependency downloads, not application workspaces, model weights, credentials or virtual environments.
 
 Superseded revisions of the same PR/workflow are cancelled. Each main/manual run keeps a unique concurrency group. `merge_group` support allows these checks to work if a GitHub merge queue is configured later; this does not enable a merge queue or bypass branch rules.
 

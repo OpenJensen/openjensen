@@ -4,7 +4,7 @@ A self-hosted VLA workspace with persistent projects, visual dataset exploration
 
 The application can run on Xbox while SkyPilot provisions GCP workers. Models and datasets download on the worker; checkpoints stay in private GCS. The UI shows live training metrics, labels checkpoints by model and step, and lets you quantize the latest or an earlier checkpoint. Quantization merges the trained weights, packs Q4/Q8 language tensors, and requires an actual native inference sanity check before reporting success. It does not establish robot task success.
 
-The optional [terminal workbench](docs/terminal.md) uses the same projects, intake and job records.
+The optional [terminal workbench](docs/terminal.md) and [Tauri desktop shell](apps/desktop/README.md) use the same projects, intake and job records. The desktop shell connects to a separately running local backend; it is not yet a bundled Python installer. Optional [Muose decision scoring](workers/decision/README.md) and [Jev/Mk1.5 proposals](workers/teaching/PROVIDERS.md) have isolated worker interfaces and explicit integration/quality gates.
 
 Start with [cloud training and quantization](docs/skypilot-training.md), [model adapters](docs/native-training.md), or the [Xbox deployment guide](deploy/xbox/README.md). The [live verification record](docs/cloud-training-verification.md) separates completed GPU runs from configuration/dependency checks and pending validation. Local evaluation and robot execution require separately configured native workers; the UI exposes only compatible targets. See the [native policy workflow](docs/policy-workflow.md), [Spatial workflow](docs/spatial-workflow.md) and [upstream validation evidence](docs/workflow-validation.md) for their setup and acceptance scope.
 

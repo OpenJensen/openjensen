@@ -22,6 +22,7 @@ jobs:
       benchmark: ${{ steps.changes.outputs.benchmark }}
       act: ${{ steps.changes.outputs.act }}
       teaching: ${{ steps.changes.outputs.teaching }}
+      decision: ${{ steps.changes.outputs.decision }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -138,10 +139,10 @@ jobs:
         run: |
           uv venv --python 3.12.14 workers/teaching/.venv-dataset
           uv pip install --python workers/teaching/.venv-dataset/bin/python --index-url https://download.pytorch.org/whl/cpu 'torch==2.11.0+cpu' 'torchvision==0.26.0+cpu'
-          uv pip install --python workers/teaching/.venv-dataset/bin/python -r workers/teaching/requirements-dataset.txt pytest==8.4.2
+          uv pip install --python workers/teaching/.venv-dataset/bin/python -r workers/teaching/requirements-dataset.txt -r workers/teaching/requirements-providers.txt pytest==8.4.2
           uv pip check --python workers/teaching/.venv-dataset/bin/python
       - name: Recorder and real LeRobot data boundaries
-        run: workers/teaching/.venv-dataset/bin/python -m pytest -q -rs workers/teaching/tests/test_teaching.py workers/teaching/tests/test_multicapture.py workers/smolvla_qlora/tests/test_local_dataset.py
+        run: workers/teaching/.venv-dataset/bin/python -m pytest -q -rs workers/teaching/tests/test_teaching.py workers/teaching/tests/test_multicapture.py workers/teaching/tests/test_providers.py workers/smolvla_qlora/tests/test_local_dataset.py
         env:
           HF_HUB_OFFLINE: '1'
           CUDA_VISIBLE_DEVICES: ''
@@ -153,8 +154,30 @@ jobs:
           uv pip check --python workers/teaching/.venv-voice/bin/python
       - name: Voice contract and failure handling (no provider call)
         run: workers/teaching/.venv-voice/bin/python -m pytest -q -rs workers/teaching/tests/test_voice.py
+  decision:
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.decision != 'false') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.19'
+          python-version: '3.12.14'
+          enable-cache: true
+          cache-suffix: decision-contracts
+          cache-dependency-glob: .github/workflows/native-workers.yml
+      - run: uv venv --python 3.12.14 workers/decision/.venv-ci
+      - run: uv pip install --python workers/decision/.venv-ci/bin/python pytest==8.4.2
+      - name: Advisory worker contracts without model downloads
+        run: workers/decision/.venv-ci/bin/python -m pytest -q -rs workers/decision/tests
+        env:
+          PYTHONPATH: workers/decision/src
+          HF_HUB_OFFLINE: '1'
+          CUDA_VISIBLE_DEVICES: ''
   native-worker-verification:
-    needs: [scope, quantization, training, benchmark, act-inference-export, teaching]
+    needs: [scope, quantization, training, benchmark, act-inference-export, teaching, decision]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -167,7 +190,7 @@ jobs:
           import json, os
           results = json.loads(os.environ['CHECK_RESULTS'])
           scope = results['scope']
-          required = {'quantization': 'quantization', 'training': 'training', 'benchmark': 'benchmark', 'act-inference-export': 'act', 'teaching': 'teaching'}
+          required = {'quantization': 'quantization', 'training': 'training', 'benchmark': 'benchmark', 'act-inference-export': 'act', 'teaching': 'teaching', 'decision': 'decision'}
           failures = []
           for job, output in required.items():
               result = results[job]['result']
