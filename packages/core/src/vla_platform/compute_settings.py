@@ -95,7 +95,7 @@ class ComputeSettings:
         self._launch_prepare_lock = asyncio.Lock()
         self._gcp_status: GcpComputeStatus | None = None
         self._gcp_checked_config: GcpConnectionConfig | None = None
-        self._gcp_checked_stamp: tuple[int, int] | None = None
+        self._gcp_checked_stamp: tuple[int, int, int, int, int] | None = None
         self._gcp_offerings: set[str] = set()
         self._preferences = ComputePreferences()
         if self.path.exists():
@@ -177,10 +177,10 @@ class ComputeSettings:
         connection = next((item for item in connections.providers if item.provider == "gcp"), None)
         return connection.config if connection else None
 
-    def _gcp_connection_stamp(self) -> tuple[int, int] | None:
+    def _gcp_connection_stamp(self) -> tuple[int, int, int, int, int] | None:
         try:
             stat = (self.path.parent / "cloud-connections.json").stat()
-            return stat.st_ino, stat.st_mtime_ns
+            return stat.st_dev, stat.st_ino, stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size
         except OSError:
             return None
 
@@ -196,6 +196,12 @@ class ComputeSettings:
             and self._gcp_status
         ):
             return self._gcp_status.model_copy(deep=True)
+        # Once a prerequisite disappears or changes, its prior verification is
+        # revoked. A recreated file can reuse inode/time values on overlayfs.
+        self._gcp_status = None
+        self._gcp_checked_config = None
+        self._gcp_checked_stamp = None
+        self._gcp_offerings.clear()
         return GcpComputeStatus(
             configured=config is not None,
             skypilot_installed=installed,

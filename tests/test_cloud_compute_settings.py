@@ -294,10 +294,13 @@ def test_only_verified_single_gpu_instance_in_selected_region_is_offered():
     ) == {"A100", "L4"}
 
 
-def test_reconnecting_same_cloud_project_requires_new_check(tmp_path, probes):
+def test_reconnecting_same_cloud_project_requires_new_check(tmp_path, probes, monkeypatch):
     save_connection(tmp_path)
     compute = ComputeSettings(tmp_path)
     assert asyncio.run(compute.check_gcp()).status == "ready"
+    # Deterministically reproduce inode/time reuse on a fast Linux filesystem.
+    stamp = compute._gcp_connection_stamp()
+    monkeypatch.setattr(compute, "_gcp_connection_stamp", lambda: stamp)
     saved = tmp_path / "cloud-connections.json"
     saved.unlink()
     assert compute.gcp_status().status == "unchecked"
