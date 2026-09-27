@@ -159,6 +159,56 @@ def test_download_publishes_new_exact_bytes_with_honest_receipt(tmp_path, monkey
     assert stream.closed and api.http.is_closed and not list(tmp_path.glob("*.partial"))
 
 
+@pytest.mark.parametrize("changed", [False, True])
+def test_borrowed_download_binds_review_and_preserves_connection(tmp_path, monkeypatch, changed):
+    async def scenario():
+        api, calls, stream = download_server(monkeypatch)
+        reviewed = await cli_client._artifact(api, "project", "job:policy")
+        if changed:
+            reviewed["metadata"]["different"] = True
+        kwargs = dict(api=api, expected_artifact=reviewed)
+        if changed:
+            with pytest.raises(ApiError, match="changed since review"):
+                await cli_client.download_artifact(
+                    "project", "job:policy", tmp_path / "out", **kwargs
+                )
+            assert list(tmp_path.iterdir()) == []
+            assert not any(r.url.path.endswith("/download") for r in calls)
+        else:
+            await cli_client.download_artifact("project", "job:policy", tmp_path / "out", **kwargs)
+            assert (tmp_path / "out").read_bytes() == stream.data
+        assert not api.http.is_closed
+        assert await cli_client._artifact(api, "project", "job:policy")
+        await api.close()
+
+    asyncio.run(scenario())
+
+
+def test_borrowed_download_cancel_drains_partial_without_closing_connection(tmp_path, monkeypatch):
+    async def scenario():
+        hold = asyncio.Event()
+        api, calls, stream = download_server(monkeypatch, stream=Bytes(hold=hold))
+        task = asyncio.create_task(
+            cli_client.download_artifact(
+                "project",
+                "job:policy",
+                tmp_path / "out",
+                api=api,
+            )
+        )
+        await hold.wait()
+        assert list(tmp_path.glob(".firebird-download-*.partial"))
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert list(tmp_path.iterdir()) == [] and stream.closed and not api.http.is_closed
+        assert await cli_client._artifact(api, "project", "job:policy")
+        assert all(r.method == "GET" for r in calls)
+        await api.close()
+
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize(
     "headers,status,match",
     [

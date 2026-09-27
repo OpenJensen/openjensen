@@ -189,6 +189,9 @@ async def download_artifact(
     max_bytes: int = DEFAULT_DOWNLOAD_LIMIT,
     timeout: int = 600,
     expected_sha256: str | None = None,
+    *,
+    api: ApiClient | None = None,
+    expected_artifact: dict | None = None,
 ):
     if not 1 <= max_bytes <= MAX_DOWNLOAD_LIMIT or not 1 <= timeout <= 3600:
         raise ApiError("Download requires a 1-byte–100 GiB byte bound and 1–3600 second deadline.")
@@ -199,12 +202,15 @@ async def download_artifact(
         raise ApiError("Output already exists; choose a new file. Nothing was overwritten.")
     if not output.parent.is_dir():
         raise ApiError("Output parent directory must already exist.")
-    api = client()
+    owns_api = api is None
+    api = api or client()
     temporary: Path | None = None
     written_identity = None
     try:
         async with asyncio.timeout(timeout):
             before = await _artifact(api, project, artifact_id)
+            if expected_artifact is not None and before != expected_artifact:
+                raise ApiError("Artifact changed since review; review it again before downloading.")
             descriptor, name = tempfile.mkstemp(
                 prefix=".firebird-download-", suffix=".partial", dir=output.parent
             )
@@ -302,4 +308,5 @@ async def download_artifact(
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
-        await api.close()
+        if owns_api:
+            await api.close()

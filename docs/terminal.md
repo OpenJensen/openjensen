@@ -24,6 +24,7 @@ The default application URL is `http://127.0.0.1:8000`. Override it with `FIREBI
 | F3 | Details and events for the selected job |
 | F4 | Dataset intake |
 | F5 | New lifecycle recipe |
+| F6 | Review and save a policy archive |
 | Ctrl+N | Create a project |
 | Ctrl+R | Refresh |
 | F8 | Review cancellation of the highlighted job |
@@ -119,9 +120,31 @@ it again. Closing the terminal does not cancel an accepted application job.
 
 These recipe paths expose existing backend adapters. CPU replay is not an
 Isaac rollout or task-success evaluation. Quantization reports drift/reload evidence,
-not calibration, hardware performance or robot quality. Artifact download forms
-and complete structured editors remain follow-up work; existing CLI download
-commands remain available.
+not calibration, hardware performance or robot quality. Complete structured recipe
+editors remain follow-up work; the editable JSON form exposes the current contracts.
+
+## Save an artifact from the terminal
+
+F6 opens the selected project's registered policy artifacts. Choose a policy, an
+explicit **new local output file**, a byte limit and a deadline. Optionally enter an
+independently known archive SHA256; the registered manifest hash is a different
+identity. The destination directory must already exist. The default bounds are
+4 GiB and 600 seconds, and the archive includes packaging overhead.
+
+**Review download** reloads the project-owned registry and shows the exact artifact,
+manifest, destination and bounds. **Save archive** explicitly starts one transfer
+over the same connection as the terminal. It refuses a registry changed since review,
+then uses the CLI's existing streaming checks, post-transfer registry comparison and
+atomic no-overwrite publication. It neither extracts the TAR nor changes a model.
+
+**Stop transfer** or Escape during a transfer cancels only that download, removes its
+own partial output and leaves application jobs running. Wait for cleanup, then use
+Escape again to close the form. Quitting drains the transfer before closing the
+terminal connection. No transfer is retried automatically. A successful receipt
+retains the local path, received bytes, archive checksum and registered manifest;
+it does not certify model quality or archive contents. Network deadlines do not
+bound synchronous disk writes/flushes. The noninteractive command below remains
+available without Textual.
 
 ## Follow lifecycle jobs from the CLI
 
@@ -187,7 +210,7 @@ checkpoint-owned training settings; the CLI does not invent those identities.
 ## Verification
 
 ```sh
-uv run --frozen --extra tui pytest tests/test_tui.py tests/test_tui_cli.py tests/test_tui_integration.py tests/test_cli_client.py tests/test_cli_workflow.py tests/test_cli_ack_types.py tests/test_tui_lifecycle.py tests/test_tui_lifecycle_integration.py tests/test_tui_policy_modes.py -q
+uv run --frozen --extra tui pytest tests/test_tui.py tests/test_tui_cli.py tests/test_tui_integration.py tests/test_cli_client.py tests/test_cli_workflow.py tests/test_cli_ack_types.py tests/test_tui_lifecycle.py tests/test_tui_lifecycle_integration.py tests/test_tui_policy_modes.py tests/test_tui_policy_api.py tests/test_tui_artifacts.py -q
 ```
 
 Pilot tests exercise keyboard navigation, forms, 48×18 terminal resizing, stale/invalid responses, selection changes, offline recovery, explicit cancellation and non-retried ambiguous writes. The integration test starts a disposable loopback API on an ephemeral port, creates a real project, runs actual local metadata intake and a supervised slow protocol fixture, cancels that fixture, reads the same records with the CLI, and restarts the API to verify persistence. It never contacts a model provider or cloud service. Fixture evidence is not training, robot-quality or hardware evidence.

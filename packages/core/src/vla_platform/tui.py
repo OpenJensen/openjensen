@@ -179,6 +179,7 @@ class FirebirdApp(App):
         ("ctrl+n", "new_project", "New project"),
         ("f4", "intake", "Intake"),
         Binding("f5", "lifecycle", "New lifecycle", priority=True),
+        Binding("f6", "artifacts", "Save artifact", priority=True),
         ("f8", "cancel_job", "Cancel job"),
         ("ctrl+r", "refresh", "Refresh"),
         ("ctrl+q", "quit", "Quit"),
@@ -209,6 +210,7 @@ class FirebirdApp(App):
         self.writing = False
         self.connected = False
         self.last_read = "Not yet connected"
+        self.download_form = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -218,6 +220,7 @@ class FirebirdApp(App):
             yield Button("New project", id="new-project")
             yield Button("Intake", id="intake", disabled=True)
             yield Button("New lifecycle", id="lifecycle", disabled=True)
+            yield Button("Save artifact", id="artifacts", disabled=True)
             yield Button("Refresh", id="refresh")
             yield Button("Cancel selected job", id="cancel-job", disabled=True)
         with TabbedContent(initial="projects-tab", id="views"):
@@ -236,7 +239,11 @@ class FirebirdApp(App):
         self.query_one("#projects", OptionList).focus()
 
     async def on_unmount(self):
-        await self.client.close()
+        try:
+            if self.download_form is not None:
+                await self.download_form.stop_transfer()
+        finally:
+            await self.client.close()
 
     def notice(self, value):
         if not self.is_running:
@@ -254,6 +261,7 @@ class FirebirdApp(App):
             or not any(p["id"] == self.project_id for p in self.projects)
         )
         self.query_one("#lifecycle", Button).disabled = self.query_one("#intake", Button).disabled
+        self.query_one("#artifacts", Button).disabled = self.query_one("#intake", Button).disabled
         job = self.highlighted_job()
         self.query_one("#cancel-job", Button).disabled = (
             self.writing or not self.connected or job is None or job["status"] not in ACTIVE
@@ -415,6 +423,45 @@ class FirebirdApp(App):
         self.controls()
         self.run_worker(partial(self.open_lifecycle, project_id, epoch), group="lifecycle-context")
 
+    def action_artifacts(self):
+        if self.screen is not self.default_screen or self.query_one("#artifacts", Button).disabled:
+            return
+        self.writing = True
+        self.controls()
+        self.run_worker(
+            partial(self.open_artifacts, self.project_id, self.epoch), group="artifact-context"
+        )
+
+    async def open_artifacts(self, project_id, epoch):
+        from vla_platform.tui_artifacts import ArtifactDownloadForm, artifacts
+
+        try:
+            records = await artifacts(self.client, project_id)
+            if self.epoch != epoch or self.project_id != project_id:
+                self.notice("Project changed. Open the artifact list again.")
+                return
+            if not records:
+                self.notice("No policy artifacts are registered in this project yet.")
+                return
+
+            def current():
+                return self.project_id == project_id and any(
+                    p["id"] == project_id for p in self.projects
+                )
+
+            self.download_form = ArtifactDownloadForm(self.client, project_id, records, current)
+            self.push_screen(self.download_form, self.artifacts_closed)
+        except ApiError as exc:
+            self.notice(str(exc))
+        finally:
+            self.writing = False
+            self.controls()
+
+    def artifacts_closed(self, receipt):
+        self.download_form = None
+        if receipt:
+            self.notice(f"Archive saved: {receipt['output']} · SHA256 {receipt['sha256']}")
+
     async def open_lifecycle(self, project_id, epoch):
         from vla_platform.tui_lifecycle import AttemptJournal, Context, journal_directory
         from vla_platform.tui_lifecycle_forms import LifecycleForm
@@ -543,6 +590,7 @@ class FirebirdApp(App):
             "new-project": self.action_new_project,
             "intake": self.action_intake,
             "lifecycle": self.action_lifecycle,
+            "artifacts": self.action_artifacts,
             "refresh": self.action_refresh,
             "cancel-job": self.action_cancel_job,
         }.get(event.button.id)
