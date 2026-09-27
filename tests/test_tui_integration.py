@@ -178,7 +178,7 @@ def test_keyboard_to_real_intake_cancel_restart_and_cli_share_records(api_server
                 i for i, j in enumerate(app.jobs) if j["id"] == ids["slow"]
             )
             await pilot.pause()
-            await pilot.press("ctrl+x")
+            await pilot.press("f8")
             app.screen.query_one("#confirm", Button).press()
             await wait_for(
                 lambda: any(j["id"] == ids["slow"] and j["status"] == "cancelled" for j in app.jobs)

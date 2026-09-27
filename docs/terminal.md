@@ -25,7 +25,7 @@ The default application URL is `http://127.0.0.1:8000`. Override it with `FIREBI
 | F4 | Dataset intake |
 | Ctrl+N | Create a project |
 | Ctrl+R | Refresh |
-| Ctrl+X | Review cancellation of the highlighted job |
+| F8 | Review cancellation of the highlighted job |
 | Ctrl+Q | Quit the client |
 | Up/Down, Enter | Highlight and open a project/job |
 | Tab / Shift+Tab | Move between controls |

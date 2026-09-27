@@ -177,7 +177,7 @@ class FirebirdApp(App):
         ("f3", "view('detail-tab')", "Details"),
         ("ctrl+n", "new_project", "New project"),
         ("f4", "intake", "Intake"),
-        ("ctrl+x", "cancel_job", "Cancel job"),
+        ("f8", "cancel_job", "Cancel job"),
         ("ctrl+r", "refresh", "Refresh"),
         ("ctrl+q", "quit", "Quit"),
     ]

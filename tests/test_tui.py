@@ -397,3 +397,19 @@ def test_cancel_before_worker_start_does_not_leak_coroutines_or_submit():
         asyncio.run(scenario())
         gc.collect()
     assert not [warning for warning in captured if "was never awaited" in str(warning.message)]
+
+
+def test_cancel_shortcut_works_while_readonly_details_has_focus():
+    async def scenario():
+        server = Server()
+        app = FirebirdApp(client=server.client(), poll_seconds=100)
+        async with app.run_test() as pilot:
+            await choose_project(app, pilot)
+            await pilot.press("enter")
+            assert isinstance(app.focused, TextArea)
+            await pilot.press("f8")
+            assert isinstance(app.screen, CancelForm)
+            await pilot.press("escape")
+            assert not any(call[0] == "POST" for call in server.calls)
+
+    asyncio.run(scenario())
