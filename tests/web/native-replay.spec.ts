@@ -8,7 +8,7 @@ const dataset = { id: 'data', project_id: 'alpha', kind: 'dataset.inspect', stat
 const panel = (page: Page) => page.getByRole('region', { name: 'CPU observation replay', exact: true });
 const submit = (page: Page) => page.getByRole('button', { name: 'Run CPU observation replay', exact: true });
 async function fixture(page: Page) {
-  const state = { jobs: [dataset] as Record<string, any>[], posts: [] as Record<string, any>[], cancelled: [] as string[], outcome: 'ok', postGate: null as Promise<void> | null, invalid: false, workers: [runtime] as Record<string, unknown>[] };
+  const state = { jobs: [dataset] as Record<string, any>[], posts: [] as Record<string, any>[], cancelled: [] as string[], outcome: 'ok', postGate: null as Promise<void> | null, invalid: false, prediction: 100, workers: [runtime] as Record<string, unknown>[] };
   await page.route('**/api/v1/**', async route => {
     const req = route.request(), path = new URL(req.url()).pathname;
     if (path === '/api/v1/projects') return route.fulfill({ json: [{ id: 'alpha', name: 'CPU replay fixture', created_at: time }] });
@@ -28,7 +28,7 @@ async function fixture(page: Page) {
     if (path.endsWith('/events')) return route.fulfill({ json: [] });
     if (path.endsWith('/replay')) {
       const job = state.jobs.find(item => item.id === 'replay-001')!;
-      return route.fulfill({ json: { artifact_id: 'replay-001:operation', job_id: job.id, model_id: state.invalid ? 'wrong' : model, source_kind: 'generated_fixture', coordinate_names: ['j0', 'j1', 'j2', 'j3', 'j4', 'gripper'], units: job.request.native_replay.units, records: job.request.native_replay.selection.map((row: object) => ({ ...row, reset_repeat_exact: true, actions: Array.from({ length: 100 }, (_, step) => Array.from({ length: 6 }, (_, joint) => joint + step / 100)) })) } });
+      return route.fulfill({ json: { artifact_id: 'replay-001:operation', job_id: job.id, model_id: state.invalid ? 'wrong' : model, source_kind: 'generated_fixture', coordinate_names: ['j0', 'j1', 'j2', 'j3', 'j4', 'gripper'], units: job.request.native_replay.units, records: job.request.native_replay.selection.map((row: object) => ({ ...row, reset_repeat_exact: true, actions: Array.from({ length: state.prediction }, (_, step) => Array.from({ length: 6 }, (_, joint) => joint + step / 100)) })) } });
     }
     if (path.startsWith('/api/v1/jobs/')) { const job = state.jobs.find(item => item.id === path.split('/').at(-1)); if (job) return route.fulfill({ json: job }); }
     if (req.method() !== 'GET') return route.fulfill({ status: 405, json: {} });
@@ -50,7 +50,7 @@ async function prepare(page: Page) {
 }
 function complete(state: Awaited<ReturnType<typeof fixture>>) {
   const job = state.jobs.find(item => item.id === 'replay-001')!;
-  job.status = 'succeeded'; job.stage = 'replaying'; job.result = { artifacts: [{ ...policy, id: 'replay-001:operation', job_id: job.id, format: 'native_run_record', metadata: { recipe: 'native-observation-replay-v1', model_id: model } }], reports: [{ operation: 'policy.run', stage: 'native_replay', mode: 'independent_observation_replay', device: 'cpu', source_artifact_id: policy.id, dataset_job_id: 'data', observation_source: { kind: 'generated_fixture' }, model_id: model, observations: 2, action_shape: [100, 6], reset_repeat_exact: true, server_closed: true, task_success: null, quality_verified: false, calibration_verified: false, speedup_verified: false, isaac_runtime_verified: false, elapsed_seconds: 2 }] };
+  job.status = 'succeeded'; job.stage = 'replaying'; job.result = { artifacts: [{ ...policy, id: 'replay-001:operation', job_id: job.id, format: 'native_run_record', metadata: { recipe: 'native-observation-replay-v1', model_id: model } }], reports: [{ operation: 'policy.run', stage: 'native_replay', mode: 'independent_observation_replay', device: 'cpu', source_artifact_id: policy.id, dataset_job_id: 'data', observation_source: { kind: 'generated_fixture' }, model_id: model, observations: 2, action_shape: [state.prediction, 6], reset_repeat_exact: true, server_closed: true, task_success: null, quality_verified: false, calibration_verified: false, speedup_verified: false, isaac_runtime_verified: false, elapsed_seconds: 2 }] };
   return job;
 }
 test('only local packed policies and explicit bounded observations can be replayed', async ({ page }) => {
@@ -489,4 +489,20 @@ test('a later history failure disables cancellation recovery acknowledgment', as
   await page.getByRole('button', { name: 'Refresh replay jobs', exact: true }).click();
   await expect(page.getByText(/Job updates are unavailable/)).toBeVisible();
   await expect(acknowledgeCancellation(page)).toBeDisabled(); expect(state.cancelled).toEqual(['replay-001']);
+});
+
+
+test('8-step replay shows all predicted actions and chart endpoints without executing3 as the full horizon', async ({ page }) => {
+  const state = await fixture(page); state.prediction = 8; await prepare(page); await submit(page).click();
+  await expect(page.getByRole('article', { name: 'Observation replay details' })).toHaveAttribute('data-job-id', 'replay-001'); complete(state);
+  await page.getByRole('button', { name: 'Refresh replay jobs' }).click();
+  const charts = page.getByRole('region', { name: 'Predicted action chunks' });
+  await expect(charts.getByRole('img')).toHaveCount(6);
+  await expect(charts.getByRole('img').first()).toHaveAccessibleName(/8 predicted actions/);
+  await expect(page.getByRole('article', { name: 'Observation replay details' })).toContainText('8 × 6');
+  await expect(charts.getByText(/actions 1–8$/)).toHaveCount(6);
+  const points = await charts.locator('polyline').first().getAttribute('points');
+  expect(points?.split(' ')).toHaveLength(8); expect(points?.split(' ').at(-1)?.split(',')[0]).toBe('256');
+  await expect(page.getByText(/does not measure task success/)).toBeVisible();
+  expect(state.posts).toHaveLength(1);
 });

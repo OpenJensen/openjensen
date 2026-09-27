@@ -6,11 +6,13 @@ export class UncertainPolicyJob extends Error {
 export class PolicyJobHttpError extends Error {
   constructor(message: string, readonly status: number, readonly initialRejection = false) { super(message); }
 }
-export type PolicyJobRequestOptions = { idempotencyKey?: string; allowInitialRejection?: boolean };
+export type PolicyJobRequestOptions = { idempotencyKey?: string; allowInitialRejection?: boolean; maxResponseBytes?: 1048576 | 8388608 };
 export function record(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === 'object' && !Array.isArray(value); }
 
 // Lifecycle mutations must not silently replay after an ambiguous network result.
 export async function policyJobRequest(path: string, body?: unknown, options: PolicyJobRequestOptions = {}): Promise<unknown> {
+  const limit = options.maxResponseBytes ?? 1_048_576;
+  if (![1_048_576, 8_388_608].includes(limit) || (body !== undefined && limit !== 1_048_576)) throw new Error('Invalid bounded response limit.');
   const key = options.idempotencyKey;
   if (key !== undefined && !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(key)) throw new Error('Invalid submission key.');
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 15_000);
@@ -19,7 +21,7 @@ export async function policyJobRequest(path: string, body?: unknown, options: Po
     const reader = response.body?.getReader();
     if (!reader) throw new Error('Application returned an empty response.');
     const parts: Uint8Array[] = []; let bytes = 0;
-    try { for (;;) { const next = await reader.read(); if (next.done) break; bytes += next.value.length; if (bytes > 1024 * 1024) throw new Error('Application response is too large.'); parts.push(next.value); } }
+    try { for (;;) { const next = await reader.read(); if (next.done) break; bytes += next.value.length; if (bytes > limit) throw new Error('Application response is too large.'); parts.push(next.value); } }
     finally { await reader.cancel(); }
     const data = new Uint8Array(bytes); let offset = 0; for (const part of parts) { data.set(part, offset); offset += part.length; }
     const value: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(data));
