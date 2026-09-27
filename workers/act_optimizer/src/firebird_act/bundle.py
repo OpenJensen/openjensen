@@ -116,9 +116,11 @@ def validate_config(config: dict[str, Any], *, source: bool) -> None:
     if (
         not isinstance(shape, list)
         or len(shape) != 3
+        or type(shape[0]) is not int
         or shape[0] != 3
         or image.get("type") != "VISUAL"
-        or any(type(n) is not int or not 32 <= n <= 1024 for n in shape[1:])
+        or any(type(n) is not int or not 32 <= n <= 2048 for n in shape[1:])
+        or shape[1] * shape[2] > 1920 * 1080
     ):
         raise ValueError("Unsupported RGB image shape")
     for key, low, high in (
