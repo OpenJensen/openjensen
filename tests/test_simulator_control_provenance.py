@@ -3,6 +3,7 @@
 import hashlib
 import json
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 from vla_platform.lifecycle import control_provenance as provenance
@@ -249,3 +250,15 @@ def test_rollout_rejects_changed_or_missing_coordinate_evidence(fault):
 def test_legacy_run_cannot_silently_switch_coordinate_system(rollout):
     with pytest.raises(ValueError):
         runner.verify_coordinate_evidence({}, rollout)
+
+
+def test_isolated_workers_ship_the_same_versioned_coordinate_schema():
+    root = Path(__file__).resolve().parents[1]
+    expected = Path(schema.__file__).read_bytes()
+    paths = [
+        "workers/smolvla_qlora/src/firebird_vla/control_schema.py",
+        "workers/act_optimizer/src/firebird_act/control_schema.py",
+        "workers/isaac_sim/sim_worker/rollout/control_schema.py",
+    ]
+    for path in paths:
+        assert (root / path).read_bytes() == expected, path

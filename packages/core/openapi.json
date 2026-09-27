@@ -803,6 +803,54 @@
         "title": "CapabilitySupport",
         "type": "object"
       },
+      "CaptureEpisode": {
+        "additionalProperties": false,
+        "properties": {
+          "episode_id": {
+            "pattern": "^[a-f0-9]{32}$",
+            "title": "Episode Id",
+            "type": "string"
+          },
+          "frames": {
+            "maximum": 3600.0,
+            "minimum": 1.0,
+            "title": "Frames",
+            "type": "integer"
+          },
+          "outcome": {
+            "enum": [
+              "unknown",
+              "operator_reported_failure"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "receipt_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Receipt Sha256",
+            "type": "string"
+          },
+          "termination": {
+            "enum": [
+              "finish",
+              "reset",
+              "step_limit",
+              "shutdown"
+            ],
+            "title": "Termination",
+            "type": "string"
+          }
+        },
+        "required": [
+          "episode_id",
+          "receipt_sha256",
+          "frames",
+          "termination",
+          "outcome"
+        ],
+        "title": "CaptureEpisode",
+        "type": "object"
+      },
       "Choice": {
         "additionalProperties": false,
         "properties": {
@@ -2525,6 +2573,9 @@
               },
               {
                 "$ref": "#/components/schemas/AugmentationRequest"
+              },
+              {
+                "$ref": "#/components/schemas/TeachingCaptureRequest"
               }
             ],
             "title": "Request"
@@ -2539,6 +2590,9 @@
               },
               {
                 "$ref": "#/components/schemas/AugmentationResult"
+              },
+              {
+                "$ref": "#/components/schemas/TeachingCaptureResult"
               },
               {
                 "type": "null"
@@ -4577,6 +4631,41 @@
         "title": "ScoreResult",
         "type": "object"
       },
+      "SessionStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "job": {
+            "$ref": "#/components/schemas/Job"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "stop_requested": {
+            "title": "Stop Requested",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "job",
+          "ready",
+          "session_id",
+          "stop_requested"
+        ],
+        "title": "SessionStatus",
+        "type": "object"
+      },
       "SimulationRequest": {
         "additionalProperties": false,
         "description": "A registered scenario selection; paths and commands belong to the operator.",
@@ -4652,6 +4741,158 @@
           "source_manifest_sha256"
         ],
         "title": "SimulationTarget",
+        "type": "object"
+      },
+      "TeachingCaptureRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "const": "teaching.capture",
+            "default": "teaching.capture",
+            "title": "Operation",
+            "type": "string"
+          },
+          "profile_id": {
+            "pattern": "^[a-zA-Z0-9_-]{1,64}$",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "profile_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Profile Sha256",
+            "type": "string"
+          },
+          "timeout_seconds": {
+            "default": 300,
+            "maximum": 3600.0,
+            "minimum": 1.0,
+            "title": "Timeout Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "profile_id",
+          "profile_sha256"
+        ],
+        "title": "TeachingCaptureRequest",
+        "type": "object"
+      },
+      "TeachingCaptureResult": {
+        "additionalProperties": false,
+        "properties": {
+          "content_verified": {
+            "const": true,
+            "default": true,
+            "title": "Content Verified",
+            "type": "boolean"
+          },
+          "episodes": {
+            "items": {
+              "$ref": "#/components/schemas/CaptureEpisode"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Episodes",
+            "type": "array"
+          },
+          "inventory_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Inventory Sha256",
+            "type": "string"
+          },
+          "lineage_group": {
+            "pattern": "^[a-zA-Z0-9_.:-]{1,128}$",
+            "title": "Lineage Group",
+            "type": "string"
+          },
+          "operation": {
+            "const": "teaching.capture",
+            "default": "teaching.capture",
+            "title": "Operation",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "recorded",
+              "synthetic"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "physical_calibration_verified": {
+            "const": false,
+            "default": false,
+            "title": "Physical Calibration Verified",
+            "type": "boolean"
+          },
+          "process_cleanup_verified": {
+            "const": true,
+            "default": true,
+            "title": "Process Cleanup Verified",
+            "type": "boolean"
+          },
+          "profile_id": {
+            "pattern": "^[a-zA-Z0-9_-]{1,64}$",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "profile_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Profile Sha256",
+            "type": "string"
+          },
+          "published": {
+            "const": true,
+            "default": true,
+            "title": "Published",
+            "type": "boolean"
+          },
+          "recording_configuration_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Recording Configuration Sha256",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "session_id": {
+            "pattern": "^[a-f0-9]{32}$",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "session_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Session Sha256",
+            "type": "string"
+          },
+          "simulator_coordinates": {
+            "const": true,
+            "default": true,
+            "title": "Simulator Coordinates",
+            "type": "boolean"
+          },
+          "task_success_claimed": {
+            "const": false,
+            "default": false,
+            "title": "Task Success Claimed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "profile_id",
+          "profile_sha256",
+          "session_id",
+          "session_sha256",
+          "inventory_sha256",
+          "recording_configuration_sha256",
+          "episodes",
+          "origin",
+          "lineage_group"
+        ],
+        "title": "TeachingCaptureResult",
         "type": "object"
       },
       "TeachingCommand": {
@@ -6819,6 +7060,7 @@
             "required": true,
             "schema": {
               "enum": [
+                "teaching.capture",
                 "dataset.inspect",
                 "dataset.augment",
                 "policy.finetune",
@@ -6864,6 +7106,432 @@
           }
         },
         "summary": "Saved Submission"
+      }
+    },
+    "/api/v1/projects/{project_id}/teaching/profiles": {
+      "get": {
+        "operationId": "profiles_api_v1_projects__project_id__teaching_profiles_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Profiles",
+        "tags": [
+          "Managed teaching"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/teaching/sessions": {
+      "post": {
+        "operationId": "start_api_v1_projects__project_id__teaching_sessions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeachingCaptureRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start",
+        "tags": [
+          "Managed teaching"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/teaching/sessions/{job_id}": {
+      "get": {
+        "operationId": "status_api_v1_projects__project_id__teaching_sessions__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Status",
+        "tags": [
+          "Managed teaching"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/teaching/sessions/{job_id}/commands": {
+      "post": {
+        "operationId": "command_api_v1_projects__project_id__teaching_sessions__job_id__commands_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeachingCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Command",
+        "tags": [
+          "Managed teaching"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/teaching/sessions/{job_id}/commands/{command_id}": {
+      "get": {
+        "operationId": "receipt_api_v1_projects__project_id__teaching_sessions__job_id__commands__command_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "command_id",
+            "required": true,
+            "schema": {
+              "title": "Command Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Receipt",
+        "tags": [
+          "Managed teaching"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/teaching/sessions/{job_id}/frame": {
+      "get": {
+        "operationId": "frame_api_v1_projects__project_id__teaching_sessions__job_id__frame_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Frame",
+        "tags": [
+          "Managed teaching"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/teaching/sessions/{job_id}/state": {
+      "get": {
+        "operationId": "state_api_v1_projects__project_id__teaching_sessions__job_id__state_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "State",
+        "tags": [
+          "Managed teaching"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/teaching/sessions/{job_id}/stop": {
+      "post": {
+        "operationId": "stop_api_v1_projects__project_id__teaching_sessions__job_id__stop_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stop",
+        "tags": [
+          "Managed teaching"
+        ]
       }
     },
     "/api/v1/simulation-options": {
