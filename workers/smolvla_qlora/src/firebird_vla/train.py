@@ -8,6 +8,15 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
+from .accumulation import (
+    CONTRACT_FILE,
+    STATE_FILE,
+    loss_weight,
+    progress_record,
+    read_record,
+    resolve_contract,
+    validate_progress,
+)
 from .checkpoint import (
     resolve_checkpoint,
     save_checkpoint,
@@ -125,7 +134,16 @@ def train(cfg, resume=None):
                 raise ValueError("Resume requires the checkpoint's original GPU compute precision")
             validate_resume_recipe(resume_path, cfg)
             saved_splits = json.loads((resume_path / "splits.json").read_text())
+        optimization = resolve_contract(
+            cfg.batch_size, cfg.gradient_accumulation_steps, resume=resume_path
+        )
+        if (
+            resume_path
+            and (resume_path / CONTRACT_FILE).exists() != (resume_path / STATE_FILE).exists()
+        ):
+            raise ValueError("Incomplete optimization checkpoint")
         train_set, validation_set, stats, splits = load_data(cfg, saved_splits)
+        write_json(output / CONTRACT_FILE, optimization)
         write_json(output / "splits.json", splits)
         write_json(output / "stats.json", stats)
         report(
@@ -186,6 +204,15 @@ def train(cfg, resume=None):
             optimizer.load_state_dict(state["optimizer"])
             scheduler.load_state_dict(state["scheduler"])
             step, consumed = state["step"], state["consumed_batches"]
+            if (resume_path / STATE_FILE).exists():
+                validate_progress(
+                    read_record(resume_path / STATE_FILE),
+                    optimization,
+                    frames=len(train_set),
+                    updates=step,
+                    consumed=consumed,
+                    skipped=consumed // cfg.gradient_accumulation_steps - step,
+                )
             torch.set_rng_state(state["torch_rng"])
             torch.cuda.set_rng_state(state["cuda_rng"], device=0)
             random.setstate(state["python_rng"])
@@ -200,6 +227,7 @@ def train(cfg, resume=None):
                 "gpu": torch.cuda.get_device_name(0),
                 "compute_dtype": dtype_name,
                 "effective_batch_size": cfg.batch_size * cfg.gradient_accumulation_steps,
+                "optimization_contract": optimization,
                 "note": "Last batch of each epoch may be smaller. No task-success measurement.",
             },
         )
@@ -235,8 +263,16 @@ def train(cfg, resume=None):
                 raise FloatingPointError(
                     f"Non-finite training loss before optimizer step {step + 1}"
                 )
-            scaler.scale(loss / cfg.gradient_accumulation_steps).backward()
-            train_loss += loss.detach().item() / cfg.gradient_accumulation_steps
+            weight = loss_weight(optimization, consumed, len(train_set), len(batch["action"]))
+            if optimization["loss_weighting"] == "equal_microbatch_mean_v1":
+                # Keep historical checkpoint arithmetic, including division, unchanged.
+                scaled_loss = loss / cfg.gradient_accumulation_steps
+                loss_value = loss.detach().item() / cfg.gradient_accumulation_steps
+            else:
+                scaled_loss = loss if weight == 1.0 else loss * weight
+                loss_value = loss.detach().item() * weight
+            scaler.scale(scaled_loss).backward()
+            train_loss += loss_value
             consumed += 1
             if consumed % cfg.gradient_accumulation_steps:
                 continue
@@ -268,6 +304,13 @@ def train(cfg, resume=None):
                 "grad_norm": float(grad_norm),
                 "learning_rate": scheduler.get_last_lr()[0],
                 "skipped_optimizer_steps": consumed // cfg.gradient_accumulation_steps - step,
+                "optimization_state": progress_record(
+                    optimization,
+                    frames=len(train_set),
+                    updates=step,
+                    consumed=consumed,
+                    skipped=consumed // cfg.gradient_accumulation_steps - step,
+                ),
                 "compute_dtype": dtype_name,
                 "elapsed_seconds": time.monotonic() - started,
                 "peak_allocated_bytes": torch.cuda.max_memory_allocated(),
@@ -334,6 +377,8 @@ def train(cfg, resume=None):
                     scaler=scaler,
                     compute_dtype=dtype_name,
                     temporal_contract=temporal,
+                    optimization_contract=optimization,
+                    optimization_state=record["optimization_state"],
                 )
                 print(json.dumps({"checkpoint_saved": saved.name, "step": step}), flush=True)
                 if step < cfg.steps:

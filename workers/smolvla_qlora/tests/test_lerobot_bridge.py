@@ -54,7 +54,7 @@ def test_native_recipe_rejects_unknown_arguments_and_moving_models():
     with pytest.raises(ValueError, match="immutable model"):
         resolve_recipe(request(model_revision="main"))
     with pytest.raises(ValueError, match="accumulation"):
-        resolve_recipe(request(gradient_accumulation_steps=2))
+        resolve_recipe(request("diffusion", gradient_accumulation_steps=2))
 
 
 def test_camera_constraints_apply_before_worker_allocations():
@@ -290,3 +290,13 @@ def test_native_dimension_bounds_fail_before_cloud_worker_allocation():
     with pytest.raises(ValueError, match="at most 24 action"):
         resolve_recipe(job)
     assert NATIVE_PROFILES["vla_jepa"]["overrides"]["binarize_gripper_action"] is False
+
+
+def test_act_accumulation_resolves_to_native_microbatch_units():
+    recipe, profile = resolve_recipe(request(gradient_accumulation_steps=3))
+    arguments = cli_arguments(recipe, profile, output="out", dataset_root="data")
+    assert "--steps=6" in arguments
+    assert "--accelerator.gradient_accumulation.steps=3" in arguments
+    assert "--save_freq=3" in arguments
+    assert "--eval_steps=6" in arguments
+    assert recipe["steps"] == 2

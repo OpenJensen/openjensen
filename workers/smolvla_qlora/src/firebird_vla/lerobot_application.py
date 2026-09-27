@@ -12,6 +12,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from .accumulation import accumulation_steps, checkpoint_optimization, native_loop_values
 from .application import publish
 from .checkpoint import verify_bundle, write_json
 from .local_dataset import bind_local_recipe, verify_local_snapshot
@@ -57,8 +58,7 @@ def resolve_recipe(job):
         )
     if recipe.get("model_revision") != profile["model_revision"]:
         raise ValueError("Native training must use the catalog's immutable model revision")
-    if recipe.get("gradient_accumulation_steps", 1) != 1:
-        raise ValueError("Native training currently requires gradient_accumulation_steps=1")
+    accumulation_steps(recipe, profile["policy_type"])
     validate_temporal(recipe, profile["policy_type"])
     data = job["dataset"]
     if data.get("source") not in {"huggingface", "local"}:
@@ -136,6 +136,7 @@ def cli_arguments(
         "cudnn_deterministic": True,
         "accelerator.gradient_accumulation.steps": 1,
     }
+    values.update(native_loop_values(recipe, profile["policy_type"]))
     initialization = profile["initialization"]
     if initialization == "pretrained":
         values["policy.path"] = str(model_root)
@@ -254,7 +255,11 @@ def main():
         temporal = json.loads((checkpoint / "temporal-contract.json").read_text())
         if json.loads(verification.read_text()).get("temporal_contract") != temporal:
             raise ValueError("Fresh reload did not verify the checkpoint temporal contract")
+        optimization = checkpoint_optimization(checkpoint, native=True)
+        if json.loads(verification.read_text()).get("optimization") != optimization:
+            raise ValueError("Fresh reload optimization evidence differs from the checkpoint")
         metadata = {
+            "optimization": optimization,
             "temporal_contract": temporal,
             "method": "full",
             "architecture": profile["policy_type"],
@@ -272,6 +277,7 @@ def main():
             bundle, metadata, profile["label"] + " checkpoint", "training_checkpoint"
         )
         result["report"] = {
+            "optimization": optimization,
             "temporal_contract": temporal,
             "scope": "native_training_and_reload",
             "method": "full",

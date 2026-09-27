@@ -7,6 +7,7 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
+from .accumulation import checkpoint_optimization
 from .checkpoint import (
     resolve_checkpoint,
     sha256,
@@ -153,7 +154,14 @@ def main():
                 != temporal
             ):
                 raise ValueError("Fresh reload did not verify the checkpoint temporal contract")
+            optimization = checkpoint_optimization(checkpoint, native=False)
+            if (
+                json.loads((bundle / "verification.json").read_text()).get("optimization")
+                != optimization
+            ):
+                raise ValueError("Fresh reload optimization evidence differs from the checkpoint")
             metadata = {
+                "optimization": optimization,
                 "temporal_contract": temporal,
                 "method": method,
                 "architecture": "smolvla",
@@ -169,6 +177,7 @@ def main():
                 bundle, metadata, METHODS[method] + " checkpoint", "training_checkpoint"
             )
             result["report"] = {
+                "optimization": optimization,
                 "temporal_contract": temporal,
                 "scope": "native_training_and_reload",
                 "method": method,
