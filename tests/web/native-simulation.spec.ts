@@ -11,7 +11,7 @@ function job(id: string, kind = 'policy.run', status = 'running', source = 'act-
     compute_target: null, simulation_target: kind === 'policy.run' ? { profile_id: profile.id, profile_sha256: 'b'.repeat(64), provider: 'gcp', accelerators: ['L4', 'H100'], source_manifest_sha256: 'a'.repeat(64) } : null, result: null as null | Record<string, unknown> };
 }
 async function fixture(page: Page) {
-  const state = { profiles: [profile], optionsError: false, jobsError: false, submit: 'ok', posts: [] as { path: string; body: unknown }[], jobs: [] as ReturnType<typeof job>[], artifacts: [artifact('act-export'), artifact('smol-export', 'smolvla'), artifact('periodic', 'act', 'training_checkpoint'), artifact('remote', 'act', 'native_checkpoint', { storage: 'gcs', remote_uri: 'gs://fixture' }), artifact('unsupported', 'diffusion')], uploaded: Buffer.alloc(0), cancels: [] as string[], events: [] as string[] };
+  const state = { profiles: [profile], optionsError: false, jobsError: false, submit: 'ok', posts: [] as { path: string; body: unknown }[], jobs: [] as ReturnType<typeof job>[], artifacts: [artifact('act-export'), artifact('smol-export', 'smolvla'), artifact('periodic', 'act', 'training_checkpoint'), artifact('remote', 'act', 'native_checkpoint', { storage: 'gcs', remote_uri: 'gs://fixture' }), artifact('unsupported', 'diffusion')], uploaded: Buffer.alloc(0), cancels: [] as string[], events: [] as string[], tasks: { isaac: 'RUNNING', vla: 'STARTING' } };
   await page.route('**/api/v1/**', async route => {
     const req = route.request(), url = new URL(req.url()), path = url.pathname;
     if (req.method() === 'POST') {
@@ -37,7 +37,7 @@ async function fixture(page: Page) {
     if (path === '/api/v1/projects') return route.fulfill({ json: [{ id: 'alpha', name: 'Generated simulation fixture', created_at: timestamp }, { id: 'beta', name: 'Second fixture', created_at: timestamp }] });
     if (path.endsWith('/jobs') && path.includes('/projects/')) return route.fulfill(state.jobsError ? { status: 503, json: { detail: 'Fixture job outage' } } : { json: path.includes('/alpha/') ? state.jobs : [] });
     if (path.endsWith('/artifacts')) return route.fulfill({ json: path.includes('/alpha/') ? state.artifacts : [] });
-    if (path.endsWith('/events')) { const id = path.split('/').at(-2)!; state.events.push(id); return route.fulfill({ json: [{ sequence: 1, stage: 'simulation', timestamp, message: `Generated event for ${id}`, data: {} }] }); }
+    if (path.endsWith('/events')) { const id = path.split('/').at(-2)!; state.events.push(id); return route.fulfill({ json: [{ sequence: 1, stage: 'simulation', timestamp, message: `Generated event for ${id}`, data: { tasks: state.tasks } }] }); }
     if (path.startsWith('/api/v1/jobs/')) { const id = path.split('/').at(-1)!; const selected = state.jobs.find(item => item.id === id); if (selected) return route.fulfill({ json: selected }); }
     return route.continue();
   });
@@ -170,5 +170,21 @@ test('changing the available profile cannot carry consent to a different cloud t
   await expect(page.getByLabel('Isaac profile', { exact: true })).toHaveValue('replacement-cup');
   await expect(page.getByRole('checkbox', { name: /experimental, paid cloud rollout/ })).not.toBeChecked();
   await expect(page.getByRole('button', { name: 'Start experimental simulation' })).toBeDisabled();
+  expect(state.posts).toHaveLength(0);
+});
+
+
+test('native and Cloud event views display bounded observed worker states as they change', async ({ page }) => {
+  const state = await fixture(page); state.jobs.push(job('observed'));
+  await page.getByRole('button', { name: 'Refresh simulation jobs' }).click();
+  await page.getByLabel('Saved simulation job').selectOption('observed');
+  await expect(page.getByRole('region', { name: 'Native simulation event log' })).toContainText('Isaac: RUNNING · VLA: STARTING');
+  state.tasks = { isaac: 'SUCCEEDED', vla: 'CANCELLING' };
+  await expect(page.getByRole('region', { name: 'Native simulation event log' })).toContainText('Isaac: SUCCEEDED · VLA: CANCELLING', { timeout: 7000 });
+  await page.getByRole('button', { name: 'Cloud runs', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Application job event log', exact: true })).toContainText('Isaac: SUCCEEDED · VLA: CANCELLING');
+  state.tasks = { isaac: 'UNRECOGNIZED_STATUS', vla: 'arbitrary-not-a-worker-state' };
+  await page.getByRole('button', { name: 'Refresh application jobs' }).click();
+  await expect(page.getByRole('region', { name: 'Application job event log', exact: true })).toHaveText(`${timestamp} · simulation · Generated event for observed`);
   expect(state.posts).toHaveLength(0);
 });

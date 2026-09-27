@@ -105,3 +105,12 @@ export function uploadModel(projectId: string, profileId: string, file: File, pr
   return { result, abort: () => xhr.abort() };
 }
 export const simulationVideoUrl = (id: string) => `${prefix}/jobs/${encode(id)}/simulation-media/video`;
+
+// Match the pinned runner's observed states; ignore extra fields and arbitrary
+// strings instead of presenting them as a verified worker status.
+const workerStates = new Set(['PENDING', 'SUBMITTED', 'STARTING', 'RUNNING', 'WINDING_DOWN', 'RECOVERING', 'CANCELLING', 'SUCCEEDED', 'CANCELLED', 'FAILED', 'FAILED_SETUP', 'FAILED_PRECHECKS', 'FAILED_NO_RESOURCE', 'FAILED_CONTROLLER']);
+export function simulationTaskSummary(data: unknown): string {
+  if (!object(data) || !object(data.tasks)) return '';
+  const tasks = data.tasks;
+  return (['isaac', 'vla'] as const).flatMap(role => typeof tasks[role] === 'string' && workerStates.has(tasks[role]) ? [`${role === 'isaac' ? 'Isaac' : 'VLA'}: ${tasks[role]}`] : []).join(' · ');
+}

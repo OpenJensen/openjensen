@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, isActive } from '@/lib/api';
-import { simulationTarget } from '@/lib/native-simulation';
+import { simulationTarget, simulationTaskSummary } from '@/lib/native-simulation';
 import { runLabel, runSummary } from '@/lib/run-summary';
 
 function reported(value: boolean | null | undefined) {
@@ -58,7 +58,7 @@ export function CloudRuns({ projectId, onOpenTraining, onOpenSimulation }: { pro
         <h3>Recorded job events</h3>
         {events.isPending && <p role="status">Loading job events…</p>}
         {events.isError && <p role="alert">Job events are unavailable. {events.error.message} Previously received events may be out of date.</p>}
-        <pre className="cloud-log-tail" role="region" aria-label="Application job event log" tabIndex={0}>{events.data?.length ? events.data.slice(-100).map(event => `${event.timestamp} · ${event.stage} · ${event.message}`).join('\n') : 'No events received for this job yet.'}</pre>
+        <pre className="cloud-log-tail" role="region" aria-label="Application job event log" tabIndex={0}>{events.data?.length ? events.data.slice(-100).map(event => `${event.timestamp} · ${event.stage} · ${event.message}${simulationTaskSummary(event.data) ? ` · ${simulationTaskSummary(event.data)}` : ''}`).join('\n') : 'No events received for this job yet.'}</pre>
         <p className="field-help">Showing at most the latest 100 recorded events. Job completion is not robot task success or proof of cloud resource cleanup.</p>
       </>}
     </section>

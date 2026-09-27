@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, artifactDownloadUrl, isActive } from '@/lib/api';
-import { cancelSimulation, isSimulationJob, nativeInput, simulationOptions, simulationTarget, simulationVideoUrl, startSimulation, UncertainSubmission, uploadModel, type NativeArtifact, type SimulationJob } from '@/lib/native-simulation';
+import { cancelSimulation, isSimulationJob, nativeInput, simulationOptions, simulationTarget, simulationTaskSummary, simulationVideoUrl, startSimulation, UncertainSubmission, uploadModel, type NativeArtifact, type SimulationJob } from '@/lib/native-simulation';
 
 export function NativeSimulationPanel({ projectId, preferredJobId, onTraining }: { projectId: string; preferredJobId?: string; onTraining: () => void }) {
   const client = useQueryClient();
@@ -118,7 +118,7 @@ export function NativeSimulationPanel({ projectId, preferredJobId, onTraining }:
         {isActive(selected) && <><progress aria-label="Native job in progress" /><button className="secondary-button" disabled={pending !== null || jobs.isError} onClick={() => setConfirmCancel(selected.id)}>Cancel selected native job</button></>}
         {confirmCancel === selected.id && isActive(selected) && <div className="warning-box" role="group" aria-label="Confirm native cancellation"><p>Request cancellation of {selected.id}? This does not prove cloud resources have been deleted.</p><button className="secondary-button" disabled={pending !== null || jobs.isError} onClick={() => void mutate('cancel')}>Confirm cancellation</button><button className="text-link" disabled={pending !== null} onClick={() => setConfirmCancel(null)}>Keep running</button></div>}
         {events.isError && <p role="alert">Recorded activity is unavailable. {events.error.message}</p>}
-        <pre className="cloud-log-tail" role="region" aria-label="Native simulation event log" tabIndex={0}>{events.data?.length ? events.data.slice(-100).map(event => `${event.timestamp} · ${event.stage} · ${event.message}`).join('\n') : 'No recorded events yet.'}</pre>
+        <pre className="cloud-log-tail" role="region" aria-label="Native simulation event log" tabIndex={0}>{events.data?.length ? events.data.slice(-100).map(event => `${event.timestamp} · ${event.stage} · ${event.message}${simulationTaskSummary(event.data) ? ` · ${simulationTaskSummary(event.data)}` : ''}`).join('\n') : 'No recorded events yet.'}</pre>
         {videoReady && !videoFailed && <video controls preload="metadata" aria-label="Recorded cup rollout" src={simulationVideoUrl(selected.id)} onError={() => setVideoFailed(true)} />}
         {videoFailed && <p role="alert">The recorded video is unavailable. You can still download the verified simulation record.</p>}
         {selected.status === 'succeeded' && records.map(item => <p key={item.id}><a className="secondary-button" href={artifactDownloadUrl(projectId, item.id)}>Download simulation record</a></p>)}
