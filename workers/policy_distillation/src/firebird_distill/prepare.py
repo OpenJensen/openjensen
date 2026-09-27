@@ -191,14 +191,83 @@ def prepare(value):
     }
 
 
+def verify_lengths(value):
+    """Read only bounded episode-index/length columns from the immutable native metadata.
+
+    This is separate from corpus production, not an untrusted-worker security boundary.
+    The app compares the independently parsed source bounds with every prepared sample.
+    """
+    exact_keys(value, {"schema_version", "dataset_snapshot", "episodes"})
+    integer(value["schema_version"], 1, 1)
+    selected = value["episodes"]
+    if not isinstance(selected, list) or not 3 <= len(selected) <= MAX_SAMPLES:
+        raise ValueError("Select3..256 distinct episode IDs")
+    for episode in selected:
+        integer(episode, 0, 19999)
+    if len(set(selected)) != len(selected):
+        raise ValueError("Duplicate metadata episode selection")
+    if importlib.metadata.version("lerobot") != "0.6.2":
+        raise ValueError("Metadata reader requires pinned LeRobot0.6.2")
+    os.environ.update(HF_HUB_OFFLINE="1", HF_DATASETS_OFFLINE="1", CUDA_VISIBLE_DEVICES="")
+    sys.addaudithook(offline_audit)
+    import pyarrow.parquet as pq
+    from firebird_vla.local_dataset import _open, verify_local_snapshot
+
+    root, manifest = verify_local_snapshot(value["dataset_snapshot"])
+    total = integer(manifest["total_episodes"], 3, 20000)
+    if max(selected) >= total:
+        raise ValueError("Selected metadata episode is absent")
+    found, frames = {}, 0
+    for item in manifest["files"]:
+        if not item["path"].startswith("meta/episodes/"):
+            continue
+        with _open(root, item["path"]) as handle:
+            table = pq.ParquetFile(
+                handle, thrift_string_size_limit=1024**2, thrift_container_size_limit=100000
+            )
+            if table.metadata.num_rows > total:
+                raise ValueError("Episode metadata row count exceeds snapshot")
+            for batch in table.iter_batches(batch_size=1024, columns=["episode_index", "length"]):
+                if batch.schema.names != ["episode_index", "length"]:
+                    raise ValueError("Missing native episode identity/length columns")
+                for row in batch.to_pylist():
+                    episode = integer(row["episode_index"], 0, total - 1)
+                    length = integer(row["length"], 1, manifest["total_frames"])
+                    if episode in found:
+                        raise ValueError("Duplicate native episode metadata")
+                    found[episode] = length
+                    frames += length
+                    if len(found) > total or frames > manifest["total_frames"]:
+                        raise ValueError("Episode metadata exceeds snapshot bounds")
+    if len(found) != total or frames != manifest["total_frames"]:
+        raise ValueError("Incomplete native episode metadata")
+    verify_local_snapshot(value["dataset_snapshot"])
+    return {
+        "schema_version": 1,
+        "snapshot_id": value["dataset_snapshot"]["id"],
+        "snapshot_manifest_sha256": value["dataset_snapshot"]["manifest_sha256"],
+        "episode_lengths": [{"episode_id": e, "length": found[e]} for e in sorted(selected)],
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("request", type=Path)
+    parser.add_argument("--metadata-only", action="store_true")
     parser.add_argument("result", type=Path)
     args = parser.parse_args()
     if os.path.lexists(args.result):
         parser.error("Result already exists")
-    result = prepare(read(args.request))
+    value = read(args.request)
+    destination = args.result.resolve()
+    for source in (
+        value.get("teacher"),
+        value.get("dataset_snapshot", {}).get("path"),
+        value.get("output_dir"),
+    ):
+        if source and destination.is_relative_to(Path(source).resolve()):
+            parser.error("Result must remain outside all source/corpus directories")
+    result = (verify_lengths if args.metadata_only else prepare)(value)
     with args.result.open("xb") as stream:
         stream.write(canonical(result))
 

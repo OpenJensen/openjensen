@@ -36,3 +36,13 @@ Independent final execution is recorded separately from source-only review.
 `independent-review.json` binds the unchanged11 source files and an independent
 41-test run (14.77seconds, zero failures/skips). Earlier duplicate reviewer runs
 with a shared log and denied process inspection are excluded from acceptance.
+
+`app-integration.json` supersedes the earlier preparation-only limitation: the
+final native reader sampling path and separate native episode metadata parse
+ran through the actual isolated application API. The job completed12 genuine
+student updates, verified fresh reload, registered the student, and served the
+exact package download. The six native episodes/three lineage groups contain
+generated scenes, so this remains software integration evidence.95 focused
+core/contract tests passed, including repeated cancellation of actual child
+processes, source/receipt integrity, retained Linux wheel variant identities
+and rejection of consistently truncated corpus lengths. No task-quality claim.
