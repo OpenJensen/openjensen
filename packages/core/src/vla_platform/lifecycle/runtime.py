@@ -22,7 +22,8 @@ class Runtime(StrictRecord):
     provider: Literal["local", "gcp"] = "local"
     region: str | None = Field(default=None, min_length=1, max_length=64, pattern=r"^[\w-]+$")
     python: str = "python"
-    worker_root: str
+    worker_root: str | None = None
+    export_only: bool = False
     conversion_python: str | None = None
     conversion_image: str | None = None
     evaluation_python: str | None = None
@@ -38,9 +39,9 @@ class Runtime(StrictRecord):
         default="firebird_vla.application", pattern=r"^[A-Za-z_]\w*(\.[A-Za-z_]\w*)+$"
     )
     training_model_ids: list[str] = Field(default_factory=lambda: ["smolvla"], min_length=1)
-    vendor: str
+    vendor: str | None = None
     conversion_vendor: str | None = None
-    build: str
+    build: str | None = None
     device: Literal["cpu", "cuda"] = "cpu"
     # Optional operator-declared specifications, not live device discovery.
     gpu_name: str | None = Field(default=None, min_length=1, max_length=200)
@@ -54,6 +55,19 @@ class Runtime(StrictRecord):
 
     @model_validator(mode="after")
     def registered_training_models(self):
+        if self.export_only:
+            if (
+                not self.act_export_python
+                or self.device != "cpu"
+                or self.training_python
+                or self.training_root
+                or self.simulator_lane
+            ):
+                raise ValueError(
+                    "Export-only runtimes require a CPU ACT exporter and no training/simulator"
+                )
+        elif not self.worker_root or not self.vendor or not self.build:
+            raise ValueError("Native policy runtimes require worker_root, vendor and build")
         if bool(self.act_export_python) != bool(self.act_export_root):
             raise ValueError("ACT export interpreter and worker root must be configured together")
         if self.act_export_python and (self.execution != "native" or self.provider != "local"):
@@ -112,6 +126,7 @@ class PublicRuntime(StrictRecord):
     device: Literal["cpu", "cuda"]
     training: bool
     act_export: bool = False
+    export_only: bool = False
     training_model_ids: list[str]
     simulation: bool
     engine_evaluation: bool = False
@@ -163,12 +178,13 @@ class RuntimeCatalog(StrictRecord):
                     "device": x.device,
                     "training": bool(x.training_python and x.training_root),
                     "act_export": bool(x.act_export_python and x.act_export_root),
+                    "export_only": x.export_only,
                     "training_model_ids": (
                         x.training_model_ids if x.training_python and x.training_root else []
                     ),
                     "simulation": bool(x.simulator_lane),
-                    "engine_evaluation": True,
-                    "run": True,
+                    "engine_evaluation": not x.export_only,
+                    "run": not x.export_only,
                     "gpu_name": x.gpu_name,
                     "gpu_memory_mib": x.gpu_memory_mib,
                     # The current native trainer uses one device per run. This
@@ -196,6 +212,8 @@ def command(
 ):
     if runtime.execution != "native":
         raise ValueError("SkyPilot targets must execute through the cloud runner")
+    if runtime.export_only and not act_export:
+        raise ValueError("This runtime supports ACT inference export only")
     if act_export:
         if (
             runtime.provider != "local"

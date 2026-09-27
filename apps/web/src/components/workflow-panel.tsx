@@ -231,7 +231,7 @@ export function WorkflowPanel({
   const inputIssue = stage === "Quantize" ? quantizationIssue(inputArtifact) : null;
   const cloudCheckpoint = !!inputArtifact && isCloudArtifact(inputArtifact);
   const needsNativeExecution = stage === "settings";
-  const runtimes = (options.data?.runtimes ?? []).filter(item => item.enabled !== false &&
+  const runtimes = (options.data?.runtimes ?? []).filter(item => item.enabled !== false && !item.export_only &&
     (!needsNativeExecution || item.execution !== "skypilot") &&
     (stage !== "Evaluate" || item.engine_evaluation !== false) &&
     (stage !== "Run" || item.run !== false) &&

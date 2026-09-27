@@ -21,10 +21,13 @@ export function ActExportControl({ projectId, checkpoint, runtimes, jobs, artifa
   const related = jobs.filter(item => item.kind === "policy.export" && "artifact_id" in item.request && item.request.artifact_id === checkpoint.id);
   const pending = related.find(isActive);
   const latest = related[0];
-  const exports = artifacts.filter(item => item.format === "inference_export" && item.parent_ids?.includes(checkpoint.id));
+  const exports = artifacts.filter(item => item.format === "inference_export" && item.parent_ids?.some(id =>
+    id === checkpoint.id || artifacts.some(parent => parent.id === id && parent.parent_ids?.includes(checkpoint.id))));
+  const cloud = isCloudArtifact(checkpoint);
+  const sourceJob = jobs.find(item => item.id === checkpoint.job_id);
   const dataset = checkpoint.metadata?.dataset as { source?: string } | undefined;
-  const issue = !projectId ? "Select a ready project to export." : isCloudArtifact(checkpoint)
-    ? "Download and register the complete checkpoint locally before exporting. Cloud-only checkpoints cannot be exported here yet."
+  const issue = !projectId ? "Select a ready project to export." : cloud && (sourceJob?.status !== "succeeded" || checkpoint.metadata?.reload_verified !== true)
+    ? "Wait for the completed, reload-verified ACT checkpoint. Intermediate saves cannot be exported."
     : checkpoint.format !== "training_checkpoint" || checkpoint.metadata?.training_backend !== "lerobot" || checkpoint.metadata?.method !== "full"
       ? "This export requires a complete native ACT training checkpoint."
       : dataset?.source !== "huggingface" ? "ACT export from local dataset snapshots is not supported yet."
@@ -40,11 +43,12 @@ export function ActExportControl({ projectId, checkpoint, runtimes, jobs, artifa
     },
   });
   return <section aria-label="ACT inference export">
+    {cloud && <p className="training-monitor-note">This action downloads the completed checkpoint to this computer (up to 4 GiB), verifies a separate local copy, then exports on CPU. It does not start a cloud GPU. The original cloud checkpoint is preserved.</p>}
     <p className="training-monitor-note">Remove the training-only VAE and keep FP32 weights. Each export checks complete synthetic action chunks in fresh CPU processes. This does not establish robot task success, calibration, GPU fit, or faster inference.</p>
     {available.length > 1 && <label>Export computer<select value={runtime?.id ?? ""} disabled={!active || mutation.isPending || !!pending} onChange={event => setSelectedRuntime(event.target.value)}>{available.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>}
-    <button type="button" className="primary-button" disabled={!active || !!issue || mutation.isPending || !!pending} onClick={() => mutation.mutate()}>{mutation.isPending || pending ? "Exporting ACT policy…" : "Export ACT inference package"}</button>
+    <button type="button" className="primary-button" disabled={!active || !!issue || mutation.isPending || !!pending} onClick={() => mutation.mutate()}>{mutation.isPending || pending ? "Exporting ACT policy…" : cloud ? "Download checkpoint and export" : "Export ACT inference package"}</button>
     {issue && <p role="status" className="training-monitor-note">{issue}</p>}
-    {pending && <p role="status">Export {pending.status}. CPU verification is running.</p>}
+    {pending && <p role="status">Export {pending.status}. {pending.stage === "downloading" ? "Downloading and verifying the checkpoint." : "Preparing or verifying the CPU export."}</p>}
     {latest?.status === "failed" && <p role="alert">Export failed: {latest.error ?? "See the recorded job for details."}</p>}
     {latest && ["cancelled", "interrupted"].includes(latest.status) && <p role="status">Export {latest.status}. No verified package is ready from this attempt.</p>}
     {mutation.error && <p role="alert">{mutation.error.message}</p>}

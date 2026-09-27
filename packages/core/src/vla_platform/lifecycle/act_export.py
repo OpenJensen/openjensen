@@ -9,7 +9,7 @@ from .training_catalog import TRAINING_MODEL_BY_ID
 RECIPE = "act-vae-removal-fp32-v1"
 
 
-def check_source(runtime, artifact, directory: Path) -> None:
+def check_source(runtime, artifact, directory: Path, *, allow_cloud=False) -> None:
     if runtime.execution != "native" or runtime.provider != "local":
         raise ValueError("ACT inference export currently requires a local CPU worker")
     if not runtime.act_export_python or not runtime.act_export_root:
@@ -26,6 +26,13 @@ def check_source(runtime, artifact, directory: Path) -> None:
         raise ValueError(
             "ACT export requires pinned Hugging Face lineage; local snapshots are unsupported"
         )
+    if allow_cloud and (directory / "remote.json").is_file():
+        from .cloud_materialize import descriptor
+
+        _, _, manifest = descriptor(directory, artifact.manifest_sha256)
+        if manifest.get("metadata") != artifact.metadata:
+            raise ValueError("Registered cloud checkpoint metadata changed")
+        return
     if any((directory / name).exists() for name in ("remote.json", "remote-checkpoint.json")):
         raise ValueError("Materialize the complete cloud checkpoint locally before ACT export")
     if artifact.metadata.get("storage") == "gcs" or artifact.metadata.get("remote"):
@@ -51,7 +58,10 @@ def check_result(info, manifest, directory: Path, report, source, source_directo
     expected = {
         "checkpoint_manifest_sha256": checkpoint_sha,
         "checkpoint_step": checkpoint_step,
-        "dataset": source.metadata.get("dataset"),
+        "dataset": {
+            key: source.metadata.get("dataset", {}).get(key)
+            for key in ("source", "repo_id", "revision")
+        },
         "camera_keys": source.metadata.get("camera_keys"),
         "architecture": "act",
         "recipe": RECIPE,

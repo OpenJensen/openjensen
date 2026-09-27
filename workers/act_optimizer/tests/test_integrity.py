@@ -520,3 +520,33 @@ def test_auxiliary_quantile_roundoff_does_not_reject_valid_mean_std(
     tensors["task_index.q99"] = torch.tensor([3.96e-14])
     save_file(tensors, path)
     validate_processors(source, read_json(source / "config.json"))
+
+
+@pytest.mark.parametrize("shape", [[3, 1080, 1920], [3, 1920, 1080], [3, 1440, 1440]])
+def test_full_hd_image_admission_preserves_exact_shape(act_source: Path, shape: list[int]) -> None:
+    cfg = read_json(act_source / "config.json")
+    cfg["input_features"]["observation.images.front"]["shape"] = shape.copy()
+    validate_config(cfg, source=True)
+    assert cfg["input_features"]["observation.images.front"]["shape"] == shape
+
+
+@pytest.mark.parametrize(
+    "shape",
+    [
+        [3, 1921, 1080],
+        [3, 2048, 1024],
+        [3, 2049, 32],
+        [3, 32, 2049],
+        [3, 31, 1920],
+        [3, 1080.0, 1920],
+        [3, True, 1920],
+        [3.0, 1080, 1920],
+    ],
+)
+def test_image_admission_rejects_excess_area_dimensions_and_nonintegers(
+    act_source: Path, shape: list[object]
+) -> None:
+    cfg = read_json(act_source / "config.json")
+    cfg["input_features"]["observation.images.front"]["shape"] = shape
+    with pytest.raises(ValueError, match="RGB image shape"):
+        validate_config(cfg, source=True)
