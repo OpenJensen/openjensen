@@ -150,7 +150,7 @@ export function ActExportControl({ projectId, checkpoint, runtimes, jobs, artifa
           {onNativeQuantize && <button type="button" className="secondary-button" disabled={!active || !!quantizeIssue} onClick={() => { if (active && !quantizeIssue) onNativeQuantize(item.id); }}>Quantize this package</button>}
         </div>
         <p className="training-monitor-note">Inference only; keep the original checkpoint for training.</p>
-        {onNativeQuantize && (quantizeIssue ? <p role="status" className="training-monitor-note">{quantizeIssue}</p> : <p className="training-monitor-note">Next: review INT8 or INT4 settings. Opening the form does not start a job; task quality remains unverified.</p>)}
+        {onNativeQuantize && quantizeIssue && <p role="status" className="training-monitor-note">{quantizeIssue}</p>}
       </section>;
     })}
   </section>;

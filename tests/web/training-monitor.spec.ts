@@ -1021,8 +1021,8 @@ test('ACT exported packages show distinct identities and hand the exact second p
   await exportSection.screenshot({ path: testInfo.outputPath('act-export-next-actions-dark.png') });
   await page.getByRole('button', { name: 'Light', exact: true }).click();
   await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
-  await expect(page.getByRole('button', { name: 'Native ACT · INT8 / INT4', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByLabel('ACT inference policy', { exact: true })).toHaveValue(state.packages[1].id);
+  await expect(page.getByRole('button', { name: 'ACT', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toBeChecked();
   expect(state.submitted).toEqual([]);
   await noOverflow(page);
   await page.screenshot({ path: testInfo.outputPath('act-export-quantization-handoff.png'), fullPage: true });
@@ -1039,12 +1039,12 @@ test('ACT exported packages show distinct identities and hand the exact second p
 test('ACT export handoff keeps a later manual source choice through a refresh', async ({ page }) => {
   const state = await exportedPackageFixture(page);
   await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
-  const selected = page.getByLabel('ACT inference policy', { exact: true });
-  await expect(selected).toHaveValue(state.packages[1].id);
-  await selected.selectOption(state.packages[0].id);
+  const policies = page.getByRole('group', { name: 'Policy', exact: true });
+  await expect(policies.locator(`input[value="${state.packages[1].id}"]`)).toBeChecked();
+  await policies.locator(`input[value="${state.packages[0].id}"]`).check();
   state.artifacts.reverse();
   await page.getByRole('button', { name: 'Refresh ACT quantization jobs', exact: true }).click();
-  await expect(selected).toHaveValue(state.packages[0].id);
+  await expect(policies.locator(`input[value="${state.packages[0].id}"]`)).toBeChecked();
   expect(state.submitted).toEqual([]); expect(state.unexpected).toEqual([]);
 });
 
@@ -1093,11 +1093,11 @@ test('ACT export preferred package stays within its owning project', async ({ pa
   await page.route('**/api/v1/projects/other-project/*', route => route.fulfill({ json: [] }));
   await page.reload(); await reopenExport(page);
   await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
-  await expect(page.getByLabel('ACT inference policy', { exact: true })).toHaveValue(state.packages[1].id);
+  await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toBeChecked();
   await page.getByLabel('Current project', { exact: true }).selectOption('other-project');
-  await page.getByRole('button', { name: 'Native ACT · INT8 / INT4', exact: true }).click();
-  await expect(page.getByLabel('ACT inference policy', { exact: true })).toHaveValue('');
-  await expect(page.getByLabel('ACT inference policy', { exact: true }).locator(`option[value="${state.packages[1].id}"]`)).toHaveCount(0);
+  await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator('input:checked')).toHaveCount(0);
+  await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Create ACT quantized package', exact: true })).toBeDisabled();
   expect(state.submitted).toEqual([]);
 });
@@ -1109,7 +1109,7 @@ test('ACT export handoff preserves an unresolved quantization request without re
   const stored = JSON.stringify({ state: 'uncertain', message: 'Earlier ACT request has an unverified outcome.' });
   await page.evaluate(({ key, stored }) => sessionStorage.setItem(key, stored), { key, stored });
   await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
-  await expect(page.getByLabel('ACT inference policy', { exact: true })).toHaveValue(state.packages[1].id);
+  await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toBeChecked();
   await expect(page.getByText('Earlier ACT request has an unverified outcome. Further submissions are paused.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Create ACT quantized package', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toBeDisabled();
