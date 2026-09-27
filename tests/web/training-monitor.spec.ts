@@ -1418,6 +1418,9 @@ test('keyed training retry after reload preserves the original key and recipe wi
   await (await newTraining(page)).click();
   const recovery = page.getByRole('region', { name: 'Training submission recovery' });
   await expect(recovery).toBeVisible();
+  // The journal appears before the support lookup; observe the lost POST before reloading.
+  await expect.poll(() => requests.length).toBe(1);
+  await expect(recovery.getByRole('button', { name: 'Check saved request' })).toBeEnabled();
   await page.evaluate(project => localStorage.setItem(`firebird.workflow.${project}`, JSON.stringify({ trainingDefaultsVersion: 3, trainingSteps: 777, trainingModelId: 'smolvla' })), projectId);
   await page.reload();
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
