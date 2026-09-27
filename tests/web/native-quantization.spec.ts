@@ -1,3 +1,4 @@
+import { startNativeQuantization, cancelNativeQuantization } from '../../apps/web/src/lib/native-quantization';
 import { expect, test, type Page } from '@playwright/test';
 import { measuredNativeReport, replayableNativeOutput, type PackedArtifact } from '../../apps/web/src/lib/native-quantization';
 import type { Job } from '../../apps/web/src/lib/api';
@@ -349,4 +350,52 @@ test('replay eligibility rejects remote, incomplete and mismatched packed artifa
     ].map(change => ({ ...replayCandidate(), metadata: { ...replayCandidate().metadata, ...change } }))
   ];
   for (const candidate of invalid) expect(replayableNativeOutput(candidate as PackedArtifact, done, measured), JSON.stringify(candidate)).toBe(false);
+});
+
+
+test('quantization mutation ACK status contract accepts only six exact strings', async () => {
+  const request = job('contract').request;
+  const valid = ['queued', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted'];
+  const original = { id: 'contract', project_id: 'alpha', kind: request.operation, status: 'running', request } as Parameters<typeof cancelNativeQuantization>[0];
+  const realFetch = globalThis.fetch;
+  let methods: string[] = [], status: unknown = 'running', cancelResponse = false;
+  globalThis.fetch = async (_input, init) => {
+    methods.push(init?.method ?? 'GET');
+    return new Response(JSON.stringify({ ...original, status: cancelResponse && init?.method === 'GET' ? 'running' : status }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  try {
+    for (status of valid) { methods = []; expect((await startNativeQuantization({ project: 'alpha', runtime: runtime.id, artifact: 'act-export', bits: 8, timeout: 600 })).status).toBe(status); expect(methods).toEqual(['POST']); }
+    for (status of [['running'], ['succeeded'], [['running']], [], null, true, 1, {}, undefined, 'unknown']) {
+      methods = []; await expect(startNativeQuantization({ project: 'alpha', runtime: runtime.id, artifact: 'act-export', bits: 8, timeout: 600 })).rejects.toThrow(/outcome is unverified/); expect(methods).toEqual(['POST']);
+      methods = []; await expect(cancelNativeQuantization(original, () => true)).rejects.toThrow(/outcome is unverified/); expect(methods).toEqual(['GET']);
+    }
+    cancelResponse = true; status = ['cancelled']; methods = [];
+    await expect(cancelNativeQuantization(original, () => true)).rejects.toThrow(/outcome is unverified/); expect(methods).toEqual(['GET', 'POST']);
+    status = 'cancelled'; methods = [];
+    expect((await cancelNativeQuantization(original, () => true)).status).toBe('cancelled'); expect(methods).toEqual(['GET', 'POST']);
+  } finally { globalThis.fetch = realFetch; }
+});
+
+for (const phase of ['submit', 'cancel-preflight', 'cancel-receipt'] as const) test(`quantization malformed ${phase} status never clears request recovery`, async ({ page }) => {
+  const state = await fixture(page); await page.getByLabel('ACT inference policy', { exact: true }).selectOption('act-export');
+  if (phase === 'submit') {
+    await page.route('**/api/v1/projects/alpha/policy-jobs', route => {
+      const request = route.request().postDataJSON(); state.posts.push(request);
+      return route.fulfill({ status: 202, json: { id: 'malformed', project_id: 'alpha', kind: request.operation, status: ['running'], request } });
+    });
+    await submit(page).click();
+  } else {
+    await submit(page).click();
+    await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toHaveAttribute('data-job-id', 'submitted');
+    const original = state.jobs.find(item => item.id === 'submitted')!;
+    if (phase === 'cancel-preflight') await page.route('**/api/v1/jobs/submitted', route => route.fulfill({ json: { ...original, status: ['running'] } }));
+    else await page.route('**/api/v1/jobs/submitted/cancel', route => { state.cancels.push('submitted'); return route.fulfill({ json: { ...original, status: ['cancelled'] } }); });
+    await page.getByRole('button', { name: 'Cancel selected ACT quantization', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm cancellation', exact: true }).click();
+  }
+  await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true }).getByRole('alert')).toContainText('outcome is unverified');
+  expect(state.posts).toHaveLength(1);
+  expect(state.cancels).toHaveLength(phase === 'cancel-receipt' ? 1 : 0);
+  expect(await page.evaluate(() => sessionStorage.getItem('firebird:job-attempt:policy.quantize:alpha'))).toContain('uncertain');
+  if (phase === 'submit') await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toHaveCount(0);
 });

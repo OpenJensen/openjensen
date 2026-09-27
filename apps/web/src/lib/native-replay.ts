@@ -15,7 +15,7 @@ export function replaySelection(value: string): ReplayRecipe['selection'] {
   return pairs.map(([episode_index, frame_index]) => ({ episode_index, frame_index }));
 }
 function accepted(value: unknown, project: string, expected: ReplayRequest, id?: string): ReplayJob {
-  if (!record(value) || typeof value.id !== 'string' || !value.id || (id && value.id !== id) || value.project_id !== project || value.kind !== 'policy.run' || !['queued', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted'].includes(String(value.status)) || !record(value.request) ||
+  if (!record(value) || typeof value.id !== 'string' || !value.id || (id && value.id !== id) || value.project_id !== project || value.kind !== 'policy.run' || typeof value.status !== 'string' || !['queued', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted'].includes(value.status) || !record(value.request) ||
       !['operation', 'runtime_id', 'artifact_id', 'dataset_job_id', 'timeout_seconds', 'native_replay'].every(key => sameJson((value.request as Record<string, unknown>)[key], expected[key as keyof ReplayRequest]))) throw new UncertainPolicyJob();
   return value as unknown as ReplayJob;
 }

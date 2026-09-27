@@ -1,3 +1,4 @@
+import { startReplay, cancelReplay } from '../../apps/web/src/lib/native-replay';
 import { expect, test, type Page } from '@playwright/test';
 
 const time = '2026-09-27T10:30:00Z', model = `sha256:${'f'.repeat(64)}`;
@@ -156,4 +157,59 @@ test('journal cleanup failure after navigation preserves recovery guidance', asy
   await expect(page.getByText(/^Submitting one /)).toHaveCount(0);
   await expect(submit(page)).toBeDisabled();
   expect(state.posts).toHaveLength(1);
+});
+
+
+test('replay mutation ACK status contract accepts only six exact strings', async () => {
+  const request: Parameters<typeof startReplay>[1] = { operation: 'policy.run', runtime_id: runtime.id, artifact_id: policy.id, dataset_job_id: 'data', timeout_seconds: 600, native_replay: { adapter: 'act-packed-observation-v1', selection: [{ episode_index: 0, frame_index: 3 }], coordinate_attestation: 'generated_fixture', units: ['degrees', 'degrees', 'degrees', 'degrees', 'degrees', 'recorded_gripper'] } };
+  const valid = ['queued', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted'];
+  const original = { id: 'contract', project_id: 'alpha', kind: request.operation, status: 'running', request } as Parameters<typeof cancelReplay>[0];
+  const realFetch = globalThis.fetch;
+  let methods: string[] = [], status: unknown = 'running', cancelResponse = false;
+  globalThis.fetch = async (_input, init) => {
+    methods.push(init?.method ?? 'GET');
+    return new Response(JSON.stringify({ ...original, status: cancelResponse && init?.method === 'GET' ? 'running' : status }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  try {
+    for (status of valid) { methods = []; expect((await startReplay('alpha', request)).status).toBe(status); expect(methods).toEqual(['POST']); }
+    for (status of [['running'], ['succeeded'], [['running']], [], null, true, 1, {}, undefined, 'unknown']) {
+      methods = []; await expect(startReplay('alpha', request)).rejects.toThrow(/outcome is unverified/); expect(methods).toEqual(['POST']);
+      methods = []; await expect(cancelReplay(original, () => true)).rejects.toThrow(/outcome is unverified/); expect(methods).toEqual(['GET']);
+    }
+    cancelResponse = true; status = ['cancelled']; methods = [];
+    await expect(cancelReplay(original, () => true)).rejects.toThrow(/outcome is unverified/); expect(methods).toEqual(['GET', 'POST']);
+    status = 'cancelled'; methods = [];
+    expect((await cancelReplay(original, () => true)).status).toBe('cancelled'); expect(methods).toEqual(['GET', 'POST']);
+  } finally { globalThis.fetch = realFetch; }
+});
+
+for (const phase of ['submit', 'cancel-preflight', 'cancel-receipt'] as const) test(`replay malformed ${phase} status is rejected without automatic retry`, async ({ page }) => {
+  const state = await fixture(page); await prepare(page);
+  if (phase === 'submit') {
+    await page.route('**/api/v1/projects/alpha/policy-jobs', route => {
+      const request = route.request().postDataJSON(); state.posts.push(request);
+      return route.fulfill({ status: 202, json: { id: 'malformed', project_id: 'alpha', kind: request.operation, status: ['running'], request } });
+    });
+    await submit(page).click();
+  } else {
+    await submit(page).click();
+    await expect(page.getByRole('article', { name: 'Observation replay details' })).toHaveAttribute('data-job-id', 'replay-001');
+    const original = state.jobs.find(item => item.id === 'replay-001')!;
+    if (phase === 'cancel-preflight') await page.route('**/api/v1/jobs/replay-001', route => route.fulfill({ json: { ...original, status: ['running'] } }));
+    else await page.route('**/api/v1/jobs/replay-001/cancel', route => { state.cancelled.push('replay-001'); return route.fulfill({ json: { ...original, status: ['cancelled'] } }); });
+    await page.getByRole('button', { name: 'Cancel selected replay', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm cancellation', exact: true }).click();
+  }
+  await expect(panel(page).getByRole('alert')).toContainText('outcome is unverified');
+  expect(state.posts).toHaveLength(1);
+  expect(state.cancelled).toHaveLength(phase === 'cancel-receipt' ? 1 : 0);
+  const details = page.getByRole('article', { name: 'Observation replay details' });
+  if (phase === 'submit') {
+    expect(await page.evaluate(() => sessionStorage.getItem('firebird:job-attempt:policy.run.replay:alpha'))).toContain('uncertain');
+    await expect(details).toHaveCount(0);
+  } else {
+    await expect(details).toHaveAttribute('data-job-id', 'replay-001');
+    await expect(details.locator('.status')).toHaveText('running');
+    await expect(page.getByRole('button', { name: 'Confirm cancellation', exact: true })).toHaveCount(0);
+  }
 });

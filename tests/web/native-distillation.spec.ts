@@ -1,3 +1,4 @@
+import { startStudent, cancelStudent } from '../../apps/web/src/lib/native-distillation';
 import { expect, test, type Page } from '@playwright/test';
 
 const time = '2026-09-27T10:30:00Z';
@@ -206,4 +207,59 @@ test('journal cleanup failure after navigation preserves recovery guidance', asy
   await expect(page.getByText(/^Submitting one /)).toHaveCount(0);
   await expect(submit(page)).toBeDisabled();
   expect(state.posts).toHaveLength(1);
+});
+
+
+test('distillation mutation ACK status contract accepts only six exact strings', async () => {
+  const request: Parameters<typeof startStudent>[1] = { operation: 'policy.distill', runtime_id: runtime.id, artifact_id: teacher.id, dataset_job_id: 'data', timeout_seconds: 600, native_distillation: { adapter: 'act-act-v1', student: 'act-256', steps: 100, learning_rate: .0001, seed: 1729, frame_stride: 30, splits: { train: [0], validation: [1], final: [2] }, coordinate_attestation: 'generated_fixture', units: ['degrees', 'degrees', 'degrees', 'degrees', 'degrees', 'recorded_gripper'] } };
+  const valid = ['queued', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted'];
+  const original = { id: 'contract', project_id: 'alpha', kind: request.operation, status: 'running', request } as Parameters<typeof cancelStudent>[0];
+  const realFetch = globalThis.fetch;
+  let methods: string[] = [], status: unknown = 'running', cancelResponse = false;
+  globalThis.fetch = async (_input, init) => {
+    methods.push(init?.method ?? 'GET');
+    return new Response(JSON.stringify({ ...original, status: cancelResponse && init?.method === 'GET' ? 'running' : status }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  try {
+    for (status of valid) { methods = []; expect((await startStudent('alpha', request)).status).toBe(status); expect(methods).toEqual(['POST']); }
+    for (status of [['running'], ['succeeded'], [['running']], [], null, true, 1, {}, undefined, 'unknown']) {
+      methods = []; await expect(startStudent('alpha', request)).rejects.toThrow(/outcome is unverified/); expect(methods).toEqual(['POST']);
+      methods = []; await expect(cancelStudent(original, () => true)).rejects.toThrow(/outcome is unverified/); expect(methods).toEqual(['GET']);
+    }
+    cancelResponse = true; status = ['cancelled']; methods = [];
+    await expect(cancelStudent(original, () => true)).rejects.toThrow(/outcome is unverified/); expect(methods).toEqual(['GET', 'POST']);
+    status = 'cancelled'; methods = [];
+    expect((await cancelStudent(original, () => true)).status).toBe('cancelled'); expect(methods).toEqual(['GET', 'POST']);
+  } finally { globalThis.fetch = realFetch; }
+});
+
+for (const phase of ['submit', 'cancel-preflight', 'cancel-receipt'] as const) test(`distillation malformed ${phase} status is rejected without automatic retry`, async ({ page }) => {
+  const state = await fixture(page); await prepare(page);
+  if (phase === 'submit') {
+    await page.route('**/api/v1/projects/alpha/policy-jobs', route => {
+      const request = route.request().postDataJSON(); state.posts.push(request);
+      return route.fulfill({ status: 202, json: { id: 'malformed', project_id: 'alpha', kind: request.operation, status: ['running'], request } });
+    });
+    await submit(page).click();
+  } else {
+    await submit(page).click();
+    await expect(page.getByRole('article', { name: 'Distillation job details' })).toHaveAttribute('data-job-id', 'student-001');
+    const original = state.jobs.find(item => item.id === 'student-001')!;
+    if (phase === 'cancel-preflight') await page.route('**/api/v1/jobs/student-001', route => route.fulfill({ json: { ...original, status: ['running'] } }));
+    else await page.route('**/api/v1/jobs/student-001/cancel', route => { state.cancel.push('student-001'); return route.fulfill({ json: { ...original, status: ['cancelled'] } }); });
+    await page.getByRole('button', { name: 'Cancel selected distillation', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm cancellation', exact: true }).click();
+  }
+  await expect(panel(page).getByRole('alert')).toContainText('outcome is unverified');
+  expect(state.posts).toHaveLength(1);
+  expect(state.cancel).toHaveLength(phase === 'cancel-receipt' ? 1 : 0);
+  const details = page.getByRole('article', { name: 'Distillation job details' });
+  if (phase === 'submit') {
+    expect(await page.evaluate(() => sessionStorage.getItem('firebird:job-attempt:policy.distill:alpha'))).toContain('uncertain');
+    await expect(details).toHaveCount(0);
+  } else {
+    await expect(details).toHaveAttribute('data-job-id', 'student-001');
+    await expect(details.locator('.status')).toHaveText('running');
+    await expect(page.getByRole('button', { name: 'Confirm cancellation', exact: true })).toHaveCount(0);
+  }
 });
