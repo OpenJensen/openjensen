@@ -60,16 +60,27 @@ export async function cancelNativeQuantization(job: Job, stillSelected: () => bo
 
 export type QuantizationReport = {
   model_id: string; precision: 'int4' | 'int8'; source_artifact_id: string;
+  prediction_horizon: number; execution_horizon: number; temporal_contract_sha256: string | null;
   source_artifact_manifest_sha256: string; source_weight_bytes: number; packed_weight_bytes: number; policy_package_bytes: number;
   drift_from_fp32: { seed: number; input_sha256: string; raw: Drift; postprocessed: Drift }[];
 };
-type Drift = { rmse: number; maximum_absolute_difference: number; coordinates: 600 };
+type Drift = { rmse: number; maximum_absolute_difference: number; coordinates: number };
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0;
-function drift(value: unknown): boolean { return object(value) && finite(value.rmse) && finite(value.maximum_absolute_difference) && value.coordinates === 600; }
+function drift(value: unknown, prediction: number): boolean { return object(value) && finite(value.rmse) && finite(value.maximum_absolute_difference) && value.coordinates === prediction * 6; }
+// Legacy records predate independent horizons and were admitted as100/100.
+// New metadata is all-or-nothing and must match the worker's bounded ACT contract.
+function temporal(value: Record<string, unknown>): Pick<QuantizationReport, 'prediction_horizon' | 'execution_horizon' | 'temporal_contract_sha256'> | null {
+  const fields = ['prediction_horizon', 'execution_horizon', 'temporal_contract_sha256'];
+  if (fields.every(key => !Object.hasOwn(value, key))) return { prediction_horizon: 100, execution_horizon: 100, temporal_contract_sha256: null };
+  const prediction = value.prediction_horizon, execution = value.execution_horizon, digest = value.temporal_contract_sha256;
+  if (typeof prediction !== 'number' || !Number.isSafeInteger(prediction) || prediction < 1 || prediction > 1024 || typeof execution !== 'number' || !Number.isSafeInteger(execution) || execution < 1 || execution > prediction || !(digest === null || (typeof digest === 'string' && /^[a-f0-9]{64}$/.test(digest)))) return null;
+  return { prediction_horizon: prediction, execution_horizon: execution, temporal_contract_sha256: digest };
+}
 export function measuredNativeReport(value: unknown, job: Job): QuantizationReport | null {
   const spec = nativeQuantizationOf(job);
   const original: unknown = job.request;
-  if (!spec || !object(value) || !object(original) || value.stage !== 'operation' || value.operation !== 'policy.quantize' ||
+  const dimensions = object(value) ? temporal(value) : null;
+  if (!dimensions || !spec || !object(value) || !object(original) || value.stage !== 'operation' || value.operation !== 'policy.quantize' ||
       value.architecture !== 'act' || value.format !== 'firebird_quant' || value.precision !== `int${spec.bits}` ||
       typeof value.model_id !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(value.model_id) || value.source_artifact_id !== original.artifact_id ||
       typeof value.source_artifact_manifest_sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(value.source_artifact_manifest_sha256) ||
@@ -78,14 +89,15 @@ export function measuredNativeReport(value: unknown, job: Job): QuantizationRepo
       value.task_success !== null || value.gpu_memory_bytes !== null || value.inference_speedup !== null ||
       !['source_weight_bytes', 'packed_weight_bytes', 'policy_package_bytes'].every(key => Number.isSafeInteger(value[key]) && Number(value[key]) > 0) ||
       !Array.isArray(value.drift_from_fp32) || value.drift_from_fp32.length !== 2 || value.drift_from_fp32.some((item, index) =>
-        !object(item) || item.seed !== [171, 902][index] || typeof item.input_sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(item.input_sha256) || !drift(item.raw) || !drift(item.postprocessed))) return null;
-  return value as unknown as QuantizationReport;
+        !object(item) || item.seed !== [171, 902][index] || typeof item.input_sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(item.input_sha256) || !drift(item.raw, dimensions.prediction_horizon) || !drift(item.postprocessed, dimensions.prediction_horizon))) return null;
+  return { ...value, ...dimensions } as unknown as QuantizationReport;
 }
 
 /** Navigation only: the destination must still admit its worker, dataset and explicit recipe. */
 export function replayableNativeOutput(artifact: PackedArtifact, job: Job, report: QuantizationReport | null): boolean {
   const metadata = artifact.metadata;
-  return !!report && job.status === 'succeeded' && typeof artifact.id === 'string' && artifact.id.length > 0 &&
+  const dimensions = object(metadata) ? temporal(metadata) : null;
+  return !!report && !!dimensions && dimensions.prediction_horizon === report.prediction_horizon && dimensions.execution_horizon === report.execution_horizon && dimensions.temporal_contract_sha256 === report.temporal_contract_sha256 && job.status === 'succeeded' && typeof artifact.id === 'string' && artifact.id.length > 0 &&
     artifact.project_id === job.project_id && artifact.job_id === job.id && artifact.format === 'native_quantized' &&
     metadata?.architecture === 'act' && metadata.format === 'firebird_quant' && metadata.format_version === 1 &&
     metadata.model_id === report.model_id && metadata.precision === report.precision && metadata.inference_only === true &&

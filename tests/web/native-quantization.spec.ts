@@ -402,3 +402,17 @@ for (const phase of ['submit', 'cancel-preflight', 'cancel-receipt'] as const) t
   expect(await page.evaluate(() => sessionStorage.getItem('firebird:job-attempt:policy.quantize:alpha'))).toContain('uncertain');
   if (phase === 'submit') await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toHaveCount(0);
 });
+
+
+test('8-step packed report displays its full prediction dimensions without quality acceptance', async ({ page }) => {
+  const state = await fixture(page), done = job('temporal-packed', 'succeeded');
+  const measured = { ...report(), prediction_horizon: 8, execution_horizon: 3, temporal_contract_sha256: 'e'.repeat(64) };
+  for (const row of measured.drift_from_fp32) { row.raw.coordinates = 48; row.postprocessed.coordinates = 48; }
+  done.result = { reports: [measured], artifacts: [] }; state.jobs.push(done); await refresh(page);
+  await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption(done.id);
+  await expect(page.getByRole('region', { name: 'Measured ACT quantization results' })).toBeVisible();
+  await page.getByText('Action differences', { exact: true }).click();
+  await expect(page.getByRole('table')).toHaveAccessibleName('Difference from FP32 across each full 8 × 6 action chunk');
+  await expect(page.getByText('Task quality, calibration, speed and GPU memory savings remain unverified.', { exact: true })).toBeVisible();
+  expect(state.posts).toEqual([]);
+});
