@@ -34,6 +34,28 @@ class Checkpoint:
 
 def inspect_checkpoint(path: Path) -> Checkpoint:
     """Validate metadata and fingerprint weights plus their saved processors."""
+    # Packed admission retains lexical paths so symlink ancestry is not erased.
+    if (path / "encoding.json").exists() or (path / "model.fbq").exists():
+        from firebird_quant.native_package import decode, inspect_policy, read, sha
+
+        packed = inspect_policy(path.absolute())
+        raw_config = read(path.absolute() / "config.json")
+        if sha(raw_config) != packed["files"]["config.json"]["sha256"]:
+            raise ValueError("Packed configuration changed during inspection")
+        config = decode(raw_config)
+        camera = next(k for k in config["input_features"] if k.startswith("observation.images."))
+        image = config["input_features"][camera]["shape"]
+        return Checkpoint(
+            packed["model_id"],
+            "act",
+            camera,
+            image[2],
+            image[1],
+            config["input_features"]["observation.state"]["shape"][0],
+            config["output_features"]["action"]["shape"][0],
+            config["chunk_size"],
+            config["n_action_steps"],
+        )
     root = path.resolve()
     files = set(_EXPORT_FILES)
     for name in _EXPORT_FILES:

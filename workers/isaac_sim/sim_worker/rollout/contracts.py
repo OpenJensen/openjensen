@@ -26,12 +26,24 @@ class Frame:
 
 
 @dataclass(frozen=True)
+class ObjectState:
+    prim_path: str
+    position_m: tuple[float, float, float]
+    orientation_xyzw: tuple[float, float, float, float]
+    linear_velocity_m_s: tuple[float, float, float]
+    angular_velocity_rad_s: tuple[float, float, float]
+    local_min_m: tuple[float, float, float]
+    local_max_m: tuple[float, float, float]
+
+
+@dataclass(frozen=True)
 class Observation:
     episode_id: str
     step: int
     sim_time: float
     state: tuple[float, ...]
     frame: Frame
+    object_state: ObjectState | None = None
 
 
 @dataclass(frozen=True)

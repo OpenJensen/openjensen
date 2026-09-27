@@ -1,5 +1,7 @@
 # Remote policy adapter
 
+For explicit object-outcome criteria and replay, see [simulation evaluation](EVALUATION.md).
+
 The rollout worker runs Isaac on L4 and a separate ACT/SmolVLA policy server on
 H100. [SkyPilot launch instructions](../skypilot/ROLLOUT.md) create one Job Group
 with two GPU tasks and a small CPU controller.
