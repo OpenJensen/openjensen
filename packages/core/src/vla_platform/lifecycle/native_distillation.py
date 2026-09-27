@@ -18,6 +18,7 @@ from vla_platform.datasets.snapshots import (
 )
 
 from .contracts import LifecycleResult, PolicyArtifact
+from .control_provenance import policy_claims, transform_claims
 from .native_quantization import (
     JSON_LIMIT,
     RUNTIME,
@@ -26,6 +27,8 @@ from .native_quantization import (
     exact_json,
     hash_file,
     source_info,
+    temporal_claims,
+    temporal_info,
 )
 from .runtime import native_distillation_ready
 from .simulation import finish_owned, strict_json
@@ -118,6 +121,7 @@ def dataset_info(profile, store, admitted, recipe):
         or action.get("names") != names
     ):
         raise ValueError("Six matching explicit state/action coordinate names are required")
+    provenance = dataset_provenance(manifest, descriptor, admitted, recipe, camera, names)
     lineage = {row["episode_index"]: row for row in manifest["lineage"]}
     selected, groups, origins = {}, {}, set()
     for split, episodes in recipe.splits.model_dump().items():
@@ -151,6 +155,7 @@ def dataset_info(profile, store, admitted, recipe):
         "selected": selected,
         "camera": camera,
         "image_shape": shape,
+        **provenance,
         "source": {
             "kind": "generated_fixture" if generated else "lerobot",
             "identity": descriptor["id"],
@@ -169,15 +174,69 @@ def dataset_info(profile, store, admitted, recipe):
     }
 
 
+def dataset_provenance(manifest, descriptor, admitted, recipe, camera, names):
+    """Bind requested immutable observations to saved model timing and coordinates."""
+    fps = manifest.get("fps")
+    finite(fps, positive=True)
+    claims = {
+        "prediction_horizon": admitted["prediction_horizon"],
+        "execution_horizon": admitted["execution_horizon"],
+        "temporal_contract_sha256": admitted["temporal_contract_sha256"],
+        "control_contract": admitted.get("control_contract"),
+        "control_contract_sha256": admitted.get("control_contract_sha256"),
+        "action_fps": fps,
+    }
+    if admitted["temporal_contract_sha256"] is not None:
+        temporal = strict_json(admitted["path"] / "temporal-contract.json", JSON_LIMIT)
+        if temporal["action_fps"] != fps:
+            raise ValueError("Distillation snapshot FPS differs from the teacher temporal contract")
+    control = claims["control_contract"]
+    if control is not None:
+        source = control["source"]
+        entries = {row["path"]: row for row in manifest["files"]}
+        if (
+            source["dataset_snapshot_id"] != descriptor["id"]
+            or source["dataset_manifest_sha256"] != descriptor["manifest_sha256"]
+            or source["demonstrations_sha256"]
+            != entries.get("meta/firebird-demonstrations.json", {}).get("sha256")
+            or control["joint_order"] != names
+            or control["camera"]["key"] != camera
+            or control["action_fps"] != fps
+            or recipe.units != ["radians"] * len(names)
+            or any(
+                manifest["features"][key].get("dtype") != "float32"
+                for key in ("observation.state", "action")
+            )
+        ):
+            raise ValueError("Distillation snapshot or coordinates differ from simulator contract")
+    return claims
+
+
+def output_provenance(metadata, admitted):
+    """Build exact worker claims while accepting historical unannotated 100/100 outputs."""
+    return temporal_claims(metadata, admitted) | transform_claims(metadata, admitted)
+
+
 def implementation_identity(runtime):
     root = Path(runtime.native_distillation_root).resolve()
-    names = ("__init__.py", "application.py", "contracts.py", "prepare.py", "runtime.py")
+    names = (
+        "__init__.py",
+        "application.py",
+        "contracts.py",
+        "prepare.py",
+        "runtime.py",
+        "provenance.py",
+    )
     result = {
         "distillation/" + name: hash_file(root / "src/firebird_distill" / name)["sha256"]
         for name in names
     }
-    for name in ("bundle.py", "probe.py"):
+    for name in ("bundle.py", "probe.py", "control_schema.py"):
         result["act/" + name] = hash_file(root.parent / "act_optimizer/src/firebird_act" / name)[
+            "sha256"
+        ]
+    for name in ("control_contract.py", "control_schema.py"):
+        result["data/" + name] = hash_file(root.parent / "smolvla_qlora/src/firebird_vla" / name)[
             "sha256"
         ]
     return result
@@ -302,7 +361,7 @@ def check_corpus(directory, response, data, recipe):
     digest = file_digest(directory, "manifest.json", JSON_LIMIT)["sha256"]
     equal(response.get("manifest_sha256"), digest, "Prepared corpus manifest changed")
     doc = strict_json(directory / "manifest.json", JSON_LIMIT)
-    if set(doc) != {
+    fields = {
         "schema_version",
         "format",
         "source",
@@ -311,8 +370,25 @@ def check_corpus(directory, response, data, recipe):
         "image_shape",
         "chunk_size",
         "samples",
-    }:
+    }
+    extra = {
+        "execution_horizon": data["execution_horizon"],
+        "action_fps": data["action_fps"],
+        "temporal_contract_sha256": data["temporal_contract_sha256"],
+        "control_contract": data["control_contract"],
+        "control_contract_sha256": data["control_contract_sha256"],
+    }
+    extended = (
+        any(key in doc for key in extra)
+        or (data["prediction_horizon"], data["execution_horizon"]) != (100, 100)
+        or data["temporal_contract_sha256"] is not None
+        or data["control_contract"] is not None
+    )
+    if set(doc) != fields | (set(extra) if extended else set()):
         raise ValueError("Invalid prepared corpus fields")
+    if extended:
+        for key, expected in extra.items():
+            equal(doc.get(key), expected, "Prepared corpus timing or simulator identity mismatch")
     for key, expected in {
         "schema_version": 1,
         "format": "act-observation-corpus-v1",
@@ -320,7 +396,7 @@ def check_corpus(directory, response, data, recipe):
         "semantics": data["semantics"],
         "camera": data["camera"],
         "image_shape": data["image_shape"],
-        "chunk_size": 100,
+        "chunk_size": data["prediction_horizon"],
     }.items():
         equal(doc.get(key), expected, "Prepared corpus source/coordinate identity mismatch")
     samples = doc.get("samples")
@@ -376,6 +452,8 @@ def check_corpus(directory, response, data, recipe):
 def model_id(directory, files):
     value = hashlib.sha256(b"sim-policy-checkpoint-v1\0")
     for name, item in sorted(files.items()):
+        if name == "temporal-contract.json":
+            continue
         encoded = name.encode("utf-8")
         value.update(len(encoded).to_bytes(8, "big") + encoded + item["bytes"].to_bytes(8, "big"))
         with _open_beneath(directory, Path(name)) as stream:
@@ -422,22 +500,29 @@ def check_result(response, job, source, admitted, data, doc, corpus_sha, destina
         for step in strict_json(admitted["path"] / name, JSON_LIMIT)["steps"]:
             if step.get("state_file"):
                 processors.add(step["state_file"])
-    if set(policy) != processors | {"config.json", "model.safetensors"} or set(files) != {
+    sidecars = {"control-contract.json", "temporal-contract.json"} & admitted["files"].keys()
+    if set(policy) != processors | sidecars | {"config.json", "model.safetensors"} or set(
+        files
+    ) != {
         "manifest.json",
         "training.json",
         "verification.json",
         "lineage.json",
     } | {"policy/" + name for name in policy}:
         raise ValueError("Student package inventory is incomplete or contains unexpected files")
-    for name in processors:
-        equal(policy[name], admitted["files"][name], "Student changed teacher processor bytes")
+    for name in processors | sidecars:
+        equal(
+            policy[name],
+            admitted["files"][name],
+            "Student changed teacher processor or sidecar bytes",
+        )
     teacher_config = strict_json(admitted["path"] / "config.json", JSON_LIMIT)
     student_config = strict_json(destination / "policy/config.json", JSON_LIMIT)
     for key, expected in {
         "type": "act",
         "use_vae": False,
-        "chunk_size": 100,
-        "n_action_steps": 100,
+        "chunk_size": admitted["prediction_horizon"],
+        "n_action_steps": admitted["execution_horizon"],
         "dim_model": 256,
         "dim_feedforward": 1024,
         "n_encoder_layers": 2,
@@ -453,7 +538,26 @@ def check_result(response, job, source, admitted, data, doc, corpus_sha, destina
         equal(
             student_config.get(key), teacher_config.get(key), "Student changed teacher conventions"
         )
+    actual_metadata = manifest.get("metadata")
+    if not isinstance(actual_metadata, dict):
+        raise ValueError("Student metadata must be an object")
+    provenance = output_provenance(actual_metadata, admitted)
+    equal(
+        output_provenance(report, admitted),
+        provenance,
+        "Student report provenance differs from manifest",
+    )
+    equal(
+        temporal_info(student_config, destination / "policy", policy),
+        {
+            key: admitted[key]
+            for key in ("prediction_horizon", "execution_horizon", "temporal_contract_sha256")
+        },
+        "Student temporal contract differs from teacher",
+    )
+    policy_claims(destination / "policy", actual_metadata)
     metadata = {
+        **provenance,
         "architecture": "act",
         "recipe": "act-action-distillation-v1",
         "model_id": model_id(destination / "policy", policy),
@@ -510,6 +614,7 @@ def check_result(response, job, source, admitted, data, doc, corpus_sha, destina
     for key, expected in {
         "schema_version": 1,
         "adapter": "act-act-v1",
+        **provenance,
         "device": "cpu",
         "dtype": "float32",
         "dataset_kind": data["source"]["kind"],
@@ -560,7 +665,7 @@ def check_result(response, job, source, admitted, data, doc, corpus_sha, destina
             raise ValueError("Incomplete held-out imitation measurements")
         for split, values in measures.items():
             count = sum(
-                min(100, s["episode_length"] - s["frame_index"]) * 6
+                min(admitted["prediction_horizon"], s["episode_length"] - s["frame_index"]) * 6
                 for s in doc["samples"]
                 if s["split"] == split
             )
@@ -586,6 +691,16 @@ def check_result(response, job, source, admitted, data, doc, corpus_sha, destina
             "queue_and_reset_exact": True,
         }.items():
             equal(predicted.get(key), expected, "Reload sample identity mismatch")
+        if provenance or any(
+            key in predicted
+            for key in ("queue_refill_exact", "prediction_horizon", "execution_horizon")
+        ):
+            for key, expected in {
+                "queue_refill_exact": True,
+                "prediction_horizon": admitted["prediction_horizon"],
+                "execution_horizon": admitted["execution_horizon"],
+            }.items():
+                equal(predicted.get(key), expected, "Reload queue timing evidence differs")
         sha(predicted.get("raw_sha256"))
         sha(predicted.get("postprocessed_sha256"))
     actual_versions = report.get("versions")
@@ -602,6 +717,7 @@ def check_result(response, job, source, admitted, data, doc, corpus_sha, destina
         verified,
         {
             "schema_version": 1,
+            **provenance,
             "versions": actual_versions,
             "policy_files": policy,
             "predictions": predictions,

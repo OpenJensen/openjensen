@@ -113,7 +113,7 @@ def test_existing_legacy_checkpoint_with_null_optional_fields_still_works(tmp_pa
     (tmp_path / "checkpoint/pretrained_model").mkdir(parents=True)
     (tmp_path / "checkpoint/manifest.json").write_text('{"step": 1}')
     assert provenance.training_claims(tmp_path, metadata) == {}
-    provenance.require_transform_support(metadata, ["config.json", "model.safetensors"])
+    assert all(value is None for value in provenance.transform_claims(metadata, {}).values())
 
 
 @pytest.mark.parametrize(
@@ -186,18 +186,12 @@ def test_export_refuses_changed_training_provenance(tmp_path, fault):
         provenance.training_claims(tmp_path, metadata)
 
 
-@pytest.mark.parametrize("location", ["metadata", "nested", "file"])
-def test_unsupported_transform_cannot_silently_drop_coordinates(tmp_path, location):
+@pytest.mark.parametrize(
+    "metadata", [{}, {"control_contract": None}, {"control_contract_sha256": None}]
+)
+def test_transform_requires_complete_source_claims_even_if_output_omits_them(tmp_path, metadata):
     claims = write_policy(tmp_path)
-    metadata, files = {}, []
-    if location == "metadata":
-        metadata = claims
-    elif location == "nested":
-        metadata = {"checkpoint": claims}
-    else:
-        files = ["policy/" + schema.FILE]
-    with pytest.raises(ValueError, match="preserving its control contract"):
-        provenance.require_transform_support(metadata, files)
+    assert provenance.transform_claims(metadata, claims) == claims
 
 
 def evidence():

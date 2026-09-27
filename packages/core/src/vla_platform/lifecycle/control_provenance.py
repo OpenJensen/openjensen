@@ -77,9 +77,8 @@ def training_claims(directory, metadata):
     return claims
 
 
-def require_transform_support(metadata, filenames):
-    if has_claims(metadata) or any(Path(name).name == FILE for name in filenames):
-        raise ValueError(
-            "This simulator-bound policy cannot yet be distilled or quantized while preserving "
-            "its control contract. Keep the original package for simulator Run."
-        )
+def transform_claims(metadata: dict, admitted: dict) -> dict:
+    """Require paired claims when declared; retain omitted historical metadata."""
+    if any(key in metadata or admitted.get(key) is not None for key in KEYS):
+        return {key: admitted.get(key) for key in KEYS}
+    return {}

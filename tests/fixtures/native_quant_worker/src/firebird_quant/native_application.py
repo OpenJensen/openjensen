@@ -67,6 +67,9 @@ def package(job):
         "stats.safetensors",
     ):
         (policy / name).write_bytes((source / name).read_bytes())
+    for name in ("control-contract.json", "temporal-contract.json"):
+        if (source / name).is_file():
+            (policy / name).write_bytes((source / name).read_bytes())
     (policy / "model.fbq").write_bytes(b"fixture packed payload, never executable")
     bits = job["native_quantization"]["bits"]
     write(
@@ -127,13 +130,36 @@ def package(job):
         "source_artifact_id": job["source"]["artifact_id"],
         "source_artifact_manifest_sha256": job["source"]["artifact_manifest_sha256"],
     }
+    prediction, execution = config["chunk_size"], config["n_action_steps"]
+    claims = {}
+    if (source / "control-contract.json").is_file():
+        raw = (source / "control-contract.json").read_bytes()
+        claims.update(
+            control_contract=json.loads(raw),
+            control_contract_sha256=hashlib.sha256(raw).hexdigest(),
+        )
+    if (
+        claims
+        or (prediction, execution) != (100, 100)
+        or (source / "temporal-contract.json").is_file()
+    ):
+        metadata.update(
+            prediction_horizon=prediction,
+            execution_horizon=execution,
+            temporal_contract_sha256=(
+                hashlib.sha256((source / "temporal-contract.json").read_bytes()).hexdigest()
+                if (source / "temporal-contract.json").is_file()
+                else None
+            ),
+        )
+    metadata.update(claims)
     chunks = [
         {
             "seed": seed,
             "input_sha256": str(index) * 64,
             "image_shape": [3, 32, 32],
-            "raw": [[0.0] * 6 for _ in range(100)],
-            "postprocessed": [[0.0] * 6 for _ in range(100)],
+            "raw": [[0.0] * 6 for _ in range(prediction)],
+            "postprocessed": [[0.0] * 6 for _ in range(prediction)],
             "queue_and_reset_exact": True,
         }
         for index, seed in enumerate((171, 902))
@@ -143,7 +169,11 @@ def package(job):
             "seed": row["seed"],
             "input_sha256": row["input_sha256"],
             **{
-                key: {"rmse": 0.0, "maximum_absolute_difference": 0.0, "coordinates": 600}
+                key: {
+                    "rmse": 0.0,
+                    "maximum_absolute_difference": 0.0,
+                    "coordinates": prediction * 6,
+                }
                 for key in ("raw", "postprocessed")
             },
         }
@@ -170,6 +200,9 @@ def package(job):
         "gpu_memory_bytes": None,
         "inference_speedup": None,
     }
+    proof.update(claims)
+    if "prediction_horizon" in metadata:
+        proof.update(prediction_horizon=prediction, execution_horizon=execution)
     lineage = {
         "schema_version": 1,
         "source_artifact_id": job["source"]["artifact_id"],
