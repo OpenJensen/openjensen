@@ -1755,6 +1755,11 @@ export interface components {
              * @enum {string}
              */
             execution: "native" | "skypilot";
+            /**
+             * Export Only
+             * @default false
+             */
+            export_only: boolean;
             /** Gpu Memory Mib */
             gpu_memory_mib: number | null;
             /** Gpu Name */

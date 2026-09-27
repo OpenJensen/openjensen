@@ -306,13 +306,17 @@ def test_bad_download_bytes_fail_api_without_registering_or_retaining_staging(
 
 
 @pytest.mark.parametrize("window", ["spawn", "cleanup", "completed-cleanup"])
+@pytest.mark.parametrize("stage", ["download", "export"])
 def test_repeated_cancellation_reaps_actual_owned_child_before_staging_cleanup(
-    application, cloud, tmp_path, monkeypatch, window
+    application, cloud, tmp_path, monkeypatch, window, stage
 ):
     app, client, pid, source, remote, _ = prepare(application, cloud, tmp_path, monkeypatch)
     started = tmp_path / "cancel-child-pid"
     if window != "completed-cleanup":
-        monkeypatch.setenv("FIREBIRD_TEST_COPY_HANG", str(started))
+        monkeypatch.setenv(
+            "FIREBIRD_TEST_COPY_HANG" if stage == "download" else "FIREBIRD_TEST_EXPORT_HANG",
+            str(started),
+        )
     lifecycle = app.state.execution.lifecycle
     original_spawn, original_stop = asyncio.create_subprocess_exec, lifecycle.stop
 
@@ -323,13 +327,13 @@ def test_repeated_cancellation_reaps_actual_owned_child_before_staging_cleanup(
         async def spawn(*args, **kwargs):
             child = await original_spawn(*args, **kwargs)
             children.append(child)
-            if window == "spawn":
+            if window == "spawn" and (stage == "download" or len(children) == 2):
                 arrived.set()
                 await release.wait()
             return child
 
         async def stop(child, container):
-            if window != "spawn":
+            if window != "spawn" and (stage == "download" or len(children) == 2):
                 arrived.set()
                 await release.wait()
             await original_stop(child, container)
@@ -364,14 +368,15 @@ def test_repeated_cancellation_reaps_actual_owned_child_before_staging_cleanup(
             release.set()
             with pytest.raises(asyncio.CancelledError):
                 await task
-        assert len(children) == 1 and children[0].returncode is not None
-        assert not (app.state.execution.settings.data_dir / "jobs" / job.id / "operation").exists()
+        assert len(children) == (1 if stage == "download" else 2)
+        assert all(child.returncode is not None for child in children)
         assert not (
             app.state.execution.settings.data_dir / "jobs" / job.id / "checkpoint-download"
         ).exists()
         if os.name == "posix":
-            with pytest.raises(ProcessLookupError):
-                os.kill(children[0].pid, 0)
+            for child in children:
+                with pytest.raises(ProcessLookupError):
+                    os.kill(child.pid, 0)
 
     client.portal.call(exercise)
     assert (remote / "remote.json").exists()

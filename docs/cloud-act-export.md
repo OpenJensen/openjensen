@@ -62,7 +62,9 @@ checkpoint, quantization result, calibrated robot policy, task-success evaluatio
 GPU-memory measurement or speedup claim.
 
 Offline API tests exercise a real supervised copy subprocess over fixture GCS
-streams, cancellation/timeout ownership, corruption, byte limits, source mutation,
+streams, repeated-cancellation ownership, corruption, byte limits, source mutation,
 publication races, cross-project rejection and full-profile lineage. Browser
 checks cover explicit final/periodic selection, local ancestry/download links and
 export-only runtime filtering. These fixtures do not exercise live GCS permissions.
+
+A genuine saved native LeRobot 0.6.2 ACT fixture also passed the complete app route through fixture GCS streams and the unchanged 0.6.1 CPU consumer. Its archive was verified against every published file and the original bundle remained unchanged. The fixture was trained on generated batches; this establishes transport, source admission and export integration, not real-dataset task quality or live GCS access.

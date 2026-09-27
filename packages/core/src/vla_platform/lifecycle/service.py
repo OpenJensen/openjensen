@@ -971,6 +971,34 @@ class Lifecycle:
                 except ProcessLookupError:
                     pass
 
+    async def act_stop_owned(self, process):
+        """Finish ACT child cleanup despite repeated cancellation, then propagate it."""
+        finish = asyncio.create_task(self.stop(process, None))
+        interrupted = False
+        while not finish.done():
+            try:
+                await asyncio.shield(finish)
+            except asyncio.CancelledError:
+                interrupted = True
+        finish.result()
+        if interrupted:
+            raise asyncio.CancelledError
+
+    async def act_spawn_owned(self, *args, **kwargs):
+        """Register an ACT copy/export child before honouring cancellation."""
+        spawning = asyncio.create_task(asyncio.create_subprocess_exec(*args, **kwargs))
+        interrupted = False
+        while not spawning.done():
+            try:
+                await asyncio.shield(spawning)
+            except asyncio.CancelledError:
+                interrupted = True
+        process = spawning.result()
+        if interrupted:
+            await self.act_stop_owned(process)
+            raise asyncio.CancelledError
+        return process
+
     async def native(
         self,
         job,
@@ -1141,7 +1169,8 @@ class Lifecycle:
             # Settings may change while a queued run waits, or during an earlier
             # workflow stage. Check again immediately before starting each worker.
             self.compute.require_enabled(runtime)
-            process = await asyncio.create_subprocess_exec(
+            spawn = self.act_spawn_owned if act_export else asyncio.create_subprocess_exec
+            process = await spawn(
                 *argv,
                 cwd=cwd,
                 env=env,
@@ -1173,7 +1202,10 @@ class Lifecycle:
                                 await self.event(job, output, f"Optimizer step {progress['step']}")
                 await process.wait()
             finally:
-                await self.stop(process, container_name if image else None)
+                if act_export:
+                    await self.act_stop_owned(process)
+                else:
+                    await self.stop(process, container_name if image else None)
             returncode = process.returncode
         if not result_path.exists() or result_path.stat().st_size > 4 * 1024 * 1024:
             raise ValueError("Worker did not produce a bounded result")
@@ -1258,44 +1290,21 @@ class Lifecycle:
             job, "downloading", "Downloading the completed ACT checkpoint for local CPU export"
         )
         destination = directory / "local-checkpoint"
-        spawning = asyncio.create_task(
-            asyncio.create_subprocess_exec(
-                python,
-                str(Path(cloud_materialize.__file__).resolve()),
-                str(descriptor.resolve()),
-                str(destination.resolve()),
-                artifact.manifest_sha256,
-                artifact.id,
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-                start_new_session=os.name == "posix",
-            )
+        process = await self.act_spawn_owned(
+            python,
+            str(Path(cloud_materialize.__file__).resolve()),
+            str(descriptor.resolve()),
+            str(destination.resolve()),
+            artifact.manifest_sha256,
+            artifact.id,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+            start_new_session=os.name == "posix",
         )
-        process = None
         try:
-            # Even repeated cancellation must first learn the exact child identity.
-            interrupted = False
-            while not spawning.done():
-                try:
-                    await asyncio.shield(spawning)
-                except asyncio.CancelledError:
-                    interrupted = True
-            process = spawning.result()
-            if interrupted:
-                raise asyncio.CancelledError
             await process.wait()
         finally:
-            if process is not None:
-                finish = asyncio.create_task(self.stop(process, None))
-                cleanup_interrupted = False
-                while not finish.done():
-                    try:
-                        await asyncio.shield(finish)
-                    except asyncio.CancelledError:
-                        cleanup_interrupted = True
-                finish.result()
-                if cleanup_interrupted:
-                    raise asyncio.CancelledError
+            await self.act_stop_owned(process)
         if process.returncode:
             raise ValueError(
                 "Completed ACT checkpoint download failed; "

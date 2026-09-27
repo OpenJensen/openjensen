@@ -19,7 +19,6 @@ from vla_platform.cloud_api import router as cloud_connections_router
 from vla_platform.cloud_connections import CloudConnections
 from vla_platform.cloud_runs import CloudRunsFeed, read_cloud_runs
 from vla_platform.compute_api import router as compute_settings_router
-from vla_platform.decision_api import router as decision_router
 from vla_platform.contracts import (
     Capability,
     EpisodePage,
@@ -30,6 +29,7 @@ from vla_platform.contracts import (
     ProjectCreate,
 )
 from vla_platform.datasets.explore import DatasetExplorer, ExplorationError
+from vla_platform.decision_api import router as decision_router
 from vla_platform.execution import Execution
 from vla_platform.huggingface_api import router as huggingface_router
 from vla_platform.huggingface_connection import HuggingFaceConnection
