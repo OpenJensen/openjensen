@@ -13,6 +13,7 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -115,6 +116,7 @@ def _identity_text(value: object, *, maximum: int = 512) -> str:
 class CloudConnections:
     def __init__(self, data_dir: Path):
         self.path = data_dir / "cloud-connections.json"
+        self.generation: str | None = None
         self._configs: dict[Provider, ConnectionConfig] = {}
         self._states: dict[Provider, CloudConnection] = {}
         self._locks: dict[Provider, asyncio.Lock] = {
@@ -129,12 +131,15 @@ class CloudConnections:
             document = json.loads(self.path.read_text())
             if not isinstance(document, dict) or document.get("version") != 1:
                 raise ValueError("Unsupported cloud connection file")
+            generation = document.get("generation")
+            if generation is not None:
+                self.generation = str(UUID(generation))
             configs = document["providers"]
             if not isinstance(configs, dict):
                 raise ValueError("Invalid cloud connection file")
             if "gcp" in configs:
                 self._configs["gcp"] = GcpConnectionConfig.model_validate(configs["gcp"])
-        except OSError, ValueError, KeyError, ValidationError:
+        except OSError, ValueError, KeyError, TypeError, AttributeError, ValidationError:
             self._configs.clear()
             for provider in ("gcp",):
                 state = self._base(provider)
@@ -144,7 +149,14 @@ class CloudConnections:
 
     def _save(self, configs: dict[Provider, ConnectionConfig]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"version": 1, "providers": {p: c.model_dump() for p, c in configs.items()}}
+        # Filesystem identity can be reused between polls (especially overlayfs).
+        # A new logical revision invalidates readiness even for identical settings.
+        generation = str(uuid4())
+        payload = {
+            "version": 1,
+            "generation": generation,
+            "providers": {p: c.model_dump() for p, c in configs.items()},
+        }
         handle, temporary = tempfile.mkstemp(prefix=".cloud-connections-", dir=self.path.parent)
         try:
             with os.fdopen(handle, "w") as file:
@@ -153,6 +165,7 @@ class CloudConnections:
                 file.flush()
                 os.fsync(file.fileno())
             os.replace(temporary, self.path)
+            self.generation = generation
         finally:
             if os.path.exists(temporary):
                 os.unlink(temporary)

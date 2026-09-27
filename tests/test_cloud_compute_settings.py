@@ -595,3 +595,50 @@ def test_import_check_locates_windows_console_script_environment_without_executi
     python = tmp_path / "python.exe"
     python.write_bytes(b"fixture interpreter; never executed")
     assert catalog.sky_python(str(launcher)) == str(python)
+
+
+def test_reconnect_between_polls_revokes_readiness_despite_identical_file_metadata(
+    tmp_path, probes, monkeypatch
+):
+    from pathlib import Path
+
+    from vla_platform.cloud_connections import CloudConnections, GcpConnectionConfig
+
+    connections = CloudConnections(tmp_path)
+    config = GcpConnectionConfig(**GCP_CONFIG)
+    connections._save({"gcp": config})
+    compute = ComputeSettings(tmp_path)
+    saved = tmp_path / "cloud-connections.json"
+    stat = saved.stat()
+    original_stat = Path.stat
+    monkeypatch.setattr(
+        Path,
+        "stat",
+        lambda path, *a, **kw: stat if path == saved else original_stat(path, *a, **kw),
+    )
+    assert asyncio.run(compute.check_gcp()).status == "ready"
+    connections._save({})
+    connections._save({"gcp": config})
+    # No status poll observed the disconnected state; all stat fields are identical.
+    assert compute.gcp_status().status == "unchecked"
+    assert not any(option.available for option in compute.gpu_options())
+    assert asyncio.run(compute.check_gcp()).status == "ready"
+
+
+def test_connection_mutation_during_readiness_probe_cannot_finish_ready(
+    tmp_path, probes, monkeypatch
+):
+    save_connection(tmp_path)
+    compute = ComputeSettings(tmp_path)
+    original = catalog.run_readonly
+
+    async def invalidate(*args, **kwargs):
+        result = await original(*args, **kwargs)
+        compute.invalidate_cloud_check()
+        return result
+
+    monkeypatch.setattr(catalog, "run_readonly", invalidate)
+    state = asyncio.run(compute.check_gcp())
+    assert state.status == "setup_required"
+    assert "changed during the check" in state.message
+    assert not any(option.available for option in compute.gpu_options())

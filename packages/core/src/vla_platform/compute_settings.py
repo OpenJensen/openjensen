@@ -95,7 +95,8 @@ class ComputeSettings:
         self._launch_prepare_lock = asyncio.Lock()
         self._gcp_status: GcpComputeStatus | None = None
         self._gcp_checked_config: GcpConnectionConfig | None = None
-        self._gcp_checked_stamp: tuple[int, int, int, int, int] | None = None
+        self._gcp_checked_stamp: tuple[int, int, int, int, int, str | None] | None = None
+        self._gcp_revision = 0
         self._gcp_offerings: set[str] = set()
         self._preferences = ComputePreferences()
         if self.path.exists():
@@ -177,10 +178,17 @@ class ComputeSettings:
         connection = next((item for item in connections.providers if item.provider == "gcp"), None)
         return connection.config if connection else None
 
-    def _gcp_connection_stamp(self) -> tuple[int, int, int, int, int] | None:
+    def _gcp_connection_stamp(self) -> tuple[int, int, int, int, int, str | None] | None:
         try:
             stat = (self.path.parent / "cloud-connections.json").stat()
-            return stat.st_dev, stat.st_ino, stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size
+            return (
+                stat.st_dev,
+                stat.st_ino,
+                stat.st_mtime_ns,
+                stat.st_ctime_ns,
+                stat.st_size,
+                CloudConnections(self.path.parent).generation,
+            )
         except OSError:
             return None
 
@@ -387,6 +395,7 @@ class ComputeSettings:
         async with self._check_lock:
             config = self._gcp_config()
             connection_stamp = self._gcp_connection_stamp()
+            revision = self._gcp_revision
             state = self.gcp_status()
             state.status = "setup_required"
             state.checked_at = datetime.now(UTC).isoformat()
@@ -498,7 +507,11 @@ class ComputeSettings:
                         "No supported single-GPU GCP machines are listed in this region. "
                         "Choose another region."
                     )
-                if self._gcp_config() != config or self._gcp_connection_stamp() != connection_stamp:
+                if (
+                    self._gcp_config() != config
+                    or self._gcp_connection_stamp() != connection_stamp
+                    or self._gcp_revision != revision
+                ):
                     raise SetupCheckError(
                         "Google Cloud settings changed during the check. "
                         "Check the new settings again."
@@ -559,11 +572,19 @@ class ComputeSettings:
             sky_api_endpoint=sky_target["sky_api_endpoint"], expected_config=config
         )
 
+    def invalidate_cloud_check(self) -> None:
+        """Revoke cached and in-flight checks when an operator changes connection state."""
+        self._gcp_revision += 1
+        self._gcp_status = None
+        self._gcp_checked_config = None
+        self._gcp_checked_stamp = None
+        self._gcp_offerings.clear()
+
     def enable_cloud(self) -> None:
         preferences = self.preferences()
         preferences.gcp.enabled = True
         self.update(ComputeSettingsUpdate(gcp=preferences.gcp))
-        self._gcp_status = None
+        self.invalidate_cloud_check()
         (self.path.parent / "compute-last-failure.json").unlink(missing_ok=True)
 
     def _persist_failure(self, state, config, stamp) -> None:

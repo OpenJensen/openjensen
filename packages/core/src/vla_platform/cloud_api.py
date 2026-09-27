@@ -29,6 +29,7 @@ async def list_cloud_connections(service: CloudConnectionsDep) -> CloudConnectio
 async def connect_cloud_provider(
     provider: Provider, payload: ConnectionConfig, service: CloudConnectionsDep, request: Request
 ) -> CloudConnection:
+    request.app.state.execution.lifecycle.compute.invalidate_cloud_check()
     try:
         result = await service.connect(provider, payload)
         if result.status == "connected":
@@ -44,15 +45,17 @@ async def connect_cloud_provider(
 
 @router.post("/{provider}/recheck", response_model=CloudConnection)
 async def recheck_cloud_provider(
-    provider: Provider, service: CloudConnectionsDep
+    provider: Provider, service: CloudConnectionsDep, request: Request
 ) -> CloudConnection:
+    request.app.state.execution.lifecycle.compute.invalidate_cloud_check()
     return await service.recheck(provider)
 
 
 @router.post("/{provider}/disconnect", response_model=CloudConnection)
 async def disconnect_cloud_provider(
-    provider: Provider, service: CloudConnectionsDep
+    provider: Provider, service: CloudConnectionsDep, request: Request
 ) -> CloudConnection:
+    request.app.state.execution.lifecycle.compute.invalidate_cloud_check()
     try:
         return await service.disconnect(provider)
     except OSError as exc:
