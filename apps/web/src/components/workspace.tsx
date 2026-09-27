@@ -49,10 +49,10 @@ const navigationGroups = [
   { name: 'Workspace', items: [7, 6] },
 ];
 
-function ModeCard({ title, detail, icon, selected, disabled, onClick }: { title: string; detail: string; icon: Parameters<typeof Icon>[0]['name']; selected: boolean; disabled: boolean; onClick: () => void }) {
-  return <button type="button" className={`mode-card${selected ? ' selected' : ''}`} aria-label={title} aria-pressed={selected} disabled={disabled} onClick={onClick}>
-    <span className="mode-card-top"><span className="mode-card-icon"><Icon name={icon} size={23} /></span><span className="mode-card-check">{selected && <Icon name="check" size={13} />}</span></span>
-    <strong>{title}</strong><span className="mode-card-detail">{detail}</span>
+function ModeCard({ title, detail, icon, selected, disabled, onClick }: { title: string; detail: string; icon?: Parameters<typeof Icon>[0]['name']; selected: boolean; disabled: boolean; onClick: () => void }) {
+  return <button type="button" className={`mode-card${icon ? '' : ' mode-card-plain'}${selected ? ' selected' : ''}`} aria-label={title} aria-pressed={selected} disabled={disabled} onClick={onClick}>
+    <span className="mode-card-top">{icon ? <span className="mode-card-icon"><Icon name={icon} size={23} /></span> : <strong>{title}</strong>}<span className="mode-card-check">{selected && <Icon name="check" size={13} />}</span></span>
+    {icon && <strong>{title}</strong>}<span className="mode-card-detail">{detail}</span>
   </button>;
 }
 
@@ -379,17 +379,17 @@ function Workbench() {
         {activeStage === 3 && <section className="workflow-choices" aria-label="Quantization workflow">
           <h2 className="workflow-choice-title">Supported models</h2>
           <div className="mode-card-grid two-columns" role="group" aria-label="Quantization mode">
-            <ModeCard title="SmolVLA" detail="GGUF · 4-bit or 8-bit" icon="spark" selected={quantizeMode === 'gguf'} disabled={!workflowProjectId} onClick={() => { if (quantizeMode !== 'gguf') setQuantizeArtifact(null); chooseQuantize('gguf'); }} />
-            <ModeCard title="ACT" detail="INT8 or INT4 · Local worker" icon="layers" selected={quantizeMode === 'native'} disabled={!workflowProjectId} onClick={() => { if (quantizeMode !== 'native') setQuantizeArtifact(null); chooseQuantize('native'); }} />
+            <ModeCard title="SmolVLA" detail="GGUF · 4-bit or 8-bit" selected={quantizeMode === 'gguf'} disabled={!workflowProjectId} onClick={() => { if (quantizeMode !== 'gguf') setQuantizeArtifact(null); chooseQuantize('gguf'); }} />
+            <ModeCard title="ACT" detail="INT8 or INT4 · Local worker" selected={quantizeMode === 'native'} disabled={!workflowProjectId} onClick={() => { if (quantizeMode !== 'native') setQuantizeArtifact(null); chooseQuantize('native'); }} />
           </div>
         </section>}
         {entryPending && (!workflowProjectId || jobs.isPending || entryFailed || recoveryError) && <section className="panel" aria-label="Workflow selection status"><p role={entryFailed || recoveryError ? 'alert' : 'status'}>{!workflowProjectId ? 'Select a project to see its workflow history.' : recoveryError ?? (entryFailed ? 'Workflow availability or history could not be loaded. Choose a mode to inspect it, or retry these reads.' : 'Loading this project’s workflow history and configured workers…')}</p>{entryFailed && <button className="secondary-button" onClick={() => { void jobs.refetch(); void options.refetch(); if (activeStage === 5) void simulation.refetch(); }}>Retry workflow context</button>}</section>}
         {activeStage === 3 && quantizeMode === 'native' && <NativeQuantizationPanel key={workflowProjectId} projectId={workflowProjectId} preferredJobId={context?.quantize?.jobId} onJobSelected={id => chooseQuantize('native', 'manual', id)} preferredArtifactId={quantizeArtifact?.projectId === workflowProjectId ? quantizeArtifact.artifactId : undefined} onPrepare={() => navigateStage(1)} onReplay={artifactId => { navigateStage(5); setReplayArtifact({ projectId: workflowProjectId, artifactId }); chooseRun('replay', 'handoff'); }} />}
-        {activeStage === 4 && <section className="workflow-context" aria-label="Evaluation purpose"><WorkbenchDisclosure title="Evaluation details"><p>Engine checks measure loading, finite actions and runtime performance. LIBERO measures closed-loop task success with a configured benchmark runtime. Observation replay and experimental Isaac rollouts do not establish task success; scored ACT / Isaac evaluation is not configured.</p>
+        {activeStage === 4 && <section className="workflow-context" aria-label="Evaluation purpose"><WorkbenchDisclosure title="Evaluation details"><p>Engine checks measure loading, finite actions and runtime performance. LIBERO measures closed-loop task success with a configured benchmark runtime. Observation replay and experimental Isaac rollouts do not establish task success; scored ACT / Isaac evaluation is not configured.</p></WorkbenchDisclosure>
           {options.isPending ? <p role="status">Checking evaluation targets…</p> : options.isError ? <p role="alert">Evaluation targets could not be loaded. Availability is unknown.</p> : <p role="status">{engineConfigured ? 'Engine evaluation is configured.' : 'No engine evaluation target is configured.'} {options.data?.runtimes.some(item => engineRuntime(item, 'Evaluate') && item.simulation) ? 'A LIBERO target is configured; its policy and protocol still require validation.' : 'No LIBERO evaluation target is configured.'}</p>}
           {simulation.isError && <p role="alert">Isaac profile availability could not be loaded.</p>}
           {jobs.isError && <p role="alert">Saved workflow history could not be refreshed; previously received records may be stale.</p>}
-          </WorkbenchDisclosure><div className="native-result-actions">
+          <div className="native-result-actions">
             {(replayConfigured || replayHistory) && <button className="text-link" onClick={() => { navigateStage(5); chooseRun('replay', 'handoff'); }}>Open observation replay</button>}
             {(simulationConfigured || simulationHistory) && <button className="text-link" onClick={() => { navigateStage(5); chooseRun('native', 'handoff'); }}>Open native Isaac Run</button>}
           </div>

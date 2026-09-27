@@ -12,7 +12,7 @@ test.describe.configure({ timeout: 120_000 });
 
 async function cli(...args: string[]) {
   const { stdout } = await execute(python, ['-m', 'vla_platform.cli', ...args], {
-    env: { ...process.env, FIREBIRD_API_URL: 'http://127.0.0.1:8765' },
+    env: { ...process.env, FIREBIRD_API_URL: `http://127.0.0.1:${process.env.FIREBIRD_BROWSER_PORT ?? '8765'}` },
     timeout: 15_000,
   });
   return JSON.parse(stdout);

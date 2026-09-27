@@ -106,12 +106,13 @@ test('the contextual guide covers every section and keeps API docs separate', as
 });
 
 
-test('fresh workflows require explicit model and runner choices', async ({ page }) => {
+test('fresh workflows require explicit model and runner choices', async ({ page }, testInfo) => {
   const mutations = await workspace(page);
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
   const quantizers = page.getByRole('group', { name: 'Quantization mode', exact: true });
   await expect(quantizers.getByRole('button', { name: 'SmolVLA', exact: true })).toHaveAttribute('aria-pressed', 'false');
   await expect(quantizers.getByRole('button', { name: 'ACT', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await page.getByRole('region', { name: 'Quantization workflow', exact: true }).screenshot({ path: testInfo.outputPath('quantization-model-cards.png') });
   await expect(page.locator('.workflow-panel')).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toHaveCount(0);
 

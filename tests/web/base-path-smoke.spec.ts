@@ -33,6 +33,11 @@ test('prefixed export loads bundles, API, dataset posters and docs without escap
   await expect(page.getByRole('heading', { name: 'Teaching', exact: true, level: 1 })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start recording', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Connect voice', exact: true })).toBeDisabled();
+  const decisionState = page.waitForResponse(response => new URL(response.url()).pathname === `${prefix}/api/v1/decision/status`);
+  await page.getByRole('button', { name: 'Decision lab', exact: true }).click();
+  expect((await decisionState).status()).toBe(200);
+  await expect(page.getByRole('region', { name: 'Decision advisory', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Teaching', exact: true }).click();
   await page.locator('.page-heading .page-guide').click();
   await expect(page).toHaveURL(new RegExp(`${prefix}/guide/#teaching$`));
   await expect(page.getByRole('heading', { name: 'Workspace guide', exact: true })).toBeVisible();

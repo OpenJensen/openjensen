@@ -1,6 +1,6 @@
 # Native ACT quantization in the web app
 
-In **Quantize**, choose the **ACT** card for INT8/INT4 packing. The **SmolVLA** card opens the separate GGUF workflow. Native ACT conversion appears usable only when the server advertises an enabled, launchable local quantization worker. The browser accepts registered IDs, never executables, paths or cloud configuration.
+In **Quantize**, choose the **ACT** card for INT8/INT4 packing. The **SmolVLA** card opens the separate GGUF workflow. Native ACT conversion appears usable only when the server advertises an enabled, launchable local quantization worker. The browser accepts registered IDs, never executables, paths or cloud configuration. These are the two model-family quantization workflows currently integrated into the app. The standalone `firebird_quant` library supports broader compatible PyTorch modules, but additional families still need application import/export, processor, reload and validation adapters.
 
 Select a complete local ACT inference export or imported native policy. Full training checkpoints, cloud descriptors, other architectures and already packed artifacts are excluded. The worker is authoritative for complete configuration, weights/processors/statistics, a single camera, six action coordinates, a 100-action chunk and `use_vae=false`. Missing browser metadata is not evidence that these checks passed; an incompatible source is rejected with preparation guidance.
 

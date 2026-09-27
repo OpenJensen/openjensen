@@ -267,3 +267,20 @@ for (const phase of ['submit', 'cancel-preflight', 'cancel-receipt'] as const) t
     await expect(page.getByRole('button', { name: 'Confirm cancellation', exact: true })).toHaveCount(0);
   }
 });
+
+test('expanded training recipe keeps labels above full-width inputs with space between fields', async ({ page }) => {
+  const state = await fixture(page); await prepare(page);
+  await page.getByText('Training recipe', { exact: true }).click();
+  const names = ['Training steps', 'Frame stride', 'Learning rate', 'Random seed', 'Distillation timeout (seconds)'];
+  await expect(page.getByLabel(names[0], { exact: true })).toBeVisible();
+  const fields = await Promise.all(names.map(name => page.getByLabel(name, { exact: true }).evaluate(element => {
+    const input = element.getBoundingClientRect(), label = element.closest('label')!.getBoundingClientRect();
+    return { labelTop: label.top, labelWidth: label.width, inputTop: input.top, inputBottom: input.bottom, inputWidth: input.width };
+  })));
+  for (const [index, field] of fields.entries()) {
+    expect(field.inputTop - field.labelTop, `${names[index]} label above its input`).toBeGreaterThanOrEqual(12);
+    expect(Math.abs(field.inputWidth - field.labelWidth), `${names[index]} uses its available field width`).toBeLessThanOrEqual(1);
+    if (index) expect(field.labelTop - fields[index - 1].inputBottom, `space before ${names[index]}`).toBeGreaterThanOrEqual(15);
+  }
+  expect(state.posts).toEqual([]);
+});

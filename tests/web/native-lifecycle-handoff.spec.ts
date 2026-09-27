@@ -266,8 +266,10 @@ test('Evaluate reports unavailable scoring and only offers configured observatio
   const state = await fixture(page);
   await page.getByRole('button', { name: 'Evaluate', exact: true }).click();
   const purpose = page.getByRole('region', { name: 'Evaluation purpose' });
-  await expect(purpose).toContainText('No engine evaluation target is configured.');
-  await expect(purpose).toContainText('No LIBERO evaluation target is configured.');
+  await expect(purpose.locator('details')).not.toHaveAttribute('open');
+  await expect(purpose.getByRole('status')).toBeVisible();
+  await expect(purpose.getByRole('status')).toContainText('No engine evaluation target is configured.');
+  await expect(purpose.getByRole('status')).toContainText('No LIBERO evaluation target is configured.');
   await expect(purpose).toContainText('scored ACT / Isaac evaluation is not configured');
   await expect(purpose.getByRole('button', { name: 'Open native Isaac Run' })).toHaveCount(0);
   await purpose.getByRole('button', { name: 'Open observation replay' }).click();
@@ -278,7 +280,9 @@ test('query failures keep Evaluate availability unknown and do not choose an ini
   const state = await fixture(page); state.failOptions = true; state.failSimulation = true;
   await page.getByRole('button', { name: 'Evaluate', exact: true }).click();
   const purpose = page.getByRole('region', { name: 'Evaluation purpose' });
-  await expect(purpose).toContainText('Availability is unknown.');
+  await expect(purpose.locator('details')).not.toHaveAttribute('open');
+  await expect(purpose.getByRole('alert').filter({ hasText: 'Availability is unknown.' })).toBeVisible();
+  await expect(purpose.getByRole('alert').filter({ hasText: 'Isaac profile availability' })).toBeVisible();
   await expect(purpose).not.toContainText('No LIBERO evaluation target is configured.');
   await expect(purpose.getByRole('button', { name: 'Open observation replay' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Run', exact: true }).click();
@@ -402,5 +406,18 @@ for (const mode of ['quantize', 'replay'] as const) test(`saved ${mode} history 
   await page.getByRole('button', { name: mode === 'quantize' ? 'Quantize' : 'Run', exact: true }).click();
   await expect(page.getByRole('button', { name: mode === 'quantize' ? 'ACT' : 'Replay observations', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('article', { name: mode === 'quantize' ? 'ACT quantization job details' : 'Observation replay details', exact: true })).toHaveAttribute('data-job-id', saved.id);
+  expect(state.mutations).toEqual([]);
+});
+
+for (const failedRead of ['profiles', 'history'] as const) test(`Evaluate keeps ${failedRead} query failure visible while explanation stays collapsed`, async ({ page }) => {
+  const state = await fixture(page);
+  const path = failedRead === 'profiles' ? '**/api/v1/simulation-options' : '**/api/v1/projects/alpha/jobs';
+  await page.route(path, route => route.fulfill({ status: 503, json: { detail: 'Generated review read failure' } }));
+  await page.reload(); await expect(page.getByLabel('Current project')).toHaveValue('alpha');
+  await page.getByRole('button', { name: 'Evaluate', exact: true }).click();
+  const purpose = page.getByRole('region', { name: 'Evaluation purpose' });
+  await expect(purpose.locator('details')).not.toHaveAttribute('open');
+  await expect(purpose.getByRole('alert')).toHaveText(failedRead === 'profiles' ? 'Isaac profile availability could not be loaded.' : 'Saved workflow history could not be refreshed; previously received records may be stale.');
+  await expect(purpose.getByRole('alert')).toBeVisible();
   expect(state.mutations).toEqual([]);
 });
