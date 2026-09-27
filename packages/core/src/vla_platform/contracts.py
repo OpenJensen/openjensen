@@ -16,6 +16,7 @@ from pydantic import (
 )
 
 from vla_platform.augmentation.contracts import AugmentationRequest, AugmentationResult
+from vla_platform.datasets.recording_contracts import RecordingPreparation, RecordingSummary
 from vla_platform.lifecycle.contracts import (
     CloudExecutionTarget,
     LifecycleResult,
@@ -77,6 +78,9 @@ class IntakeRequest(Record):
     )
     path: NonEmptyString | None = Field(default=None, max_length=4096)
     snapshot_for_training: bool = Field(default=False, strict=True)
+    recordings: RecordingPreparation | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @field_validator("revision", mode="before")
     @classmethod
@@ -85,6 +89,16 @@ class IntakeRequest(Record):
 
     @model_validator(mode="after")
     def validate_source(self) -> IntakeRequest:
+        if self.recordings is not None:
+            if (
+                self.source != "local"
+                or not self.snapshot_for_training
+                or self.path is not None
+                or self.repo_id is not None
+                or self.revision != "main"
+            ):
+                raise ValueError("Recordings require local immutable intake without path overrides")
+            return self
         if self.snapshot_for_training and self.source != "local":
             raise ValueError("Training snapshots require a local dataset")
         if self.source == "huggingface" and (not self.repo_id or self.path is not None):
@@ -246,10 +260,17 @@ class DatasetProfile(Record):
     )
 
     snapshot: DatasetSnapshot | None = Field(default=None, exclude_if=lambda value: value is None)
+    recording_preparation: RecordingSummary | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def validate_provenance(self) -> DatasetProfile:
         """Require pinned HF identity or the matching local metadata identity."""
+        if self.recording_preparation is not None and (
+            self.snapshot is None or self.inspection_scope != "complete_snapshot"
+        ):
+            raise ValueError("Prepared recordings require a complete immutable snapshot")
         if self.snapshot is not None and (
             self.source != "local"
             or self.format != "lerobot_v3"
@@ -520,6 +541,7 @@ class WorkerRequest(Record):
     intake: IntakeRequest
     local_root: str | None = None
     snapshot_store: str | None = None
+    reader_python: str | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class WorkerResult(Record):
