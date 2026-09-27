@@ -38,7 +38,7 @@ The local bundle is `src-tauri/target/release/bundle/macos/OPEN JENSEN.app`. A l
 
 ```sh
 cargo fmt --manifest-path src-tauri/Cargo.toml --check
-cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --features custom-protocol -- -D warnings
 cargo test --manifest-path src-tauri/Cargo.toml
 node --test tests/connection.test.cjs
 ```
@@ -58,7 +58,7 @@ Verified stable releases on 2026-09-27: Rust 1.98.1, Tauri crate/CLI 2.12.0, tau
 
 ## Owned backend foundation (not a packaged release)
 
-Production startup is fail-closed at `PRODUCTION_PAYLOAD = None`. Merely placing an executable in a resource directory cannot enable it. A future separately reviewed payload must pin the complete frozen build and supply the exact executable/resource identities; the present resolver checks the fixed executable and static manifest, while the child verifies every static file before ready. This is not independent verification of arbitrary `_internal` dependencies. A [local frozen-sidecar experiment](sidecar/README.md#recorded-local-experiment) now verifies the Python payload separately; no Tauri bundle resource mapping, installer or production runtime activation is included yet.
+Production startup is fail-closed at `PRODUCTION_PAYLOAD = None`. Merely placing an executable in a resource directory cannot enable it. A future separately reviewed payload must pin the complete frozen build and supply the exact executable/resource identities; the resolver now authenticates the complete pinned inventory, including `_internal`, before each owned start; the child additionally verifies every static file before ready. A [local frozen-sidecar experiment](sidecar/README.md#recorded-local-experiment) now verifies the Python payload separately; no Tauri bundle resource mapping, installer or production runtime activation is included yet.
 
 The fixed intended resource layout is `sidecar/firebird-sidecar/firebird-sidecar` (with `.exe` on Windows) plus the complete `_internal` tree. Native code resolves it from Tauri's resource directory, never PATH, current working directory or browser input. The child receives a cleared environment with only OS runtime temporary-directory/SystemRoot fields retained; application/provider/cloud and Python override variables are excluded.
 
@@ -71,3 +71,33 @@ The supervisor permits at most 90 seconds from spawn to ready, 30 seconds for gr
 A valid stopped receipt plus successful process exit establishes ordinary child shutdown. A hard stop, missing receipt or inspection/reaping failure remains `cleanup_unknown`, revokes navigation and blocks another owned start in that desktop process. It does not prove detached worker or remote resource cleanup. Data and application recovery evidence are preserved. Unexpected exits are observed on the next native status/navigation check; no automatic retry or relaunch follows. Connecting to an external backend neither owns nor stops it, and cannot erase a prior cleanup warning.
 
 The native Connection menu only returns to the bundled screen. Only its controls can request ownership changes; HTTP-loaded workbench pages have no native IPC grant. Stop/restart invalidate the allowed backend origin; a new ready generation supplies a new allowed loopback origin. Window close and Quit are intercepted before process exit. Native GUI lifecycle behavior, real frozen-sidecar relocation, active-worker hard-stop behavior, upgrade policy, signing/notarization and Windows/Linux acceptance remain separate gates.
+
+
+## Default-off local payload candidate
+
+`local-payload-experiment` is a build-time-only feature for a separately reviewed native
+candidate. Ordinary builds keep `PRODUCTION_PAYLOAD=None`. No runtime environment value,
+browser argument or discovered executable can enable it. The feature is deliberately
+excluded from the normal validation command above: enabling all features without the
+explicit generated pin must fail the build. It currently targets macOS ARM64 only.
+
+The [scratch preparer](sidecar/README.md#local-native-candidate-preparation) validates an
+already accepted frozen payload, copies it unchanged, and emits fixed pin constants plus
+a Tauri resource overlay. The generated application identifier is separate from the
+normal desktop. Native startup refuses a mismatched identifier. Workspace creation still
+requires explicit confirmation; its version2 marker includes the complete payload identity.
+Old, unmarked or mismatched workspaces are refused and preserved. No existing `.firebird`
+workspace, credentials or model environments are copied or adopted.
+
+The native verifier checks exact files, byte counts, hashes, permission bits, directories
+and literal safe relative symlinks against a bounded, hash-pinned manifest outside the
+payload. It refuses extras, missing files, special entries, escaped/dangling/cyclic links
+and non-ARM64 native inventory. This authenticates an operator-reviewed immutable build;
+it is not an OS sandbox against concurrent malicious writes by the same user.
+
+The complete resources in the final `.app` must match the staged inventory before any
+GUI acceptance. Bundler or signing changes are a failed gate, not permission to refresh
+the pin silently. Native lifecycle acceptance, a clean machine, distribution, upgrades
+and other platforms are still pending. This source change alone has not built or launched
+an enabled candidate. The earlier8ce child/static snapshot remains distinct from a later
+native wrapper source and does not contain WEB-009.

@@ -18,6 +18,19 @@ const UNAVAILABLE: &str = "This desktop has no verified bundled Python payload. 
 // A separately reviewed freezer build must supply an immutable pin before this can be Some.
 // No environment, command argument, web input or discovered file can enable production startup.
 const PRODUCTION_PAYLOAD: Option<PayloadPin> = None;
+#[cfg(feature = "local-payload-experiment")]
+include!(concat!(env!("OUT_DIR"), "/local-payload-pin.rs"));
+
+pub(crate) fn validate_identifier(identifier: &str) -> Result<(), String> {
+    #[cfg(feature = "local-payload-experiment")]
+    if identifier != LOCAL_EXPERIMENT_IDENTIFIER {
+        return Err(
+            "The local payload experiment requires its separate application identifier.".into(),
+        );
+    }
+    let _ = identifier;
+    Ok(())
+}
 
 #[derive(Clone, Copy)]
 struct PayloadPin {
@@ -25,10 +38,13 @@ struct PayloadPin {
     executable_bytes: u64,
     resources_sha256: &'static str,
     build_id: &'static str,
+    manifest: crate::payload_manifest::ManifestPin,
 }
 
 #[derive(Clone)]
 struct Payload {
+    folder: PathBuf,
+    manifest: PathBuf,
     executable: PathBuf,
     resources: PathBuf,
     resources_sha256: String,
@@ -82,7 +98,13 @@ struct ResourceManifest {
 
 impl Payload {
     fn bundled(root: &Path) -> Result<Self, String> {
+        #[cfg(feature = "local-payload-experiment")]
+        let pin = LOCAL_EXPERIMENT_PAYLOAD;
+        #[cfg(not(feature = "local-payload-experiment"))]
         let pin = PRODUCTION_PAYLOAD.ok_or(UNAVAILABLE)?;
+        // The ordinary build remains unavailable, regardless of files or runtime environment.
+        #[cfg(feature = "local-payload-experiment")]
+        let _ = PRODUCTION_PAYLOAD;
         Self::from_pin(root, pin)
     }
 
@@ -113,6 +135,8 @@ impl Payload {
             }
         }
         let payload = Self {
+            manifest: root.join("sidecar/payload-manifest.json"),
+            folder,
             executable,
             resources,
             resources_sha256: pin.resources_sha256.into(),
@@ -130,7 +154,8 @@ impl Payload {
         if self.fixture.is_some() {
             return Ok(());
         }
-        // Stream the fixed executable hash; a future pin also fixes its maximum size.
+        crate::payload_manifest::verify(&self.folder, &self.manifest, self.pin.manifest)?;
+        // Preserve the explicit entrypoint identity in addition to the complete inventory.
         let info =
             fs::symlink_metadata(&self.executable).map_err(|_| "Bundled executable is missing.")?;
         if !info.is_file() || info.len() != self.pin.executable_bytes {
@@ -172,8 +197,8 @@ impl Payload {
         {
             return Err("Bundled manifest does not match this desktop build.".into());
         }
-        // The pinned child verifies every static payload file before ready. This native check
-        // authenticates the immutable manifest, not arbitrary unpinned onedir dependencies.
+        // The complete onedir inventory is authenticated above; the pinned child also
+        // verifies every static payload file before announcing private readiness.
         Ok(())
     }
 
@@ -212,6 +237,7 @@ struct WorkspaceOwner {
     owner: String,
     build_id: String,
     resources_sha256: String,
+    payload_identity_sha256: String,
 }
 
 fn directory(path: &Path) -> Result<(), String> {
@@ -238,10 +264,11 @@ fn workspace(parent: &Path, payload: &Payload) -> Result<PathBuf, String> {
         .map_err(|_| "Cannot create the dedicated desktop data directory.")?;
     let root = parent.join("desktop-v1");
     let expected = WorkspaceOwner {
-        schema_version: 1,
+        schema_version: 2,
         owner: "openjensen-desktop".into(),
         build_id: payload.build_id.clone(),
         resources_sha256: payload.resources_sha256.clone(),
+        payload_identity_sha256: payload.pin.manifest.identity.into(),
     };
     match fs::create_dir(&root) {
         Ok(()) => {
