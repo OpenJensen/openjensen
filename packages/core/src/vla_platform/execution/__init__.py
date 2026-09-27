@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import sys
 import time
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -13,6 +12,7 @@ from vla_platform.augmentation.contracts import AugmentationRequest
 from vla_platform.augmentation.service import Augmentation
 from vla_platform.contracts import TERMINAL, IntakeRequest, Job, WorkerRequest, WorkerResult, now
 from vla_platform.datasets.cache import Inspections
+from vla_platform.frozen_commands import intake_command
 from vla_platform.lifecycle.contracts import PolicyRequest, SimulationTarget
 from vla_platform.lifecycle.service import Lifecycle
 from vla_platform.settings import Settings
@@ -162,11 +162,7 @@ class Execution:
                     await self.save(job)
                 request_path, result_path = await asyncio.to_thread(self.write_request, job)
                 process = await asyncio.create_subprocess_exec(
-                    sys.executable,
-                    "-m",
-                    "vla_platform.datasets.worker",
-                    str(request_path),
-                    str(result_path),
+                    *intake_command(request_path, result_path),
                     stdout=asyncio.subprocess.DEVNULL,
                     stderr=asyncio.subprocess.DEVNULL,
                 )
