@@ -125,7 +125,7 @@ test('known accepted ID stays visible when first receipt persistence fails and h
 });
 for (const outcome of ['ack', 'error']) test(`remounted recording controller cannot replace a still-pending ${outcome} with another key`, async ({ page }) => {
   const s = await fixture(page), first = deferred(); s.gate = first; s.lost = outcome === 'error'; s.nextId = 'old-job'; await selectEpisodes(page); await submit(page).click(); await expect.poll(() => s.posts.length).toBe(1);
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await expect(page.getByRole('button', { name: 'Inspect dataset', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await expect(page.getByRole('button', { name: 'Checking dataset…', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Teaching', exact: true }).click(); await expect(submit(page)).toBeDisabled(); await expect(checkSaved(page)).toBeDisabled(); await expect(ack(page)).toHaveCount(0);
   first.release(); if (outcome === 'ack') await expect(panel(page).getByText(/Retained acknowledgement: job old-job/)).toBeVisible(); else await expect(checkSaved(page)).toBeEnabled();
   expect(s.posts).toHaveLength(1); expect(new Set(s.keys).size).toBe(1);
