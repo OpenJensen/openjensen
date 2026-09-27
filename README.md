@@ -20,13 +20,14 @@ Built at the Firebird hackathon.
 | --- | --- |
 | Explore | Inspect public LeRobot v2/v3 datasets, play camera recordings and review sampled state/action rows. Validate local v3 datasets into immutable training copies. |
 | Train | Choose a policy and compatible compute, follow loss and progress, resume supported runs, and download checkpoints with their recipes and provenance. |
-| Optimize | Convert SmolVLA checkpoints to GGUF with Q8 or experimental Q4 language-weight quantization. Export completed ACT checkpoints as FP32 inference packages. |
-| Check and run | Measure native inference, verify package reloads, run configured LIBERO evaluations, or launch an experimental ACT/SmolVLA Isaac simulation. |
+| Distill | Train a smaller ACT256 student from a compatible local ACT teacher and immutable observations, with explicit training, validation and final episode groups. |
+| Optimize | Convert SmolVLA checkpoints to GGUF with Q8 or experimental Q4 language-weight quantization. Export completed ACT checkpoints as FP32 inference packages, then create packed INT8/INT4 ACT candidates with fresh CPU reload checks. |
+| Check and run | Measure native inference, inspect full packed ACT predictions on recorded observations, run configured LIBERO evaluations, or launch an experimental ACT/SmolVLA Isaac simulation. |
 | Collect and review | Record demonstrations through the Teaching interface, connect optional voice services, or review appearance-augmentation candidates before reusing them. |
 
 Each operation has its own model, dataset and runtime requirements. The interface shows configured capabilities; a registered adapter does not mean every model has completed a GPU run.
 
-[OPEN JENSEN Quant](workers/firebird_quant/README.md) is a separate 4/8-bit quantization library and CLI for dense PyTorch models. It provides portable inference, tensor coverage reports and reloadable artifacts beyond the integrated SmolVLA workflow. Model quality and hardware speed need separate evaluation.
+[OPEN JENSEN Quant](workers/firebird_quant/README.md) is a 4/8-bit quantization library and CLI for dense PyTorch models. Its native ACT packing path is integrated with the workspace; broader library support does not imply every architecture has an application adapter. Model quality and hardware speed need separate evaluation.
 
 ## Inside the workspace
 
@@ -50,10 +51,12 @@ OPEN JENSEN is a development preview. The repository includes real GPU execution
 | SmolVLA quantization | A trained checkpoint has completed GGUF conversion, Q4 packing and native execution. **Q8 is the default; Q4 is experimental.** These checks do not establish retained task quality for a new policy. |
 | Evaluate and Run | Recorded cloud SmolVLA checks exercise real CUDA inference and package reloads with synthetic inputs. Configured LIBERO can measure benchmark outcomes; the newer integrated Spatial workflow still awaits hardware acceptance. |
 | ACT export | The supported final native checkpoint can be materialized and exported on CPU with action-chunk parity and reload checks. This is an inference export, not quantization. Local-dataset ACT export is not supported yet. |
+| ACT distillation | The browser has submitted a real local ACT→ACT256 training job, registered the fresh-reloaded student and downloaded it. The verified example uses generated observations and demonstrates software execution, not learned robot competence. SmolVLA and cross-family distillation remain planned. |
+| Native ACT packing and replay | INT8/INT4 policies have returned full 100×6 action chunks through fresh CPU workers, including reset checks. The application can replay explicitly selected immutable observations and display saved action traces. Stored-weight compression does not establish lower runtime memory, faster execution, task success or packed-policy Isaac support. |
 | Native Isaac | ACT/SmolVLA package import, job controls, status and output handling are implemented. The web workflow has fixture coverage; live rollout acceptance and scored cup-pickup evaluation are separate work. |
 | Teaching and augmentation | Recording and LeRobot writer/readback are implemented. Live voice-to-Isaac acceptance and live augmentation quality remain unverified. Local teaching captures can train native LeRobot adapters; the dedicated SmolVLA and Psi-Zero routes still require Hub datasets. |
 | Clients and extensions | The Textual client and Tauri desktop connector are implemented. Desktop requires a separately running backend. Unity is a receive-only viewer. Muose is advisory; Jev and Mk1.5 adapters are not connected to the control loop. |
-| Planned | Distillation, a bundled desktop backend, and verified physical-robot deployment. |
+| Planned | Broader distillation adapters, a bundled desktop backend, and verified physical-robot deployment. |
 
 See the [cloud training record](docs/cloud-training-verification.md), [native inference record](docs/jobs-first-verification.md), and [native simulation scope](docs/native-simulation.md) for the experiments, inputs and remaining checks. A completed job, lower training loss or successful model conversion does not by itself establish task success.
 
@@ -80,6 +83,13 @@ The core application and metadata intake need no GPU or provider key. Public Hub
 
 For tool-version fallbacks, development mode, local dataset configuration and CLI examples, see the [getting started guide](docs/getting-started.md).
 
+For native ACT distillation and packed observation replay, use the separate
+[local CPU worker setup](workers/local_cpu/README.md). It installs isolated worker
+environments and writes a new configuration only when explicitly requested; the
+ordinary application setup above does not install model dependencies or activate
+these workers. Native ACT quantization also needs its
+[registered packing worker](workers/firebird_quant/NATIVE_ACT.md).
+
 ### Your first project
 
 1. Create a project and open **Dataset → Sources**.
@@ -94,7 +104,8 @@ For tool-version fallbacks, development mode, local dataset configuration and CL
 | --- | --- |
 | Setup and compute | [Getting started](docs/getting-started.md), [compute settings](docs/compute-settings.md), [cloud training](docs/skypilot-training.md) |
 | Datasets | [Local training and Teaching](docs/local-training.md), [appearance augmentation](docs/augmentation.md), [source provenance](apps/web/public/datasets/README.md) |
-| Policies and artifacts | [Training adapters](docs/native-training.md), [native policy workflow](docs/policy-workflow.md), [ACT export](docs/cloud-act-export.md), [cloud artifact storage](docs/cloud-artifact-storage.md) |
+| Policies and artifacts | [Training adapters](docs/native-training.md), [native policy workflow](docs/policy-workflow.md), [ACT export](docs/cloud-act-export.md), [ACT distillation](workers/policy_distillation/README.md), [cloud artifact storage](docs/cloud-artifact-storage.md) |
+| Local optimization | [CPU worker setup](workers/local_cpu/README.md), [native ACT packing](workers/firebird_quant/NATIVE_ACT.md), [recorded-observation replay](workers/isaac_sim/NATIVE_REPLAY.md) |
 | Evaluation and simulation | [Native Isaac](docs/native-simulation.md), [LIBERO Spatial](docs/spatial-workflow.md), [cloud inference](docs/cloud-inference.md), [cloud run monitoring](docs/cloud-runs.md) |
 | Other clients | [Terminal workbench](docs/terminal.md), [desktop connector](apps/desktop/README.md), [Unity viewer](apps/unity/com.firebird.teaching-viewer/README.md) |
 | Optional AI services | [Voice connections](docs/teaching-connections.md), [Muose decision worker](workers/decision/README.md), [Jev and Mk1.5 proposals](workers/teaching/PROVIDERS.md) |
