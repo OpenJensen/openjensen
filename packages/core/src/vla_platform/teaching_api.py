@@ -424,3 +424,9 @@ async def voice_join(payload: VoiceJoin, response: Response):
             "agent_name",
         )
     }
+
+
+# Optional advice shares the existing local access boundary but owns no controls.
+from vla_platform.teaching_intelligence_api import router as intelligence_router  # noqa: E402
+
+router.include_router(intelligence_router)
