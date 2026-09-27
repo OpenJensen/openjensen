@@ -368,6 +368,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/jobs/{job_id}/simulation-media/video": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Simulation Video */
+        get: operations["simulation_video_api_v1_jobs__job_id__simulation_media_video_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/jobs/{job_id}/training": {
         parameters: {
             query?: never;
@@ -522,6 +539,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/model-imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Native Policy
+         * @description Upload a complete native ACT/SmolVLA TAR; import is an observable local job.
+         */
+        post: operations["import_native_policy_api_v1_projects__project_id__model_imports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/policy-jobs": {
         parameters: {
             query?: never;
@@ -533,6 +570,23 @@ export interface paths {
         put?: never;
         /** Policy Job */
         post: operations["policy_job_api_v1_projects__project_id__policy_jobs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/simulation-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Simulation Options */
+        get: operations["simulation_options_api_v1_simulation_options_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1436,6 +1490,7 @@ export interface components {
             request: components["schemas"]["IntakeRequest"] | components["schemas"]["PolicyRequest"] | components["schemas"]["AugmentationRequest"];
             /** Result */
             result?: components["schemas"]["DatasetProfile"] | components["schemas"]["LifecycleResult"] | components["schemas"]["AugmentationResult"] | null;
+            simulation_target?: components["schemas"]["SimulationTarget"] | null;
             /** Stage */
             stage?: string | null;
             /**
@@ -1648,7 +1703,7 @@ export interface components {
              * Format
              * @enum {string}
              */
-            format: "gguf" | "training_checkpoint" | "native_checkpoint" | "deployment_package" | "inference_export";
+            format: "gguf" | "training_checkpoint" | "native_checkpoint" | "deployment_package" | "inference_export" | "simulation_record";
             /** Id */
             id: string;
             /** Job Id */
@@ -1688,6 +1743,7 @@ export interface components {
             resume_job_id?: string | null;
             /** Runtime Id */
             runtime_id: string;
+            simulation?: components["schemas"]["SimulationRequest"] | null;
             /** Source Id */
             source_id?: string | null;
             /**
@@ -1883,6 +1939,41 @@ export interface components {
              */
             threads: 2;
             timing_ms: components["schemas"]["Timing"];
+        };
+        /**
+         * SimulationRequest
+         * @description A registered scenario selection; paths and commands belong to the operator.
+         */
+        SimulationRequest: {
+            /**
+             * Experimental
+             * @default false
+             */
+            experimental: boolean;
+            /** Profile Id */
+            profile_id: string;
+        };
+        /**
+         * SimulationTarget
+         * @description The accepted multi-worker target, kept separate from single-GPU training.
+         */
+        SimulationTarget: {
+            /** Accelerators */
+            accelerators?: ("L4" | "H100")[];
+            /** Model Id */
+            model_id?: string | null;
+            /** Profile Id */
+            profile_id: string;
+            /** Profile Sha256 */
+            profile_sha256: string;
+            /**
+             * Provider
+             * @default gcp
+             * @constant
+             */
+            provider: "gcp";
+            /** Source Manifest Sha256 */
+            source_manifest_sha256: string;
         };
         /** TeachingCommand */
         TeachingCommand: {
@@ -2700,6 +2791,37 @@ export interface operations {
             };
         };
     };
+    simulation_video_api_v1_jobs__job_id__simulation_media_video_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     training_telemetry_api_v1_jobs__job_id__training_get: {
         parameters: {
             query?: never;
@@ -3001,6 +3123,39 @@ export interface operations {
             };
         };
     };
+    import_native_policy_api_v1_projects__project_id__model_imports_post: {
+        parameters: {
+            query: {
+                profile_id: string;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     policy_job_api_v1_projects__project_id__policy_jobs_post: {
         parameters: {
             query?: never;
@@ -3032,6 +3187,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    simulation_options_api_v1_simulation_options_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };

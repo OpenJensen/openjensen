@@ -232,7 +232,8 @@ def test_local_profile_cannot_claim_unrelated_identity(
 def test_saved_job_and_project_shape_is_compatible(job_data: dict[str, Any]) -> None:
     restored = Job.model_validate_json(json.dumps(job_data))
     assert restored.compute_target is None
-    assert restored.model_dump(exclude={"stage", "compute_target"}) == job_data
+    assert restored.simulation_target is None
+    assert restored.model_dump(exclude={"stage", "compute_target", "simulation_target"}) == job_data
     assert restored.stage is None
     project = {"id": "legacy-project", "name": "Project", "created_at": TIMESTAMP}
     assert Project.model_validate_json(json.dumps(project)).model_dump() == project
