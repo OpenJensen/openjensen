@@ -44,6 +44,10 @@ class Inspections:
         self.lock = asyncio.Lock()
 
     async def submit(self, project_id: str, request: IntakeRequest) -> Job:
+        if request.snapshot_for_training:
+            # Metadata identity cannot identify changed rows or video bytes.
+            # Every explicit snapshot request revalidates the complete source.
+            return await self.execution.submit(project_id, request)
         if request.source == "huggingface":
             revision = await resolve_hub_revision(request)
             prepared = request.model_copy(update={"revision": revision})
@@ -64,6 +68,8 @@ class Inspections:
 
     def matches(self, job: Job, request: IntakeRequest) -> bool:
         previous = job.request
+        if isinstance(previous, IntakeRequest) and previous.snapshot_for_training:
+            return False
         if not isinstance(previous, IntakeRequest) or previous.source != request.source:
             return False
         if request.source == "huggingface":

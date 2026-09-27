@@ -190,6 +190,16 @@ def prepare(payload: dict, stage_dir: Path, target: dict) -> tuple[Path, dict]:
     remote_payload["output_dir"] = "output"
     remote_payload["source"] = None
     (bundle / "inputs").mkdir()
+    if payload.get("dataset_snapshot"):
+        from vla_platform.datasets.snapshots import stage_snapshot
+
+        snapshot = payload["dataset_snapshot"]
+        if payload["operation"] != "policy.finetune":
+            raise ValueError("Local dataset snapshots are only used for training")
+        stage_snapshot(
+            Path(snapshot["path"]), bundle / "inputs" / "dataset", snapshot["manifest_sha256"]
+        )
+        remote_payload["dataset_snapshot"]["path"] = "inputs/dataset"
     if payload.get("artifact"):
         _copy_tree(
             Path(payload["artifact"]["path"]),
@@ -983,7 +993,8 @@ async def ensure_cloud_storage(sky, target):
     bucket = stdout.decode().strip()
     if process.returncode or not re.fullmatch(r"gs://[a-z0-9._-]+", bucket):
         raise ValueError(
-            "Could not prepare private Google Cloud artifact storage: " + stderr.decode()[-1000:]
+            "Checkpoint storage cannot be prepared. Verify bucket ownership, private access, "
+            "and bucket metadata/object permissions for the connected Google Cloud account."
         )
     return bucket
 

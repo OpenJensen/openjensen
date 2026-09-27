@@ -5,6 +5,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api, isActive, isDatasetJob, type DatasetJob, type DatasetProfile, type Job, type Project } from '@/lib/api';
 import { CloudRuns } from '@/components/cloud-runs';
 import { WorkflowPanel } from '@/components/workflow-panel';
+import { TeachingPanel } from '@/components/teaching-panel';
 import { TrainingPanel } from '@/components/training-panel';
 import { AugmentationPanel } from '@/components/augmentation-panel';
 import { Icon } from '@/components/icon';
@@ -41,6 +42,7 @@ function displayDate(value: string) {
 
 function DatasetResult({ profile }: { profile: DatasetProfile }) {
   return <section className="result inspection-overview" aria-labelledby="result-title">
+    {profile.snapshot && <p role="status">Training copy verified · {profile.snapshot.file_count} files · {profile.snapshot.lineage_validated ? 'Recorded lineage retained' : 'Ancestry unknown; not independent evaluation evidence'}</p>}
     <div className="result-heading">
       <div><h3 id="result-title">{profile.repo_id || 'Local dataset'}</h3></div>
       <span className="metadata-badge"><Icon name="check" size={14} /> {profile.format.replace('_', ' ')}</span>
@@ -72,6 +74,7 @@ function IntakeForm({ project, readinessMessage, localAvailable, onCreated, star
   const [repoId, setRepoId] = useState(starter.repoId);
   const [revision, setRevision] = useState(starter.revision);
   const [path, setPath] = useState('');
+  const [snapshotForTraining, setSnapshotForTraining] = useState(false);
   useEffect(() => {
     if (!localAvailable && source === 'local') setSource('huggingface');
   }, [localAvailable, source]);
@@ -81,7 +84,7 @@ function IntakeForm({ project, readinessMessage, localAvailable, onCreated, star
       if (source === 'local' && !localAvailable) throw new Error('Local intake is not enabled on this application.');
       return api.inspect(project.id, source === 'huggingface'
         ? { source, repo_id: repoId.trim(), revision: revision.trim() || 'main' }
-        : { source, path: path.trim(), revision: 'main' });
+        : { source, path: path.trim(), revision: 'main', snapshot_for_training: snapshotForTraining });
     },
     onSuccess: (job) => {
       queryClient.setQueryData<Job[]>(['jobs', job.project_id], previous => [job, ...(previous ?? []).filter(item => item.id !== job.id)]);
@@ -116,6 +119,8 @@ function IntakeForm({ project, readinessMessage, localAvailable, onCreated, star
         <label className="field-label" htmlFor="local-path">Dataset directory</label>
         <input id="local-path" name="path" disabled={!project} value={path} onChange={event => setPath(event.target.value)} required placeholder="Path to a LeRobot dataset" autoCapitalize="none" autoCorrect="off" spellCheck={false} aria-describedby="path-help" />
         <p id="path-help" className="field-help">Path on the API host, inside the configured dataset directory.</p>
+        <label className="field-label"><input type="checkbox" checked={snapshotForTraining} onChange={event => setSnapshotForTraining(event.target.checked)} /> Prepare immutable training copy</label>
+        <p className="field-help">Validate all rows and videos in a finalized LeRobot v3 dataset, then copy it into this workspace. Up to 16 GiB; source files stay unchanged.</p>
       </>}
       <ErrorNotice error={mutation.error} />
       {!project && <p className="form-note" role="status">{readinessMessage}</p>}
@@ -149,7 +154,7 @@ function Workbench() {
   const [activeStage, setActiveStage] = useState(0);
   const [quantizeArtifact, setQuantizeArtifact] = useState<{ projectId: string; artifactId: string } | null>(null);
   const [settingsTab, setSettingsTab] = useState<'compute' | 'settings' | 'diagnostics'>('compute');
-  const [datasetView, setDatasetView] = useState<'sources' | 'inspection' | 'augmentation'>('sources');
+  const [datasetView, setDatasetView] = useState<'sources' | 'inspection' | 'augmentation' | 'teaching'>('sources');
   const [starter, setStarter] = useState(datasetStarters[0]);
   const [starterSelection, setStarterSelection] = useState(0);
   const [activeStarterId, setActiveStarterId] = useState(datasetStarters[0].id);
@@ -233,7 +238,7 @@ function Workbench() {
         {!connected && !health.isPending && <div className="connection-notice"><ErrorNotice error={health.error} /><button className="text-button" onClick={() => { void health.refetch(); void projects.refetch(); void capabilities.refetch(); }}>Retry connection</button></div>}
         {capabilities.error && connected && <div className="connection-notice"><ErrorNotice error={capabilities.error} /><button className="text-button" onClick={() => void capabilities.refetch()} disabled={capabilities.isFetching}>Retry capabilities</button></div>}
         <div className="dataset-view" hidden={activeStage !== 0}>
-          <div className="section-tabs"><nav className="dataset-tab-buttons" aria-label="Dataset views"><button type="button" className={`section-tab${datasetView === 'sources' ? ' active' : ''}`} aria-pressed={datasetView === 'sources'} onClick={() => setDatasetView('sources')}>Sources</button><button type="button" className={`section-tab${datasetView === 'inspection' ? ' active' : ''}`} aria-pressed={datasetView === 'inspection'} disabled={!selectedJob} onClick={() => setDatasetView('inspection')}>Inspection{sortedJobs.length > 0 && <span className="tab-count">{sortedJobs.length}</span>}</button><button type="button" className={`section-tab${datasetView === 'augmentation' ? ' active' : ''}`} aria-pressed={datasetView === 'augmentation'} onClick={() => setDatasetView('augmentation')}>Augmentation</button></nav><span className="section-note">LeRobot v2 / v3</span></div>
+          <div className="section-tabs"><nav className="dataset-tab-buttons" aria-label="Dataset views"><button type="button" className={`section-tab${datasetView === 'sources' ? ' active' : ''}`} aria-pressed={datasetView === 'sources'} onClick={() => setDatasetView('sources')}>Sources</button><button type="button" className={`section-tab${datasetView === 'inspection' ? ' active' : ''}`} aria-pressed={datasetView === 'inspection'} disabled={!selectedJob} onClick={() => setDatasetView('inspection')}>Inspection{sortedJobs.length > 0 && <span className="tab-count">{sortedJobs.length}</span>}</button><button type="button" className={`section-tab${datasetView === 'augmentation' ? ' active' : ''}`} aria-pressed={datasetView === 'augmentation'} onClick={() => setDatasetView('augmentation')}>Augmentation</button><button type="button" className={`section-tab${datasetView === 'teaching' ? ' active' : ''}`} aria-pressed={datasetView === 'teaching'} onClick={() => setDatasetView('teaching')}>Teaching</button></nav><span className="section-note">LeRobot v2 / v3</span></div>
           <div className="content-grid source-grid" hidden={datasetView !== 'sources'}>
             <div className="intake-column"><IntakeForm key={`${projectId}-${starterSelection}`} project={workflowProjectId ? project : undefined} readinessMessage={projects.isPending ? 'Loading projects before importing a dataset.' : projects.isError ? 'Project list unavailable. Retry projects to continue.' : 'Create or select a project to import a dataset.'} starter={starter} onSourceEdited={() => setActiveStarterId('')} localAvailable={capabilities.data?.some(item => item.operation === 'dataset.inspect.local' && (item.status === 'available' || item.status === 'untested')) ?? false} onCreated={job => { setSelectedJobId(job.id); setDatasetView('inspection'); }} /></div>
             <DatasetStarters selected={activeStarterId} onSelect={item => { setStarter(item); setActiveStarterId(item.id); setStarterSelection(previous => previous + 1); }} />
@@ -247,10 +252,11 @@ function Workbench() {
                 {sortedJobs.length > 1 && <div className="history-control"><label htmlFor="inspection-history">History</label><select id="inspection-history" value={selectedJob.id} onChange={event => setSelectedJobId(event.target.value)}>{sortedJobs.map(job => <option key={job.id} value={job.id}>{job.request.repo_id || 'Local dataset'} · {displayDate(job.created_at)} · {job.status}</option>)}</select></div>}
                 <JobDetail key={selectedJob.id} job={selectedJob} projectId={projectId} />
                 {selectedJob.result && <DatasetExplorer key={`explorer-${selectedJob.id}`} job={selectedJob} active={activeStage === 0 && datasetView === 'inspection'} />}
-                {selectedJob.status === 'succeeded' && selectedJob.result?.source === 'huggingface' && <div className="dataset-train-action"><button className="primary-button" onClick={() => setActiveStage(1)}>Train on this dataset <Icon name="arrow" size={16} /></button></div>}
+                {selectedJob.status === 'succeeded' && (selectedJob.result?.source === 'huggingface' || selectedJob.result?.snapshot) && <div className="dataset-train-action"><button className="primary-button" onClick={() => setActiveStage(1)}>Train on this dataset <Icon name="arrow" size={16} /></button></div>}
               </>}
             </section>
           </div>
+          {activeStage === 0 && datasetView === 'teaching' && <TeachingPanel />}
           {activeStage === 0 && datasetView === 'augmentation' && <AugmentationPanel key={`${projectId}-${selectedJob?.id ?? ''}`} projectId={projectId} preferredDatasetId={selectedJob?.id} onChooseDataset={() => setDatasetView('sources')} />}
           {jobs.error && datasetView === 'sources' && <ErrorNotice error={jobs.error} />}
         </div>

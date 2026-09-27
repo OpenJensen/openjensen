@@ -43,6 +43,7 @@ from vla_platform.lifecycle.training_catalog import public_training_models
 from vla_platform.projects import Projects
 from vla_platform.settings import Settings
 from vla_platform.storage import Storage
+from vla_platform.teaching_api import router as teaching_router
 
 LOCAL_ORIGINS = {
     "http://127.0.0.1:3000",
@@ -102,6 +103,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(cloud_connections_router)
     app.include_router(compute_settings_router)
     app.include_router(huggingface_router)
+    app.include_router(teaching_router)
     app.add_middleware(
         TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]", "testserver"]
     )

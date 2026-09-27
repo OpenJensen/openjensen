@@ -719,8 +719,25 @@ class Lifecycle:
                 raise ValueError("Native LeRobot training currently requires a LeRobot v3 dataset")
             if model.backend == "psi0" and dataset.result.format != "lerobot_v2":
                 raise ValueError("Psi-Zero currently requires a LeRobot v2.1 dataset")
-            if dataset.result.source != "huggingface":
-                raise ValueError("The current native recipe requires a pinned Hugging Face dataset")
+            if dataset.result.source == "local":
+                if model.backend != "lerobot" or dataset.result.snapshot is None:
+                    raise ValueError(
+                        "Local training requires a verified v3 snapshot and a native LeRobot model"
+                    )
+                from vla_platform.datasets.snapshots import resolve_snapshot, training_split
+
+                snapshot_path = await asyncio.to_thread(
+                    resolve_snapshot,
+                    self.settings.data_dir / "dataset-snapshots",
+                    dataset.result.snapshot.model_dump(),
+                )
+                await asyncio.to_thread(
+                    training_split,
+                    snapshot_path,
+                    dataset.result.snapshot.manifest_sha256,
+                    recipe.get("validation_fraction", 0.2),
+                    recipe.get("seed", 42),
+                )
         if (
             request.operation in {"policy.evaluate", "policy.run", "policy.workflow"}
             and request.evaluation.mode == "libero"
@@ -986,6 +1003,24 @@ class Lifecycle:
         if training and operation == "policy.finetune":
             dataset = await self.execution.get(request.dataset_job_id)
             payload["dataset"] = dataset.result.model_dump()
+            if dataset.result.source == "local":
+                from vla_platform.datasets.snapshots import resolve_snapshot, stage_snapshot
+
+                descriptor = dataset.result.snapshot.model_dump()
+                source = await asyncio.to_thread(
+                    resolve_snapshot, self.settings.data_dir / "dataset-snapshots", descriptor
+                )
+                staged = await asyncio.to_thread(
+                    stage_snapshot,
+                    source,
+                    stage_dir / "dataset-snapshot",
+                    descriptor["manifest_sha256"],
+                )
+                payload["dataset_snapshot"] = {
+                    "path": str(staged.resolve()),
+                    "id": descriptor["id"],
+                    "manifest_sha256": descriptor["manifest_sha256"],
+                }
         request_path, result_path = stage_dir / "request.json", stage_dir / "result.json"
         request_path.write_text(json.dumps(payload, allow_nan=False))
         if runtime.execution == "skypilot":

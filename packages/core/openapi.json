@@ -1216,7 +1216,8 @@
             "default": "metadata_only",
             "enum": [
               "metadata_only",
-              "bounded_parquet_rows"
+              "bounded_parquet_rows",
+              "complete_snapshot"
             ],
             "title": "Inspection Scope",
             "type": "string"
@@ -1282,6 +1283,16 @@
             "title": "Schema Version",
             "type": "integer"
           },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DatasetSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "source": {
             "enum": [
               "huggingface",
@@ -1321,6 +1332,82 @@
           "warnings"
         ],
         "title": "DatasetProfile",
+        "type": "object"
+      },
+      "DatasetSnapshot": {
+        "additionalProperties": false,
+        "description": "Path-free identity; only the application can resolve the snapshot store.",
+        "properties": {
+          "file_count": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 4096.0,
+            "title": "File Count",
+            "type": "integer"
+          },
+          "format": {
+            "const": "lerobot_v3",
+            "default": "lerobot_v3",
+            "title": "Format",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "lineage_validated": {
+            "title": "Lineage Validated",
+            "type": "boolean"
+          },
+          "manifest_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Manifest Sha256",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "total_bytes": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 17179869184.0,
+            "title": "Total Bytes",
+            "type": "integer"
+          },
+          "total_episodes": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 20000.0,
+            "title": "Total Episodes",
+            "type": "integer"
+          },
+          "total_frames": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 2000000.0,
+            "title": "Total Frames",
+            "type": "integer"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "manifest_sha256",
+          "total_bytes",
+          "file_count",
+          "total_episodes",
+          "total_frames",
+          "lineage_validated",
+          "warnings"
+        ],
+        "title": "DatasetSnapshot",
         "type": "object"
       },
       "EpisodePage": {
@@ -1923,6 +2010,11 @@
             "minLength": 1,
             "title": "Revision",
             "type": "string"
+          },
+          "snapshot_for_training": {
+            "default": false,
+            "title": "Snapshot For Training",
+            "type": "boolean"
           },
           "source": {
             "default": "huggingface",
@@ -2861,6 +2953,65 @@
         "title": "PublicRuntime",
         "type": "object"
       },
+      "TeachingCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "arguments": {
+            "additionalProperties": true,
+            "title": "Arguments",
+            "type": "object"
+          },
+          "command_id": {
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "episode_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{1,96}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Id"
+          },
+          "expected_revision": {
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "operation": {
+            "enum": [
+              "task",
+              "start",
+              "pause",
+              "reset",
+              "correct",
+              "mark_failure",
+              "finish"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "session_id": {
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "command_id",
+          "expected_revision",
+          "operation"
+        ],
+        "title": "TeachingCommand",
+        "type": "object"
+      },
       "TrainingCheckpoint": {
         "additionalProperties": false,
         "properties": {
@@ -3203,6 +3354,21 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VoiceJoin": {
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id"
+        ],
+        "title": "VoiceJoin",
         "type": "object"
       }
     }
@@ -4439,6 +4605,162 @@
           }
         },
         "summary": "Policy Job"
+      }
+    },
+    "/api/v1/teaching/commands": {
+      "post": {
+        "operationId": "command_api_v1_teaching_commands_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeachingCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Command",
+        "tags": [
+          "Teaching"
+        ]
+      }
+    },
+    "/api/v1/teaching/commands/{command_id}": {
+      "get": {
+        "operationId": "receipt_api_v1_teaching_commands__command_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "command_id",
+            "required": true,
+            "schema": {
+              "title": "Command Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Receipt",
+        "tags": [
+          "Teaching"
+        ]
+      }
+    },
+    "/api/v1/teaching/frame": {
+      "get": {
+        "operationId": "frame_api_v1_teaching_frame_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Frame",
+        "tags": [
+          "Teaching"
+        ]
+      }
+    },
+    "/api/v1/teaching/state": {
+      "get": {
+        "operationId": "state_api_v1_teaching_state_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "State",
+        "tags": [
+          "Teaching"
+        ]
+      }
+    },
+    "/api/v1/teaching/voice/join": {
+      "post": {
+        "operationId": "voice_join_api_v1_teaching_voice_join_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoiceJoin"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Voice Join",
+        "tags": [
+          "Teaching"
+        ]
       }
     }
   }
