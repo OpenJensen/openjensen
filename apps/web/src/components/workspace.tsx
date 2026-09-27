@@ -22,6 +22,7 @@ import { TrainingPanel } from '@/components/training-panel';
 import { AugmentationPanel } from '@/components/augmentation-panel';
 import { Icon } from '@/components/icon';
 import { WorkspaceShell } from '@/components/workspace-shell';
+import { WorkspaceJourney } from '@/components/workspace-journey';
 import { DatasetExplorer } from '@/components/dataset-explorer';
 import { DatasetStarters } from '@/components/dataset-starters';
 import { datasetStarters, type DatasetStarter } from '@/lib/dataset-starters';
@@ -341,7 +342,7 @@ function Workbench() {
           <ul className="stage-list">{group.items.map(index => {
             const item = stages[index];
             return <li key={item.name}><button type="button" className={`stage-button${activeStage === index ? ' selected' : ''}`} onClick={() => { if (index === 6) setSettingsTab('compute'); navigateStage(index); }} aria-current={activeStage === index ? 'page' : undefined}>
-              <Icon name={item.icon} size={18} /><span>{item.name}</span>
+              <Icon name={item.icon} size={18} /><span>{item.name}</span>{index < 6 && <span className="stage-order" aria-hidden="true">{index + 1}</span>}
             </button></li>;
           })}</ul>
         </div>)}
@@ -351,6 +352,11 @@ function Workbench() {
         <div className={`page-heading${activeStage === 1 ? ' training-page-heading' : ''}`}><h1>{stage.name}</h1><div className="page-actions"><a className="page-guide" href={publicPath(`/guide/#${guideSectionId(stage.name)}`)}><Icon name="book" size={16} />Guide</a><div className={`connection ${connected ? 'connected' : ''}`} role="status" aria-label="Application API connection" title="Application API connection; simulator and voice connections are shown separately."><span />{health.isPending ? 'Connecting' : connected ? 'App connected' : 'App offline'}</div></div></div>
         {!connected && !health.isPending && <div className="connection-notice"><ErrorNotice error={health.error} /><button className="text-button" onClick={() => { void health.refetch(); void projects.refetch(); void capabilities.refetch(); }}>Retry connection</button></div>}
         {capabilities.error && connected && <div className="connection-notice"><ErrorNotice error={capabilities.error} /><button className="text-button" onClick={() => void capabilities.refetch()} disabled={capabilities.isFetching}>Retry capabilities</button></div>}
+        <WorkspaceJourney key={`journey-${workflowProjectId}`} stage={activeStage} projectId={workflowProjectId} projectName={workflowProjectId ? project?.name : undefined}
+          jobs={jobs.data ?? []} historyState={!workflowProjectId ? 'unselected' : jobs.isError ? 'unavailable' : jobs.isPending ? 'loading' : 'ready'}
+          inspection={selectedJob} inspectionExplicit={!!selectedJobId}
+          workflow={activeStage === 3 ? quantizeMode === 'native' ? 'ACT · native quantization' : quantizeMode === 'gguf' ? 'SmolVLA · GGUF' : undefined : activeStage === 5 ? runMode === 'native' ? '3D simulation · ACT or SmolVLA' : runMode === 'replay' ? 'ACT · observation replay' : runMode === 'engine' ? 'GGUF · inference check' : undefined : activeStage === 2 && distillationModels[workflowProjectId] === 'act' ? 'ACT → ACT256' : undefined}
+          onNavigate={navigateStage} onTrain={startTrainingOnDataset} onRefresh={() => void jobs.refetch()} />
         <div className="dataset-view" hidden={activeStage !== 0}>
           <div className="section-tabs"><nav className="dataset-tab-buttons" aria-label="Dataset views"><button type="button" className={`section-tab${datasetView === 'sources' ? ' active' : ''}`} aria-pressed={datasetView === 'sources'} onClick={() => setDatasetView('sources')}>Sources</button><button type="button" className={`section-tab${datasetView === 'inspection' ? ' active' : ''}`} aria-pressed={datasetView === 'inspection'} disabled={!selectedJob} onClick={() => setDatasetView('inspection')}>Inspection{sortedJobs.length > 0 && <span className="tab-count">{sortedJobs.length}</span>}</button></nav><span className="section-note">LeRobot v2 / v3</span></div>
           <div className="content-grid source-grid" hidden={datasetView !== 'sources'}>

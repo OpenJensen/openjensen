@@ -48,6 +48,7 @@ test('run choices are visible, keyboard accessible and stay within a narrow scre
     await choice.focus();
     await page.keyboard.press('Enter');
     await expect(choice).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('region', { name: 'Workflow context', exact: true })).toHaveCount(1);
   }
   await choices.getByRole('button', { name: '3D simulation', exact: true }).click();
   await page.screenshot({ path: testInfo.outputPath('run-workspace.png'), fullPage: false });
@@ -131,5 +132,108 @@ test('fresh workflows require explicit model and runner choices', async ({ page 
   await expect(models.getByRole('radio', { checked: true })).toHaveCount(0);
   await page.getByRole('radio', { name: 'SmolVLA', exact: true }).locator('..').click();
   await expect(page.getByRole('radio', { name: 'SmolVLA', exact: true })).toBeChecked();
+  expect(mutations).toEqual([]);
+});
+
+
+async function journeyFixture(page: Page) {
+  const mutations = await workspace(page);
+  const time = '2026-09-27T12:00:00Z';
+  const inspection = (id: string, project_id = 'ux-review', snapshot = true) => ({
+    id, project_id, kind: 'dataset.inspect', status: 'succeeded', created_at: time, updated_at: time,
+    request: { source: 'local', path: 'generated-fixture' },
+    result: { source: 'local', format: 'lerobot_v3', repo_id: null, revision: 'fixture', metadata_sha256: 'a'.repeat(64), fps: 30, robot_type: 'generated-so101', inspected_at: time, warnings: [], total_episodes: 6, total_frames: 24, inspection_scope: 'complete_snapshot', features: {}, snapshot: snapshot ? { id: `sha256:${'b'.repeat(64)}`, manifest_sha256: 'b'.repeat(64), lineage_validated: true, total_episodes: 6, file_count: 4 } : null },
+  });
+  const state = { jobs: [inspection('dataset-first'), { ...inspection('dataset-second'), created_at: '2026-09-27T13:00:00Z' }, inspection('foreign-dataset', 'other'), { id: 'run-job', project_id: 'ux-review', kind: 'policy.run', status: 'failed', request: { operation: 'policy.run', runtime_id: 'fixture' }, result: null, created_at: time, updated_at: time }, { id: 'training-job', project_id: 'ux-review', kind: 'policy.finetune', status: 'running', request: { operation: 'policy.finetune', runtime_id: 'fixture' }, result: null, created_at: time, updated_at: time }] as Record<string, any>[], failed: false, gate: null as Promise<void> | null };
+  await page.route('**/api/v1/projects', route => route.fulfill({ json: [{ id: 'ux-review', name: 'Robot workspace', created_at: time }, { id: 'beta', name: 'Empty second project', created_at: time }] }));
+  await page.route('**/api/v1/projects/*/jobs', async route => {
+    if (state.gate) await state.gate;
+    return state.failed ? route.fulfill({ status: 503, json: { detail: 'Generated unavailable history' } }) : route.fulfill({ json: state.jobs }); // Includes foreign records to verify ownership filtering.
+  });
+  await page.reload();
+  await expect(page.getByLabel('Current project')).toHaveValue('ux-review');
+  return { state, mutations };
+}
+
+test('compact mobile navigation leaves useful stage content visible and every tool keyboard reachable', async ({ page }, testInfo) => {
+  const mutations = await workspace(page);
+  const navigation = page.getByRole('navigation', { name: 'Policy lifecycle' });
+  for (const width of [320, 390, 645]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const sidebar = await page.getByRole('complementary', { name: 'Workspace navigation' }).boundingBox();
+    expect(sidebar!.height).toBeLessThan(235);
+    const intake = await page.getByRole('heading', { name: 'Import a dataset', exact: true }).boundingBox();
+    expect(intake!.y).toBeLessThan(590);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`journey-empty-${width}.png`), fullPage: false });
+  }
+  for (const name of ['Teaching', 'Fine-tune', 'Distill', 'Quantize', 'Evaluate', 'Run', 'Decision lab', 'Cloud runs', 'Settings & diagnostics', 'Dataset']) {
+    const button = navigation.getByRole('button', { name, exact: true });
+    await button.focus();
+    await page.keyboard.press('Enter');
+    await expect(button).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByRole('heading', { name, exact: true, level: 1 })).toBeVisible();
+  }
+  expect(mutations).toEqual([]);
+});
+
+test('project activity is recorded execution history, isolated from foreign jobs and fresh model choices', async ({ page }) => {
+  const { mutations } = await journeyFixture(page);
+  const journey = page.getByRole('region', { name: 'Workflow context', exact: true });
+  await expect(journey.locator('summary')).toContainText('4 recorded jobs · 1 active');
+  await journey.locator('summary').click();
+  await expect(journey).toContainText('not a completion checklist');
+  await expect(journey.getByRole('button', { name: 'Review Dataset activity', exact: true })).toContainText('2 succeeded');
+  await expect(journey.getByRole('button', { name: 'Review Run activity', exact: true })).toContainText('1 stopped or failed');
+  await journey.getByRole('button', { name: 'Review Quantize activity', exact: true }).click();
+  await expect(page.getByRole('group', { name: 'Quantization mode' }).getByRole('button', { pressed: true })).toHaveCount(0);
+  await page.getByLabel('Current project').selectOption('beta');
+  await expect(journey.locator('summary')).toContainText('0 recorded jobs');
+  await expect(journey).not.toContainText('dataset-second');
+  await expect(journey).toContainText('Empty second project');
+  expect(mutations).toEqual([]);
+});
+
+test('journey continues with the exact viewed dataset and never submits a training job', async ({ page }) => {
+  const { mutations } = await journeyFixture(page);
+  await page.getByRole('button', { name: /^Inspection/ }).click();
+  await page.getByLabel('History', { exact: true }).selectOption('dataset-first');
+  const journey = page.getByRole('region', { name: 'Workflow context', exact: true });
+  await expect(journey).toContainText('Inspection viewed');
+  await journey.getByRole('button', { name: 'Continue with this dataset', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Fine-tune', exact: true, level: 1 })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Inspected dataset', exact: true }).locator('input:checked')).toHaveValue('dataset-first');
+  expect(mutations).toEqual([]);
+});
+
+test('missing history stays unknown and recovery restores context without enabling metadata-only training', async ({ page }) => {
+  const { state, mutations } = await journeyFixture(page);
+  state.failed = true;
+  await page.reload();
+  const journey = page.getByRole('region', { name: 'Workflow context', exact: true });
+  await expect(journey.getByRole('alert')).toContainText('unavailable');
+  await expect(journey.locator('summary')).toHaveCount(0);
+  await expect(journey.getByRole('button', { name: 'Continue with this dataset' })).toHaveCount(0);
+  state.failed = false;
+  state.jobs = state.jobs.filter(job => job.id === 'dataset-first');
+  state.jobs[0].result.snapshot = null;
+  await journey.getByRole('button', { name: 'Refresh project activity' }).click();
+  await expect(journey.locator('summary')).toContainText('1 recorded job');
+  await expect(journey.getByRole('button', { name: 'Continue with this dataset' })).toHaveCount(0);
+  expect(mutations).toEqual([]);
+});
+
+test('loading activity does not report zero jobs or offer a stale dataset continuation', async ({ page }) => {
+  const { state, mutations } = await journeyFixture(page);
+  let release!: () => void;
+  state.gate = new Promise<void>(resolve => { release = resolve; });
+  await page.reload();
+  const journey = page.getByRole('region', { name: 'Workflow context', exact: true });
+  await expect(journey.getByRole('status')).toHaveText('Loading project activity…');
+  await expect(journey.locator('summary')).toHaveCount(0);
+  await expect(journey.getByRole('button', { name: 'Continue with this dataset' })).toHaveCount(0);
+  release(); state.gate = null;
+  await expect(journey.locator('summary')).toContainText('4 recorded jobs');
   expect(mutations).toEqual([]);
 });
