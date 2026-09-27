@@ -488,6 +488,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/artifacts/{artifact_id}/replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Replay Record
+         * @description Read verified saved CPU predictions; never execute a policy or simulator.
+         */
+        get: operations["replay_record_api_v1_projects__project_id__artifacts__artifact_id__replay_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/augmentations": {
         parameters: {
             query?: never;
@@ -644,6 +664,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teaching/intelligence/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel */
+        post: operations["cancel_api_v1_teaching_intelligence_cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teaching/intelligence/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Decision */
+        post: operations["decision_api_v1_teaching_intelligence_decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teaching/intelligence/perception": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Perception */
+        post: operations["perception_api_v1_teaching_intelligence_perception_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teaching/intelligence/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Settings */
+        get: operations["get_settings_api_v1_teaching_intelligence_settings_get"];
+        /** Save Settings */
+        put: operations["save_settings_api_v1_teaching_intelligence_settings_put"];
+        post?: never;
+        /** Remove Settings */
+        delete: operations["remove_settings_api_v1_teaching_intelligence_settings_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teaching/intelligence/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Intelligence Status */
+        get: operations["intelligence_status_api_v1_teaching_intelligence_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teaching/state": {
         parameters: {
             query?: never;
@@ -678,10 +785,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teaching/voice/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Voice Status */
+        get: operations["voice_status_api_v1_teaching_voice_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AdviceRequest */
+        AdviceRequest: {
+            /**
+             * Consent
+             * @constant
+             */
+            consent: true;
+            /** Episode Id */
+            episode_id: string | null;
+            /** Expected Revision */
+            expected_revision: number;
+            /** Prompt */
+            prompt: string;
+            /** Request Id */
+            request_id: string;
+            /** Session Id */
+            session_id: string;
+        };
+        /** AdviceResult */
+        AdviceResult: {
+            /**
+             * Advisory Only
+             * @constant
+             */
+            advisory_only: true;
+            /** Choices */
+            choices: components["schemas"]["Choice"][];
+            /**
+             * Current At Return
+             * @constant
+             */
+            current_at_return: true;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "decision" | "perception";
+            /** Proposal */
+            proposal: components["schemas"]["DecisionProposal"] | components["schemas"]["PerceptionProposal"];
+            /** Request Id */
+            request_id: string;
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: 1;
+        };
         /** AugmentationClip */
         AugmentationClip: {
             /** Camera Key */
@@ -842,6 +1013,33 @@ export interface components {
             /** Width */
             width: number | null;
         };
+        /** CancelRequest */
+        CancelRequest: {
+            /** Request Id */
+            request_id: string;
+            /** Session Id */
+            session_id: string;
+        };
+        /** CancelResult */
+        CancelResult: {
+            /**
+             * Billing Verified
+             * @constant
+             */
+            billing_verified: false;
+            /** Request Id */
+            request_id: string;
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: 1;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "cancellation_requested" | "not_active";
+        };
         /**
          * Capability
          * @description Planned/untested records carry no support; outcome claims carry evidence.
@@ -934,6 +1132,13 @@ export interface components {
              * @enum {string}
              */
             os: "linux" | "windows" | "macos";
+        };
+        /** Choice */
+        Choice: {
+            /** Description */
+            description: string;
+            /** Id */
+            id: string;
         };
         /** CloudConnection */
         CloudConnection: {
@@ -1120,6 +1325,15 @@ export interface components {
             gcp?: components["schemas"]["GcpComputeSettings"] | null;
             local?: components["schemas"]["LocalComputeSettings"] | null;
         };
+        /** Context */
+        Context: {
+            /** Episode Id */
+            episode_id: string | null;
+            /** Revision */
+            revision: number;
+            /** Session Id */
+            session_id: string;
+        };
         /** DatasetProfile */
         DatasetProfile: {
             /** Features */
@@ -1207,6 +1421,18 @@ export interface components {
             total_frames: number;
             /** Warnings */
             warnings: string[];
+        };
+        /** DecisionProposal */
+        DecisionProposal: {
+            /** Choice */
+            choice: string;
+            /** Confidence */
+            confidence: number;
+            /** Probabilities */
+            probabilities: {
+                [key: string]: number;
+            };
+            receipt: components["schemas"]["Provenance"];
         };
         /** DecisionStatus */
         DecisionStatus: {
@@ -1349,6 +1575,18 @@ export interface components {
              */
             warmups: number;
         };
+        /** FrameIdentity */
+        FrameIdentity: {
+            context: components["schemas"]["Context"];
+            /** Height */
+            height: number;
+            /** Rgb Sha256 */
+            rgb_sha256: string;
+            /** Step */
+            step: number;
+            /** Width */
+            width: number;
+        };
         /** FrameSample */
         FrameSample: {
             /** Action */
@@ -1475,6 +1713,16 @@ export interface components {
              * @enum {string}
              */
             source: "huggingface" | "local";
+        };
+        /** IntelligenceSettingsInput */
+        IntelligenceSettingsInput: {
+            /**
+             * Openrouter Api Key
+             * Format: password
+             */
+            openrouter_api_key: string;
+            /** Voice Model */
+            voice_model: string;
         };
         /** Job */
         Job: {
@@ -1747,6 +1995,33 @@ export interface components {
             group_size: 64;
         };
         /**
+         * NativeReplay
+         * @description Explicit CPU observation replay, not an environment or a scored simulation.
+         */
+        NativeReplay: {
+            /**
+             * Adapter
+             * @constant
+             */
+            adapter: "act-packed-observation-v1";
+            /**
+             * Coordinate Attestation
+             * @enum {string}
+             */
+            coordinate_attestation: "policy_recorded_coordinates" | "generated_fixture";
+            /** Selection */
+            selection: components["schemas"]["ReplayObservation"][];
+            /** Units */
+            units: string[];
+        };
+        /** Observation */
+        Observation: {
+            /** Box */
+            box: number[];
+            /** Label */
+            label: string;
+        };
+        /**
          * ParityLimits
          * @description Operator-declared tolerances; no unmeasured universal default.
          */
@@ -1758,6 +2033,16 @@ export interface components {
             /** Profile */
             profile: string;
         };
+        /** PerceptionProposal */
+        PerceptionProposal: {
+            /** Observations */
+            observations: components["schemas"]["Observation"][];
+            receipt: components["schemas"]["Provenance"];
+            /** Summary */
+            summary: string;
+            /** Uncertain */
+            uncertain: boolean;
+        };
         /** PolicyArtifact */
         PolicyArtifact: {
             /** File Bytes */
@@ -1766,7 +2051,7 @@ export interface components {
              * Format
              * @enum {string}
              */
-            format: "gguf" | "training_checkpoint" | "native_checkpoint" | "deployment_package" | "inference_export" | "simulation_record" | "native_quantized";
+            format: "gguf" | "training_checkpoint" | "native_checkpoint" | "deployment_package" | "inference_export" | "simulation_record" | "native_quantized" | "native_run_record";
             /** Id */
             id: string;
             /** Job Id */
@@ -1798,6 +2083,7 @@ export interface components {
             limits?: components["schemas"]["Limits"] | null;
             native_distillation?: components["schemas"]["NativeDistillation"] | null;
             native_quantization?: components["schemas"]["NativeQuantization"] | null;
+            native_replay?: components["schemas"]["NativeReplay"] | null;
             /**
              * Operation
              * @enum {string}
@@ -1853,6 +2139,28 @@ export interface components {
         ProjectCreate: {
             /** Name */
             name: string;
+        };
+        /** Provenance */
+        Provenance: {
+            context: components["schemas"]["Context"];
+            /** Elapsed Seconds */
+            elapsed_seconds: number;
+            frame: components["schemas"]["FrameIdentity"] | null;
+            /**
+             * Generated Proposal
+             * @constant
+             */
+            generated_proposal: true;
+            /** Reported Cost Usd */
+            reported_cost_usd: number | null;
+            /** Request Sha256 */
+            request_sha256: string;
+            /** Requested Model */
+            requested_model: string;
+            /** Response Id */
+            response_id: string | null;
+            /** Returned Model */
+            returned_model: string;
         };
         /** PublicRuntime */
         PublicRuntime: {
@@ -1920,6 +2228,16 @@ export interface components {
              */
             native_quantization_only: boolean;
             /**
+             * Native Replay
+             * @default false
+             */
+            native_replay: boolean;
+            /**
+             * Native Replay Only
+             * @default false
+             */
+            native_replay_only: boolean;
+            /**
              * Needs Preparation
              * @default false
              */
@@ -1948,6 +2266,13 @@ export interface components {
             training_model_ids: string[];
             /** Unavailable Reason */
             unavailable_reason?: string | null;
+        };
+        /** ReplayObservation */
+        ReplayObservation: {
+            /** Episode Index */
+            episode_index: number;
+            /** Frame Index */
+            frame_index: number;
         };
         /** Score */
         Score: {
@@ -3107,6 +3432,40 @@ export interface operations {
             };
         };
     };
+    replay_record_api_v1_projects__project_id__artifacts__artifact_id__replay_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     augment_dataset_api_v1_projects__project_id__augmentations_post: {
         parameters: {
             query?: never;
@@ -3393,6 +3752,198 @@ export interface operations {
             };
         };
     };
+    cancel_api_v1_teaching_intelligence_cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CancelRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CancelResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decision_api_v1_teaching_intelligence_decision_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdviceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdviceResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    perception_api_v1_teaching_intelligence_perception_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdviceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdviceResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_settings_api_v1_teaching_intelligence_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    save_settings_api_v1_teaching_intelligence_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntelligenceSettingsInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_settings_api_v1_teaching_intelligence_settings_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    intelligence_status_api_v1_teaching_intelligence_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     state_api_v1_teaching_state_get: {
         parameters: {
             query?: never;
@@ -3442,6 +3993,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    voice_status_api_v1_teaching_voice_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };

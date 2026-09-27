@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, isActive, isDatasetJob, type DatasetJob, type DatasetProfile, type Job, type Project } from '@/lib/api';
 import { NativeQuantizationPanel } from '@/components/native-quantization-panel';
+import { NativeDistillationPanel } from '@/components/native-distillation-panel';
 import { NativeSimulationPanel } from '@/components/native-simulation-panel';
 import { CloudRuns } from '@/components/cloud-runs';
 import { WorkflowPanel } from '@/components/workflow-panel';
@@ -20,7 +21,7 @@ import { datasetStarters, type DatasetStarter } from '@/lib/dataset-starters';
 const stagePurpose = [
   'Inspect robotics data, understand its episodes, and prepare a training source.',
   'Train a policy from an inspected dataset, then review its checkpoints and exports.',
-  'Smaller student policies are planned. Distillation is not yet available in this workspace.',
+  'Train a smaller student from a teacher policy and verified robotics observations.',
   'Create a smaller policy package and inspect the measured differences.',
   'Check execution or measure task success with a configured evaluation protocol.',
   'Run a prepared policy and review its recorded execution.',
@@ -254,7 +255,7 @@ function Workbench() {
         <p className="sidebar-section-label">Workspace</p>
         <ul className="stage-list">{stages.map((item, index) => <li key={item.name}>
           <button type="button" className={`stage-button${activeStage === index ? ' selected' : ''}`} onClick={() => navigateStage(index)} aria-current={activeStage === index ? 'page' : undefined}>
-            <Icon name={item.icon} size={19} /><span>{item.name}</span>{index === 2 && <small>Planned</small>}
+            <Icon name={item.icon} size={19} /><span>{item.name}</span>
           </button>
         </li>)}</ul>
         <button className={`stage-button${activeStage === 6 ? ' selected' : ''}`} onClick={() => { setSettingsTab('compute'); setActiveStage(6); }}><Icon name="sliders" size={19} /><span>Settings & diagnostics</span></button>
@@ -311,7 +312,7 @@ function Workbench() {
         {activeStage === 5 && <section className="panel run-modes" aria-label="Run workflow"><div role="group" aria-label="Run mode"><button className="secondary-button" aria-pressed={runMode === 'native'} onClick={() => setRunMode('native')}>Native Isaac · ACT / SmolVLA</button><button className="secondary-button" aria-pressed={runMode === 'engine'} onClick={() => setRunMode('engine')}>Engine checks · GGUF</button></div><p>{runMode === 'native' ? 'Recorded cup-scene rollouts and complete native policy packages.' : 'Reload a prepared engine policy and check its execution. For ACT or native SmolVLA in the cup scene, choose Native Isaac.'}</p></section>}
         {activeStage === 5 && runMode === 'native' && <NativeSimulationPanel key={workflowProjectId} projectId={workflowProjectId} preferredJobId={openSimulation?.projectId === workflowProjectId ? openSimulation.id : undefined} onTraining={() => navigateStage(1)} />}
         {activeStage > 1 && activeStage !== 2 && activeStage !== 7 && (activeStage !== 3 || quantizeMode === 'gguf') && (activeStage !== 5 || runMode === 'engine') && <WorkflowPanel key={`${workflowProjectId}-${activeStage}-${workflowNavigation}`} projectId={workflowProjectId} tab={settingsTab} onTabChange={setSettingsTab} onOpenQuantize={() => navigateStage(3)} stage={activeStage === 6 ? 'settings' : stage.name} preferredArtifactId={activeStage === 3 && quantizeArtifact?.projectId === projectId ? quantizeArtifact.artifactId : undefined} onViewTraining={() => navigateStage(1)} />}
-        {activeStage === 2 && <section className="planned-panel" aria-labelledby="planned-title"><span className="empty-icon"><Icon name={stage.icon} size={28} /></span><span className="planned-badge">Planned</span><h2 id="planned-title">{stage.name}</h2><button className="secondary-button" onClick={() => setActiveStage(0)}>Go to Dataset <Icon name="arrow" size={15} /></button></section>}
+        {activeStage === 2 && <NativeDistillationPanel key={workflowProjectId} projectId={workflowProjectId} onDataset={() => { setDatasetView('sources'); navigateStage(0); }} onQuantize={artifactId => { setQuantizeArtifact({ projectId, artifactId }); setQuantizeMode('native'); navigateStage(3); }} />}
   </WorkspaceShell>;
 }
 
