@@ -9,5 +9,4 @@ if [[ ! -x "$SIM_PYTHON" ]]; then
   exit 1
 fi
 
-cd "$SIM_DIR"
-exec "$SIM_PYTHON" rollout_launch.py "$@"
+exec "$SIM_PYTHON" "$SIM_DIR/rollout_launch.py" "$@"

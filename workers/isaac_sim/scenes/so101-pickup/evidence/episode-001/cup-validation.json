@@ -1,0 +1,74 @@
+{
+  "fit_frames": [
+    150,
+    180,
+    210
+  ],
+  "validation_frames": [
+    165,
+    195
+  ],
+  "heldout_parameters": [
+    -0.22478990763966805,
+    -0.02914790645704914,
+    0.10219060004585377,
+    0.027674814975395565,
+    0.04156838413438038
+  ],
+  "training_errors": {
+    "rms_px": 0.9238154130799092,
+    "median_px": 0.5065943947313416,
+    "p95_px": 1.7868196135137757,
+    "max_px": 4.186866403120353
+  },
+  "validation_errors": {
+    "rms_px": 0.9830478956542797,
+    "median_px": 0.4987375437338096,
+    "p95_px": 1.7970913734550351,
+    "max_px": 4.186866403120353
+  },
+  "rim_observed_px": {
+    "major": 111.91360931396484,
+    "minor": 31.32241325378418,
+    "center": [
+      766.8991821289062,
+      553.6007690429688
+    ]
+  },
+  "rim_frustum_px": {
+    "major": 106.31693267822266,
+    "minor": 34.93716049194336,
+    "center": [
+      768.2628173828125,
+      554.7783813476562
+    ]
+  },
+  "rim_outer_diameter_width_match_m": 0.08751594902432398,
+  "rim_minor_at_width_match_px": 36.776302996517195,
+  "rim_limit": "Matching rim width would overpredict ellipse depth. The fixed approximate camera and plain frustum cannot explain the full rolled-rim shape exactly.",
+  "annotation_sensitivity": {
+    "method": "30 seeded fits; each observed edge group shifted independently in both image axes within\u00b11.5px at1920\u00d71080. Not a statistical confidence interval.",
+    "parameters_order": [
+      "x",
+      "y",
+      "height",
+      "radius_bottom",
+      "radius_top"
+    ],
+    "min": [
+      -0.22538182274747395,
+      -0.03275418328392496,
+      0.10025334744387762,
+      0.02691505383920893,
+      0.040789594080170015
+    ],
+    "max": [
+      -0.2237700656996946,
+      -0.02539251882861015,
+      0.10410159795212835,
+      0.02888406616998119,
+      0.04234762698650164
+    ]
+  },
+  "scale_note": "All metric estimates inherit assumed1m shelf width. A10% scale error creates a10% dimension and relative-position error; camera/distortion uncertainty is additional."
+}

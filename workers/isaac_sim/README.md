@@ -6,6 +6,8 @@ tracing is not required.
 
 For calibrated ACT/SmolVLA control through a separate inference VM, see
 [the rollout adapter](ROLLOUT.md).
+For recorded-state comparisons and calibration fits without starting Isaac, see
+[offline calibration](CALIBRATION_OFFLINE.md).
 
 ```text
 YAML -> service -> Isaac adapter -> USD physics + RGB frames

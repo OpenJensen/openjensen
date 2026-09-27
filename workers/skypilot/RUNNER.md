@@ -1,4 +1,4 @@
-# Run ACT + Isaac with the shared account
+# Run ACT or SmolVLA with Isaac
 
 Code, login helper, configuration and scene live in this repository. Share the
 service-account JSON key separately through a password manager's secure share.
@@ -12,9 +12,10 @@ Use a fresh OS account if SkyPilot already runs under another login: its API
 server retains its startup credentials, and a second port still shares state.
 Authenticate below before starting SkyPilot.
 
-Store the supplied key at `~/.config/isaac-act-runner/key.json`. Store the complete
-ACT step-29000 export at `~/models/act_step29000`, including its saved processors
-and normalization files. The model weights remain outside Git.
+Store the supplied key at `~/.config/isaac-act-runner/key.json`. Keep complete
+checkpoint exports outside the checkout, including saved processors and normalization
+files. The commands below use `~/Downloads/act_step29000` and
+`~/Downloads/smolvla_step20000`. Model weights remain outside Git.
 
 ```bash
 bash
@@ -33,9 +34,10 @@ cp rollout.experimental.example.yaml rollout.experimental.local.yaml
 bash sky.sh check gcp
 ```
 
-For another checkpoint location, edit `~/vla-checkpoint` in the local task file.
-The template pins this export's fingerprint; another model needs matching policy
-settings and calibration. Local YAML edits are ignored by Git.
+Select the export with `--checkpoint`; no model-specific YAML edits are needed.
+The launcher derives its fingerprint, camera key, image size, state dimension and
+action horizon. Scene, robot joint order and calibration remain explicit. Local
+YAML edits are ignored by Git.
 
 The helper selects only
 `sim-rollout-runner@project-5693e83a-db3a-43e1-98c.iam.gserviceaccount.com`, uses a
@@ -50,13 +52,29 @@ After accepting the [NVIDIA container license](https://catalog.ngc.nvidia.com/or
 
 ```bash
 export ACCEPT_EULA=Y
-bash launch-rollout.sh rollout.experimental.local.yaml --experimental --validate-only
-bash launch-rollout.sh rollout.experimental.local.yaml --experimental
+bash launch-rollout.sh rollout.experimental.local.yaml \
+  --checkpoint ~/Downloads/act_step29000 --experimental --validate-only
+bash launch-rollout.sh rollout.experimental.local.yaml \
+  --checkpoint ~/Downloads/smolvla_step20000 --experimental --validate-only
+
+# Launch the selected model after its preflight passes.
+bash launch-rollout.sh rollout.experimental.local.yaml \
+  --checkpoint ~/Downloads/smolvla_step20000 --experimental
 ```
 
 Validation is local. Launch creates billable L4 and H100 Spot VMs plus a CPU
 controller. Keep the terminal open for the launcher's two-hour deadline.
 GPU capacity and Spot interruptions can prevent completion.
+
+Each run selects one checkpoint. Run ACT and SmolVLA sequentially with the current
+H100 quota. Use the ACT path in the same launch command to run ACT.
+The default horizon is capped by the export's `n_action_steps`: 100 for this ACT
+export and 50 for SmolVLA. Add `--execute-steps 10` to both runs for the same
+replanning interval. Values above the model's chunk size are rejected.
+
+Per-run manifest snapshots are mounted explicitly and cleaned up after submission;
+the source templates are unchanged. SmolVLA needs its public VLM configuration and
+tokenizer from Hugging Face on first startup.
 
 This runs 150 steps, or five simulated seconds. Calibration is **unverified**;
 the previous run demonstrated wrist/gripper motion, not a successful pickup.
@@ -70,7 +88,7 @@ bash sky.sh jobs queue
 bash sky.sh jobs logs JOB_ID isaac
 bash sky.sh jobs logs JOB_ID vla
 bash sky.sh gcloud storage cp --recursive \
-  gs://project-5693e83a-db3a-43e1-98c-sim-results/act-motion-tests/RUN_UUID ./results/
+  gs://project-5693e83a-db3a-43e1-98c-sim-results/policy-motion-tests/RUN_UUID ./results/
 
 # Cancel only if the job is still active.
 bash sky.sh jobs cancel JOB_ID --yes
@@ -90,6 +108,12 @@ autostops after 10 idle minutes; its disk remains. Delete your idle controller w
 | `skypilot-v1` service account | Service Account User, to attach the VM identity |
 | `sim-ssh` IAP groups in `us-central1` and `us-east4` | IAP tunnel access |
 | Simulation results bucket | Storage Object Viewer |
+| `firebird-artifacts-project-5693e83a-db3a-43e1-98c` bucket | Storage Legacy Bucket Reader + [`firebirdCheckpointObjects`](checkpoint-object-role.json): bucket metadata read; object read/list/create and metadata update |
+
+The checkpoint grant cannot overwrite or delete existing objects. Use unique
+checkpoint names; cleanup requires an administrator. Effective permissions and
+bucket metadata reads passed as the runner on 2026-09-27. Private bucket settings
+and simulation configuration are unchanged. No training launch was tested.
 
 SkyPilot 0.13 uses the existing `skypilot-v1` VM identity. Its jobs inherit Compute
 Admin, Storage Admin and project-wide Service Account User access. This account
