@@ -17,11 +17,11 @@ UV_PROJECT_ENVIRONMENT=.venv-psi GIT_LFS_SKIP_SMUDGE=1 uv sync --frozen --group 
 uv pip install --python .venv-psi/bin/python flash_attn==2.7.4.post1 --no-build-isolation
 ```
 
-The cloud image needs NVIDIA drivers and FFmpeg libraries. The Firebird runner
+The cloud image needs NVIDIA drivers and FFmpeg libraries. The OPEN JENSEN runner
 selects the official FlashAttention wheel matching the installed Torch C++ ABI
 and verifies its pinned SHA-256. A CUDA toolkit and development headers are only
 needed when the environment requires a source-build fallback.
-Expose the Firebird worker source on `PYTHONPATH`, set `FIREBIRD_PSI_ROOT` to that
+Expose the OPEN JENSEN worker source on `PYTHONPATH`, set `FIREBIRD_PSI_ROOT` to that
 checkout, and invoke `python -m firebird_vla.psi_application REQUEST RESULT`.
 Use one visible GPU with BF16 support; the catalog conservatively requests at
 least 40 GB until memory is measured on a real run.

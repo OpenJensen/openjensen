@@ -73,7 +73,7 @@ a bounded diagnostic tail. Temporary staging is cleaned on handled failure;
 force-killing the parent can leave a hidden `.act-export-*` directory for operator
 cleanup, but cannot publish a partial package.
 
-The supported Firebird loader explicitly overrides the device to CPU and
+The supported OPEN JENSEN loader explicitly overrides the device to CPU and
 `pretrained_backbone_weights=None`, and loads saved processors locally. A generic
 LeRobot loader without that override may request torchvision backbone weights.
 Verification sets Hugging Face offline flags and blocks Python socket connect/DNS
@@ -213,7 +213,7 @@ recipe. At native LeRobot0.6.2 revision
 a CPU optimizer update on seeded synthetic tensors, calls upstream
 `save_checkpoint`, then in a fresh process uses upstream two-phase resume with
 Accelerate1.14.0. Saved model, optimizer, RNG and the next optimizer update must
-match exactly. Its final mode uses the actual Firebird checkpoint bundler.
+match exactly. Its final mode uses the actual OPEN JENSEN checkpoint bundler.
 Run `generate`, `resume`, then `bundle` against the same new scratch directory
 in the isolated producer environment. The ACT exporter stays on its unchanged
 LeRobot0.6.1 lock and consumes only the resulting complete bundle.

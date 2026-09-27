@@ -3,6 +3,6 @@
 <plist version="1.0">
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Firebird uses your microphone when you choose voice teaching to give commands to the connected teaching session.</string>
+	<string>OPEN JENSEN uses your microphone when you choose voice teaching to give commands to the connected teaching session.</string>
 </dict>
 </plist>

@@ -1,4 +1,4 @@
-# Firebird teaching viewer
+# OPEN JENSEN teaching viewer
 
 A receive-only Unity package for the teaching worker's atomic `GET /frame` version 1 response. It shows the RGB camera image and explicitly named joint positions in radians. It does not write transforms, articulation targets, robot commands, LiveKit rooms, or cloud settings. Adding the component never starts a connection.
 

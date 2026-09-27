@@ -34,7 +34,7 @@ The request captures its target using a short local SkyPilot configuration read,
 then queues promptly. The background job prepares its project-specific workspace,
 checks credentials and regional offerings, and launches the selected GPU.
 Preparation can enable required Google Cloud APIs through SkyPilot's supported
-workspace API. Existing default and other workspaces are preserved; Firebird never
+workspace API. Existing default and other workspaces are preserved; OPEN JENSEN never
 overwrites a mismatched workspace name. A matching existing workspace is reused
 and its GCP compute access is checked automatically.
 

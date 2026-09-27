@@ -21,6 +21,7 @@ MODEL_HASH = "3d81f0712ea1e9495a5996258dbc9a41e2fc2e1912dd87464683b20950e5c76f"
 LICENSE = "CC-BY-NC-SA-4.0"
 VERSIONS = {"torch": "2.11.0", "safetensors": "0.8.0", "tokenizers": "0.23.2"}
 TEMPLATE = "STATE:\n{state}\n\nINSTRUCTIONS:\n{instructions}\n\nCRITERION:\n{criterion}"
+# These strings are part of the existing decision worker's exact wire contract.
 CAVEATS = [
     "Relative softmax weights are not calibrated correctness probabilities.",
     "Experimental Firebird prompt; not a reproduction of the upstream benchmark.",

@@ -8,17 +8,17 @@ UPSTREAM_REVISION = "4f3720d45e102b36d7c3e9465ab8062274170518"
 
 
 def stage_psi(bundle: Path, training_root: Path) -> list[str]:
-    """Append after creating Python 3.11 .venv and installing the Firebird worker.
+    """Append after creating Python 3.11 .venv and installing the OPEN JENSEN worker.
 
     The pinned upstream lock owns the ML environment. ``--inexact`` preserves
-    the already installed Firebird bridge and Google Cloud storage client.
+    the already installed OPEN JENSEN bridge and Google Cloud storage client.
     No upstream model weights are downloaded or staged on the application host.
     """
     for name in ("psi_application.py", "psi_train.py", "psi_verify.py", "psi_profile.py"):
         if not (training_root / "src" / "firebird_vla" / name).is_file():
             raise ValueError("The bundled Psi-Zero worker is missing on the application server")
     if not (bundle / "worker").is_dir():
-        raise ValueError("Stage the shared Firebird worker before Psi-Zero setup")
+        raise ValueError("Stage the shared OPEN JENSEN worker before Psi-Zero setup")
     shutil.copyfile(
         Path(__file__).with_name("psi_flash_install.py"), bundle / "psi_flash_install.py"
     )

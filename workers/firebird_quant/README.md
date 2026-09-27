@@ -1,6 +1,6 @@
-# Firebird Quant
+# OPEN JENSEN Quant
 
-One packed-weight interface across model families. Firebird Quant discovers
+One packed-weight interface across model families. OPEN JENSEN Quant discovers
 registered dense tensors by shape and dtype, without a SmolVLA/LLM allowlist.
 It packs real signed 4-bit or 8-bit codes, records every retained tensor, and
 provides a portable eager PyTorch inference path and a reloadable artifact.

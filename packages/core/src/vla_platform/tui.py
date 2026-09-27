@@ -169,7 +169,7 @@ class CancelForm(Form):
 
 class FirebirdApp(App):
     ENABLE_COMMAND_PALETTE = False
-    TITLE = "Firebird"
+    TITLE = "OPEN JENSEN"
     SUB_TITLE = "Dataset → Fine-tune → Distill → Quantize → Evaluate → Run"
     BINDINGS = [
         ("f1", "view('projects-tab')", "Projects"),

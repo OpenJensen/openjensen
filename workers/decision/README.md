@@ -1,8 +1,8 @@
 # Optional Muose decision worker
 
-This standalone CPU worker scores a small list of text criteria against a state and instructions. It has no job, tool, cloud, payment, or robot execution interface. It is **experimental and advisory only**. It is not a VLA. The optional Firebird **Dataset → Decision lab** panel exposes manual advisory scoring when the application operator configures this isolated worker. It is disabled by default.
+This standalone CPU worker scores a small list of text criteria against a state and instructions. It has no job, tool, cloud, payment, or robot execution interface. It is **experimental and advisory only**. It is not a VLA. The optional OPEN JENSEN **Dataset → Decision lab** panel exposes manual advisory scoring when the application operator configures this isolated worker. It is disabled by default.
 
-The only supported model is [muose/Muose-50M-Decision](https://huggingface.co/muose/Muose-50M-Decision/tree/5afb8eeff127621fea2d66fc63f56798ada12eda) at commit `5afb8eeff127621fea2d66fc63f56798ada12eda`. Its [model card](https://huggingface.co/muose/Muose-50M-Decision/blob/5afb8eeff127621fea2d66fc63f56798ada12eda/README.md) attributes it to Muose and licenses it under **CC-BY-NC-SA-4.0**. Use requires explicit license acceptance; commercial use needs separate permission from the owner. This optional component does not change the license of the rest of Firebird. No model weights or upstream Python files are included here.
+The only supported model is [muose/Muose-50M-Decision](https://huggingface.co/muose/Muose-50M-Decision/tree/5afb8eeff127621fea2d66fc63f56798ada12eda) at commit `5afb8eeff127621fea2d66fc63f56798ada12eda`. Its [model card](https://huggingface.co/muose/Muose-50M-Decision/blob/5afb8eeff127621fea2d66fc63f56798ada12eda/README.md) attributes it to Muose and licenses it under **CC-BY-NC-SA-4.0**. Use requires explicit license acceptance; commercial use needs separate permission from the owner. This optional component does not change the license of the rest of OPEN JENSEN. No model weights or upstream Python files are included here.
 
 ## Install separately
 
@@ -64,13 +64,13 @@ CRITERION:
 {criterion}
 ```
 
-The upstream repository does not publish a complete inference/tokenization helper establishing a canonical prompt format. This template is explicitly Firebird's experiment. Do not equate these results with the author's BANKING77 scores.
+The upstream repository does not publish a complete inference/tokenization helper establishing a canonical prompt format. This template is explicitly OPEN JENSEN's experiment. Do not equate these results with the author's BANKING77 scores.
 
 ## Execution and integrity boundaries
 
 - All ancestor directories and final input files use descriptor-based no-follow traversal. Files must be regular, have bounded size, and remain stable during bounded reads. FIFO, symlink, changed-size, and checksum mismatches fail closed.
 - The reviewed `model.py` and `decision_model.py` bytes are executed in isolated temporary module namespaces only after all seven files pass verification. The model directory is never added to Python's import path. The original bytes are never modified.
-- The source defines an unused `torch.load(..., weights_only=False)` helper. Firebird does not call it, and disables `torch.load` in the scoring process. It loads only the pinned safetensors bytes, restores the one declared tied embedding alias, and checks exact tensor inventory, shapes, FP32 dtype, finiteness, and the 50,760,960 parameter count.
+- The source defines an unused `torch.load(..., weights_only=False)` helper. OPEN JENSEN does not call it, and disables `torch.load` in the scoring process. It loads only the pinned safetensors bytes, restores the one declared tied embedding alias, and checks exact tensor inventory, shapes, FP32 dtype, finiteness, and the 50,760,960 parameter count.
 - CPU only: two intra-op threads, one inter-op thread, evaluation/inference mode. Python audit hooks reject socket connection/name-resolution and subprocess launch attempts; this is **not an OS network or filesystem sandbox**. The pinned dependency runtime and operator configuration remain trusted.
 - Only the public CLI supplies the owned-process deadline: default 30 seconds, configurable above zero through 120 seconds. Output streams are bounded to 64 KiB each. Timeout, interruption, or excessive output kills and reaps the owned scoring child, with up to five seconds for local reaping. The supervisor defers signals during child creation and cleanup. There is no automatic retry.
 - The internal `--_child` path and `DecisionScorer` class are implementation/isolated-experiment interfaces, not independent timeout boundaries. An outer application supervisor must give the public CLI its requested deadline plus the cleanup allowance and send graceful termination before forced kill. No software can reap a child after the parent itself is forcibly killed.

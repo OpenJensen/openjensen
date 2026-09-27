@@ -1,6 +1,6 @@
-# Firebird desktop workbench
+# OPEN JENSEN desktop workbench
 
-This Tauri 2 client opens the existing Python-served static Firebird web app. It does not start, package, configure or stop Python, GPU workers or cloud jobs. Closing the window exits only the desktop process. DESK-002 remains the separate Python-sidecar and clean-machine installation milestone.
+This Tauri 2 client opens the existing Python-served static OPEN JENSEN web app. It does not start, package, configure or stop Python, GPU workers or cloud jobs. Closing the window exits only the desktop process. DESK-002 remains the separate Python-sidecar and clean-machine installation milestone.
 
 ## Run and build
 
@@ -14,7 +14,7 @@ pnpm exec tauri dev
 
 Start the existing application separately with `firebird serve`, after building the shared web interface using the repository's normal setup. The connection screen checks both `/api/v1/health` and the root HTML page before opening it. API-only servers, wrong application versions, redirects, connection failures and oversized responses are rejected with a visible retry state. The packaged frontend here is only the connection screen; the full static Next interface continues to be served by the existing application.
 
-The default endpoint is `http://127.0.0.1:8000/`. To use another port, set `FIREBIRD_DESKTOP_PORT` to a decimal integer from 1 to 65535 before launching the desktop executable. Hosts, URLs, credentials and path prefixes are not accepted as desktop configuration. The native **Firebird → Connection** menu (Cmd/Ctrl+Shift+R) returns to the connection screen after a backend restart. No backend restart is triggered by that menu.
+The default endpoint is `http://127.0.0.1:8000/`. To use another port, set `FIREBIRD_DESKTOP_PORT` to a decimal integer from 1 to 65535 before launching the desktop executable. Hosts, URLs, credentials and path prefixes are not accepted as desktop configuration. The native **OPEN JENSEN → Connection** menu (Cmd/Ctrl+Shift+R) returns to the connection screen after a backend restart. No backend restart is triggered by that menu.
 
 ```sh
 # macOS application bundle; Node is a build dependency, not a runtime requirement.
@@ -23,7 +23,7 @@ pnpm exec tauri build --bundles app
 src-tauri/target/release/firebird-desktop --self-check
 ```
 
-The local bundle is `src-tauri/target/release/bundle/macos/Firebird.app`. A locally built application is not a signed/notarized public distribution or proof of clean-machine installation. Windows/Linux packages and runtime acceptance remain unverified until those operating systems are tested. No updater, installer service or autostart is installed.
+The local bundle is `src-tauri/target/release/bundle/macos/OPEN JENSEN.app`. A locally built application is not a signed/notarized public distribution or proof of clean-machine installation. Windows/Linux packages and runtime acceptance remain unverified until those operating systems are tested. No updater, installer service or autostart is installed.
 
 ## Ownership and permissions
 

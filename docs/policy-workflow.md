@@ -1,6 +1,6 @@
 # Native policy workflow
 
-Firebird owns the project, dataset intake, jobs, cancellation, progress, artifact
+OPEN JENSEN owns the project, dataset intake, jobs, cancellation, progress, artifact
 lineage and downloads. Isolated Python 3.11/3.12 workers own ML/native execution. The core stays
 on Python 3.14 without Torch. Web and CLI submit the same versioned API requests.
 
@@ -68,7 +68,7 @@ See [compute settings](compute-settings.md) and
 
 The SmolVLA form defaults to **20,000 optimizer steps and batch size 64**,
 verified from KiteML’s signed-in training form on 2026-09-26 with
-`codywang/so101_pickup_test`. Firebird publishes **about five checkpoints total** to private GCS by default: every
+`codywang/so101_pickup_test`. OPEN JENSEN publishes **about five checkpoints total** to private GCS by default: every
 4,000 optimizer steps for a 20,000-step run, including the final checkpoint.
 The checkpoint count is editable.
 The displayed step and batch defaults match KiteML. The existing LoRA/QLoRA
