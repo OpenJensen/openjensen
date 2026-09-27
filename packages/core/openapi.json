@@ -1461,6 +1461,51 @@
         "title": "DecisionStatus",
         "type": "object"
       },
+      "DistillationSplits": {
+        "additionalProperties": false,
+        "properties": {
+          "final": {
+            "items": {
+              "maximum": 19999.0,
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "title": "Final",
+            "type": "array"
+          },
+          "train": {
+            "items": {
+              "maximum": 19999.0,
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "title": "Train",
+            "type": "array"
+          },
+          "validation": {
+            "items": {
+              "maximum": 19999.0,
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "title": "Validation",
+            "type": "array"
+          }
+        },
+        "required": [
+          "train",
+          "validation",
+          "final"
+        ],
+        "title": "DistillationSplits",
+        "type": "object"
+      },
       "EpisodePage": {
         "additionalProperties": false,
         "properties": {
@@ -2556,6 +2601,82 @@
         "title": "LocalPreviewLimits",
         "type": "object"
       },
+      "NativeDistillation": {
+        "additionalProperties": false,
+        "description": "Recorded-data selection and a fixed ACT teacher/student recipe; no paths.",
+        "properties": {
+          "adapter": {
+            "const": "act-act-v1",
+            "title": "Adapter",
+            "type": "string"
+          },
+          "coordinate_attestation": {
+            "enum": [
+              "teacher_recorded_coordinates",
+              "generated_fixture"
+            ],
+            "title": "Coordinate Attestation",
+            "type": "string"
+          },
+          "frame_stride": {
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Frame Stride",
+            "type": "integer"
+          },
+          "learning_rate": {
+            "maximum": 0.001,
+            "minimum": 1e-07,
+            "title": "Learning Rate",
+            "type": "number"
+          },
+          "seed": {
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Seed",
+            "type": "integer"
+          },
+          "splits": {
+            "$ref": "#/components/schemas/DistillationSplits"
+          },
+          "steps": {
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Steps",
+            "type": "integer"
+          },
+          "student": {
+            "const": "act-256",
+            "title": "Student",
+            "type": "string"
+          },
+          "units": {
+            "items": {
+              "maxLength": 80,
+              "minLength": 1,
+              "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+              "type": "string"
+            },
+            "maxItems": 6,
+            "minItems": 6,
+            "title": "Units",
+            "type": "array"
+          }
+        },
+        "required": [
+          "adapter",
+          "student",
+          "steps",
+          "learning_rate",
+          "seed",
+          "frame_stride",
+          "splits",
+          "coordinate_attestation",
+          "units"
+        ],
+        "title": "NativeDistillation",
+        "type": "object"
+      },
       "NativeQuantization": {
         "additionalProperties": false,
         "description": "Explicit local packed ACT recipe; separate from GGUF precision.",
@@ -2734,6 +2855,16 @@
               }
             ]
           },
+          "native_distillation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NativeDistillation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "native_quantization": {
             "anyOf": [
               {
@@ -2748,6 +2879,7 @@
             "enum": [
               "policy.import",
               "policy.finetune",
+              "policy.distill",
               "policy.export",
               "policy.quantize",
               "policy.evaluate",
@@ -2997,6 +3129,16 @@
           "launchable": {
             "default": true,
             "title": "Launchable",
+            "type": "boolean"
+          },
+          "native_distillation": {
+            "default": false,
+            "title": "Native Distillation",
+            "type": "boolean"
+          },
+          "native_distillation_only": {
+            "default": false,
+            "title": "Native Distillation Only",
             "type": "boolean"
           },
           "native_quantization": {

@@ -27,6 +27,10 @@ class Runtime(StrictRecord):
     native_quantization_only: bool = False
     native_quantization_python: str | None = Field(default=None, min_length=1)
     native_quantization_root: str | None = Field(default=None, min_length=1)
+    native_distillation_only: bool = Field(default=False, strict=True)
+    native_distillation_python: str | None = Field(default=None, min_length=1)
+    native_distillation_root: str | None = Field(default=None, min_length=1)
+    native_distillation_dataset_python: str | None = Field(default=None, min_length=1)
     conversion_python: str | None = None
     conversion_image: str | None = None
     evaluation_python: str | None = None
@@ -58,13 +62,41 @@ class Runtime(StrictRecord):
 
     @model_validator(mode="after")
     def registered_training_models(self):
+        distillation = (
+            self.native_distillation_python,
+            self.native_distillation_root,
+            self.native_distillation_dataset_python,
+        )
+        if any(distillation) and not all(distillation):
+            raise ValueError("Distillation requires both isolated interpreters and its worker root")
+        if any(distillation) and (
+            self.execution != "native" or self.provider != "local" or self.device != "cpu"
+        ):
+            raise ValueError("Native distillation requires a local CPU runtime")
+        if (
+            sum((self.native_distillation_only, self.native_quantization_only, self.export_only))
+            > 1
+        ):
+            raise ValueError("Dedicated native runtime modes cannot be combined")
         if bool(self.native_quantization_python) != bool(self.native_quantization_root):
             raise ValueError("Native quantization interpreter and worker root must be paired")
         if self.native_quantization_python and (
             self.execution != "native" or self.provider != "local" or self.device != "cpu"
         ):
             raise ValueError("Native quantization requires a local CPU runtime")
-        if self.native_quantization_only:
+        if self.native_distillation_only:
+            if (
+                not all(distillation)
+                or self.native_quantization_python
+                or self.act_export_python
+                or self.training_python
+                or self.training_root
+                or self.simulator_lane
+                or self.image
+                or self.training_image
+            ):
+                raise ValueError("Distillation-only runtime cannot select other execution backends")
+        elif self.native_quantization_only:
             if (
                 not self.native_quantization_python
                 or self.export_only
@@ -75,6 +107,7 @@ class Runtime(StrictRecord):
                 or self.simulator_lane
                 or self.image
                 or self.training_image
+                or any(distillation)
             ):
                 raise ValueError("Packed-only runtime requires a CPU worker without other backends")
         elif self.export_only:
@@ -84,6 +117,7 @@ class Runtime(StrictRecord):
                 or self.training_python
                 or self.training_root
                 or self.simulator_lane
+                or any(distillation)
             ):
                 raise ValueError(
                     "Export-only runtimes require a CPU ACT exporter and no training/simulator"
@@ -150,6 +184,8 @@ class PublicRuntime(StrictRecord):
     act_export: bool = False
     native_quantization: bool = False
     native_quantization_only: bool = False
+    native_distillation: bool = False
+    native_distillation_only: bool = False
     export_only: bool = False
     training_model_ids: list[str]
     simulation: bool
@@ -205,12 +241,18 @@ class RuntimeCatalog(StrictRecord):
                     "export_only": x.export_only,
                     "native_quantization": native_quantization_ready(x),
                     "native_quantization_only": x.native_quantization_only,
+                    "native_distillation": native_distillation_ready(x),
+                    "native_distillation_only": x.native_distillation_only,
                     "training_model_ids": (
                         x.training_model_ids if x.training_python and x.training_root else []
                     ),
                     "simulation": bool(x.simulator_lane),
-                    "engine_evaluation": not (x.export_only or x.native_quantization_only),
-                    "run": not (x.export_only or x.native_quantization_only),
+                    "engine_evaluation": not (
+                        x.export_only or x.native_quantization_only or x.native_distillation_only
+                    ),
+                    "run": not (
+                        x.export_only or x.native_quantization_only or x.native_distillation_only
+                    ),
                     "gpu_name": x.gpu_name,
                     "gpu_memory_mib": x.gpu_memory_mib,
                     # The current native trainer uses one device per run. This
@@ -223,6 +265,34 @@ class RuntimeCatalog(StrictRecord):
             ],
             "sources": [{"id": x.id, "label": x.label, "task": x.task} for x in self.sources],
         }
+
+
+def native_distillation_ready(runtime: Runtime) -> bool:
+    """Configured local paths permit preflight, not a claim of model validation."""
+    if not all(
+        (
+            runtime.native_distillation_python,
+            runtime.native_distillation_root,
+            runtime.native_distillation_dataset_python,
+        )
+    ):
+        return False
+    root = Path(runtime.native_distillation_root)
+    interpreters = [
+        Path(runtime.native_distillation_python),
+        Path(runtime.native_distillation_dataset_python),
+    ]
+    return (
+        os.name == "posix"
+        and all(p.is_absolute() and p.is_file() and os.access(p, os.X_OK) for p in interpreters)
+        and root.is_absolute()
+        and all(
+            (root / "src/firebird_distill" / name).is_file()
+            for name in ("application.py", "prepare.py")
+        )
+        and (root.parent / "act_optimizer/src/firebird_act/application.py").is_file()
+        and (root.parent / "smolvla_qlora/src/firebird_vla/local_dataset.py").is_file()
+    )
 
 
 def native_quantization_ready(runtime: Runtime) -> bool:
@@ -255,6 +325,8 @@ def command(
 ):
     if runtime.execution != "native":
         raise ValueError("SkyPilot targets must execute through the cloud runner")
+    if runtime.native_distillation_only:
+        raise ValueError("This runtime supports explicit native ACT distillation only")
     if runtime.native_quantization_only:
         raise ValueError("This runtime supports native ACT quantization only")
     if runtime.export_only and not act_export:

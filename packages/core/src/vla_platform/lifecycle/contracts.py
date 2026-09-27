@@ -1,6 +1,6 @@
 """GPU-independent application lifecycle contracts."""
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -131,10 +131,44 @@ class NativeQuantization(StrictRecord):
         return value
 
 
+EpisodeId = Annotated[int, Field(ge=0, le=19999, strict=True)]
+CoordinateUnit = Annotated[str, Field(min_length=1, max_length=80, pattern=r"^[^\x00-\x1f\x7f]+$")]
+
+
+class DistillationSplits(StrictRecord):
+    train: list[EpisodeId] = Field(min_length=1, max_length=256)
+    validation: list[EpisodeId] = Field(min_length=1, max_length=256)
+    final: list[EpisodeId] = Field(min_length=1, max_length=256)
+
+    @model_validator(mode="after")
+    def distinct_episodes(self):
+        episodes = self.train + self.validation + self.final
+        if len(episodes) != len(set(episodes)):
+            raise ValueError("Distillation episode selections must be unique and disjoint")
+        if len(episodes) > 256:
+            raise ValueError("Distillation supports at most 256 selected episodes")
+        return self
+
+
+class NativeDistillation(StrictRecord):
+    """Recorded-data selection and a fixed ACT teacher/student recipe; no paths."""
+
+    adapter: Literal["act-act-v1"]
+    student: Literal["act-256"]
+    steps: int = Field(ge=1, le=10000, strict=True)
+    learning_rate: float = Field(ge=1e-7, le=1e-3, strict=True, allow_inf_nan=False)
+    seed: int = Field(ge=0, le=2147483647, strict=True)
+    frame_stride: int = Field(ge=1, le=10000, strict=True)
+    splits: DistillationSplits
+    coordinate_attestation: Literal["teacher_recorded_coordinates", "generated_fixture"]
+    units: list[CoordinateUnit] = Field(min_length=6, max_length=6)
+
+
 class PolicyRequest(StrictRecord):
     operation: Literal[
         "policy.import",
         "policy.finetune",
+        "policy.distill",
         "policy.export",
         "policy.quantize",
         "policy.evaluate",
@@ -159,19 +193,46 @@ class PolicyRequest(StrictRecord):
     timeout_seconds: int = Field(default=7200, ge=30, le=86400)
     simulation: SimulationRequest | None = None
     native_quantization: NativeQuantization | None = None
+    native_distillation: NativeDistillation | None = None
 
     @model_validator(mode="before")
     @classmethod
     def native_deadline(cls, value):
-        if isinstance(value, dict) and value.get("native_quantization") is not None:
+        if isinstance(value, dict) and any(
+            value.get(key) is not None for key in ("native_quantization", "native_distillation")
+        ):
             value = dict(value)
             value.setdefault("timeout_seconds", 600)
             if type(value["timeout_seconds"]) is not int:
-                raise ValueError("Native quantization deadline must be an integer")
+                raise ValueError("Native worker deadline must be an integer")
         return value
 
     @model_validator(mode="after")
     def input_contract(self):
+        if self.native_distillation is not None:
+            if (
+                self.operation != "policy.distill"
+                or not self.artifact_id
+                or not self.dataset_job_id
+                or self.source_id is not None
+                or self.resume_job_id is not None
+                or self.training is not None
+                or self.training_method != "lora"
+                or self.precision is not None
+                or self.candidates != [Precision()]
+                or self.evaluation != Evaluation()
+                or self.limits is not None
+                or self.simulation is not None
+                or self.native_quantization is not None
+                or self.timeout_seconds > 3600
+            ):
+                raise ValueError(
+                    "Distillation requires a local teacher artifact, completed dataset intake "
+                    "and explicit ACT student recipe; other lifecycle options are unsupported"
+                )
+            return self
+        if self.operation == "policy.distill":
+            raise ValueError("Distillation requires an explicit native_distillation recipe")
         if self.native_quantization is not None:
             if (
                 self.operation != "policy.quantize"

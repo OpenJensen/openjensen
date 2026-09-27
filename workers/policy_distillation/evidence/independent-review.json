@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "reviewer": "/root/tracking_audit",
+  "created_at": "2026-09-27T10:07:21.238635+00:00",
+  "source_files": {
+    "workers/policy_distillation/README.md": "a825b16fa611b603b38ed5b6d9f3c136e767ed1c4a6904d96b848d6cf56b4427",
+    "workers/policy_distillation/pyproject.toml": "b965cbd580e1c2deea220e8ac1238834e28b1d284e069e4cf750837b4576dc1d",
+    "workers/policy_distillation/src/firebird_distill/__init__.py": "6e692853220b6a5d748bfc3f86cdf452441839efa0a853528d484be469141cae",
+    "workers/policy_distillation/src/firebird_distill/application.py": "dbe20d4fca39c7c097f6f98b46cac22f36505f1d8414b6548a7ece7a2b417a73",
+    "workers/policy_distillation/src/firebird_distill/contracts.py": "de16f7998ed223e33224e6d4850ef09676545c9ce87d4bccbf7a7ee04c4e972f",
+    "workers/policy_distillation/src/firebird_distill/prepare.py": "35aedaa3d5c85e0468ea86f2199139664dada82ada78ca6d0a6dbbaa7b52e4ab",
+    "workers/policy_distillation/src/firebird_distill/runtime.py": "e2dee8698f9712f82e20ef3f78ba16d640439068bfebc8fe198ebc1121ca1a36",
+    "workers/policy_distillation/tests/conftest.py": "6523c164cce4c306dfcff0ae004ee719a6b5c2e4fb53a7d5f5f01b6bc765dd93",
+    "workers/policy_distillation/tests/test_contracts.py": "f2d98a0ed09cd8f433119b4a43124de6b42305e63412e1f3061d49285b7f8568",
+    "workers/policy_distillation/tests/test_owner.py": "5b493b2c40afa7577805ef4ebc4782a0a8ef695cf6d9dccbb838026b190602f5",
+    "workers/policy_distillation/tests/test_training.py": "1992f2af178806a97926c04fe8ebe37f78c68b7470cba747ac44fee25abd8e47"
+  },
+  "approval": "approved bounded CPU worker after independent final41 execution",
+  "blocking_findings": [],
+  "executor_receipt": {
+    "sha256": "8b0f0388f04fa6e7ad3f47645ec3ad69bd160744f2ae5d892bac96a80d37af2e"
+  },
+  "reviewed_boundaries": [
+    "Native detached normalized ACT teacher targets with actual native masked L1; frozen copied backbone, trained smaller student head.",
+    "Exact group/episode/frame split provenance, leakage/padding guards and fixed last-step selection before final assessment.",
+    "Complete FP32 student config/processors/stats and matching native checkpoint identity, source-byte preservation and fresh independent load without original teacher.",
+    "Owned POSIX process group, spawn-window signal flag, successful-leader descendants cleaned, bounded diagnostic tail and explicit cleanup failures.",
+    "Runtime/source/teacher target identities recorded; CPU/generated proof remains distinct from task success/quality or speed."
+  ],
+  "resolved_notes": [
+    "README now describes supervised-work deadline accurately; initial admission and blocking copy/hash IO are not falsely claimed hard wall-clock bounded.",
+    "Darwin transient EPERM accepted only with kernel-confirmed process-group disappearance; real permission failure propagates.",
+    "Pinned upstream dilation False-to-int serialization corrected to exact same False architecture before student serialization."
+  ],
+  "independent_execution": true,
+  "limits": [
+    "Generated CPU teacher/student software proof only; no app integration, recorded-data generalization, robot/Isaac/GPU execution or quality claim.",
+    "Actual supplied-teacher and native0.6.2 preparation receipts were executed by author and are not independently repeated here.",
+    "No cloud/GitHub/main action or environment dependency mutation."
+  ],
+  "independent_tests": {
+    "passed": 41,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 14.77,
+    "log_sha256": "a596055ae6b027c429987d29905ed26b4622486ba6865936a1039c8aedd3d5b1",
+    "platform": "macOS",
+    "thread_limits": 1,
+    "command": "OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=workers/policy_distillation/src:workers/act_optimizer/src ACT_PYTHON -m pytest workers/policy_distillation/tests -q -p no:cacheprovider --basetemp=UNIQUE_REVIEW_TEMP",
+    "source_hashes_unchanged": true
+  },
+  "excluded_runs": "Initial reviewer and coordinator duplicated command/log; process assertion sandbox-denied. Shared log is non-authoritative and not included in acceptance. This unique serialized run had required owned-child inspection permissions and separate temporary root.",
+  "updated_at": "2026-09-27T10:13:14.810705+00:00"
+}

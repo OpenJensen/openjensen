@@ -103,7 +103,8 @@ def bundle(root):
     return manifest, files
 
 
-def source_info(artifact, data_dir):
+def source_info(artifact, data_dir, *, require_inference=True):
+    """Verify an owned complete ACT policy; packing additionally requires VAE removal."""
     if (
         artifact.format not in {"native_checkpoint", "inference_export"}
         or artifact.metadata.get("architecture") != "act"
@@ -143,7 +144,8 @@ def source_info(artifact, data_dir):
     config = strict_json(policy / "config.json", JSON_LIMIT)
     if (
         config.get("type") != "act"
-        or config.get("use_vae") is not False
+        or type(config.get("use_vae")) is not bool
+        or (require_inference and config["use_vae"] is not False)
         or config.get("chunk_size") != 100
         or config.get("n_action_steps") != 100
     ):
