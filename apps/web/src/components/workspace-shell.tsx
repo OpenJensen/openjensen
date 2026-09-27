@@ -28,7 +28,7 @@ export function WorkspaceShell({
   return <div className="workspace">
     <a href="#main" className="skip-link">{skipLabel}</a>
     <aside className="sidebar" aria-label={sidebarLabel}>
-      <a className="brand" href={publicPath('/')} aria-label="OPEN JENSEN workspace home"><span className="brand-mark"><Icon name="layers" size={21} /></span><span>OPEN JENSEN</span></a>
+      <a className="brand" href={publicPath('/')} aria-label="OPEN JENSEN workspace home"><span className="brand-mark"><Icon name="layers" size={21} /></span><span className="brand-copy">OPEN JENSEN<span className="brand-subtitle">Robotics workbench</span></span></a>
       <div className="sidebar-content">{navigation}</div>
       <div className="sidebar-bottom">
         {sidebarFooter}
