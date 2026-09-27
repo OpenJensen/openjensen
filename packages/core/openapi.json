@@ -6408,6 +6408,25 @@
               "title": "Project Id",
               "type": "string"
             }
+          },
+          {
+            "description": "Optional durable key scoped to project and operation. Identical requests return the original job's current state, including terminal/interrupted jobs; changed requests return 409. Preserve the key before sending. No automatic retries occur.",
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional durable key scoped to project and operation. Identical requests return the original job's current state, including terminal/interrupted jobs; changed requests return 409. Preserve the key before sending. No automatic retries occur.",
+              "title": "Idempotency-Key"
+            }
           }
         ],
         "requestBody": {
@@ -6431,6 +6450,9 @@
             },
             "description": "Successful Response"
           },
+          "409": {
+            "description": "The key already identifies a different normalized request"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -6440,6 +6462,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "503": {
+            "description": "Saved acceptance cannot be verified; no replacement work is submitted"
           }
         },
         "summary": "Augment Dataset"
@@ -6456,6 +6481,25 @@
             "schema": {
               "title": "Project Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "Optional durable key scoped to project and operation. Identical requests return the original job's current state, including terminal/interrupted jobs; changed requests return 409. Preserve the key before sending. No automatic retries occur.",
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional durable key scoped to project and operation. Identical requests return the original job's current state, including terminal/interrupted jobs; changed requests return 409. Preserve the key before sending. No automatic retries occur.",
+              "title": "Idempotency-Key"
             }
           }
         ],
@@ -6480,6 +6524,9 @@
             },
             "description": "Successful Response"
           },
+          "409": {
+            "description": "The key already identifies a different normalized request"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -6489,6 +6536,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "503": {
+            "description": "Saved acceptance cannot be verified; no replacement work is submitted"
           }
         },
         "summary": "Inspect Dataset"
@@ -6599,6 +6649,25 @@
               "title": "Project Id",
               "type": "string"
             }
+          },
+          {
+            "description": "Optional durable key scoped to project and operation. Identical requests return the original job's current state, including terminal/interrupted jobs; changed requests return 409. Preserve the key before sending. No automatic retries occur.",
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional durable key scoped to project and operation. Identical requests return the original job's current state, including terminal/interrupted jobs; changed requests return 409. Preserve the key before sending. No automatic retries occur.",
+              "title": "Idempotency-Key"
+            }
           }
         ],
         "requestBody": {
@@ -6622,6 +6691,9 @@
             },
             "description": "Successful Response"
           },
+          "409": {
+            "description": "The key already identifies a different normalized request"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -6631,6 +6703,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "503": {
+            "description": "Saved acceptance cannot be verified; no replacement work is submitted"
           }
         },
         "summary": "Policy Job"
@@ -6712,6 +6787,83 @@
           }
         },
         "summary": "Recording Options"
+      }
+    },
+    "/api/v1/projects/{project_id}/submissions/{key}": {
+      "get": {
+        "description": "Observe an accepted job without resolving inputs, dispatching or retrying it.",
+        "operationId": "saved_submission_api_v1_projects__project_id__submissions__key__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+              "title": "Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "operation",
+            "required": true,
+            "schema": {
+              "enum": [
+                "dataset.inspect",
+                "dataset.augment",
+                "policy.finetune",
+                "policy.distill",
+                "policy.quantize",
+                "policy.evaluate",
+                "policy.run",
+                "policy.export",
+                "policy.workflow",
+                "policy.import"
+              ],
+              "title": "Operation",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No accepted job is bound to this scope and key"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Saved submission identity cannot be verified"
+          }
+        },
+        "summary": "Saved Submission"
       }
     },
     "/api/v1/simulation-options": {

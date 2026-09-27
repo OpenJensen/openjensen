@@ -8,7 +8,7 @@ from typing import Annotated
 from uuid import uuid4
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -50,6 +50,15 @@ from vla_platform.projects import Projects
 from vla_platform.recordings_api import router as recordings_router
 from vla_platform.settings import Settings
 from vla_platform.storage import Storage
+from vla_platform.submissions import (
+    IdempotencyKey,
+    SubmissionConflict,
+    SubmissionOperation,
+    SubmissionUnavailable,
+)
+from vla_platform.submissions import (
+    lookup as submission_lookup,
+)
 from vla_platform.teaching_api import router as teaching_router
 
 LOCAL_ORIGINS = {
@@ -58,6 +67,33 @@ LOCAL_ORIGINS = {
     "http://127.0.0.1:8000",
     "http://localhost:8000",
     "http://[::1]:8000",
+}
+
+
+def submission_key(
+    request: Request,
+    idempotency_key: Annotated[
+        IdempotencyKey | None,
+        Header(
+            description=(
+                "Optional durable key scoped to project and operation. Identical requests "
+                "return the original job's current state, including terminal/interrupted jobs; "
+                "changed "
+                "requests return 409. Preserve the key before sending. No automatic retries occur."
+            )
+        ),
+    ] = None,
+) -> str | None:
+    """An optional opaque client key; duplicate headers are never silently selected."""
+    if len(request.headers.getlist("idempotency-key")) > 1:
+        raise HTTPException(422, "Supply exactly one Idempotency-Key header")
+    return idempotency_key
+
+
+SubmissionKeyDep = Annotated[str | None, Depends(submission_key)]
+SUBMISSION_RESPONSES = {
+    409: {"description": "The key already identifies a different normalized request"},
+    503: {"description": "Saved acceptance cannot be verified; no replacement work is submitted"},
 }
 
 
@@ -107,6 +143,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         docs_url=None,
         redoc_url=None,
     )
+
+    @app.exception_handler(SubmissionConflict)
+    async def submission_conflict(_request: Request, exc: SubmissionConflict):
+        return JSONResponse({"detail": str(exc)}, status_code=409)
+
+    @app.exception_handler(SubmissionUnavailable)
+    async def submission_unavailable(_request: Request, exc: SubmissionUnavailable):
+        return JSONResponse({"detail": str(exc)}, status_code=503)
+
     app.include_router(cloud_connections_router)
     app.include_router(compute_settings_router)
     app.include_router(huggingface_router)
@@ -120,7 +165,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         CORSMiddleware,
         allow_origins=sorted(LOCAL_ORIGINS),
         allow_methods=["GET", "POST", "PUT", "DELETE"],
-        allow_headers=["Content-Type"],
+        allow_headers=["Content-Type", "Idempotency-Key"],
+        expose_headers=["Idempotency-Key"],
     )
 
     @app.middleware("http")
@@ -243,19 +289,39 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(404, "Project not found")
         return await execution.list(project_id)
 
-    @app.post("/api/v1/projects/{project_id}/intakes", response_model=Job, status_code=202)
+    @app.post(
+        "/api/v1/projects/{project_id}/intakes",
+        response_model=Job,
+        status_code=202,
+        responses=SUBMISSION_RESPONSES,
+    )
     async def inspect_dataset(
         project_id: str,
         payload: IntakeRequest,
         projects: ProjectsDep,
         execution: ExecutionDep,
+        response: Response,
+        idempotency_key: SubmissionKeyDep,
     ) -> Job:
         if await projects.get(project_id) is None:
             raise HTTPException(404, "Project not found")
-        if payload.source == "local" and payload.recordings is None and settings.local_root is None:
+        if (
+            idempotency_key is None
+            and payload.source == "local"
+            and payload.recordings is None
+            and settings.local_root is None
+        ):
             raise HTTPException(422, "Local intake is disabled; configure FIREBIRD_LOCAL_DATA_ROOT")
         try:
-            return await execution.inspections.submit(project_id, payload)
+            job = await execution.inspections.submit(
+                project_id, payload, idempotency_key=idempotency_key
+            )
+            if idempotency_key is not None:
+                response.headers["Idempotency-Key"] = idempotency_key
+                response.headers["Cache-Control"] = "no-store"
+            return job
+        except SubmissionConflict:
+            raise
         except RecordingError as exc:
             raise HTTPException(exc.status, str(exc)) from exc
         except ValueError as exc:
@@ -273,17 +339,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def augmentation_options(execution: ExecutionDep):
         return execution.augmentation.options()
 
-    @app.post("/api/v1/projects/{project_id}/augmentations", response_model=Job, status_code=202)
+    @app.post(
+        "/api/v1/projects/{project_id}/augmentations",
+        response_model=Job,
+        status_code=202,
+        responses=SUBMISSION_RESPONSES,
+    )
     async def augment_dataset(
         project_id: str,
         payload: AugmentationRequest,
         projects: ProjectsDep,
         execution: ExecutionDep,
+        response: Response,
+        idempotency_key: SubmissionKeyDep,
     ) -> Job:
         if await projects.get(project_id) is None:
             raise HTTPException(404, "Project not found")
         try:
-            return await execution.submit(project_id, payload)
+            job = await execution.submit(project_id, payload, idempotency_key=idempotency_key)
+            if idempotency_key is not None:
+                response.headers["Idempotency-Key"] = idempotency_key
+                response.headers["Cache-Control"] = "no-store"
+            return job
+        except SubmissionConflict:
+            raise
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
 
@@ -364,6 +443,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """Upload a complete native ACT/SmolVLA TAR; import is an observable local job."""
         from vla_platform.lifecycle.simulation import MAX_ARCHIVE_BYTES, finish_owned, profile_for
 
+        if request.headers.getlist("idempotency-key"):
+            raise HTTPException(
+                422,
+                "Binary model uploads do not support Idempotency-Key; "
+                "reconcile the existing upload job before another upload",
+            )
         if await projects.get(project_id) is None:
             raise HTTPException(404, "Project not found")
         try:
@@ -448,16 +533,60 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(422, "Verified simulation video is unavailable") from exc
         return FileResponse(path, media_type="video/mp4")
 
-    @app.post("/api/v1/projects/{project_id}/policy-jobs", response_model=Job, status_code=202)
+    @app.post(
+        "/api/v1/projects/{project_id}/policy-jobs",
+        response_model=Job,
+        status_code=202,
+        responses=SUBMISSION_RESPONSES,
+    )
     async def policy_job(
-        project_id: str, payload: PolicyRequest, projects: ProjectsDep, execution: ExecutionDep
+        project_id: str,
+        payload: PolicyRequest,
+        projects: ProjectsDep,
+        execution: ExecutionDep,
+        response: Response,
+        idempotency_key: SubmissionKeyDep,
     ) -> Job:
         if await projects.get(project_id) is None:
             raise HTTPException(404, "Project not found")
         try:
-            return await execution.submit(project_id, payload)
+            job = await execution.submit(project_id, payload, idempotency_key=idempotency_key)
+            if idempotency_key is not None:
+                response.headers["Idempotency-Key"] = idempotency_key
+                response.headers["Cache-Control"] = "no-store"
+            return job
+        except SubmissionConflict:
+            raise
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
+
+    @app.get(
+        "/api/v1/projects/{project_id}/submissions/{key}",
+        response_model=Job,
+        responses={
+            404: {"description": "No accepted job is bound to this scope and key"},
+            503: {"description": "Saved submission identity cannot be verified"},
+        },
+    )
+    async def saved_submission(
+        project_id: str,
+        key: IdempotencyKey,
+        operation: SubmissionOperation,
+        projects: ProjectsDep,
+        execution: ExecutionDep,
+        response: Response,
+    ) -> Job:
+        """Observe an accepted job without resolving inputs, dispatching or retrying it."""
+        if await projects.get(project_id) is None:
+            raise HTTPException(404, "Project not found")
+        job = await submission_lookup(execution.storage, project_id, operation, key)
+        if job is None:
+            raise HTTPException(
+                404, "No accepted submission found for this project, operation and key"
+            )
+        response.headers["Idempotency-Key"] = key
+        response.headers["Cache-Control"] = "no-store"
+        return job
 
     @app.get("/api/v1/projects/{project_id}/artifacts", response_model=list[PolicyArtifact])
     async def artifacts(project_id: str, projects: ProjectsDep, execution: ExecutionDep):

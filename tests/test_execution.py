@@ -73,7 +73,7 @@ def test_initial_migration_is_versioned(tmp_path):
     with TestClient(create_app(Settings(data_dir=tmp_path))):
         with sqlite3.connect(tmp_path / "workspace.sqlite3") as database:
             assert database.execute("select version_num from alembic_version").fetchone() == (
-                "0001",
+                "0002",
             )
 
 

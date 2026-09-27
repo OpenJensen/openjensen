@@ -664,6 +664,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/submissions/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Saved Submission
+         * @description Observe an accepted job without resolving inputs, dispatching or retrying it.
+         */
+        get: operations["saved_submission_api_v1_projects__project_id__submissions__key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/simulation-options": {
         parameters: {
             query?: never;
@@ -3833,7 +3853,10 @@ export interface operations {
     augment_dataset_api_v1_projects__project_id__augmentations_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Optional durable key scoped to project and operation. Identical requests return the original job's current state, including terminal/interrupted jobs; changed requests return 409. Preserve the key before sending. No automatic retries occur. */
+                "idempotency-key"?: string | null;
+            };
             path: {
                 project_id: string;
             };
@@ -3854,6 +3877,13 @@ export interface operations {
                     "application/json": components["schemas"]["Job"];
                 };
             };
+            /** @description The key already identifies a different normalized request */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -3863,12 +3893,22 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description Saved acceptance cannot be verified; no replacement work is submitted */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     inspect_dataset_api_v1_projects__project_id__intakes_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Optional durable key scoped to project and operation. Identical requests return the original job's current state, including terminal/interrupted jobs; changed requests return 409. Preserve the key before sending. No automatic retries occur. */
+                "idempotency-key"?: string | null;
+            };
             path: {
                 project_id: string;
             };
@@ -3889,6 +3929,13 @@ export interface operations {
                     "application/json": components["schemas"]["Job"];
                 };
             };
+            /** @description The key already identifies a different normalized request */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -3897,6 +3944,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description Saved acceptance cannot be verified; no replacement work is submitted */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -3967,7 +4021,10 @@ export interface operations {
     policy_job_api_v1_projects__project_id__policy_jobs_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Optional durable key scoped to project and operation. Identical requests return the original job's current state, including terminal/interrupted jobs; changed requests return 409. Preserve the key before sending. No automatic retries occur. */
+                "idempotency-key"?: string | null;
+            };
             path: {
                 project_id: string;
             };
@@ -3988,6 +4045,13 @@ export interface operations {
                     "application/json": components["schemas"]["Job"];
                 };
             };
+            /** @description The key already identifies a different normalized request */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -3996,6 +4060,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description Saved acceptance cannot be verified; no replacement work is submitted */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -4058,6 +4129,54 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    saved_submission_api_v1_projects__project_id__submissions__key__get: {
+        parameters: {
+            query: {
+                operation: "dataset.inspect" | "dataset.augment" | "policy.finetune" | "policy.distill" | "policy.quantize" | "policy.evaluate" | "policy.run" | "policy.export" | "policy.workflow" | "policy.import";
+            };
+            header?: never;
+            path: {
+                project_id: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"];
+                };
+            };
+            /** @description No accepted job is bound to this scope and key */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Saved submission identity cannot be verified */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
