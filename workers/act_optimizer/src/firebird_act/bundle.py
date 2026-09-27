@@ -81,19 +81,74 @@ def inventory(root: Path) -> dict[str, dict[str, Any]]:
     return {p.name: file_identity(p) for p in sorted(entries)}
 
 
+def temporal_dimensions(config: dict[str, Any]) -> dict[str, int]:
+    prediction, execution = config.get("chunk_size"), config.get("n_action_steps")
+    if (
+        type(prediction) is not int
+        or type(execution) is not int
+        or not 1 <= execution <= prediction <= 1024
+    ):
+        raise ValueError("ACT horizons require 1 <= execution <= prediction <= 1024")
+    return {"prediction_horizon": prediction, "execution_horizon": execution}
+
+
+def validate_temporal_contract(config: dict[str, Any], record: dict[str, Any]) -> None:
+    """Bind optional native training sampling provenance to the exact saved ACT config."""
+    horizons = temporal_dimensions(config)
+    fps = record.get("action_fps")
+    if type(fps) not in (int, float) or not math.isfinite(fps) or fps <= 0:
+        raise ValueError("Temporal contract requires positive finite action FPS")
+    observation = record.get("observation_delta_indices")
+    if observation not in (None, [0]) or (
+        observation is not None and any(type(i) is not int for i in observation)
+    ):
+        raise ValueError("Unsupported ACT observation indices")
+    expected = {
+        "schema_version": 1,
+        "family": "act",
+        "action_fps": fps,
+        "policy_fields": {
+            "chunk_size": horizons["prediction_horizon"],
+            "n_action_steps": horizons["execution_horizon"],
+            "n_obs_steps": 1,
+        },
+        "action_delta_indices": list(range(horizons["prediction_horizon"])),
+        "observation_delta_indices": observation,
+        "action_delta_timestamps": [i / fps for i in range(horizons["prediction_horizon"])],
+        "observation_delta_timestamps": None if observation is None else [0.0],
+        "observation_history": 1,
+        "frame_stride": 1,
+        **horizons,
+    }
+    # Canonical JSON distinguishes bool/int and int/float in all identity fields.
+    if canonical(record) != canonical(expected):
+        raise ValueError("Temporal contract differs from the saved ACT configuration")
+
+
+def temporal_files(root: Path, config: dict[str, Any]) -> set[str]:
+    name = "temporal-contract.json"
+    if not os.path.lexists(root / name):
+        return set()
+    validate_temporal_contract(config, read_json(root / name))
+    return {name}
+
+
 def validate_config(config: dict[str, Any], *, source: bool) -> None:
+    temporal_dimensions(config)
+    dilation = config.get("replace_final_stride_with_dilation")
+    if not (
+        (type(dilation) is bool and dilation is False) or (type(dilation) is int and dilation == 0)
+    ):
+        raise ValueError("Unsupported ACT config: replace_final_stride_with_dilation")
     required = {
         "type": "act",
         "n_obs_steps": 1,
-        "n_action_steps": 100,
-        "chunk_size": 100,
         "use_vae": source,
         "use_peft": False,
         "use_amp": False,
         "temporal_ensemble_coeff": None,
         "vision_backbone": "resnet18",
         "pre_norm": False,
-        "replace_final_stride_with_dilation": False,
         "feedforward_activation": "relu",
         "normalization_mapping": NORM_MAP,
     }
@@ -407,7 +462,16 @@ def verify_export(root: Path) -> dict[str, Any]:
         raise ValueError("ACT package inventory/hash verification failed")
     config = read_json(root / "config.json")
     validate_config(config, source=False)
-    required = CORE_FILES | validate_processors(root, config) | {"recipe.json", "parity.json"}
+    for key, value in temporal_dimensions(config).items():
+        if key in manifest or value != 100:
+            if type(manifest.get(key)) is not int or manifest[key] != value:
+                raise ValueError("ACT export temporal manifest differs from saved config")
+    required = (
+        CORE_FILES
+        | validate_processors(root, config)
+        | temporal_files(root, config)
+        | {"recipe.json", "parity.json"}
+    )
     if "train_config.json" in files:
         required.add("train_config.json")
     if set(files) != required:

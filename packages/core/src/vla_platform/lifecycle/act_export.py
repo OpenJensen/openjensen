@@ -111,5 +111,38 @@ def check_result(info, manifest, directory: Path, report, source, source_directo
         or reload.get("manifest_sha256") != digest
     ):
         raise ValueError("ACT export lacks complete-package CPU reload evidence")
+    from .native_quantization import exact_json, temporal_info
+
+    source_policy = source_directory / "checkpoint/pretrained_model"
+    source_config = read_json(source_policy / "config.json")
+    temporal = temporal_info(source_config)
+    temporal_keys = {"prediction_horizon", "execution_horizon", "temporal_contract_sha256"}
+    if (
+        temporal_keys & metadata.keys()
+        or (temporal["prediction_horizon"], temporal["execution_horizon"]) != (100, 100)
+        or (source_directory / "checkpoint/temporal-contract.json").exists()
+    ):
+        exported_config = read_json(directory / "policy/config.json")
+        if not exact_json(exported_config, source_config | {"use_vae": False}):
+            raise ValueError("ACT export changed config beyond VAE removal")
+        temporal = temporal_info(source_config)
+        temporal_path = source_directory / "checkpoint/temporal-contract.json"
+        if temporal_path.exists():
+            original = temporal_path.read_bytes()
+            if (directory / "policy/temporal-contract.json").read_bytes() != original:
+                raise ValueError("ACT export changed temporal training provenance")
+            temporal = temporal_info(
+                source_config,
+                directory / "policy",
+                {"temporal-contract.json": {"sha256": hashlib.sha256(original).hexdigest()}},
+            )
+        if any(
+            type(metadata.get(k)) is not type(v)
+            or metadata.get(k) != v
+            or type(report.get(k)) is not type(v)
+            or report.get(k) != v
+            for k, v in temporal.items()
+        ):
+            raise ValueError("ACT export temporal claims differ from saved checkpoint")
     if report.get("gpu_memory_bytes") is not None or report.get("inference_speedup") is not None:
         raise ValueError("ACT CPU export cannot claim a measured GPU improvement")

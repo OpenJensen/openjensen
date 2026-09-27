@@ -211,7 +211,7 @@ def output(f, root, doc, corpus_files):
     root.mkdir(parents=True)
     records = []
     for index, sample in enumerate(doc["samples"]):
-        actions = [[0.0] * 6 for _ in range(100)]
+        actions = [[0.0] * 6 for _ in range(f.admitted.get("prediction_horizon", 100))]
         records.append(
             {
                 "sample_index": index,
@@ -265,7 +265,7 @@ def output(f, root, doc, corpus_files):
         "versions": nr.RUNTIME,
         "observation_source": f.data["source"],
         "observations": len(doc["samples"]),
-        "action_shape": [100, 6],
+        "action_shape": [f.admitted.get("prediction_horizon", 100), 6],
         "reset_repeat_exact": True,
         "coordinate_semantics": f.data["semantics"],
         "elapsed_seconds": 0.1,
@@ -729,3 +729,28 @@ def test_aggregate_budget_rejected_before_preparer_or_rgb_io(fixture, monkeypatc
 def test_unbounded_integer_measurement_rejected_without_overflow():
     with pytest.raises(ValueError):
         nr.number(10**1000)
+
+
+def test_changed_horizon_replay_checks_full_prediction_not_execution(fixture):
+    f = fixture
+    path = f.admitted["path"] / "config.json"
+    config = json.loads(path.read_bytes())
+    config.update(chunk_size=8, n_action_steps=3, n_obs_steps=1)
+    write(path, config)
+    f.source.metadata.update(
+        prediction_horizon=8,
+        execution_horizon=3,
+        temporal_contract_sha256=None,
+        model_id=model_identity(inventory(path.parent)),
+    )
+    f.source.manifest_sha256 = manifest(path.parent.parent, f.source.metadata)
+    f.admitted = nr.source_info(f.source, f.data_dir)
+    assert f.admitted["prediction_horizon"] == 8 and f.admitted["execution_horizon"] == 3
+    doc, res = prepared(f, f.root / "corpus")
+    _, files = nr.check_corpus(f.root / "corpus", res, f.data, f.admitted)
+    response = output(f, f.root / "result", doc, files)
+    check(f, response, doc, files, f.root / "result")
+    value = json.loads((f.root / "result/predictions.json").read_bytes())
+    value["records"][0]["actions"] = value["records"][0]["actions"][:3]
+    with pytest.raises(ValueError, match="full prediction"):
+        nr.predictions(value, f.admitted, doc)

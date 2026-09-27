@@ -15,6 +15,7 @@ from .bundle import (
     publish_new_directory,
     read_json,
     safe_file,
+    temporal_dimensions,
     verify_export,
 )
 from .export import RECIPE, export_policy
@@ -56,6 +57,12 @@ def _checked_export(
     if type(receipt.get("package_bytes")) is not int or receipt["package_bytes"] != package_bytes:
         raise ValueError("ACT export receipt package size differs from the tested package")
     selected = _selected_files(admission)
+    if admission.temporal_sha256 is not None:
+        if (
+            hashlib.sha256(safe_file(policy / "temporal-contract.json")).hexdigest()
+            != admission.temporal_sha256
+        ):
+            raise ValueError("Exported temporal contract differs from registered source")
     parity = read_json(policy / "parity.json")
     recipe = read_json(policy / "recipe.json")
     if parity.get("source_checkpoint_files") != selected or recipe.get("source_files") != selected:
@@ -109,7 +116,12 @@ def run_job(job: dict[str, Any]) -> dict[str, Any]:
         policy = bundle / "policy"
         # The exporter snapshots, rehashes and reloads the exact selected policy.
         # Bind its actual snapshot identities back to the prior full-bundle admission.
-        receipt = export_policy(admission.source, policy, timeout=PROBE_TIMEOUT_SECONDS)
+        receipt = export_policy(
+            admission.source,
+            policy,
+            timeout=PROBE_TIMEOUT_SECONDS,
+            **({"temporal_source": admission.temporal_source} if admission.temporal_source else {}),
+        )
         _, manifest_sha = _checked_export(policy, receipt, admission)
         package_files = inventory(policy)
         current = admit_training_source(
@@ -121,6 +133,8 @@ def run_job(job: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("Training source changed before export publication")
         metadata = {
             "architecture": "act",
+            **temporal_dimensions(read_json(policy / "config.json")),
+            "temporal_contract_sha256": admission.temporal_sha256,
             "inference_only": True,
             "training_resume_supported": False,
             "precision": "float32",

@@ -19,6 +19,8 @@ source_path = Path(source["path"])
 root = Path(job["output_dir"]) / "inference-export"
 policy = root / "policy"
 policy.mkdir(parents=True)
+config = json.loads((source_path / "checkpoint/pretrained_model/config.json").read_bytes())
+(policy / "config.json").write_text(json.dumps(config | {"use_vae": False}))
 (policy / "manifest.json").write_text('{"fixture_only":true}')
 sha = hashlib.sha256((policy / "manifest.json").read_bytes()).hexdigest()
 metadata = {

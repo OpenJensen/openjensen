@@ -103,6 +103,65 @@ def bundle(root):
     return manifest, files
 
 
+def temporal_info(config, policy=None, files=None):
+    """Check saved ACT dimensions and optional exact training sampling provenance."""
+    if not isinstance(config, dict):
+        raise ValueError("ACT config must be an object")
+    prediction, execution = config.get("chunk_size"), config.get("n_action_steps")
+    if (
+        type(prediction) is not int
+        or type(execution) is not int
+        or not 1 <= execution <= prediction <= 1024
+    ):
+        raise ValueError("ACT horizons require 1 <= execution <= prediction <= 1024")
+    observation_steps = config.get(
+        "n_obs_steps", 1 if (prediction, execution) == (100, 100) else None
+    )
+    if type(observation_steps) is not int or observation_steps != 1:
+        raise ValueError("ACT temporal admission requires one saved observation step")
+    if config.get("temporal_ensemble_coeff") is not None:
+        raise ValueError("ACT temporal admission does not support temporal ensembling")
+    result = {"prediction_horizon": prediction, "execution_horizon": execution}
+    name = "temporal-contract.json"
+    if files is not None and name in files:
+        from types import SimpleNamespace
+
+        from .temporal import resolved_temporal
+
+        record = strict_json(policy / name, JSON_LIMIT)
+        if not isinstance(record, dict):
+            raise ValueError("ACT temporal contract must be an object")
+        actual = SimpleNamespace(
+            chunk_size=prediction,
+            n_action_steps=execution,
+            n_obs_steps=observation_steps,
+            action_delta_indices=list(range(prediction)),
+            observation_delta_indices=record.get("observation_delta_indices"),
+        )
+        expected = resolved_temporal(actual, record.get("action_fps"), "act")
+        if not exact_json(record, expected):
+            raise ValueError("Temporal contract differs from saved ACT config")
+        result["temporal_contract_sha256"] = files[name]["sha256"]
+    else:
+        result["temporal_contract_sha256"] = None
+    return result
+
+
+def temporal_claims(metadata, admitted):
+    expected = {
+        key: admitted.get(key, 100 if key != "temporal_contract_sha256" else None)
+        for key in ("prediction_horizon", "execution_horizon", "temporal_contract_sha256")
+    }
+    # Historical 100/100 artifacts did not declare these additive fields.
+    if any(key in metadata for key in expected) or expected != {
+        "prediction_horizon": 100,
+        "execution_horizon": 100,
+        "temporal_contract_sha256": None,
+    }:
+        return expected
+    return {}
+
+
 def source_info(artifact, data_dir, *, require_inference=True):
     """Verify an owned complete ACT policy; packing additionally requires VAE removal."""
     if (
@@ -146,13 +205,9 @@ def source_info(artifact, data_dir, *, require_inference=True):
         config.get("type") != "act"
         or type(config.get("use_vae")) is not bool
         or (require_inference and config["use_vae"] is not False)
-        or config.get("chunk_size") != 100
-        or config.get("n_action_steps") != 100
     ):
-        raise ValueError(
-            "First export ACT to inference-only FP32: "
-            "use_vae=false and 100-step chunks are required"
-        )
+        raise ValueError("First export ACT to inference-only FP32: use_vae=false is required")
+    temporal = temporal_info(config, policy, files)
     features = config.get("input_features", {})
     if not isinstance(features, dict) or not isinstance(config.get("output_features"), dict):
         raise ValueError("ACT input/output features must be saved mappings")
@@ -204,6 +259,7 @@ def source_info(artifact, data_dir, *, require_inference=True):
         "files": files,
         "outer": outer,
         "image_shape": cameras[0],
+        **temporal,
         "manifest_sha256": files.get("manifest.json", {}).get("sha256"),
     }
 
@@ -312,6 +368,8 @@ def check_result(response, job, source, admitted, directory):
         for step in strict_json(admitted["path"] / name, JSON_LIMIT)["steps"]:
             if step.get("state_file"):
                 expected_policy.add(step["state_file"])
+    if "temporal-contract.json" in admitted["files"]:
+        expected_policy.add("temporal-contract.json")
     if set(policy) != expected_policy:
         raise ValueError("Packed policy must contain exact processors and no floating master")
     for name in expected_policy - {"model.fbq", "encoding.json"}:
@@ -361,6 +419,9 @@ def check_result(response, job, source, admitted, directory):
         "source_artifact_manifest_sha256": source.manifest_sha256,
     }
     metadata = manifest.get("metadata")
+    if not isinstance(metadata, dict):
+        raise ValueError("Packed metadata must be an object")
+    expected.update(temporal_claims(metadata, admitted))
     if (
         metadata != expected
         or any(type(metadata.get(key)) is not type(value) for key, value in expected.items())
@@ -393,7 +454,13 @@ def check_result(response, job, source, admitted, directory):
     if set(files) != expected_files:
         raise ValueError("Unexpected packed package payload")
     proof = strict_json(directory / "verification.json", JSON_LIMIT)
-    check_proof(proof, expected["model_id"], admitted["image_shape"])
+    check_proof(
+        proof,
+        expected["model_id"],
+        admitted["image_shape"],
+        admitted.get("prediction_horizon", 100),
+        admitted.get("execution_horizon", 100),
+    )
     sizes = {
         "source_weight_bytes": admitted["files"]["model.safetensors"]["bytes"],
         "packed_weight_bytes": policy["model.fbq"]["bytes"],
@@ -425,7 +492,7 @@ def check_result(response, job, source, admitted, directory):
     return manifest, files
 
 
-def check_proof(proof, model_id, shape):
+def check_proof(proof, model_id, shape, prediction=100, execution=100):
     expected = {
         "schema_version": 1,
         "model_id": model_id,
@@ -453,6 +520,10 @@ def check_proof(proof, model_id, shape):
         or {k: str(v).split("+")[0] for k, v in proof["versions"].items()} != RUNTIME
     ):
         raise ValueError("Incomplete native CPU reload evidence")
+    for key, value in (("prediction_horizon", prediction), ("execution_horizon", execution)):
+        if key in proof or (prediction, execution) != (100, 100):
+            if type(proof.get(key)) is not int or proof[key] != value:
+                raise ValueError("Proof temporal dimensions differ from saved policy")
     rows = []
     floating, packed = proof.get("floating"), proof.get("packed")
     if (
@@ -478,7 +549,7 @@ def check_proof(proof, model_id, shape):
                 chunk = row.get(key)
                 if (
                     not isinstance(chunk, list)
-                    or len(chunk) != 100
+                    or len(chunk) != prediction
                     or any(
                         not isinstance(action, list)
                         or len(action) != 6
@@ -486,7 +557,7 @@ def check_proof(proof, model_id, shape):
                         for action in chunk
                     )
                 ):
-                    raise ValueError("Expected finite complete 100x6 actions")
+                    raise ValueError("Expected finite complete prediction-horizon x 6 actions")
         if baseline["input_sha256"] != candidate["input_sha256"]:
             raise ValueError("Floating and packed fixtures differ")
         drift = {"seed": seed, "input_sha256": candidate["input_sha256"]}
@@ -497,9 +568,9 @@ def check_proof(proof, model_id, shape):
                 for a, b in zip(first, second, strict=True)
             ]
             drift[key] = {
-                "rmse": math.sqrt(math.fsum(v * v for v in delta) / 600),
+                "rmse": math.sqrt(math.fsum(v * v for v in delta) / (prediction * 6)),
                 "maximum_absolute_difference": max(delta),
-                "coordinates": 600,
+                "coordinates": prediction * 6,
             }
         rows.append(drift)
     if not exact_json(proof.get("drift_from_fp32"), rows):

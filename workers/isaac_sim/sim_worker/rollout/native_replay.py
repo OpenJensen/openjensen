@@ -136,7 +136,7 @@ def run_job(job):
                         + log.read(4096).decode("utf-8", errors="replace")
                     ) from error
             result = decode(read(child_result, 8 * 1024**2))
-            validate_result(result, job["source"], doc)
+            validate_result(result, job["source"], doc, info["config"]["chunk_size"])
             stage = temporary / "artifact"
             stage.mkdir()
             write_new(stage / "predictions.json", canonical(result))
@@ -157,7 +157,7 @@ def run_job(job):
                 "versions": result["versions"],
                 "observation_source": doc["source"],
                 "observations": len(doc["samples"]),
-                "action_shape": [100, 6],
+                "action_shape": [info["config"]["chunk_size"], 6],
                 "reset_repeat_exact": all(r["reset_repeat_exact"] for r in result["records"]),
                 "coordinate_semantics": doc["semantics"],
                 "elapsed_seconds": time.monotonic() - started,

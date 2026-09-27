@@ -22,8 +22,11 @@ from .bundle import (
     read_json,
     safe_file,
     strip_vae,
+    temporal_dimensions,
+    temporal_files,
     validate_config,
     validate_processors,
+    validate_temporal_contract,
 )
 from .probe import FIXTURE_SEEDS, VERSIONS
 
@@ -66,6 +69,12 @@ def run_probe(
 
 
 def validate_probe(report: dict[str, Any]) -> None:
+    dimensions = temporal_dimensions(
+        {
+            "chunk_size": report.get("prediction_horizon", 100),
+            "n_action_steps": report.get("execution_horizon", 100),
+        }
+    )
     if (
         type(report.get("schema_version")) is not int
         or report["schema_version"] != 1
@@ -101,7 +110,7 @@ def validate_probe(report: dict[str, Any]) -> None:
             matrix = fixture.get(key)
             if (
                 not isinstance(matrix, list)
-                or len(matrix) != 100
+                or len(matrix) != dimensions["prediction_horizon"]
                 or any(
                     not isinstance(row, list)
                     or len(row) != 6
@@ -109,7 +118,9 @@ def validate_probe(report: dict[str, Any]) -> None:
                     for row in matrix
                 )
             ):
-                raise ValueError("ACT parity requires finite complete 100x6 actions")
+                raise ValueError(
+                    "ACT parity requires finite complete prediction-horizon x 6 actions"
+                )
 
 
 def compare_probes(original: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
@@ -117,6 +128,11 @@ def compare_probes(original: dict[str, Any], candidate: dict[str, Any]) -> dict[
     validate_probe(candidate)
     if original["versions"] != candidate["versions"] or original["python"] != candidate["python"]:
         raise ValueError("Parity runtimes differ")
+    dimensions = {
+        key: original.get(key, 100) for key in ("prediction_horizon", "execution_horizon")
+    }
+    if any(candidate.get(key, 100) != value for key, value in dimensions.items()):
+        raise ValueError("Parity temporal configurations differ")
     if original["fixtures"] != candidate["fixtures"]:
         raise ValueError("Fresh-process ACT chunk/postprocessor parity failed")
     return {
@@ -129,7 +145,8 @@ def compare_probes(original: dict[str, Any], candidate: dict[str, Any]) -> dict[
         "versions": original["versions"],
         "python": original["python"],
         "fixture_count": len(original["fixtures"]),
-        "action_steps": 100,
+        "action_steps": dimensions["prediction_horizon"],
+        **dimensions,
         "action_dim": 6,
         "exact_equal": True,
         "maximum_absolute_error": 0.0,
@@ -152,7 +169,9 @@ def compare_probes(original: dict[str, Any], candidate: dict[str, Any]) -> dict[
     }
 
 
-def export_policy(source: Path, output: Path, *, timeout: float = 120) -> dict[str, Any]:
+def export_policy(
+    source: Path, output: Path, *, timeout: float = 120, temporal_source: Path | None = None
+) -> dict[str, Any]:
     """Validate, snapshot, transform and prove parity before atomic no-replace publication."""
     source, output = Path(source), Path(output)
     if os.path.lexists(output):
@@ -164,7 +183,16 @@ def export_policy(source: Path, output: Path, *, timeout: float = 120) -> dict[s
     source_files = inventory(source)
     config = read_json(source / "config.json")
     validate_config(config, source=True)
-    names = CORE_FILES | validate_processors(source, config)
+    names = CORE_FILES | validate_processors(source, config) | temporal_files(source, config)
+    temporal_bytes = None
+    if temporal_source is not None:
+        temporal_bytes = safe_file(temporal_source, 1024 * 1024)
+        validate_temporal_contract(config, decode(temporal_bytes))
+        if (
+            "temporal-contract.json" in names
+            and safe_file(source / "temporal-contract.json") != temporal_bytes
+        ):
+            raise ValueError("Conflicting temporal provenance records")
     if "train_config.json" in source_files:
         read_json(source / "train_config.json")
         names.add("train_config.json")
@@ -185,6 +213,8 @@ def export_policy(source: Path, output: Path, *, timeout: float = 120) -> dict[s
             raise ValueError("Source changed during snapshot")
         recipe = strip_vae(original / "model.safetensors", candidate / "model.safetensors", config)
         (candidate / "config.json").write_bytes(canonical(config | {"use_vae": False}))
+        if temporal_bytes is not None and "temporal-contract.json" not in names:
+            (candidate / "temporal-contract.json").write_bytes(temporal_bytes)
         before = inventory(candidate)
         original_probe = run_probe(original, root / "original-result.json", timeout)
         candidate_probe = run_probe(candidate, root / "candidate-result.json", timeout)
@@ -193,6 +223,9 @@ def export_policy(source: Path, output: Path, *, timeout: float = 120) -> dict[s
             or candidate_probe["checkpoint_files"] != before
         ):
             raise ValueError("Verified checkpoint inventory differs from export inputs")
+        for proof in (original_probe, candidate_probe):
+            if any(proof.get(k, 100) != v for k, v in temporal_dimensions(config).items()):
+                raise ValueError("Probe temporal dimensions differ from saved config")
         parity = compare_probes(original_probe, candidate_probe)
         if inventory(candidate) != before or inventory(source) != source_files:
             raise ValueError("Source or export changed during verification")
@@ -224,6 +257,7 @@ def export_policy(source: Path, output: Path, *, timeout: float = 120) -> dict[s
             "files": files,
             "source_model_bytes": source_files["model.safetensors"]["bytes"],
             "export_model_bytes": before["model.safetensors"]["bytes"],
+            **temporal_dimensions(config),
             "calibration_verified": False,
             "task_success": None,
         }
@@ -245,6 +279,11 @@ def export_policy(source: Path, output: Path, *, timeout: float = 120) -> dict[s
         for file in candidate.iterdir():
             with file.open("r+b") as stream:
                 os.fsync(stream.fileno())
+        if (
+            temporal_source is not None
+            and safe_file(temporal_source, 1024 * 1024) != temporal_bytes
+        ):
+            raise ValueError("Temporal source changed during export")
         publish_new_directory(candidate, output)
     return manifest | {
         "package_bytes": sum(p.stat().st_size for p in output.iterdir()),

@@ -51,7 +51,8 @@ def run(job):
     info = policy(source, job["source"])
     doc, input_files = observations(inputs, job["observations"]["manifest_sha256"], info["config"])
     camera = doc["camera_key"]
-    backend = LeRobotPolicy(source, "cpu", 100, 6, camera)
+    prediction = info["config"]["chunk_size"]
+    backend = LeRobotPolicy(source, "cpu", prediction, 6, camera)
     if backend.model_id() != info["model_id"]:
         raise ValueError("Loaded packed model identity changed")
     if any(
@@ -59,7 +60,7 @@ def run(job):
         for p in list(backend._policy.parameters()) + list(backend._policy.buffers())
     ):
         raise ValueError("Native replay must remain CPU only")
-    server = create_server(("127.0.0.1", 0), backend, info["model_id"], 6, 100)
+    server = create_server(("127.0.0.1", 0), backend, info["model_id"], 6, prediction)
     permitted[0] = server.server_address[1]
     thread = threading.Thread(
         target=server.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True
@@ -95,8 +96,10 @@ def run(job):
                 chunk = client.predict(observation)
                 duration = time.monotonic() - started
                 current = [list(action) for action in chunk.actions]
-                if len(current) != 100:
-                    raise ValueError("Native replay requires the complete100x6 action chunk")
+                if len(current) != prediction:
+                    raise ValueError(
+                        "Native replay requires the complete prediction-horizon x 6 action chunk"
+                    )
                 if actions is not None and current != actions:
                     raise ValueError(
                         "Fresh reset changed packed predictions on identical observation"

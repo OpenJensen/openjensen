@@ -233,7 +233,7 @@ def sync_directory(path):
         os.close(descriptor)
 
 
-def validate_result(value, source, doc):
+def validate_result(value, source, doc, prediction=100):
     keys(
         value,
         {
@@ -307,11 +307,11 @@ def validate_result(value, source, doc):
         ):
             raise ValueError("Replay result differs from exact selected input")
         actions = row["actions"]
-        if not isinstance(actions, list) or len(actions) != 100:
-            raise ValueError("Replay requires full100x6 output")
+        if not isinstance(actions, list) or len(actions) != prediction:
+            raise ValueError("Replay requires full prediction-horizon x 6 output")
         for action in actions:
             if not isinstance(action, list) or len(action) != 6:
-                raise ValueError("Replay requires full100x6 output")
+                raise ValueError("Replay requires full prediction-horizon x 6 output")
             for coordinate in action:
                 number(coordinate)
         if not isinstance(row["requests"], list) or len(row["requests"]) != 2:

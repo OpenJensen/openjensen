@@ -550,3 +550,19 @@ def test_image_admission_rejects_excess_area_dimensions_and_nonintegers(
     cfg["input_features"]["observation.images.front"]["shape"] = shape
     with pytest.raises(ValueError, match="RGB image shape"):
         validate_config(cfg, source=True)
+
+
+@pytest.mark.parametrize("prediction,execution", [(8, 3), (1, 1), (1024, 7)])
+def test_independent_horizons_are_bounded(prediction, execution):
+    assert bundle.temporal_dimensions({"chunk_size": prediction, "n_action_steps": execution}) == {
+        "prediction_horizon": prediction,
+        "execution_horizon": execution,
+    }
+
+
+@pytest.mark.parametrize(
+    "prediction,execution", [(8, 9), (True, 1), (8, True), (8.0, 3), (1025, 1), (8, 0)]
+)
+def test_invalid_horizons_fail_before_runtime(prediction, execution):
+    with pytest.raises(ValueError):
+        bundle.temporal_dimensions({"chunk_size": prediction, "n_action_steps": execution})
