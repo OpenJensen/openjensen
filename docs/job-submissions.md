@@ -32,8 +32,9 @@ The key is not an authorization token. Existing project admission and local API
 access boundaries still apply. Binary `model-imports`, project creation and
 cancellation do not use this contract. Binary uploads explicitly reject the header
 rather than imply upload deduplication. Existing upload/cancellation recovery remains
-unchanged. Browser journals have not yet been wired to these keys in this backend
-slice; that is a separate integration gate for JOB-003.
+unchanged. Browser adoption uses the shared controller described below; each form
+must explicitly adopt it. Other policy panels retain their existing transport and
+journals.
 
 ## Persistence and recovery
 
@@ -72,3 +73,52 @@ Desktop/offline tools that only understand revision `0001` must reject `0002` un
 their own strict compatibility checks are updated. Do not copy a new workspace into
 an older payload or remove its submission table to make it open. No live workspace,
 operator configuration or provider was migrated or activated by the disposable tests.
+
+## Browser submission controller
+
+`useDurableSubmission({ project, operation })` supports `dataset.inspect`,
+`dataset.augment` and `policy.finetune`. Before any network request it saves a random
+key, project, operation and an independent JSON copy of the original recipe in
+session storage. The recipe is bounded to 1 MiB and finite JSON values. The storage
+key includes the API origin/mount path, operation and project. This is tab/session
+recovery, not cross-browser synchronization or protection against same-user storage
+modification. Legacy journals remain visible as uncertainty; they are not converted
+into invented keyed requests.
+
+`submit(body, validate)` first looks up that saved identity. The lookup must echo the
+exact key and `Cache-Control: no-store`, including a scoped missing-key 404. A found
+job is validated and returned without POST. A verified 404 permits only the current
+explicit submission to POST the saved recipe and key. An older server that does not
+prove this contract receives no POST from this controller.
+
+After a lost response, `reconcile(validate)` only performs GET. A 404 retains the
+original key and blocks a new request. It enables a separate explicit
+`retry(validate)` action; retry performs another lookup and, only if still missing,
+sends the same saved key and recipe. Neither action reads the edited form to recreate
+a recipe. There are no automatic POST retries. A reload requires a new explicit
+lookup before enabling retry.
+
+A well-formed initial HTTP 400/422 validation rejection permits correction and a new
+explicit submission. It is considered definitive only after verified support and
+before any ambiguous POST outcome for this key. A rejection during an explicit
+retry, HTTP 409, malformed errors, network failures and server errors retain the
+saved request. Validation errors from the framework may omit the custom echo header;
+that exception is restricted to the well-formed initial 400/422 response.
+
+The caller supplies `validate(value, originalBody) => Job`; it must verify the
+operation's admission rules against the saved recipe, including legitimate server
+normalization. `trainingReceipt` performs this check for training and checkpoint
+resumes. The controller additionally checks job/project/operation/status/timestamps.
+A disabled shared query cache fences old component mounts from clearing a successor's
+attempt. A verified minimal receipt is retained before fallible storage cleanup; the
+full validated job is returned and cached for normal results display. A cleanup or
+storage-read failure leaves admission disabled without hiding an accepted identity.
+
+For integrations, new work requires `hydrated && available && !attempt && !busy`.
+`available` indicates storage health, not permission to discard an unresolved key.
+`submissionOf(attempt)` distinguishes keyed recovery from legacy history review;
+`canRetry` governs the separate explicit retry action. `clearLegacy(expected)` may
+only be called after the user explicitly reviews fresh history for that same legacy
+attempt. It cannot clear a valid durable key. Cancellation journals are separate and
+unchanged. The pure controller tests do not establish mounted-form, provider, GPU or
+training-quality acceptance; each adopted form needs its own integration checks.
