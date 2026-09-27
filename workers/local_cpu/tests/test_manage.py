@@ -371,3 +371,173 @@ def test_source_requirement_has_archive_filename_for_uv(fixture):
     # uv rejects the old codeload /tar.gz/<commit> endpoint before fetching it.
     assert parsed.path.endswith("/" + m.UPSTREAM + ".tar.gz")
     assert parsed.fragment == "sha256=" + m.UPSTREAM_SHA
+
+
+@pytest.fixture
+def shared_uv_cache(tmp_path):
+    cache = tmp_path / "previous-attempt/cache"
+    cache.mkdir(parents=True)
+    (cache / "CACHEDIR.TAG").write_bytes(b"Signature: 8a477f597d28d172789f06886806bc55")
+    (cache / "wheels-v6").mkdir()
+    (cache / "wheels-v6/generated-wheel-record").write_bytes(b"existing generated cache fixture")
+    return cache
+
+
+def test_explicit_cache_plan_preserves_hashes_and_never_spawns_or_writes(
+    fixture, shared_uv_cache, monkeypatch, capsys
+):
+    root, _ = fixture
+    before = {p: p.read_bytes() for p in shared_uv_cache.rglob("*") if p.is_file()}
+    monkeypatch.setattr(m.subprocess, "Popen", lambda *a, **kw: pytest.fail("process created"))
+    monkeypatch.setattr(
+        m.subprocess, "check_output", lambda *a, **kw: pytest.fail("process created")
+    )
+    default = m.setup_plan(root / "new", Path("/python"), Path("/uv"))
+    for action in ("plan", "install"):
+        assert (
+            m.main(
+                [
+                    action,
+                    "--root",
+                    str(root / "new"),
+                    "--python",
+                    "/python",
+                    "--uv",
+                    "/uv",
+                    "--cache",
+                    str(shared_uv_cache),
+                ]
+            )
+            == 0
+        )
+        plan = json.loads(capsys.readouterr().out)
+        assert plan["commands"] == default["commands"]
+        assert plan["inputs"] == default["inputs"]
+        assert plan["cache"] == {
+            "path": str(shared_uv_cache),
+            "shared": True,
+            "scope": "uv_distribution_artifacts_only",
+            "link_mode": "copy",
+        }
+        assert not (root / "new").exists()
+        assert before == {p: p.read_bytes() for p in shared_uv_cache.rglob("*") if p.is_file()}
+    assert default["cache"]["path"] == str(root / "new/cache")
+    assert default["cache"]["shared"] is False
+
+
+def test_shared_cache_only_affects_uv_not_runtime_imports_or_model_storage(
+    fixture, shared_uv_cache, monkeypatch
+):
+    root, _ = fixture
+    for key in ("UV_CACHE_DIR", "UV_LINK_MODE", "PYTHONPATH", "HF_HOME", "HF_HUB_CACHE"):
+        monkeypatch.setenv(key, "untrusted-inherited-value")
+    env = m.environment(root / "new", offline=False, cache=shared_uv_cache)
+    assert env["UV_CACHE_DIR"] == str(shared_uv_cache)
+    assert env["UV_LINK_MODE"] == "copy"
+    assert env["UV_PROJECT_ENVIRONMENT"] == str(root / "new/act-model")
+    assert env["HF_HOME"] == str(root / "new/cache/huggingface")
+    assert "PYTHONPATH" not in env and "untrusted-inherited-value" not in str(env)
+    assert "UV_LINK_MODE" not in m.environment(root / "new", offline=False)
+
+
+@pytest.mark.parametrize("kind", ["same", "inside", "ancestor"])
+def test_shared_cache_cannot_overlap_new_environment(fixture, shared_uv_cache, kind):
+    root, _ = fixture
+    destination = {
+        "same": shared_uv_cache,
+        "inside": shared_uv_cache.parent,
+        "ancestor": shared_uv_cache / "new",
+    }[kind]
+    with pytest.raises(ValueError, match="disjoint"):
+        m.setup_plan(destination, root / "python", root / "uv", cache=shared_uv_cache)
+
+
+@pytest.mark.parametrize("kind", ["missing", "file", "no-marker", "bad-marker", "large-marker"])
+def test_shared_cache_rejects_unrecognized_directories(fixture, kind):
+    root, _ = fixture
+    cache = root / "cache"
+    if kind == "file":
+        cache.write_text("not a directory")
+    elif kind != "missing":
+        cache.mkdir()
+        if kind == "bad-marker":
+            (cache / "CACHEDIR.TAG").write_text("not a uv cache")
+        elif kind == "large-marker":
+            (cache / "CACHEDIR.TAG").write_bytes(
+                b"Signature: 8a477f597d28d172789f06886806bc55" + b"x" * 1024
+            )
+    with pytest.raises(ValueError):
+        m.setup_plan(root / "new", root / "python", root / "uv", cache=cache)
+    assert not (root / "new").exists()
+
+
+@pytest.mark.parametrize(
+    "kind", ["relative", "traversal", "leaf-link", "ancestor-link", "marker-link"]
+)
+def test_shared_cache_rejects_ambiguous_or_linked_paths(fixture, shared_uv_cache, kind):
+    root, _ = fixture
+    cache = shared_uv_cache
+    if kind == "relative":
+        cache = Path("relative/cache")
+    elif kind == "traversal":
+        cache = root / "previous-attempt/../previous-attempt/cache"
+    elif kind == "leaf-link":
+        cache = root / "cache-link"
+        cache.symlink_to(shared_uv_cache, target_is_directory=True)
+    elif kind == "ancestor-link":
+        (root / "parent-link").symlink_to(shared_uv_cache.parent, target_is_directory=True)
+        cache = root / "parent-link/cache"
+    else:
+        tag = shared_uv_cache / "CACHEDIR.TAG"
+        original = tag.read_bytes()
+        tag.unlink()
+        (root / "outside-marker").write_bytes(original)
+        tag.symlink_to(root / "outside-marker")
+    with pytest.raises(ValueError):
+        m.setup_plan(root / "new", root / "python", root / "uv", cache=cache)
+
+
+@pytest.mark.parametrize("level", ["root", "ancestor"])
+def test_shared_cache_does_not_admit_installed_environments(fixture, shared_uv_cache, level):
+    root, _ = fixture
+    target = shared_uv_cache if level == "root" else shared_uv_cache.parent
+    (target / "pyvenv.cfg").write_text("generated installed environment fixture")
+    with pytest.raises(ValueError, match="installed Python environment"):
+        m.setup_plan(root / "new", root / "python", root / "uv", cache=shared_uv_cache)
+
+
+def test_mock_install_reuses_cache_but_creates_separate_environments(
+    fixture, shared_uv_cache, monkeypatch
+):
+    root, _ = fixture
+    python, uv = root / "python", root / "uv"
+    python.touch()
+    uv.touch()
+    original = {p: p.read_bytes() for p in shared_uv_cache.rglob("*") if p.is_file()}
+    monkeypatch.setattr(
+        m.subprocess,
+        "check_output",
+        lambda cmd, **kw: "uv 0.12.19 (fixture)" if cmd[0] == str(uv) else "3.12",
+    )
+    commands = []
+    monkeypatch.setattr(m, "run", lambda cmd, **kw: commands.append((cmd, kw["env"])))
+    verified = []
+    monkeypatch.setattr(
+        m,
+        "verify",
+        lambda target: verified.append(target) or {"verified": {"model": True, "reader": True}},
+    )
+    result = m.install(root / "new", python, uv, cache=shared_uv_cache)
+    assert len(commands) == 6 and verified == [root / "new"]
+    assert all(
+        env["UV_CACHE_DIR"] == str(shared_uv_cache) and env["UV_LINK_MODE"] == "copy"
+        for _, env in commands
+    )
+    assert commands[0][0][-1] == str(python)
+    assert commands[1][0][-1] == str(root / "new/dataset-reader")
+    assert "--locked" in commands[0][0] and "--require-hashes" in commands[2][0]
+    assert original == {p: p.read_bytes() for p in shared_uv_cache.rglob("*") if p.is_file()}
+    assert result["cache"]["path"] == str(shared_uv_cache)
+    assert json.loads((root / "new/installation.json").read_text())["cache"] == result["cache"]
+    with pytest.raises(ValueError, match="must be new"):
+        m.install(root / "new", python, uv, cache=shared_uv_cache)
