@@ -7,8 +7,15 @@ in installed wheels. It applies to vla.cpp v0.3.0, commit
 The original SmolVLA-specific reader accepts only F32/BF16 and allocates floating
 matrices regardless of the GGUF tensor type. The patch allocates LM and vision
 matrices in their Q8_0/Q4_0 source type and transfers packed bytes directly to the
-backend. `ggml_mul_mat` consumes those packed weights. It leaves action-expert,
-projector, embedding, normalization and action/state tensor paths unchanged.
+backend. `ggml_mul_mat` consumes those packed weights. Action-expert, projector,
+embedding, normalization and action/state tensors remain unquantized.
+
+The GGUF token embedding is allocated using its actual F32, F16 or BF16 storage
+type and transferred without recasting. The upstream reader hardcoded BF16,
+which rejected a trained checkpoint exported to F32 with a raw-byte-count error.
+This correction preserves the exporter's lossless floating materialization for
+both FP16 and BF16 training runs. Native safetensors retain their existing BF16
+loading path. Unsupported packed embedding types are rejected.
 
 Packed input validation rejects other tensor types and protected components.
 Loading checks packed tensor shape, type, and byte count before transfer. The
@@ -36,6 +43,10 @@ before applying the patch, using `VLA_N_THREADS=4 VLA_IMG_SIZE=512` and the same
 floating GGUF. The harness refuses changed artifact hashes and mismatched source
 patches, records the executable hash, and verifies BF16 action regression.
 
-This patch is validated on Docker Linux CPU. CUDA, native macOS, and real robot
-task quality require their own runs. Synthetic action differences are a numerical
-smoke check and must not be interpreted as a task-success guarantee.
+Historical packed-weight CPU/CUDA measurements are recorded separately in the
+worker's quantization reports. The newer embedding reader has compiled regression
+coverage for F32/F16/BF16, and the application requires a fresh native forward pass
+for each cloud quantization result. See the current
+[application verification record](../../../output/verification/README.md) for
+completed whole-model checks and their exact scope. Synthetic finite actions do
+not establish robot task success.

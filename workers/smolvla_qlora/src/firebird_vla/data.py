@@ -43,8 +43,9 @@ def load_data(cfg, splits=None):
         shape = features.get(key, {}).get("shape", [])
         if len(shape) != 1 or not 1 <= shape[0] <= 32:
             raise ValueError(f"{key} must be a vector with 1..32 dimensions")
-    if features.get(cfg.camera_key, {}).get("dtype") not in ("video", "image"):
-        raise ValueError(f"Missing image/video camera {cfg.camera_key}")
+    for camera_key in cfg.selected_camera_keys:
+        if features.get(camera_key, {}).get("dtype") not in ("video", "image"):
+            raise ValueError(f"Missing image/video camera {camera_key}")
     if meta.fps <= 0:
         raise ValueError("Dataset FPS must be positive")
     ids = [int(ep["episode_index"]) for ep in meta.episodes]
@@ -69,11 +70,27 @@ def load_data(cfg, splits=None):
     return train, validation, stats, splits
 
 
-def prepare_batch(batch, preprocessor):
+def prepare_batch(batch, preprocessor, camera_keys=None):
     tasks = batch.get("task")
     if not tasks or any(not isinstance(t, str) or not t.strip() for t in tasks):
         raise ValueError("Each frame must have a non-empty dataset task instruction")
+    if camera_keys is not None:
+        missing = [key for key in camera_keys if key not in batch or batch[key] is None]
+        if missing:
+            raise ValueError(f"Missing selected cameras in batch: {', '.join(missing)}")
+        # Avoid moving unused camera tensors to the GPU. The policy consumes selected views
+        # in recipe order through its input_features, independently of dataset column order.
+        selected = set(camera_keys) | {f"{key}_padding_mask" for key in camera_keys}
+        batch = {
+            key: value
+            for key, value in batch.items()
+            if not key.startswith("observation.images.") or key in selected
+        }
     processed = preprocessor(batch)
+    if camera_keys is not None:
+        missing = [key for key in camera_keys if key not in processed or processed[key] is None]
+        if missing:
+            raise ValueError(f"Preprocessor dropped selected cameras: {', '.join(missing)}")
     # LeRobot 0.4.4's dataset emits action_is_pad; SmolVLA.forward reads actions_id_pad.
     if "action_is_pad" not in batch:
         raise ValueError("Missing action chunk padding mask")

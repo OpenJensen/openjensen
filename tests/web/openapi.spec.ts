@@ -97,3 +97,9 @@ test('shell quoting preserves apostrophes and blocks command substitution', () =
   expect(shellQuote("a'b")).toBe("'a'\"'\"'b'");
   expect(shellQuote('$(touch sentinel); `id`')).toBe("'$(touch sentinel); `id`'");
 });
+
+
+test('cURL examples preserve a deployed API prefix', () => {
+  const command = curlExample(endpointsFor(document)[0], 'https://example.test/firebird');
+  expect(command).toContain("'https://example.test/firebird/api/v1/widgets/{id}'");
+});

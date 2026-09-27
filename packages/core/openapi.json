@@ -1,6 +1,336 @@
 {
   "components": {
     "schemas": {
+      "AugmentationClip": {
+        "additionalProperties": false,
+        "properties": {
+          "camera_key": {
+            "title": "Camera Key",
+            "type": "string"
+          },
+          "episode_index": {
+            "minimum": 0.0,
+            "title": "Episode Index",
+            "type": "integer"
+          },
+          "index": {
+            "minimum": 0.0,
+            "title": "Index",
+            "type": "integer"
+          },
+          "input_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Input Sha256",
+            "type": "string"
+          },
+          "interaction_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interaction Id"
+          },
+          "output_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Output Sha256",
+            "type": "string"
+          },
+          "source_end_seconds": {
+            "exclusiveMinimum": 0.0,
+            "title": "Source End Seconds",
+            "type": "number"
+          },
+          "source_start_seconds": {
+            "minimum": 0.0,
+            "title": "Source Start Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "index",
+          "episode_index",
+          "camera_key",
+          "source_start_seconds",
+          "source_end_seconds",
+          "input_sha256",
+          "output_sha256"
+        ],
+        "title": "AugmentationClip",
+        "type": "object"
+      },
+      "AugmentationOptions": {
+        "additionalProperties": false,
+        "properties": {
+          "auth_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Message"
+          },
+          "auth_mode": {
+            "default": "unconfigured",
+            "enum": [
+              "google_cloud",
+              "gemini_api_key",
+              "unconfigured"
+            ],
+            "title": "Auth Mode",
+            "type": "string"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "google_cloud_project": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Cloud Project"
+          },
+          "max_clips": {
+            "default": 4,
+            "title": "Max Clips",
+            "type": "integer"
+          },
+          "max_duration_seconds": {
+            "default": 10,
+            "title": "Max Duration Seconds",
+            "type": "integer"
+          },
+          "model": {
+            "default": "gemini-omni-1.1-flash",
+            "title": "Model",
+            "type": "string"
+          },
+          "presets": {
+            "items": {
+              "$ref": "#/components/schemas/AugmentationPreset"
+            },
+            "title": "Presets",
+            "type": "array"
+          },
+          "setup_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setup Message"
+          }
+        },
+        "required": [
+          "configured"
+        ],
+        "title": "AugmentationOptions",
+        "type": "object"
+      },
+      "AugmentationPreset": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "enum": [
+              "lighting",
+              "texture",
+              "custom"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "prompt"
+        ],
+        "title": "AugmentationPreset",
+        "type": "object"
+      },
+      "AugmentationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "camera_key": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Camera Key",
+            "type": "string"
+          },
+          "duration_seconds": {
+            "default": 5,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "episode_indices": {
+            "items": {
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "maxItems": 4,
+            "minItems": 1,
+            "title": "Episode Indices",
+            "type": "array"
+          },
+          "operation": {
+            "const": "dataset.augment",
+            "default": "dataset.augment",
+            "title": "Operation",
+            "type": "string"
+          },
+          "preset": {
+            "default": "lighting",
+            "enum": [
+              "lighting",
+              "texture",
+              "custom"
+            ],
+            "title": "Preset",
+            "type": "string"
+          },
+          "prompt": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Prompt",
+            "type": "string"
+          },
+          "source_job_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Source Job Id",
+            "type": "string"
+          },
+          "start_seconds": {
+            "default": 0,
+            "maximum": 86400.0,
+            "minimum": 0.0,
+            "title": "Start Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "source_job_id",
+          "episode_indices",
+          "camera_key"
+        ],
+        "title": "AugmentationRequest",
+        "type": "object"
+      },
+      "AugmentationResult": {
+        "additionalProperties": false,
+        "properties": {
+          "auth_mode": {
+            "default": "gemini_api_key",
+            "enum": [
+              "google_cloud",
+              "gemini_api_key"
+            ],
+            "title": "Auth Mode",
+            "type": "string"
+          },
+          "clips": {
+            "items": {
+              "$ref": "#/components/schemas/AugmentationClip"
+            },
+            "maxItems": 4,
+            "minItems": 1,
+            "title": "Clips",
+            "type": "array"
+          },
+          "google_cloud_project": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Cloud Project"
+          },
+          "metadata_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Metadata Sha256",
+            "type": "string"
+          },
+          "model": {
+            "default": "gemini-omni-1.1-flash",
+            "title": "Model",
+            "type": "string"
+          },
+          "operation": {
+            "const": "dataset.augment",
+            "default": "dataset.augment",
+            "title": "Operation",
+            "type": "string"
+          },
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          },
+          "repo_id": {
+            "title": "Repo Id",
+            "type": "string"
+          },
+          "review_required": {
+            "const": true,
+            "default": true,
+            "title": "Review Required",
+            "type": "boolean"
+          },
+          "revision": {
+            "pattern": "^[a-f0-9]{40}$",
+            "title": "Revision",
+            "type": "string"
+          },
+          "source_job_id": {
+            "title": "Source Job Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "prompt",
+          "source_job_id",
+          "repo_id",
+          "revision",
+          "metadata_sha256",
+          "clips",
+          "warnings"
+        ],
+        "title": "AugmentationResult",
+        "type": "object"
+      },
       "CameraPreview": {
         "additionalProperties": false,
         "properties": {
@@ -144,6 +474,7 @@
             "enum": [
               "dataset.inspect",
               "dataset.inspect.local",
+              "dataset.augment",
               "policy.finetune",
               "policy.distill",
               "policy.quantize",
@@ -297,6 +628,176 @@
         "title": "CapabilitySupport",
         "type": "object"
       },
+      "CloudConnection": {
+        "properties": {
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GcpConnectionConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "identity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CloudIdentity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "provider": {
+            "const": "gcp",
+            "title": "Provider",
+            "type": "string"
+          },
+          "setup_commands": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Setup Commands",
+            "type": "array"
+          },
+          "status": {
+            "default": "disconnected",
+            "enum": [
+              "disconnected",
+              "unverified",
+              "connected",
+              "setup_required",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "name"
+        ],
+        "title": "CloudConnection",
+        "type": "object"
+      },
+      "CloudConnectionsResponse": {
+        "properties": {
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/CloudConnection"
+            },
+            "title": "Providers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "providers"
+        ],
+        "title": "CloudConnectionsResponse",
+        "type": "object"
+      },
+      "CloudExecutionTarget": {
+        "additionalProperties": false,
+        "description": "Server-owned selection captured when a job is accepted; no credentials.",
+        "properties": {
+          "accelerator": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+            "title": "Accelerator",
+            "type": "string"
+          },
+          "disk_size_gb": {
+            "maximum": 2000.0,
+            "minimum": 100.0,
+            "title": "Disk Size Gb",
+            "type": "integer"
+          },
+          "gpu_count": {
+            "const": 1,
+            "default": 1,
+            "title": "Gpu Count",
+            "type": "integer"
+          },
+          "idle_minutes": {
+            "maximum": 60.0,
+            "minimum": 1.0,
+            "title": "Idle Minutes",
+            "type": "integer"
+          },
+          "instance_type": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instance Type"
+          },
+          "project_id": {
+            "pattern": "^[a-z][a-z0-9-]{4,28}[a-z0-9]$",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "region": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9-]+[0-9]$",
+            "title": "Region",
+            "type": "string"
+          },
+          "sky_api_endpoint": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Sky Api Endpoint",
+            "type": "string"
+          },
+          "workspace": {
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "title": "Workspace",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "workspace",
+          "sky_api_endpoint",
+          "region",
+          "accelerator",
+          "disk_size_gb",
+          "idle_minutes"
+        ],
+        "title": "CloudExecutionTarget",
+        "type": "object"
+      },
       "CloudFeedIssue": {
         "additionalProperties": false,
         "properties": {
@@ -321,6 +822,101 @@
           "message"
         ],
         "title": "CloudFeedIssue",
+        "type": "object"
+      },
+      "CloudGpuOption": {
+        "additionalProperties": false,
+        "properties": {
+          "accelerator": {
+            "title": "Accelerator",
+            "type": "string"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "gpu_count": {
+            "default": 1,
+            "title": "Gpu Count",
+            "type": "integer"
+          },
+          "gpu_memory_mib": {
+            "title": "Gpu Memory Mib",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "instance_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instance Type"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "launchable": {
+            "default": false,
+            "title": "Launchable",
+            "type": "boolean"
+          },
+          "needs_preparation": {
+            "default": false,
+            "title": "Needs Preparation",
+            "type": "boolean"
+          },
+          "supported": {
+            "title": "Supported",
+            "type": "boolean"
+          },
+          "unavailable_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unavailable Reason"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "accelerator",
+          "gpu_memory_mib",
+          "instance_type",
+          "supported",
+          "available",
+          "unavailable_reason"
+        ],
+        "title": "CloudGpuOption",
+        "type": "object"
+      },
+      "CloudIdentity": {
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account"
+          }
+        },
+        "title": "CloudIdentity",
         "type": "object"
       },
       "CloudRunLogs": {
@@ -524,6 +1120,68 @@
           "server_time"
         ],
         "title": "CloudRunsFeed",
+        "type": "object"
+      },
+      "ComputeSettingsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "gcp": {
+            "$ref": "#/components/schemas/GcpComputeSettings"
+          },
+          "gcp_status": {
+            "$ref": "#/components/schemas/GcpComputeStatus"
+          },
+          "gpu_options": {
+            "items": {
+              "$ref": "#/components/schemas/CloudGpuOption"
+            },
+            "title": "Gpu Options",
+            "type": "array"
+          },
+          "local": {
+            "$ref": "#/components/schemas/LocalComputeSettings"
+          },
+          "runtimes": {
+            "items": {
+              "$ref": "#/components/schemas/PublicRuntime"
+            },
+            "title": "Runtimes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "runtimes",
+          "gcp_status",
+          "gpu_options"
+        ],
+        "title": "ComputeSettingsResponse",
+        "type": "object"
+      },
+      "ComputeSettingsUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "gcp": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GcpComputeSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "local": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalComputeSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "ComputeSettingsUpdate",
         "type": "object"
       },
       "DatasetProfile": {
@@ -994,6 +1652,157 @@
         "title": "FrameSample",
         "type": "object"
       },
+      "GcpComputeSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "default_gpu": {
+            "default": "A100",
+            "title": "Default Gpu",
+            "type": "string"
+          },
+          "disk_size_gb": {
+            "default": 200,
+            "maximum": 2000.0,
+            "minimum": 100.0,
+            "title": "Disk Size Gb",
+            "type": "integer"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "idle_minutes": {
+            "default": 10,
+            "maximum": 60.0,
+            "minimum": 1.0,
+            "title": "Idle Minutes",
+            "type": "integer"
+          }
+        },
+        "title": "GcpComputeSettings",
+        "type": "object"
+      },
+      "GcpComputeStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "configured": {
+            "default": false,
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region"
+          },
+          "setup_commands": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Setup Commands",
+            "type": "array"
+          },
+          "sky_api_endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sky Api Endpoint"
+          },
+          "skypilot_installed": {
+            "default": false,
+            "title": "Skypilot Installed",
+            "type": "boolean"
+          },
+          "status": {
+            "default": "unchecked",
+            "enum": [
+              "unchecked",
+              "ready",
+              "setup_required",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "GcpComputeStatus",
+        "type": "object"
+      },
+      "GcpConnectionConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "project_id": {
+            "pattern": "^[a-z][a-z0-9-]{4,28}[a-z0-9]$",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "region": {
+            "maxLength": 64,
+            "minLength": 3,
+            "pattern": "^[a-z][a-z0-9-]+[0-9]$",
+            "title": "Region",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "region"
+        ],
+        "title": "GcpConnectionConfig",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1005,6 +1814,77 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HuggingFaceStatus": {
+        "properties": {
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "configured": {
+            "default": false,
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "token_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Hint"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          }
+        },
+        "title": "HuggingFaceStatus",
+        "type": "object"
+      },
+      "HuggingFaceTokenInput": {
+        "additionalProperties": false,
+        "properties": {
+          "token": {
+            "format": "password",
+            "title": "Token",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "HuggingFaceTokenInput",
         "type": "object"
       },
       "IntakeRequest": {
@@ -1038,6 +1918,7 @@
           },
           "revision": {
             "default": "main",
+            "description": "Branch, tag or commit. Omitted or blank uses the latest main revision.",
             "maxLength": 200,
             "minLength": 1,
             "title": "Revision",
@@ -1059,6 +1940,16 @@
       "Job": {
         "additionalProperties": false,
         "properties": {
+          "compute_target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CloudExecutionTarget"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "created_at": {
             "format": "date-time",
             "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:[Zz]|[+-](?:[01]\\d|2[0-3]):[0-5]\\d)$",
@@ -1099,6 +1990,9 @@
               },
               {
                 "$ref": "#/components/schemas/PolicyRequest"
+              },
+              {
+                "$ref": "#/components/schemas/AugmentationRequest"
               }
             ],
             "title": "Request"
@@ -1110,6 +2004,9 @@
               },
               {
                 "$ref": "#/components/schemas/LifecycleResult"
+              },
+              {
+                "$ref": "#/components/schemas/AugmentationResult"
               },
               {
                 "type": "null"
@@ -1161,6 +2058,11 @@
       "JobEvent": {
         "additionalProperties": false,
         "properties": {
+          "data": {
+            "additionalProperties": true,
+            "title": "Data",
+            "type": "object"
+          },
           "message": {
             "title": "Message",
             "type": "string"
@@ -1263,6 +2165,25 @@
           }
         },
         "title": "Limits",
+        "type": "object"
+      },
+      "LocalComputeSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "label": {
+            "default": "Local machine",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "title": "LocalComputeSettings",
         "type": "object"
       },
       "LocalDatasetPreview": {
@@ -1786,6 +2707,464 @@
         "title": "ProjectCreate",
         "type": "object"
       },
+      "PublicRuntime": {
+        "additionalProperties": false,
+        "properties": {
+          "accelerator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accelerator"
+          },
+          "device": {
+            "enum": [
+              "cpu",
+              "cuda"
+            ],
+            "title": "Device",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "execution": {
+            "default": "native",
+            "enum": [
+              "native",
+              "skypilot"
+            ],
+            "title": "Execution",
+            "type": "string"
+          },
+          "gpu_memory_mib": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gpu Memory Mib"
+          },
+          "gpu_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gpu Name"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "launchable": {
+            "default": true,
+            "title": "Launchable",
+            "type": "boolean"
+          },
+          "needs_preparation": {
+            "default": false,
+            "title": "Needs Preparation",
+            "type": "boolean"
+          },
+          "provider": {
+            "enum": [
+              "local",
+              "gcp"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "provider_label": {
+            "title": "Provider Label",
+            "type": "string"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region"
+          },
+          "simulation": {
+            "title": "Simulation",
+            "type": "boolean"
+          },
+          "training": {
+            "title": "Training",
+            "type": "boolean"
+          },
+          "training_gpu_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Training Gpu Count"
+          },
+          "training_model_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Training Model Ids",
+            "type": "array"
+          },
+          "unavailable_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unavailable Reason"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "provider",
+          "provider_label",
+          "region",
+          "enabled",
+          "device",
+          "training",
+          "training_model_ids",
+          "simulation",
+          "gpu_name",
+          "gpu_memory_mib",
+          "training_gpu_count"
+        ],
+        "title": "PublicRuntime",
+        "type": "object"
+      },
+      "TrainingCheckpoint": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Id"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "remote_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remote Uri"
+          },
+          "step": {
+            "minimum": 0.0,
+            "title": "Step",
+            "type": "integer"
+          },
+          "storage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp"
+          }
+        },
+        "required": [
+          "step",
+          "name"
+        ],
+        "title": "TrainingCheckpoint",
+        "type": "object"
+      },
+      "TrainingMetric": {
+        "additionalProperties": false,
+        "properties": {
+          "elapsed_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elapsed Seconds"
+          },
+          "grad_norm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grad Norm"
+          },
+          "learning_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Learning Rate"
+          },
+          "step": {
+            "minimum": 0.0,
+            "title": "Step",
+            "type": "integer"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp"
+          },
+          "train_loss": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Train Loss"
+          },
+          "validation_action_mse": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Validation Action Mse"
+          },
+          "validation_loss": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Validation Loss"
+          }
+        },
+        "required": [
+          "step"
+        ],
+        "title": "TrainingMetric",
+        "type": "object"
+      },
+      "TrainingTelemetry": {
+        "additionalProperties": false,
+        "properties": {
+          "checkpoints": {
+            "items": {
+              "$ref": "#/components/schemas/TrainingCheckpoint"
+            },
+            "title": "Checkpoints",
+            "type": "array"
+          },
+          "completed_steps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed Steps"
+          },
+          "current_action": {
+            "title": "Current Action",
+            "type": "string"
+          },
+          "elapsed_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elapsed Seconds"
+          },
+          "eta_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eta Seconds"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/JobEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "latest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrainingMetric"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "logs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Logs",
+            "type": "array"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/TrainingMetric"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "metrics_truncated": {
+            "default": false,
+            "title": "Metrics Truncated",
+            "type": "boolean"
+          },
+          "percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percent"
+          },
+          "phase": {
+            "title": "Phase",
+            "type": "string"
+          },
+          "reproducibility": {
+            "additionalProperties": true,
+            "title": "Reproducibility",
+            "type": "object"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "total_steps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Steps"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "wall_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wall Seconds"
+          }
+        },
+        "required": [
+          "job_id",
+          "status",
+          "phase",
+          "current_action",
+          "updated_at"
+        ],
+        "title": "TrainingTelemetry",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -1834,6 +3213,24 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/augmentation-options": {
+      "get": {
+        "operationId": "augmentation_options_api_v1_augmentation_options_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AugmentationOptions"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Augmentation Options"
+      }
+    },
     "/api/v1/capabilities": {
       "get": {
         "operationId": "capabilities_api_v1_capabilities_get",
@@ -1856,6 +3253,166 @@
         "summary": "Capabilities"
       }
     },
+    "/api/v1/cloud-connections": {
+      "get": {
+        "operationId": "list_cloud_connections_api_v1_cloud_connections_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudConnectionsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Cloud Connections",
+        "tags": [
+          "Cloud connections"
+        ]
+      }
+    },
+    "/api/v1/cloud-connections/{provider}/connect": {
+      "post": {
+        "operationId": "connect_cloud_provider_api_v1_cloud_connections__provider__connect_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "const": "gcp",
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GcpConnectionConfig"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudConnection"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Cloud Provider",
+        "tags": [
+          "Cloud connections"
+        ]
+      }
+    },
+    "/api/v1/cloud-connections/{provider}/disconnect": {
+      "post": {
+        "operationId": "disconnect_cloud_provider_api_v1_cloud_connections__provider__disconnect_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "const": "gcp",
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudConnection"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Disconnect Cloud Provider",
+        "tags": [
+          "Cloud connections"
+        ]
+      }
+    },
+    "/api/v1/cloud-connections/{provider}/recheck": {
+      "post": {
+        "operationId": "recheck_cloud_provider_api_v1_cloud_connections__provider__recheck_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "const": "gcp",
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudConnection"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recheck Cloud Provider",
+        "tags": [
+          "Cloud connections"
+        ]
+      }
+    },
     "/api/v1/cloud-runs": {
       "get": {
         "description": "Read bounded operator snapshots; never connect to or control a cloud host.",
@@ -1873,6 +3430,108 @@
           }
         },
         "summary": "Cloud Runs"
+      }
+    },
+    "/api/v1/compute-settings": {
+      "get": {
+        "operationId": "get_compute_settings_api_v1_compute_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComputeSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Compute Settings",
+        "tags": [
+          "Compute settings"
+        ]
+      },
+      "put": {
+        "operationId": "update_compute_settings_api_v1_compute_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComputeSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComputeSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Compute Settings",
+        "tags": [
+          "Compute settings"
+        ]
+      }
+    },
+    "/api/v1/compute-settings/gcp/check": {
+      "post": {
+        "operationId": "check_gcp_compute_api_v1_compute_settings_gcp_check_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComputeSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Check Gcp Compute",
+        "tags": [
+          "Compute settings"
+        ]
+      }
+    },
+    "/api/v1/compute-settings/gcp/prepare": {
+      "post": {
+        "operationId": "prepare_gcp_compute_api_v1_compute_settings_gcp_prepare_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComputeSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Prepare Gcp Compute",
+        "tags": [
+          "Compute settings"
+        ]
       }
     },
     "/api/v1/health": {
@@ -1895,6 +3554,124 @@
           }
         },
         "summary": "Health"
+      }
+    },
+    "/api/v1/huggingface-connection": {
+      "delete": {
+        "operationId": "delete_huggingface_token_api_v1_huggingface_connection_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HuggingFaceStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Delete Huggingface Token",
+        "tags": [
+          "Hugging Face"
+        ]
+      },
+      "get": {
+        "operationId": "huggingface_status_api_v1_huggingface_connection_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HuggingFaceStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Huggingface Status",
+        "tags": [
+          "Hugging Face"
+        ]
+      },
+      "post": {
+        "operationId": "save_huggingface_token_api_v1_huggingface_connection_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HuggingFaceTokenInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HuggingFaceStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Huggingface Token",
+        "tags": [
+          "Hugging Face"
+        ]
+      },
+      "put": {
+        "operationId": "save_huggingface_token_api_v1_huggingface_connection_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HuggingFaceTokenInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HuggingFaceStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Huggingface Token",
+        "tags": [
+          "Hugging Face"
+        ]
       }
     },
     "/api/v1/jobs/{job_id}": {
@@ -1934,6 +3711,99 @@
           }
         },
         "summary": "Get Job"
+      }
+    },
+    "/api/v1/jobs/{job_id}/augmentation/clips/{index}": {
+      "get": {
+        "operationId": "augmentation_clip_api_v1_jobs__job_id__augmentation_clips__index__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "index",
+            "required": true,
+            "schema": {
+              "title": "Index",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "original",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Original",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Augmentation Clip"
+      }
+    },
+    "/api/v1/jobs/{job_id}/augmentation/download": {
+      "get": {
+        "operationId": "download_augmentation_api_v1_jobs__job_id__augmentation_download_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Augmentation"
       }
     },
     "/api/v1/jobs/{job_id}/cancel": {
@@ -2138,6 +4008,82 @@
         "summary": "Job Events"
       }
     },
+    "/api/v1/jobs/{job_id}/training": {
+      "get": {
+        "operationId": "training_telemetry_api_v1_jobs__job_id__training_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrainingTelemetry"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Training Telemetry"
+      }
+    },
+    "/api/v1/jobs/{job_id}/training/reproducibility": {
+      "get": {
+        "operationId": "training_reproducibility_api_v1_jobs__job_id__training_reproducibility_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Training Reproducibility"
+      }
+    },
     "/api/v1/policy-options": {
       "get": {
         "operationId": "policy_options_api_v1_policy_options_get",
@@ -2303,6 +4249,55 @@
           }
         },
         "summary": "Download Artifact"
+      }
+    },
+    "/api/v1/projects/{project_id}/augmentations": {
+      "post": {
+        "operationId": "augment_dataset_api_v1_projects__project_id__augmentations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AugmentationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Augment Dataset"
       }
     },
     "/api/v1/projects/{project_id}/intakes": {

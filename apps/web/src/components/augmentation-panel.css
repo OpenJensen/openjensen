@@ -1,0 +1,131 @@
+.augmentation-panel { min-width: 0; }
+.augmentation-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 22px; margin-bottom: 25px; }
+.augmentation-heading > div { min-width: 0; }
+.augmentation-heading h2 { font-size: 22px; font-weight: 550; letter-spacing: -.6px; margin: 0; }
+.augmentation-heading p:last-child { max-width: 570px; color: var(--muted); font-size: 12px; line-height: 1.8; }
+.augmentation-provider { display: inline-flex; align-items: center; flex-shrink: 0; gap: 7px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 11px; color: var(--muted); background: var(--subtle); }
+.augmentation-setup { display: flex; gap: 12px; margin-bottom: 25px; padding: 18px; border: 1px solid var(--line); border-radius: 9px; background: var(--subtle); }
+.augmentation-setup > svg { margin-top: 2px; color: var(--muted); }
+.augmentation-setup > div { min-width: 0; }
+.augmentation-setup strong { font-size: 13px; font-weight: 550; }
+.augmentation-setup p { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.75; overflow-wrap: anywhere; }
+.augmentation-setup .text-button { margin-top: 10px; }
+.augmentation-notice { margin-bottom: 20px; }
+.augmentation-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 30px 20px; margin-bottom: 25px; border: 1px dashed var(--line-strong); border-radius: 9px; background: var(--subtle); text-align: center; }
+.augmentation-empty > svg { color: var(--muted); }
+.augmentation-empty h3 { font-size: 14px; font-weight: 550; }
+.augmentation-empty p { max-width: 380px; color: var(--muted); font-size: 12px; line-height: 1.8; }
+.augmentation-form { min-width: 0; }
+.augmentation-form fieldset { min-width: 0; padding: 0; margin: 0; border: 0; }
+.augmentation-form legend { padding: 0; margin-bottom: 17px; font-size: 13px; font-weight: 550; }
+.augmentation-form fieldset + fieldset { margin-top: 30px; padding-top: 26px; border-top: 1px solid var(--line); }
+.augmentation-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.augmentation-fields > label,
+.augmentation-prompt-label { display: grid; align-content: start; gap: 8px; min-width: 0; color: var(--muted); font-size: 11px; }
+.augmentation-wide { grid-column: 1 / -1; }
+.augmentation-panel input:not([type=radio]),
+.augmentation-panel select,
+.augmentation-panel textarea { width: 100%; min-width: 0; min-height: 40px; padding: 9px 11px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12px; }
+.augmentation-panel textarea { resize: vertical; line-height: 1.7; }
+.augmentation-panel textarea:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.augmentation-fields small { font-size: 10px; line-height: 1.6; }
+.augmentation-panel fieldset:disabled { opacity: .6; }
+.augmentation-field-error { margin-top: 13px; color: var(--error); font-size: 11px; }
+.augmentation-presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.augmentation-preset { position: relative; min-width: 0; padding: 16px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: pointer; }
+.augmentation-preset > input { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.augmentation-preset:hover { border-color: var(--line-strong); background: var(--subtle); }
+.augmentation-preset:has(input:checked) { border-color: var(--success); background: color-mix(in srgb, var(--success-bg) 45%, var(--surface)); box-shadow: 0 0 0 1px var(--success); }
+.augmentation-preset:has(input:focus-visible) { outline: 2px solid var(--ink); outline-offset: 4px; }
+.augmentation-preset:has(input:disabled) { cursor: not-allowed; }
+.augmentation-preset-heading { display: flex; align-items: center; gap: 8px; }
+.augmentation-preset-heading > svg { color: var(--muted); }
+.augmentation-preset-heading strong { font-size: 12px; font-weight: 550; line-height: 1.5; }
+.augmentation-choice-dot { flex-shrink: 0; width: 13px; height: 13px; margin-left: auto; border: 1px solid var(--line-strong); border-radius: 50%; background: var(--surface); }
+.augmentation-preset:has(input:checked) .augmentation-choice-dot { border: 4px solid var(--success); }
+.augmentation-prompt-label { margin-top: 19px; }
+.augmentation-hint { color: var(--muted); font-size: 11px; line-height: 1.8; overflow-wrap: anywhere; }
+.augmentation-edit > .augmentation-hint { margin-top: 9px; }
+.augmentation-preset-prompt { margin-top: 13px; color: var(--muted); font-size: 11px; line-height: 1.8; }
+.augmentation-preset-prompt summary { cursor: pointer; }
+.augmentation-preset-prompt p { padding: 13px; margin-top: 9px; background: var(--subtle); border: 1px solid var(--line); border-radius: 6px; white-space: pre-wrap; }
+.augmentation-submit { margin-top: 25px; padding-top: 22px; border-top: 1px solid var(--line); }
+.augmentation-disclosure { display: flex; align-items: flex-start; gap: 9px; color: var(--muted); }
+.augmentation-disclosure > svg { margin-top: 2px; }
+.augmentation-disclosure p { font-size: 11px; line-height: 1.8; max-width: 630px; }
+.augmentation-submit-row { display: flex; justify-content: space-between; align-items: center; gap: 22px; margin-top: 19px; }
+.augmentation-submit-row .primary-button { flex-shrink: 0; min-height: 42px; padding: 10px 15px; font-size: 12px; }
+.augmentation-history { padding-top: 28px; margin-top: 35px; border-top: 1px solid var(--line); }
+.augmentation-history-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 19px; }
+.augmentation-history-heading h2 { font-size: 17px; font-weight: 550; letter-spacing: -.3px; }
+.augmentation-history-heading p { margin-top: 5px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.augmentation-history-heading > span { color: var(--muted); font-size: 11px; flex-shrink: 0; padding-top: 4px; }
+.augmentation-history-picker { display: flex; align-items: center; gap: 12px; min-width: 0; color: var(--muted); font-size: 11px; margin-bottom: 15px; }
+.augmentation-history-picker select { flex: 1; }
+.augmentation-run { min-width: 0; padding: 21px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+.augmentation-run-heading { display: flex; justify-content: space-between; align-items: center; gap: 14px; }
+.augmentation-run-heading h3 { font-size: 14px; font-weight: 550; }
+.augmentation-run-heading p { color: var(--muted); font-size: 11px; margin-top: 5px; }
+.augmentation-progress { display: flex; align-items: center; gap: 13px; padding: 23px 0 3px; }
+.augmentation-progress > div { min-width: 0; flex: 1; }
+.augmentation-progress strong { font-size: 12px; font-weight: 500; }
+.augmentation-progress p { color: var(--muted); font-size: 11px; margin-top: 5px; line-height: 1.8; overflow-wrap: anywhere; }
+.augmentation-progress .secondary-button { flex-shrink: 0; }
+.augmentation-run > .augmentation-hint { margin-top: 14px; }
+.augmentation-review { display: flex; align-items: flex-start; gap: 11px; padding: 14px; margin-top: 22px; border-radius: 7px; background: var(--warning-bg); color: var(--warning); }
+.augmentation-review > svg { margin-top: 2px; }
+.augmentation-review strong { font-size: 12px; font-weight: 550; }
+.augmentation-review p { margin: 0; font-size: 11px; line-height: 1.8; }
+.augmentation-warnings { padding-left: 20px; color: var(--warning); font-size: 11px; line-height: 1.8; margin: 12px 0 0; }
+.augmentation-preview-heading { display: flex; justify-content: space-between; align-items: center; gap: 17px; margin: 24px 0 14px; }
+.augmentation-preview-heading > div { min-width: 0; }
+.augmentation-preview-heading h4 { font-size: 13px; font-weight: 550; }
+.augmentation-preview-heading p { color: var(--muted); font-size: 10px; margin-top: 5px; line-height: 1.7; overflow-wrap: anywhere; }
+.augmentation-clip-picker { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; flex-shrink: 0; }
+.augmentation-clip-picker select { width: auto; min-height: 35px; padding: 6px 9px; }
+.augmentation-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; }
+.augmentation-comparison figure { min-width: 0; margin: 0; }
+.augmentation-comparison figcaption { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; font-size: 11px; font-weight: 500; }
+.augmentation-comparison figcaption small { color: var(--muted); font-size: 10px; font-weight: 400; }
+.augmentation-comparison video { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: contain; background: #111; border: 1px solid var(--line); border-radius: 7px; }
+.augmentation-comparison .text-link { margin-top: 10px; font-size: 11px; }
+.augmentation-comparison .augmentation-hint { margin-top: 8px; }
+.augmentation-export { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-top: 24px; padding-top: 22px; border-top: 1px solid var(--line); }
+.augmentation-export > div { min-width: 0; }
+.augmentation-export strong { font-size: 12px; font-weight: 550; }
+.augmentation-export p { color: var(--muted); font-size: 11px; line-height: 1.8; margin-top: 5px; }
+.augmentation-export > a { display: inline-flex; flex-shrink: 0; align-items: center; gap: 9px; text-decoration: none; }
+.augmentation-provenance { padding-top: 19px; margin-top: 21px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+.augmentation-provenance summary { cursor: pointer; }
+.augmentation-provenance dl { display: grid; gap: 10px; margin: 16px 0; }
+.augmentation-provenance dl > div { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 14px; }
+.augmentation-provenance dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+.augmentation-provenance h4 { font-size: 11px; font-weight: 550; }
+.augmentation-effective-prompt { padding: 13px; margin-top: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--subtle); line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+@media (max-width: 1040px) {
+  .augmentation-presets { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .augmentation-preset { padding: 14px; }
+  .augmentation-submit-row { align-items: flex-start; flex-direction: column; gap: 13px; }
+  .augmentation-export { align-items: flex-start; flex-direction: column; gap: 14px; }
+}
+@media (max-width: 640px) {
+  .augmentation-heading { flex-direction: column; gap: 13px; }
+  .augmentation-heading h2 { font-size: 20px; }
+  .augmentation-fields { grid-template-columns: minmax(0, 1fr); gap: 17px; }
+  .augmentation-comparison { grid-template-columns: minmax(0, 1fr); gap: 22px; }
+  .augmentation-run { padding: 15px; }
+  .augmentation-preview-heading { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .augmentation-progress { flex-wrap: wrap; }
+  .augmentation-progress > div { flex-basis: calc(100% - 40px); }
+  .augmentation-progress .secondary-button { margin-left: 30px; }
+  .augmentation-provenance dl > div { grid-template-columns: minmax(0, 1fr); gap: 3px; }
+  .augmentation-submit-row .primary-button { width: 100%; justify-content: center; }
+  .dataset-tab-buttons { gap: 16px; }
+  .dataset-view > .section-tabs > .section-note { display: none; }
+}
+@media (max-width: 380px) {
+  .dataset-tab-buttons { gap: 12px; width: 100%; justify-content: space-between; }
+  .dataset-tab-buttons .section-tab { font-size: 11px; gap: 4px; }
+  .augmentation-export > a { width: 100%; justify-content: center; font-size: 11px; }
+}

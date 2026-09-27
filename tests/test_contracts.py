@@ -231,7 +231,8 @@ def test_local_profile_cannot_claim_unrelated_identity(
 
 def test_saved_job_and_project_shape_is_compatible(job_data: dict[str, Any]) -> None:
     restored = Job.model_validate_json(json.dumps(job_data))
-    assert restored.model_dump(exclude={"stage"}) == job_data
+    assert restored.compute_target is None
+    assert restored.model_dump(exclude={"stage", "compute_target"}) == job_data
     assert restored.stage is None
     project = {"id": "legacy-project", "name": "Project", "created_at": TIMESTAMP}
     assert Project.model_validate_json(json.dumps(project)).model_dump() == project
@@ -240,7 +241,6 @@ def test_saved_job_and_project_shape_is_compatible(job_data: dict[str, Any]) -> 
 @pytest.mark.parametrize(
     "payload",
     [
-        {"repo_id": "owner/data", "revision": "  "},
         {"source": "local", "path": "  "},
         {"source": "local", "path": ".", "repo_id": "owner/data"},
         {"source": "huggingface", "repo_id": "owner/data", "path": "."},
@@ -249,6 +249,12 @@ def test_saved_job_and_project_shape_is_compatible(job_data: dict[str, Any]) -> 
 def test_invalid_intake_source_identity_is_rejected(payload: dict[str, Any]) -> None:
     with pytest.raises(ValidationError):
         IntakeRequest.model_validate(payload)
+
+
+@pytest.mark.parametrize("revision", [None, "", "  ", "\n\t"])
+def test_blank_intake_revision_defaults_to_latest_main(revision) -> None:
+    assert IntakeRequest(repo_id="owner/data", revision=revision).revision == "main"
+    assert IntakeRequest(repo_id="owner/data").revision == "main"
 
 
 @pytest.mark.parametrize("version", [0, 2, 99, "1"])

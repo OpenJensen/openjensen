@@ -95,6 +95,42 @@ class MonitorTests(unittest.TestCase):
         tail.write("more\n")
         self.assertIn("oversized log line omitted", tail.value)
 
+    def test_supported_account_credentials_are_redacted_across_sdk_chunks(self):
+        samples = [
+            ("HF_TOKEN=hf_abcdefghijklmnopqrstuvwxyz\n", "hf_abcdefghijklmnopqrstuvwxyz"),
+            ("Downloaded with hf_abc_def-12345678\n", "hf_abc_def-12345678"),
+            ("SDK token ya29.abc_def-12345678\n", "ya29.abc_def-12345678"),
+            ("Authorization: Basic cHJpdmF0ZTpwdw==\n", "cHJpdmF0ZTpwdw=="),
+            ("Proxy-Authorization=Bearer proxy-private\n", "proxy-private"),
+            ("Cookie: session=private-session; csrf=private-csrf\n", "private-session"),
+            ("Set-Cookie: session=private-cookie; HttpOnly\n", "private-cookie"),
+            ('{"client_secret": "private secret with spaces"}\n', "private secret with spaces"),
+            ('{"Authorization": "Bearer private-json-auth"}\n', "private-json-auth"),
+            ('password="unfinished private secret', "unfinished private secret"),
+            ("https://user:private-url-password@example.com/file\n", "private-url-password"),
+            ("https://example.com/file?token=private-query&part=1\n", "private-query"),
+            ("https://example.com/file?access%5Ftoken=encoded-private\n", "encoded-private"),
+            ("https://example.com/file?X-Goog-Signature=signed-private\n", "signed-private"),
+            ("https://example.com/file#access_token=fragment-private\n", "fragment-private"),
+        ]
+        for text, private in samples:
+            with self.subTest(text=text):
+                tail = monitor.LogTail()
+                for index in range(0, len(text), 3):
+                    tail.write(text[index : index + 3])
+                self.assertNotIn(private, tail.value)
+                self.assertIn("[redacted]", tail.value)
+                self.assertLessEqual(len(tail.value.encode()), monitor.LOG_BYTES)
+
+    def test_redaction_preserves_nonsecret_training_details_and_url_parameters(self):
+        normal = (
+            "step=100 tokens=32 token_count=64 tokenizer=SmolVLM status=RUNNING\n"
+            "https://huggingface.co/lerobot/smolvla_base?revision=abc&file=config.json\n"
+        )
+        self.assertEqual(monitor.clean_log(normal), normal)
+        protected = monitor.clean_log("https://host/model?token=private&part=2&revision=abc")
+        self.assertIn("part=2&revision=abc", protected)
+
     def test_http_200_log_stream_error_must_check_final_request_result(self):
         response, common, sdk, payloads = Mock(), Mock(), Mock(), Mock()
         common.make_authenticated_request.return_value = response

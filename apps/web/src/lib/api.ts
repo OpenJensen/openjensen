@@ -1,11 +1,49 @@
 import type { components } from './api.generated';
+import { basePath, publicPath } from './base-path';
+import type { TrainingModel } from './training-models';
+
+export type CloudProvider = 'gcp';
+export type CloudConfig = { project_id: string; region: string };
+export type CloudConnection = {
+  provider: CloudProvider;
+  name: string;
+  status: 'disconnected' | 'connected' | 'unverified' | 'setup_required' | 'error';
+  config: CloudConfig | null;
+  identity: { account: string | null } | null;
+  checked_at: string | null;
+  message: string | null;
+  setup_commands: string[];
+};
+export type CloudConnections = { providers: CloudConnection[] };
+export type HuggingFaceConnectionStatus = {
+  configured: boolean;
+  username: string | null;
+  token_hint: string | null;
+  checked_at: string | null;
+  message: string | null;
+};
+export type ComputeProvider = CloudProvider | 'local';
+export type LocalComputeSettings = { enabled: boolean; label: string };
+export type GcpComputeSettings = { enabled: boolean; default_gpu: string; disk_size_gb: number; idle_minutes: number };
+export type CloudGpuOption = { id: string; label: string; accelerator: string; gpu_memory_mib: number; gpu_count: number; supported: boolean; available: boolean; unavailable_reason: string | null };
+export type ComputeSettings = {
+  local: LocalComputeSettings;
+  gcp?: GcpComputeSettings;
+  runtimes: PolicyOptions['runtimes'];
+  gpu_options?: CloudGpuOption[];
+  gcp_status?: { status: 'unchecked' | 'ready' | 'setup_required' | 'error'; configured: boolean; project_id: string | null; region: string | null; workspace?: string | null; skypilot_installed: boolean; checked_at: string | null; message: string | null; setup_commands: string[] };
+};
 
 export type PolicyRequest = components['schemas']['PolicyRequest'];
 export type PolicyArtifact = components['schemas']['PolicyArtifact'];
 export type LifecycleResult = components['schemas']['LifecycleResult'];
 export type JobEvent = components['schemas']['JobEvent'];
+export type TrainingTelemetry = components['schemas']['TrainingTelemetry'];
+export type TrainingMetric = components['schemas']['TrainingMetric'];
 export type PolicyOptions = {
-  runtimes: { id: string; label: string; device: 'cpu' | 'cuda'; training: boolean; simulation: boolean }[];
+  runtimes: { id: string; label: string; device: 'cpu' | 'cuda'; training: boolean; simulation: boolean; gpu_name?: string | null; gpu_memory_mib?: number | null; training_gpu_count?: number | null; training_model_ids?: string[]; provider?: ComputeProvider; provider_label?: string; region?: string | null; enabled?: boolean; execution?: 'native' | 'skypilot'; accelerator?: string | null; unavailable_reason?: string | null }[];
+  compute?: { local: LocalComputeSettings; gcp?: GcpComputeSettings };
+  training_models?: TrainingModel[];
   sources: { id: string; label: string; task: string }[];
   training_methods: { id: string; label: string; description: string }[];
   default_training_method: string;
@@ -18,6 +56,15 @@ export type DatasetProfile = components['schemas']['DatasetProfile'];
 export type Capability = components['schemas']['Capability'];
 export type IntakeRequest = components['schemas']['IntakeRequest'];
 export type DatasetJob = Job & { kind: 'dataset.inspect'; request: IntakeRequest; result?: DatasetProfile | null };
+export type AugmentationRequest = components['schemas']['AugmentationRequest'];
+export type AugmentationResult = components['schemas']['AugmentationResult'];
+export type AugmentationJob = Job & { kind: 'dataset.augment'; request: AugmentationRequest; result?: AugmentationResult | null };
+export type AugmentationOptions = components['schemas']['AugmentationOptions'];
+
+export function isAugmentationJob(job: Job): job is AugmentationJob {
+  return job.kind === 'dataset.augment' && 'operation' in job.request &&
+    job.request.operation === 'dataset.augment' && (!job.result || 'clips' in job.result);
+}
 
 export function isDatasetJob(job: Job): job is DatasetJob {
   return job.kind === 'dataset.inspect' && 'source' in job.request &&
@@ -32,10 +79,20 @@ export type FrameSample = components['schemas']['FrameSample'];
 // Static production builds use the Python host's origin. Development uses its
 // loopback API unless the developer explicitly provides an alternative origin.
 export const apiOrigin = (process.env.NEXT_PUBLIC_API_URL ??
-  (process.env.NODE_ENV === 'development' ? 'http://127.0.0.1:8000' : '')).replace(/\/$/, '');
+  (process.env.NODE_ENV === 'development' ? 'http://127.0.0.1:8000' : basePath)).replace(/\/$/, '');
 
-export const apiReferenceUrl = '/docs/';
+export const apiReferenceUrl = publicPath('/docs/');
 export const openApiUrl = `${apiOrigin}/openapi.json`;
+
+// Local preview media uses the API host/prefix; Hub and signed external URLs stay intact.
+export const apiMediaUrl = (url: string) => url.startsWith('/api/') ? `${apiOrigin}${url}` : url;
+
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
 
 async function request<T>(path: string, init?: RequestInit, timeoutMs = 15_000): Promise<T> {
   const controller = new AbortController();
@@ -56,7 +113,7 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs = 15_000):
           message = body.detail.map((issue: { msg?: string }) => issue.msg ?? 'Invalid input').join('; ');
         }
       } catch { /* Preserve the HTTP error when no JSON detail exists. */ }
-      throw new Error(message);
+      throw new ApiError(message, response.status);
     }
     return await response.json() as T;
   } catch (error) {
@@ -75,10 +132,37 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs = 15_000):
 export const artifactDownloadUrl = (projectId: string, artifactId: string) =>
   `${apiOrigin}/api/v1/projects/${encodeURIComponent(projectId)}/artifacts/${encodeURIComponent(artifactId)}/download`;
 
+export const trainingReproducibilityUrl = (jobId: string) =>
+  `${apiOrigin}/api/v1/jobs/${encodeURIComponent(jobId)}/training/reproducibility`;
+
+export const augmentationClipUrl = (jobId: string, index: number, original = false) =>
+  `${apiOrigin}/api/v1/jobs/${encodeURIComponent(jobId)}/augmentation/clips/${index}?original=${original}`;
+
+export const augmentationDownloadUrl = (jobId: string) =>
+  `${apiOrigin}/api/v1/jobs/${encodeURIComponent(jobId)}/augmentation/download`;
+
 export const api = {
+  huggingFaceStatus: () => request<HuggingFaceConnectionStatus>('/huggingface-connection'),
+  saveHuggingFaceToken: (token: string) => request<HuggingFaceConnectionStatus>('/huggingface-connection', { method: 'PUT', body: JSON.stringify({ token }) }, 20_000),
+  removeHuggingFaceToken: () => request<HuggingFaceConnectionStatus>('/huggingface-connection', { method: 'DELETE' }),
+  computeSettings: () => request<ComputeSettings>('/compute-settings'),
+  saveCloudCompute: (gcp: GcpComputeSettings) => request<ComputeSettings>('/compute-settings', { method: 'PUT', body: JSON.stringify({ gcp }) }),
+  checkCloudCompute: () => request<ComputeSettings>('/compute-settings/gcp/check', { method: 'POST' }, 150_000),
+  prepareCloudCompute: () => request<ComputeSettings>('/compute-settings/gcp/prepare', { method: 'POST' }, 260_000),
+  saveComputeSettings: (local: LocalComputeSettings) => request<ComputeSettings>('/compute-settings', { method: 'PUT', body: JSON.stringify({ local }) }),
+  cloudConnections: () => request<CloudConnections>('/cloud-connections'),
+  connectCloud: (provider: CloudProvider, config: CloudConfig) => request<CloudConnection>(`/cloud-connections/${provider}/connect`, { method: 'POST', body: JSON.stringify(config) }, 45_000),
+  recheckCloud: (provider: CloudProvider) => request<CloudConnection>(`/cloud-connections/${provider}/recheck`, { method: 'POST' }, 45_000),
+  disconnectCloud: (provider: CloudProvider) => request<CloudConnection>(`/cloud-connections/${provider}/disconnect`, { method: 'POST' }),
+  augmentationOptions: () => request<AugmentationOptions>('/augmentation-options'),
+  augment: (projectId: string, body: AugmentationRequest) => request<Job>(`/projects/${encodeURIComponent(projectId)}/augmentations`, {
+    method: 'POST', body: JSON.stringify(body),
+  }),
+
   cloudRuns: () => request<components['schemas']['CloudRunsFeed']>('/cloud-runs'),
   policyOptions: () => request<PolicyOptions>('/policy-options'),
   artifacts: (id: string) => request<PolicyArtifact[]>(`/projects/${encodeURIComponent(id)}/artifacts`),
+  trainingTelemetry: (id: string) => request<TrainingTelemetry>(`/jobs/${encodeURIComponent(id)}/training`),
   events: (id: string) => request<JobEvent[]>(`/jobs/${encodeURIComponent(id)}/events`),
   policyJob: (id: string, body: PolicyRequest) => request<Job>(`/projects/${encodeURIComponent(id)}/policy-jobs`, {
     method: 'POST', body: JSON.stringify(body),
@@ -92,6 +176,7 @@ export const api = {
   jobs: (projectId: string) => request<Job[]>(`/projects/${encodeURIComponent(projectId)}/jobs`),
   inspect: (projectId: string, body: IntakeRequest) => request<Job>(
     `/projects/${encodeURIComponent(projectId)}/intakes`, { method: 'POST', body: JSON.stringify(body) },
+    30_000,
   ),
   cancel: (jobId: string) => request<Job>(`/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' }),
   episodes: (jobId: string, offset = 0, limit = 6) => request<EpisodePage>(

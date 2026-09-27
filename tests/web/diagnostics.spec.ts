@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { waitForJob } from './job-waiter';
 
-const configured = 'http://127.0.0.1:8766';
+const configured = `http://127.0.0.1:${process.env.FIREBIRD_DIAGNOSTICS_CONFIGURED_PORT ?? '8766'}`;
 
 async function project(request: APIRequestContext, origin = '') {
   const response = await request.post(`${origin}/api/v1/projects`, { data: { name: 'Diagnostics browser test' } });
@@ -127,7 +127,7 @@ test('guides an empty project to Quantize and blocks unsupported simulation', as
   await expect(page.getByText('Evaluates LIBERO Object task 0', { exact: false })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start diagnostics', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Open Quantize', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Create a smaller policy', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Quantize policy', exact: true })).toBeVisible();
   const artifact = await policy(request, id);
   await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
   await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();

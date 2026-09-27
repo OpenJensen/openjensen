@@ -1,8 +1,12 @@
 # Firebird application
 
-A local VLA lifecycle application with persistent projects, dataset intake and visual exploration, selectable LoRA/QLoRA fine-tuning, native quantization, evaluation and reload-verified packages through shared web/CLI jobs. Native operations require configured worker environments and the documented acceptance checks. Distillation remains planned.
+A self-hosted VLA workspace with persistent projects, visual dataset exploration, cloud training adapters for all 15 policy choices observed in KiteML, and checkpoint-to-GGUF quantization for SmolVLA. SmolVLA supports LoRA/QLoRA; the other policies use isolated native training environments. Configured native workers provide evaluation, Spatial workflows and reload-verified packages through shared web/CLI jobs. Distillation remains planned.
 
-Start with the [policy workflow and setup guide](docs/policy-workflow.md). Recommended quantization defaults depend on the execution target; detailed metrics and advanced controls live under **Settings & diagnostics**. See [validation evidence](docs/workflow-validation.md) for the scope of actual hardware checks.
+The application can run on Xbox while SkyPilot provisions GCP workers. Models and datasets download on the worker; checkpoints stay in private GCS. The UI shows live training metrics, labels checkpoints by model and step, and lets you quantize the latest or an earlier checkpoint. Quantization merges the trained weights, packs Q4/Q8 language tensors, and requires an actual native inference sanity check before reporting success. It does not establish robot task success.
+
+Start with [cloud training and quantization](docs/skypilot-training.md), [model adapters](docs/native-training.md), or the [Xbox deployment guide](deploy/xbox/README.md). The [live verification record](docs/cloud-training-verification.md) separates completed GPU runs from configuration/dependency checks and pending validation. Local evaluation and robot execution require separately configured native workers; the UI exposes only compatible targets. See the [native policy workflow](docs/policy-workflow.md), [Spatial workflow](docs/spatial-workflow.md) and [upstream validation evidence](docs/workflow-validation.md) for their setup and acceptance scope.
+
+**Dataset → Augmentation** supports Gemini Omni lighting, texture and custom appearance edits for selected camera clips, with before/after review and provenance exports. See the [augmentation setup and scope](docs/augmentation.md); this optional feature uses the saved Google Cloud login or a server-side Gemini API key, plus FFmpeg.
 
 Application Git root: this directory. The nested `firebird-hackathon-prep/` directory remains a separate, ignored Git repository. Its [accepted plan](firebird-hackathon-prep/docs/idea/18_stack-and-phased-build-plan.md) and [task register](firebird-hackathon-prep/docs/tasks/README.md) hold planning and coordination records; they are not included in an application-only clone.
 
@@ -51,7 +55,7 @@ Local metadata intake is disabled by default. Set `FIREBIRD_LOCAL_DATA_ROOT` to 
 
 ## Explore a dataset visually
 
-The **Sources** view includes two real, revision-pinned starters: SO-101 pickup and SO-100 pick-and-place. Create a project, select a starter or enter a public LeRobot repository, and click **Inspect dataset**. The **Inspection** view preserves metadata counts, warnings, and source provenance.
+The **Sources** view includes two revision-pinned starters: SO-101 pickup and SO-100 pick & place. Each card uses a real source-camera still; dataset counts and preview checks are recorded in [dataset provenance](apps/web/public/datasets/README.md). Create a project, select a starter or enter a public LeRobot repository, and click **Inspect dataset**. The **Inspection** view preserves metadata counts, warnings, and source provenance.
 
 Click **Load visual preview** to explicitly fetch the episode index and a small sample of recorded data. Select an episode, play or seek its camera views with the shared episode controls, and switch between joint/state and action sample tables. Camera playback uses the source's episode offsets and stops on the selected episode's last frame. Switching views pauses playback.
 
@@ -86,3 +90,7 @@ pnpm test:web
 ```
 
 Do not hand-edit generated API types. Claim a task card before parallel work, coordinate shared schema/manifest/migration changes, and provide evidence plus independent review. CI runs application and browser checks on Linux/Windows, plus separate lightweight native-worker contract checks. Full GPU workflows and Windows GPU acceptance remain separate validation gates.
+
+Connect Google Cloud once in **Settings → Compute**, then choose L4, T4, or A100 and click **Start fine-tuning**. Provider preparation and SkyPilot dispatch happen automatically. See [compute settings](docs/compute-settings.md) and [SkyPilot job lifecycle](docs/skypilot-training.md).
+
+The **Fine-tune** run monitor shows reported optimizer steps and percentage, training and validation loss, learning rate, duration, estimated remaining training time, checkpoints, activity and worker output. **Reproducibility** exposes pinned model/dataset inputs, the resolved recipe, seed, episode split and available runtime evidence as downloadable JSON. New runs record evidence from submission onward; older runs show only what their saved files establish. See [training comparison and monitoring](docs/training-comparison.md) for the Kite ML comparison, verification scope and remaining model support.

@@ -1,3 +1,5 @@
+import { publicPath } from './base-path';
+
 export type DatasetStarter = {
   id: string;
   title: string;
@@ -9,7 +11,8 @@ export type DatasetStarter = {
   cameras: number;
 };
 
-// Counts and stills belong to these exact public dataset revisions.
+// Counts and stills belong to these exact public dataset revisions. See
+// public/datasets/README.md for sources and the preview verification record.
 export const datasetStarters: DatasetStarter[] = [
   {
     id: 'so101-pickup',
@@ -17,7 +20,7 @@ export const datasetStarters: DatasetStarter[] = [
     repoId: 'codywang/so101_pickup_test',
     revision: 'ecef85bc07005f771ad86deeff1427f9d72953ed',
     description: 'A single arm, a cup, and a front camera.',
-    poster: '/datasets/so101-pickup.jpg',
+    poster: publicPath('/datasets/so101-pickup.jpg'),
     episodes: 30,
     cameras: 1,
   },
@@ -27,7 +30,7 @@ export const datasetStarters: DatasetStarter[] = [
     repoId: 'lerobot/svla_so100_pickplace',
     revision: '728583b5eaf9e739a7f119e2def466fa1d552402',
     description: 'Tabletop manipulation from top and wrist views.',
-    poster: '/datasets/so100-pickplace.jpg',
+    poster: publicPath('/datasets/so100-pickplace.jpg'),
     episodes: 50,
     cameras: 2,
   },

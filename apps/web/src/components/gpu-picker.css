@@ -1,0 +1,109 @@
+.gpu-picker {
+  display: grid;
+  gap: 9px;
+  width: min(100%, 520px);
+  min-width: 0;
+}
+.gpu-picker-label { color: var(--muted); font-size: 11px; font-weight: 500; }
+.gpu-picker-control { position: relative; min-width: 0; }
+.gpu-picker-trigger {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  min-height: 66px;
+  padding: 13px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  color: var(--ink);
+  background: linear-gradient(120deg, var(--surface), var(--subtle));
+  text-align: left;
+  box-shadow: 0 2px 4px color-mix(in srgb, var(--ink) 3%, transparent);
+}
+.gpu-picker-trigger:hover:not(:disabled) { border-color: var(--muted); background: var(--surface); }
+.gpu-picker-trigger[aria-expanded="true"] { border-color: var(--ink); }
+.gpu-picker-trigger:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.gpu-picker-value { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; letter-spacing: -.2px; overflow-wrap: anywhere; }
+.gpu-picker-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  color: var(--gpu-mark-ink, var(--muted));
+  background: var(--gpu-mark-bg, var(--hover));
+  border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  border-radius: 10px;
+}
+.gpu-picker [data-gpu="l4"] { --gpu-mark-ink: #427253; --gpu-mark-bg: #edf5e8; }
+.gpu-picker [data-gpu="t4"] { --gpu-mark-ink: #536e8d; --gpu-mark-bg: #edf2f8; }
+.gpu-picker [data-gpu="a100"] { --gpu-mark-ink: #75608c; --gpu-mark-bg: #f3eef8; }
+:root[data-theme="dark"] .gpu-picker [data-gpu="l4"] { --gpu-mark-ink: #a1c88d; --gpu-mark-bg: #253023; }
+:root[data-theme="dark"] .gpu-picker [data-gpu="t4"] { --gpu-mark-ink: #9bb7d9; --gpu-mark-bg: #242c38; }
+:root[data-theme="dark"] .gpu-picker [data-gpu="a100"] { --gpu-mark-ink: #c2abd7; --gpu-mark-bg: #302837; }
+.gpu-picker-memory {
+  flex-shrink: 0;
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.gpu-picker-chevron { flex-shrink: 0; margin-left: 3px; color: var(--muted); transition: transform .16s ease; }
+.gpu-picker-trigger[aria-expanded="true"] .gpu-picker-chevron { transform: rotate(180deg); }
+.gpu-picker-menu {
+  position: absolute;
+  inset: calc(100% + 7px) 0 auto;
+  z-index: 30;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 6px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 13px;
+  background: var(--surface);
+  box-shadow: 0 14px 38px color-mix(in srgb, var(--ink) 11%, transparent), 0 3px 8px color-mix(in srgb, var(--ink) 5%, transparent);
+  animation: gpu-picker-reveal .12s ease-out;
+}
+.gpu-picker-menu-above { inset: auto 0 calc(100% + 7px); }
+.gpu-picker-option {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 64px;
+  min-width: 0;
+  padding: 11px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background-color .12s, border-color .12s;
+}
+.gpu-picker-option + .gpu-picker-option { margin-top: 3px; }
+.gpu-picker-option[aria-selected="true"] { background: var(--subtle); }
+.gpu-picker-option.is-active { background: var(--hover); border-color: var(--line); }
+.gpu-picker-copy { display: grid; flex: 1; min-width: 0; gap: 3px; }
+.gpu-picker-copy strong { font-size: 13px; font-weight: 550; line-height: 1.35; overflow-wrap: anywhere; }
+.gpu-picker-copy small { color: var(--muted); font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+.gpu-picker-selected { display: grid; place-items: center; flex: 0 0 18px; width: 18px; color: var(--success); }
+@keyframes gpu-picker-reveal { from { opacity: 0; } to { opacity: 1; } }
+@media (max-width: 480px) {
+  .gpu-picker { width: 100%; }
+  .gpu-picker-trigger { gap: 10px; padding: 11px 12px; min-height: 62px; }
+  .gpu-picker-option { gap: 9px; padding: 10px 8px; }
+  .gpu-picker-memory { padding-inline: 5px; }
+  .gpu-picker-mark { flex-basis: 32px; width: 32px; height: 32px; border-radius: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gpu-picker-menu { animation: none; }
+  .gpu-picker-chevron, .gpu-picker-option { transition: none; }
+}

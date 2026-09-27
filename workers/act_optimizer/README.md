@@ -129,3 +129,43 @@ Tests generate a real small ACT policy and saved processors. They cover fresh-pr
 parity, strict loader failures, source mutation, missing/invalid statistics,
 malformed proof reports, bounded process termination, package tampering and
 no-replacement publication. CI does not need the private checkpoint or a GPU.
+
+
+## Preparatory native-training source admission
+
+`firebird_act.training_source.admit_training_source` performs a read-only,
+point-in-time check of a completed application ACT training bundle. The caller
+must supply its registered outer manifest SHA256 and artifact identity. It
+verifies both complete manifest inventories, the saved ACT/full-training recipe
+and upstream revision, required resume files, dataset/camera lineage, and the
+existing exporter's config, processor and FP32 parsing rules. Bounded file reads
+reject symlinks, special files, unsafe paths, unfinalized entries and source
+changes detected during admission. Parent directories must remain trusted and
+operator-owned; this is not a hostile-filesystem sandbox.
+
+The saved positive integer counter in `training_state/training_step.json` must
+match the inner manifest step. The [pinned upstream writer](https://github.com/huggingface/lerobot/blob/e595b7902714ba51f91e47523f66f89c5181b649/src/lerobot/common/train_utils.py#L140)
+also stores batch, precision and topology metadata; these remain hashed provenance,
+not an independently verified native-resume contract.
+
+The full-bundle inventory permits at most 128 entries, 2 GiB per file and 4 GiB
+total. These are inventory limits, not broader export support: the existing
+exporter's tighter 512 MiB weight-file limit and JSON/statistics limits still apply.
+
+The returned source is `checkpoint/pretrained_model`. Its receipt binds source
+files, both manifests, optimizer step, upstream revision and dataset identity.
+The original bundle, including optimizer/RNG state and saved probes, is unchanged.
+Opaque training-state/probe files are hashed, never deserialized by this adapter.
+Remote-only descriptors must first be materialized through a separately verified
+path; this module performs no network calls.
+
+This is source admission only: it neither exports nor loads a model, and the
+returned path is not an immutable snapshot. Re-admit after any source change and
+bind these file identities into the eventual export snapshot. The receipt sets
+runtime compatibility and export verification to false. The application has no
+new ACT export route or capability. Cross-version producer0.6.2 to consumer0.6.1
+loading still requires a separate native-runtime test. Existing synthetic
+serialization tests and a0.6.1 policy fixture do not establish that compatibility.
+The recorded chunk20 PushT checkpoint remains outside this exporter's chunk100,
+six-coordinate recipe. Inference-only output must never replace or be presented
+as the original resumable training checkpoint.

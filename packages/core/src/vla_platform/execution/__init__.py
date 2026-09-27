@@ -7,7 +7,10 @@ from uuid import uuid4
 
 from sqlalchemy import insert, select, update
 
+from vla_platform.augmentation.contracts import AugmentationRequest
+from vla_platform.augmentation.service import Augmentation
 from vla_platform.contracts import TERMINAL, IntakeRequest, Job, WorkerRequest, WorkerResult, now
+from vla_platform.datasets.cache import Inspections
 from vla_platform.lifecycle.contracts import PolicyRequest
 from vla_platform.lifecycle.service import Lifecycle
 from vla_platform.settings import Settings
@@ -23,7 +26,10 @@ class Execution:
         self.tasks: dict[str, asyncio.Task] = {}
         self.lock = asyncio.Lock()
         self.native_slots = asyncio.Semaphore(1)
+        self.cloud_slots = asyncio.Semaphore(2)
         self.lifecycle = Lifecycle(self)
+        self.augmentation = Augmentation(self)
+        self.inspections = Inspections(self)
         self.slots = asyncio.Semaphore(2)  # Metadata jobs only; not a GPU admission policy.
 
     async def get(self, job_id: str) -> Job | None:
@@ -53,17 +59,29 @@ class Execution:
                 .values(status=job.status, record=job.model_dump())
             )
 
-    async def submit(self, project_id: str, request: IntakeRequest | PolicyRequest) -> Job:
+    async def submit(
+        self, project_id: str, request: IntakeRequest | PolicyRequest | AugmentationRequest
+    ) -> Job:
+        compute_target = None
         if isinstance(request, PolicyRequest):
-            await self.lifecycle.validate(project_id, request)
+            compute_target = await self.lifecycle.validate(project_id, request)
+        elif isinstance(request, AugmentationRequest):
+            await self.augmentation.validate(project_id, request)
         job = Job(
             id=str(uuid4()),
             project_id=project_id,
-            kind=request.operation if isinstance(request, PolicyRequest) else "dataset.inspect",
+            kind=request.operation
+            if isinstance(request, (PolicyRequest, AugmentationRequest))
+            else "dataset.inspect",
             request=request,
+            compute_target=compute_target,
             created_at=now(),
             updated_at=now(),
         )
+        if isinstance(request, PolicyRequest):
+            from vla_platform.lifecycle.telemetry import capture
+
+            await capture(self.lifecycle, job)
         async with self.storage.engine.begin() as connection:
             await connection.execute(
                 insert(jobs).values(
@@ -82,6 +100,8 @@ class Execution:
                 return job
             job.status = "cancelled"
             job.error = "Cancelled by the user; no later stage will be published."
+            if isinstance(job.request, AugmentationRequest):
+                job.error += " An already submitted Gemini request may still run and incur charges."
             await self.save(job)
             task = self.tasks.get(job_id)
             if task:
@@ -113,6 +133,9 @@ class Execution:
 
     async def run(self, job_id: str) -> None:
         initial = await self.get(job_id)
+        if initial and isinstance(initial.request, AugmentationRequest):
+            await self.augmentation.run(initial)
+            return
         if initial and isinstance(initial.request, PolicyRequest):
             await self.run_policy(initial)
             return
@@ -166,7 +189,9 @@ class Execution:
 
     async def run_policy(self, job: Job) -> None:
         try:
-            async with self.native_slots:
+            # Each cloud run owns an isolated GPU; local native work shares one.
+            slots = self.cloud_slots if job.compute_target is not None else self.native_slots
+            async with slots:
                 async with self.lock:
                     current = await self.get(job.id)
                     if current.status in TERMINAL:
@@ -188,6 +213,9 @@ class Execution:
                 if current.status not in TERMINAL:
                     current.status = "failed"
                     current.error = f"{type(exc).__name__}: {str(exc)[:2000]}"
+                    await self.save(current)
+                elif current.status == "cancelled" and "Cloud cleanup" in str(exc):
+                    current.error = f"{current.error or 'Cancelled.'}\n{str(exc)[:2000]}"
                     await self.save(current)
 
     async def reconcile(self) -> None:
@@ -230,7 +258,14 @@ class Execution:
                             " An orphan metadata worker may still be running; late result files "
                             "are not adopted. Verify process identity before manual cleanup."
                         )
-                    if isinstance(job.request, PolicyRequest):
+                    if isinstance(job.request, AugmentationRequest):
+                        job.error = (
+                            "Application stopped during augmentation. No outputs published or "
+                            "paid requests retried. An already submitted Gemini request may "
+                            "still run and incur charges. Submit a new job to retry explicitly."
+                        )
+                        job.result = None
+                    elif isinstance(job.request, PolicyRequest):
                         evidence = evidence.replace("new inspection", "new job")
                         evidence = evidence.replace(
                             "orphan metadata worker", "orphan native worker"
@@ -248,6 +283,21 @@ class Execution:
                         .where(jobs.c.id == job.id, jobs.c.status == previous_status)
                         .values(status=job.status, record=job.model_dump())
                     )
+        # SkyPilot clusters outlive the API process. Reconcile only durable,
+        # job-owned dispatch records, never unrelated operator clusters.
+        from vla_platform.lifecycle.sky_runner import recover
+
+        for failure in await recover(self.settings.data_dir):
+            job = await self.get(failure["job_id"])
+            if job is None:
+                continue
+            message = failure["error"]
+            await self.lifecycle.event(job, "cloud_cleanup", message)
+            async with self.lock:
+                current = await self.get(job.id)
+                if current and message not in (current.error or ""):
+                    current.error = f"{current.error}\n{message}" if current.error else message
+                    await self.save(current)
 
     async def close(self) -> None:
         tasks = list(self.tasks.values())

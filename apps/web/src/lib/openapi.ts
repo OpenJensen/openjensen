@@ -85,7 +85,7 @@ export function shellQuote(value: string): string {
 }
 
 export function curlExample(endpoint: Endpoint, origin: string): string {
-  const url = new URL(endpoint.path, origin).href.replace(/%7B/gi, '{').replace(/%7D/gi, '}');
+  const url = new URL(endpoint.path.replace(/^\/+/, ''), `${origin.replace(/\/+$/, '')}/`).href.replace(/%7B/gi, '{').replace(/%7D/gi, '}');
   const lines = [`curl --request ${endpoint.method} ${shellQuote(url)}`, `  --header 'Accept: application/json'`];
   // The reference never fabricates request bodies: payloads come from a local file
   // written against the schema shown alongside the example.

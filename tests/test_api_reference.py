@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
-from fastapi.routing import APIRoute
+from fastapi.routing import APIRoute, iter_route_contexts
 from fastapi.testclient import TestClient
 from vla_platform.api import create_app
 from vla_platform.settings import Settings
@@ -147,8 +147,8 @@ def test_openapi_covers_every_public_api_route_and_method(tmp_path):
     app = create_app(Settings(data_dir=tmp_path / "workspace"))
     registered = {
         (route.path, method.lower())
-        for route in app.routes
-        if isinstance(route, APIRoute) and route.path.startswith("/api/")
+        for route in iter_route_contexts(app.routes)
+        if isinstance(route.original_route, APIRoute) and route.path.startswith("/api/")
         for method in route.methods
     }
     documented = {

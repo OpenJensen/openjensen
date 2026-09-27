@@ -19,9 +19,10 @@ class TrainConfig:
     dataset_revision: str = "ecef85bc07005f771ad86deeff1427f9d72953ed"
     output_dir: str = "outputs/smolvla-qlora"
     camera_key: str = "observation.images.front"
-    steps: int = 1000
-    batch_size: int = 1
-    gradient_accumulation_steps: int = 8
+    camera_keys: list[str] | None = None
+    steps: int = 20000
+    batch_size: int = 64
+    gradient_accumulation_steps: int = 1
     learning_rate: float = 0.0001
     weight_decay: float = 0.01
     max_grad_norm: float = 1.0
@@ -33,7 +34,7 @@ class TrainConfig:
     validation_fraction: float = 0.2
     eval_every: int = 100
     eval_batches: int = 20
-    save_every: int = 100
+    save_every: int = 4000
     log_every: int = 10
     num_workers: int = 0
     seed: int = 42
@@ -49,6 +50,13 @@ class TrainConfig:
         for name in ("model_id", "backbone_id", "dataset_id", "camera_key", "output_dir"):
             if not isinstance(getattr(self, name), str) or not getattr(self, name).strip():
                 raise ValueError(f"{name} must be a non-empty string")
+        if self.camera_keys is not None:
+            if not isinstance(self.camera_keys, list) or not self.camera_keys:
+                raise ValueError("camera_keys must be a non-empty list")
+            if any(not isinstance(key, str) or not key.strip() for key in self.camera_keys):
+                raise ValueError("camera_keys must contain non-empty strings")
+            if len(set(self.camera_keys)) != len(self.camera_keys):
+                raise ValueError("camera_keys must not contain duplicates")
         positive = (
             "steps",
             "batch_size",
@@ -82,6 +90,23 @@ class TrainConfig:
         if not 0 <= self.lora_dropout < 1 or not 0 < self.validation_fraction < 1:
             raise ValueError("Require dropout in [0,1) and validation_fraction in (0,1)")
         return self
+
+    @property
+    def selected_camera_keys(self):
+        """Preserve explicit camera order; old recipes keep their single camera."""
+        return tuple(self.camera_keys) if self.camera_keys is not None else (self.camera_key,)
+
+    def resume_matches(self, previous):
+        """Compare effective recipes across the legacy single-camera representation."""
+
+        def canonical(config):
+            data = config.to_dict()
+            data.pop("output_dir")
+            data.pop("camera_key")
+            data["camera_keys"] = list(config.selected_camera_keys)
+            return data
+
+        return canonical(self) == canonical(previous)
 
     def to_dict(self):
         return asdict(self)

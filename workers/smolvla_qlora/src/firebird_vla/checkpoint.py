@@ -6,7 +6,6 @@ import os
 import re
 import shutil
 import tempfile
-from dataclasses import replace
 from pathlib import Path
 
 
@@ -144,14 +143,11 @@ def resolve_checkpoint(path):
     raise ValueError(f"No complete, integrity-verified training checkpoint in {path}: {detail}")
 
 
-def publish_checkpoint(staging, destination):
-    """Commit a complete bundle before atomically advancing its advisory pointer."""
+def commit_checkpoint_directory(staging, destination):
+    """Durably expose a finished private directory; the caller validates its inventory."""
     staging, destination = Path(staging), Path(destination)
-    if destination.exists():
+    if destination.exists() or destination.is_symlink():
         raise FileExistsError(f"Refusing to overwrite checkpoint {destination}")
-    manifest = verify_training_checkpoint(staging)
-    if destination.name != f"checkpoint-{manifest['step']:06d}":
-        raise ValueError("Checkpoint destination and manifest optimizer steps differ")
     # Flush contents and directory entries before making this bundle discoverable.
     for path in staging.rglob("*"):
         if path.is_file():
@@ -163,6 +159,18 @@ def publish_checkpoint(staging, destination):
     _sync_directory(staging)
     os.rename(staging, destination)
     _sync_directory(destination.parent)
+    return destination
+
+
+def publish_checkpoint(staging, destination):
+    """Commit a complete bundle before atomically advancing its advisory pointer."""
+    staging, destination = Path(staging), Path(destination)
+    if destination.exists():
+        raise FileExistsError(f"Refusing to overwrite checkpoint {destination}")
+    manifest = verify_training_checkpoint(staging)
+    if destination.name != f"checkpoint-{manifest['step']:06d}":
+        raise ValueError("Checkpoint destination and manifest optimizer steps differ")
+    commit_checkpoint_directory(staging, destination)
     write_json(
         destination.parent / "latest.json",
         {"checkpoint": destination.name, "step": manifest["step"]},
@@ -170,15 +178,27 @@ def publish_checkpoint(staging, destination):
     return destination
 
 
-def validate_resume_state(state, manifest, cfg):
+def validate_resume_cursor(step, consumed, accumulation, scaled):
+    """Scaled FP16 can consume batches without completing an optimizer update."""
+    if (
+        type(step) is not int
+        or type(consumed) is not int
+        or step < 0
+        or consumed < step * accumulation
+        or consumed % accumulation
+        or (not scaled and consumed != step * accumulation)
+    ):
+        raise ValueError("Checkpoint batch cursor is inconsistent with optimizer step")
+
+
+def validate_resume_state(state, manifest, cfg, *, scaled=False):
     """Reject a hashed but inconsistent optimizer cursor before restoring state."""
     if not isinstance(state, dict):
         raise ValueError("Checkpoint training state must be a mapping")
     step, consumed = state.get("step"), state.get("consumed_batches")
     if type(step) is not int or step < 1 or step != manifest["step"]:
         raise ValueError("Checkpoint training state and manifest optimizer steps differ")
-    if type(consumed) is not int or consumed != step * cfg.gradient_accumulation_steps:
-        raise ValueError("Checkpoint batch cursor is inconsistent with optimizer step")
+    validate_resume_cursor(step, consumed, cfg.gradient_accumulation_steps, scaled)
     if step >= cfg.steps:
         raise ValueError("Checkpoint already completed this recipe")
 
@@ -187,7 +207,7 @@ def validate_resume_recipe(directory, cfg):
     from .config import TrainConfig
 
     previous = TrainConfig.load(Path(directory) / "recipe.json")
-    if replace(previous, output_dir=cfg.output_dir) != cfg:
+    if not cfg.resume_matches(previous):
         raise ValueError("Resume requires the original recipe except output_dir")
 
 
@@ -204,6 +224,9 @@ def save_checkpoint(
     step,
     consumed_batches,
     probe_action,
+    *,
+    scaler=None,
+    compute_dtype=None,
 ):
     import random
     from importlib.metadata import version
@@ -224,18 +247,22 @@ def save_checkpoint(
         write_json(staging / "stats.json", stats)
         write_json(staging / "splits.json", splits)
         save_file({"action": probe_action.contiguous()}, str(staging / "probe.safetensors"))
-        torch.save(
-            {
-                "step": step,
-                "consumed_batches": consumed_batches,
-                "optimizer": optimizer.state_dict(),
-                "scheduler": scheduler.state_dict(),
-                "torch_rng": torch.get_rng_state(),
-                "cuda_rng": torch.cuda.get_rng_state(0),
-                "python_rng": random.getstate(),
-            },
-            staging / "training.pt",
-        )
+        training_state = {
+            "step": step,
+            "consumed_batches": consumed_batches,
+            "optimizer": optimizer.state_dict(),
+            "scheduler": scheduler.state_dict(),
+            "torch_rng": torch.get_rng_state(),
+            "cuda_rng": torch.cuda.get_rng_state(0),
+            "python_rng": random.getstate(),
+        }
+        if compute_dtype is not None:
+            if compute_dtype not in {"float16", "bfloat16"}:
+                raise ValueError("Unsupported checkpoint compute dtype")
+            training_state["compute_dtype"] = compute_dtype
+        if scaler is not None and scaler.is_enabled():
+            training_state["scaler"] = scaler.state_dict()
+        torch.save(training_state, staging / "training.pt")
         files = {
             p.relative_to(staging).as_posix(): sha256(p)
             for p in sorted(staging.rglob("*"))
@@ -248,7 +275,9 @@ def save_checkpoint(
                 "step": step,
                 "files": files,
                 "representation": (
-                    "pinned-base+nf4-double-quant-bf16-storage+peft-adapter"
+                    "pinned-base+nf4-double-quant-"
+                    + ("fp16" if compute_dtype == "float16" else "bf16")
+                    + "-storage+peft-adapter"
                     if cfg.method == "qlora"
                     else "pinned-base+peft-adapter"
                 ),
@@ -269,29 +298,38 @@ def save_checkpoint(
                 },
                 "task_success": None,
                 "reload_verified": False,
+                "compute_dtype": compute_dtype or "bfloat16",
             },
         )
         publish_checkpoint(staging, destination)
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
         raise
+    if os.getenv("FIREBIRD_CHECKPOINT_EXPORT_ROOT"):
+        from .snapshots import publish_checkpoint as publish_snapshot
+
+        publish_snapshot(destination, Path(os.environ["FIREBIRD_CHECKPOINT_EXPORT_ROOT"]))
     return destination
 
 
 def load_for_inference(directory):
     """Return (policy, preprocessor, postprocessor) for raw batched LeRobot observations."""
     from .config import TrainConfig
-    from .model import build_policy, make_processors, require_runtime
+    from .model import build_policy, make_processors, require_runtime, runtime_compute_dtype
 
     require_runtime()
     directory = Path(directory)
     manifest = verify_bundle(directory)
+    # FP16-trained NF4 bases must still be packed from FP16 on newer GPUs;
+    # silently taking the newer GPU's BF16 default changes the trained policy.
+    selected_dtype = runtime_compute_dtype(manifest.get("compute_dtype", "bfloat16"))
     cfg = TrainConfig.load(directory / "recipe.json")
     policy, config, quantized = build_policy(
         cfg,
         policy_config_dir=directory / "policy",
         adapter_dir=directory / "adapter",
         trainable=False,
+        compute_dtype=selected_dtype,
     )
     if quantized != manifest["quantized_modules"]:
         raise ValueError("Reloaded quantization layout differs from the saved checkpoint")
