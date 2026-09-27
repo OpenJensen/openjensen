@@ -33,6 +33,34 @@ def block_network(event: str, arguments: tuple[object, ...]) -> None:
         raise RuntimeError("Runtime verification is offline")
 
 
+def installed_versions(pins: dict[str, str], prefix: Path) -> dict[str, str]:
+    """Read each distribution's metadata once while retaining exact admission checks."""
+    indexed: dict[str, list[tuple[importlib.metadata.Distribution, str | None]]] = {}
+    for distribution in importlib.metadata.distributions():
+        metadata = distribution.metadata
+        name = metadata["Name"]
+        if not isinstance(name, str):
+            raise ValueError("Installed distribution metadata has no package name")
+        normalized = name.lower().replace("_", "-")
+        if normalized in pins:
+            indexed.setdefault(normalized, []).append((distribution, metadata["Version"]))
+    versions = {}
+    prefix = prefix.resolve()
+    for name, expected in pins.items():
+        matches = indexed.get(name, [])
+        if len(matches) != 1:
+            raise ValueError(
+                f"{name} has missing or duplicate metadata; no borrowed environment paths"
+            )
+        distribution, actual = matches[0]
+        if not isinstance(actual, str) or actual.split("+")[0] != expected:
+            raise ValueError(f"{name} requires {expected}, found {actual}")
+        if not Path(str(distribution.locate_file(""))).resolve().is_relative_to(prefix):
+            raise ValueError(f"{name} is borrowed from another environment")
+        versions[name] = actual
+    return versions
+
+
 def check(role: str, repo: Path) -> dict[str, object]:
     """Check an independent installed runtime and its fixed repository modules."""
     if role not in {"model", "reader"} or sys.version_info[:2] != (3, 12):
@@ -42,24 +70,7 @@ def check(role: str, repo: Path) -> dict[str, object]:
     pins = PINS | {"lerobot": "0.6.1" if role == "model" else "0.6.2"}
     if role == "reader":
         pins |= READER_PINS
-    versions = {}
-    distributions = list(importlib.metadata.distributions())
-    for name, expected in pins.items():
-        matches = [d for d in distributions if d.metadata["Name"].lower().replace("_", "-") == name]
-        if len(matches) != 1:
-            raise ValueError(
-                f"{name} has missing or duplicate metadata; no borrowed environment paths"
-            )
-        actual = matches[0].version
-        if actual.split("+")[0] != expected:
-            raise ValueError(f"{name} requires {expected}, found {actual}")
-        if (
-            not Path(str(matches[0].locate_file("")))
-            .resolve()
-            .is_relative_to(Path(sys.prefix).resolve())
-        ):
-            raise ValueError(f"{name} is borrowed from another environment")
-        versions[name] = actual
+    versions = installed_versions(pins, Path(sys.prefix))
     if platform.system() == "Linux" and any(
         not versions[n].endswith("+cpu") for n in ("torch", "torchvision")
     ):

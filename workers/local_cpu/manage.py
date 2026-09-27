@@ -324,15 +324,37 @@ def verify(
             raise ValueError(f"Missing executable for {role}; run the explicit install first")
         # Bounded JSON stdout, no keys are forwarded and probe forbids socket activity.
         with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
-            result = subprocess.run(
-                [str(python), "-I", str(HERE / "probe.py"), role, str(REPO)],
-                env=environment(root, offline=True),
-                stdin=subprocess.DEVNULL,
-                stdout=stdout,
-                stderr=stderr,
-                timeout=60,
-                check=False,
-            )
+            try:
+                result = subprocess.run(
+                    [str(python), "-I", str(HERE / "probe.py"), role, str(REPO)],
+                    env=environment(root, offline=True),
+                    stdin=subprocess.DEVNULL,
+                    stdout=stdout,
+                    stderr=stderr,
+                    timeout=60,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired as error:
+                stdout.seek(0)
+                raw = stdout.read(64 * 1024 + 1)
+                complete_json = False
+                if len(raw) <= 64 * 1024:
+                    try:
+                        complete_json = isinstance(json.loads(raw.decode("utf-8")), dict)
+                    except (ValueError, UnicodeError):
+                        pass
+                stderr.seek(0, os.SEEK_END)
+                stderr.seek(max(0, stderr.tell() - 2000))
+                tail = stderr.read(2000).decode("utf-8", errors="replace")
+                progress = (
+                    "a complete JSON object was captured but the process did not exit"
+                    if complete_json
+                    else "no complete JSON object was captured"
+                )
+                raise ValueError(
+                    f"{role} runtime verification exceeded its 60-second deadline; "
+                    f"{progress} (not accepted). stderr tail: {tail or '<empty>'}"
+                ) from error
             stdout.seek(0)
             raw = stdout.read(64 * 1024 + 1)
             if result.returncode or len(raw) > 64 * 1024:

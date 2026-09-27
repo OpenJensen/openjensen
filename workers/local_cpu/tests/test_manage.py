@@ -835,3 +835,77 @@ def test_interruption_after_real_link_does_not_leave_accepted_receipt(tmp_path, 
         m.write_new(target, {"ready": True})
     assert not target.exists()
     assert not list(tmp_path.glob(".local-cpu-*"))
+
+
+@pytest.mark.parametrize(
+    "stdout,complete",
+    [
+        (b"", False),
+        (b'{"partial":', False),
+        (b'{"done":true}', True),
+        (b"[]", False),
+        (b"x" * 65537, False),
+    ],
+)
+def test_timeout_retains_bounded_stderr_and_output_progress(
+    tmp_path, monkeypatch, stdout, complete
+):
+    def timed_out(command, **kwargs):
+        assert kwargs["timeout"] == 60
+        kwargs["stdout"].write(stdout)
+        kwargs["stderr"].write(b"unretained-prefix" + b"x" * 3000 + b"last import marker")
+        raise m.subprocess.TimeoutExpired(command, 60)
+
+    monkeypatch.setattr(m.subprocess, "run", timed_out)
+    with pytest.raises(ValueError) as caught:
+        m.verify(tmp_path, model_python=Path(sys.executable), reader_python=Path(sys.executable))
+    message = str(caught.value)
+    expected = "a complete JSON object was captured" if complete else "no complete JSON object"
+    assert expected in message and "60-second deadline" in message and "not accepted" in message
+    assert "last import marker" in message and "unretained-prefix" not in message
+    assert len(message) < 2250
+
+
+@pytest.mark.parametrize("complete", [True, False])
+def test_real_probe_timeout_keeps_output_and_reaps_child(tmp_path, monkeypatch, complete):
+    import os
+    import subprocess
+    import time
+
+    original_run, original_popen = subprocess.run, subprocess.Popen
+    children = []
+    stdout_value = '{"done":true}' if complete else '{"partial":'
+    code = (
+        "import sys,time;"
+        f"sys.stdout.write({stdout_value!r});sys.stdout.flush();"
+        "sys.stderr.write('generated last import marker');sys.stderr.flush();"
+        "time.sleep(60)"
+    )
+
+    def spawned(command, **kwargs):
+        child = original_popen(command, **kwargs)
+        children.append(child)
+        # Handshake waits for actual output, not a guessed startup delay.
+        deadline = time.monotonic() + 5
+        while os.fstat(kwargs["stderr"].fileno()).st_size == 0:
+            if child.poll() is not None or time.monotonic() > deadline:
+                child.kill()
+                child.wait(timeout=2)
+                pytest.fail("generated timeout child failed its output handshake")
+            time.sleep(0.01)
+        return child
+
+    def short_observer(command, **kwargs):
+        assert kwargs["timeout"] == 60
+        return original_run([sys.executable, "-I", "-u", "-c", code], **dict(kwargs, timeout=0.1))
+
+    monkeypatch.setattr(m.subprocess, "Popen", spawned)
+    monkeypatch.setattr(m.subprocess, "run", short_observer)
+    with pytest.raises(ValueError) as caught:
+        m.verify(tmp_path, model_python=Path(sys.executable), reader_python=Path(sys.executable))
+    assert "generated last import marker" in str(caught.value)
+    expected = "a complete JSON object was captured" if complete else "no complete JSON object"
+    assert expected in str(caught.value)
+    assert len(children) == 1 and children[0].poll() is not None
+    with pytest.raises(ProcessLookupError):
+        os.kill(children[0].pid, 0)
