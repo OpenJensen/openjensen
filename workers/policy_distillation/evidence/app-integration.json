@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "scope": "Generated native writer\u2192snapshot\u2192actual API\u2192native reader\u2192teacher/student updates\u2192fresh reload\u2192download; no robot quality",
+  "source_files_sha256": {
+    "packages/core/src/vla_platform/lifecycle/native_distillation.py": "79973cbd2b12851ff82a9e0b69a663e1d76a1aa6f01bf4dcddf760d1029f96cf",
+    "tests/test_native_distillation.py": "699dfed21c6d3b5dce7d5ce64391f446f11ea2cb3fb5e436292379359e41b2a7",
+    "workers/policy_distillation/src/firebird_distill/prepare.py": "e00c000431c226531a7c99bb07865a8ce4deea245398f2ce196832331b662883"
+  },
+  "tests": {
+    "passed": 95,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 2.57,
+    "command": "CORE_PYTHON -m pytest tests/test_native_distillation.py tests/test_distillation_contract.py -q -p no:cacheprovider",
+    "log_sha256": "802089446e95c1cf118f677cc7a3f1a5326f890f8fa817eb3d6497418bdd1ea3"
+  },
+  "native_api_proof": {
+    "job_id": "e9880bff-3378-414c-8c86-a34261958aec",
+    "status": "succeeded",
+    "job_elapsed_seconds": 38.85357,
+    "source_unchanged": true,
+    "teacher_origin": "generated native ACT fixture; separate supplied teacher proof in local-cpu.json",
+    "snapshot": {
+      "schema_version": 1,
+      "id": "sha256:4a698269e1858e233268c2776f637ee9e6ff1e0d0a1be5b389c9d93811a88c31",
+      "manifest_sha256": "4a698269e1858e233268c2776f637ee9e6ff1e0d0a1be5b389c9d93811a88c31",
+      "format": "lerobot_v3",
+      "total_bytes": 123411,
+      "file_count": 8,
+      "total_episodes": 6,
+      "total_frames": 24,
+      "lineage_validated": true,
+      "warnings": [
+        "Action units, robot calibration and task success are not established by dataset validation.",
+        "Declared lineage coverage was checked; collection ancestry is not independently verified."
+      ]
+    },
+    "model_id": "sha256:26b60646d17219cfd45a54cfa0d80268c32b9861d9b6a7ec748f46ddd89bd8d2",
+    "artifact_manifest_sha256": "088374fd014b58f6d80d553494407d0441c38c525fd2c121ee04a7771323ad4e",
+    "artifact_payload_sha256": {
+      "lineage.json": "ec917720a1d5415919a2eed9bd435b7b7266682a8947b91e1c40c159eea7fd28",
+      "policy/config.json": "b1c50740187ef4d270ab80ea727bb93df74be2d0e1c60cc88464b060f6e0188a",
+      "policy/model.safetensors": "cf20bad715be4595cbf9dce68d1e48e25049c253a15f44f276712d5f371c96e3",
+      "policy/policy_postprocessor.json": "648b415125a183dfd6cbc47c1dc04ab3f2d912654ef22a12ca5e8b93d7d85cdd",
+      "policy/policy_postprocessor_step_0_unnormalizer_processor.safetensors": "ae1e255d00209ed7dfbd83163089ea55eb63aebe57c0e8e92497914ba56a4d71",
+      "policy/policy_preprocessor.json": "0708a2a86799db24a2c4076be30ac17d82898e6606eddfa4bae9af1cdb1b7a3d",
+      "policy/policy_preprocessor_step_3_normalizer_processor.safetensors": "ae1e255d00209ed7dfbd83163089ea55eb63aebe57c0e8e92497914ba56a4d71",
+      "training.json": "0f56297aa2b68265bce29cebca07a6564704d1dd38d7d85c095fec3b1b14c5b7",
+      "verification.json": "a5f8f059a568b7dd79dc129c32a24854026e65181d4ed106a35e21f746e7f644"
+    },
+    "archive_bytes": 56002560,
+    "archive_sha256": "4d2c4ed9843620cd1ea69298a6168c373ab7a64928fd8971b7fdd6d94deb3e61",
+    "archive_files": {
+      "policy/manifest.json": "088374fd014b58f6d80d553494407d0441c38c525fd2c121ee04a7771323ad4e",
+      "policy/lineage.json": "ec917720a1d5415919a2eed9bd435b7b7266682a8947b91e1c40c159eea7fd28",
+      "policy/policy/config.json": "b1c50740187ef4d270ab80ea727bb93df74be2d0e1c60cc88464b060f6e0188a",
+      "policy/policy/model.safetensors": "cf20bad715be4595cbf9dce68d1e48e25049c253a15f44f276712d5f371c96e3",
+      "policy/policy/policy_postprocessor.json": "648b415125a183dfd6cbc47c1dc04ab3f2d912654ef22a12ca5e8b93d7d85cdd",
+      "policy/policy/policy_postprocessor_step_0_unnormalizer_processor.safetensors": "ae1e255d00209ed7dfbd83163089ea55eb63aebe57c0e8e92497914ba56a4d71",
+      "policy/policy/policy_preprocessor.json": "0708a2a86799db24a2c4076be30ac17d82898e6606eddfa4bae9af1cdb1b7a3d",
+      "policy/policy/policy_preprocessor_step_3_normalizer_processor.safetensors": "ae1e255d00209ed7dfbd83163089ea55eb63aebe57c0e8e92497914ba56a4d71",
+      "policy/training.json": "0f56297aa2b68265bce29cebca07a6564704d1dd38d7d85c095fec3b1b14c5b7",
+      "policy/verification.json": "a5f8f059a568b7dd79dc129c32a24854026e65181d4ed106a35e21f746e7f644"
+    },
+    "steps": 12,
+    "student_weights_bytes": 55946840,
+    "teacher_inference_tensor_bytes": 75493144,
+    "fresh_reload_verified": true,
+    "metrics": {
+      "final": {
+        "demonstration_per_coordinate_l1": [
+          0.5192184944947561,
+          1.2988782326380413,
+          0.6294053693612417,
+          2.577476660410563,
+          4.233235438664754,
+          3.6687353452046714
+        ],
+        "teacher_normalized_l1": 0.19362070825364855,
+        "teacher_normalized_rmse": 0.24479024967838617,
+        "valid_action_coordinates": 72
+      },
+      "train": {
+        "demonstration_per_coordinate_l1": [
+          0.5472177962462107,
+          1.3156754573186238,
+          0.631926546494166,
+          2.4974276622136435,
+          4.220431248346965,
+          3.7023037672042847
+        ],
+        "teacher_normalized_l1": 0.16804809040493435,
+        "teacher_normalized_rmse": 0.22179358007797811,
+        "valid_action_coordinates": 72
+      },
+      "validation": {
+        "demonstration_per_coordinate_l1": [
+          0.44652218619982403,
+          1.3246772686640422,
+          0.6905914346377054,
+          2.601589322090149,
+          4.2996712525685625,
+          3.767812728881836
+        ],
+        "teacher_normalized_l1": 0.20918122927347818,
+        "teacher_normalized_rmse": 0.24851834803055467,
+        "valid_action_coordinates": 72
+      }
+    },
+    "dataset_kind": "generated_fixture",
+    "runtime_versions": {
+      "lerobot": "0.6.1",
+      "safetensors": "0.8.0",
+      "torch": "2.11.0",
+      "torchvision": "0.26.0"
+    }
+  },
+  "limitations": [
+    "Generated scene observations and generated teacher; no recorded-data generalization or task-quality claim",
+    "Local CPU only; no GPU, provider, cloud or live application configuration changes",
+    "Independent worker41 is separately bound; these95 adapter/contract tests are executor results pending coordinator review",
+    "Deadline covers admission and both owned child stages; bounded source-I/O and cleanup are drained rather than abandoned",
+    "UI integration is coordinated separately"
+  ]
+}
