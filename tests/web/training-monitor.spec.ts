@@ -10,6 +10,8 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
   const unexpected: string[] = [];
   const cancelled: string[] = [];
   const telemetryRequests: string[] = [];
+  const savedSubmissions = new Map<string, Record<string, any>>();
+  const submissionLookups: string[] = [];
   const dataset = {
     id: 'dataset', project_id: projectId, kind: 'dataset.inspect', status: 'succeeded',
     request: { source: 'huggingface', repo_id: 'fixture/robot', revision: 'main' },
@@ -101,7 +103,9 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
       }
       const created = { ...job, id: `new-run-${submitted.length}`, request: body, status: 'queued', stage: 'preparing', error: null, created_at: timestamp() };
       jobs.unshift(created);
-      await route.fulfill({ status: 202, json: created });
+      const key = request.headers()['idempotency-key'];
+      if (key) savedSubmissions.set(key, created);
+      await route.fulfill({ status: 202, json: created, headers: key ? { 'Idempotency-Key': key, 'Cache-Control': 'no-store' } : {} });
       return;
     }
     if (request.method() === 'POST' && path === `/api/v1/jobs/${job.id}/cancel`) {
@@ -114,6 +118,13 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
       return;
     }
     if (request.method() === 'GET') {
+      if (path.startsWith(`/api/v1/projects/${projectId}/submissions/`)) {
+        const key = decodeURIComponent(path.split('/').at(-1)!);
+        submissionLookups.push(key);
+        const saved = savedSubmissions.get(key);
+        await route.fulfill({ status: saved ? 200 : 404, json: saved ?? { detail: 'No matching saved request.' }, headers: { 'Idempotency-Key': key, 'Cache-Control': 'no-store' } });
+        return;
+      }
       const replies: Record<string, unknown> = {
         '/api/v1/health': { status: 'ok', version: 'training-fixture' }, '/api/v1/capabilities': [],
         '/api/v1/simulation-options': { profiles: [] },
@@ -126,7 +137,7 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
           compute: { local: { enabled: false, label: 'Local' }, gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 } },
           training_models: [
             { id: 'smolvla', label: 'SmolVLA', description: 'Compact policy', model_id: 'lerobot/smolvla_base', model_revision: revision, methods: ['lora'], suggested_gpu_memory_gb: 16 },
-            { id: 'pi05', label: 'π₀.₅', description: 'Flow policy', model_id: 'lerobot/pi05_base', model_revision: revision, methods: ['full'], minimum_gpu_memory_gb: 40 },
+            { id: 'pi05', label: 'π₀.₅', description: 'Flow policy', model_id: 'lerobot/pi05_base', model_revision: revision, methods: ['full'], minimum_gpu_memory_gb: 40, runtime_ids: ['all-models-a100'] },
             ...(localDataset ? [{ id: 'act', label: 'ACT', description: 'Native policy', model_id: 'code://lerobot/act', model_revision: revision, methods: ['full'], backend: 'lerobot', minimum_gpu_memory_gb: 16 }] : []),
           ], sources: [], training_methods: [{ id: 'lora', label: 'LoRA', description: 'Train adapters.' }, { id: 'full', label: 'Full training', description: 'Train policy.' }], default_training_method: 'lora',
           quantization_defaults: { cuda: { language: 'Q8_0', vision: null }, cpu: { language: 'Q8_0', vision: null }, note: '' },
@@ -155,7 +166,7 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
     await page.locator('.job-history-entry[data-job-id="run-001"]').click();
     await expect(monitor).toBeVisible();
   }
-  return { telemetry, job, jobs, artifacts, extraRuntimes, monitor, submitted, unexpected, cancelled, telemetryRequests };
+  return { telemetry, job, jobs, artifacts, extraRuntimes, monitor, submitted, unexpected, cancelled, telemetryRequests, savedSubmissions, submissionLookups };
 }
 
 async function noOverflow(page: Page) {
@@ -532,7 +543,7 @@ async function newTraining(page: Page) {
 
 for (const fault of ['lost', 'wrong-project', 'changed-budget', 'redirect'] as const) {
   test(`training submission recovery retains ${fault} uncertainty across navigation and reload`, async ({ page }, testInfo) => {
-    const { jobs } = await workspace(page, 'empty', false);
+    const { jobs, savedSubmissions } = await workspace(page, 'empty', false);
     let posts = 0, redirected = 0;
     await page.route('**/api/v1/training-redirect-target', async route => {
       redirected += 1;
@@ -541,34 +552,34 @@ for (const fault of ['lost', 'wrong-project', 'changed-budget', 'redirect'] as c
     await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => {
       posts += 1;
       const body = route.request().postDataJSON();
+      const key = route.request().headers()['idempotency-key'];
+      expect(key).toMatch(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/);
       const accepted = { id: 'accepted-on-server', project_id: projectId, kind: 'policy.finetune', status: 'queued', request: body, created_at: timestamp(), updated_at: timestamp() };
-      jobs.unshift(accepted);
+      jobs.unshift(accepted); savedSubmissions.set(key, accepted);
+      const headers = { 'Idempotency-Key': key, 'Cache-Control': 'no-store' };
       if (fault === 'lost') await route.abort();
-      else if (fault === 'redirect') await route.fulfill({ status: 307, headers: { location: '/api/v1/training-redirect-target' }, body: '' });
-      else await route.fulfill({ status: 202, json: fault === 'wrong-project' ? { ...accepted, project_id: 'another-project' } : { ...accepted, request: { ...body, training: { ...body.training, steps: body.training.steps + 1 } } } });
+      else if (fault === 'redirect') await route.fulfill({ status: 307, headers: { ...headers, location: '/api/v1/training-redirect-target' }, body: '' });
+      else await route.fulfill({ status: 202, headers, json: fault === 'wrong-project' ? { ...accepted, project_id: 'another-project' } : { ...accepted, request: { ...body, training: { ...body.training, steps: body.training.steps + 1 } } } });
     });
     const start = await newTraining(page);
     await start.click();
     const recovery = page.getByRole('region', { name: 'Training submission recovery' });
     await expect(recovery).toContainText('unverified');
     await expect(start).toBeDisabled();
-    const acknowledge = recovery.getByRole('button', { name: 'I checked the jobs; allow a new request' });
-    await expect(acknowledge).toBeDisabled();
+    await expect(recovery.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toHaveCount(0);
     await page.getByRole('navigation', { name: 'Policy lifecycle' }).getByRole('button', { name: 'Dataset', exact: true }).click();
     await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
     await expect(recovery).toBeVisible();
     await page.reload();
     await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
     await expect(recovery).toBeVisible();
-    await expect(acknowledge).toBeDisabled();
-    await recovery.getByRole('button', { name: 'Refresh training jobs' }).click();
-    await expect(page.locator('.job-history-entry[data-job-id="accepted-on-server"]')).toBeVisible();
-    await expect(acknowledge).toBeEnabled();
+    await expect(recovery.getByRole('button', { name: 'Retry same request', exact: true })).toBeDisabled();
     if (fault === 'lost') {
       await noOverflow(page);
       await page.screenshot({ path: testInfo.outputPath('training-submission-recovery.png'), fullPage: true });
     }
-    await acknowledge.click();
+    await recovery.getByRole('button', { name: 'Check saved request', exact: true }).click();
+    await expect(page.getByRole('article', { name: 'Training run monitor' })).toHaveAttribute('data-run-id', 'accepted-on-server');
     await expect(recovery).toHaveCount(0);
     expect(posts).toBe(1);
     expect(redirected).toBe(0);
@@ -579,7 +590,7 @@ test('training journal write failure sends no request', async ({ page }) => {
   await page.addInitScript(() => {
     const set = Storage.prototype.setItem;
     Storage.prototype.setItem = function (key, value) {
-      if (key.startsWith('firebird:job-attempt:policy.finetune:')) throw new Error('Storage unavailable');
+      if (key.startsWith('firebird:submission:v1:')) throw new Error('Storage unavailable');
       return set.call(this, key, value);
     };
   });
@@ -595,7 +606,7 @@ test('training acknowledgement survives journal cleanup failure', async ({ page 
   await page.addInitScript(() => {
     const remove = Storage.prototype.removeItem;
     Storage.prototype.removeItem = function (key) {
-      if (key.startsWith('firebird:job-attempt:policy.finetune:')) throw new Error('Storage unavailable');
+      if (key.startsWith('firebird:submission:v1:')) throw new Error('Storage unavailable');
       return remove.call(this, key);
     };
   });
@@ -620,7 +631,7 @@ for (const malformed of ['status', 'method', 'dataset', 'timestamp', 'recipe'] a
       if (malformed === 'dataset') job.request.dataset_job_id = null;
       if (malformed === 'timestamp') job.updated_at = 'invalid';
       if (malformed === 'recipe') job.request.training = ['invalid'];
-      await route.fulfill({ status: 202, json: job });
+      await route.fulfill({ status: 202, json: job, headers: { 'Idempotency-Key': route.request().headers()['idempotency-key'], 'Cache-Control': 'no-store' } });
     });
     await monitor.getByRole('button', { name: 'Resume from checkpoint' }).click();
     await page.getByRole('button', { name: 'Resume fine-tuning', exact: true }).click();
@@ -630,18 +641,26 @@ for (const malformed of ['status', 'method', 'dataset', 'timestamp', 'recipe'] a
   });
 }
 
-test('training recovery requires a successful history refresh and an explicit acknowledgement', async ({ page }) => {
-  await workspace(page, 'empty', false);
-  let posts = 0;
-  await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => { posts += 1; await route.abort(); });
-  await (await newTraining(page)).click();
+test('legacy training recovery requires fresh history and explicit acknowledgement without POST', async ({ page }) => {
+  const { submitted } = await workspace(page, 'empty', false);
+  await page.evaluate(project => sessionStorage.setItem(`firebird:job-attempt:policy.finetune:${project}`, JSON.stringify({ state: 'uncertain', message: 'Legacy request outcome is unverified.' })), projectId);
+  await page.reload();
+  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
   const recovery = page.getByRole('region', { name: 'Training submission recovery' });
-  await expect(recovery).toContainText('unverified');
+  await expect(recovery).toContainText('no server request key');
+  const acknowledge = recovery.getByRole('button', { name: 'I checked the jobs; allow a new request' });
+  await expect(acknowledge).toBeDisabled();
+  await expect(recovery.getByRole('button', { name: 'Retry same request' })).toHaveCount(0);
   await page.route(`**/api/v1/projects/${projectId}/jobs`, async route => route.fulfill({ status: 503, json: { detail: 'History unavailable' } }));
   await recovery.getByRole('button', { name: 'Refresh training jobs' }).click();
   await expect(recovery).toContainText('Training history could not refresh');
-  await expect(recovery.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toBeDisabled();
-  expect(posts).toBe(1);
+  await expect(acknowledge).toBeDisabled();
+  await page.unroute(`**/api/v1/projects/${projectId}/jobs`);
+  await recovery.getByRole('button', { name: 'Refresh training jobs' }).click();
+  await expect(acknowledge).toBeEnabled();
+  await acknowledge.click();
+  await expect(recovery).toHaveCount(0);
+  expect(submitted).toEqual([]);
 });
 
 test('a definite training rejection reports its reason without inventing a saved job', async ({ page }) => {
@@ -649,7 +668,7 @@ test('a definite training rejection reports its reason without inventing a saved
   let posts = 0;
   await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => {
     posts += 1;
-    await route.fulfill({ status: 422, json: { detail: 'The selected dataset is not admitted for training.' } });
+    await route.fulfill({ status: 422, json: { detail: 'The selected dataset is not admitted for training.' }, headers: { 'Idempotency-Key': route.request().headers()['idempotency-key'], 'Cache-Control': 'no-store' } });
   });
   const start = await newTraining(page);
   await start.click();
@@ -1114,5 +1133,239 @@ test('ACT export handoff preserves an unresolved quantization request without re
   await expect(page.getByRole('button', { name: 'Create ACT quantized package', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toBeDisabled();
   expect(await page.evaluate(key => sessionStorage.getItem(key), key)).toBe(stored);
+  expect(state.submitted).toEqual([]);
+});
+
+
+// Generated browser fixtures exercise admission and exact requests; no training runs.
+async function temporalTraining(page: Page, model = 'ACT') {
+  const state = await workspace(page, 'local-snapshot', false);
+  const dataset = state.jobs.find(item => item.id === 'dataset')!;
+  Object.assign(dataset.result!, { source: 'huggingface', repo_id: 'fixture/robot', revision });
+  state.extraRuntimes.push({ id: 'all-models-a100', label: 'A100', accelerator: 'A100', provider: 'gcp', execution: 'skypilot', device: 'cuda', enabled: true, training: true, training_model_ids: ['act', 'smolvla', 'pi05'], gpu_memory_mib: 40960 });
+  await page.reload();
+  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
+  const setup = page.getByRole('navigation', { name: 'Training setup' });
+  await setup.getByRole('button', { name: 'Model', exact: true }).click();
+  await page.getByRole('radio', { name: model, exact: true }).locator('..').click();
+  await setup.getByRole('button', { name: 'Compute', exact: true }).click();
+  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  return { ...state, setup };
+}
+
+for (const model of ['ACT', 'SmolVLA']) {
+  test(`training horizons submit independent ${model} action timing with exact dataset identity`, async ({ page }, testInfo) => {
+    const state = await temporalTraining(page, model);
+    const timing = page.getByRole('group', { name: 'Action timing', exact: true });
+    await expect(timing).toContainText(model === 'ACT' ? '100 actions' : '50 actions');
+    await timing.getByRole('checkbox', { name: 'Customize action horizons' }).check();
+    await timing.getByRole('spinbutton', { name: 'Prediction horizon', exact: true }).fill('24');
+    await timing.getByRole('spinbutton', { name: 'Execution horizon', exact: true }).fill('8');
+    await expect(page.getByRole('region', { name: 'Training recipe review' })).toContainText('Predict 24 · execute 8');
+    await expect(page.getByRole('region', { name: 'Training recipe review' })).toContainText('fixture/robot');
+    await noOverflow(page);
+    await page.screenshot({ path: testInfo.outputPath(`training-timing-${model}.png`), fullPage: true });
+    await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
+    await expect.poll(() => state.submitted.length).toBe(1);
+    expect(state.submitted[0]).toMatchObject({ operation: 'policy.finetune', dataset_job_id: 'dataset', runtime_id: 'all-models-a100', timeout_seconds: 86400,
+      training: { prediction_horizon: 24, execution_horizon: 8, observation_history: 1, frame_stride: 1, model_id: model === 'ACT' ? 'code://lerobot/act' : 'lerobot/smolvla_base' } });
+    expect(state.submitted[0].training).not.toHaveProperty('chunk_size');
+    expect(state.unexpected).toEqual([]);
+  });
+}
+
+test('training horizons reject invalid order and bounds before any POST', async ({ page }) => {
+  const state = await temporalTraining(page);
+  const timing = page.getByRole('group', { name: 'Action timing', exact: true });
+  await timing.getByRole('checkbox', { name: 'Customize action horizons' }).check();
+  const prediction = timing.getByRole('spinbutton', { name: 'Prediction horizon', exact: true });
+  const execution = timing.getByRole('spinbutton', { name: 'Execution horizon', exact: true });
+  const submit = page.getByRole('button', { name: 'Start fine-tuning', exact: true });
+  for (const [p, e] of [['8', '9'], ['0', '1'], ['1025', '1'], ['3.5', '1'], ['8', '0']]) {
+    await prediction.fill(p); await execution.fill(e);
+    await expect(timing.getByRole('alert')).toBeVisible();
+    await expect(submit).toBeDisabled();
+  }
+  await prediction.fill('8'); await execution.fill('4');
+  await expect(submit).toBeEnabled();
+  expect(state.submitted).toEqual([]);
+});
+
+test('training horizons keep model drafts separate and omit unsupported family overrides', async ({ page }) => {
+  const state = await temporalTraining(page);
+  const timing = page.getByRole('group', { name: 'Action timing', exact: true });
+  await timing.getByRole('checkbox', { name: 'Customize action horizons' }).check();
+  await timing.getByRole('spinbutton', { name: 'Prediction horizon', exact: true }).fill('12');
+  await timing.getByRole('spinbutton', { name: 'Execution horizon', exact: true }).fill('4');
+  async function choose(model: string) {
+    await state.setup.getByRole('button', { name: 'Model', exact: true }).click();
+    await page.getByRole('radio', { name: model, exact: true }).locator('..').click();
+    await state.setup.getByRole('button', { name: 'Compute', exact: true }).click();
+    await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  }
+  await choose('SmolVLA');
+  await expect(timing.getByRole('checkbox')).not.toBeChecked();
+  await expect(timing).toContainText('50 actions');
+  await choose('ACT');
+  await expect(timing.getByRole('spinbutton', { name: 'Prediction horizon', exact: true })).toHaveValue('12');
+  await expect(timing.getByRole('spinbutton', { name: 'Execution horizon', exact: true })).toHaveValue('4');
+  await choose('π₀.₅');
+  await expect(timing).toHaveCount(0);
+  await expect(page.getByText('Action timing follows this model’s native configuration.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
+  await expect.poll(() => state.submitted.length).toBe(1);
+  for (const key of ['prediction_horizon', 'execution_horizon', 'observation_history', 'frame_stride', 'chunk_size']) expect(state.submitted[0].training).not.toHaveProperty(key);
+});
+
+test('training horizons leave checkpoint resume unchanged and show recorded timing only', async ({ page }) => {
+  const state = await workspace(page, 'failed');
+  state.job.request.training = { ...state.job.request.training, prediction_horizon: 24, execution_horizon: 6 };
+  await state.monitor.getByRole('button', { name: 'Resume from checkpoint' }).click();
+  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  await expect(page.getByText('Original recipe preserved.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Training recipe review' })).toContainText('Checkpoint-owned timing');
+  await expect(page.getByRole('checkbox', { name: 'Customize action horizons' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Resume fine-tuning', exact: true }).click();
+  await expect.poll(() => state.submitted.length).toBe(1);
+  expect(state.submitted[0]).toMatchObject({ artifact_id: 'checkpoint-artifact', training: null });
+});
+
+test('training horizons keep uncustomized recipes compatible with the prior form', async ({ page }) => {
+  const state = await temporalTraining(page);
+  const customize = page.getByRole('checkbox', { name: 'Customize action horizons' });
+  await expect(customize).not.toBeChecked();
+  await customize.check();
+  await page.getByRole('spinbutton', { name: 'Prediction horizon', exact: true }).fill('24');
+  await page.getByRole('spinbutton', { name: 'Execution horizon', exact: true }).fill('8');
+  await customize.uncheck();
+  await expect(page.getByRole('region', { name: 'Training recipe review' })).toContainText('Predict 100 · execute 100 · default');
+  await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
+  await expect.poll(() => state.submitted.length).toBe(1);
+  for (const key of ['prediction_horizon', 'execution_horizon', 'observation_history', 'frame_stride', 'chunk_size']) expect(state.submitted[0].training).not.toHaveProperty(key);
+});
+
+
+test('keyed training retry after reload preserves the original key and recipe with no automatic POST', async ({ page }) => {
+  const state = await workspace(page, 'empty', false);
+  const requests: { key: string; body: Record<string, any> }[] = [];
+  await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => {
+    const key = route.request().headers()['idempotency-key'], body = route.request().postDataJSON();
+    requests.push({ key, body });
+    if (requests.length === 1) { await route.abort(); return; }
+    const job = { id: 'same-request-accepted', project_id: projectId, kind: 'policy.finetune', status: 'queued', request: body, created_at: timestamp(), updated_at: timestamp() };
+    state.jobs.unshift(job); state.savedSubmissions.set(key, job);
+    await route.fulfill({ status: 202, json: job, headers: { 'Idempotency-Key': key, 'Cache-Control': 'no-store' } });
+  });
+  await (await newTraining(page)).click();
+  const recovery = page.getByRole('region', { name: 'Training submission recovery' });
+  await expect(recovery).toBeVisible();
+  await page.evaluate(project => localStorage.setItem(`firebird.workflow.${project}`, JSON.stringify({ trainingDefaultsVersion: 3, trainingSteps: 777, trainingModelId: 'smolvla' })), projectId);
+  await page.reload();
+  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await expect(recovery.getByRole('button', { name: 'Retry same request' })).toBeDisabled();
+  await recovery.getByRole('button', { name: 'Check saved request' }).click();
+  await expect(recovery).toContainText('new request remains blocked');
+  await expect(recovery.getByRole('button', { name: 'Retry same request' })).toBeEnabled();
+  expect(requests).toHaveLength(1);
+  await recovery.getByRole('button', { name: 'Retry same request' }).click();
+  await expect(page.getByRole('article', { name: 'Training run monitor' })).toHaveAttribute('data-run-id', 'same-request-accepted');
+  expect(requests).toHaveLength(2);
+  expect(requests[1]).toEqual(requests[0]);
+  expect(requests[1].body.training.steps).toBe(20000);
+  expect(state.submissionLookups).toEqual([requests[0].key, requests[0].key, requests[0].key]);
+});
+
+test('keyed training requires current server support before sending any POST', async ({ page }) => {
+  const state = await workspace(page, 'empty', false);
+  await page.route(`**/api/v1/projects/${projectId}/submissions/*`, route => route.fulfill({ status: 404, json: { detail: 'Not Found' } }));
+  await (await newTraining(page)).click();
+  const recovery = page.getByRole('region', { name: 'Training submission recovery' });
+  await expect(recovery).toBeVisible();
+  await expect(recovery.getByRole('button', { name: 'Retry same request' })).toBeDisabled();
+  expect(state.submitted).toEqual([]);
+});
+
+test('keyed training retains the accepted receipt if storage reads fail after acknowledgement', async ({ page }) => {
+  const state = await workspace(page, 'empty', false);
+  await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => {
+    const body = route.request().postDataJSON(), key = route.request().headers()['idempotency-key'];
+    state.submitted.push(body);
+    await page.evaluate(() => {
+      const get = Storage.prototype.getItem;
+      Storage.prototype.getItem = function (key) {
+        if (key.startsWith('firebird:submission:v1:')) throw new Error('Denied after ACK');
+        return get.call(this, key);
+      };
+    });
+    await route.fulfill({ status: 202, json: { id: 'retained-after-read-denial', project_id: projectId, kind: 'policy.finetune', status: 'queued', request: body, created_at: timestamp(), updated_at: timestamp() }, headers: { 'Idempotency-Key': key, 'Cache-Control': 'no-store' } });
+  });
+  await (await newTraining(page)).click();
+  await expect(page.getByRole('article', { name: 'Training run monitor' })).toHaveAttribute('data-run-id', 'retained-after-read-denial');
+  const recovery = page.getByRole('region', { name: 'Training submission recovery' });
+  await expect(recovery).toContainText('storage is unavailable');
+  await expect(recovery.getByRole('button', { name: 'Check saved request' })).toBeDisabled();
+  expect(state.submitted).toHaveLength(1);
+});
+
+test('keyed training storage read denial blocks initial submission', async ({ page }) => {
+  await page.addInitScript(() => {
+    const get = Storage.prototype.getItem;
+    Storage.prototype.getItem = function (key) {
+      if (key.startsWith('firebird:submission:v1:')) throw new Error('Read denied');
+      return get.call(this, key);
+    };
+  });
+  const state = await workspace(page, 'empty', false);
+  const start = await newTraining(page);
+  await expect(start).toBeDisabled();
+  await expect(page.getByRole('region', { name: 'Training submission recovery' })).toContainText('storage is unavailable');
+  expect(state.submitted).toEqual([]);
+});
+
+test('keyed training late acknowledgement retains history without replacing a manually selected job', async ({ page }) => {
+  const state = await workspace(page, 'history', false);
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let posts = 0;
+  await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => {
+    posts += 1;
+    const key = route.request().headers()['idempotency-key'], body = route.request().postDataJSON();
+    await gate;
+    const job = { id: 'late-accepted-training', project_id: projectId, kind: 'policy.finetune', status: 'queued', request: body, created_at: timestamp(), updated_at: timestamp() };
+    state.jobs.unshift(job); state.savedSubmissions.set(key, job);
+    await route.fulfill({ status: 202, json: job, headers: { 'Idempotency-Key': key, 'Cache-Control': 'no-store' } });
+  });
+  try {
+    await (await newTraining(page)).click();
+    await expect.poll(() => posts).toBe(1);
+    await page.getByRole('button', { name: 'Back to jobs', exact: true }).click();
+    await page.locator('.job-history-entry[data-job-id="older-run"]').click();
+    await expect(state.monitor).toHaveAttribute('data-run-id', 'older-run');
+    release();
+    await expect(page.getByRole('region', { name: 'Training submission recovery' })).toHaveCount(0);
+    await expect(state.monitor).toHaveAttribute('data-run-id', 'older-run');
+    await page.getByRole('button', { name: 'Back to jobs', exact: true }).click();
+    await expect(page.locator('.job-history-entry[data-job-id="late-accepted-training"]')).toBeVisible();
+    expect(posts).toBe(1);
+  } finally { release(); }
+});
+
+for (const fault of ['malformed', 'foreign'] as const) test(`legacy training recovery refuses ${fault} history before allowing a new request`, async ({ page }) => {
+  const state = await workspace(page, 'empty', false);
+  await page.evaluate(project => sessionStorage.setItem(`firebird:job-attempt:policy.finetune:${project}`, JSON.stringify({ state: 'uncertain', message: 'Legacy request outcome is unverified.' })), projectId);
+  await page.reload();
+  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  const recovery = page.getByRole('region', { name: 'Training submission recovery' });
+  const acknowledge = recovery.getByRole('button', { name: 'I checked the jobs; allow a new request' });
+  const path = `**/api/v1/projects/${projectId}/jobs`;
+  await page.route(path, route => route.fulfill({ json: fault === 'malformed' ? { jobs: [] } : [{ ...state.jobs[0], project_id: 'another-project' }] }));
+  await recovery.getByRole('button', { name: 'Refresh training jobs' }).click();
+  await expect(recovery).toContainText('malformed or contains another project');
+  await expect(acknowledge).toBeDisabled();
+  expect(state.submitted).toEqual([]);
+  await page.unroute(path);
+  await recovery.getByRole('button', { name: 'Refresh training jobs' }).click();
+  await expect(acknowledge).toBeEnabled();
   expect(state.submitted).toEqual([]);
 });
