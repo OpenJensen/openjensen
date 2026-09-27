@@ -1127,6 +1127,9 @@ export function TrainingPanel({
               active={active}
               artifacts={(artifacts.data ?? []).filter(item => item.job_id === selectedRun.id)}
               modelCatalog={models}
+              exportRuntimes={options.isSuccess ? options.data.runtimes : []}
+              exportJobs={jobs.data ?? []}
+              exportArtifacts={artifacts.data ?? []}
               onCancel={() => cancel.mutate(selectedRun.id)}
               cancelling={cancel.isPending && cancel.variables === selectedRun.id}
               cancelError={cancel.variables === selectedRun.id ? cancel.error : null}

@@ -4,7 +4,8 @@ This isolated worker removes the training-only VAE encoder from a supported FP32
 LeRobot ACT checkpoint. It copies retained tensors without numerical conversion,
 preserves saved processors, and changes only `use_vae` to `false` in the policy
 configuration. This is an inference export, not quantization, distillation, or a
-training checkpoint. Application optimizer integration is a later slice.
+training checkpoint. The application can export a registered, complete local ACT
+training bundle through a separately configured CPU worker.
 
 LeRobot's ACT evaluation path uses a zero latent and skips the VAE encoder. The
 shared latent projection remains in the export. See the [pinned ACT source](https://github.com/huggingface/lerobot/blob/v0.6.1/src/lerobot/policies/act/modeling_act.py).
@@ -159,13 +160,72 @@ Opaque training-state/probe files are hashed, never deserialized by this adapter
 Remote-only descriptors must first be materialized through a separately verified
 path; this module performs no network calls.
 
-This is source admission only: it neither exports nor loads a model, and the
-returned path is not an immutable snapshot. Re-admit after any source change and
-bind these file identities into the eventual export snapshot. The receipt sets
-runtime compatibility and export verification to false. The application has no
-new ACT export route or capability. Cross-version producer0.6.2 to consumer0.6.1
-loading still requires a separate native-runtime test. Existing synthetic
-serialization tests and a0.6.1 policy fixture do not establish that compatibility.
+Source admission itself neither exports nor loads a model. The returned path is a
+point-in-time selection. The application bridge binds its selected file identities
+to the exporter's actual snapshots and re-admits the whole bundle before publication.
+The admission receipt remains explicitly admission-only; a separate export receipt
+records the completed fresh-process checks.
+
+## Application bridge
+
+Configure both `act_export_python` and `act_export_root` in an operator-owned local
+runtime. These select the pinned consumer interpreter and this worker directory;
+the fixed module is `firebird_act.application`. The server never accepts executable
+or source paths from the browser. This optional worker has no GPU or container
+requirement and does not inherit a runtime's training image.
+
+The fixed invocation is `python -m firebird_act.application REQUEST.json RESULT.json`.
+The bounded schema1 request supplies `job_id`, `operation: "policy.export"`, an
+absolute `output_dir`, and `artifact` with its registered `id`,
+`format: "training_checkpoint"`, absolute local `path`, and `manifest_sha256`.
+Other normal application fields are ignored. The result must be a new file directly
+inside `output_dir`; it returns the same job identity and a registered
+`format: "inference_export"` artifact, or a bounded error with a nonzero exit.
+
+`inference-export/` is published atomically without replacement. It contains:
+
+- `policy/`: the exact package tested by the existing three-process exporter;
+- `lineage.json`: frozen complete-bundle admission and checkpoint identities;
+- `verification.json`: the exporter's complete-package reload receipt;
+- `manifest.json`: the application's SHA256 inventory and source lineage.
+
+The envelope records the parent artifact and both source manifests, saved step,
+model revision, dataset revision, camera and CPU-only verification scope. It does
+not edit the tested inner package. The original resumable checkpoint is preserved.
+The app downloads the envelope with the tested policy under `policy/policy/` in
+its tar archive. Inference exports cannot be selected for training resume,
+quantization or unimplemented simulator execution.
+
+The Fine-tune checkpoint monitor offers **Export ACT inference package** for ACT.
+It requires a ready project, enabled local export worker and complete native
+checkpoint with pinned Hugging Face dataset lineage. Local dataset snapshot
+lineage is explicitly unsupported by this export recipe. Cloud descriptors fail before worker launch; operators must first
+materialize and register the complete verified checkpoint. No automatic model
+or cloud download is started by this action.
+
+## Native producer compatibility fixture
+
+`scripts/native_checkpoint_fixture.py` is an optional, separate producer test
+recipe. At native LeRobot0.6.2 revision
+`e595b7902714ba51f91e47523f66f89c5181b649`, it makes a small real ACT policy, performs
+a CPU optimizer update on seeded synthetic tensors, calls upstream
+`save_checkpoint`, then in a fresh process uses upstream two-phase resume with
+Accelerate1.14.0. Saved model, optimizer, RNG and the next optimizer update must
+match exactly. Its final mode uses the actual Firebird checkpoint bundler.
+Run `generate`, `resume`, then `bundle` against the same new scratch directory
+in the isolated producer environment. The ACT exporter stays on its unchanged
+LeRobot0.6.1 lock and consumes only the resulting complete bundle.
+
+The recorded macOS CPU proof also ran that bundle through the actual app API,
+export subprocess, artifact registration and tar download; all archive members
+matched the tested package, and source hashes remained unchanged. See
+`evidence/native-application-parity.json`. This is a synthetic full-checkpoint
+compatibility test, not validation of a trained policy or a production training
+run. It establishes neither GPU/native-Windows support nor calibration, task
+success, learned quality or dataset-loader resume correctness. The default
+ACT CI tests remain on the pinned0.6.1 consumer; the optional0.6.2 producer is
+not silently installed into that environment.
+
 The recorded chunk20 PushT checkpoint remains outside this exporter's chunk100,
 six-coordinate recipe. Inference-only output must never replace or be presented
 as the original resumable training checkpoint.

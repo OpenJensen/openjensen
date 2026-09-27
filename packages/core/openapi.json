@@ -477,6 +477,7 @@
               "dataset.augment",
               "policy.finetune",
               "policy.distill",
+              "policy.export",
               "policy.quantize",
               "policy.evaluate",
               "policy.run"
@@ -2537,7 +2538,8 @@
               "gguf",
               "training_checkpoint",
               "native_checkpoint",
-              "deployment_package"
+              "deployment_package",
+              "inference_export"
             ],
             "title": "Format",
             "type": "string"
@@ -2812,6 +2814,11 @@
               }
             ],
             "title": "Accelerator"
+          },
+          "act_export": {
+            "default": false,
+            "title": "Act Export",
+            "type": "boolean"
           },
           "device": {
             "enum": [

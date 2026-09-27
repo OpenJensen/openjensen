@@ -765,7 +765,7 @@ export interface components {
              * Operation
              * @enum {string}
              */
-            operation: "dataset.inspect" | "dataset.inspect.local" | "dataset.augment" | "policy.finetune" | "policy.distill" | "policy.quantize" | "policy.evaluate" | "policy.run";
+            operation: "dataset.inspect" | "dataset.inspect.local" | "dataset.augment" | "policy.finetune" | "policy.distill" | "policy.export" | "policy.quantize" | "policy.evaluate" | "policy.run";
             /**
              * Schema Version
              * @default 1
@@ -1582,7 +1582,7 @@ export interface components {
              * Format
              * @enum {string}
              */
-            format: "gguf" | "training_checkpoint" | "native_checkpoint" | "deployment_package";
+            format: "gguf" | "training_checkpoint" | "native_checkpoint" | "deployment_package" | "inference_export";
             /** Id */
             id: string;
             /** Job Id */
@@ -1671,6 +1671,11 @@ export interface components {
         PublicRuntime: {
             /** Accelerator */
             accelerator?: string | null;
+            /**
+             * Act Export
+             * @default false
+             */
+            act_export: boolean;
             /**
              * Device
              * @enum {string}

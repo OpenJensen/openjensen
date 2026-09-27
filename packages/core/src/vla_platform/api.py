@@ -171,6 +171,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     r.training_python and r.training_root
                     for r in execution.lifecycle.catalog.runtimes
                 ),
+                any(
+                    r.act_export_python and r.act_export_root
+                    for r in execution.lifecycle.catalog.runtimes
+                ),
             ),
             Capability(
                 stage="Dataset",
