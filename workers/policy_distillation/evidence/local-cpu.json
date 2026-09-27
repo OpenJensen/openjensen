@@ -186,5 +186,10 @@
     "Native saved ACT bool became int0 through upstream annotation; final student explicitly writes unchangedFalse and shared native identity regression passes",
     "Optional supplied-teacher proof deliberately cancelled to free UI resources, then same source/request rerun successfully alone"
   ],
-  "independent_source_review": "independent-review.json: all11 hashes bound and independently executed41 passed,0failed,0skipped"
+  "independent_source_review": "independent-review.json: all11 hashes bound and independently executed41 passed,0failed,0skipped",
+  "post_review_static_configuration": {
+    "file": "workers/policy_distillation/pyproject.toml",
+    "sha256": "595725497de95ad2344c61c110e1e782a2dede9372bab479341269156ce7f0bb",
+    "change": "Explicit Ruff third-party import grouping matches the root configuration; runtime and tests unchanged"
+  }
 }
