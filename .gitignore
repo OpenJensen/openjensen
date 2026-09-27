@@ -31,3 +31,6 @@ sim-rollout-runner*.json
 
 # Private deployment/run evidence and local screenshots.
 /output/
+
+# Presentation media is kept locally, separate from application releases.
+/artifacts/open-jensen-videos/
