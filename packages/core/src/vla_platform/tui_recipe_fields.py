@@ -65,8 +65,9 @@ def fields_for(mode, draft, context):
                 "choice",
                 methods,
             ),
-            Field("training.steps", "Training steps"),
-            Field("training.batch_size", "Batch size"),
+            Field("training.steps", "Completed optimizer updates"),
+            Field("training.batch_size", "Maximum observations per microbatch"),
+            Field("training.gradient_accumulation_steps", "Microbatches per optimizer update"),
             Field("training.learning_rate", "Learning rate", "number"),
             Field(
                 "training.camera_keys",
@@ -260,6 +261,11 @@ class RecipeFields(ModalScreen):
         self.cameras = []
         for field in self.fields:
             value = at(self.draft, field.path)
+            if field.path == "training.gradient_accumulation_steps":
+                if "gradient_accumulation_steps" not in self.draft["training"]:
+                    value = 1
+                elif value is None:
+                    raise ApiError(f"{field.label}: the saved value must be an integer.")
             if field.kind in {"choice", "optional_choice"}:
                 if value is not None and not any(
                     type(value) is type(x) and value == x for x in field.choices
@@ -326,6 +332,14 @@ class RecipeFields(ModalScreen):
                     )
                 )
             )
+            if self.mode == "train":
+                yield Static(
+                    "Steps and checkpoint/evaluation cadence count completed optimizer updates. "
+                    "Nominal batch = microbatch size × accumulation × 1 worker; short batches "
+                    "contain fewer observations. Accumulation above 1 requires the selected "
+                    "model and worker to advertise support. Exact resume keeps saved settings.",
+                    markup=False,
+                )
             if self.mode in {"resume", "export"}:
                 yield Static(
                     "Saved model, dataset and training method are retained. "
@@ -397,6 +411,12 @@ class RecipeFields(ModalScreen):
                     result["training"].pop("camera_key")
             else:
                 value = parse_value(field, self.query_one("#" + field.ident, Input).value)
+            if (
+                field.path == "training.gradient_accumulation_steps"
+                and "gradient_accumulation_steps" not in self.draft["training"]
+                and value == 1
+            ):
+                continue  # Preserve a legacy omitted default when it was not changed.
             put(result, field.path, value)
         if self.mode == "train":
             changed_adapter = result["training"]["model_id"] != self.draft["training"].get(
@@ -406,6 +426,7 @@ class RecipeFields(ModalScreen):
                 "model_id",
                 "steps",
                 "batch_size",
+                "gradient_accumulation_steps",
                 "learning_rate",
                 "camera_key",
                 "camera_keys",

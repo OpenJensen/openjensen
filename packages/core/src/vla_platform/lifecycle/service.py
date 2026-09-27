@@ -32,7 +32,10 @@ from vla_platform.lifecycle.contracts import (
 )
 from vla_platform.lifecycle.runtime import RuntimeCatalog, command
 from vla_platform.lifecycle.temporal import validate_temporal
-from vla_platform.lifecycle.training_catalog import training_model_for_recipe
+from vla_platform.lifecycle.training_catalog import (
+    supports_gradient_accumulation,
+    training_model_for_recipe,
+)
 from vla_platform.local_worker_registry import LocalWorkerRegistry
 
 logger = logging.getLogger(__name__)
@@ -780,9 +783,13 @@ class Lifecycle:
                     f"{model.label} requires a GPU with at least "
                     f"{model.minimum_gpu_memory_gb} GB of memory"
                 )
+            if (recipe or {}).get(
+                "gradient_accumulation_steps", 1
+            ) != 1 and not supports_gradient_accumulation(model, runtime):
+                raise ValueError(
+                    "This model and worker currently require gradient accumulation of 1"
+                )
             if model.backend in {"lerobot", "psi0"}:
-                if (recipe or {}).get("gradient_accumulation_steps", 1) != 1:
-                    raise ValueError("Native policy training currently requires accumulation of 1")
                 cameras = (recipe or {}).get("camera_keys") or [(recipe or {}).get("camera_key")]
                 if (
                     model.required_cameras

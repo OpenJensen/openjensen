@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from .native_profiles import NATIVE_PROFILES
 
 if TYPE_CHECKING:
-    from vla_platform.lifecycle.runtime import RuntimeCatalog
+    from vla_platform.lifecycle.runtime import Runtime, RuntimeCatalog
 
 
 @dataclass(frozen=True)
@@ -118,6 +118,19 @@ TRAINING_MODELS = tuple(
 TRAINING_MODEL_BY_ID = {model.id: model for model in TRAINING_MODELS}
 
 
+def supports_gradient_accumulation(model: TrainingModel, runtime: Runtime) -> bool:
+    """Only reviewed bundled adapters declare optimizer-window semantics."""
+    expected = {
+        "smolvla": "firebird_vla.application",
+        "act": "firebird_vla.lerobot_application",
+    }.get(model.id)
+    return bool(
+        expected
+        and model.id in runtime.training_model_ids
+        and (runtime.execution == "skypilot" or runtime.training_module == expected)
+    )
+
+
 def public_training_models(catalog: RuntimeCatalog) -> list[dict]:
     result = []
     for model in TRAINING_MODELS:
@@ -150,6 +163,14 @@ def public_training_models(catalog: RuntimeCatalog) -> list[dict]:
                 else "coming_soon",
                 "unavailable_reason": reason,
                 "runtime_ids": runtime_ids,
+                "gradient_accumulation_supported": model.id in {"act", "smolvla"},
+                "gradient_accumulation_runtime_ids": [
+                    runtime.id
+                    for runtime in catalog.runtimes
+                    if runtime.id in runtime_ids and supports_gradient_accumulation(model, runtime)
+                ],
+                "training_step_unit": "optimizer_updates",
+                "training_world_size": 1,
             }
         )
     return result
