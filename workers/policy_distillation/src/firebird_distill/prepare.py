@@ -26,7 +26,6 @@ from .contracts import (
     read,
     teacher_info,
 )
-
 from .provenance import action_fps, check_snapshot_control, policy_metadata
 
 
@@ -66,7 +65,9 @@ def prepare(value):
     cfg, camera, processors_sha = teacher_info(teacher, before)
     metadata = policy_metadata(teacher, cfg)
     fps_contract = action_fps(teacher, metadata)
-    check_snapshot_control(source, manifest, value["dataset_snapshot"], camera, metadata, fps_contract)
+    check_snapshot_control(
+        source, manifest, value["dataset_snapshot"], camera, metadata, fps_contract
+    )
     prediction = metadata["prediction_horizon"]
     if manifest.get("lineage_validated") is not True:
         raise ValueError("Explicit episode lineage is required before distillation")
@@ -116,9 +117,10 @@ def prepare(value):
         "chunk_size": prediction,
         "execution_horizon": metadata["execution_horizon"],
         "action_fps": manifest["fps"],
-        **{key: metadata[key] for key in (
-            "temporal_contract_sha256", "control_contract", "control_contract_sha256"
-        )},
+        **{
+            key: metadata[key]
+            for key in ("temporal_contract_sha256", "control_contract", "control_contract_sha256")
+        },
         "samples": [],
     }
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -184,8 +186,15 @@ def prepare(value):
             raise ValueError("Native reader omitted selected episodes")
         (stage / "manifest.json").write_bytes(canonical(doc))
         manifest_sha = digest(canonical(doc))
-        corpus(stage, manifest_sha, cfg, camera, processors_sha,
-               metadata=metadata, expected_fps=fps_contract)
+        corpus(
+            stage,
+            manifest_sha,
+            cfg,
+            camera,
+            processors_sha,
+            metadata=metadata,
+            expected_fps=fps_contract,
+        )
         from .contracts import load_sample
 
         for sample in doc["samples"]:

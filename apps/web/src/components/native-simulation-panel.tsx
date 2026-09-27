@@ -10,7 +10,7 @@ import './simulation-workspace.css';
 import { NativePreparation } from './native-preparation';
 import { publicPath } from '@/lib/base-path';
 import { WorkbenchDisclosure } from '@/components/workbench-disclosure';
-import { cancelSimulation, isSimulationJob, nativeInput, simulationOptions, simulationTarget, simulationTaskSummary, simulationVideoUrl, startSimulation, UncertainSubmission, uploadModel, type NativeArtifact, type SimulationJob } from '@/lib/native-simulation';
+import { cancelSimulation, isSimulationJob, nativeInput, simulationOptions, simulationTarget, simulationProfileTarget, simulationExecutionTarget, simulationTaskSummary, simulationVideoUrl, startSimulation, UncertainSubmission, uploadModel, type NativeArtifact, type SimulationJob } from '@/lib/native-simulation';
 
 class SimulationJournalUnavailable extends Error {
   constructor() { super('Browser session storage is unavailable or its simulation receipt is unreadable. Restore it and reload, then inspect recorded jobs before another request.'); }
@@ -155,7 +155,7 @@ export function NativeSimulationPanel({ projectId, preferredJobId, onJobSelected
         <div className="native-result-header"><div><span className="eyebrow">{selected.kind === 'policy.import' ? 'Package intake' : 'Recorded execution'}</span><h3>{selected.kind === 'policy.import' ? 'Native policy import' : 'Isaac rollout'}</h3></div><span className={`status status-${selected.status}`}><span className="status-dot" />{selected.status}</span></div>
         {videoReady && !videoFailed && <figure className="native-recording"><video controls preload="metadata" aria-label="Recorded cup rollout" src={simulationVideoUrl(selected.id)} onError={() => setVideoFailed(true)} /><figcaption><strong>Recorded cup rollout</strong><span>Execution recording · pickup success not measured</span></figcaption></figure>}
         {videoFailed && <p role="alert">The recorded video is unavailable. You can still download the verified simulation record.</p>}
-        <dl className="cloud-run-facts"><div><dt>Execution target</dt><dd>{simulationTarget(selected)?.accelerators.join(' + ') ?? (selected.kind === 'policy.import' ? 'Local package validation' : 'Awaiting recorded cloud target')}</dd></div><div><dt>Cup pickup success</dt><dd>Not measured</dd></div><div><dt>Calibration</dt><dd>Unverified</dd></div></dl>
+        <dl className="cloud-run-facts"><div><dt>Execution target</dt><dd>{simulationExecutionTarget(selected) ?? (selected.kind === 'policy.import' ? 'Local package validation' : 'Awaiting recorded cloud target')}</dd></div><div><dt>Cup pickup success</dt><dd>Not measured</dd></div><div><dt>Calibration</dt><dd>Unverified</dd></div></dl>
         {events.isError && <p className="error-notice" role="alert">Activity updates are unavailable. Worker states and event history may be stale.</p>}
         {observedTasks && <p className="native-worker-summary" role="status" aria-label="Observed simulation workers">{events.isError ? 'Last observed: ' : ''}{observedTasks}</p>}
         {selected.error && <p role="alert" className="error-notice">{selected.error}</p>}
@@ -185,7 +185,7 @@ export function NativeSimulationPanel({ projectId, preferredJobId, onJobSelected
         <div className="simulation-choice-grid" role="radiogroup" aria-label="Isaac profile">
           {options.data?.profiles.map(item => <label className="simulation-choice" key={item.id}>
             <input type="radio" name="simulation-profile" aria-label={item.label} value={item.id} checked={profile?.id === item.id} onChange={() => { setProfileId(item.id); setArtifactId(''); setExperimental(false); }} />
-            <span className="simulation-choice-icon"><Icon name="play" /></span><span className="simulation-choice-copy"><strong>{item.label}</strong><span>{item.architectures.map(a => a === 'act' ? 'ACT' : 'SmolVLA').join(' / ')}</span></span>
+            <span className="simulation-choice-icon"><Icon name="play" /></span><span className="simulation-choice-copy"><strong>{item.label}</strong><span>{item.architectures.map(a => a === 'act' ? 'ACT' : 'SmolVLA').join(' / ')} · {simulationProfileTarget(item)}</span></span>
           </label>)}
         </div>
       </section>
@@ -199,7 +199,7 @@ export function NativeSimulationPanel({ projectId, preferredJobId, onJobSelected
           <label>Native policy TAR<input type="file" accept=".tar,.tar.gz,.tgz,application/x-tar,application/gzip" onChange={event => setFile(event.target.files?.[0] ?? null)} /></label>
           {file && <p>{file.name} · {(file.size / 1024 ** 2).toFixed(1)} MiB</p>}
           {file && (!file.size || file.size > (options.data?.max_archive_bytes ?? 0)) && <p role="alert">Choose a nonempty TAR no larger than {((options.data?.max_archive_bytes ?? 0) / 1024 ** 3).toFixed(1)} GiB.</p>}
-          <WorkbenchDisclosure title="Package requirements"><p>Include safetensors weights, configuration, saved processors and normalization statistics. Import saves and validates locally; no GPU job starts.</p></WorkbenchDisclosure>
+          <WorkbenchDisclosure title="Package requirements"><p>Include {profile.policy_runtime === 'packed-act-cpu' ? 'packed ACT weights (model.fbq and encoding.json)' : 'safetensors weights'}, configuration, saved processors and normalization statistics. Import saves and validates locally; no GPU job starts.</p></WorkbenchDisclosure>
           <button type="button" className="secondary-button" disabled={!file || !file.size || file.size > (options.data?.max_archive_bytes ?? 0)} onClick={() => void mutate('upload')}>Upload and validate policy</button>
         </div> : <>
           <div className="simulation-choice-grid" role="radiogroup" aria-label="Native policy">
@@ -213,7 +213,7 @@ export function NativeSimulationPanel({ projectId, preferredJobId, onJobSelected
         <h3 id="simulation-launch-title" className="visually-hidden">Run settings</h3>
         <label className="simulation-timeout">Timeout (seconds)<input aria-label="Simulation timeout (seconds)" type="number" min="30" max="7200" step="1" value={timeout} onChange={event => { setTimeoutValue(event.target.value); setExperimental(false); }} /></label>
         {!timeoutValid && <p role="alert">Choose a whole number from 30 to 7200 seconds.</p>}
-        <p className="simulation-scope-note">Paid L4 + H100 workers. Timeout is not a spending cap.</p>
+        <p className="simulation-scope-note">Paid {simulationProfileTarget(profile)}. Timeout is not a spending cap.</p>
         <WorkbenchDisclosure title="Cloud limits"><p>Cancellation is supervised; resource deletion is not verified. The job has a maximum two-hour timeout.</p></WorkbenchDisclosure>
         <label className="native-confirm"><input type="checkbox" checked={experimental} onChange={event => setExperimental(event.target.checked)} />I understand this is an experimental, paid cloud rollout with unverified cup pickup and calibration.</label>
         <button type="button" className="primary-button simulation-submit" disabled={policySource !== 'saved' || !input || !experimental || !timeoutValid || artifacts.isError || jobs.isError} onClick={() => void mutate('run')}><Icon name="play" size={17} />Start experimental simulation</button>

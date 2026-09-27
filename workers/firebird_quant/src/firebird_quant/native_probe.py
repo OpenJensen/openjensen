@@ -103,7 +103,12 @@ def evaluate(policy, root, config, torch):
 
 
 def convert(source, destination, bits):
-    from firebird_act.bundle import control_files, temporal_files, tensor_header, validate_processors
+    from firebird_act.bundle import (
+        control_files,
+        temporal_files,
+        tensor_header,
+        validate_processors,
+    )
     from safetensors.torch import load_file
 
     from . import Recipe, quantize

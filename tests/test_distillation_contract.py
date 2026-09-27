@@ -127,6 +127,22 @@ def test_runtime_has_no_implicit_engine_or_training_capability(tmp_path):
     ]:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("# installed worker marker")
+    for folder, names in (
+        (
+            root / "src/firebird_distill",
+            ("__init__.py", "runtime.py", "contracts.py", "provenance.py"),
+        ),
+        (
+            root.parent / "act_optimizer/src/firebird_act",
+            ("bundle.py", "probe.py", "control_schema.py"),
+        ),
+        (
+            root.parent / "smolvla_qlora/src/firebird_vla",
+            ("control_contract.py", "control_schema.py"),
+        ),
+    ):
+        for name in names:
+            (folder / name).write_text("# installed worker dependency marker")
     public = catalog.public()["runtimes"][0]
     assert public["native_distillation"] and public["native_distillation_only"]
     assert not any(public[key] for key in ["training", "run", "simulation", "engine_evaluation"])

@@ -70,8 +70,8 @@ def job(teacher, tmp_path):
 
 def make_job(teacher, tmp_path):
     import torch
-    from safetensors.torch import save
     from firebird_distill.provenance import action_fps, policy_metadata
+    from safetensors.torch import save
 
     expected = inventory(teacher)
     cfg, camera, processors = teacher_info(teacher, expected)
@@ -108,11 +108,14 @@ def make_job(teacher, tmp_path):
             revision=record["source"]["dataset_manifest_sha256"],
         )
         doc["semantics"].update(
-            state_names=record["joint_order"], action_names=record["joint_order"],
+            state_names=record["joint_order"],
+            action_names=record["joint_order"],
             units=["radians"] * 6,
         )
-    if prediction != 100 or metadata["execution_horizon"] != 100 or any(
-        metadata[k] is not None for k in ("control_contract", "temporal_contract_sha256")
+    if (
+        prediction != 100
+        or metadata["execution_horizon"] != 100
+        or any(metadata[k] is not None for k in ("control_contract", "temporal_contract_sha256"))
     ):
         doc.update({k: v for k, v in metadata.items() if k != "prediction_horizon"})
         doc["action_fps"] = action_fps(teacher, metadata) or 20

@@ -167,8 +167,15 @@ def train(job, output):
     teacher_root, data_root = Path(job["teacher"]["path"]), Path(job["dataset"]["path"])
     cfg, camera, processors_sha = teacher_info(teacher_root, job["teacher"]["files"])
     inherited = policy_metadata(teacher_root, cfg)
-    doc = corpus(data_root, job["dataset"]["manifest_sha256"], cfg, camera, processors_sha,
-                 metadata=inherited, expected_fps=action_fps(teacher_root, inherited))
+    doc = corpus(
+        data_root,
+        job["dataset"]["manifest_sha256"],
+        cfg,
+        camera,
+        processors_sha,
+        metadata=inherited,
+        expected_fps=action_fps(teacher_root, inherited),
+    )
     # Decode every input before optimization to reject corrupt/misdeclared padding immediately.
     # Prevent identical observation bytes leaking across operator-declared partitions.
     seen = {}
@@ -343,8 +350,15 @@ def verify(job, output):
     files = inventory(root)
     cfg, camera, processors_sha = policy_info(root, files)
     inherited = policy_metadata(root, cfg)
-    doc = corpus(data, job["dataset"]["manifest_sha256"], cfg, camera, processors_sha,
-                 metadata=inherited, expected_fps=action_fps(root, inherited))
+    doc = corpus(
+        data,
+        job["dataset"]["manifest_sha256"],
+        cfg,
+        camera,
+        processors_sha,
+        metadata=inherited,
+        expected_fps=action_fps(root, inherited),
+    )
     policy, pre, post = load_policy(root)
     records = predictions(policy, pre, post, data, doc)
     return {

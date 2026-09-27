@@ -35,6 +35,7 @@ class Checkpoint:
     action_steps: int
     control_contract: dict | None = None
     control_contract_sha256: str | None = None
+    model_format: str = "safetensors"
 
 
 def inspect_checkpoint(path: Path) -> Checkpoint:
@@ -68,6 +69,7 @@ def inspect_checkpoint(path: Path) -> Checkpoint:
             config["n_action_steps"],
             control,
             control_sha,
+            "firebird_quant",
         )
     root = path.resolve()
     files = set(_EXPORT_FILES)

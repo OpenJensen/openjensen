@@ -8,7 +8,10 @@ from firebird_act.bundle import canonical, inventory
 from firebird_distill.application import native_model_id
 from firebird_distill.contracts import corpus, digest, read, teacher_info
 from firebird_distill.provenance import (
-    action_fps, check_snapshot_control, inherited_files, policy_metadata,
+    action_fps,
+    check_snapshot_control,
+    inherited_files,
+    policy_metadata,
 )
 from semantics_fixture import control_record, policy, temporal_record
 
@@ -16,34 +19,69 @@ from semantics_fixture import control_record, policy, temporal_record
 def observation_corpus(root, config, metadata, processors, *, legacy=False):
     root.mkdir()
     doc = {
-        "schema_version": 1, "format": "act-observation-corpus-v1",
-        "source": {"kind": "generated_fixture", "identity": "sha256:" + "a" * 64,
-                   "revision": "a" * 64, "inventory_sha256": "d" * 64},
-        "semantics": {"state_names": [f"joint_{i}" for i in range(6)],
-                      "action_names": [f"joint_{i}" for i in range(6)], "units": ["radians"] * 6,
-                      "compatibility": "generated_fixture", "teacher_processors_sha256": processors},
-        "camera": "observation.images.front", "image_shape": [3, 32, 32],
-        "chunk_size": config["chunk_size"], "samples": [],
+        "schema_version": 1,
+        "format": "act-observation-corpus-v1",
+        "source": {
+            "kind": "generated_fixture",
+            "identity": "sha256:" + "a" * 64,
+            "revision": "a" * 64,
+            "inventory_sha256": "d" * 64,
+        },
+        "semantics": {
+            "state_names": [f"joint_{i}" for i in range(6)],
+            "action_names": [f"joint_{i}" for i in range(6)],
+            "units": ["radians"] * 6,
+            "compatibility": "generated_fixture",
+            "teacher_processors_sha256": processors,
+        },
+        "camera": "observation.images.front",
+        "image_shape": [3, 32, 32],
+        "chunk_size": config["chunk_size"],
+        "samples": [],
     }
     if not legacy:
-        doc.update({k: metadata[k] for k in (
-            "execution_horizon", "temporal_contract_sha256", "control_contract",
-            "control_contract_sha256",
-        )}, action_fps=20)
+        doc.update(
+            {
+                k: metadata[k]
+                for k in (
+                    "execution_horizon",
+                    "temporal_contract_sha256",
+                    "control_contract",
+                    "control_contract_sha256",
+                )
+            },
+            action_fps=20,
+        )
     for i, split in enumerate(("train", "validation", "final")):
         name, raw = f"sample-{i:06d}.safetensors", b"metadata-only sample"
         (root / name).write_bytes(raw)
-        doc["samples"].append({"file": name, "sha256": digest(raw), "bytes": len(raw),
-                               "episode_id": i, "lineage_group": f"group-{i}",
-                               "frame_index": 0, "episode_length": 4, "split": split})
+        doc["samples"].append(
+            {
+                "file": name,
+                "sha256": digest(raw),
+                "bytes": len(raw),
+                "episode_id": i,
+                "lineage_group": f"group-{i}",
+                "frame_index": 0,
+                "episode_length": 4,
+                "split": split,
+            }
+        )
     (root / "manifest.json").write_bytes(canonical(doc))
     return doc
 
 
 def check(root, config, metadata, processors, doc):
     (root / "manifest.json").write_bytes(canonical(doc))
-    return corpus(root, digest(canonical(doc)), config, "observation.images.front", processors,
-                  metadata=metadata, expected_fps=20 if metadata["control_contract"] else None)
+    return corpus(
+        root,
+        digest(canonical(doc)),
+        config,
+        "observation.images.front",
+        processors,
+        metadata=metadata,
+        expected_fps=20 if metadata["control_contract"] else None,
+    )
 
 
 @pytest.mark.parametrize("prediction,execution", [(1, 1), (8, 3), (100, 100), (1024, 8)])
@@ -55,27 +93,34 @@ def test_teacher_and_corpus_preserve_inherited_horizons(tmp_path, prediction, ex
     assert metadata["prediction_horizon"] == prediction
     assert metadata["execution_horizon"] == execution
     assert action_fps(root, metadata) == 20
-    assert {"control-contract.json", "temporal-contract.json", "pre-stats.safetensors"} <= inherited_files(root, config)
+    assert {
+        "control-contract.json",
+        "temporal-contract.json",
+        "pre-stats.safetensors",
+    } <= inherited_files(root, config)
     data = tmp_path / "corpus"
     doc = observation_corpus(data, config, metadata, processors)
     assert check(data, config, metadata, processors, doc) == doc
 
 
-@pytest.mark.parametrize("change", [
-    lambda d: d.update(chunk_size=100),
-    lambda d: d.update(execution_horizon=True),
-    lambda d: d.update(execution_horizon=8),
-    lambda d: d.update(action_fps=30),
-    lambda d: d.update(action_fps=True),
-    lambda d: d.update(temporal_contract_sha256=None),
-    lambda d: d.pop("execution_horizon"),
-    lambda d: d.update(control_contract=None, control_contract_sha256=None),
-    lambda d: d["source"].update(identity="sha256:" + "e" * 64),
-    lambda d: d["source"].update(revision="e" * 64),
-    lambda d: d["semantics"].update(units=["degrees"] * 6),
-    lambda d: d["semantics"]["state_names"].reverse(),
-    lambda d: d["samples"][2].update(lineage_group="group-0"),
-])
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda d: d.update(chunk_size=100),
+        lambda d: d.update(execution_horizon=True),
+        lambda d: d.update(execution_horizon=8),
+        lambda d: d.update(action_fps=30),
+        lambda d: d.update(action_fps=True),
+        lambda d: d.update(temporal_contract_sha256=None),
+        lambda d: d.pop("execution_horizon"),
+        lambda d: d.update(control_contract=None, control_contract_sha256=None),
+        lambda d: d["source"].update(identity="sha256:" + "e" * 64),
+        lambda d: d["source"].update(revision="e" * 64),
+        lambda d: d["semantics"].update(units=["degrees"] * 6),
+        lambda d: d["semantics"]["state_names"].reverse(),
+        lambda d: d["samples"][2].update(lineage_group="group-0"),
+    ],
+)
 def test_contract_or_partition_changes_fail_closed(tmp_path, change):
     teacher = tmp_path / "teacher"
     config = policy(teacher)
@@ -142,28 +187,58 @@ def snapshot_metadata(root):
         "action": {"dtype": "float32", "shape": [6], "names": record["joint_order"]},
         "observation.images.front": {"dtype": "video", "shape": [32, 32, 3]},
     }
-    source = {"source_session_id": "s", "scene_sha256": "c" * 64,
-              "origin": "synthetic", "lineage_group": "group"}
-    provenance = {"schema_version": 1, "controller": "joint_position_targets",
-                  "state_units": "radians", "action_units": "radians", "timebase": "simulation_seconds",
-                  "action_column": "action", "requested_action_column": "teaching.requested_action",
-                  "scene_hash_scope": record["source"]["scene_hash_scope"], "task_success_verified": False,
-                  "joint_order": record["joint_order"], "camera_prim": record["camera"]["prim"],
-                  "sources": [source], "episodes": [{"episode_index": 0, "source_session_id": "s"}]}
-    for name, value in (("meta/info.json", {"fps": 20, "features": features}),
-                        ("meta/firebird-demonstrations.json", provenance)):
+    source = {
+        "source_session_id": "s",
+        "scene_sha256": "c" * 64,
+        "origin": "synthetic",
+        "lineage_group": "group",
+    }
+    provenance = {
+        "schema_version": 1,
+        "controller": "joint_position_targets",
+        "state_units": "radians",
+        "action_units": "radians",
+        "timebase": "simulation_seconds",
+        "action_column": "action",
+        "requested_action_column": "teaching.requested_action",
+        "scene_hash_scope": record["source"]["scene_hash_scope"],
+        "task_success_verified": False,
+        "joint_order": record["joint_order"],
+        "camera_prim": record["camera"]["prim"],
+        "sources": [source],
+        "episodes": [{"episode_index": 0, "source_session_id": "s"}],
+    }
+    for name, value in (
+        ("meta/info.json", {"fps": 20, "features": features}),
+        ("meta/firebird-demonstrations.json", provenance),
+    ):
         (root / name).write_bytes(canonical(value))
-    files = [{"path": p.relative_to(root).as_posix(), "size": p.stat().st_size,
-              "sha256": digest(p.read_bytes())} for p in sorted((root / "meta").iterdir())]
-    record["source"]["demonstrations_sha256"] = digest((root / "meta/firebird-demonstrations.json").read_bytes())
-    manifest = {"fps": 20, "features": features, "files": files, "lineage_validated": True,
-                "lineage": [{"episode_index": 0, "origin": "synthetic", "lineage_group": "group"}]}
+    files = [
+        {
+            "path": p.relative_to(root).as_posix(),
+            "size": p.stat().st_size,
+            "sha256": digest(p.read_bytes()),
+        }
+        for p in sorted((root / "meta").iterdir())
+    ]
+    record["source"]["demonstrations_sha256"] = digest(
+        (root / "meta/firebird-demonstrations.json").read_bytes()
+    )
+    manifest = {
+        "fps": 20,
+        "features": features,
+        "files": files,
+        "lineage_validated": True,
+        "lineage": [{"episode_index": 0, "origin": "synthetic", "lineage_group": "group"}],
+    }
     pointer = {"path": str(root), "id": "sha256:" + "a" * 64, "manifest_sha256": "a" * 64}
     return manifest, pointer, record
 
 
 def test_snapshot_contract_derivation_requires_exact_source_and_cadence(tmp_path, monkeypatch):
-    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[3] / "workers/smolvla_qlora/src"))
+    monkeypatch.syspath_prepend(
+        str(Path(__file__).resolve().parents[3] / "workers/smolvla_qlora/src")
+    )
     root = tmp_path / "snapshot"
     manifest, pointer, record = snapshot_metadata(root)
     metadata = {"control_contract": record}
@@ -173,7 +248,9 @@ def test_snapshot_contract_derivation_requires_exact_source_and_cadence(tmp_path
     with pytest.raises(ValueError, match="exact teacher source"):
         check_snapshot_control(root, manifest, changed, "observation.images.front", metadata, 20)
     with pytest.raises(ValueError, match="FPS"):
-        check_snapshot_control(root, manifest | {"fps": 30}, pointer, "observation.images.front", metadata, 20)
+        check_snapshot_control(
+            root, manifest | {"fps": 30}, pointer, "observation.images.front", metadata, 20
+        )
     info = read(root / "meta/info.json")
     info["features"]["action"]["names"] = list(reversed(record["joint_order"]))
     (root / "meta/info.json").write_bytes(canonical(info))
@@ -186,15 +263,29 @@ def test_implementation_identity_includes_exact_reader_derivation_sources():
 
     workers = Path(__file__).resolve().parents[2]
     paths = {
-        **{"distillation/" + name: workers / "policy_distillation/src/firebird_distill" / name
-           for name in ("__init__.py", "application.py", "contracts.py", "prepare.py",
-                        "runtime.py", "provenance.py")},
-        **{"act/" + name: workers / "act_optimizer/src/firebird_act" / name
-           for name in ("bundle.py", "probe.py", "control_schema.py")},
-        **{"data/" + name: workers / "smolvla_qlora/src/firebird_vla" / name
-           for name in ("control_contract.py", "control_schema.py")},
+        **{
+            "distillation/" + name: workers / "policy_distillation/src/firebird_distill" / name
+            for name in (
+                "__init__.py",
+                "application.py",
+                "contracts.py",
+                "prepare.py",
+                "runtime.py",
+                "provenance.py",
+            )
+        },
+        **{
+            "act/" + name: workers / "act_optimizer/src/firebird_act" / name
+            for name in ("bundle.py", "probe.py", "control_schema.py")
+        },
+        **{
+            "data/" + name: workers / "smolvla_qlora/src/firebird_vla" / name
+            for name in ("control_contract.py", "control_schema.py")
+        },
     }
-    assert implementation_identity() == {key: digest(path.read_bytes()) for key, path in paths.items()}
+    assert implementation_identity() == {
+        key: digest(path.read_bytes()) for key, path in paths.items()
+    }
 
 
 def test_temporal_only_fps_and_nondefault_no_sidecar_corpus(tmp_path):
@@ -212,8 +303,13 @@ def test_temporal_only_fps_and_nondefault_no_sidecar_corpus(tmp_path):
     data = tmp_path / "corpus"
     doc = observation_corpus(data, config, metadata, processors)
     assert check(data, config, metadata, processors, doc) == doc
-    for key in ("execution_horizon", "action_fps", "temporal_contract_sha256",
-                "control_contract", "control_contract_sha256"):
+    for key in (
+        "execution_horizon",
+        "action_fps",
+        "temporal_contract_sha256",
+        "control_contract",
+        "control_contract_sha256",
+    ):
         doc.pop(key)
     with pytest.raises(ValueError, match="Legacy corpus"):
         check(data, config, metadata, processors, doc)
@@ -230,10 +326,13 @@ def test_100_100_corpus_cannot_omit_present_sidecars(tmp_path):
         check(data, config, metadata, processors, doc)
 
 
-@pytest.mark.parametrize("kind,compatibility", [
-    ("generated_fixture", "generated_fixture"),
-    ("lerobot", "operator_attested_teacher_recorded_coordinates"),
-])
+@pytest.mark.parametrize(
+    "kind,compatibility",
+    [
+        ("generated_fixture", "generated_fixture"),
+        ("lerobot", "operator_attested_teacher_recorded_coordinates"),
+    ],
+)
 def test_homogeneous_selected_origin_can_use_mixed_source_snapshot(tmp_path, kind, compatibility):
     teacher = tmp_path / "teacher"
     config = policy(teacher)
@@ -256,9 +355,16 @@ def test_homogeneous_selected_origin_can_use_mixed_source_snapshot(tmp_path, kin
         check(data, config, metadata, processors, doc)
 
 
-@pytest.mark.parametrize("name", [
-    "manifest.json", "recipe.json", "parity.json", "train_config.json", "export-lineage.json",
-])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "manifest.json",
+        "recipe.json",
+        "parity.json",
+        "train_config.json",
+        "export-lineage.json",
+    ],
+)
 def test_existing_export_teacher_metadata_is_retained_but_not_student_payload(tmp_path, name):
     from firebird_distill.contracts import policy_info
 

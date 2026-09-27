@@ -95,9 +95,21 @@ def test_even_null_or_empty_accelerator_claim_is_refused(case, accelerator):
 @pytest.mark.parametrize(
     "change",
     [
-        "machine", "spot", "region", "nodes", "public-port", "ordered",
-        "extra-mount", "wrong-source", "setup", "run", "device", "runtime",
-        "deadline", "pythonpath", "model-format",
+        "machine",
+        "spot",
+        "region",
+        "nodes",
+        "public-port",
+        "ordered",
+        "extra-mount",
+        "wrong-source",
+        "setup",
+        "run",
+        "device",
+        "runtime",
+        "deadline",
+        "pythonpath",
+        "model-format",
     ],
 )
 def test_cpu_template_cannot_override_resources_sources_or_execution(case, change):
@@ -276,9 +288,10 @@ def test_cpu_context_is_saved_before_one_launch_and_cannot_be_reused(case):
         assert dispatched[2]["envs"]["POLICY_MODEL_FORMAT"] == "firebird_quant"
         return 0
 
-    with patch.object(launcher, "_inspect", return_value=info), patch.object(
-        launcher, "_launch", side_effect=submitted
-    ) as launch:
+    with (
+        patch.object(launcher, "_inspect", return_value=info),
+        patch.object(launcher, "_launch", side_effect=submitted) as launch,
+    ):
         assert launcher._submit(args, case.task) == 0
         with pytest.raises(FileExistsError):
             launcher._submit(args, case.task)
@@ -324,10 +337,12 @@ def test_cli_keeps_selected_input_separate_from_library_source_paths(
     selected = case.worker.parent / "operator-selected-input"
     args = ["launch", str(case.task), "--experimental", "--policy-runtime", runtime]
     if selection != "omitted":
-        args.extend([
-            "--checkpoint-archive" if selection == "archive" else "--checkpoint",
-            selected.name,
-        ])
+        args.extend(
+            [
+                "--checkpoint-archive" if selection == "archive" else "--checkpoint",
+                selected.name,
+            ]
+        )
     monkeypatch.chdir(case.worker.parent)
     monkeypatch.setattr(sys, "argv", args)
     monkeypatch.setattr(sys, "path", list(sys.path))
@@ -355,12 +370,14 @@ def test_cli_keeps_selected_input_separate_from_library_source_paths(
     monkeypatch.setattr(launcher, "_submit", submit)
     assert launcher._main() == 0
     assert resolved == ([] if selection == "omitted" else [(selected, selection == "archive")])
-    assert chosen == [(
-        case.task,
-        None if selection == "omitted" else case.checkpoint,
-        launcher._Mode.EXPERIMENTAL,
-        None,
-        runtime,
-    )]
+    assert chosen == [
+        (
+            case.task,
+            None if selection == "omitted" else case.checkpoint,
+            launcher._Mode.EXPERIMENTAL,
+            None,
+            runtime,
+        )
+    ]
     assert submitted == [(runtime, case.task)]
     assert not case.dispatch.called

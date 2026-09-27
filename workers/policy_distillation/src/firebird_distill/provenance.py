@@ -1,7 +1,11 @@
 """Exact inherited inference semantics, without importing Torch or a simulator."""
 
 from firebird_act.bundle import (
-    canonical, control_files, safe_file, temporal_dimensions, temporal_files,
+    canonical,
+    control_files,
+    safe_file,
+    temporal_dimensions,
+    temporal_files,
     validate_processors,
 )
 from firebird_act.control_schema import optional as control_optional
@@ -72,15 +76,17 @@ def check_corpus_metadata(doc, config, metadata, expected_fps):
     if doc["chunk_size"] != dimensions["prediction_horizon"]:
         raise ValueError("Corpus prediction horizon differs from teacher")
     fields = {
-        "execution_horizon", "action_fps", "temporal_contract_sha256",
-        "control_contract", "control_contract_sha256",
+        "execution_horizon",
+        "action_fps",
+        "temporal_contract_sha256",
+        "control_contract",
+        "control_contract_sha256",
     }
     present = fields.intersection(doc)
     if not present:
         if dimensions != {"prediction_horizon": 100, "execution_horizon": 100} or any(
-            metadata[k] is not None for k in (
-                "temporal_contract_sha256", "control_contract", "control_contract_sha256"
-            )
+            metadata[k] is not None
+            for k in ("temporal_contract_sha256", "control_contract", "control_contract_sha256")
         ):
             raise ValueError("Legacy corpus cannot omit nondefault teacher semantics")
         return fields

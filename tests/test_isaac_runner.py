@@ -82,6 +82,9 @@ def test_profile_loader_public_boundary_and_identity(profile, tmp_path):
         "task_object",
         "provider",
         "accelerators",
+        "policy_runtime",
+        "policy_device",
+        "policy_formats",
         "task_success",
     }
     assert str(profile.credential_file) not in json.dumps(loaded.public())

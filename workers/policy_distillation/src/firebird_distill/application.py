@@ -20,12 +20,11 @@ from .contracts import (
     MAX_SAMPLE_BYTES,
     corpus,
     digest,
-    read,
     policy_info,
+    read,
     request,
     teacher_info,
 )
-
 from .provenance import action_fps, inherited_files, policy_metadata
 
 
@@ -214,7 +213,14 @@ def implementation_identity():
     import firebird_vla.control_contract
     import firebird_vla.control_schema
 
-    names = ("__init__.py", "application.py", "contracts.py", "prepare.py", "runtime.py", "provenance.py")
+    names = (
+        "__init__.py",
+        "application.py",
+        "contracts.py",
+        "prepare.py",
+        "runtime.py",
+        "provenance.py",
+    )
     files = {
         "distillation/" + name: digest(safe_file(Path(__file__).parent / name, 1024**2))
         for name in names
@@ -235,8 +241,15 @@ def run_job(job):
     cfg, camera, processors_sha = teacher_info(teacher, job["teacher"]["files"])
     inherited = policy_metadata(teacher, cfg)
     fps_contract = action_fps(teacher, inherited)
-    doc = corpus(data, job["dataset"]["manifest_sha256"], cfg, camera, processors_sha,
-                 metadata=inherited, expected_fps=fps_contract)
+    doc = corpus(
+        data,
+        job["dataset"]["manifest_sha256"],
+        cfg,
+        camera,
+        processors_sha,
+        metadata=inherited,
+        expected_fps=fps_contract,
+    )
     preserved = {name: job["teacher"]["files"][name] for name in inherited_files(teacher, cfg)}
     output.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
@@ -257,8 +270,15 @@ def run_job(job):
             copy_corpus(data, copied_data, doc)
             # Revalidate copied identities before execution; original paths cannot be read by child.
             teacher_info(copied_teacher, job["teacher"]["files"])
-            corpus(copied_data, job["dataset"]["manifest_sha256"], cfg, camera, processors_sha,
-                   metadata=inherited, expected_fps=fps_contract)
+            corpus(
+                copied_data,
+                job["dataset"]["manifest_sha256"],
+                cfg,
+                camera,
+                processors_sha,
+                metadata=inherited,
+                expected_fps=fps_contract,
+            )
             copied_job = copy.deepcopy(job)
             copied_job["teacher"]["path"], copied_job["dataset"]["path"] = (
                 str(copied_teacher),

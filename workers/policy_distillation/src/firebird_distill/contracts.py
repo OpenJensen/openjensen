@@ -10,9 +10,9 @@ from pathlib import Path
 from firebird_act.bundle import (
     CORE_FILES,
     canonical,
-    temporal_dimensions,
     inventory,
     safe_file,
+    temporal_dimensions,
     validate_config,
     validate_processors,
 )
@@ -166,9 +166,11 @@ def policy_info(root, expected, *, source_metadata=False):
 
     policy_metadata(root, cfg)
     required = CORE_FILES | inherited_files(root, cfg)
-    allowed = required | ({
-        "manifest.json", "recipe.json", "parity.json", "train_config.json", "export-lineage.json"
-    } if source_metadata else set())
+    allowed = required | (
+        {"manifest.json", "recipe.json", "parity.json", "train_config.json", "export-lineage.json"}
+        if source_metadata
+        else set()
+    )
     if not required <= set(expected) <= allowed:
         raise ValueError("Unexpected files in ACT inference payload")
     camera = next(k for k in cfg["input_features"] if k.startswith("observation.images."))
@@ -195,8 +197,10 @@ def corpus(root, expected_sha, cfg, camera, processors_sha, *, metadata=None, ex
 
     if metadata is None:
         metadata = {
-            **temporal_dimensions(cfg), "temporal_contract_sha256": None,
-            "control_contract": None, "control_contract_sha256": None,
+            **temporal_dimensions(cfg),
+            "temporal_contract_sha256": None,
+            "control_contract": None,
+            "control_contract_sha256": None,
         }
     extra = check_corpus_metadata(doc, cfg, metadata, expected_fps)
     exact_keys(
@@ -210,7 +214,8 @@ def corpus(root, expected_sha, cfg, camera, processors_sha, *, metadata=None, ex
             "image_shape",
             "chunk_size",
             "samples",
-        } | (extra if "execution_horizon" in doc else set()),
+        }
+        | (extra if "execution_horizon" in doc else set()),
     )
     integer(doc["schema_version"], 1, 1)
     if doc["format"] != "act-observation-corpus-v1" or doc["camera"] != camera:

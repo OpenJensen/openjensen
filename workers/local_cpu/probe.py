@@ -66,15 +66,21 @@ def distillation_source_identity(repo: Path) -> dict[str, str]:
     root = repo.resolve() / "workers"
     groups = (
         (
-            "distillation", "firebird_distill", "policy_distillation/src/firebird_distill",
+            "distillation",
+            "firebird_distill",
+            "policy_distillation/src/firebird_distill",
             ("__init__", "application", "contracts", "prepare", "runtime", "provenance"),
         ),
         (
-            "act", "firebird_act", "act_optimizer/src/firebird_act",
+            "act",
+            "firebird_act",
+            "act_optimizer/src/firebird_act",
             ("bundle", "probe", "control_schema"),
         ),
         (
-            "data", "firebird_vla", "smolvla_qlora/src/firebird_vla",
+            "data",
+            "firebird_vla",
+            "smolvla_qlora/src/firebird_vla",
             ("control_contract", "control_schema"),
         ),
     )
@@ -85,7 +91,9 @@ def distillation_source_identity(repo: Path) -> dict[str, str]:
             module = importlib.import_module(imported)
             path = root / folder / f"{name}.py"
             if module.__file__ is None or Path(module.__file__).resolve() != path:
-                raise ValueError(f"Distillation dependency is not from selected checkout: {imported}")
+                raise ValueError(
+                    f"Distillation dependency is not from selected checkout: {imported}"
+                )
             with path.open("rb") as stream:
                 raw = stream.read(1024 * 1024 + 1)
             if not raw or len(raw) > 1024 * 1024:

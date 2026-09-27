@@ -2,8 +2,9 @@ import { apiOrigin, type Job, type PolicyArtifact } from './api';
 
 // Additive API types until the combined server schema is generated. No operator
 // paths, commands, credentials or arbitrary media URLs are accepted by this client.
-export type SimulationTarget = { profile_id: string; profile_sha256: string; provider: 'gcp'; accelerators: ('L4' | 'H100')[]; source_manifest_sha256: string; model_id?: string | null };
-export type SimulationProfile = { id: string; label: string; architectures: ('act' | 'smolvla')[]; experimental: true; task_object: 'cup' };
+export type PolicyRuntime = 'lerobot-cuda' | 'packed-act-cpu';
+export type SimulationTarget = { policy_runtime?: PolicyRuntime; profile_id: string; profile_sha256: string; provider: 'gcp'; accelerators: ('L4' | 'H100')[]; source_manifest_sha256: string; model_id?: string | null };
+export type SimulationProfile = { id: string; label: string; architectures: ('act' | 'smolvla')[]; experimental: true; task_object: 'cup'; provider?: 'gcp'; accelerators?: ('L4' | 'H100')[]; policy_runtime?: PolicyRuntime; policy_device?: 'cpu' | 'cuda'; policy_formats?: ('safetensors' | 'firebird_quant')[] };
 export type SimulationOptions = { profiles: SimulationProfile[]; unavailable_reason?: string | null; max_archive_bytes: number; scored_evaluation: false };
 export type NativeArtifact = Omit<PolicyArtifact, 'format'> & { format: PolicyArtifact['format'] | 'simulation_record' };
 export type SimulationJob = Job & { simulation_target?: SimulationTarget | null };
@@ -18,17 +19,46 @@ export function objectRecord(value: unknown): value is Record<string, unknown> {
 function message(value: unknown, status: number) { return objectRecord(value) && typeof value.detail === 'string' ? value.detail.slice(0, 2000) : `The application returned HTTP ${status}.`; }
 export function simulationTarget(job: Job): SimulationTarget | null {
   const target = (job as SimulationJob).simulation_target;
-  return target?.provider === 'gcp' && typeof target.profile_id === 'string' && Array.isArray(target.accelerators) ? target : null;
+  if (target?.provider !== 'gcp' || typeof target.profile_id !== 'string' || !Array.isArray(target.accelerators)) return null;
+  const mode = target.policy_runtime === undefined ? 'lerobot-cuda' : target.policy_runtime;
+  const expected = mode === 'packed-act-cpu' ? ['L4'] : ['L4', 'H100'];
+  return ['lerobot-cuda', 'packed-act-cpu'].includes(mode) && JSON.stringify(target.accelerators) === JSON.stringify(expected) ? target : null;
 }
 export function isSimulationJob(job: Job) {
   return simulationTarget(job) !== null || ('simulation' in job.request && objectRecord(job.request.simulation) && typeof job.request.simulation.profile_id === 'string');
 }
 export function nativeInput(artifact: NativeArtifact, projectId: string, profile?: SimulationProfile) {
   const architecture = artifact.metadata?.architecture;
-  return artifact.project_id === projectId && ['inference_export', 'native_checkpoint'].includes(artifact.format) &&
+  const checkpoint = objectRecord(artifact.metadata?.checkpoint) ? artifact.metadata.checkpoint : {};
+  const claims: unknown[] = [];
+  if (artifact.metadata?.format === 'safetensors' || artifact.metadata?.format === 'firebird_quant') claims.push(artifact.metadata.format);
+  if ('model_format' in checkpoint) claims.push(checkpoint.model_format);
+  if (artifact.format === 'native_quantized') claims.push('firebird_quant');
+  if (claims.some(value => value !== 'safetensors' && value !== 'firebird_quant') || new Set(claims).size > 1) return false;
+  const packed = claims[0] === 'firebird_quant';
+  const compatible = profile?.policy_runtime === 'packed-act-cpu' ? packed && architecture === 'act' : !packed;
+  return compatible && artifact.project_id === projectId && ['inference_export', 'native_checkpoint', 'native_quantized'].includes(artifact.format) &&
     (architecture === 'act' || architecture === 'smolvla') && (!profile || profile.architectures.includes(architecture)) &&
     artifact.metadata?.storage !== 'gcs' && !artifact.metadata?.remote_uri;
 }
+export function simulationProfileTarget(profile?: SimulationProfile): string {
+  return profile?.policy_runtime === 'packed-act-cpu' ? 'L4 simulator + CPU policy worker' : 'L4 + H100 workers';
+}
+export function simulationExecutionTarget(job: Job): string | null {
+  const target = simulationTarget(job);
+  return target ? target.policy_runtime === 'packed-act-cpu' ? 'L4 simulator + CPU policy worker' : target.accelerators.join(' + ') : null;
+}
+function validPolicyProfile(profile: Record<string, unknown>): boolean {
+  if (!['policy_runtime', 'policy_device', 'policy_formats'].some(key => key in profile)) return true;
+  const mode = profile.policy_runtime;
+  if (mode !== 'packed-act-cpu' && mode !== 'lerobot-cuda') return false;
+  const packed = mode === 'packed-act-cpu';
+  return profile.provider === 'gcp' && profile.policy_device === (packed ? 'cpu' : 'cuda') &&
+    JSON.stringify(profile.policy_formats) === JSON.stringify([packed ? 'firebird_quant' : 'safetensors']) &&
+    JSON.stringify(profile.accelerators) === JSON.stringify(packed ? ['L4'] : ['L4', 'H100']) &&
+    (!packed || JSON.stringify(profile.architectures) === JSON.stringify(['act']));
+}
+
 export function acceptedJob(value: unknown, projectId: string, operation: string, profileId?: string, expectedId?: string): SimulationJob {
   if (!objectRecord(value) || typeof value.id !== 'string' || !value.id || value.project_id !== projectId || value.kind !== operation ||
       (typeof value.status !== 'string' || !['queued', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted'].includes(value.status)) ||
@@ -66,7 +96,7 @@ export async function simulationOptions(): Promise<SimulationOptions> {
   if (!objectRecord(value) || !Array.isArray(value.profiles) || value.profiles.length > 100 ||
       !Number.isSafeInteger(value.max_archive_bytes) || Number(value.max_archive_bytes) <= 0 || Number(value.max_archive_bytes) > MAX_ARCHIVE_BYTES || value.scored_evaluation !== false ||
       value.profiles.some(p => !objectRecord(p) || typeof p.id !== 'string' || !/^[\w-]{1,100}$/.test(p.id) || typeof p.label !== 'string' || p.experimental !== true || p.task_object !== 'cup' ||
-        !Array.isArray(p.architectures) || !p.architectures.length || p.architectures.some(a => a !== 'act' && a !== 'smolvla'))) throw new Error('The application returned unsupported simulation options.');
+        !Array.isArray(p.architectures) || !p.architectures.length || p.architectures.some(a => a !== 'act' && a !== 'smolvla') || !validPolicyProfile(p))) throw new Error('The application returned unsupported simulation options.');
   return value as SimulationOptions;
 }
 export async function startSimulation(projectId: string, profileId: string, artifactId: string, timeout: number, manifestSha256: string) {

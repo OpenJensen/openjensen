@@ -141,7 +141,9 @@ def test_probe_control_claims_cannot_disagree(source, tmp_path, probes, monkeypa
 @pytest.mark.parametrize(
     "change", ["drop_control", "drop_temporal", "joint_order", "processors", "introduced"]
 )
-def test_conversion_cannot_drop_or_replace_bound_files(source, tmp_path, probes, monkeypatch, change):
+def test_conversion_cannot_drop_or_replace_bound_files(
+    source, tmp_path, probes, monkeypatch, change
+):
     if change == "introduced":
         (source / "control-contract.json").unlink()
     original = app._probe

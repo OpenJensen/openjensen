@@ -222,7 +222,8 @@ def _tasks(documents, mode=_Mode.ROLLOUT, policy_runtime=_CUDA_RUNTIME):
                 or resource.get("use_spot") is not spot
                 or not _valid_infra(resource.get("infra"), name, mode)
             ):
-                raise ValueError(f"{name} must use its configured {_REGION} resource")
+                kind = "CPU" if accelerator is None else "GPU"
+                raise ValueError(f"{name} must use its configured {_REGION} {kind} resource")
         if resources.get("ports"):
             raise ValueError("Do not expose the policy server through public SkyPilot ports")
         if Path(task.get("workdir", "")).resolve() != _WORKER:

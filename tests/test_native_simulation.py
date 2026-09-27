@@ -30,17 +30,25 @@ def wait(client, job_id):
 
 @pytest.fixture
 def app(tmp_path, monkeypatch):
+    from vla_platform.lifecycle.isaac_runner import require_policy_runtime
+
     calls = []
     profile = SimpleNamespace(
         id="cup-scene",
+        policy_runtime="lerobot-cuda",
         label="Fixture cup scene",
         identity_hash=lambda: "a" * 64,
         public=lambda: {
             "id": "cup-scene",
             "label": "Fixture cup scene",
             "experimental": True,
-            "architectures": ["act", "smolvla"],
+            "architectures": ["act"]
+            if profile.policy_runtime == "packed-act-cpu"
+            else ["act", "smolvla"],
             "task_object": "cup",
+            "accelerators": ["L4"]
+            if profile.policy_runtime == "packed-act-cpu"
+            else ["L4", "H100"],
         },
     )
     monkeypatch.setattr(simulation, "profiles", lambda _: (profile,))
@@ -54,7 +62,11 @@ def app(tmp_path, monkeypatch):
             model = destination / "contents"
             model.mkdir()
             (model / "config.json").write_text(json.dumps({"type": family}))
-            (model / "model.safetensors").write_bytes(b"fixture-only-not-model-weights")
+            if profile.policy_runtime == "packed-act-cpu":
+                (model / "model.fbq").write_bytes(b"fixture-only-not-model-weights")
+                (model / "encoding.json").write_text("{}")
+            else:
+                (model / "model.safetensors").write_bytes(b"fixture-only-not-model-weights")
         else:
             shutil.copytree(source, destination / "contents")
             model = next((destination / "contents").rglob("config.json")).parent
@@ -62,7 +74,13 @@ def app(tmp_path, monkeypatch):
         receipt = {
             "schema_version": 1,
             "directory": model.relative_to(destination).as_posix(),
-            "checkpoint": {"policy_type": family, "model_id": "sha256:" + "b" * 64},
+            "checkpoint": {
+                "policy_type": family,
+                "model_id": "sha256:" + "b" * 64,
+                "model_format": "firebird_quant"
+                if (model / "model.fbq").is_file()
+                else "safetensors",
+            },
             "source_sha256": simulation.sha(source) if archive else None,
             "files": {
                 p.relative_to(destination).as_posix(): {
@@ -104,11 +122,19 @@ def app(tmp_path, monkeypatch):
             "artifacts": records,
             "fixture_only": True,
         }
+        if profile.policy_runtime == "packed-act-cpu":
+            report.update(
+                policy_runtime="packed-act-cpu", policy_device="cpu", model_format="firebird_quant"
+            )
         (directory / "report.json").write_text(json.dumps(report))
         return report
 
     monkeypatch.setattr(simulation, "resolve", resolve)
-    runner = SimpleNamespace(run=execute, admit=lambda p, m: {"model_id": m["model_id"]})
+    runner = SimpleNamespace(
+        run=execute,
+        admit=lambda p, m: {"model_id": m["model_id"]},
+        require_policy_runtime=require_policy_runtime,
+    )
     monkeypatch.setitem(sys.modules, "vla_platform.lifecycle.isaac_runner", runner)
     import vla_platform.lifecycle
 
@@ -129,9 +155,13 @@ def upload(client, pid, family):
     return wait(client, response.json()["id"])
 
 
-@pytest.mark.parametrize("family", ["act", "smolvla"])
-def test_both_native_families_import_and_run_through_owned_jobs(app, family):
+@pytest.mark.parametrize(
+    "family,policy_runtime",
+    [("act", "lerobot-cuda"), ("smolvla", "lerobot-cuda"), ("act", "packed-act-cpu")],
+)
+def test_both_native_families_import_and_run_through_owned_jobs(app, family, policy_runtime):
     client, pid, settings, profile, calls = app
+    profile.policy_runtime = policy_runtime
     imported = upload(client, pid, family)
     assert imported["status"] == "succeeded", imported
     artifact = imported["result"]["artifacts"][0]
@@ -154,7 +184,14 @@ def test_both_native_families_import_and_run_through_owned_jobs(app, family):
     job = wait(client, response.json()["id"])
     assert job["status"] == "succeeded", job
     assert job["compute_target"] is None
-    assert job["simulation_target"]["accelerators"] == ["L4", "H100"]
+    assert job["simulation_target"]["policy_runtime"] == policy_runtime
+    assert job["simulation_target"]["accelerators"] == (
+        ["L4"] if policy_runtime == "packed-act-cpu" else ["L4", "H100"]
+    )
+    if policy_runtime == "packed-act-cpu":
+        report = job["result"]["reports"][0]
+        assert report["policy_runtime"] == policy_runtime and report["policy_device"] == "cpu"
+        assert report["model_format"] == "firebird_quant"
     assert job["simulation_target"]["source_manifest_sha256"] == artifact["manifest_sha256"]
     assert job["result"]["decision"] == "diagnostics_only"
     assert job["result"]["reports"][0]["task_success"] is None
@@ -366,3 +403,54 @@ def test_run_rejects_registered_coordinates_missing_from_resolved_package(app, l
     assert "control metadata differs" in job["error"]
     assert not calls
     assert len(client.get(f"/api/v1/projects/{pid}/artifacts").json()) == 1
+
+
+@pytest.mark.parametrize(
+    "encoding,files,family,accepted",
+    [
+        ("legacy", ["model.safetensors"], "act", True),
+        ("safetensors", ["model.safetensors"], "smolvla", True),
+        ("firebird_quant", ["model.fbq", "encoding.json"], "act", True),
+        ("firebird_quant", ["model.fbq", "encoding.json"], "smolvla", False),
+        ("firebird_quant", ["model.fbq"], "act", False),
+        ("firebird_quant", ["encoding.json"], "act", False),
+        ("firebird_quant", ["model.safetensors"], "act", False),
+        ("safetensors", ["model.fbq", "encoding.json"], "act", False),
+        ("legacy", ["model.fbq", "encoding.json"], "act", False),
+        ("firebird_quant", ["model.fbq", "encoding.json", "model.safetensors"], "act", False),
+        ("safetensors", [], "act", False),
+        (None, ["model.safetensors"], "act", False),
+        ([], ["model.safetensors"], "act", False),
+        ("unknown", ["model.safetensors"], "act", False),
+    ],
+)
+def test_import_receipt_encoding_matches_inventory(tmp_path, encoding, files, family, accepted):
+    """Protocol markers check encoding admission, never model execution or quality."""
+    destination = tmp_path / "imported"
+    model = destination / "contents"
+    model.mkdir(parents=True)
+    for name in files:
+        (model / name).write_bytes(b"generated protocol marker")
+    (model / "config.json").write_text(json.dumps({"type": family}))
+    info = {"policy_type": family, "model_id": "sha256:" + "a" * 64}
+    if encoding != "legacy":
+        info["model_format"] = encoding
+    receipt = {
+        "schema_version": 1,
+        "directory": "contents",
+        "checkpoint": info,
+        "files": {
+            p.relative_to(destination).as_posix(): {
+                "sha256": simulation.sha(p),
+                "bytes": p.stat().st_size,
+            }
+            for p in model.iterdir()
+        },
+    }
+    receipt_path = tmp_path / "receipt.json"
+    receipt_path.write_text(json.dumps(receipt))
+    if accepted:
+        assert simulation.check_receipt(destination, receipt_path) == (model, receipt)
+    else:
+        with pytest.raises(ValueError, match="encoding"):
+            simulation.check_receipt(destination, receipt_path)

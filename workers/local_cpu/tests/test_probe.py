@@ -85,15 +85,21 @@ def worker_sources(tmp_path, monkeypatch):
     files, modules = {}, {}
     groups = (
         (
-            "distillation", "firebird_distill", "policy_distillation/src/firebird_distill",
+            "distillation",
+            "firebird_distill",
+            "policy_distillation/src/firebird_distill",
             ("__init__", "application", "contracts", "prepare", "runtime", "provenance"),
         ),
         (
-            "act", "firebird_act", "act_optimizer/src/firebird_act",
+            "act",
+            "firebird_act",
+            "act_optimizer/src/firebird_act",
             ("bundle", "probe", "control_schema"),
         ),
         (
-            "data", "firebird_vla", "smolvla_qlora/src/firebird_vla",
+            "data",
+            "firebird_vla",
+            "smolvla_qlora/src/firebird_vla",
             ("control_contract", "control_schema"),
         ),
     )
@@ -151,10 +157,12 @@ def test_dependency_source_origin_and_presence_are_required(worker_sources, faul
     if fault == "missing_file":
         files["distillation/provenance.py"].unlink()
     elif fault == "missing_module":
+
         def missing(name):
             if name == key:
                 raise ModuleNotFoundError(name)
             return modules[name]
+
         monkeypatch.setattr(p.importlib, "import_module", missing)
     elif fault == "borrowed":
         # Even a module elsewhere in this same checkout must not satisfy the fixed path.
