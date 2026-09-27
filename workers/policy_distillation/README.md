@@ -156,8 +156,15 @@ optimizer/RNG checkpoint: `training_resume_supported=false`.
 
 The student is already `use_vae=false`; do **not** send it through ACT VAE-removal
 export. The API snapshot-to-distillation job and checkpoint download are verified
-in [application evidence](evidence/app-integration.json). Web UI integration, CUDA,
-Isaac rollout, timing speedup, calibration and task quality remain unverified.
+in [application evidence](evidence/app-integration.json). The [browser integration
+proof](evidence/browser-integration.json) also verifies a manually submitted 12-step
+local job through the production web UI, successful registration and the exact
+browser-downloaded package. It used a generated ACT teacher and three generated
+scene groups, not recorded robot skill. All original source hashes were unchanged;
+all 10 archive files matched the registered package. The student weights were
+55,946,840 bytes; total job elapsed time was 170.426 seconds on macOS CPU. This is
+software verification, not a speed benchmark. CUDA, Isaac rollout, timing speedup,
+calibration and task quality remain unverified.
 `quality_verified`, `calibration_verified`, `speedup_verified` and
 `isaac_runtime_verified` remain false; `task_success` is null. Offline teacher
 imitation error can improve while robot success worsens. Teacher failure may be
