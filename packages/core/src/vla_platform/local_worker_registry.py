@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import stat
 import tempfile
 import threading
 from pathlib import Path
@@ -12,6 +13,8 @@ from pydantic import Field
 
 from vla_platform.lifecycle.contracts import StrictRecord
 from vla_platform.lifecycle.runtime import Runtime, RuntimeCatalog
+
+_MAX_REGISTRY_BYTES = 131072
 
 _MANAGED_FIELDS = {
     "id",
@@ -83,6 +86,29 @@ def _identity(runtime: Runtime) -> tuple:
     )
 
 
+def _read_saved(path: Path) -> _SavedWorkers | None:
+    try:
+        before = path.lstat()
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISREG(before.st_mode) or before.st_size > _MAX_REGISTRY_BYTES:
+        raise ValueError("Unsafe registry")
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    descriptor = os.open(path, flags)
+    with os.fdopen(descriptor, "rb") as stream:
+        opened = os.fstat(stream.fileno())
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or opened.st_size > _MAX_REGISTRY_BYTES
+            or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
+        ):
+            raise ValueError("Unsafe registry")
+        payload = stream.read(_MAX_REGISTRY_BYTES + 1)
+    if len(payload) > _MAX_REGISTRY_BYTES:
+        raise ValueError("Unsafe registry")
+    return _SavedWorkers.model_validate_json(payload.decode("utf-8"))
+
+
 class LocalWorkerRegistry:
     def __init__(self, data_dir: Path, operator_catalog: RuntimeCatalog):
         self.path = data_dir / "local-workers.json"
@@ -91,10 +117,8 @@ class LocalWorkerRegistry:
         self._runtimes: list[Runtime] = []
         self._load_error: str | None = None
         try:
-            if self.path.exists():
-                if self.path.is_symlink() or self.path.stat().st_size > 131072:
-                    raise ValueError("Unsafe registry")
-                saved = _SavedWorkers.model_validate_json(self.path.read_text())
+            saved = _read_saved(self.path)
+            if saved is not None:
                 entries = [_validate_managed(runtime) for runtime in saved.runtimes]
                 if len({runtime.id for runtime in entries}) != len(entries):
                     raise ValueError("Duplicate registered worker IDs")
@@ -152,7 +176,7 @@ class LocalWorkerRegistry:
                 raise ValueError("The local worker registry is full")
             updated = [*self._runtimes, runtime]
             payload = json.dumps(_SavedWorkers(version=1, runtimes=updated).model_dump(), indent=2)
-            if len(payload.encode("utf-8")) + 1 > 131072:
+            if len(payload.encode("utf-8")) + 1 > _MAX_REGISTRY_BYTES:
                 raise ValueError("The local worker registry is full")
             self.path.parent.mkdir(parents=True, exist_ok=True)
             descriptor, temporary = tempfile.mkstemp(prefix=".local-workers-", dir=self.path.parent)

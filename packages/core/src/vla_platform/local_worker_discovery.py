@@ -400,7 +400,18 @@ class LocalWorkerDiscoveryService:
         try:
             return await asyncio.shield(task)
         except asyncio.CancelledError:
-            await task
+            # A later cancellation must not cancel the task wrapper and release
+            # the lock while its thread still owns a probe. Drain even failures,
+            # then preserve the requesting caller's cancellation.
+            while not task.done():
+                try:
+                    await asyncio.shield(task)
+                except asyncio.CancelledError:
+                    continue
+                except Exception:
+                    break
+            if not task.cancelled():
+                task.exception()
             raise
 
     async def check(self) -> LocalWorkerDiscovery:

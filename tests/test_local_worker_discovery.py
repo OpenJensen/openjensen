@@ -465,3 +465,73 @@ runpy.run_path(sys.argv[0], run_name='__main__')
     assert result["reason"] == "missing_dependencies"
     assert b"private" not in output
     assert output.count(b"\n") == 1
+
+
+@pytest.mark.parametrize("action", ["check", "add"])
+@pytest.mark.parametrize("fails", [False, True])
+def test_repeated_cancellation_retains_scan_lock_until_thread_finishes(
+    local, monkeypatch, action, fails
+):
+    import threading
+
+    service, _ = local
+
+    async def exercise():
+        initial = await service.check()
+        candidate_id = initial.candidates[0].id
+        response = service.last_result
+        candidates = service._candidates.copy()
+        loop = asyncio.get_running_loop()
+        started, second_started = asyncio.Event(), asyncio.Event()
+        release = threading.Event()
+        guard = threading.Lock()
+        count = active = peak = 0
+
+        def scan():
+            nonlocal count, active, peak
+            with guard:
+                count += 1
+                number = count
+                active += 1
+                peak = max(peak, active)
+            loop.call_soon_threadsafe((started if number == 1 else second_started).set)
+            try:
+                if number == 1:
+                    if not release.wait(3):
+                        raise AssertionError("Fixture release did not arrive")
+                    if fails:
+                        raise RuntimeError("Generated scan failure after cancellation")
+                return response, candidates
+            finally:
+                with guard:
+                    active -= 1
+
+        monkeypatch.setattr(service, "_discover", scan)
+        original = asyncio.create_task(
+            service.check() if action == "check" else service.add(candidate_id)
+        )
+        successor = None
+        try:
+            await asyncio.wait_for(started.wait(), 1)
+            original.cancel()
+            await asyncio.sleep(0)
+            original.cancel()
+            await asyncio.sleep(0)
+            successor = asyncio.create_task(service.check())
+            await asyncio.sleep(0.03)
+            assert not original.done(), "Cancelled caller released its still-running scan"
+            assert service._lock.locked()
+            assert not second_started.is_set()
+            release.set()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(original, 1)
+            await asyncio.wait_for(successor, 1)
+            assert peak == 1 and active == 0
+            assert service.lifecycle.local_workers.writes == 0
+        finally:
+            release.set()
+            await asyncio.gather(
+                original, *([successor] if successor else []), return_exceptions=True
+            )
+
+    asyncio.run(exercise())

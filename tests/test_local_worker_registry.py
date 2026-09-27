@@ -213,3 +213,93 @@ def test_api_uses_registered_catalog_without_enabling_local_or_exposing_private_
         assert client.get(f"/api/v1/projects/{project}/jobs").json() == []
     with TestClient(create_app(settings)) as client:
         assert client.get("/api/v1/policy-options").json()["runtimes"][0]["id"] == runtime["id"]
+
+
+@pytest.mark.parametrize("kind", ["fifo", "symlink", "dangling-symlink", "oversize"])
+def test_registry_rejects_nonregular_or_oversized_input_without_opening_it(
+    tmp_path, monkeypatch, kind
+):
+    if kind == "fifo" and not hasattr(os, "mkfifo"):
+        pytest.skip("Named pipes unavailable")
+    path = tmp_path / "local-workers.json"
+    if kind == "fifo":
+        os.mkfifo(path)
+    elif kind in {"symlink", "dangling-symlink"}:
+        target = tmp_path / "original-registry.json"
+        if kind == "symlink":
+            target.write_text('{"version":1,"runtimes":[]}')
+        path.symlink_to(target)
+    else:
+        path.write_bytes(b" " * (131072 + 1))
+
+    original_open = os.open
+    original_read = type(path).read_text
+
+    def refuse_open(name, *args, **kwargs):
+        if os.fspath(name) == os.fspath(path):
+            pytest.fail("Unsafe registry must be rejected before opening")
+        return original_open(name, *args, **kwargs)
+
+    def refuse_read(name, *args, **kwargs):
+        if name == path:
+            pytest.fail("Unsafe registry must not enter a blocking text read")
+        return original_read(name, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", refuse_open)
+    monkeypatch.setattr(type(path), "read_text", refuse_read)
+    registry = LocalWorkerRegistry(tmp_path, RuntimeCatalog())
+    assert registry.merge().runtimes == []
+    assert registry.issues and "could not be loaded" in registry.issues[0]
+    with pytest.raises(ValueError, match="could not be loaded"):
+        registry.register(trainer(tmp_path))
+    assert path.exists() or path.is_symlink()
+
+
+def test_registry_cannot_follow_a_swapped_symlink(tmp_path, monkeypatch):
+    path = tmp_path / "local-workers.json"
+    registry = LocalWorkerRegistry(tmp_path, RuntimeCatalog())
+    registry.register(trainer(tmp_path))
+    original = path.read_bytes()
+    private = tmp_path / "different-registry.json"
+    private.write_bytes(original)
+    original_open = os.open
+    swapped = False
+
+    def swap_before_open(name, flags, *args, **kwargs):
+        nonlocal swapped
+        if os.fspath(name) == os.fspath(path):
+            swapped = True
+            path.unlink()
+            path.symlink_to(private)
+            if hasattr(os, "O_NOFOLLOW"):
+                assert flags & os.O_NOFOLLOW
+            if hasattr(os, "O_NONBLOCK"):
+                assert flags & os.O_NONBLOCK
+        return original_open(name, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", swap_before_open)
+    loaded = LocalWorkerRegistry(tmp_path, RuntimeCatalog())
+    assert swapped
+    assert loaded.merge().runtimes == [] and loaded.issues
+    assert private.read_bytes() == original
+
+
+def test_registry_rejects_growth_after_size_check(tmp_path, monkeypatch):
+    path = tmp_path / "local-workers.json"
+    path.write_text('{"version":1,"runtimes":[]}')
+    original_fstat = os.fstat
+    grew = False
+
+    def grow_after_fstat(descriptor):
+        nonlocal grew
+        result = original_fstat(descriptor)
+        if (result.st_dev, result.st_ino) == (path.stat().st_dev, path.stat().st_ino):
+            with path.open("ab") as stream:
+                stream.write(b" " * 131073)
+            grew = True
+        return result
+
+    monkeypatch.setattr(os, "fstat", grow_after_fstat)
+    loaded = LocalWorkerRegistry(tmp_path, RuntimeCatalog())
+    assert grew
+    assert loaded.merge().runtimes == [] and loaded.issues
