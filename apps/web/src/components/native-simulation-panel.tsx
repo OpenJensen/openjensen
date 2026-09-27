@@ -35,7 +35,9 @@ export function NativeSimulationPanel({ projectId, preferredJobId, onTraining }:
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; abortUpload.current?.(); }; }, []);
   const saved = (jobs.data ?? []).filter(item => item.project_id === projectId && isSimulationJob(item)).sort((a, b) => b.created_at.localeCompare(a.created_at));
   const selected = saved.find(item => item.id === jobId) ?? (accepted?.id === jobId ? accepted : undefined);
-  const events = useQuery({ queryKey: ['events', selected?.id], queryFn: () => api.events(selected!.id), enabled: !!selected, retry: false, refetchInterval: selected && isActive(selected) ? 2_000 : false });
+  // A terminal transition must fetch final events even when the active poll was empty.
+  // Job status has a fixed six-value domain; timestamps would grow this cache unboundedly.
+  const events = useQuery({ queryKey: ['events', selected?.id, selected?.status], queryFn: () => api.events(selected!.id), enabled: !!selected, retry: false, refetchInterval: selected && isActive(selected) ? 2_000 : false });
   const result = selected?.result && 'reports' in selected.result ? selected.result : null;
   const outputs = (result?.artifacts ?? []) as NativeArtifact[];
   const report = result?.reports?.find(item => item.stage === 'simulation');

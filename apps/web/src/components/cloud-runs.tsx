@@ -17,7 +17,9 @@ export function CloudRuns({ projectId, onOpenTraining, onOpenSimulation }: { pro
   const managed = (jobs.data ?? []).filter(job => job.project_id === projectId && (job.compute_target != null || simulationTarget(job) !== null)).sort((a, b) => b.created_at.localeCompare(a.created_at));
   const [jobId, setJobId] = useState('');
   const job = managed.find(item => item.id === jobId) ?? managed[0];
-  const events = useQuery({ queryKey: ['events', job?.id], queryFn: () => api.events(job!.id), enabled: !!job, refetchInterval: job && isActive(job) ? 3_000 : false, retry: false });
+  // A terminal transition must fetch final events even when the active poll was empty.
+  // Job status has a fixed six-value domain; timestamps would grow this cache unboundedly.
+  const events = useQuery({ queryKey: ['events', job?.id, job?.status], queryFn: () => api.events(job!.id), enabled: !!job, refetchInterval: job && isActive(job) ? 3_000 : false, retry: false });
   const feed = useQuery({ queryKey: ['cloud-runs'], queryFn: api.cloudRuns, refetchInterval: 3_000, staleTime: 0, retry: false });
   const [runId, setRunId] = useState('');
   const [stream, setStream] = useState<'isaac' | 'vla'>('isaac');

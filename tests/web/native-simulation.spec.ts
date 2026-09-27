@@ -188,3 +188,41 @@ test('native and Cloud event views display bounded observed worker states as the
   await expect(page.getByRole('region', { name: 'Application job event log', exact: true })).toHaveText(`${timestamp} · simulation · Generated event for observed`);
   expect(state.posts).toHaveLength(0);
 });
+
+for (const view of ['native', 'cloud'] as const) test(`${view} final events refresh when a quick job completes after an empty active poll`, async ({ page }) => {
+  const state = await fixture(page);
+  const quick = job('quick-completion', view === 'native' ? 'policy.import' : 'policy.run', 'queued');
+  state.jobs.push(quick);
+  let armed = false, terminalPublished = false, finalReads = 0;
+  let finishEmptyPoll!: () => void;
+  const emptyPollFinished = new Promise<void>(resolve => { finishEmptyPoll = resolve; });
+  await page.route('**/api/v1/jobs/quick-completion/events', async route => {
+    if (terminalPublished) {
+      finalReads += 1;
+      return route.fulfill({ json: [{ sequence: 1, stage: 'model_import', timestamp, message: 'Generated final integrity receipt', data: {} }] });
+    }
+    await route.fulfill({ json: [] });
+    if (armed) finishEmptyPoll();
+  });
+  await page.route('**/api/v1/projects/alpha/jobs', async route => {
+    if (armed) {
+      // Let an in-flight active-event read finish empty before publishing the
+      // terminal status. No event timer is advanced or manually refreshed.
+      await emptyPollFinished;
+      quick.status = 'succeeded';
+      terminalPublished = true;
+    }
+    return route.fulfill({ json: state.jobs });
+  });
+  await page.getByRole('button', { name: 'Refresh simulation jobs' }).click();
+  if (view === 'native') await page.getByLabel('Saved simulation job').selectOption(quick.id);
+  else await page.getByRole('button', { name: 'Cloud runs', exact: true }).click();
+  const log = page.getByRole('region', { name: view === 'native' ? 'Native simulation event log' : 'Application job event log', exact: true });
+  await expect(log).toContainText(view === 'native' ? 'No recorded events yet.' : 'No events received for this job yet.');
+  armed = true;
+  const status = view === 'native' ? page.getByRole('article', { name: 'Native simulation job details' }) : page.getByText('Recorded status', { exact: true }).locator('..');
+  await expect(status).toContainText('succeeded', { timeout: 8000 });
+  await expect(log).toContainText('Generated final integrity receipt', { timeout: 5000 });
+  expect(finalReads).toBeGreaterThan(0);
+  expect(state.posts).toHaveLength(0);
+});
