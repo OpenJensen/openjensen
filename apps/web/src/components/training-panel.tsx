@@ -12,7 +12,7 @@ import {
   type PolicyRequest,
 } from "@/lib/api";
 import { datasetStarters } from "@/lib/dataset-starters";
-import { trainingModels, type TrainingModel } from "@/lib/training-models";
+import { gradientAccumulationAvailable, trainingModels, type TrainingModel } from "@/lib/training-models";
 import { checkpointStep, trainingRunModelLabel } from "@/lib/checkpoints";
 import { CameraPlayer } from "@/components/dataset-explorer";
 import { Icon } from "@/components/icon";
@@ -176,6 +176,7 @@ export function TrainingPanel({
   onComputeSettings,
   onQuantize,
   onNativeQuantize,
+  onNativeDistill,
   startNew,
   showJobsRequest,
   preferredRunId,
@@ -188,6 +189,7 @@ export function TrainingPanel({
   onComputeSettings: () => void;
   onQuantize?: (artifactId: string) => void;
   onNativeQuantize?: (artifactId: string) => void;
+  onNativeDistill?: (artifactId: string) => void;
   startNew?: { id: number; datasetId?: string };
   showJobsRequest?: number;
   preferredRunId?: string;
@@ -476,6 +478,11 @@ export function TrainingPanel({
   const activeMethod = resumeId
     ? priorRequest?.training_method
     : trainingMethod;
+  const accumulationSupported = gradientAccumulationAvailable(model, runtime?.id, activeMethod);
+  const accumulationIssue = !resumeId && recipe.gradientAccumulation !== 1 && !accumulationSupported
+    ? `Accumulation ${recipe.gradientAccumulation} is not supported by the selected model, method and compute target. Choose a supported configuration or explicitly use accumulation 1.` : null;
+  const nominalBatch = recipe.batchSize * recipe.gradientAccumulation;
+  const trainingBudget = `${number(recipe.trainingSteps)} ${accumulationSupported ? 'optimizer updates' : 'steps'} · batch ${recipe.batchSize}`;
   const displayedModelId = model?.id;
   const stepComplete = [
     !!activeDataset && !datasetIssue(activeDataset.result),
@@ -552,6 +559,8 @@ export function TrainingPanel({
                     ? modelIssue
                   : !runtime
                     ? "Choose an available GPU."
+                    : accumulationIssue
+                      ? accumulationIssue
                     : timingIssue
                       ? timingIssue
                     : !resumeId && !recipeValid
@@ -1059,10 +1068,12 @@ export function TrainingPanel({
               <dl>
                 <div><dt>Dataset</dt><dd>{activeDataset?.result.repo_id ?? (activeDataset ? 'Local training snapshot' : 'Choose a dataset')}{activeDataset && <small className="training-recipe-identity" title={activeDataset.result.snapshot?.manifest_sha256 ?? activeDataset.result.revision}>{activeDataset.result.snapshot ? 'Snapshot' : 'Pinned revision'} {(activeDataset.result.snapshot?.manifest_sha256 ?? activeDataset.result.revision).slice(0, 12)}</small>}</dd></div>
                 <div><dt>Observations</dt><dd>{activeCameraKeys.length} {activeCameraKeys.length === 1 ? 'camera' : 'cameras'}{activeDataset ? ` · ${number(activeDataset.result.total_episodes)} episodes` : ''}</dd></div>
-                <div><dt>Training budget</dt><dd>{resumeId ? 'Saved recipe' : `${number(recipe.trainingSteps)} steps · batch ${recipe.batchSize}`}</dd></div>
+                <div><dt>Training budget</dt><dd>{resumeId ? 'Saved recipe' : trainingBudget}</dd></div>
                 <div><dt>Action timing</dt><dd>{resumeId ? checkpointTiming(originalTraining) : effectiveTiming ? `Predict ${effectiveTiming.prediction} · execute ${effectiveTiming.execution}${timing?.enabled ? '' : ' · default'}` : 'Model-owned settings'}</dd></div>
               </dl>
               <p>{resumeId ? 'Dataset, model and timing stay bound to the saved checkpoint.' : 'Requested settings are checked by the worker. Training loss does not measure robot task success.'}</p>
+              {!resumeId && accumulationSupported && <p>Steps, learning-rate schedules and checkpoint/validation cadence count completed optimizer updates. One device is configured.</p>}
+              {accumulationIssue && <><p role="alert">{accumulationIssue}</p><button type="button" className="secondary-button" disabled={busy} onClick={() => update("gradientAccumulation", 1)}>Use accumulation 1</button></>}
             </section>
             <GpuPicker
               value={selectedGpu}
@@ -1080,7 +1091,7 @@ export function TrainingPanel({
                 <span>
                   {resumeId
                     ? "Original recipe"
-                    : `${number(recipe.trainingSteps)} steps · batch ${recipe.batchSize}`}
+                    : trainingBudget}
                 </span>
               </summary>
               {resumeId ? (
@@ -1121,9 +1132,13 @@ export function TrainingPanel({
                   </label>
                   <label>
                     Gradient accumulation
-                    <input type="number" min="1" step="1" value={recipe.gradientAccumulation} disabled={busy}
+                    <input type="number" min="1" step="1" aria-label="Gradient accumulation" aria-describedby="training-accumulation-help" value={recipe.gradientAccumulation} disabled={busy || !accumulationSupported}
                       onChange={event => update("gradientAccumulation", Number(event.target.value))} />
-                    <small>{positiveInteger(recipe.batchSize) && positiveInteger(recipe.gradientAccumulation) ? `Effective batch size: ${number(recipe.batchSize * recipe.gradientAccumulation)}` : "Microbatches per optimizer step"}</small>
+                    <small id="training-accumulation-help">{accumulationSupported
+                      ? positiveInteger(recipe.batchSize) && positiveInteger(recipe.gradientAccumulation) && Number.isSafeInteger(nominalBatch)
+                        ? `Nominal effective batch: ${number(nominalBatch)} examples (${recipe.batchSize} × ${recipe.gradientAccumulation} × 1 device). Short final windows contain fewer examples.`
+                        : "Microbatches per completed optimizer update on one device."
+                      : "Only accumulation 1 is available: this model, method and compute target do not advertise complete accumulation support."}</small>
                   </label>
                   <label>
                     Random seed
@@ -1286,6 +1301,7 @@ export function TrainingPanel({
               cancelError={cancel.variables === selectedRun.id ? cancel.error : null}
               onQuantize={onQuantize}
               onNativeQuantize={onNativeQuantize}
+              onNativeDistill={onNativeDistill}
               onResume={resumeOptions.some(item => item.jobId === selectedRun.id) ? () => {
                 selectionGeneration.current += 1;
                 setResumeId(resumeOptions.find(item => item.jobId === selectedRun.id)!.id);

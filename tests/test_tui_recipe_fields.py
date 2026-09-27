@@ -403,3 +403,46 @@ def test_pilot_native_recorded_data_fields_do_not_invent_units_or_episode_splits
             assert not server.posts
 
     asyncio.run(scenario())
+
+
+def test_accumulation_null_is_not_repaired_but_omitted_default_is_preserved():
+    ctx = asyncio.run(context(ExtendedServer()))
+    draft = recipe("train")
+    omitted = RecipeFields("train", draft, ctx)
+    assert omitted.initial["training.gradient_accumulation_steps"] == "1"
+    assert "gradient_accumulation_steps" not in draft["training"]
+    draft["training"]["gradient_accumulation_steps"] = None
+    with pytest.raises(ApiError, match="Microbatches per optimizer update"):
+        RecipeFields("train", draft, ctx)
+    assert draft["training"]["gradient_accumulation_steps"] is None
+
+
+def test_pilot_explicit_accumulation_one_allows_managed_model_and_method_change(tmp_path):
+    async def scenario():
+        server = ExtendedServer()
+        app = FirebirdApp(client=server.client(), poll_seconds=100, journal_dir=tmp_path / "state")
+        async with app.run_test(size=(48, 18)) as pilot:
+            form = await open_form(server, tmp_path, "train", app, pilot)
+            draft = recipe("train")
+            draft["runtime_id"] = "engine"
+            draft["training"]["gradient_accumulation_steps"] = 1
+            form.query_one("#recipe-editor", TextArea).load_text(canonical(draft))
+            await pilot.pause()
+            await reviewed(form, pilot)
+            form.query_one("#recipe-fields", Button).press()
+            await until(lambda: isinstance(app.screen, RecipeFields) and app.screen.is_mounted)
+            editor = app.screen
+            editor.query_one("#field-training-model_id", Select).value = "fixture/smolvla"
+            editor.query_one("#field-training_method", Select).value = "lora"
+            expected = copy.deepcopy(draft)
+            expected["training"]["model_id"] = "fixture/smolvla"
+            expected["training_method"] = "lora"
+            assert editor.value() == expected
+            editor.query_one("#fields-apply", Button).press()
+            await until(lambda: app.screen is form)
+            await pilot.pause()
+            assert json.loads(form.query_one("#recipe-editor", TextArea).text) == expected
+            assert form.reviewed is None and not form.query_one("#recipe-consent", Checkbox).value
+            assert not server.posts
+
+    asyncio.run(scenario())

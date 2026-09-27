@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { initialQuantizeEntry, initialRunEntry } from '../../apps/web/src/lib/workflow-entry';
-import type { Job } from '../../apps/web/src/lib/api';
+import type { Job, PolicyArtifact } from '../../apps/web/src/lib/api';
+import { studentTeacher } from '../../apps/web/src/lib/native-distillation';
 
 // Generated API records exercise real workspace navigation; no model or cloud work runs.
 const time = '2026-09-27T12:00:00Z', model = `sha256:${'f'.repeat(64)}`;
@@ -434,4 +435,17 @@ for (const failedRead of ['profiles', 'history'] as const) test(`Evaluate keeps 
   await expect(purpose.getByRole('alert')).toHaveText(failedRead === 'profiles' ? 'Isaac profile availability could not be loaded.' : 'Saved workflow history could not be refreshed; previously received records may be stale.');
   await expect(purpose.getByRole('alert')).toBeVisible();
   expect(state.mutations).toEqual([]);
+});
+
+
+test('teacher eligibility preserves legacy ACT inputs while rejecting explicit incompatible prediction horizons', () => {
+  const source = artifact('registered-teacher') as PolicyArtifact;
+  expect(studentTeacher(source, 'alpha')).toBe(true);
+  expect(studentTeacher({ ...source, metadata: { ...source.metadata, prediction_horizon: 100 } }, 'alpha')).toBe(true);
+  for (const prediction_horizon of [32, 101, 0, '100', null, [100], true]) {
+    expect(studentTeacher({ ...source, metadata: { ...source.metadata, prediction_horizon } }, 'alpha')).toBe(false);
+  }
+  expect(studentTeacher(source, 'beta')).toBe(false);
+  expect(studentTeacher({ ...source, metadata: { architecture: 'smolvla' } }, 'alpha')).toBe(false);
+  expect(studentTeacher({ ...source, metadata: { ...source.metadata, storage: 'gcs' } }, 'alpha')).toBe(false);
 });

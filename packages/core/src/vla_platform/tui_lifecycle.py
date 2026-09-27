@@ -272,6 +272,20 @@ class Context:
                 or request["training_method"] not in model["methods"]
             ):
                 raise ApiError("Choose a model/method registered for this runtime.")
+            accumulation = recipe.get("gradient_accumulation_steps", 1)
+            if type(accumulation) is not int or accumulation < 1:
+                raise ApiError("Gradient accumulation must be a positive integer.")
+            accumulation_runtimes = model.get("gradient_accumulation_runtime_ids")
+            if accumulation > 1 and not (
+                model.get("gradient_accumulation_supported") is True
+                and isinstance(accumulation_runtimes, list)
+                and all(isinstance(ident, str) for ident in accumulation_runtimes)
+                and runtime["id"] in accumulation_runtimes
+                and type(model.get("training_world_size")) is int
+                and model.get("training_world_size") == 1
+                and model.get("training_step_unit") == "optimizer_updates"
+            ):
+                raise ApiError("This model and worker only advertise gradient accumulation of 1.")
             cameras = recipe.get("camera_keys") or [recipe.get("camera_key")]
             features = dataset["result"]["features"]
             if (

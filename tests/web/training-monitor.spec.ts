@@ -1,11 +1,18 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
+import { gradientAccumulationAvailable, type TrainingModel } from '../../apps/web/src/lib/training-models';
 
 const projectId = 'training-monitor-fixture';
 const revision = 'a'.repeat(40);
 const timestamp = () => new Date().toISOString();
+type AccumulationCatalog = 'supported' | 'missing' | 'disabled' | 'wrong-runtime' | 'wrong-unit' | 'world-size';
+function accumulationCapabilities(mode: AccumulationCatalog) {
+  return mode === 'missing' ? {} : { gradient_accumulation_supported: mode !== 'disabled',
+    gradient_accumulation_runtime_ids: mode === 'wrong-runtime' ? ['not-the-selected-runtime'] : ['skypilot-gcp-A100', 'all-models-a100'],
+    training_step_unit: mode === 'wrong-unit' ? 'microbatches' : 'optimizer_updates', training_world_size: mode === 'world-size' ? 2 : 1 };
+}
 
-async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 'stale' | 'unavailable' | 'legacy' | 'validating' | 'history' | 'empty' | 'local-snapshot' | 'local-unprepared' = 'running', openDetails = true, exportMode?: 'local' | 'remote' | 'remote-complete' | 'unconfigured' | 'failed' | 'local-dataset') {
+async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 'stale' | 'unavailable' | 'legacy' | 'validating' | 'history' | 'empty' | 'local-snapshot' | 'local-unprepared' = 'running', openDetails = true, exportMode?: 'local' | 'remote' | 'remote-complete' | 'unconfigured' | 'failed' | 'local-dataset', accumulationCatalog: AccumulationCatalog = 'supported') {
   const submitted: Record<string, any>[] = [];
   const unexpected: string[] = [];
   const cancelled: string[] = [];
@@ -136,10 +143,10 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
           runtimes: [...extraRuntimes, ...(exportMode && exportMode !== 'unconfigured' ? [{ id: 'act-cpu', label: 'Local CPU export', provider: 'local', execution: 'native', device: 'cpu', enabled: true, training: false, act_export: true, export_only: true, engine_evaluation: false, run: false, simulation: false }] : []), { id: 'skypilot-gcp-A100', label: 'A100', accelerator: 'A100', execution: 'skypilot', provider: 'gcp', device: 'cuda', enabled: true, training: true, simulation: false, training_model_ids: localDataset ? ['smolvla', 'act'] : ['smolvla'] }],
           compute: { local: { enabled: false, label: 'Local' }, gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 } },
           training_models: [
-            { id: 'smolvla', label: 'SmolVLA', description: 'Compact policy', model_id: 'lerobot/smolvla_base', model_revision: revision, methods: ['lora'], suggested_gpu_memory_gb: 16 },
+            { id: 'smolvla', label: 'SmolVLA', description: 'Compact policy', model_id: 'lerobot/smolvla_base', model_revision: revision, methods: ['lora', 'qlora'], suggested_gpu_memory_gb: 16, ...accumulationCapabilities(accumulationCatalog) },
             { id: 'pi05', label: 'π₀.₅', description: 'Flow policy', model_id: 'lerobot/pi05_base', model_revision: revision, methods: ['full'], minimum_gpu_memory_gb: 40, runtime_ids: ['all-models-a100'] },
-            ...(localDataset ? [{ id: 'act', label: 'ACT', description: 'Native policy', model_id: 'code://lerobot/act', model_revision: revision, methods: ['full'], backend: 'lerobot', minimum_gpu_memory_gb: 16 }] : []),
-          ], sources: [], training_methods: [{ id: 'lora', label: 'LoRA', description: 'Train adapters.' }, { id: 'full', label: 'Full training', description: 'Train policy.' }], default_training_method: 'lora',
+            ...(localDataset ? [{ id: 'act', label: 'ACT', description: 'Native policy', model_id: 'code://lerobot/act', model_revision: revision, methods: ['full'], backend: 'lerobot', minimum_gpu_memory_gb: 16, ...accumulationCapabilities(accumulationCatalog) }] : []),
+          ], sources: [], training_methods: [{ id: 'lora', label: 'LoRA', description: 'Train adapters.' }, { id: 'qlora', label: 'QLoRA', description: 'Train quantized adapters.' }, { id: 'full', label: 'Full training', description: 'Train policy.' }], default_training_method: 'lora',
           quantization_defaults: { cuda: { language: 'Q8_0', vision: null }, cpu: { language: 'Q8_0', vision: null }, note: '' },
         },
       };
@@ -1137,12 +1144,163 @@ test('ACT export handoff preserves an unresolved quantization request without re
 });
 
 
+// Generated completed exports only; these cases never run a model or provider.
+async function teacherHandoffFixture(page: Page, configured = true) {
+  const state = await exportedPackageFixture(page);
+  if (configured) state.extraRuntimes.push({ id: 'student-cpu', label: 'Generated ACT distillation worker', provider: 'local', execution: 'native', device: 'cpu', enabled: true, launchable: true, native_distillation: true, native_distillation_only: true, training: false, simulation: false, engine_evaluation: false, run: false });
+  const prepared = structuredClone(state.jobs.find(job => job.id === 'dataset')!);
+  prepared.id = 'prepared-observations';
+  Object.assign(prepared.result, { source: 'local', repo_id: null, inspection_scope: 'complete_snapshot', snapshot: { id: `sha256:${'b'.repeat(64)}`, manifest_sha256: 'b'.repeat(64), lineage_validated: true, total_episodes: 10 } });
+  state.jobs.push(prepared);
+  await page.reload(); await reopenExport(page);
+  return state;
+}
+const teacherChoices = (page: Page) => page.getByRole('group', { name: 'Teacher', exact: true });
+const useTeacher = (page: Page, id: string) => exportedPackage(page, id).getByRole('button', { name: 'Use as ACT teacher', exact: true });
+
+test('training export continues to Distill with the exact second same-label package and explicit recipe', async ({ page }, testInfo) => {
+  const state = await teacherHandoffFixture(page);
+  for (const item of state.packages) {
+    await expect(useTeacher(page, item.id)).toBeEnabled();
+    await expect(exportedPackage(page, item.id).getByRole('button', { name: 'Quantize this package' })).toBeEnabled();
+    await expect(exportedPackage(page, item.id).getByRole('link', { name: 'Download ACT inference package' })).toHaveAttribute('href', `/api/v1/projects/${projectId}/artifacts/${encodeURIComponent(item.id)}/download`);
+  }
+  await noOverflow(page);
+  await page.getByRole('region', { name: 'ACT inference export', exact: true }).screenshot({ path: testInfo.outputPath('training-distill-continuation-light.png') });
+  const chosen = state.packages[1];
+  await useTeacher(page, chosen.id).click();
+  const panel = page.getByRole('region', { name: 'ACT distillation', exact: true });
+  await expect(panel).toBeVisible();
+  await expect(teacherChoices(page).locator('input:checked')).toHaveValue(chosen.id);
+  await expect(page.getByLabel('Teacher from training', { exact: true })).toContainText(chosen.id);
+  await expect(page.getByLabel('Teacher from training', { exact: true })).toContainText(`Export ${chosen.job_id.slice(0, 8)}`);
+  await expect(page.getByRole('group', { name: 'Dataset', exact: true }).locator('input:checked')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
+  expect(state.submitted).toEqual([]);
+  await page.getByRole('button', { name: 'Dark', exact: true }).click();
+  await noOverflow(page);
+  await panel.screenshot({ path: testInfo.outputPath('training-distill-destination-dark.png') });
+  await page.getByRole('button', { name: 'Light', exact: true }).click();
+  await page.getByRole('group', { name: 'Dataset', exact: true }).locator('input[value="prepared-observations"]').check();
+  const consent = page.getByRole('checkbox', { name: /I verified that the dataset/ });
+  await expect(consent).not.toBeChecked();
+  const units = ['degrees', 'degrees', 'degrees', 'degrees', 'degrees', 'recorded_gripper'];
+  for (const [label, value] of [['Training episodes', '0, 1'], ['Validation episodes', '2, 3'], ['Final episodes', '4, 5'], ['Six coordinate units', units.join(', ')]]) await page.getByLabel(label, { exact: true }).fill(value);
+  await page.getByRole('checkbox', { name: 'This snapshot contains generated test observations.' }).check();
+  await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
+  await consent.check();
+  await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => {
+    const request = route.request().postDataJSON(); state.submitted.push(request);
+    await route.fulfill({ status: 202, json: { ...state.job, id: 'explicit-student', kind: 'policy.distill', status: 'queued', request } });
+  });
+  await page.getByRole('button', { name: 'Train ACT256 student', exact: true }).click();
+  await expect(page.getByRole('article', { name: 'Distillation job details' })).toHaveAttribute('data-job-id', 'explicit-student');
+  expect(state.submitted).toEqual([{ operation: 'policy.distill', runtime_id: 'student-cpu', artifact_id: chosen.id, dataset_job_id: 'prepared-observations', timeout_seconds: 600, native_distillation: { adapter: 'act-act-v1', student: 'act-256', steps: 100, learning_rate: .0001, seed: 1729, frame_stride: 30, splits: { train: [0, 1], validation: [2, 3], final: [4, 5] }, units, coordinate_attestation: 'generated_fixture' } }]);
+  expect(state.unexpected).toEqual([]);
+});
+
+test('training export explains unavailable distillation without changing quantization or download', async ({ page }) => {
+  const state = await teacherHandoffFixture(page, false), item = state.packages[1];
+  await expect(useTeacher(page, item.id)).toBeDisabled();
+  await expect(exportedPackage(page, item.id)).toContainText('A local ACT distillation worker is not available');
+  await expect(exportedPackage(page, item.id).getByRole('button', { name: 'Quantize this package' })).toBeEnabled();
+  await expect(exportedPackage(page, item.id).getByRole('link', { name: 'Download ACT inference package' })).toBeVisible();
+  expect(state.submitted).toEqual([]);
+});
+
+for (const fault of ['remote', 'architecture', 'unrecorded', 'manifest', 'foreign-output', 'pending', 'prediction-horizon'] as const) test(`training export refuses ${fault} teacher handoff`, async ({ page }) => {
+  const state = await teacherHandoffFixture(page), item = state.packages[1];
+  const saved = state.jobs.find(job => job.id === item.job_id)!;
+  if (fault === 'remote') Object.assign(item.metadata, { storage: 'gcs' });
+  if (fault === 'architecture') Object.assign(item.metadata, { architecture: 'smolvla' });
+  if (fault === 'unrecorded') saved.result.artifacts = [];
+  if (fault === 'manifest') saved.result.artifacts[0].manifest_sha256 = 'f'.repeat(64);
+  if (fault === 'foreign-output') saved.result.artifacts[0].project_id = 'another-project';
+  if (fault === 'pending') saved.status = 'running';
+  if (fault === 'prediction-horizon') Object.assign(item.metadata, { prediction_horizon: 32 });
+  await page.reload(); await reopenExport(page);
+  await expect(useTeacher(page, item.id)).toBeDisabled();
+  await expect(exportedPackage(page, item.id).getByRole('link', { name: 'Download ACT inference package' })).toBeVisible();
+  if (fault === 'prediction-horizon') await expect(exportedPackage(page, item.id)).toContainText('requires a 100-action prediction horizon');
+  expect(state.submitted).toEqual([]);
+});
+
+test('manual Distill teacher choices reject a known non-100 horizon and preserve legacy timing metadata', async ({ page }) => {
+  const state = await teacherHandoffFixture(page), changed = state.packages[1];
+  Object.assign(changed.metadata, { prediction_horizon: 32 });
+  await page.reload(); await reopenExport(page);
+  await expect(useTeacher(page, changed.id)).toBeDisabled();
+  await page.getByRole('button', { name: 'Distill', exact: true }).click();
+  await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  await expect(teacherChoices(page).locator(`input[value="${changed.id}"]`)).toHaveCount(0);
+  await expect(teacherChoices(page).locator(`input[value="${state.packages[0].id}"]`)).toHaveCount(1);
+  await expect(teacherChoices(page).locator('input:checked')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
+  expect(state.submitted).toEqual([]);
+});
+
+test('training teacher continuation never replaces a manual selection when the package returns after a missing read', async ({ page }) => {
+  const state = await teacherHandoffFixture(page), chosen = state.packages[1], manual = state.packages[0];
+  await useTeacher(page, chosen.id).click();
+  await expect(teacherChoices(page).locator('input:checked')).toHaveValue(chosen.id);
+  const index = state.artifacts.findIndex(item => item.id === chosen.id); state.artifacts.splice(index, 1);
+  await page.getByRole('button', { name: 'Refresh distillation jobs', exact: true }).click();
+  await expect(teacherChoices(page).locator(`input[value="${chosen.id}"]`)).toHaveCount(0);
+  await expect(teacherChoices(page).locator('input:checked')).toHaveCount(0);
+  await teacherChoices(page).locator(`input[value="${manual.id}"]`).check();
+  state.artifacts.push(chosen);
+  await page.getByRole('button', { name: 'Refresh distillation jobs', exact: true }).click();
+  await expect(teacherChoices(page).locator(`input[value="${chosen.id}"]`)).toHaveCount(1);
+  await expect(teacherChoices(page).locator('input:checked')).toHaveValue(manual.id);
+  await expect(page.getByLabel('Teacher from training', { exact: true })).toHaveCount(0);
+  expect(state.submitted).toEqual([]);
+});
+
+test('training teacher handoff preserves an unresolved distillation submission journal', async ({ page }) => {
+  const state = await teacherHandoffFixture(page);
+  const key = `firebird:job-attempt:policy.distill:${projectId}`;
+  const stored = JSON.stringify({ state: 'uncertain', message: 'Earlier student request has an unverified outcome.' });
+  await page.evaluate(({ key, stored }) => sessionStorage.setItem(key, stored), { key, stored });
+  await useTeacher(page, state.packages[1].id).click();
+  await expect(page.getByText('Earlier student request has an unverified outcome.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'I checked recorded jobs; allow a new request', exact: true })).toBeDisabled();
+  await expect(teacherChoices(page).locator('input:checked')).toHaveValue(state.packages[1].id);
+  expect(await page.evaluate(key => sessionStorage.getItem(key), key)).toBe(stored);
+  expect(state.submitted).toEqual([]);
+});
+
+test('training teacher handoff is cleared by a manual model choice or project switch', async ({ page }) => {
+  const state = await teacherHandoffFixture(page);
+  await page.route('**/api/v1/projects', route => route.fulfill({ json: [{ id: projectId, name: 'Training visibility', created_at: timestamp() }, { id: 'other-project', name: 'Other project', created_at: timestamp() }] }));
+  // Deliberately return foreign records; the destination must apply project ownership.
+  await page.route('**/api/v1/projects/other-project/jobs', route => route.fulfill({ json: state.jobs }));
+  await page.route('**/api/v1/projects/other-project/artifacts', route => route.fulfill({ json: state.artifacts }));
+  await page.reload(); await reopenExport(page);
+  await useTeacher(page, state.packages[1].id).click();
+  await expect(teacherChoices(page).locator('input:checked')).toHaveValue(state.packages[1].id);
+  await page.getByRole('button', { name: 'All models', exact: true }).click();
+  await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  await expect(teacherChoices(page).locator('input:checked')).toHaveCount(0);
+  await reopenExport(page);
+  await useTeacher(page, state.packages[1].id).click();
+  await page.getByLabel('Current project', { exact: true }).selectOption('other-project');
+  await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  await expect(teacherChoices(page).locator('input:checked')).toHaveCount(0);
+  await expect(teacherChoices(page).locator(`input[value="${state.packages[1].id}"]`)).toHaveCount(0);
+  await expect(page.getByLabel('Teacher from training', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
+  expect(state.submitted).toEqual([]);
+});
+
+
 // Generated browser fixtures exercise admission and exact requests; no training runs.
-async function temporalTraining(page: Page, model = 'ACT') {
-  const state = await workspace(page, 'local-snapshot', false);
+async function temporalTraining(page: Page, model = 'ACT', accumulationCatalog: AccumulationCatalog = 'supported', savedAccumulation?: number) {
+  const state = await workspace(page, 'local-snapshot', false, undefined, accumulationCatalog);
   const dataset = state.jobs.find(item => item.id === 'dataset')!;
   Object.assign(dataset.result!, { source: 'huggingface', repo_id: 'fixture/robot', revision });
   state.extraRuntimes.push({ id: 'all-models-a100', label: 'A100', accelerator: 'A100', provider: 'gcp', execution: 'skypilot', device: 'cuda', enabled: true, training: true, training_model_ids: ['act', 'smolvla', 'pi05'], gpu_memory_mib: 40960 });
+  if (savedAccumulation !== undefined) await page.evaluate(({ projectId, savedAccumulation }) => { const key = `firebird.workflow.${projectId}`; localStorage.setItem(key, JSON.stringify({ ...JSON.parse(localStorage.getItem(key) ?? '{}'), gradientAccumulation: savedAccumulation })); }, { projectId, savedAccumulation });
   await page.reload();
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
@@ -1260,6 +1418,9 @@ test('keyed training retry after reload preserves the original key and recipe wi
   await (await newTraining(page)).click();
   const recovery = page.getByRole('region', { name: 'Training submission recovery' });
   await expect(recovery).toBeVisible();
+  // The journal appears before the support lookup; observe the lost POST before reloading.
+  await expect.poll(() => requests.length).toBe(1);
+  await expect(recovery.getByRole('button', { name: 'Check saved request' })).toBeEnabled();
   await page.evaluate(project => localStorage.setItem(`firebird.workflow.${project}`, JSON.stringify({ trainingDefaultsVersion: 3, trainingSteps: 777, trainingModelId: 'smolvla' })), projectId);
   await page.reload();
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
@@ -1368,4 +1529,88 @@ for (const fault of ['malformed', 'foreign'] as const) test(`legacy training rec
   await recovery.getByRole('button', { name: 'Refresh training jobs' }).click();
   await expect(acknowledge).toBeEnabled();
   expect(state.submitted).toEqual([]);
+});
+
+
+// Generated catalog support proves browser admission only, not native/CUDA updates.
+for (const [model, method] of [['ACT', 'full'], ['SmolVLA', 'lora'], ['SmolVLA', 'qlora']] as const) test(`advertised accumulation submits exact ${model} ${method} optimizer-update recipe`, async ({ page }) => {
+  const state = await temporalTraining(page, model);
+  if (method === 'qlora') {
+    await state.setup.getByRole('button', { name: 'Model', exact: true }).click();
+    await page.getByRole('group', { name: 'Training method', exact: true }).getByRole('radio', { name: 'QLoRA', exact: true }).check();
+    await state.setup.getByRole('button', { name: 'Compute', exact: true }).click();
+    await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  }
+  await page.getByLabel('Steps', { exact: true }).fill('20');
+  await page.getByLabel('Batch size', { exact: true }).fill('3');
+  await page.getByLabel('Gradient accumulation', { exact: true }).fill('4');
+  await expect(page.getByText('Nominal effective batch: 12 examples (3 × 4 × 1 device). Short final windows contain fewer examples.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Training recipe review', exact: true })).toContainText('20 optimizer updates');
+  await expect(page.getByRole('region', { name: 'Training recipe review', exact: true })).toContainText('checkpoint/validation cadence count completed optimizer updates');
+  expect(state.submitted).toEqual([]);
+  await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
+  await expect.poll(() => state.submitted.length).toBe(1);
+  expect(state.submitted[0]).toMatchObject({ operation: 'policy.finetune', runtime_id: 'all-models-a100', dataset_job_id: 'dataset', training_method: method, training: { steps: 20, batch_size: 3, gradient_accumulation_steps: 4 } });
+});
+
+for (const capability of ['missing', 'disabled', 'wrong-runtime', 'wrong-unit', 'world-size'] as const) test(`accumulation ${capability} capability preserves a saved request value and requires explicit reset`, async ({ page }) => {
+  const state = await temporalTraining(page, 'ACT', capability, 4);
+  const accumulation = page.getByLabel('Gradient accumulation', { exact: true });
+  await expect(accumulation).toHaveValue('4'); await expect(accumulation).toBeDisabled();
+  await expect(page.getByRole('region', { name: 'Training recipe review', exact: true }).getByRole('alert')).toContainText('Accumulation 4 is not supported');
+  await expect(page.getByRole('button', { name: 'Start fine-tuning', exact: true })).toBeDisabled();
+  expect(state.submitted).toEqual([]);
+  await page.getByRole('button', { name: 'Use accumulation 1', exact: true }).click();
+  await expect(accumulation).toHaveValue('1'); await expect(accumulation).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Start fine-tuning', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
+  await expect.poll(() => state.submitted.length).toBe(1);
+  expect(state.submitted[0]).toMatchObject({ runtime_id: 'all-models-a100', training_method: 'full', training: { gradient_accumulation_steps: 1 } });
+});
+
+test('switching to another model keeps accumulation visible and blocked until an explicit correction', async ({ page }) => {
+  const state = await temporalTraining(page);
+  await page.getByLabel('Gradient accumulation', { exact: true }).fill('3');
+  await state.setup.getByRole('button', { name: 'Model', exact: true }).click();
+  await page.getByRole('radio', { name: 'π₀.₅', exact: true }).locator('..').click();
+  await state.setup.getByRole('button', { name: 'Compute', exact: true }).click();
+  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  await expect(page.getByLabel('Gradient accumulation', { exact: true })).toHaveValue('3');
+  await expect(page.getByLabel('Gradient accumulation', { exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Start fine-tuning', exact: true })).toBeDisabled();
+  await state.setup.getByRole('button', { name: 'Model', exact: true }).click();
+  await page.getByRole('radio', { name: 'ACT', exact: true }).locator('..').click();
+  await state.setup.getByRole('button', { name: 'Compute', exact: true }).click();
+  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  await expect(page.getByLabel('Gradient accumulation', { exact: true })).toHaveValue('3');
+  await expect(page.getByLabel('Gradient accumulation', { exact: true })).toBeEnabled();
+  expect(state.submitted).toEqual([]);
+});
+
+test('accumulation capability never rewrites an exact checkpoint resume recipe', async ({ page }) => {
+  const state = await workspace(page, 'failed', true, undefined, 'missing');
+  state.job.request.training.gradient_accumulation_steps = 4;
+  await state.monitor.getByRole('button', { name: 'Resume from checkpoint' }).click();
+  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  await expect(page.getByText('Original recipe preserved.', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Gradient accumulation', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Use accumulation 1', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Resume fine-tuning', exact: true }).click();
+  await expect.poll(() => state.submitted.length).toBe(1);
+  expect(state.submitted[0]).toMatchObject({ artifact_id: 'checkpoint-artifact', training: null });
+});
+
+test('accumulation predicate requires exact model method runtime and complete catalog semantics', () => {
+  const model: TrainingModel = { id: 'act', label: 'ACT', description: '', model_id: 'code://lerobot/act', model_revision: 'a'.repeat(40), methods: ['full'], gradient_accumulation_supported: true, gradient_accumulation_runtime_ids: ['worker'], training_step_unit: 'optimizer_updates', training_world_size: 1 };
+  expect(gradientAccumulationAvailable(model, 'worker', 'full')).toBe(true);
+  expect(gradientAccumulationAvailable(model, 'other', 'full')).toBe(false);
+  expect(gradientAccumulationAvailable(model, 'worker', 'lora')).toBe(false);
+  for (const key of ['gradient_accumulation_supported', 'gradient_accumulation_runtime_ids', 'training_step_unit', 'training_world_size'] as const) {
+    const partial = { ...model }; delete partial[key]; expect(gradientAccumulationAvailable(partial, 'worker', 'full')).toBe(false);
+  }
+  for (const patch of [{ gradient_accumulation_supported: 'true' }, { gradient_accumulation_runtime_ids: 'worker' }, { training_step_unit: 'microbatches' }, { training_world_size: true }, { training_world_size: 2 }, { id: 'custom' }]) expect(gradientAccumulationAvailable({ ...model, ...patch } as TrainingModel, 'worker', 'full')).toBe(false);
+  const smol = { ...model, id: 'smolvla', methods: ['lora', 'qlora', 'full'] };
+  expect(gradientAccumulationAvailable(smol, 'worker', 'lora')).toBe(true);
+  expect(gradientAccumulationAvailable(smol, 'worker', 'qlora')).toBe(true);
+  expect(gradientAccumulationAvailable(smol, 'worker', 'full')).toBe(false);
 });

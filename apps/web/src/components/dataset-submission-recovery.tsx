@@ -1,5 +1,7 @@
 'use client';
 
+import type { Job } from '@/lib/api';
+import { reviewedIntakeHistory } from '@/lib/dataset-submission';
 import { useRef, useState } from 'react';
 import { submissionOf, type useDurableSubmission } from '@/lib/durable-submission';
 import type { PolicyJobAttempt } from '@/lib/policy-job-attempt';
@@ -9,7 +11,7 @@ type Props = {
   submission: ReturnType<typeof useDurableSubmission>;
   onReconcile: () => Promise<void>;
   onRetry: () => Promise<void>;
-  onReviewHistory: () => Promise<boolean>;
+  onReviewHistory: () => Promise<boolean | Job[]>;
 };
 
 /** Only an explicit history review can release an old, unkeyed recovery record. */
@@ -17,16 +19,25 @@ export function DatasetSubmissionRecovery({ submission, onReconcile, onRetry, on
   const [reviewed, setReviewed] = useState<PolicyJobAttempt>(null);
   const [reviewing, setReviewing] = useState(false);
   const [reviewError, setReviewError] = useState('');
-  const reviewBusy = useRef(false);
+  const reviewBusy = useRef(false), reviewedHistory = useRef<Job[] | undefined>(undefined);
   const latestAttempt = useRef(submission.attempt);
   latestAttempt.current = submission.attempt;
   const identity = submissionOf(submission.attempt);
   async function review() {
     if (reviewBusy.current || submission.busy) return;
     const expected = submission.attempt;
-    reviewBusy.current = true; setReviewed(null); setReviewing(true); setReviewError('');
+    reviewBusy.current = true; reviewedHistory.current = undefined; setReviewed(null); setReviewing(true); setReviewError('');
     try {
-      if (await onReviewHistory() && latestAttempt.current === expected) setReviewed(expected);
+      const result = await onReviewHistory();
+      if (result && latestAttempt.current === expected) {
+        if (Array.isArray(result)) {
+          const project = result[0]?.project_id;
+          // Empty history is also a valid freshly fetched response. The controller
+          // validates its actual scope again at the explicit acknowledgment.
+          reviewedHistory.current = project ? reviewedIntakeHistory(result, project) : result;
+        }
+        setReviewed(expected);
+      }
       else setReviewError('Job history could not be verified. Keep this request unresolved.');
     } catch (error) { setReviewError(error instanceof Error ? error.message : 'Job history could not be verified.'); }
     finally { reviewBusy.current = false; setReviewing(false); }
@@ -47,7 +58,7 @@ export function DatasetSubmissionRecovery({ submission, onReconcile, onRetry, on
       <p>This older or unreadable recovery record has no verified request ID. Review the project’s jobs before allowing another submission.</p>
       <div className="dataset-submission-actions">
         <button type="button" className="secondary-button" disabled={reviewing || submission.busy || !submission.available} onClick={() => void review()}>{reviewing ? 'Checking history…' : 'Refresh job history'}</button>
-        <button type="button" className="secondary-button" disabled={!reviewed || reviewed !== submission.attempt || reviewing || submission.busy || !submission.available} onClick={() => { if (submission.clearLegacy(reviewed)) setReviewed(null); }}>I reviewed the jobs; allow a new request</button>
+        <button type="button" className="secondary-button" disabled={!reviewed || reviewed !== submission.attempt || reviewing || submission.busy || !submission.available} onClick={() => { if (submission.clearLegacy(reviewed, reviewedHistory.current)) setReviewed(null); }}>I reviewed the jobs; allow a new request</button>
       </div>
     </>}
     {reviewError && <p className="error-notice" role="alert">{reviewError}</p>}

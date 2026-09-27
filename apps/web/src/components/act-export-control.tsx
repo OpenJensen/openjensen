@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, artifactDownloadUrl, isActive, type Job, type PolicyArtifact, type PolicyOptions } from "@/lib/api";
+import { studentRuntime, studentTeacher } from "@/lib/native-distillation";
 import { isCloudArtifact } from "@/lib/checkpoints";
 import { availableNativeQuantizer, nativeQuantizationInput } from "@/lib/native-quantization";
 import { actExportContext, startActExport, storedActExportAttempt, storeActExportReceipt, storedActExportReceipt } from "@/lib/act-export";
@@ -13,7 +14,7 @@ class ExportJournalUnavailable extends Error {
   constructor() { super("Browser session storage is unavailable or its export receipt is unreadable. Restore it and reload, then inspect recorded export jobs before submitting again."); }
 }
 
-export function ActExportControl({ projectId, checkpoint, runtimes, jobs, artifacts, active, onNativeQuantize }: {
+export function ActExportControl({ projectId, checkpoint, runtimes, jobs, artifacts, active, onNativeQuantize, onNativeDistill }: {
   projectId: string;
   checkpoint: PolicyArtifact;
   runtimes: PolicyOptions["runtimes"];
@@ -21,6 +22,7 @@ export function ActExportControl({ projectId, checkpoint, runtimes, jobs, artifa
   artifacts: PolicyArtifact[];
   active: boolean;
   onNativeQuantize?: (artifactId: string) => void;
+  onNativeDistill?: (artifactId: string) => void;
 }) {
   const client = useQueryClient();
   const [selectedRuntime, setSelectedRuntime] = useState("");
@@ -61,6 +63,7 @@ export function ActExportControl({ projectId, checkpoint, runtimes, jobs, artifa
   const exports = artifacts.filter(item => item.project_id === projectId && item.format === "inference_export" && item.parent_ids?.some(id =>
     id === checkpoint.id || artifacts.some(parent => parent.project_id === projectId && parent.id === id && parent.parent_ids?.includes(checkpoint.id))));
   const quantizerAvailable = runtimes.some(availableNativeQuantizer);
+  const distillerAvailable = runtimes.some(studentRuntime);
   const cloud = isCloudArtifact(checkpoint);
   const sourceJob = observed.find(item => item.project_id === projectId && item.id === checkpoint.job_id);
   const dataset = checkpoint.metadata?.dataset as { source?: string } | undefined;
@@ -138,19 +141,28 @@ export function ActExportControl({ projectId, checkpoint, runtimes, jobs, artifa
       const exportJob = related.find(job => job.id === item.job_id);
       const outputs = exportJob?.result && "artifacts" in exportJob.result ? exportJob.result.artifacts ?? [] : [];
       const recordedOutput = outputs.some(output => output.id === item.id && output.project_id === projectId && output.job_id === item.job_id && output.format === "inference_export" && output.manifest_sha256 === item.manifest_sha256);
-      const quantizeIssue = exportJob?.status !== "succeeded" ? "Wait for this export to finish and appear in recorded history."
+      const sourceIssue = exportJob?.status !== "succeeded" ? "Wait for this export to finish and appear in recorded history."
         : !recordedOutput ? "This package is not recorded in the completed export result. Refresh the export jobs before continuing."
-        : !nativeQuantizationInput(item, projectId) ? "This package is not a supported local ACT inference input for quantization."
-        : !quantizerAvailable ? "A local native ACT quantization worker is not available. The package can still be downloaded."
         : null;
+      const quantizeIssue = sourceIssue ?? (!nativeQuantizationInput(item, projectId) ? "This package is not a supported local ACT inference input for quantization."
+        : !quantizerAvailable ? "A local native ACT quantization worker is not available. The package can still be downloaded."
+        : null);
+      const distillIssue = sourceIssue ?? (item.metadata?.prediction_horizon !== undefined && item.metadata.prediction_horizon !== 100
+        ? "ACT distillation currently requires a 100-action prediction horizon. This package keeps its original timing."
+        : !studentTeacher(item, projectId) ? "This package is not a supported local ACT teacher input."
+          : !distillerAvailable ? "A local ACT distillation worker is not available. The package can still be downloaded."
+          : null);
+      const continuationIssues = [...new Set([onNativeDistill && distillIssue, onNativeQuantize && quantizeIssue].filter(Boolean))];
       return <section key={item.id} aria-label={`ACT inference package ${item.id}`}>
         <p className="training-monitor-note">ACT FP32 inference package · Export {item.job_id.slice(0, 8)}</p>
+        {onNativeDistill && <p className="training-monitor-note">Train a smaller ACT student, or quantize this package directly.</p>}
         <div className="native-result-actions">
+          {onNativeDistill && <button type="button" className="secondary-button" disabled={!active || !!distillIssue} onClick={() => { if (active && !distillIssue) onNativeDistill(item.id); }}>Use as ACT teacher</button>}
           <a className="text-link" href={artifactDownloadUrl(projectId, item.id)}>Download ACT inference package</a>
           {onNativeQuantize && <button type="button" className="secondary-button" disabled={!active || !!quantizeIssue} onClick={() => { if (active && !quantizeIssue) onNativeQuantize(item.id); }}>Quantize this package</button>}
         </div>
         <p className="training-monitor-note">Inference only; keep the original checkpoint for training.</p>
-        {onNativeQuantize && quantizeIssue && <p role="status" className="training-monitor-note">{quantizeIssue}</p>}
+        {continuationIssues.length > 0 && <p role="status" className="training-monitor-note">{continuationIssues.join(" ")}</p>}
       </section>;
     })}
   </section>;

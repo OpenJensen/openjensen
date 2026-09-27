@@ -514,3 +514,65 @@ def test_chained_cloud_resume_uses_checkpoint_recipe_and_camera_lineage(
         sidecar.write_text("{}")
         with pytest.raises(ValueError, match="differs from its registered manifest"):
             asyncio.run(lifecycle.resumed_training_contract("project", followup))
+
+
+@pytest.mark.parametrize(
+    "model_id,module,expected",
+    [
+        ("smolvla", "firebird_vla.application", True),
+        ("act", "firebird_vla.lerobot_application", True),
+        ("act", "custom_training.application", False),
+        ("smolvla", "custom_training.application", False),
+        ("pi0", "firebird_vla.lerobot_application", False),
+        ("psi0", "custom_training.application", False),
+    ],
+)
+def test_accumulation_catalog_is_bound_to_the_installed_adapter(model_id, module, expected):
+    worker = runtime(training_module=module, training_model_ids=[model_id])
+    model = next(
+        m for m in public_training_models(RuntimeCatalog(runtimes=[worker])) if m["id"] == model_id
+    )
+    assert model["gradient_accumulation_runtime_ids"] == (["trainer"] if expected else [])
+    assert model["training_step_unit"] == "optimizer_updates"
+    assert model["training_world_size"] == 1
+
+
+@pytest.mark.parametrize(
+    "model_id,module",
+    [
+        ("act", "custom_training.application"),
+        ("pi0", "firebird_vla.lerobot_application"),
+        ("psi0", "custom_training.application"),
+    ],
+)
+def test_unsupported_accumulation_rejected_before_job_or_dataset_execution(
+    tmp_path, model_id, module
+):
+    worker = runtime(training_module=module, training_model_ids=[model_id], gpu_memory_mib=81920)
+    config = tmp_path / "runtimes.json"
+    config.write_text(RuntimeCatalog(runtimes=[worker]).model_dump_json())
+    with TestClient(
+        create_app(Settings(data_dir=tmp_path / "data", runtime_config=config))
+    ) as client:
+        client.put("/api/v1/compute-settings", json={"local": {"enabled": True}})
+        project = client.post("/api/v1/projects", json={"name": "Accumulation admission"}).json()[
+            "id"
+        ]
+        model = TRAINING_MODEL_BY_ID[model_id]
+        response = client.post(
+            f"/api/v1/projects/{project}/policy-jobs",
+            json={
+                "operation": "policy.finetune",
+                "runtime_id": "trainer",
+                "dataset_job_id": "not-loaded",
+                "training_method": "full",
+                "training": {
+                    "model_id": model.model_id,
+                    "model_revision": model.model_revision,
+                    "gradient_accumulation_steps": 2,
+                },
+            },
+        )
+        assert response.status_code == 422
+        assert "require gradient accumulation of 1" in response.json()["detail"]
+        assert client.get(f"/api/v1/projects/{project}/jobs").json() == []

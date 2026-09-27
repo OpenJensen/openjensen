@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .accumulation import checkpoint_optimization
 from .checkpoint import load_for_inference, resolve_checkpoint, write_json
 from .config import TrainConfig
 from .temporal import check_dataset_temporal, resolved_temporal
@@ -14,6 +15,7 @@ def main():
     parser.add_argument("checkpoint", type=Path)
     args = parser.parse_args()
     args.checkpoint = resolve_checkpoint(args.checkpoint)
+    optimization = checkpoint_optimization(args.checkpoint)
     import torch
     from safetensors.torch import load_file
     from torch.utils.data import default_collate
@@ -43,6 +45,7 @@ def main():
     torch.testing.assert_close(actual, expected, rtol=1e-3, atol=1e-3)
     report = {
         "reload_verified": True,
+        "optimization": optimization,
         "temporal_contract": temporal,
         "checkpoint": str(args.checkpoint.resolve()),
         "max_abs_action_difference": (actual - expected).abs().max().item(),

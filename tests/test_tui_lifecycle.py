@@ -581,3 +581,45 @@ def test_invalid_recipe_reports_user_field_without_response_blame():
     value["native_quantization"]["bits"] = 3
     with pytest.raises(ApiError, match="Recipe needs correction: native_quantization.bits"):
         current.review("quantize", canonical(value))
+
+
+@pytest.mark.parametrize(
+    "capability",
+    [
+        None,
+        {},
+        {"gradient_accumulation_runtime_ids": "train"},
+        {"gradient_accumulation_runtime_ids": None},
+        {"training_world_size": True},
+        {"training_step_unit": "microbatches"},
+        {"gradient_accumulation_runtime_ids": ["other-worker"]},
+    ],
+)
+def test_terminal_accumulation_requires_exact_worker_capability(capability):
+    current = asyncio.run(context(LifecycleServer()))
+    model = next(m for m in current.models if m["model_id"] == "fixture/act")
+    if capability is not None:
+        model.update(
+            gradient_accumulation_supported=True,
+            gradient_accumulation_runtime_ids=["train"],
+            training_world_size=1,
+            training_step_unit="optimizer_updates",
+        )
+        model.update(capability)
+    value = recipe("train")
+    value["training"]["gradient_accumulation_steps"] = 3
+    if capability == {}:
+        assert (
+            current.review("train", canonical(value)).request["training"][
+                "gradient_accumulation_steps"
+            ]
+            == 3
+        )
+    else:
+        with pytest.raises(ApiError, match="advertise gradient accumulation of 1"):
+            current.review("train", canonical(value))
+    value["training"]["gradient_accumulation_steps"] = 1
+    assert (
+        current.review("train", canonical(value)).request["training"]["gradient_accumulation_steps"]
+        == 1
+    )
