@@ -542,3 +542,18 @@ input::placeholder { color: var(--muted); opacity: .8; }
 .teaching-preview-stale canvas { opacity: .45; }
 .teaching-preview p, .teaching-setup { font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
 .teaching-setup summary { cursor: pointer; }
+
+/* Native simulation stays separate from engine diagnostics and operator setup. */
+.run-modes [role="group"] { display: flex; flex-wrap: wrap; gap: 10px; }
+.run-modes [aria-pressed="true"] { border-color: var(--accent, #2563eb); font-weight: 700; }
+.native-simulation, .native-simulation-history, .native-simulation-result { display: grid; gap: 16px; min-width: 0; }
+.native-simulation-form { display: grid; gap: 16px; min-width: 0; border: 1px solid var(--border, #dce1e8); padding: 16px; border-radius: 10px; }
+.native-simulation-form label, .native-simulation-history > label { display: grid; gap: 8px; min-width: 0; }
+.native-simulation select, .native-simulation input { max-width: 100%; min-width: 0; width: 100%; }
+.native-simulation .native-confirm { display: flex; align-items: flex-start; gap: 10px; }
+.native-confirm input { flex: 0 0 auto; width: auto; margin-top: 4px; }
+.native-simulation video { width: 100%; max-height: 480px; background: #111; }
+.native-simulation dd, .native-import p { overflow-wrap: anywhere; }
+.native-import { border-block: 1px solid var(--border, #dce1e8); padding-block: 16px; }
+.native-simulation fieldset:disabled { opacity: .65; }
+.native-simulation progress { max-width: 100%; }
