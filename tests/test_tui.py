@@ -373,3 +373,27 @@ def test_intake_does_not_acknowledge_another_project_or_operation(mismatch):
             assert len([call for call in server.calls if call[0] == "POST"]) == 1
 
     asyncio.run(scenario())
+
+
+def test_cancel_before_worker_start_does_not_leak_coroutines_or_submit():
+    import gc
+    import warnings
+
+    async def scenario():
+        server = Server()
+        app = FirebirdApp(client=server.client(), poll_seconds=100)
+        async with app.run_test() as pilot:
+            await until(lambda: app.connected)
+            # No event-loop yield: each old read is cancelled before it can start.
+            for _ in range(30):
+                app.action_refresh()
+            app.mutate("project", {"name": "must not submit"})
+            app.workers.cancel_all()
+            await pilot.press("ctrl+q")
+        assert not any(call[0] == "POST" for call in server.calls)
+
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always", RuntimeWarning)
+        asyncio.run(scenario())
+        gc.collect()
+    assert not [warning for warning in captured if "was never awaited" in str(warning.message)]

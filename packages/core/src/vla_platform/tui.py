@@ -2,6 +2,7 @@
 
 import json
 from datetime import datetime
+from functools import partial
 
 from pydantic import ValidationError
 from rich.text import Text
@@ -266,7 +267,7 @@ class FirebirdApp(App):
     def action_refresh(self):
         if not self.is_running:
             return
-        self.read_worker = self.run_worker(self.fetch_records(), group="read", exclusive=True)
+        self.read_worker = self.run_worker(self.fetch_records, group="read", exclusive=True)
 
     @staticmethod
     def options(widget, records, render):
@@ -427,7 +428,7 @@ class FirebirdApp(App):
             return
         self.writing = True
         self.controls()
-        self.run_worker(self.write(kind, payload, project_id), group="mutation")
+        self.run_worker(partial(self.write, kind, payload, project_id), group="mutation")
 
     async def write(self, kind, payload, project_id):
         try:
