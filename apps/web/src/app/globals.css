@@ -649,8 +649,8 @@ input[type=file]::file-selector-button { min-height: 40px; border: 1px solid var
 .distillation-facts small { display: block; margin-top: 6px; color: var(--muted); }
 .distillation-history { display: grid; gap: 8px; }
 .distillation-partitions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.native-distillation .distillation-check { display: flex; align-items: flex-start; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 9px; line-height: 1.6; }
-.native-distillation .distillation-check input { width: 16px; height: 16px; margin: 3px 0 0; flex: 0 0 16px; }
+:is(.native-distillation, .native-replay) .distillation-check { display: flex; align-items: flex-start; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 9px; line-height: 1.6; }
+:is(.native-distillation, .native-replay) .distillation-check input { width: 16px; height: 16px; margin: 3px 0 0; flex: 0 0 16px; }
 @media (max-width: 900px) { .native-distillation .distillation-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 600px) { .distillation-partitions { grid-template-columns: 1fr; } }
 .native-simulation-result .cloud-log-tail { max-height: 20rem; min-height: 6rem; margin-bottom: 0; background: var(--subtle); }
@@ -693,3 +693,11 @@ input[type=file]::file-selector-button { min-height: 40px; border: 1px solid var
   .native-simulation-result .cloud-run-facts { grid-template-columns: 1fr; }
   .theme-toggle button { padding-inline: 7px; }
 }
+
+.replay-action-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.replay-action-trace { margin: 0; padding: 14px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--ink); min-width: 0; }
+.replay-action-trace figcaption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.replay-action-trace figcaption span, .replay-action-trace small { color: var(--muted); font-size: 11px; font-weight: 400; }
+.replay-action-trace svg { display: block; width: 100%; margin-block: 12px 6px; color: var(--accent); }
+@media (max-width: 900px) { .replay-action-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 500px) { .replay-action-grid { grid-template-columns: 1fr; } }
