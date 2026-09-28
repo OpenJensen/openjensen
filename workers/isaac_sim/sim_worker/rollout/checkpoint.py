@@ -35,14 +35,13 @@ class Checkpoint:
     action_steps: int
     control_contract: dict | None = None
     control_contract_sha256: str | None = None
+    model_format: str = "safetensors"
 
 
 def inspect_checkpoint(path: Path) -> Checkpoint:
     """Validate metadata and fingerprint weights plus their saved processors."""
     # Packed admission retains lexical paths so symlink ancestry is not erased.
     if (path / "encoding.json").exists() or (path / "model.fbq").exists():
-        if (path / CONTROL_FILE).exists() or (path / CONTROL_FILE).is_symlink():
-            raise ValueError("Packed simulator control contracts are not yet supported")
         from firebird_quant.native_package import decode, inspect_policy, read, sha
 
         packed = inspect_policy(path.absolute())
@@ -50,6 +49,12 @@ def inspect_checkpoint(path: Path) -> Checkpoint:
         if sha(raw_config) != packed["files"]["config.json"]["sha256"]:
             raise ValueError("Packed configuration changed during inspection")
         config = decode(raw_config)
+        control, control_sha = control_optional(path, config)
+        if (control, control_sha) != (
+            packed.get("control_contract"),
+            packed.get("control_contract_sha256"),
+        ):
+            raise ValueError("Packed simulator control contract changed during inspection")
         camera = next(k for k in config["input_features"] if k.startswith("observation.images."))
         image = config["input_features"][camera]["shape"]
         return Checkpoint(
@@ -62,6 +67,9 @@ def inspect_checkpoint(path: Path) -> Checkpoint:
             config["output_features"]["action"]["shape"][0],
             config["chunk_size"],
             config["n_action_steps"],
+            control,
+            control_sha,
+            "firebird_quant",
         )
     root = path.resolve()
     files = set(_EXPORT_FILES)

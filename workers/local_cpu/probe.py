@@ -61,6 +61,51 @@ def installed_versions(pins: dict[str, str], prefix: Path) -> dict[str, str]:
     return versions
 
 
+def distillation_source_identity(repo: Path) -> dict[str, str]:
+    """Bind the worker's declared dependency identity to the selected checkout."""
+    root = repo.resolve() / "workers"
+    groups = (
+        (
+            "distillation",
+            "firebird_distill",
+            "policy_distillation/src/firebird_distill",
+            ("__init__", "application", "contracts", "prepare", "runtime", "provenance"),
+        ),
+        (
+            "act",
+            "firebird_act",
+            "act_optimizer/src/firebird_act",
+            ("bundle", "probe", "control_schema"),
+        ),
+        (
+            "data",
+            "firebird_vla",
+            "smolvla_qlora/src/firebird_vla",
+            ("control_contract", "control_schema"),
+        ),
+    )
+    expected = {}
+    for prefix, package, folder, names in groups:
+        for name in names:
+            imported = package if name == "__init__" else f"{package}.{name}"
+            module = importlib.import_module(imported)
+            path = root / folder / f"{name}.py"
+            if module.__file__ is None or Path(module.__file__).resolve() != path:
+                raise ValueError(
+                    f"Distillation dependency is not from selected checkout: {imported}"
+                )
+            with path.open("rb") as stream:
+                raw = stream.read(1024 * 1024 + 1)
+            if not raw or len(raw) > 1024 * 1024:
+                raise ValueError(f"Invalid bounded worker source: {imported}")
+            expected[f"{prefix}/{name}.py"] = hashlib.sha256(raw).hexdigest()
+    application = importlib.import_module("firebird_distill.application")
+    actual = application.implementation_identity()
+    if actual != expected:
+        raise ValueError("Distillation implementation identity differs from selected source files")
+    return expected
+
+
 def check(role: str, repo: Path) -> dict[str, object]:
     """Check an independent installed runtime and its fixed repository modules."""
     if role not in {"model", "reader"} or sys.version_info[:2] != (3, 12):
@@ -126,6 +171,7 @@ def check(role: str, repo: Path) -> dict[str, object]:
         "python": platform.python_version(),
         "versions": versions,
         "worker_sha256": loaded,
+        "distillation_implementation_sha256": distillation_source_identity(repo),
         "reader_source_sha256": writer_hashes,
         "model_execution": False,
         "network": False,

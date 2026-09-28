@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { initialQuantizeEntry, initialRunEntry } from '../../apps/web/src/lib/workflow-entry';
 import type { Job, PolicyArtifact } from '../../apps/web/src/lib/api';
 import { studentTeacher } from '../../apps/web/src/lib/native-distillation';
+import { hasSimulatorControlContract, nativeQuantizationInput } from '../../apps/web/src/lib/native-quantization';
 
 // Generated API records exercise real workspace navigation; no model or cloud work runs.
 const time = '2026-09-27T12:00:00Z', model = `sha256:${'f'.repeat(64)}`;
@@ -32,7 +33,9 @@ async function fixture(page: Page) {
       const body = request.postDataJSON(); state.mutations.push({ path, body });
       if (path === '/api/v1/projects/alpha/policy-jobs') {
         const id = body.operation === 'policy.distill' ? 'student-job' : body.operation === 'policy.quantize' ? 'quant-job' : 'replay-job';
-        const job = makeJob(id, body); state.jobs.push(job); return route.fulfill({ status: 202, json: job });
+        const job = makeJob(body.simulation ? 'simulation-job' : id, body);
+        if (body.simulation) Object.assign(job, { simulation_target: { profile_id: body.simulation.profile_id, profile_sha256: 'e'.repeat(64), policy_runtime: 'packed-act-cpu', provider: 'gcp', accelerators: ['L4'], source_manifest_sha256: state.artifacts.find(item => item.id === body.artifact_id)?.manifest_sha256 } });
+        state.jobs.push(job); return route.fulfill({ status: 202, json: job });
       }
       if (path.endsWith('/cancel')) { const job = state.jobs.find(item => item.id === path.split('/').at(-2))!; job.status = 'cancelled'; return route.fulfill({ json: job }); }
       return route.fulfill({ status: 405, json: { detail: 'Unexpected generated-fixture mutation' } });
@@ -72,6 +75,155 @@ async function openPacked(page: Page, state: Awaited<ReturnType<typeof fixture>>
   await page.getByRole('button', { name: 'Replay recorded observations', exact: true }).click();
   await expect(page.getByRole('region', { name: 'CPU observation replay', exact: true })).toBeVisible();
 }
+
+const packedProfile = { id: 'packed-cpu', label: 'Generated packed CPU profile', architectures: ['act'], experimental: true, task_object: 'cup', policy_runtime: 'packed-act-cpu', policy_device: 'cpu', policy_formats: ['firebird_quant'], provider: 'gcp', accelerators: ['L4'] };
+async function simulationContinuationFixture(page: Page) {
+  const state = await fixture(page);
+  state.profiles = [{ id: 'cuda-first', label: 'Generated CUDA profile', architectures: ['act', 'smolvla'], experimental: true, task_object: 'cup' }, packedProfile];
+  const job = makeJob('quant-job', quantRequest()); completeQuant(job);
+  const first = { ...structuredClone(packed), label: 'Same generated package' };
+  const target = { ...structuredClone(packed), id: 'quantized:second', label: first.label, manifest_sha256: 'd'.repeat(64) };
+  job.result!.artifacts = [first, target]; state.jobs.push(job); state.artifacts.push(structuredClone(first), structuredClone(target));
+  await page.reload(); await expect(page.getByLabel('Current project')).toHaveValue('alpha');
+  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption(job.id);
+  const continueButton = page.locator(`[data-artifact-id="${target.id}"]`).getByRole('button', { name: 'Prepare simulation', exact: true });
+  await expect(continueButton).toBeEnabled();
+  return { ...state, target, first, continueButton };
+}
+
+test('exact second packed package prepares simulation with explicit profile and paid consent only', async ({ page }) => {
+  const state = await simulationContinuationFixture(page);
+  await state.continueButton.click();
+  await expect(page.getByRole('region', { name: 'Package from quantization', exact: true })).toContainText(state.target.id);
+  const profiles = page.getByRole('radiogroup', { name: 'Isaac profile', exact: true });
+  const policies = page.getByRole('radiogroup', { name: 'Native policy', exact: true });
+  await expect(profiles.locator('input:checked')).toHaveCount(0);
+  await expect(policies.locator('input:checked')).toHaveCount(0);
+  const consent = page.getByRole('checkbox', { name: /experimental, paid cloud rollout/ });
+  await expect(consent).toBeDisabled();
+  await profiles.getByRole('radio', { name: packedProfile.label }).check();
+  await expect(policies.locator('input:checked')).toHaveValue(state.target.id);
+  await expect(consent).not.toBeChecked();
+  await expect(page.getByText('Paid L4 simulator + CPU policy worker. Timeout is not a spending cap.', { exact: true })).toBeVisible();
+  await page.getByLabel('Simulation timeout (seconds)').fill('600');
+  const launch = page.getByRole('button', { name: 'Start experimental simulation', exact: true });
+  await expect(launch).toBeDisabled(); expect(state.mutations).toEqual([]);
+  await consent.check(); await launch.dblclick();
+  await expect(page.getByRole('article', { name: 'Native simulation job details' })).toHaveAttribute('data-job-id', 'simulation-job');
+  expect(state.mutations).toEqual([{ path: '/api/v1/projects/alpha/policy-jobs', body: { operation: 'policy.run', runtime_id: packedProfile.id, artifact_id: state.target.id, simulation: { profile_id: packedProfile.id, experimental: true }, timeout_seconds: 600 } }]);
+});
+
+for (const fault of ['missing', 'manifest', 'model', 'foreign'] as const) test(`simulation continuation refuses ${fault} source and never chooses a replacement`, async ({ page }) => {
+  const state = await simulationContinuationFixture(page);
+  const index = state.artifacts.findIndex(item => item.id === state.target.id);
+  if (fault === 'missing') state.artifacts.splice(index, 1);
+  else if (fault === 'manifest') state.artifacts[index].manifest_sha256 = 'e'.repeat(64);
+  else if (fault === 'model') state.artifacts[index].metadata = { ...state.artifacts[index].metadata, model_id: `sha256:${'e'.repeat(64)}` };
+  else state.artifacts[index].project_id = 'beta';
+  await state.continueButton.click(); await page.getByRole('button', { name: 'Refresh simulation jobs', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Package from quantization', exact: true })).toContainText('missing or its recorded identity changed');
+  await page.getByRole('radio', { name: packedProfile.label, exact: true }).check();
+  await expect(page.getByRole('radiogroup', { name: 'Native policy', exact: true }).locator('input:checked')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Start experimental simulation', exact: true })).toBeDisabled();
+  expect(state.mutations).toEqual([]);
+});
+
+test('late simulation package cannot override a manual policy or restore paid consent', async ({ page }) => {
+  const state = await simulationContinuationFixture(page);
+  state.artifacts.splice(state.artifacts.findIndex(item => item.id === state.target.id), 1);
+  await state.continueButton.click(); await page.getByRole('button', { name: 'Refresh simulation jobs', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Package from quantization', exact: true })).toContainText('missing or its recorded identity changed');
+  await page.getByRole('radio', { name: packedProfile.label, exact: true }).check();
+  const policies = page.getByRole('radiogroup', { name: 'Native policy', exact: true });
+  await policies.locator(`input[value="${state.first.id}"]`).check();
+  state.artifacts.push(structuredClone(state.target));
+  await page.getByRole('button', { name: 'Refresh simulation jobs', exact: true }).click();
+  await expect(policies.locator(`input[value="${state.target.id}"]`)).toHaveCount(1);
+  await expect(policies.locator('input:checked')).toHaveValue(state.first.id);
+  await expect(page.getByRole('region', { name: 'Package from quantization', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('checkbox', { name: /experimental, paid cloud rollout/ })).not.toBeChecked();
+  expect(state.mutations).toEqual([]);
+});
+
+test('a changed handed-off manifest clears consent and blocks the previously selected policy', async ({ page }) => {
+  const state = await simulationContinuationFixture(page);
+  await state.continueButton.click();
+  await page.getByRole('radio', { name: packedProfile.label, exact: true }).check();
+  const consent = page.getByRole('checkbox', { name: /experimental, paid cloud rollout/ });
+  await consent.check();
+  await expect(page.getByRole('button', { name: 'Start experimental simulation', exact: true })).toBeEnabled();
+  state.artifacts.find(item => item.id === state.target.id)!.manifest_sha256 = 'e'.repeat(64);
+  await page.getByRole('button', { name: 'Refresh simulation jobs', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Package from quantization', exact: true })).toContainText('missing or its recorded identity changed');
+  await expect(page.getByRole('radiogroup', { name: 'Native policy', exact: true }).locator('input:checked')).toHaveCount(0);
+  await expect(consent).not.toBeChecked(); await expect(consent).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Start experimental simulation', exact: true })).toBeDisabled();
+  expect(state.mutations).toEqual([]);
+});
+
+test('manual recording selection consumes simulation handoff and retains its exact video and download', async ({ page }) => {
+  const state = await simulationContinuationFixture(page);
+  const saved = makeJob('saved-cup-rollout', { operation: 'policy.run', runtime_id: packedProfile.id, artifact_id: state.first.id, simulation: { profile_id: packedProfile.id, experimental: true }, timeout_seconds: 600 });
+  saved.status = 'succeeded'; saved.stage = 'simulation';
+  saved.result = { artifacts: [artifact('saved-cup-record', 'simulation_record', {}, 'alpha', saved.id)], reports: [{ stage: 'simulation', artifacts: [{ path: 'artifacts/outputs/video.mp4' }] }] };
+  state.jobs.push(saved);
+  // Hold generated media transport so this checks the owned player route, not invented playback evidence.
+  let release!: () => void; const mediaGate = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/v1/jobs/saved-cup-rollout/simulation-media/video', async route => { await mediaGate; await route.fulfill({ status: 200, contentType: 'video/mp4', body: Buffer.alloc(0) }); });
+  try {
+    await state.continueButton.click(); await page.getByRole('button', { name: 'Refresh simulation jobs', exact: true }).click();
+    await page.getByLabel('Saved simulation job', { exact: true }).selectOption(saved.id);
+    await expect(page.getByRole('article', { name: 'Native simulation job details', exact: true })).toHaveAttribute('data-job-id', saved.id);
+    await expect(page.getByLabel('Recorded cup rollout', { exact: true })).toHaveAttribute('src', '/api/v1/jobs/saved-cup-rollout/simulation-media/video');
+    await expect(page.getByRole('link', { name: 'Download simulation record', exact: true })).toHaveAttribute('href', '/api/v1/projects/alpha/artifacts/saved-cup-record/download');
+    await page.getByText('Prepare another run', { exact: true }).click();
+    await page.getByRole('button', { name: 'Refresh simulation jobs', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Package from quantization', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('radiogroup', { name: 'Isaac profile', exact: true }).locator('input:checked')).toHaveCount(0);
+    await expect(page.getByRole('article', { name: 'Native simulation job details', exact: true })).toHaveAttribute('data-job-id', saved.id);
+    expect(state.mutations).toEqual([]);
+  } finally { release(); }
+});
+
+test('simulation continuation preserves uncertainty and clears on explicit project or mode change', async ({ page }) => {
+  const state = await simulationContinuationFixture(page);
+  const key = 'firebird:job-attempt:policy.run.simulation:alpha';
+  const saved = JSON.stringify({ state: 'uncertain', message: 'Earlier rollout outcome remains unknown.' });
+  await page.evaluate(({ key, saved }) => sessionStorage.setItem(key, saved), { key, saved });
+  await state.continueButton.click();
+  await expect(page.getByRole('region', { name: 'Native simulation recovery', exact: true })).toContainText('Earlier rollout outcome remains unknown.');
+  await expect(page.getByRole('radio', { name: packedProfile.label, exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'I checked the jobs; allow a new request', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Replay observations', exact: true }).click();
+  await page.getByRole('button', { name: '3D simulation', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Package from quantization', exact: true })).toHaveCount(0);
+  expect(await page.evaluate(key => sessionStorage.getItem(key), key)).toBe(saved);
+  await page.getByLabel('Current project').selectOption('beta');
+  await page.getByRole('button', { name: '3D simulation', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Package from quantization', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('radiogroup', { name: 'Native policy', exact: true }).locator('input:checked')).toHaveCount(0);
+  expect(state.mutations).toEqual([]);
+});
+
+for (const fault of ['missing-profile', 'profile-error'] as const) test(`packed result keeps replay and download when ${fault} blocks simulation`, async ({ page }) => {
+  const state = await simulationContinuationFixture(page);
+  // Mutate the fixture's shared arrays/route state, not an application setting.
+  if (fault === 'missing-profile') state.profiles.splice(1, 1);
+  else await page.route('**/api/v1/simulation-options', route => route.fulfill({ status: 503, json: { detail: 'Generated profile outage' } }));
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await page.getByRole('button', { name: '3D simulation', exact: true }).click();
+  await page.getByRole('button', { name: 'Refresh simulation jobs', exact: true }).click();
+  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption('quant-job');
+  const result = page.locator(`[data-artifact-id="${state.target.id}"]`);
+  await expect(result.getByRole('button', { name: 'Prepare simulation', exact: true })).toBeDisabled();
+  await expect(result).toContainText(fault === 'missing-profile' ? 'No packed ACT simulation profile is configured.' : 'Simulation profile availability is unknown.');
+  await expect(result.getByRole('button', { name: 'Replay recorded observations', exact: true })).toBeEnabled();
+  await expect(result.getByRole('link', { name: 'Download INT8 package', exact: true })).toHaveAttribute('href', `/api/v1/projects/alpha/artifacts/${encodeURIComponent(state.target.id)}/download`);
+  expect(state.mutations).toEqual([]);
+});
 
 test('explicit Distill to Quantize to Replay carries exact artifacts without submitting on navigation', async ({ page }) => {
   const state = await fixture(page);
@@ -438,14 +590,33 @@ for (const failedRead of ['profiles', 'history'] as const) test(`Evaluate keeps 
 });
 
 
-test('teacher eligibility preserves legacy ACT inputs while rejecting explicit incompatible prediction horizons', () => {
+test('teacher eligibility preserves legacy timing and admits complete bounded horizon metadata', () => {
   const source = artifact('registered-teacher') as PolicyArtifact;
   expect(studentTeacher(source, 'alpha')).toBe(true);
-  expect(studentTeacher({ ...source, metadata: { ...source.metadata, prediction_horizon: 100 } }, 'alpha')).toBe(true);
-  for (const prediction_horizon of [32, 101, 0, '100', null, [100], true]) {
+  for (const prediction_horizon of [1, 32, 100, 1024]) expect(studentTeacher({ ...source, metadata: { ...source.metadata, prediction_horizon, execution_horizon: 1, temporal_contract_sha256: null } }, 'alpha')).toBe(true);
+  for (const prediction_horizon of [32, 100, 101, 0, '100', null, [100], true]) {
     expect(studentTeacher({ ...source, metadata: { ...source.metadata, prediction_horizon } }, 'alpha')).toBe(false);
   }
   expect(studentTeacher(source, 'beta')).toBe(false);
   expect(studentTeacher({ ...source, metadata: { architecture: 'smolvla' } }, 'alpha')).toBe(false);
   expect(studentTeacher({ ...source, metadata: { ...source.metadata, storage: 'gcs' } }, 'alpha')).toBe(false);
+});
+
+
+test('ACT transform eligibility preserves null legacy imports and rejects incomplete or malformed simulator claims', () => {
+  const source = artifact('contract-policy') as PolicyArtifact;
+  for (const metadata of [{}, { control_contract: null }, { control_contract_sha256: null }, { control_contract: null, control_contract_sha256: null }, { checkpoint: { control_contract: null, control_contract_sha256: null } }]) {
+    const legacy = { ...source, metadata: { ...source.metadata, ...metadata } };
+    expect(hasSimulatorControlContract(legacy)).toBe(false);
+    expect(studentTeacher(legacy, 'alpha')).toBe(true);
+    expect(nativeQuantizationInput(legacy, 'alpha')).toBe(true);
+  }
+  for (const field of ['control_contract', 'control_contract_sha256']) for (const value of [{ kind: 'simulator_joint_position', schema_version: 1 }, 'f'.repeat(64), {}, [], '', 0, false]) {
+    for (const claim of [{ [field]: value }, { control_contract: null, control_contract_sha256: null, checkpoint: { [field]: value } }]) {
+      const guarded = { ...source, metadata: { ...source.metadata, ...claim } };
+      expect(hasSimulatorControlContract(guarded)).toBe(true);
+      expect(studentTeacher(guarded, 'alpha')).toBe(false);
+      expect(nativeQuantizationInput(guarded, 'alpha')).toBe(false);
+    }
+  }
 });

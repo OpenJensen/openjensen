@@ -19,7 +19,7 @@ firebird-distill = "firebird_distill.application:main"
 where = ["src"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src", "../act_optimizer/src"]
+pythonpath = ["src", "../act_optimizer/src", "../smolvla_qlora/src"]
 testpaths = ["tests"]
 
 [tool.ruff]

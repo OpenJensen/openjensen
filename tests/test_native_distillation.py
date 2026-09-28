@@ -128,10 +128,12 @@ def fixture(tmp_path):
     ]:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("# protocol fixture")
-    for name in ("__init__.py", "contracts.py", "runtime.py"):
+    for name in ("__init__.py", "contracts.py", "runtime.py", "provenance.py"):
         (worker / "src/firebird_distill" / name).write_text("# protocol fixture")
-    for name in ("bundle.py", "probe.py"):
+    for name in ("bundle.py", "probe.py", "control_schema.py"):
         (worker.parent / "act_optimizer/src/firebird_act" / name).write_text("# protocol fixture")
+    for name in ("control_contract.py", "control_schema.py"):
+        (worker.parent / "smolvla_qlora/src/firebird_vla" / name).write_text("# protocol fixture")
     runtime = configured(worker)
     data["implementation"] = nd.implementation_identity(runtime)
     lifecycle = SimpleNamespace(

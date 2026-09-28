@@ -43,10 +43,10 @@ function missing(key: string) { return response({ detail: 'No saved submission' 
 function requestKey(init?: RequestInit) { return new Headers(init?.headers).get('Idempotency-Key')!; }
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(r => { resolve = r; }); return { promise, resolve }; }
 
-for (const operation of ['dataset.inspect', 'dataset.augment', 'policy.finetune'] as const) test(`generic ${operation} persists exact original before any I/O and uses only its fixed endpoint`, async () => {
+for (const operation of ['dataset.inspect', 'dataset.augment', 'policy.finetune', 'teaching.capture'] as const) test(`generic ${operation} persists exact original before any I/O and uses only its fixed endpoint`, async () => {
   const f = fixture(), ownScope = { ...scope, operation };
   const c = submissionController(ownScope, f.cache, () => f.storage);
-  const recipe = operation === 'policy.finetune' ? body() : { repo_id: 'owned/dataset', fraction: 0.5, ordered: [2, 1] };
+  const recipe = operation === 'teaching.capture' ? { operation, profile_id: 'local-isaac', profile_sha256: 'a'.repeat(64), timeout_seconds: 300 } : operation === 'policy.finetune' ? body() : { repo_id: 'owned/dataset', fraction: 0.5, ordered: [2, 1] };
   const seen: string[] = [];
   globalThis.fetch = async (url, init) => {
     const key = requestKey(init), stored = JSON.parse(f.seed.get(submissionStorageKey(ownScope))!);
@@ -57,7 +57,7 @@ for (const operation of ['dataset.inspect', 'dataset.augment', 'policy.finetune'
   const accepted = await c.submit(recipe, value => value as Job);
   expect(accepted?.id).toBe('accepted-job'); expect(accepted?.result).toEqual({ unverified: true }); expect(f.state().receipt?.result).toBeNull(); expect(seen).toHaveLength(2);
   expect(seen[0]).toContain(`/submissions/`); expect(seen[0]).toContain(`operation=${encodeURIComponent(operation)}`);
-  expect(seen[1]).toMatch(new RegExp(`/${operation === 'dataset.inspect' ? 'intakes' : operation === 'dataset.augment' ? 'augmentations' : 'policy-jobs'}$`));
+  expect(seen[1]).toMatch(new RegExp(`/${operation === 'dataset.inspect' ? 'intakes' : operation === 'dataset.augment' ? 'augmentations' : operation === 'teaching.capture' ? 'teaching/sessions' : 'policy-jobs'}$`));
   expect(f.state().attempt).toBeNull(); expect(f.seed.size).toBe(0);
 });
 

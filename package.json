@@ -11,7 +11,8 @@
     "check:web": "pnpm --filter @firebird/web typecheck",
     "test:web": "playwright test",
     "test:diagnostics": "playwright test --config playwright.diagnostics.config.ts",
-    "generate:client": "openapi-typescript packages/core/openapi.json -o apps/web/src/lib/api.generated.ts"
+    "generate:client": "openapi-typescript packages/core/openapi.json -o apps/web/src/lib/api.generated.ts",
+    "test:web:pure": "playwright test --config playwright.pure.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",

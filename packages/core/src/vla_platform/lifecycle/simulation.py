@@ -134,20 +134,49 @@ async def validate(lifecycle, project_id, request):
     if request.operation != "policy.run" or not request.simulation.experimental:
         raise ValueError("Only explicitly experimental Isaac Run is available")
     artifact = await lifecycle.artifact(project_id, request.artifact_id)
-    directory = source_directory(lifecycle, artifact)
+    directory = source_directory(lifecycle, artifact, profile)
     await asyncio.to_thread(check_bundle, directory, artifact.manifest_sha256)
     return SimulationTarget(
         profile_id=profile.id,
         profile_sha256=await asyncio.to_thread(profile.identity_hash),
         source_manifest_sha256=artifact.manifest_sha256,
+        policy_runtime=profile.policy_runtime,
+        accelerators=profile.public()["accelerators"],
     )
 
 
-def source_directory(lifecycle, artifact):
-    if artifact.format not in {"native_checkpoint", "inference_export"}:
+def artifact_model_format(artifact):
+    metadata = artifact.metadata
+    nested = metadata.get("checkpoint")
+    claims = []
+    if metadata.get("format") in ("safetensors", "firebird_quant"):
+        claims.append(metadata["format"])
+    if isinstance(nested, dict) and "model_format" in nested:
+        claims.append(nested["model_format"])
+    if artifact.format == "native_quantized":
+        claims.append("firebird_quant")
+    if (
+        any(claim not in ("safetensors", "firebird_quant") for claim in claims)
+        or len(set(claims)) > 1
+    ):
+        raise ValueError("Native policy encoding claims contradict each other")
+    return claims[0] if claims else "safetensors"
+
+
+def source_directory(lifecycle, artifact, profile=None):
+    if artifact.format not in {"native_checkpoint", "inference_export", "native_quantized"}:
         raise ValueError("Isaac needs a complete native ACT or SmolVLA checkpoint; export it first")
-    if artifact.metadata.get("architecture") not in {"act", "smolvla"}:
+    if artifact.metadata.get("architecture") not in ("act", "smolvla"):
         raise ValueError("Isaac requires an explicitly identified ACT or SmolVLA checkpoint")
+    encoding = artifact_model_format(artifact)
+    mode = getattr(profile, "policy_runtime", "lerobot-cuda")
+    if mode not in ("lerobot-cuda", "packed-act-cpu"):
+        raise ValueError("Unsupported simulation policy runtime")
+    if (
+        mode == "packed-act-cpu"
+        and (encoding != "firebird_quant" or artifact.metadata["architecture"] != "act")
+    ) or (mode == "lerobot-cuda" and encoding != "safetensors"):
+        raise ValueError("Choose a simulation profile compatible with this policy encoding")
     directory = lifecycle.settings.data_dir / artifact.path
     jobs = lifecycle.settings.data_dir / "jobs"
     if not directory.resolve().is_relative_to(jobs.resolve()) or directory.is_symlink():
@@ -182,7 +211,7 @@ async def resolve(lifecycle, profile, source, destination, receipt_path, *, arch
     if archive:
         command.append("--archive")
     environment = dict(os.environ)
-    environment["PYTHONPATH"] = str(worker)
+    environment["PYTHONPATH"] = profile.policy_pythonpath
     process = None
     log_path = receipt_path.with_suffix(".log")
     try:
@@ -199,7 +228,7 @@ async def resolve(lifecycle, profile, source, destination, receipt_path, *, arch
         if process.returncode != 0:
             raise ValueError(
                 "Native policy import failed. Supply a complete ACT or SmolVLA export with "
-                "configuration, safetensors weights, saved processors and all statistics."
+                "configuration, the selected weight encoding, saved processors and all statistics."
             )
         return await asyncio.to_thread(check_receipt, destination, receipt_path)
     finally:
@@ -211,6 +240,8 @@ def check_receipt(destination, receipt_path):
     if receipt_path.is_symlink() or not 0 < receipt_path.stat().st_size <= MAX_RECEIPT_BYTES:
         raise ValueError("Invalid native policy import receipt")
     receipt = strict_json(receipt_path)
+    if not isinstance(receipt, dict):
+        raise ValueError("Invalid native policy import receipt")
     relative = receipt.get("directory")
     if (
         not isinstance(relative, str)
@@ -249,11 +280,24 @@ def check_receipt(destination, receipt_path):
     if (
         type(receipt.get("schema_version")) is not int
         or receipt["schema_version"] != 1
-        or info.get("policy_type") not in {"act", "smolvla"}
+        or not isinstance(info, dict)
+        or info.get("policy_type") not in ("act", "smolvla")
         or not isinstance(info.get("model_id"), str)
         or not re.fullmatch(r"sha256:[a-f0-9]{64}", info["model_id"])
     ):
         raise ValueError("Invalid native policy metadata")
+    encoding = info.get("model_format", "safetensors")
+    packed_files = ((model / "model.fbq").is_file(), (model / "encoding.json").is_file())
+    float_file = (model / "model.safetensors").is_file()
+    if (
+        encoding not in ("safetensors", "firebird_quant")
+        or (encoding == "safetensors" and (not float_file or any(packed_files)))
+        or (
+            encoding == "firebird_quant"
+            and (not all(packed_files) or float_file or info["policy_type"] != "act")
+        )
+    ):
+        raise ValueError("Native policy encoding differs from the imported files")
     from .control_provenance import policy_claims
 
     policy_claims(model, info)
@@ -297,6 +341,15 @@ def save_record(directory, destination, report, target):
         or strict_json(directory / "report.json") != report
     ):
         raise ValueError("Simulation report does not match this accepted model and profile")
+    mode = target.policy_runtime
+    runtime = {
+        "policy_runtime": mode,
+        "policy_device": "cpu" if mode == "packed-act-cpu" else "cuda",
+        "model_format": "firebird_quant" if mode == "packed-act-cpu" else "safetensors",
+    }
+    if mode == "packed-act-cpu" or runtime.keys() & report.keys():
+        if any(report.get(key) != value for key, value in runtime.items()):
+            raise ValueError("Simulation report differs from the accepted policy runtime")
     inventory = report.get("artifacts")
     if not isinstance(inventory, list) or len(inventory) != len(RECORD_FILES):
         raise ValueError("Simulation report is missing its required outputs")
@@ -428,11 +481,13 @@ async def run(lifecycle, job):
         if receipt.get("source_sha256") != ticket["sha256"]:
             raise ValueError("The imported archive differs from the uploaded bytes")
         info = receipt["checkpoint"]
+        isaac_runner.require_policy_runtime(profile, info)
         from .control_provenance import policy_claims
 
         metadata = {
             **policy_claims(model, info),
             "architecture": info["policy_type"],
+            "format": info.get("model_format", "safetensors"),
             "model_id": info["model_id"],
             "policy_subdirectory": model.relative_to(artifact_dir).as_posix(),
             "checkpoint": info,
@@ -469,9 +524,14 @@ async def run(lifecycle, job):
 
     artifact = await lifecycle.artifact(job.project_id, request.artifact_id)
     target = job.simulation_target
-    if target is None or target.source_manifest_sha256 != artifact.manifest_sha256:
+    if (
+        target is None
+        or target.source_manifest_sha256 != artifact.manifest_sha256
+        or target.policy_runtime != profile.policy_runtime
+        or target.accelerators != profile.public()["accelerators"]
+    ):
         raise ValueError("Simulation source differs from its accepted job target")
-    source = source_directory(lifecycle, artifact)
+    source = source_directory(lifecycle, artifact, profile)
     await asyncio.to_thread(check_bundle, source, target.source_manifest_sha256)
     if await asyncio.to_thread(profile.identity_hash) != target.profile_sha256:
         raise ValueError("Simulation profile changed after submission; no GPU was requested")
@@ -487,6 +547,8 @@ async def run(lifecycle, job):
         receipt["files"].get("contents/manifest.json", {}).get("sha256")
         != target.source_manifest_sha256
         or receipt["checkpoint"]["policy_type"] != artifact.metadata["architecture"]
+        or receipt["checkpoint"].get("model_format", "safetensors")
+        != artifact_model_format(artifact)
     ):
         raise ValueError("The copied policy differs from the accepted artifact")
     from .control_provenance import policy_claims

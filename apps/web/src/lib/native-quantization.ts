@@ -1,5 +1,5 @@
 import { type Job, type PolicyArtifact, type PolicyOptions } from './api';
-import { policyJobRequest, UncertainPolicyJob } from './policy-job-mutation';
+import { policyJobRequest, sameJson, UncertainPolicyJob } from './policy-job-mutation';
 
 // Additive client boundary while the core-owned combined schema is generated.
 // Callers choose registered IDs; no executable, file path or provider is accepted.
@@ -23,9 +23,75 @@ export function availableNativeQuantizer(runtime: NativeQuantizationRuntime): bo
   return runtime.native_quantization === true && runtime.enabled !== false && runtime.launchable !== false &&
     runtime.execution === 'native' && runtime.provider === 'local' && !runtime.unavailable_reason;
 }
+/** Imported legacy checkpoints may serialize both optional fields as null. */
+export function hasSimulatorControlContract(artifact: Pick<PolicyArtifact, 'metadata'>): boolean {
+  const metadata = artifact.metadata;
+  return [metadata, object(metadata) ? metadata.checkpoint : null].some(value =>
+    object(value) && (value.control_contract != null || value.control_contract_sha256 != null));
+}
+type SimulatorControl = Record<string, unknown> & {
+  joint_order: string[]; action_fps: number;
+  camera: { key: string; width: number; height: number; prim: string };
+  source: { dataset_snapshot_id: string; dataset_manifest_sha256: string };
+};
+type TransformMetadata = {
+  prediction_horizon: number; execution_horizon: number; temporal_contract_sha256: string | null;
+  control_contract: SimulatorControl | null; control_contract_sha256: string | null;
+};
+const sha256 = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+const integer = (value: unknown, min: number, max: number): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= min && value <= max;
+function fields(value: Record<string, unknown>, names: string): boolean { return sameJson(Object.keys(value).sort(), names.split(' ').sort()); }
+function simulatorControl(value: unknown): value is SimulatorControl {
+  if (!object(value) || !fields(value, 'schema_version kind controller state_key action_key state_units action_units timebase joint_order camera action_fps source physical_calibration_verified task_success_verified') ||
+      value.schema_version !== 1 || value.kind !== 'simulator_joint_position' || value.controller !== 'joint_position_targets' ||
+      value.state_key !== 'observation.state' || value.action_key !== 'action' || value.state_units !== 'radians' || value.action_units !== 'radians' || value.timebase !== 'simulation_seconds' ||
+      value.physical_calibration_verified !== false || value.task_success_verified !== false || !integer(value.action_fps, 1, 60) ||
+      !Array.isArray(value.joint_order) || value.joint_order.length !== 6 || value.joint_order.some(name => typeof name !== 'string' || !/^[_\p{ID_Start}][_\p{ID_Continue}]*$/u.test(name)) || new Set(value.joint_order).size !== 6) return false;
+  const camera = value.camera, source = value.source;
+  return object(camera) && fields(camera, 'key width height prim') && typeof camera.key === 'string' && /^observation\.images\.[A-Za-z_][A-Za-z_0-9]*$/.test(camera.key) &&
+    typeof camera.prim === 'string' && /^(\/[A-Za-z_][A-Za-z_0-9]*)+$/.test(camera.prim) && integer(camera.width, 32, 1920) && integer(camera.height, 32, 1920) && camera.width % 2 === 0 && camera.height % 2 === 0 && camera.width * camera.height <= 1920 * 1080 &&
+    object(source) && fields(source, 'dataset_snapshot_id dataset_manifest_sha256 demonstrations_sha256 scene_sha256 scene_hash_scope origins') && sha256(source.dataset_manifest_sha256) && source.dataset_snapshot_id === `sha256:${source.dataset_manifest_sha256}` && sha256(source.demonstrations_sha256) &&
+    source.scene_hash_scope === 'root USD bytes; referenced assets not inventoried' && Array.isArray(source.scene_sha256) && source.scene_sha256.length >= 1 && source.scene_sha256.length <= 128 && source.scene_sha256.every(sha256) && sameJson(source.scene_sha256, [...new Set(source.scene_sha256)].sort()) &&
+    Array.isArray(source.origins) && source.origins.length >= 1 && source.origins.every(item => item === 'recorded' || item === 'synthetic') && sameJson(source.origins, [...new Set(source.origins)].sort());
+}
+/** Metadata admission only. The server verifies saved files, hashes and dataset semantics. */
+export function nativeTransformMetadata(artifact: Pick<PolicyArtifact, 'metadata'>): TransformMetadata | null {
+  const metadata = artifact.metadata;
+  if (!object(metadata)) return null;
+  if (metadata.checkpoint != null && !object(metadata.checkpoint)) return null;
+  const checkpoint = object(metadata.checkpoint) ? metadata.checkpoint : null;
+  // Native ACT producers used no metadata.format until encoding was made explicit.
+  // Artifact envelope formats (native_checkpoint/inference_export) live elsewhere.
+  if ((metadata.format != null && metadata.format !== 'safetensors') || (checkpoint && 'model_format' in checkpoint && checkpoint.model_format !== 'safetensors')) return null;
+  let timing: Pick<TransformMetadata, 'prediction_horizon' | 'execution_horizon' | 'temporal_contract_sha256'> | null = null;
+  let control: Pick<TransformMetadata, 'control_contract' | 'control_contract_sha256'> | null = null;
+  for (const row of checkpoint ? [metadata, checkpoint] : [metadata]) {
+    if (['prediction_horizon', 'execution_horizon', 'temporal_contract_sha256'].some(key => Object.hasOwn(row, key))) {
+      const next = temporal(row);
+      if (!next || (timing && !sameJson(timing, next))) return null;
+      timing = next;
+    }
+    if (row.control_contract != null || row.control_contract_sha256 != null) {
+      if (!simulatorControl(row.control_contract) || !sha256(row.control_contract_sha256)) return null;
+      const next = { control_contract: row.control_contract, control_contract_sha256: row.control_contract_sha256 };
+      if (control && !sameJson(control, next)) return null;
+      control = next;
+    }
+  }
+  // Imported checkpoint receipts name the same saved config dimensions differently.
+  if (checkpoint && ('chunk_size' in checkpoint || 'action_steps' in checkpoint)) {
+    if (!integer(checkpoint.chunk_size, 1, 1024) || !integer(checkpoint.action_steps, 1, checkpoint.chunk_size) ||
+        (timing && (timing.prediction_horizon !== checkpoint.chunk_size || timing.execution_horizon !== checkpoint.action_steps))) return null;
+    timing ??= { prediction_horizon: checkpoint.chunk_size, execution_horizon: checkpoint.action_steps, temporal_contract_sha256: null };
+  }
+  return { ...(timing ?? { prediction_horizon: 100, execution_horizon: 100, temporal_contract_sha256: null }), ...(control ?? { control_contract: null, control_contract_sha256: null }) };
+}
+export function nativeTransformIssue(artifact: Pick<PolicyArtifact, 'metadata'>): string | null {
+  return nativeTransformMetadata(artifact) ? null : 'This package’s model format, timing or simulator details are incomplete or unsupported. Refresh its recorded metadata or export it again.';
+}
 export function nativeQuantizationInput(artifact: PackedArtifact, projectId: string): boolean {
   return artifact.project_id === projectId && ['native_checkpoint', 'inference_export'].includes(artifact.format) &&
-    artifact.metadata?.architecture === 'act' && artifact.metadata?.storage !== 'gcs' && !artifact.metadata?.remote && !artifact.metadata?.remote_uri &&
+    artifact.metadata?.architecture === 'act' && !nativeTransformIssue(artifact) && artifact.metadata?.storage !== 'gcs' && !artifact.metadata?.remote && !artifact.metadata?.remote_uri &&
     artifact.metadata?.inference_only !== false && artifact.metadata?.method !== 'full' && artifact.metadata?.training_backend !== 'lerobot' && artifact.metadata?.use_vae !== true;
 }
 function uncertain() { return new UncertainQuantization('The submission outcome is unverified. Check recorded jobs before making another request. This request was not retried.'); }

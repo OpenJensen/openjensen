@@ -78,20 +78,63 @@ def runtime(root, **updates):
     )
 
 
+QUANT_PROTOCOL_FILES = (
+    "__init__.py",
+    "native_application.py",
+    "native_package.py",
+    "native_probe.py",
+    "native_consumer.py",
+    "codec.py",
+    "model.py",
+    "state.py",
+)
+ACT_PROTOCOL_FILES = ("__init__.py", "application.py", "bundle.py", "probe.py", "control_schema.py")
+
+
+def install_protocol_dependencies(worker):
+    """Inert file-presence fixtures; only the existing protocol entrypoint executes."""
+    paths = [worker / "src/firebird_quant" / name for name in QUANT_PROTOCOL_FILES]
+    paths += [
+        worker.parent / "act_optimizer/src/firebird_act" / name for name in ACT_PROTOCOL_FILES
+    ]
+    for path in paths:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.exists():
+            path.write_text("# Protocol marker only; no native model implementation.\n")
+    return paths
+
+
 def test_public_capability_requires_installed_worker_without_paths(tmp_path):
     configured = runtime(tmp_path)
     catalog = RuntimeCatalog(runtimes=[configured])
     assert not catalog.public()["runtimes"][0]["native_quantization"]
-    module = tmp_path / "src/firebird_quant/native_application.py"
-    module.parent.mkdir(parents=True)
-    module.write_text("# fixed worker")
-    act = tmp_path.parent / "act_optimizer/src/firebird_act/application.py"
-    act.parent.mkdir(parents=True)
-    act.write_text("# fixed consumer")
+    install_protocol_dependencies(tmp_path)
     public = catalog.public()["runtimes"][0]
     assert public["native_quantization"]
     assert not public["run"] and not public["engine_evaluation"]
     assert "native_quantization_python" not in public
+
+
+@pytest.mark.parametrize(
+    "family,name",
+    [("quant", name) for name in QUANT_PROTOCOL_FILES]
+    + [("act", name) for name in ACT_PROTOCOL_FILES],
+)
+def test_missing_execution_dependency_disables_quantization_before_admission(
+    tmp_path, family, name
+):
+    worker = tmp_path / "workers/firebird_quant"
+    install_protocol_dependencies(worker)
+    configured = runtime(worker)
+    catalog = RuntimeCatalog(runtimes=[configured])
+    assert catalog.public()["runtimes"][0]["native_quantization"]
+    folder = (
+        worker / "src/firebird_quant"
+        if family == "quant"
+        else worker.parent / "act_optimizer/src/firebird_act"
+    )
+    (folder / name).unlink()
+    assert not catalog.public()["runtimes"][0]["native_quantization"]
 
 
 @pytest.mark.parametrize(
@@ -128,9 +171,7 @@ def save_manifest(root, metadata):
 def application(tmp_path):
     worker = tmp_path / "workers/firebird_quant"
     shutil.copytree(Path(__file__).parent / "fixtures/native_quant_worker", worker)
-    act = worker.parent / "act_optimizer/src/firebird_act/application.py"
-    act.parent.mkdir(parents=True)
-    act.write_text("# fixed consumer marker; no ML in protocol fixture")
+    install_protocol_dependencies(worker)
     catalog = tmp_path / "runtimes.json"
     catalog.write_text(RuntimeCatalog(runtimes=[runtime(worker)]).model_dump_json())
     app = create_app(Settings(data_dir=tmp_path / "data", runtime_config=catalog))

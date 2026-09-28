@@ -51,6 +51,26 @@ async function fixture(page: Page) {
 }
 const acknowledge = (page: Page) => page.getByRole('checkbox', { name: /experimental, paid cloud rollout/ }).check();
 
+test('a packed CPU profile is never selected automatically on direct Run entry', async ({ page }) => {
+  const state = await fixture(page);
+  const cpu = { ...profile, id: 'packed-cpu', label: 'Generated packed CPU profile', architectures: ['act'], policy_runtime: 'packed-act-cpu', policy_device: 'cpu', policy_formats: ['firebird_quant'], provider: 'gcp', accelerators: ['L4'] };
+  state.profiles = [cpu];
+  state.artifacts.push(artifact('packed-policy', 'act', 'native_quantized', { format: 'firebird_quant' }));
+  await page.reload(); await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await page.getByRole('button', { name: '3D simulation', exact: true }).click();
+  const profiles = page.getByRole('radiogroup', { name: 'Isaac profile', exact: true });
+  const policies = page.getByRole('radiogroup', { name: 'Native policy', exact: true });
+  await expect(profiles.getByRole('radio', { name: cpu.label, exact: true })).toBeEnabled();
+  await expect(profiles.locator('input:checked')).toHaveCount(0);
+  await expect(policies.getByRole('radio')).toHaveCount(0);
+  await expect(page.getByRole('checkbox', { name: /experimental, paid cloud rollout/ })).toBeDisabled();
+  await profiles.getByRole('radio', { name: cpu.label, exact: true }).check();
+  await expect(policies.getByRole('radio', { name: 'Generated packed-policy', exact: true })).toBeVisible();
+  await expect(policies.locator('input:checked')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Start experimental simulation', exact: true })).toBeDisabled();
+  expect(state.posts).toEqual([]);
+});
+
 test('native Run preserves engine navigation and fails closed when profiles are missing', async ({ page }) => {
   const state = await fixture(page); state.profiles = [];
   await page.reload(); await page.getByRole('button', { name: 'Run', exact: true }).click();
@@ -325,7 +345,11 @@ for (const width of [320, 390]) test(`compact ${width}px navigation keeps stage 
   // introduction must still fit in the first screen without scrolling.
   expect(bounds!.y + bounds!.height).toBeLessThan(844 * 0.6);
   const navigation = page.getByRole('navigation', { name: 'Policy lifecycle' });
-  expect(await navigation.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  // The compact navigation scrolls internally; its viewport must remain on-screen.
+  const navigationBounds = await navigation.boundingBox();
+  expect(navigationBounds!.x).toBeGreaterThanOrEqual(0);
+  expect(navigationBounds!.x + navigationBounds!.width).toBeLessThanOrEqual(width);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
   await page.getByRole('button', { name: 'Run', exact: true }).focus();
   await page.keyboard.press('Tab');
   await expect(page.getByRole('button', { name: 'Decision lab', exact: true })).toBeFocused();

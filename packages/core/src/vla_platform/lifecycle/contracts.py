@@ -58,9 +58,17 @@ class SimulationTarget(StrictRecord):
     profile_id: str
     profile_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     provider: Literal["gcp"] = "gcp"
+    policy_runtime: Literal["lerobot-cuda", "packed-act-cpu"] = "lerobot-cuda"
     accelerators: list[Literal["L4", "H100"]] = Field(default_factory=lambda: ["L4", "H100"])
     source_manifest_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     model_id: str | None = Field(default=None, pattern=r"^sha256:[a-f0-9]{64}$")
+
+    @model_validator(mode="after")
+    def matching_policy_resources(self):
+        expected = ["L4"] if self.policy_runtime == "packed-act-cpu" else ["L4", "H100"]
+        if self.accelerators != expected:
+            raise ValueError("Simulation resources differ from its policy runtime")
+        return self
 
 
 class ParityLimits(StrictRecord):

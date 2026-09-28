@@ -27,6 +27,7 @@ MAX_ARTIFACT_BYTES = 512 * 1024**2
 GROUP = re.compile(r"isaac-(?:act|smolvla)-test-[a-f0-9]{8}\Z")
 HEX = re.compile(r"[a-f0-9]{64}\Z")
 UUID = re.compile(r"[a-f0-9]{32}\Z")
+POLICY_RUNTIMES = {"lerobot-cuda", "packed-act-cpu"}
 ACTIVE = {"PENDING", "SUBMITTED", "STARTING", "RUNNING", "WINDING_DOWN", "RECOVERING", "CANCELLING"}
 TERMINAL = {
     "SUCCEEDED",
@@ -132,6 +133,21 @@ class SimulationProfile:
     accept_eula: bool
     sky_api_endpoint: str | None = None
     gcloud_config: Path | None = None
+    policy_runtime: str = "lerobot-cuda"
+
+    def __post_init__(self):
+        if not isinstance(self.policy_runtime, str) or self.policy_runtime not in POLICY_RUNTIMES:
+            raise ValueError("Unsupported simulation policy runtime")
+
+    @property
+    def policy_pythonpath(self):
+        folders = [self.runner_root / "workers/isaac_sim"]
+        if self.policy_runtime == "packed-act-cpu":
+            folders.extend(
+                self.runner_root / "workers" / name / "src"
+                for name in ("firebird_quant", "act_optimizer")
+            )
+        return os.pathsep.join(map(str, folders))
 
     @property
     def skypilot(self):
@@ -142,14 +158,18 @@ class SimulationProfile:
         return self.skypilot / ".venv" / "bin" / "python"
 
     def public(self):
+        packed = self.policy_runtime == "packed-act-cpu"
         return {
             "id": self.id,
             "label": self.label,
-            "architectures": ["act", "smolvla"],
+            "architectures": ["act"] if packed else ["act", "smolvla"],
             "experimental": True,
             "task_object": "cup",
             "provider": "gcp",
-            "accelerators": ["L4", "H100"],
+            "accelerators": ["L4"] if packed else ["L4", "H100"],
+            "policy_runtime": self.policy_runtime,
+            "policy_device": "cpu" if packed else "cuda",
+            "policy_formats": ["firebird_quant"] if packed else ["safetensors"],
             "task_success": None,
         }
 
@@ -160,7 +180,15 @@ class SimulationProfile:
         # credentials, environments, models, caches or hidden receipt files.
         inventory = {}
         total = 0
-        for folder in (self.skypilot, self.runner_root / "workers" / "isaac_sim"):
+        folders = [self.skypilot, self.runner_root / "workers" / "isaac_sim"]
+        if self.policy_runtime == "packed-act-cpu":
+            folders.extend(
+                self.runner_root / "workers" / name / "src"
+                for name in ("firebird_quant", "act_optimizer")
+            )
+        for folder in folders:
+            if folder.is_symlink() or not folder.is_dir():
+                raise ValueError("Simulation source dependency is missing or linked")
             for current, dirs, files in os.walk(folder, followlinks=False):
                 dirs[:] = sorted(
                     name for name in dirs if not name.startswith(".") and name != "__pycache__"
@@ -193,6 +221,22 @@ class SimulationProfile:
         ):
             if f"workers/skypilot/{name}" not in inventory:
                 raise ValueError("Simulation runner is missing reviewed source/configuration")
+        if self.policy_runtime == "packed-act-cpu":
+            for name in (
+                "workers/firebird_quant/src/firebird_quant/native_consumer.py",
+                "workers/firebird_quant/src/firebird_quant/native_package.py",
+                "workers/firebird_quant/src/firebird_quant/codec.py",
+                "workers/firebird_quant/src/firebird_quant/model.py",
+                "workers/firebird_quant/src/firebird_quant/state.py",
+                "workers/act_optimizer/src/firebird_act/bundle.py",
+                "workers/act_optimizer/src/firebird_act/probe.py",
+                "workers/act_optimizer/src/firebird_act/control_schema.py",
+                "workers/skypilot/remote/policy_cpu_setup.sh",
+                "workers/skypilot/remote/policy_cpu_run.sh",
+                "workers/skypilot/remote/policy-cpu.requirements.txt",
+            ):
+                if name not in inventory:
+                    raise ValueError("Packed simulation is missing a fixed CPU dependency")
         record = {
             "id": self.id,
             "project_id": self.project_id,
@@ -203,6 +247,8 @@ class SimulationProfile:
             "accept_eula": self.accept_eula,
             "files": inventory,
         }
+        if self.policy_runtime != "lerobot-cuda":
+            record["policy_runtime"] = self.policy_runtime
         return hashlib.sha256(json.dumps(record, sort_keys=True).encode()).hexdigest()
 
     def environment(self):
@@ -224,7 +270,7 @@ class SimulationProfile:
             CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=str(self.credential_file),
             CLOUDSDK_CORE_PROJECT=self.project_id,
             PYTHONDONTWRITEBYTECODE="1",
-            PYTHONPATH=str(self.runner_root / "workers" / "isaac_sim"),
+            PYTHONPATH=self.policy_pythonpath,
         )
         if self.gcloud_config is not None:
             env["CLOUDSDK_CONFIG"] = str(self.gcloud_config)
@@ -263,7 +309,7 @@ def load_profiles(path):
         if (
             not isinstance(item, dict)
             or not required <= set(item)
-            or set(item) - required - {"sky_api_endpoint", "gcloud_config"}
+            or set(item) - required - {"sky_api_endpoint", "gcloud_config", "policy_runtime"}
         ):
             raise ValueError("Invalid simulation profile fields")
         if not isinstance(item["id"], str) or not re.fullmatch(r"[a-z][a-z0-9-]{0,63}", item["id"]):
@@ -280,6 +326,11 @@ def load_profiles(path):
             or type(item["accept_eula"]) is not bool
         ):
             raise ValueError("Simulation profile requires its pinned task and EULA choice")
+        if (
+            not isinstance(item.get("policy_runtime", "lerobot-cuda"), str)
+            or item.get("policy_runtime", "lerobot-cuda") not in POLICY_RUNTIMES
+        ):
+            raise ValueError("Unsupported simulation policy runtime")
         values = dict(item)
         for name in ("runner_root", "task", "credential_file"):
             if not isinstance(item[name], str) or not Path(item[name]).is_absolute():
@@ -323,10 +374,28 @@ def load_profiles(path):
     return tuple(profiles)
 
 
+def require_policy_runtime(profile, checkpoint):
+    """Reject unsupported weight/device pairs before import publication or allocation."""
+    mode = getattr(profile, "policy_runtime", "lerobot-cuda")
+    if not isinstance(mode, str) or mode not in POLICY_RUNTIMES:
+        raise ValueError("Unsupported simulation policy runtime")
+    expected_format = "firebird_quant" if mode == "packed-act-cpu" else "safetensors"
+    if (
+        not isinstance(checkpoint, dict)
+        or checkpoint.get("policy_type") not in ("act", "smolvla")
+        or checkpoint.get("model_format", "safetensors") != expected_format
+        or (mode == "packed-act-cpu" and checkpoint.get("policy_type") != "act")
+    ):
+        raise ValueError("Checkpoint encoding differs from the selected simulation policy runtime")
+    return mode
+
+
 def admit(profile, metadata):
     checkpoint = metadata.get("checkpoint", metadata) if isinstance(metadata, dict) else {}
-    if checkpoint.get("policy_type") not in {"act", "smolvla"}:
+    if not isinstance(checkpoint, dict) or checkpoint.get("policy_type") not in ("act", "smolvla"):
         raise ValueError("Native simulation supports ACT and SmolVLA exports")
+    mode = require_policy_runtime(profile, checkpoint)
+    expected_format = "firebird_quant" if mode == "packed-act-cpu" else "safetensors"
     if checkpoint.get("state_dim") != 6 or checkpoint.get("action_dim") != 6:
         raise ValueError("The SO101 cup profile requires six state and action coordinates")
     for name in ("width", "height", "chunk_size", "action_steps"):
@@ -376,6 +445,11 @@ def admit(profile, metadata):
         "profile_sha256": profile.identity_hash(),
         "model_id": checkpoint["model_id"],
         "experimental": True,
+        **(
+            {"policy_runtime": mode, "model_format": expected_format, "policy_device": "cpu"}
+            if mode == "packed-act-cpu"
+            else {}
+        ),
         "calibration_verified": False,
         "task_success": None,
     }
@@ -468,6 +542,19 @@ def _context(profile, job_directory):
         raise ValueError("Simulation result destination differs from its registered profile")
     if context["group_name"][-8:] != context["rollout_id"][:8]:
         raise ValueError("Simulation launch identity differs")
+    mode = getattr(profile, "policy_runtime", "lerobot-cuda")
+    if not isinstance(mode, str) or mode not in POLICY_RUNTIMES:
+        raise ValueError("Unsupported simulation policy runtime")
+    expected = {
+        "policy_runtime": mode,
+        "policy_device": "cpu" if mode == "packed-act-cpu" else "cuda",
+        "model_format": "firebird_quant" if mode == "packed-act-cpu" else "safetensors",
+    }
+    # Historical CUDA receipts omit this entire trio. Packed execution has no
+    # such legacy form, and a partial or contradictory new receipt is invalid.
+    if mode == "packed-act-cpu" or expected.keys() & context.keys():
+        if any(context.get(key) != value for key, value in expected.items()):
+            raise ValueError("Simulation launch policy runtime differs from its profile")
     return context
 
 
@@ -629,6 +716,11 @@ async def run(
                     admission["model_id"],
                     "--expected-results-prefix",
                     profile.results_uri,
+                    *(
+                        ["--policy-runtime", profile.policy_runtime]
+                        if profile.policy_runtime != "lerobot-cuda"
+                        else []
+                    ),
                 ],
                 timeout=min(timeout_seconds, 600),
             )
@@ -689,6 +781,15 @@ async def run(
                 "schema_version": 1,
                 "kind": "isaac_simulation",
                 **coordinate_evidence(admission),
+                **(
+                    {
+                        "policy_runtime": "packed-act-cpu",
+                        "policy_device": "cpu",
+                        "model_format": "firebird_quant",
+                    }
+                    if profile.policy_runtime == "packed-act-cpu"
+                    else {}
+                ),
                 "profile_id": profile.id,
                 "profile_sha256": identity,
                 "model_id": admission["model_id"],

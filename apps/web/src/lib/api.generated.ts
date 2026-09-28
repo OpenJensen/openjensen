@@ -2868,6 +2868,12 @@ export interface components {
             accelerators?: ("L4" | "H100")[];
             /** Model Id */
             model_id?: string | null;
+            /**
+             * Policy Runtime
+             * @default lerobot-cuda
+             * @enum {string}
+             */
+            policy_runtime: "lerobot-cuda" | "packed-act-cpu";
             /** Profile Id */
             profile_id: string;
             /** Profile Sha256 */

@@ -1,4 +1,4 @@
-.augmentation-panel { --augmentation-accent: #4c78b8; min-width: 0; max-width: 1080px; margin-inline: auto; }
+.augmentation-panel { --augmentation-accent: var(--accent); min-width: 0; max-width: 1080px; margin-inline: auto; }
 .augmentation-history-heading h2 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -.3px; }
 .augmentation-setup { display: flex; gap: 12px; margin-bottom: 25px; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--subtle); }
 .augmentation-setup > svg { margin-top: 2px; color: var(--muted); }

@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, artifactDownloadUrl, isActive, isDatasetJob, type Job } from '@/lib/api';
-import { cancelStudent, episodeSelection, startStudent, studentDataset, studentJob, studentReport, studentRuntime, studentTeacher, type DistillationRecipe, type DistillationRequest } from '@/lib/native-distillation';
+import { cancelStudent, episodeSelection, startStudent, studentDataset, studentDatasetIssue, studentJob, studentReport, studentRuntime, studentTeacher, type DistillationRecipe, type DistillationRequest } from '@/lib/native-distillation';
 import { record, UncertainPolicyJob } from '@/lib/policy-job-mutation';
+import { nativeTransformIssue, nativeTransformMetadata } from '@/lib/native-quantization';
 import { storeAttempt, storedAttempt, type PolicyJobAttempt } from '@/lib/policy-job-attempt';
 import { useNativeCancellation } from '@/lib/native-cancellation-attempt';
 import { WorkflowChoiceGrid } from './workflow-choice-grid';
@@ -61,7 +62,10 @@ export function NativeDistillationPanel({ projectId, preferredJobId, preferredTe
   const runtimes = (options.data?.runtimes ?? []).filter(studentRuntime);
   const runtime = runtimeId ? runtimes.find(item => item.id === runtimeId) : runtimes[0];
   const teachers = (artifacts.data ?? []).filter(item => studentTeacher(item, projectId));
+  const excludedTeachers = (artifacts.data ?? []).some(item => item.project_id === projectId && ['native_checkpoint', 'inference_export'].includes(item.format) && item.metadata?.architecture === 'act' && nativeTransformIssue(item));
   const teacher = teachers.find(item => item.id === teacherId);
+  const teacherSemantics = teacher ? nativeTransformMetadata(teacher) : null;
+  const teacherDatasetSource = teacherSemantics?.control_contract?.source;
   useEffect(() => {
     if (preference.current.id !== preferredTeacherArtifactId) { preference.current = { id: preferredTeacherArtifactId, consumed: false }; setPendingTeacher(!!preferredTeacherArtifactId); }
     if (!preferredTeacherArtifactId || preference.current.consumed || !artifacts.isSuccess || artifacts.isError) return;
@@ -91,6 +95,8 @@ export function NativeDistillationPanel({ projectId, preferredJobId, preferredTe
     if (dataset && all.some(id => id >= dataset.result!.total_episodes)) throw new Error('An episode number exceeds the selected dataset.');
     const coordinates = units.split(',').map(value => value.trim());
     if (coordinates.length !== 6 || coordinates.some(value => !value || value.length > 80 || /[\x00-\x1f\x7f]/.test(value))) throw new Error('Enter six coordinate units, in dataset order, separated by commas.');
+    const datasetIssue = teacher && dataset ? studentDatasetIssue(teacher, dataset, coordinates) : null;
+    if (datasetIssue) throw new Error(datasetIssue);
     for (const [label, value, min, max] of [['Steps', steps, 1, 10000], ['Frame stride', stride, 1, 10000], ['Seed', seed, 0, 2147483647], ['Timeout', timeout, 30, 3600]] as const) {
       if (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)) || Number(value) < min || Number(value) > max) throw new Error(`${label} must be a whole number from ${min} to ${max}.`);
     }
@@ -179,7 +185,10 @@ export function NativeDistillationPanel({ projectId, preferredJobId, preferredTe
           <p>Choose a prepared dataset and independent episode splits, then confirm its coordinates. Training starts only when you submit.</p>
         </div>}
         <WorkflowChoiceGrid name="teacher" label="Teacher" value={teacherId} onChange={chooseTeacher} options={teachers.map(item => ({ value: item.id, label: item.label, meta: item.id.slice(0, 8), icon: 'layers' }))} emptyMessage="No ACT teacher policies. Import or export a complete policy first." />
-        <WorkflowChoiceGrid name="student-dataset" label="Dataset" value={datasetId} onChange={value => { setDataset(value); setAttested(false); setTrain(''); setValidation(''); setFinal(''); }} options={datasets.map(item => ({ value: item.id, label: item.result!.repo_id ?? 'Local robotics dataset', description: `${item.result!.total_episodes} episodes`, icon: 'database' }))} emptyMessage="Import a complete dataset snapshot to continue." />
+        {excludedTeachers && <p role="status">Some ACT packages are excluded because their model format, timing or simulator details are incomplete or unsupported. Refresh or export a complete inference package.</p>}
+        {teacherSemantics && <p className="field-help">Inherited action timing: plans {teacherSemantics.prediction_horizon} actions and applies {teacherSemantics.execution_horizon} per update. The server checks the saved policy before training; these values do not establish task quality.</p>}
+        {teacherSemantics?.control_contract && <p role="status">This teacher carries a simulator control contract. Use the dataset this teacher was trained from and enter radians for all six joint units. The student must retain that contract; calibration and task success remain unverified.</p>}
+        <WorkflowChoiceGrid name="student-dataset" label="Dataset" value={datasetId} onChange={value => { setDataset(value); setAttested(false); setTrain(''); setValidation(''); setFinal(''); }} options={datasets.map(item => ({ value: item.id, label: item.result!.repo_id ?? 'Local robotics dataset', description: `${item.result!.total_episodes} episodes`, meta: teacherDatasetSource && item.project_id === projectId && item.result!.snapshot?.id === teacherDatasetSource.dataset_snapshot_id && item.result!.snapshot?.manifest_sha256 === teacherDatasetSource.dataset_manifest_sha256 ? 'Teacher source dataset' : undefined, icon: 'database' }))} emptyMessage="Import a complete dataset snapshot to continue." />
         {!datasets.length && <button type="button" className="text-link" onClick={onDataset}>Open Dataset intake</button>}
         {(runtimes.length > 1 || !runtime) && <WorkflowChoiceGrid name="student-worker" label="Compute" value={runtime?.id ?? ''} onChange={setRuntime} options={runtimes.map(item => ({ value: item.id, label: item.label, icon: 'sliders' }))} />}
         {teacher && dataset && <>

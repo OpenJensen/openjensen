@@ -8,7 +8,8 @@ Only this pair is implemented. SmolVLA and cross-family distillation are unavail
 
 The first recipe retains the teacher's learned ResNet18 backbone (copied exactly
 and frozen), six-coordinate ordering, single camera, saved pre/postprocessors and
-100-action chunk/queue. The student has width256, FF1024, two encoder layers, one
+inherited prediction horizon and execution-prefix queue. Horizons satisfy
+`1 <= execution <= prediction <= 1024`; a saved 8/3 policy remains 8/3. The student has width256, FF1024, two encoder layers, one
 decoder, four attention heads, no VAE, and dropout0. It must be smaller than the
 teacher's inference tensors, excluding any teacher VAE. Native ACT's masked L1
 loss learns **normalized teacher actions**; the saved normalizer processes the
@@ -27,11 +28,11 @@ LeRobot0.6.1, Torch2.11.0, torchvision0.26.0, safetensors0.8.0. Linux CPU wheel
 suffixes are accepted and the actual installed versions are retained. Reuse the
 validated `workers/act_optimizer` environment; never install model dependencies
 into the application/core environment. The local packages can be installed with
-`pip install --no-deps -e workers/act_optimizer -e workers/policy_distillation`,
+`pip install --no-deps -e workers/act_optimizer -e workers/policy_distillation -e workers/smolvla_qlora`,
 or exposed through these fixed source roots:
 
 ```sh
-PYTHONPATH=workers/policy_distillation/src:workers/act_optimizer/src \
+PYTHONPATH=workers/policy_distillation/src:workers/act_optimizer/src:workers/smolvla_qlora/src \
   workers/act_optimizer/.venv/bin/python -m firebird_distill.application \
   /absolute/operator-owned/request.json /absolute/new-result.json
 ```
@@ -82,8 +83,8 @@ The output must be new; publication is an atomic no-replace directory rename.
 
 The trainer consumes a bounded immutable observation corpus: at most256 samples,
 8MiB per sample,2GiB total. Each safetensors record has original uint8 RGB, raw
-float32 state `[6]`, recorded float32 action chunk `[100,6]`, and bool padding
-`[100]`. Padding must match the actual episode length and frame index. No pickle,
+float32 state `[6]`, recorded float32 action chunk `[prediction_horizon,6]`, and bool padding
+`[prediction_horizon]`. Padding must match the actual episode length and frame index. No pickle,
 custom model code, remote loader or augmentation runs. The JSON manifest binds
 all bytes, native source identity, camera shape, coordinate names/units, teacher
 processor identity, episode/frame identity and declared ancestry.
@@ -150,7 +151,7 @@ three declared generated scene groups,6episodes,24frames and12sampled observatio
 model/recipe and the source dataset kind. Teacher target hashes, masks/partitions,
 implementation/runtime source hashes, random seed and optimizer losses are kept.
 The fresh process must reproduce all full action-chunk and postprocessed hashes,
-including100-action queue/reset behavior, using only the saved student package and
+including the inherited execution-prefix queue, its refill and reset behavior, using only the saved student package and
 its observation corpus. This establishes a reloadable inference artifact, not an
 optimizer/RNG checkpoint: `training_resume_supported=false`.
 
@@ -180,7 +181,7 @@ teacher tensors so VAE removal is not counted as a distillation gain.
 ## Verification
 
 ```sh
-PYTHONPATH=workers/policy_distillation/src:workers/act_optimizer/src \
+PYTHONPATH=workers/policy_distillation/src:workers/act_optimizer/src:workers/smolvla_qlora/src \
   workers/act_optimizer/.venv/bin/python -m pytest workers/policy_distillation/tests -q
 ```
 
@@ -189,3 +190,51 @@ strict fresh-process reload, group/episode leakage, padding, finite data, strict
 input mutation, atomic no-overwrite, source preservation and real process cleanup.
 The genuine native-v3 preparation proof runs separately in the dataset environment;
 its generated captures and artifact evidence are retained outside Git.
+
+
+## Inherited control and timing continuation
+
+The worker source now preserves the teacher's exact saved pre/postprocessor JSON,
+normalization statistics, `temporal-contract.json` and `control-contract.json`.
+Prediction length comes from `chunk_size`; the action queue uses `n_action_steps`.
+Training targets remain detached normalized full teacher predictions. Only the
+observation batch enters the saved preprocessor; targets never enter it.
+Postprocessed diagnostics cover the entire prediction horizon, while queue proof
+checks the execution prefix, the next refill, and reset against the first action.
+
+For simulator-bound policies, preparation requires the exact immutable snapshot
+named by the teacher's control record. The existing snapshot verifier and control
+record derivation bind demonstrations, joint order, camera, FPS, source origins and
+root scene hashes. Operator attestation cannot substitute another snapshot or
+coordinate system. This initial scope does not support transfer to a different
+recording snapshot. Three disjoint episode/lineage partitions remain required;
+final observations still cannot choose an optimizer update or candidate.
+
+New corpus manifests include `execution_horizon`, `action_fps`,
+`temporal_contract_sha256`, `control_contract`, and `control_contract_sha256`;
+`chunk_size` retains the prediction horizon. Legacy omission of these fields is
+accepted only for 100/100 teachers with neither sidecar. Partial metadata fails.
+FPS is copied from the verified dataset and compared with every saved cadence
+contract; the ACT model config itself does not contain dataset FPS.
+
+Reports, fresh-reload receipts and artifact metadata expose both horizons and
+exact sidecar identities. The complete policy inventory includes both sidecars.
+FP32 `sim-policy-checkpoint-v1` identity includes the control contract and saved
+processors but excludes temporal provenance, matching the actual Isaac inspector.
+This differs deliberately from packed-model identity, which inventories and hashes
+all packed inference files. Fresh reload must reproduce both sidecar claims and
+full prediction hashes; original source files remain unchanged.
+
+This continuation is currently source/test authoring only. No nondefault-horizon
+student training, native fresh reload, packing, HTTP serving or Isaac execution has
+been verified for it. Earlier 100/100 evidence above remains historical and does
+not establish this new chain. Physical calibration and task quality remain open.
+
+
+The generated native 8/3 regression is explicitly opt-in with
+`FIREBIRD_DISTILL_CONTROL_NATIVE=1` and the exact test selector
+`test_native_8_3_preserves_semantics_and_normalized_teacher_targets`. It is not
+part of the lightweight metadata admission checks. It retains the existing
+100/100 native regression and uses nonidentity processor statistics to check
+that teacher targets remain in normalized coordinates. It has not been run for
+this draft. Coordinate its CPU, disk and process budget before enabling it.

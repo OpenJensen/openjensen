@@ -10,7 +10,7 @@ import stat
 from pathlib import Path
 
 from .contracts import LifecycleResult, PolicyArtifact
-from .control_provenance import require_transform_support
+from .control_provenance import policy_claims, records, transform_claims
 from .runtime import native_quantization_ready
 from .simulation import finish_owned, strict_json
 
@@ -187,7 +187,6 @@ def source_info(artifact, data_dir, *, require_inference=True):
         or manifest.get("metadata") != artifact.metadata
     ):
         raise ValueError("Registered ACT artifact identity or metadata changed")
-    require_transform_support(artifact.metadata, outer)
     if any(Path(name).name in {"remote.json", "remote-checkpoint.json"} for name in outer):
         raise ValueError("Materialize and export the complete checkpoint before quantization")
     models = [root / name for name in outer if Path(name).name == "model.safetensors"]
@@ -213,6 +212,27 @@ def source_info(artifact, data_dir, *, require_inference=True):
     ):
         raise ValueError("First export ACT to inference-only FP32: use_vae=false is required")
     temporal = temporal_info(config, policy, files)
+    for record in records(artifact.metadata):
+        if any(key in record for key in temporal) and any(
+            key not in record or not exact_json(record[key], value)
+            for key, value in temporal.items()
+        ):
+            raise ValueError("Registered ACT temporal claims differ from policy files")
+    for name, item in outer.items():
+        if Path(name).name == "temporal-contract.json" and (
+            item["sha256"] != temporal["temporal_contract_sha256"]
+        ):
+            raise ValueError("ACT artifact lost or changed its temporal contract")
+    control = policy_claims(policy, artifact.metadata)
+    for name, item in outer.items():
+        if Path(name).name == "control-contract.json" and (
+            not control or item["sha256"] != control["control_contract_sha256"]
+        ):
+            raise ValueError("ACT artifact lost or changed its simulator control contract")
+    if control and temporal["temporal_contract_sha256"] is not None:
+        record = strict_json(policy / "temporal-contract.json", JSON_LIMIT)
+        if record["action_fps"] != control["control_contract"]["action_fps"]:
+            raise ValueError("ACT temporal and simulator control cadence differ")
     features = config.get("input_features", {})
     if not isinstance(features, dict) or not isinstance(config.get("output_features"), dict):
         raise ValueError("ACT input/output features must be saved mappings")
@@ -265,6 +285,7 @@ def source_info(artifact, data_dir, *, require_inference=True):
         "outer": outer,
         "image_shape": cameras[0],
         **temporal,
+        **control,
         "manifest_sha256": files.get("manifest.json", {}).get("sha256"),
     }
 
@@ -373,8 +394,9 @@ def check_result(response, job, source, admitted, directory):
         for step in strict_json(admitted["path"] / name, JSON_LIMIT)["steps"]:
             if step.get("state_file"):
                 expected_policy.add(step["state_file"])
-    if "temporal-contract.json" in admitted["files"]:
-        expected_policy.add("temporal-contract.json")
+    for name in ("temporal-contract.json", "control-contract.json"):
+        if name in admitted["files"]:
+            expected_policy.add(name)
     if set(policy) != expected_policy:
         raise ValueError("Packed policy must contain exact processors and no floating master")
     for name in expected_policy - {"model.fbq", "encoding.json"}:
@@ -427,15 +449,14 @@ def check_result(response, job, source, admitted, directory):
     if not isinstance(metadata, dict):
         raise ValueError("Packed metadata must be an object")
     expected.update(temporal_claims(metadata, admitted))
+    expected.update(transform_claims(metadata, admitted))
     if (
-        metadata != expected
+        not exact_json(metadata, expected)
         or any(type(metadata.get(key)) is not type(value) for key, value in expected.items())
-        or any(
-            report.get(key) != value or type(report.get(key)) is not type(value)
-            for key, value in expected.items()
-        )
+        or any(not exact_json(report.get(key), value) for key, value in expected.items())
     ):
         raise ValueError("Packed policy claims or source identity do not match")
+    policy_claims(directory / "policy", metadata)
     lineage = strict_json(directory / "lineage.json", JSON_LIMIT)
     if not exact_json(
         lineage,
@@ -465,6 +486,7 @@ def check_result(response, job, source, admitted, directory):
         admitted["image_shape"],
         admitted.get("prediction_horizon", 100),
         admitted.get("execution_horizon", 100),
+        admitted,
     )
     sizes = {
         "source_weight_bytes": admitted["files"]["model.safetensors"]["bytes"],
@@ -497,7 +519,7 @@ def check_result(response, job, source, admitted, directory):
     return manifest, files
 
 
-def check_proof(proof, model_id, shape, prediction=100, execution=100):
+def check_proof(proof, model_id, shape, prediction=100, execution=100, admitted=None):
     expected = {
         "schema_version": 1,
         "model_id": model_id,
@@ -515,12 +537,11 @@ def check_proof(proof, model_id, shape, prediction=100, execution=100):
         "gpu_memory_bytes": None,
         "inference_speedup": None,
     }
+    if isinstance(proof, dict):
+        expected.update(transform_claims(proof, admitted or {}))
     if (
         not isinstance(proof, dict)
-        or any(
-            proof.get(key) != value or type(proof.get(key)) is not type(value)
-            for key, value in expected.items()
-        )
+        or any(not exact_json(proof.get(key), value) for key, value in expected.items())
         or not isinstance(proof.get("versions"), dict)
         or {k: str(v).split("+")[0] for k, v in proof["versions"].items()} != RUNTIME
     ):

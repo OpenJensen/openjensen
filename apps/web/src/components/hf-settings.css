@@ -10,12 +10,13 @@
 .hf-settings-account span { color: var(--muted); letter-spacing: 1px; }
 .hf-settings-fields { display: flex; gap: 14px; align-items: flex-end; margin: 18px 0 12px; }
 .hf-settings-fields label { display: grid; gap: 8px; flex: 1; max-width: 420px; min-width: 0; color: var(--muted); font-size: 11px; }
-.hf-settings-fields input { background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); border-radius: 6px; padding: 9px 11px; width: 100%; font-size: 12px; }
+.hf-settings-fields input { background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); border-radius: 6px; padding: 9px 11px; width: 100%; min-height: 44px; font-size: 12px; }
 .hf-settings-error { color: var(--error, #b42318); font-size: 12px; line-height: 1.6; }
 .hf-settings-feedback { color: var(--success); font-size: 12px; }
 @media (max-width: 650px) {
   .hf-settings { padding: 15px; }
   .hf-settings-fields { flex-direction: column; align-items: stretch; }
   .hf-settings-fields label { max-width: none; }
+  .hf-settings-fields input { font-size: 16px; }
   .hf-settings-heading { flex-wrap: wrap; }
 }

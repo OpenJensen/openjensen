@@ -8,9 +8,11 @@ import re
 from pathlib import Path
 
 from firebird_act.bundle import (
+    CORE_FILES,
     canonical,
     inventory,
     safe_file,
+    temporal_dimensions,
     validate_config,
     validate_processors,
 )
@@ -147,9 +149,7 @@ def request(value):
     return roots
 
 
-def teacher_info(root, expected):
-    if "control-contract.json" in expected:
-        raise ValueError("Distillation does not yet preserve simulator control contracts")
+def policy_info(root, expected, *, source_metadata=False):
     if inventory(root) != expected:
         raise ValueError("Teacher inventory changed")
     cfg = read(root / "config.json")
@@ -162,8 +162,17 @@ def teacher_info(root, expected):
             raise ValueError("Invalid teacher features")
     validate_config(cfg, source=cfg["use_vae"])
     stats = validate_processors(root, cfg)
-    if cfg["dim_model"] <= 256 or cfg["n_encoder_layers"] < 2:
-        raise ValueError("Teacher must be larger than the fixed ACT256 student")
+    from .provenance import inherited_files, policy_metadata
+
+    policy_metadata(root, cfg)
+    required = CORE_FILES | inherited_files(root, cfg)
+    allowed = required | (
+        {"manifest.json", "recipe.json", "parity.json", "train_config.json", "export-lineage.json"}
+        if source_metadata
+        else set()
+    )
+    if not required <= set(expected) <= allowed:
+        raise ValueError("Unexpected files in ACT inference payload")
     camera = next(k for k in cfg["input_features"] if k.startswith("observation.images."))
     processors = {
         name: expected[name]
@@ -172,11 +181,28 @@ def teacher_info(root, expected):
     return cfg, camera, digest(canonical(processors))
 
 
-def corpus(root, expected_sha, cfg, camera, processors_sha):
+def teacher_info(root, expected):
+    cfg, camera, processors = policy_info(root, expected, source_metadata=True)
+    if cfg["dim_model"] <= 256 or cfg["n_encoder_layers"] < 2:
+        raise ValueError("Teacher must be larger than the fixed ACT256 student")
+    return cfg, camera, processors
+
+
+def corpus(root, expected_sha, cfg, camera, processors_sha, *, metadata=None, expected_fps=None):
     raw = safe_file(root / "manifest.json", 1024**2)
     if digest(raw) != expected_sha:
         raise ValueError("Corpus manifest identity mismatch")
     doc = decode(raw)
+    from .provenance import check_corpus_metadata
+
+    if metadata is None:
+        metadata = {
+            **temporal_dimensions(cfg),
+            "temporal_contract_sha256": None,
+            "control_contract": None,
+            "control_contract_sha256": None,
+        }
+    extra = check_corpus_metadata(doc, cfg, metadata, expected_fps)
     exact_keys(
         doc,
         {
@@ -188,10 +214,10 @@ def corpus(root, expected_sha, cfg, camera, processors_sha):
             "image_shape",
             "chunk_size",
             "samples",
-        },
+        }
+        | (extra if "execution_horizon" in doc else set()),
     )
     integer(doc["schema_version"], 1, 1)
-    integer(doc["chunk_size"], 100, 100)
     if doc["format"] != "act-observation-corpus-v1" or doc["camera"] != camera:
         raise ValueError("Corpus adapter/camera mismatch")
     shape = doc["image_shape"]
@@ -281,11 +307,12 @@ def corpus(root, expected_sha, cfg, camera, processors_sha):
     return doc
 
 
-def load_sample(root, sample, shape):
+def load_sample(root, sample, shape, prediction_horizon=100):
     """Decode an immutable, size/hash checked byte snapshot, never an arbitrary pickle."""
     import torch
     from safetensors.torch import load
 
+    integer(prediction_horizon, 1, 1024)
     raw = safe_file(root / sample["file"], MAX_SAMPLE_BYTES)
     if len(raw) != sample["bytes"] or digest(raw) != sample["sha256"]:
         raise ValueError("Corpus sample changed")
@@ -293,8 +320,8 @@ def load_sample(root, sample, shape):
     specs = {
         "image": (torch.uint8, shape),
         "state": (torch.float32, [6]),
-        "actions": (torch.float32, [100, 6]),
-        "padding": (torch.bool, [100]),
+        "actions": (torch.float32, [prediction_horizon, 6]),
+        "padding": (torch.bool, [prediction_horizon]),
     }
     if set(data) != set(specs):
         raise ValueError("Unexpected observation tensors")
@@ -305,7 +332,7 @@ def load_sample(root, sample, shape):
             or not torch.isfinite(data[key]).all()
         ):
             raise ValueError("Invalid observation tensor shape/dtype/values")
-    expected = torch.arange(100) + sample["frame_index"] >= sample["episode_length"]
+    expected = torch.arange(prediction_horizon) + sample["frame_index"] >= sample["episode_length"]
     if not torch.equal(data["padding"], expected) or bool(expected.all()):
         raise ValueError("Action padding does not match the true episode boundary")
     return data

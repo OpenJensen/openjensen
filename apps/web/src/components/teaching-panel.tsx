@@ -6,6 +6,7 @@ import { TeachingIntelligence } from "./teaching-intelligence";
 import { TeachingPreview } from "./teaching-preview";
 import { WorkflowIntegration } from "./workflow-integration";
 import { apiOrigin } from "@/lib/api";
+import type { TeachingTransport } from "@/lib/managed-teaching";
 import type { Room } from "livekit-client";
 import "./workbench-form.css";
 import "./teaching-panel.css";
@@ -14,10 +15,11 @@ type State = { mode: string; episode_id: string | null; revision: number; sessio
 type Connection = { connected: boolean; state: State | null; message: string | null; voice_configured: boolean };
 type Receipt = { command_id: string; status: "queued" | "executing" | "acknowledged" | "rejected"; error?: string };
 const endpoint = `${apiOrigin}/api/v1/teaching`;
-async function request<T>(path: string, body?: object): Promise<T> {
+async function request<T>(path: string, body?: object, beforePost?: () => void): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), path === "/voice/join" ? 15000 : 8000);
   try {
+    if (body !== undefined) beforePost?.();
     const response = await fetch(endpoint + path, { method: body ? "POST" : "GET", headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined, cache: "no-store", signal: controller.signal });
     const value = await response.json();
     if (!response.ok) throw new Error(typeof value.detail === "string" ? value.detail : "Teaching request failed.");
@@ -28,7 +30,14 @@ async function request<T>(path: string, body?: object): Promise<T> {
   } finally { clearTimeout(timeout); }
 }
 
-export function TeachingPanel() {
+export function TeachingPanel({ transport }: { transport?: TeachingTransport } = {}) {
+  // A changed target retires every pending receipt, preview and voice lease.
+  return <TeachingControls key={transport?.identity ?? 'manual'} transport={transport} />;
+}
+
+function TeachingControls({ transport }: { transport?: TeachingTransport }) {
+  const requestFor = transport?.request ?? request;
+  const scope = transport?.identity ?? 'manual';
   const [instruction, setInstruction] = useState("");
   const [joint, setJoint] = useState("");
   const [receiptId, setReceiptId] = useState("");
@@ -37,14 +46,14 @@ export function TeachingPanel() {
   const [voiceState, setVoiceState] = useState("Disconnected");
   const [voiceError, setVoiceError] = useState("");
   const [agentPresent, setAgentPresent] = useState(false);
-  const voiceReadiness = useQuery({ queryKey: ["teaching-voice-status"], queryFn: () => request<{ broker_reachable: boolean; configuration_present: boolean; dependencies_present: boolean; message: string }>("/voice/status"), refetchInterval: 3000, retry: false });
+  const voiceReadiness = useQuery({ queryKey: ["teaching-voice-status", scope], queryFn: () => requestFor<{ broker_reachable: boolean; configuration_present: boolean; dependencies_present: boolean; message: string }>("/voice/status"), enabled: !transport, refetchInterval: transport ? false : 3000, retry: false });
   const room = useRef<Room | null>(null);
   const joining = useRef(false);
   const generation = useRef(0);
   const mounted = useRef(true);
   const media = useRef<HTMLDivElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const connection = useQuery({ queryKey: ["teaching-state"], queryFn: () => request<Connection>("/state"), refetchInterval: 1000, retry: false });
+  const connection = useQuery({ queryKey: ["teaching-state", scope], queryFn: () => requestFor<Connection>("/state"), refetchInterval: 1000, retry: false });
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const tick = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(tick); }, []);
   const state = connection.data?.state;
@@ -52,15 +61,17 @@ export function TeachingPanel() {
   if (state?.session_id) lastState.current = state;
   const previewState = state?.session_id ? state : lastState.current;
   const online = connection.isSuccess && connection.data?.connected && !!state?.session_id && now - connection.dataUpdatedAt <= 5000;
-  const receipt = useQuery({ queryKey: ["teaching-receipt", receiptId], queryFn: () => request<Receipt>(`/commands/${receiptId}`), enabled: !!receiptId && !receiptExpired, refetchInterval: query => !receiptExpired && !query.state.error && ["queued", "executing"].includes(query.state.data?.status ?? "queued") ? 250 : false, retry: false });
+  const receipt = useQuery({ queryKey: ["teaching-receipt", scope, receiptId], queryFn: () => requestFor<Receipt>(`/commands/${receiptId}`), enabled: !!receiptId && !receiptExpired, refetchInterval: query => !receiptExpired && !query.state.error && ["queued", "executing"].includes(query.state.data?.status ?? "queued") ? 250 : false, retry: false });
   const command = useMutation({
     mutationFn: async ({ operation, args = {} }: { operation: string; args?: object }) => {
-      const current = await request<Connection>("/state");
+      const current = await requestFor<Connection>("/state");
+      if (!mounted.current) throw new Error("Teaching controls changed before the command was sent.");
       if (!current.connected || !current.state) throw new Error("Teaching executor is disconnected.");
       if (!state?.session_id || current.state.session_id !== state.session_id) { void connection.refetch(); throw new Error("The simulator session changed. Review its state before issuing another command."); }
-      return request<Receipt>("/commands", { command_id: crypto.randomUUID(), session_id: current.state.session_id, episode_id: current.state.episode_id, expected_revision: current.state.revision, operation, arguments: args });
+      return requestFor<Receipt>("/commands", { command_id: crypto.randomUUID(), session_id: current.state.session_id, episode_id: current.state.episode_id, expected_revision: current.state.revision, operation, arguments: args }, () => { if (!mounted.current) throw new Error("Teaching controls changed before the command was sent."); });
     },
-    onSuccess: result => { setReceiptExpired(false); setReceiptId(result.command_id); void connection.refetch(); },
+    onSuccess: result => { if (mounted.current) { setReceiptExpired(false); setReceiptId(result.command_id); void connection.refetch(); } },
+    retry: false,
   });
   useEffect(() => {
     if (!receiptId || receipt.data?.status === "acknowledged" || receipt.data?.status === "rejected") return;
@@ -89,14 +100,14 @@ export function TeachingPanel() {
     await current?.disconnect(); media.current?.replaceChildren(); setVoiceState("Disconnected"); setAgentPresent(false);
   }
   async function join() {
-    if (!state?.session_id || room.current || joining.current) return;
+    if (transport || !state?.session_id || room.current || joining.current) return;
     joining.current = true; voiceSession.current = state.session_id;
     const attempt = ++generation.current;
     const live = () => mounted.current && generation.current === attempt;
     setVoiceError(""); setVoiceState("Connecting");
     let current: Room | null = null;
     try {
-      const access = await request<{ url: string; token: string; expires_in_seconds: number }>("/voice/join", { session_id: state.session_id });
+      const access = await requestFor<{ url: string; token: string; expires_in_seconds: number }>("/voice/join", { session_id: state.session_id });
       const { Room, RoomEvent, ParticipantKind } = await import("livekit-client");
       if (!live()) return;
       current = new Room({ adaptiveStream: true, dynacast: true });
@@ -134,7 +145,7 @@ export function TeachingPanel() {
     <details className="teaching-setup"><summary>Connection details</summary><dl className="cloud-run-facts"><div><dt>Executor connection</dt><dd>{online ? "Reachable" : connection.isPending ? "Checking" : "Not connected"}</dd></div><div><dt>Voice service</dt><dd>{voiceReadiness.isSuccess && voiceReadiness.data?.broker_reachable && voiceReadiness.data.configuration_present && voiceReadiness.data.dependencies_present ? "Configured; access unverified" : "Not configured or broker unavailable"}</dd></div><div><dt>Last response from application</dt><dd>{connection.dataUpdatedAt ? new Date(connection.dataUpdatedAt).toLocaleTimeString() : "Not received"}</dd></div></dl></details>
     {connection.error && <p role="alert">Teaching connection could not be checked.</p>}
     {state?.fault && <p role="alert">The executor stopped after a fault. Inspect the worker before continuing.</p>}
-    {previewState?.session_id && <TeachingPreview key={previewState.session_id} online={!!online} context={{ session_id: previewState.session_id, revision: previewState.revision, active_episode_id: previewState.episode_id, mode: previewState.mode }} />}
+    {previewState?.session_id && <TeachingPreview key={previewState.session_id} frameUrl={transport?.frameUrl} online={!!online} context={{ session_id: previewState.session_id, revision: previewState.revision, active_episode_id: previewState.episode_id, mode: previewState.mode }} />}
     <form className="workbench-form teaching-task-form" onSubmit={event => { event.preventDefault(); command.mutate({ operation: "task", args: { instruction: instruction.trim() } }); }}>
       <div className="workbench-field">
         <label htmlFor="teaching-task">Task instruction</label>
@@ -163,13 +174,13 @@ export function TeachingPanel() {
     {receiptExpired && <p role="alert">No final acknowledgement arrived. Execution is unverified; inspect the executor before retrying.</p>}
     {receipt.error && <p role="alert">Command acknowledgement unavailable. Execution is not confirmed.</p>}
     {state && <dl className="dataset-facts"><div><dt>Session</dt><dd>{state.session_id}</dd></div><div><dt>Executor mode</dt><dd>{state.mode}</dd></div><div><dt>Recorded steps</dt><dd>{state.steps}</dd></div><div><dt>Simulation time</dt><dd>{state.sim_time?.toFixed(2)} s</dd></div><div><dt>Outcome</dt><dd>{state.outcome || "Unverified"}</dd></div></dl>}
-    <TeachingIntelligence context={state?.session_id ? { session_id: state.session_id, episode_id: state.episode_id, revision: state.revision } : null} online={!!online} />
-    <section className="teaching-voice" aria-labelledby="teaching-voice-title">
+    {transport ? <p role="status">Voice and optional advice are not connected to this managed session. Manual teaching services remain separate. Finishing an episode does not publish the capture; use Stop and publish when the session is complete.</p> : <TeachingIntelligence context={state?.session_id ? { session_id: state.session_id, episode_id: state.episode_id, revision: state.revision } : null} online={!!online} />}
+    {!transport && <section className="teaching-voice" aria-labelledby="teaching-voice-title">
       <h3 id="teaching-voice-title">Voice</h3>
       <p>Connecting sends microphone audio through LiveKit/OpenRouter for up to five minutes. Provider charges may apply.</p>
       <div className="workbench-actions"><button className="primary-button" disabled={!online || !(voiceReadiness.isSuccess && voiceReadiness.data?.broker_reachable && voiceReadiness.data.configuration_present && voiceReadiness.data.dependencies_present) || voiceState !== "Disconnected"} onClick={() => void join()}>Connect voice</button>{voiceState !== "Disconnected" && <button className="secondary-button" onClick={() => void leave()}>Disconnect microphone</button>}</div>
       <p role="status">{voiceState} · Voice agent {agentPresent ? "present in room" : "not observed"}</p>{voiceError && <p role="alert">{voiceError}</p>}
       <div ref={media} aria-label="Teaching room media" />
-    </section>
+    </section>}
   </section>;
 }

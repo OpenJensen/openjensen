@@ -20,10 +20,12 @@ from .contracts import (
     MAX_SAMPLE_BYTES,
     corpus,
     digest,
+    policy_info,
     read,
     request,
     teacher_info,
 )
+from .provenance import action_fps, inherited_files, policy_metadata
 
 
 def signal_owned_group(pid, sig):
@@ -184,15 +186,16 @@ def native_model_id(root):
     """Native sim-policy-checkpoint-v1 identity; tested against the shared inspector.
 
     Hash domain, then sorted UTF8 name length/name, file length and exact file bytes.
-    Only config, weights and saved processors/statistics participate in this identity.
+    Config, weights, processors/statistics and the optional control contract
+    participate. Temporal provenance is inventoried but excluded, matching Isaac.
     """
-    from firebird_act.bundle import CORE_FILES, validate_config, validate_processors
+    from firebird_act.bundle import CORE_FILES
 
-    config = read(root / "config.json")
-    validate_config(config, source=False)
-    names = CORE_FILES | validate_processors(root, config)
-    if set(inventory(root)) != names:
-        raise ValueError("Unexpected files in native student inference payload")
+    files = inventory(root)
+    config, _, _ = policy_info(root, files)
+    if config["use_vae"] is not False:
+        raise ValueError("Student inference identity requires a VAE-free policy")
+    names = (CORE_FILES | inherited_files(root, config)) - {"temporal-contract.json"}
     value = hashlib.sha256(b"sim-policy-checkpoint-v1\0")
     for name in sorted(names):
         encoded, raw = name.encode("utf-8"), safe_file(root / name)
@@ -205,23 +208,49 @@ def native_model_id(root):
 
 def implementation_identity():
     import firebird_act.bundle
+    import firebird_act.control_schema
     import firebird_act.probe
+    import firebird_vla.control_contract
+    import firebird_vla.control_schema
 
+    names = (
+        "__init__.py",
+        "application.py",
+        "contracts.py",
+        "prepare.py",
+        "runtime.py",
+        "provenance.py",
+    )
     files = {
-        "distillation/" + p.name: digest(safe_file(p, 1024**2))
-        for p in sorted(Path(__file__).parent.glob("*.py"))
+        "distillation/" + name: digest(safe_file(Path(__file__).parent / name, 1024**2))
+        for name in names
     }
-    for module in (firebird_act.bundle, firebird_act.probe):
-        files["act/" + Path(module.__file__).name] = digest(
-            safe_file(Path(module.__file__), 1024**2)
-        )
+    for prefix, modules in (
+        ("act/", (firebird_act.bundle, firebird_act.probe, firebird_act.control_schema)),
+        ("data/", (firebird_vla.control_contract, firebird_vla.control_schema)),
+    ):
+        for module in modules:
+            files[prefix + Path(module.__file__).name] = digest(
+                safe_file(Path(module.__file__), 1024**2)
+            )
     return files
 
 
 def run_job(job):
     teacher, data, output = request(job)
     cfg, camera, processors_sha = teacher_info(teacher, job["teacher"]["files"])
-    doc = corpus(data, job["dataset"]["manifest_sha256"], cfg, camera, processors_sha)
+    inherited = policy_metadata(teacher, cfg)
+    fps_contract = action_fps(teacher, inherited)
+    doc = corpus(
+        data,
+        job["dataset"]["manifest_sha256"],
+        cfg,
+        camera,
+        processors_sha,
+        metadata=inherited,
+        expected_fps=fps_contract,
+    )
+    preserved = {name: job["teacher"]["files"][name] for name in inherited_files(teacher, cfg)}
     output.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
     implementation = implementation_identity()
@@ -241,7 +270,15 @@ def run_job(job):
             copy_corpus(data, copied_data, doc)
             # Revalidate copied identities before execution; original paths cannot be read by child.
             teacher_info(copied_teacher, job["teacher"]["files"])
-            corpus(copied_data, job["dataset"]["manifest_sha256"], cfg, camera, processors_sha)
+            corpus(
+                copied_data,
+                job["dataset"]["manifest_sha256"],
+                cfg,
+                camera,
+                processors_sha,
+                metadata=inherited,
+                expected_fps=fps_contract,
+            )
             copied_job = copy.deepcopy(job)
             copied_job["teacher"]["path"], copied_job["dataset"]["path"] = (
                 str(copied_teacher),
@@ -266,6 +303,11 @@ def run_job(job):
             )
             report = read(train_result)
             expected_files = inventory(stage / "policy")
+            student_cfg, _, _ = policy_info(stage / "policy", expected_files)
+            if policy_metadata(stage / "policy", student_cfg) != inherited or any(
+                expected_files.get(name) != expected for name, expected in preserved.items()
+            ):
+                raise ValueError("Student changed inherited processors or sidecar bytes")
             # The fresh reloader cannot use either original or copied teacher weights.
             shutil.rmtree(copied_teacher)
             owner.run(
@@ -286,6 +328,9 @@ def run_job(job):
                 or report["policy_files"] != expected_files
                 or verified["predictions"] != report["predictions"]
                 or verified["versions"] != report["versions"]
+                or any(k not in report or k not in verified for k in inherited)
+                or canonical({k: report.get(k) for k in inherited}) != canonical(inherited)
+                or canonical({k: verified.get(k) for k in inherited}) != canonical(inherited)
             ):
                 raise ValueError("Fresh-process student reload differs from the frozen artifact")
             report["fresh_reload_verified"] = True
@@ -308,6 +353,7 @@ def run_job(job):
             (stage / "lineage.json").write_bytes(canonical(lineage))
             model_id = native_model_id(stage / "policy")
             metadata = {
+                **inherited,
                 "architecture": "act",
                 "recipe": "act-action-distillation-v1",
                 "model_id": model_id,

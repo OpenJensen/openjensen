@@ -8,13 +8,15 @@ import { WorkflowChoiceGrid } from './workflow-choice-grid';
 import { NativePreparation } from './native-preparation';
 import { publicPath } from '@/lib/base-path';
 import { WorkbenchDisclosure } from './workbench-disclosure';
-import { availableNativeQuantizer, cancelNativeQuantization, nativeQuantizationInput, nativeQuantizationOf, measuredNativeReport, replayableNativeOutput, object, startNativeQuantization, UncertainQuantization, type NativeQuantizationRuntime, type PackedArtifact } from '@/lib/native-quantization';
+import { simulationOptions } from '@/lib/native-simulation';
+import { quantizedSimulationHandoff, simulationHandoffProfiles, type SimulationHandoff } from '@/lib/native-simulation-handoff';
+import { availableNativeQuantizer, nativeTransformIssue, nativeTransformMetadata, cancelNativeQuantization, nativeQuantizationInput, nativeQuantizationOf, measuredNativeReport, replayableNativeOutput, object, startNativeQuantization, UncertainQuantization, type NativeQuantizationRuntime, type PackedArtifact } from '@/lib/native-quantization';
 
 class QuantizationJournalUnavailable extends Error {
   constructor() { super('Browser session storage is unavailable. Restore it and reload, then inspect recorded jobs before submitting again.'); }
 }
 
-export function NativeQuantizationPanel({ projectId, preferredArtifactId, preferredJobId, onJobSelected, onPrepare, onReplay }: { projectId: string; preferredArtifactId?: string; preferredJobId?: string; onJobSelected?: (id: string) => void; onPrepare: () => void; onReplay?: (artifactId: string) => void }) {
+export function NativeQuantizationPanel({ projectId, preferredArtifactId, preferredJobId, onJobSelected, onPrepare, onReplay, onPrepareSimulation }: { projectId: string; preferredArtifactId?: string; preferredJobId?: string; onJobSelected?: (id: string) => void; onPrepare: () => void; onReplay?: (artifactId: string) => void; onPrepareSimulation?: (source: SimulationHandoff) => void }) {
   const client = useQueryClient();
   const options = useQuery({ queryKey: ['policy-options'], queryFn: api.policyOptions, retry: false, refetchInterval: 10_000 });
   const jobs = useQuery({ queryKey: ['jobs', projectId], queryFn: () => api.jobs(projectId), enabled: !!projectId, retry: false, refetchInterval: 2_000 });
@@ -25,7 +27,9 @@ export function NativeQuantizationPanel({ projectId, preferredArtifactId, prefer
   const runtime = runtimeId ? runtimes.find(item => item.id === runtimeId) : runtimes[0];
   const [artifactId, setArtifactId] = useState('');
   const inputs = (artifacts.data ?? []).filter(item => nativeQuantizationInput(item, projectId));
+  const excludedInputs = (artifacts.data ?? []).some(item => item.project_id === projectId && ['native_checkpoint', 'inference_export'].includes(item.format) && item.metadata?.architecture === 'act' && nativeTransformIssue(item));
   const input = inputs.find(item => item.id === artifactId);
+  const inputSemantics = input ? nativeTransformMetadata(input) : null;
   const [bits, setBits] = useState<4 | 8>(8);
   const [timeout, setTimeoutValue] = useState('600');
   const seconds = Number(timeout);
@@ -79,6 +83,7 @@ export function NativeQuantizationPanel({ projectId, preferredArtifactId, prefer
   const downloads = outputs.filter(item => item.project_id === projectId && item.job_id === selected?.id && item.format === 'native_quantized' && item.metadata?.architecture === 'act');
   const reports: Record<string, unknown>[] = Array.isArray(result?.reports) ? result.reports.filter(object) : [];
   const measured = selected ? reports.map(item => measuredNativeReport(item, selected)).find(Boolean) : null;
+  const simulation = useQuery({ queryKey: ['simulation-options'], queryFn: simulationOptions, enabled: !!onPrepareSimulation && selected?.status === 'succeeded' && !!measured, retry: false, refetchInterval: selected?.status === 'succeeded' && !!measured ? 10_000 : false });
   const editable = journalReady && !!projectId && options.isSuccess && !options.isError && artifacts.isSuccess && !artifacts.isError && jobs.isSuccess && !jobs.isError && !pending && !attempt.data;
   const ready = editable && !!runtime;
   function showJob(id: string) { onJobSelected?.(id); selectedId.current = id; setJobId(id); setConfirmCancel(null); }
@@ -126,7 +131,14 @@ export function NativeQuantizationPanel({ projectId, preferredArtifactId, prefer
           <p>Postprocessed differences use saved processor output coordinates; physical units are unverified. No accepted quality threshold or GPU memory/latency improvement is established.</p></WorkbenchDisclosure>
         </section> : <p role="alert">A complete measured quantization report is unavailable. Do not infer reload or quality acceptance from the job status alone.</p>)}
 
-      {selected.status === 'succeeded' && <><p>Task quality, calibration, speed and GPU memory savings remain unverified.</p>{downloads.map(item => <div key={item.id} className="native-result-actions">{onReplay && replayableNativeOutput(item, selected, measured ?? null) && <button className="primary-button" onClick={() => onReplay(item.id)}>Replay recorded observations</button>}<a className="secondary-button" href={artifactDownloadUrl(projectId, item.id)}>Download INT{nativeQuantizationOf(selected)?.bits} package</a></div>)}</>}
+      {selected.status === 'succeeded' && <><p>Task quality, calibration, speed and GPU memory savings remain unverified.</p>{downloads.map(item => {
+        const handoff = quantizedSimulationHandoff(item, selected, measured ?? null);
+        const compatible = simulation.data ? simulationHandoffProfiles(item, simulation.data.profiles) : [];
+        return <div key={item.id} data-artifact-id={item.id}>
+          <div className="native-result-actions">{onReplay && replayableNativeOutput(item, selected, measured ?? null) && <button className="primary-button" onClick={() => onReplay(item.id)}>Replay recorded observations</button>}{onPrepareSimulation && handoff && <button className="secondary-button" disabled={!simulation.isSuccess || simulation.isError || jobs.isError || !compatible.length} onClick={() => onPrepareSimulation(handoff)}>Prepare simulation</button>}<a className="secondary-button" href={artifactDownloadUrl(projectId, item.id)}>Download INT{nativeQuantizationOf(selected)?.bits} package</a></div>
+          {onPrepareSimulation && handoff && <p className="field-help" role="status">{simulation.isError ? 'Simulation profile availability is unknown. Open Run to refresh its configuration.' : simulation.isPending ? 'Checking configured simulation profiles…' : compatible.length ? 'Continue with this exact package, then choose a profile and review paid rollout consent. Nothing starts here.' : 'No packed ACT simulation profile is configured. Observation replay and download remain available.'}</p>}
+        </div>;
+      })}</>}
       {isActive(selected) && <><progress aria-label="ACT quantization in progress" /><button className="secondary-button" disabled={pending !== null || jobs.isError} onClick={() => setConfirmCancel(selected.id)}>Cancel selected ACT quantization</button></>}
       {confirmCancel === selected.id && isActive(selected) && <div role="group" aria-label="Confirm ACT quantization cancellation" className="warning-box"><p>Stop this job and its owned local processes?</p><button className="secondary-button" disabled={pending !== null || jobs.isError} onClick={() => void mutate('cancel')}>Confirm cancellation</button><button className="text-link" disabled={pending !== null} onClick={() => setConfirmCancel(null)}>Keep running</button></div>}
       {events.isError && <p role="alert">Activity updates are unavailable; previously received activity may be stale. {events.error.message}</p>}
@@ -153,6 +165,9 @@ export function NativeQuantizationPanel({ projectId, preferredArtifactId, prefer
       </div> : <>
         <fieldset disabled={!editable} className="native-simulation-form"><legend className="visually-hidden">ACT quantization setup</legend>
           <WorkflowChoiceGrid name="act-policy" label="Policy" value={input?.id ?? ''} onChange={chooseArtifact} options={inputs.map(item => ({ value: item.id, label: item.label, meta: item.id.slice(0, 8), icon: 'layers' }))} emptyMessage="No ACT inference policies. Import or export a complete policy first." />
+          {excludedInputs && <p role="status">Some ACT packages are excluded because their model format, timing or simulator details are incomplete or unsupported. Refresh or export a complete inference package.</p>}
+          {inputSemantics && <p className="field-help">Inherited action timing: plans {inputSemantics.prediction_horizon} actions and applies {inputSemantics.execution_horizon} per update. Packing keeps the saved timing; the server checks the policy before starting.</p>}
+          {inputSemantics?.control_contract && <p role="status">This package carries a simulator control contract. Packing must preserve it. A compatible Run profile and separate rollout consent are still required; calibration and task success remain unverified.</p>}
           {(runtimes.length > 1 || !runtime) && <WorkflowChoiceGrid name="act-worker" label="Compute" value={runtime?.id ?? ''} onChange={setRuntimeId} options={runtimes.map(item => ({ value: item.id, label: item.label, icon: 'sliders' }))} />}
           <WorkflowChoiceGrid name="act-precision" label="Compression" value={String(bits)} onChange={value => setBits(value === '4' ? 4 : 8)} options={[{ value: '8', label: '8-bit', description: 'Balanced', icon: 'compress' }, { value: '4', label: '4-bit', description: 'Smaller package', icon: 'compress' }]} />
           <label className="simulation-timeout">Timeout (seconds)<input aria-label="Quantization timeout (seconds)" type="number" min="30" max="600" step="1" value={timeout} onChange={event => setTimeoutValue(event.target.value)} /></label>

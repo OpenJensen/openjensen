@@ -10,7 +10,8 @@ from pathlib import Path
 from firebird_act.bundle import canonical, inventory, safe_file
 from firebird_act.probe import offline_audit, runtime_versions
 
-from .contracts import corpus, digest, load_sample, read, teacher_info
+from .contracts import corpus, digest, load_sample, policy_info, read, teacher_info
+from .provenance import action_fps, inherited_files, policy_metadata
 
 
 def setup(seed):
@@ -75,8 +76,9 @@ def chunk(policy, batch):
 
     policy.reset()
     result = policy.predict_action_chunk(batch).detach()
-    if tuple(result.shape) != (1, 100, 6) or not torch.isfinite(result).all():
-        raise ValueError("Expected finite full ACT100x6 chunk")
+    prediction = policy.config.chunk_size
+    if tuple(result.shape) != (1, prediction, 6) or not torch.isfinite(result).all():
+        raise ValueError("Expected finite full ACT prediction-horizon chunk")
     return result
 
 
@@ -90,8 +92,11 @@ def processed(raw, post):
     import torch
 
     post.reset()
-    value = torch.stack([post(raw[:, i, :]) for i in range(100)])[:, 0]
-    if tuple(value.shape) != (100, 6) or not torch.isfinite(value).all():
+    prediction = raw.shape[1]
+    if tuple(raw.shape) != (1, prediction, 6) or not 1 <= prediction <= 1024:
+        raise ValueError("Invalid full action chunk for postprocessing")
+    value = torch.stack([post(raw[:, i, :]) for i in range(prediction)])[:, 0]
+    if tuple(value.shape) != (prediction, 6) or not torch.isfinite(value).all():
         raise ValueError("Invalid recorded-coordinate actions")
     return value
 
@@ -106,17 +111,23 @@ def predictions(policy, pre, post, data_root, doc):
 
     records = []
     for sample in doc["samples"]:
-        data = load_sample(data_root, sample, doc["image_shape"])
+        data = load_sample(data_root, sample, doc["image_shape"], doc["chunk_size"])
         batch = batch_for(data, pre, doc["camera"])
         with torch.no_grad():
             raw = chunk(policy, batch)
             actual = processed(raw, post)
             policy.reset()
-            queued = torch.stack([policy.select_action(batch) for _ in range(100)])[:, 0]
+            execution = policy.config.n_action_steps
+            queued = torch.stack([policy.select_action(batch) for _ in range(execution)])[:, 0]
+            refill = policy.select_action(batch)
             policy.reset()
             first = policy.select_action(batch)
-            if not torch.equal(queued, raw[0]) or not torch.equal(first, raw[:, 0]):
-                raise ValueError("Student queue/reset did not reproduce its full action chunk")
+            if (
+                not torch.equal(queued, raw[0, :execution])
+                or not torch.equal(refill, raw[:, 0])
+                or not torch.equal(first, raw[:, 0])
+            ):
+                raise ValueError("Student execution-prefix queue/refill/reset differs")
         records.append(
             {
                 "sample_sha256": sample["sha256"],
@@ -124,6 +135,9 @@ def predictions(policy, pre, post, data_root, doc):
                 "raw_sha256": tensor_sha(raw),
                 "postprocessed_sha256": tensor_sha(actual),
                 "queue_and_reset_exact": True,
+                "queue_refill_exact": True,
+                "prediction_horizon": policy.config.chunk_size,
+                "execution_horizon": policy.config.n_action_steps,
             }
         )
     return records
@@ -152,12 +166,21 @@ def train(job, output):
 
     teacher_root, data_root = Path(job["teacher"]["path"]), Path(job["dataset"]["path"])
     cfg, camera, processors_sha = teacher_info(teacher_root, job["teacher"]["files"])
-    doc = corpus(data_root, job["dataset"]["manifest_sha256"], cfg, camera, processors_sha)
+    inherited = policy_metadata(teacher_root, cfg)
+    doc = corpus(
+        data_root,
+        job["dataset"]["manifest_sha256"],
+        cfg,
+        camera,
+        processors_sha,
+        metadata=inherited,
+        expected_fps=action_fps(teacher_root, inherited),
+    )
     # Decode every input before optimization to reject corrupt/misdeclared padding immediately.
     # Prevent identical observation bytes leaking across operator-declared partitions.
     seen = {}
     for sample in doc["samples"]:
-        data = load_sample(data_root, sample, doc["image_shape"])
+        data = load_sample(data_root, sample, doc["image_shape"], doc["chunk_size"])
         key = digest(data["image"].numpy().tobytes() + data["state"].numpy().tobytes())
         if seen.setdefault(key, sample["split"]) != sample["split"]:
             raise ValueError("Identical observations leak across splits")
@@ -184,7 +207,7 @@ def train(job, output):
     targets = {}
 
     def sample_batch(sample):
-        data = load_sample(data_root, sample, doc["image_shape"])
+        data = load_sample(data_root, sample, doc["image_shape"], doc["chunk_size"])
         return data, batch_for(data, pre, camera)
 
     def target(sample, batch):
@@ -258,15 +281,18 @@ def train(job, output):
     policy_dir = output / "policy"
     policy_dir.mkdir(parents=True)
     student.save_pretrained(policy_dir)
-    for name in job["teacher"]["files"]:
-        if name.startswith("policy_preprocessor") or name.startswith("policy_postprocessor"):
-            (policy_dir / name).write_bytes(safe_file(teacher_root / name))
-    # State filenames need not use the policy_ prefix.
-    from firebird_act.bundle import validate_processors
-
-    for name in validate_processors(teacher_root, cfg):
-        (policy_dir / name).write_bytes(safe_file(teacher_root / name))
+    # Preserve exact normalization and sidecar bytes. Distillation changes only
+    # architecture/weights, never the teacher's observation or action coordinates.
+    for name in inherited_files(teacher_root, cfg):
+        raw = safe_file(teacher_root / name)
+        expected = job["teacher"]["files"][name]
+        if len(raw) != expected["bytes"] or digest(raw) != expected["sha256"]:
+            raise ValueError("Teacher inference semantics changed before student save")
+        (policy_dir / name).write_bytes(raw)
     frozen_files = inventory(policy_dir)
+    student_cfg, _, _ = policy_info(policy_dir, frozen_files)
+    if policy_metadata(policy_dir, student_cfg) != inherited:
+        raise ValueError("Student lost teacher timing/control semantics")
     after = {split: metrics(split) for split in ("train", "validation", "final")}
     proof = predictions(student, pre, post, data_root, doc)
     if inventory(policy_dir) != frozen_files:
@@ -282,6 +308,7 @@ def train(job, output):
     report = {
         "schema_version": 1,
         "adapter": "act-act-v1",
+        **inherited,
         "versions": versions,
         "device": "cpu",
         "dtype": "float32",
@@ -319,12 +346,25 @@ def train(job, output):
 def verify(job, output):
     _, versions = setup(job["recipe"]["seed"])
     # No teacher path is accessed in this process (audit hook denies it).
-    policy, pre, post = load_policy(output / "policy")
-    doc = read(Path(job["dataset"]["path"]) / "manifest.json")
-    records = predictions(policy, pre, post, Path(job["dataset"]["path"]), doc)
+    root, data = output / "policy", Path(job["dataset"]["path"])
+    files = inventory(root)
+    cfg, camera, processors_sha = policy_info(root, files)
+    inherited = policy_metadata(root, cfg)
+    doc = corpus(
+        data,
+        job["dataset"]["manifest_sha256"],
+        cfg,
+        camera,
+        processors_sha,
+        metadata=inherited,
+        expected_fps=action_fps(root, inherited),
+    )
+    policy, pre, post = load_policy(root)
+    records = predictions(policy, pre, post, data, doc)
     return {
         "schema_version": 1,
         "versions": versions,
+        **inherited,
         "policy_files": inventory(output / "policy"),
         "predictions": records,
     }
