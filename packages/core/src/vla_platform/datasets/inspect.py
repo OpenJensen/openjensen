@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import json
+import math
 import re
 from pathlib import Path
 from urllib.parse import quote
@@ -10,6 +11,63 @@ import httpx
 from vla_platform.contracts import DatasetProfile, IntakeRequest, now
 
 MAX_METADATA_BYTES = 2 * 1024 * 1024
+MAX_LOCAL_METADATA_DEPTH = 24
+MAX_LOCAL_METADATA_NODES = 16_384
+MAX_LOCAL_METADATA_STRING = 16_384
+MAX_LOCAL_METADATA_FEATURES = 128
+
+
+def local_metadata(raw: bytes) -> dict:
+    """Decode bounded local metadata without accepting ambiguous JSON values.
+
+    This does not follow data/video templates or claim that declared files exist.
+    Path confinement and the existing in-root symlink policy remain with the reader.
+    """
+    if len(raw) > MAX_METADATA_BYTES:
+        raise ValueError("Metadata exceeds the 2 MiB inspection limit")
+
+    def unique_pairs(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("Duplicate local metadata keys are unsupported")
+            result[key] = value
+        return result
+
+    def invalid_constant(_):
+        raise ValueError("Non-finite local metadata numbers are unsupported")
+
+    try:
+        info = json.loads(raw, object_pairs_hook=unique_pairs, parse_constant=invalid_constant)
+    except (UnicodeError, RecursionError, json.JSONDecodeError) as exc:
+        raise ValueError("Invalid or excessively nested local JSON metadata") from exc
+    if not isinstance(info, dict):
+        raise ValueError("Expected a LeRobot metadata object")
+    stack = [(info, 0)]
+    nodes = 0
+    while stack:
+        value, depth = stack.pop()
+        nodes += 1
+        if depth > MAX_LOCAL_METADATA_DEPTH or nodes > MAX_LOCAL_METADATA_NODES:
+            raise ValueError("Local metadata structure exceeds the inspection limit")
+        if isinstance(value, (dict, list)):
+            children = len(value) * (2 if isinstance(value, dict) else 1)
+            if nodes + len(stack) + children > MAX_LOCAL_METADATA_NODES:
+                raise ValueError("Local metadata structure exceeds the inspection limit")
+        if isinstance(value, dict):
+            stack.extend((key, depth + 1) for key in value)
+            stack.extend((item, depth + 1) for item in value.values())
+        elif isinstance(value, list):
+            stack.extend((item, depth + 1) for item in value)
+        elif isinstance(value, str) and len(value) > MAX_LOCAL_METADATA_STRING:
+            raise ValueError("Local metadata string exceeds the inspection limit")
+        elif isinstance(value, float) and not math.isfinite(value):
+            # JSON numeric overflow (for example 1e999) bypasses parse_constant.
+            raise ValueError("Non-finite local metadata numbers are unsupported")
+    features = info.get("features")
+    if isinstance(features, dict) and len(features) > MAX_LOCAL_METADATA_FEATURES:
+        raise ValueError("Local metadata feature count exceeds the inspection limit")
+    return info
 
 
 def profile(
@@ -17,7 +75,7 @@ def profile(
 ) -> DatasetProfile:
     if len(raw) > MAX_METADATA_BYTES:
         raise ValueError("Metadata exceeds the 2 MiB inspection limit")
-    info = json.loads(raw)
+    info = local_metadata(raw) if request.source == "local" else json.loads(raw)
     if not isinstance(info, dict):
         raise ValueError("Expected a LeRobot metadata object")
     version = str(info.get("codebase_version", ""))
@@ -125,6 +183,8 @@ def inspect_local(request: IntakeRequest, allowed_root: str | None) -> DatasetPr
     target = (dataset / "meta/info.json").resolve(strict=True)
     if not dataset.is_relative_to(root) or not target.is_relative_to(root):
         raise ValueError("Dataset metadata must remain within FIREBIRD_LOCAL_DATA_ROOT")
+    if not target.is_file():
+        raise ValueError("Local dataset metadata must be a regular file")
     with target.open("rb") as handle:
         raw = handle.read(MAX_METADATA_BYTES + 1)
     digest = hashlib.sha256(raw).hexdigest()
