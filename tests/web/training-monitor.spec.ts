@@ -522,9 +522,9 @@ test('completed local ACT snapshot exports its exact checkpoint without rewritin
   state.job.status = 'succeeded'; state.telemetry.status = 'succeeded';
   const original = structuredClone(checkpoint.metadata);
   await page.reload(); await reopenExport(page);
-  await expect(exportButton(page)).toBeEnabled();
+  await expect(state.monitor.getByRole('button', { name: 'Export ACT inference package', exact: true })).toBeEnabled();
   expect(state.submitted).toEqual([]);
-  await exportButton(page).click();
+  await state.monitor.getByRole('button', { name: 'Export ACT inference package', exact: true }).click();
   await expect(state.monitor.getByRole('link', { name: 'Download ACT inference package' })).toBeVisible();
   expect(state.submitted).toEqual([{ operation: 'policy.export', runtime_id: 'act-cpu', artifact_id: checkpoint.id, training_method: 'full', timeout_seconds: 600 }]);
   expect(checkpoint.metadata).toEqual(original);
@@ -542,7 +542,7 @@ for (const fault of ['snapshot-identity', 'manifest', 'incomplete', 'not-reloade
   if (fault === 'not-reloaded') metadata.reload_verified = false;
   if (fault === 'format') metadata.dataset.format = 'lerobot_v2';
   await page.reload(); await reopenExport(page);
-  await expect(exportButton(page)).toBeDisabled();
+  await expect(state.monitor.getByRole('button', { name: 'Export ACT inference package', exact: true })).toBeDisabled();
   await expect(state.monitor.getByText('Export needs Hugging Face lineage or a complete, reload-verified local LeRobot v3 snapshot with matching snapshot identity.')).toBeVisible();
   expect(state.submitted).toEqual([]);
 });
