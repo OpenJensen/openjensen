@@ -225,7 +225,10 @@ def snapshot():
                 assert record["source"]["origins"] == ["synthetic"]
                 assert record["joint_order"] == JOINTS and record["action_fps"] == FPS
                 assert record["camera"] == {
-                    "key": CAMERA, "width": 32, "height": 32, "prim": "/Generated/Camera"
+                    "key": CAMERA,
+                    "width": 32,
+                    "height": 32,
+                    "prim": "/Generated/Camera",
                 }
                 assert record["source"]["demonstrations_sha256"] == _sha(canonical(demonstrations))
                 assert sum(item["size"] for item in _files(root)) < 16 * 1024**2
