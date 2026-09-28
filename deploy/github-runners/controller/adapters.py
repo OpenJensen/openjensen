@@ -194,7 +194,7 @@ class Compute:
             "scheduling": {
                 "provisioningModel": "STANDARD",
                 "automaticRestart": False,
-                "onHostMaintenance": "TERMINATE",
+                "onHostMaintenance": "MIGRATE",
                 "maxRunDuration": {"seconds": str(MAX_LIFETIME_SECONDS)},
                 "instanceTerminationAction": "DELETE",
             },

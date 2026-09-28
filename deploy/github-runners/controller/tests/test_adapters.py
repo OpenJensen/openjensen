@@ -43,6 +43,7 @@ def test_worker_payload():
     payload = session.post.call_args.kwargs["json"]
     assert payload["serviceAccounts"] == []
     assert payload["scheduling"]["provisioningModel"] == "STANDARD"
+    assert payload["scheduling"]["onHostMaintenance"] == "MIGRATE"
     assert payload["scheduling"]["maxRunDuration"]["seconds"] == str(MAX_LIFETIME_SECONDS)
     assert payload["scheduling"]["instanceTerminationAction"] == "DELETE"
     assert payload["disks"][0]["autoDelete"]
