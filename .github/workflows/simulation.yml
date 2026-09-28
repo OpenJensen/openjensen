@@ -14,7 +14,7 @@ permissions:
   contents: read
 jobs:
   simulation:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.GCP_RUNNERS_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-latest"]') }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4

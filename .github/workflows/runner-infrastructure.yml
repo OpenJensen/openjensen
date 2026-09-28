@@ -1,0 +1,52 @@
+name: Runner infrastructure checks
+on:
+  pull_request:
+    paths:
+      - deploy/github-runners/**
+      - .github/workflows/**
+      - package.json
+      - .node-version
+      - .python-version
+  push:
+    branches: [main]
+    paths:
+      - deploy/github-runners/**
+      - .github/workflows/**
+      - package.json
+      - .node-version
+      - .python-version
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ${{ fromJSON(vars.GCP_RUNNERS_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-latest"]') }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.19'
+          python-version: '3.12.14'
+      - name: Controller and routing tests
+        run: |
+          uv venv /tmp/runner-tests
+          uv pip install --python /tmp/runner-tests/bin/python -r deploy/github-runners/controller/requirements-dev.txt
+          /tmp/runner-tests/bin/python -m pytest -q deploy/github-runners/controller/tests tests/test_ci_scope.py
+          /tmp/runner-tests/bin/ruff check deploy/github-runners
+          /tmp/runner-tests/bin/ruff format --check deploy/github-runners
+          bash -n deploy/github-runners/image/provision.sh
+          bash -n deploy/github-runners/image/runner.sh
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.13.5'
+      - name: Validate Terraform without credentials
+        working-directory: deploy/github-runners/terraform
+        run: |
+          terraform fmt -check -recursive
+          terraform init -backend=false
+          terraform validate
+          terraform test

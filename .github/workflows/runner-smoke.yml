@@ -1,0 +1,41 @@
+name: GCP runner acceptance
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: [self-hosted, linux, x64, firebird-gcp]
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        worker: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify image and clean workspace
+        run: |
+          test ! -e /tmp/firebird-job-marker
+          touch /tmp/firebird-job-marker
+          test "$(node --version)" = "v$(cat .node-version)"
+          test "$(pnpm --version)" = "$(jq -r '.packageManager | sub("^pnpm@"; "")' package.json)"
+          uv --version
+          uv python find "$(cat .python-version)"
+          uv python find 3.11
+          uv python find 3.12.14
+          ffmpeg -version
+          curl --fail --silent --header 'Metadata-Flavor: Google' \
+            http://metadata.google.internal/computeMetadata/v1/instance/id
+          node - <<'JS'
+          const { chromium } = require('/opt/browser-bootstrap/node_modules/@playwright/test');
+          (async () => {
+            const browser = await chromium.launch();
+            const page = await browser.newPage();
+            await page.setContent('<title>Runner ready</title>');
+            if (await page.title() !== 'Runner ready') { throw new Error('Browser failed'); }
+            await browser.close();
+          })().catch(error => { console.error(error); process.exit(1); });
+          JS
+      - name: Hold capacity to observe fourth-job queueing
+        run: sleep 90

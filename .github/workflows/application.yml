@@ -18,7 +18,7 @@ permissions:
   contents: read
 jobs:
   scope:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.GCP_RUNNERS_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-latest"]') }}
     timeout-minutes: 3
     outputs:
       application: ${{ steps.changes.outputs.application }}
@@ -43,7 +43,7 @@ jobs:
       matrix:
         # Hackathon default is Linux. Windows is an explicit manual opt-in.
         os: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.windows_browser && '["ubuntu-latest","windows-latest"]' || '["ubuntu-latest"]') }}
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ fromJSON(matrix.os == 'ubuntu-latest' && vars.GCP_RUNNERS_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","firebird-gcp"]' || format('["{0}"]', matrix.os)) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -114,7 +114,7 @@ jobs:
   application-verification:
     needs: [scope, application]
     if: ${{ always() }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.GCP_RUNNERS_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-latest"]') }}
     timeout-minutes: 2
     steps:
       - name: Verify every selected check completed

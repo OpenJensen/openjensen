@@ -1,0 +1,7 @@
+terraform/.terraform/
+terraform/*.tfstate*
+terraform/*.tfvars
+terraform/*.tfplan
+image/*.pkrvars.hcl
+image/packer-manifest.json
+*.pem
