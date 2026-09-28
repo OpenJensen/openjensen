@@ -129,9 +129,16 @@ test('denied durable journal storage prevents the first start request', async ({
 });
 test('late start acknowledgement never moves a different project or stops a session on navigation', async ({ page }) => {
   const s = await fixture(page); const gate = deferred(); s.startGate = gate; await reviewStart(page); await start(page).click(); await expect.poll(() => s.posts.length).toBe(1);
-  await page.getByLabel('Current project').selectOption('beta'); await enterManaged(page); await expect(managed(page).getByLabel('Saved teaching session', { exact: true })).toHaveValue(''); gate.release();
-  await expect.poll(() => s.bindings.size).toBe(1); await expect(managed(page).getByLabel('Saved teaching session', { exact: true })).toHaveValue(''); expect(s.posts).toHaveLength(1);
-  await page.getByLabel('Current project').selectOption('alpha'); await enterManaged(page); await chooseSaved(page); await expect(managed(page).getByRole('button', { name: 'Stop and publish', exact: true })).toBeVisible(); expect(s.posts).toHaveLength(1);
+  await expect(managed(page)).toHaveCount(1); await expect(recordings(page)).toHaveCount(1);
+  await page.getByLabel('Current project').selectOption('beta'); await enterManaged(page);
+  await expect(managed(page)).toHaveCount(1); await expect(recordings(page)).toHaveCount(1);
+  await expect(managed(page).getByLabel('Saved teaching session', { exact: true })).toHaveValue(''); gate.release();
+  await expect.poll(() => s.bindings.size).toBe(1);
+  await expect(managed(page)).toHaveCount(1); await expect(recordings(page)).toHaveCount(1);
+  await expect(managed(page).getByLabel('Saved teaching session', { exact: true })).toHaveValue(''); expect(s.posts).toHaveLength(1);
+  await page.getByLabel('Current project').selectOption('alpha'); await enterManaged(page);
+  await expect(managed(page)).toHaveCount(1); await expect(recordings(page)).toHaveCount(1);
+  await chooseSaved(page); await expect(managed(page).getByRole('button', { name: 'Stop and publish', exact: true })).toBeVisible(); expect(s.posts).toHaveLength(1);
 });
 test('stop ambiguity and remount retain saved stopping state without claiming publication or reposting', async ({ page }) => {
   const s = await fixture(page, [job()]); await chooseSaved(page); s.lostStop = true;
