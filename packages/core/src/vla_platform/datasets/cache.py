@@ -6,7 +6,7 @@ import stat
 from pathlib import Path
 
 from vla_platform.contracts import DatasetProfile, IntakeRequest, Job
-from vla_platform.datasets.inspect import MAX_METADATA_BYTES, resolve_hub_revision
+from vla_platform.datasets.inspect import MAX_METADATA_BYTES, profile, resolve_hub_revision
 
 
 def local_identity(request: IntakeRequest, allowed_root: Path | None) -> IntakeRequest | None:
@@ -26,14 +26,12 @@ def local_identity(request: IntakeRequest, allowed_root: Path | None) -> IntakeR
             raw = handle.read(MAX_METADATA_BYTES + 1)
         if len(raw) > MAX_METADATA_BYTES:
             return None
-    except OSError, ValueError:
+        revision = f"metadata-sha256:{hashlib.sha256(raw).hexdigest()}"
+        # Reuse must obey today's admission rules, not an older permissive result.
+        profile(raw, request, revision)
+    except OSError, ValueError, KeyError:
         return None
-    return request.model_copy(
-        update={
-            "path": str(dataset),
-            "revision": f"metadata-sha256:{hashlib.sha256(raw).hexdigest()}",
-        }
-    )
+    return request.model_copy(update={"path": str(dataset), "revision": revision})
 
 
 class Inspections:

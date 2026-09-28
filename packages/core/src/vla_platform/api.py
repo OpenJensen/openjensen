@@ -180,11 +180,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def local_access_boundary(request: Request, call_next):
         origin = request.headers.get("origin")
         same_origin = str(request.base_url).rstrip("/")
-        if origin and origin not in LOCAL_ORIGINS and origin != same_origin:
-            return JSONResponse(
+        if (origin and origin not in LOCAL_ORIGINS and origin != same_origin) or (
+            not origin and request.headers.get("sec-fetch-site") == "cross-site"
+        ):
+            response = JSONResponse(
                 {"detail": "Origin is not allowed for the local application"}, status_code=403
             )
-        return await call_next(request)
+        else:
+            response = await call_next(request)
+        if request.url.path.startswith("/api/v1/"):
+            # Include handled errors: a cached failure must not hide a later job state.
+            response.headers["Cache-Control"] = "no-store"
+        return response
 
     def projects_service(request: Request) -> Projects:
         return request.app.state.projects
