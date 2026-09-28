@@ -29,8 +29,9 @@ class RolloutSpec:
     model_id: str
     task: str
     timeout_seconds: float
-    calibration: Path
+    calibration: Path | None
     evaluation: EvaluationSpec | None = None
+    control_contract: dict | None = None
 
 
 class _Loader(yaml.SafeLoader):
@@ -114,6 +115,10 @@ def check_endpoint(endpoint: str) -> str:
 
 def load(path: Path) -> RolloutSpec:
     document = read_document(path)
+    has_control_contract = "control_contract" in document
+    control_contract = document.pop("control_contract", None)
+    if has_control_contract and control_contract is None:
+        raise ValueError("Explicit control_contract cannot be null")
     evaluation = None
     if "evaluation" in document:
         evaluation = EvaluationSpec.parse(document.pop("evaluation"))
@@ -153,7 +158,9 @@ def load(path: Path) -> RolloutSpec:
     timeout = number(policy["timeout_seconds"], "timeout_seconds")
     if not 0 < timeout <= _MAX_TIMEOUT_SECONDS:
         raise ValueError(f"timeout_seconds must be in (0, {_MAX_TIMEOUT_SECONDS}]")
-    return RolloutSpec(
+    if control_contract is not None and data["calibration"] is not None:
+        raise ValueError("Simulator-native policy must explicitly use calibration: null")
+    spec = RolloutSpec(
         SimSpec(
             str(scene_path),
             scene["camera"],
@@ -170,6 +177,16 @@ def load(path: Path) -> RolloutSpec:
         _text(policy["model_id"], "model_id"),
         _text(policy["task"], "task"),
         timeout,
-        _path(data["calibration"], path.parent, "calibration"),
+        (
+            _path(data["calibration"], path.parent, "calibration")
+            if control_contract is None
+            else None
+        ),
         evaluation,
+        control_contract,
     )
+    if control_contract is not None:
+        from .control_contract import admit
+
+        admit(control_contract, spec.sim)
+    return spec

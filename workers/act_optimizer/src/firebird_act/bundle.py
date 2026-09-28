@@ -12,6 +12,9 @@ import struct
 from pathlib import Path
 from typing import Any
 
+from .control_schema import FILE as CONTROL_FILE
+from .control_schema import optional as control_optional
+
 JSON_LIMIT = 1024 * 1024
 WEIGHT_LIMIT = 512 * 1024 * 1024
 CORE_FILES = {
@@ -123,6 +126,14 @@ def validate_temporal_contract(config: dict[str, Any], record: dict[str, Any]) -
     # Canonical JSON distinguishes bool/int and int/float in all identity fields.
     if canonical(record) != canonical(expected):
         raise ValueError("Temporal contract differs from the saved ACT configuration")
+
+
+def control_files(root: Path, config: dict[str, Any]) -> set[str]:
+    record, _ = control_optional(root, config)
+    if record is not None and (root / "temporal-contract.json").exists():
+        if read_json(root / "temporal-contract.json").get("action_fps") != record["action_fps"]:
+            raise ValueError("Temporal action FPS differs from simulator control contract")
+    return {CONTROL_FILE} if record is not None else set()
 
 
 def temporal_files(root: Path, config: dict[str, Any]) -> set[str]:
@@ -470,6 +481,7 @@ def verify_export(root: Path) -> dict[str, Any]:
         CORE_FILES
         | validate_processors(root, config)
         | temporal_files(root, config)
+        | control_files(root, config)
         | {"recipe.json", "parity.json"}
     )
     if "train_config.json" in files:

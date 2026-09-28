@@ -136,6 +136,7 @@ class Rollout:
             "model_id": self._spec.model_id,
             "calibration_sha256": self._mapping.digest,
             "calibration_status": self._mapping.status,
+            **getattr(self._mapping, "control_metadata", {}),
             "experimental": self._mapping.use is CalibrationUse.EXPERIMENTAL,
             "policy_requests": requests,
             "inference_seconds": latency_seconds,

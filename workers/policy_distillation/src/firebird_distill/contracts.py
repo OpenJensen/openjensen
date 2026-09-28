@@ -148,6 +148,8 @@ def request(value):
 
 
 def teacher_info(root, expected):
+    if "control-contract.json" in expected:
+        raise ValueError("Distillation does not yet preserve simulator control contracts")
     if inventory(root) != expected:
         raise ValueError("Teacher inventory changed")
     cfg = read(root / "config.json")

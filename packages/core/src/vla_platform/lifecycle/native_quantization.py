@@ -10,6 +10,7 @@ import stat
 from pathlib import Path
 
 from .contracts import LifecycleResult, PolicyArtifact
+from .control_provenance import require_transform_support
 from .runtime import native_quantization_ready
 from .simulation import finish_owned, strict_json
 
@@ -186,6 +187,7 @@ def source_info(artifact, data_dir, *, require_inference=True):
         or manifest.get("metadata") != artifact.metadata
     ):
         raise ValueError("Registered ACT artifact identity or metadata changed")
+    require_transform_support(artifact.metadata, outer)
     if any(Path(name).name in {"remote.json", "remote-checkpoint.json"} for name in outer):
         raise ValueError("Materialize and export the complete checkpoint before quantization")
     models = [root / name for name in outer if Path(name).name == "model.safetensors"]

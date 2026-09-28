@@ -1,9 +1,10 @@
 """Application admission and receipt binding for the isolated ACT CPU exporter."""
 
 import hashlib
-import json
 from pathlib import Path
 
+from .control_provenance import policy_claims, training_claims
+from .control_schema import canonical
 from .training_catalog import TRAINING_MODEL_BY_ID
 
 RECIPE = "act-vae-removal-fp32-v1"
@@ -21,11 +22,7 @@ def check_source(runtime, artifact, directory: Path, *, allow_cloud=False) -> No
         or artifact.metadata.get("method") != "full"
     ):
         raise ValueError("ACT export requires a native full-training checkpoint")
-    dataset = artifact.metadata.get("dataset")
-    if not isinstance(dataset, dict) or dataset.get("source") != "huggingface":
-        raise ValueError(
-            "ACT export requires pinned Hugging Face lineage; local snapshots are unsupported"
-        )
+    dataset_lineage(artifact.metadata, directory)
     if allow_cloud and (directory / "remote.json").is_file():
         from .cloud_materialize import descriptor
 
@@ -39,12 +36,69 @@ def check_source(runtime, artifact, directory: Path, *, allow_cloud=False) -> No
         raise ValueError("Materialize the complete cloud checkpoint locally before ACT export")
     if not (directory / "checkpoint/pretrained_model/model.safetensors").is_file():
         raise ValueError("ACT export requires a complete local checkpoint bundle")
+    training_claims(directory, artifact.metadata)
 
 
 def read_json(path: Path):
-    if path.is_symlink() or not path.is_file() or path.stat().st_size > 4 * 1024 * 1024:
-        raise ValueError("ACT export receipt is missing or oversized")
-    return json.loads(path.read_bytes())
+    from .simulation import strict_json
+
+    return strict_json(path, 4 * 1024 * 1024)
+
+
+def dataset_lineage(metadata: dict, directory: Path) -> tuple[dict, dict]:
+    """Project portable lineage from saved training bytes, never caller overrides."""
+    dataset = metadata.get("dataset")
+    if not isinstance(dataset, dict):
+        raise ValueError("ACT export requires pinned dataset lineage")
+    if dataset.get("source") == "huggingface":
+        return {key: dataset.get(key) for key in ("source", "repo_id", "revision")}, {}
+    if dataset.get("source") != "local":
+        raise ValueError("ACT export requires a pinned Hub dataset or complete local snapshot")
+    from vla_platform.contracts import DatasetProfile
+
+    try:
+        profile = DatasetProfile.model_validate(dataset)
+    except ValueError as error:
+        raise ValueError("ACT export requires a valid complete local dataset profile") from error
+    if profile.inspection_scope != "complete_snapshot" or profile.snapshot is None:
+        raise ValueError("ACT export requires a complete immutable local dataset snapshot")
+    snapshot = profile.snapshot
+    checkpoint = directory / "checkpoint"
+    manifest = read_json(checkpoint / "manifest.json")
+    recipe_path = checkpoint / "recipe.json"
+    recipe = read_json(recipe_path)
+    recipe_sha = hashlib.sha256(recipe_path.read_bytes()).hexdigest()
+    if (
+        not isinstance(manifest.get("files"), dict)
+        or manifest["files"].get("recipe.json") != recipe_sha
+    ):
+        raise ValueError("ACT local dataset recipe differs from its checkpoint manifest")
+    expected = {
+        "dataset_source": "local",
+        "dataset_id": "firebird/local-" + snapshot.manifest_sha256[:16],
+        "dataset_revision": snapshot.id,
+        "dataset_manifest_sha256": snapshot.manifest_sha256,
+        "dataset_lineage_validated": snapshot.lineage_validated,
+    }
+    if any(type(recipe.get(k)) is not type(v) or recipe.get(k) != v for k, v in expected.items()):
+        raise ValueError("ACT local snapshot differs from the saved training recipe")
+    claims = {
+        "dataset_snapshot_id": snapshot.id,
+        "dataset_manifest_sha256": snapshot.manifest_sha256,
+    }
+    # Earlier native local checkpoints contain the full dataset profile and recipe,
+    # but not these additive outer fields. Their absence is not a different identity.
+    if any(key in metadata and metadata[key] != value for key, value in claims.items()):
+        raise ValueError("ACT local snapshot metadata differs from its saved training recipe")
+    portable = {
+        "source": "local",
+        "snapshot_id": snapshot.id,
+        "manifest_sha256": snapshot.manifest_sha256,
+    }
+    portable.update(
+        {key: dataset[key] for key in ("repo_id", "revision") if dataset.get(key) is not None}
+    )
+    return portable, claims
 
 
 def check_result(info, manifest, directory: Path, report, source, source_directory: Path) -> None:
@@ -55,13 +109,16 @@ def check_result(info, manifest, directory: Path, report, source, source_directo
     checkpoint = source_directory / "checkpoint/manifest.json"
     checkpoint_sha = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
     checkpoint_step = read_json(checkpoint).get("step")
+    dataset, dataset_claims = dataset_lineage(source.metadata, source_directory)
+    control = training_claims(source_directory, source.metadata)
+    if policy_claims(directory / "policy", metadata) != control:
+        raise ValueError("ACT export changed its simulator control contract")
     expected = {
+        **control,
+        **dataset_claims,
         "checkpoint_manifest_sha256": checkpoint_sha,
         "checkpoint_step": checkpoint_step,
-        "dataset": {
-            key: source.metadata.get("dataset", {}).get(key)
-            for key in ("source", "repo_id", "revision")
-        },
+        "dataset": dataset,
         "camera_keys": source.metadata.get("camera_keys"),
         "architecture": "act",
         "recipe": RECIPE,
@@ -82,12 +139,8 @@ def check_result(info, manifest, directory: Path, report, source, source_directo
         "calibration_verified": False,
     }
     if any(
-        metadata.get(key) != value
-        or report.get(key) != value
-        or (
-            type(value) is bool
-            and (type(metadata.get(key)) is not bool or type(report.get(key)) is not bool)
-        )
+        canonical(metadata.get(key)) != canonical(value)
+        or canonical(report.get(key)) != canonical(value)
         for key, value in expected.items()
     ):
         raise ValueError("ACT inference export identity or proof differs from its source")

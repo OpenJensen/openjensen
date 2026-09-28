@@ -12,12 +12,18 @@ class Settings:
     cloud_runs_dir: Path | None = None
     simulation_config: Path | None = None
     recording_config: Path | None = None
+    teaching_session_config: Path | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
         local_root = os.getenv("FIREBIRD_LOCAL_DATA_ROOT")
         static = Path(os.getenv("FIREBIRD_WEB_DIR", "apps/web/out")).resolve()
         return cls(
+            teaching_session_config=Path(os.environ["FIREBIRD_TEACHING_SESSION_CONFIG"])
+            .expanduser()
+            .absolute()
+            if os.getenv("FIREBIRD_TEACHING_SESSION_CONFIG")
+            else None,
             recording_config=Path(os.environ["FIREBIRD_RECORDING_CONFIG"]).expanduser().absolute()
             if os.getenv("FIREBIRD_RECORDING_CONFIG")
             else None,

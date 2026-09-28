@@ -20,6 +20,8 @@ from vla_platform.lifecycle.service import Lifecycle
 from vla_platform.settings import Settings
 from vla_platform.storage import Storage, job_submissions, jobs
 from vla_platform.submissions import Submission, SubmissionRequest, lookup
+from vla_platform.teaching_sessions.contracts import TeachingCaptureRequest
+from vla_platform.teaching_sessions.service import TeachingSessions
 
 # Recovery state machine: terminal states are absorbing; retries require a new job ID.
 RECOVERY_TRANSITIONS = {"queued": "interrupted", "running": "interrupted"}
@@ -42,6 +44,7 @@ class Execution:
         self.augmentation = Augmentation(self)
         self.inspections = Inspections(self)
         self.recordings = Recordings(self)
+        self.teaching = TeachingSessions(self)
         self.slots = asyncio.Semaphore(2)  # Metadata jobs only; not a GPU admission policy.
         self._submission_locks = [asyncio.Lock() for _ in range(64)]
         self._accepting: set[asyncio.Task] = set()
@@ -117,7 +120,9 @@ class Execution:
         self, project_id: str, request: SubmissionRequest, submission: Submission | None = None
     ) -> Job:
         compute_target = None
-        if isinstance(request, PolicyRequest):
+        if isinstance(request, TeachingCaptureRequest):
+            await self.teaching.validate(project_id, request)
+        elif isinstance(request, PolicyRequest):
             compute_target = await self.lifecycle.validate(project_id, request)
         elif isinstance(request, AugmentationRequest):
             await self.augmentation.validate(project_id, request)
@@ -127,7 +132,7 @@ class Execution:
             id=str(uuid4()),
             project_id=project_id,
             kind=request.operation
-            if isinstance(request, (PolicyRequest, AugmentationRequest))
+            if isinstance(request, (PolicyRequest, AugmentationRequest, TeachingCaptureRequest))
             else "dataset.inspect",
             request=request,
             compute_target=None if isinstance(compute_target, SimulationTarget) else compute_target,
@@ -255,6 +260,9 @@ class Execution:
 
     async def run(self, job_id: str) -> None:
         initial = await self.get(job_id)
+        if initial and isinstance(initial.request, TeachingCaptureRequest):
+            await self.teaching.run(initial)
+            return
         if initial and isinstance(initial.request, AugmentationRequest):
             await self.augmentation.run(initial)
             return
@@ -394,6 +402,14 @@ class Execution:
                             "still run and incur charges. Submit a new job to retry explicitly."
                         )
                         job.result = None
+                    elif isinstance(job.request, TeachingCaptureRequest):
+                        job.result = None
+                        job.error = (
+                            "Application stopped during managed teaching. The parent-liveness "
+                            "supervisor owns bounded local cleanup. No saved PID was signalled, "
+                            "capture adopted, "
+                            "or request redispatched. Retained raw data requires explicit review."
+                        )
                     elif isinstance(job.request, PolicyRequest):
                         evidence = evidence.replace("new inspection", "new job")
                         evidence = evidence.replace(

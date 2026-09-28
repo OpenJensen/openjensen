@@ -48,11 +48,24 @@ metadata = {
         (source_path / "checkpoint/manifest.json").read_bytes()
     ).hexdigest(),
     "dataset": {
-        key: source["metadata"]["dataset"][key] for key in ("source", "repo_id", "revision")
+        key: source["metadata"]["dataset"].get(key) for key in ("source", "repo_id", "revision")
     },
     "camera_keys": source["metadata"]["camera_keys"],
 }
+if source["metadata"]["dataset"]["source"] == "local":
+    dataset = source["metadata"]["dataset"]
+    snapshot = dataset["snapshot"]
+    metadata["dataset"] = {
+        "source": "local",
+        "snapshot_id": snapshot["id"],
+        "manifest_sha256": snapshot["manifest_sha256"],
+        **{key: dataset[key] for key in ("repo_id", "revision") if dataset.get(key) is not None},
+    }
+    metadata["dataset_snapshot_id"] = snapshot["id"]
+    metadata["dataset_manifest_sha256"] = snapshot["manifest_sha256"]
 fault = os.getenv("FIXTURE_FAULT")
+if fault == "dataset-snapshot":
+    metadata["dataset_snapshot_id"] = "sha256:" + "f" * 64
 if fault == "source":
     metadata["source_artifact_id"] = "another-source"
 if fault == "step":

@@ -283,6 +283,7 @@ def validate_submission_records(database, budget):
     from vla_platform.augmentation.contracts import AugmentationRequest
     from vla_platform.contracts import IntakeRequest, Job, Timestamp
     from vla_platform.lifecycle.contracts import PolicyRequest
+    from vla_platform.teaching_sessions.contracts import TeachingCaptureRequest
 
     layout = database.execute("PRAGMA table_info(job_submissions)").fetchall()
     expected = {
@@ -345,7 +346,9 @@ def validate_submission_records(database, budget):
         TypeAdapter(Timestamp).validate_python(created, strict=True)
         original = parse_json(raw.encode())
         model = (
-            IntakeRequest
+            TeachingCaptureRequest
+            if operation == "teaching.capture"
+            else IntakeRequest
             if operation == "dataset.inspect"
             else AugmentationRequest
             if operation == "dataset.augment"
@@ -373,6 +376,11 @@ def validate_submission_records(database, budget):
             != canonical(accepted.request.model_dump(mode="json"))
         ):
             raise MaintenanceError("Submission accepted job identity differs")
+        # Teaching profile resolution verifies identity; it never enriches the recipe.
+        if isinstance(request, TeachingCaptureRequest) and normalized != canonical(
+            accepted.request.model_dump(mode="json")
+        ):
+            raise MaintenanceError("Teaching submission recipe differs from its acceptance")
         # The accepted response may be a cached job in any valid lifecycle state.
         # Original request and resolved accepted request need not be identical.
         if accepted.compute_target is not None or accepted.simulation_target is not None:
@@ -384,6 +392,7 @@ def validate_database(workspace, files, budget):
     # Schema-only imports: never import API/Execution/Storage or a runtime registry.
     from vla_platform.contracts import TERMINAL, Job, Project
     from vla_platform.lifecycle.contracts import LifecycleResult
+    from vla_platform.teaching_sessions.contracts import TeachingCaptureResult
 
     if files.get("workspace.sqlite3", {}).get("kind") != "file":
         raise MaintenanceError("Workspace database is missing")
@@ -499,6 +508,13 @@ def validate_database(workspace, files, budget):
                     raise MaintenanceError("Active jobs prevent offline maintenance")
                 if job.compute_target is not None or job.simulation_target is not None:
                     raise MaintenanceError("Remote target requires separate compatibility review")
+                if isinstance(job.result, TeachingCaptureResult):
+                    raise MaintenanceError(
+                        "Published teaching captures require external catalog/inventory "
+                        "compatibility review before desktop backup or handoff. "
+                        "Keep the original workspace and capture catalog; migration is not "
+                        "supported yet."
+                    )
                 if isinstance(job.result, LifecycleResult):
                     for artifact in job.result.artifacts:
                         if artifact.project_id != project_id or artifact.job_id != job_id:

@@ -15,6 +15,8 @@ from pathlib import Path
 from .accumulation import accumulation_steps, checkpoint_optimization, native_loop_values
 from .application import publish
 from .checkpoint import verify_bundle, write_json
+from .control_contract import check_checkpoint
+from .control_schema import metadata as control_metadata
 from .local_dataset import bind_local_recipe, verify_local_snapshot
 from .native_profiles import LEROBOT_REVISION, native_profile_for_recipe, validate_native_dataset
 from .telemetry import emit
@@ -203,6 +205,7 @@ def main():
                 or recipe.get("dataset_id") != identity["dataset_id"]
                 or recipe.get("dataset_revision") != identity["dataset_revision"]
                 or recipe.get("dataset_splits") != identity.get("dataset_splits")
+                or recipe.get("control_contract") != identity.get("control_contract")
                 or recipe.get("upstream_revision") != LEROBOT_REVISION
             ):
                 raise ValueError("Resume must preserve the saved worker, model and pinned dataset")
@@ -258,7 +261,13 @@ def main():
         optimization = checkpoint_optimization(checkpoint, native=True)
         if json.loads(verification.read_text()).get("optimization") != optimization:
             raise ValueError("Fresh reload optimization evidence differs from the checkpoint")
+        check_checkpoint(checkpoint, recipe)
+        control = control_metadata(checkpoint)
+        verified = json.loads(verification.read_text())
+        if any(verified.get(k) != v for k, v in control.items()):
+            raise ValueError("Fresh reload did not verify simulator control provenance")
         metadata = {
+            **control,
             "optimization": optimization,
             "temporal_contract": temporal,
             "method": "full",
@@ -268,6 +277,14 @@ def main():
             "task": "unverified",
             "action_dim": job["dataset"]["features"]["action"]["shape"][0],
             "dataset": job["dataset"],
+            **(
+                {
+                    "dataset_snapshot_id": recipe["dataset_revision"],
+                    "dataset_manifest_sha256": recipe["dataset_manifest_sha256"],
+                }
+                if recipe.get("dataset_source") == "local"
+                else {}
+            ),
             "base_model": {"repository": recipe["model_id"], "revision": recipe["model_revision"]},
             "camera_keys": recipe["camera_keys"],
             "reload_verified": True,
@@ -277,6 +294,7 @@ def main():
             bundle, metadata, profile["label"] + " checkpoint", "training_checkpoint"
         )
         result["report"] = {
+            **control,
             "optimization": optimization,
             "temporal_contract": temporal,
             "scope": "native_training_and_reload",

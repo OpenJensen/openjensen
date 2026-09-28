@@ -348,7 +348,30 @@ def admit(profile, metadata):
         r"sha256:[a-f0-9]{64}", checkpoint["model_id"]
     ):
         raise ValueError("Checkpoint has no verified model fingerprint")
+    control = checkpoint.get("control_contract")
+    control_sha = checkpoint.get("control_contract_sha256")
+    coordinate_claims = {}
+    if control is not None or control_sha is not None:
+        from .control_schema import canonical, validate
+
+        validate(control)
+        if hashlib.sha256(canonical(control)).hexdigest() != control_sha:
+            raise ValueError("Checkpoint simulator control identity differs")
+        if (
+            len(control["joint_order"]) != checkpoint["state_dim"]
+            or control["camera"]["key"] != checkpoint["camera_key"]
+            or control["camera"]["width"] != checkpoint["width"]
+            or control["camera"]["height"] != checkpoint["height"]
+        ):
+            raise ValueError("Checkpoint dimensions differ from its simulator control contract")
+        coordinate_claims = {
+            "control_contract_sha256": control_sha,
+            "coordinate_mapping": "simulator_native_radians",
+            "calibration_status": "not_applicable_simulator",
+            "physical_calibration_verified": False,
+        }
     return {
+        **coordinate_claims,
         "profile_id": profile.id,
         "profile_sha256": profile.identity_hash(),
         "model_id": checkpoint["model_id"],
@@ -665,6 +688,7 @@ async def run(
             report = {
                 "schema_version": 1,
                 "kind": "isaac_simulation",
+                **coordinate_evidence(admission),
                 "profile_id": profile.id,
                 "profile_sha256": identity,
                 "model_id": admission["model_id"],
@@ -695,6 +719,45 @@ def _response_json(response):
         if len(content) > JSON_LIMIT:
             raise ValueError("Artifact metadata exceeds its limit")
     return json.loads(content)
+
+
+def coordinate_evidence(record):
+    if record.get("control_contract_sha256") is None:
+        if (
+            record.get("coordinate_mapping") == "simulator_native_radians"
+            or record.get("calibration_status") == "not_applicable_simulator"
+            or record.get("physical_calibration_verified") not in (None, False)
+        ):
+            raise ValueError("Simulator coordinate evidence lacks its accepted control identity")
+        return {}
+    expected = {
+        "control_contract_sha256": record["control_contract_sha256"],
+        "coordinate_mapping": "simulator_native_radians",
+        "calibration_status": "not_applicable_simulator",
+        "physical_calibration_verified": False,
+    }
+    if (
+        not isinstance(expected["control_contract_sha256"], str)
+        or not HEX.fullmatch(expected["control_contract_sha256"])
+        or any(
+            type(record.get(k)) is not type(v) or record.get(k) != v for k, v in expected.items()
+        )
+    ):
+        raise ValueError("Simulator coordinate evidence is incomplete or inconsistent")
+    return expected
+
+
+def verify_coordinate_evidence(accepted, rollout):
+    expected = coordinate_evidence(accepted)
+    if expected:
+        if coordinate_evidence(rollout) != expected:
+            raise ValueError(
+                "Downloaded simulation changed or omitted the accepted control contract"
+            )
+    elif coordinate_evidence(rollout):
+        raise ValueError("Downloaded simulation unexpectedly changed the coordinate mapping")
+    if expected and rollout.get("calibration_sha256") != expected["control_contract_sha256"]:
+        raise ValueError("Downloaded simulator mapping digest differs from the accepted contract")
 
 
 def _collect(directory):
@@ -816,6 +879,7 @@ def _collect(directory):
         or rollout.get("manifest_sha256") != context.get("manifest_sha256")
     ):
         raise ValueError("Downloaded completion does not match this simulation's model/manifest")
+    verify_coordinate_evidence(request, rollout)
     _write(directory / "artifacts.json", {"run_id": run_id, "artifacts": artifacts})
 
 
