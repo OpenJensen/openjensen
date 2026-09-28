@@ -2,6 +2,10 @@
 
 Read the current task card and source before editing. Preserve working configuration, user data and previously verified behavior. Planning and task records belong to the separate `firebird-hackathon-prep` repository; application code belongs here. The coordinator owns shared interfaces and integration.
 
+## Local verification and publication
+
+GitHub Actions is unavailable for this project. Run the applicable checks locally and retain source-bound results; hosted CI is not an acceptance gate. After review and local verification, merge into local `main` and push it to the remote. Do not report resource-stopped or unexecuted checks as passing, and do not remove workflow definitions merely because hosted execution is unavailable.
+
 ## Local resource budget
 
 - One resource-heavy verification lane at a time across all agents: browser/build, native model proof, or Docker. Coordinate ownership before starting. Lightweight source work can run in parallel.
