@@ -80,7 +80,7 @@ terraform apply bootstrap.tfplan
 ```
 
 Defaults create the network, builder-only IAP firewall, service accounts,
-restricted roles, registry, lease bucket, and **empty** secret. No controller,
+restricted roles, registry, build/lease buckets, and **empty** secret. No controller,
 Scheduler job, or worker exists yet. Keep Terraform state private and durable;
 for team use configure a GCS backend before applying. Do not commit state/plans.
 
@@ -133,16 +133,17 @@ Create the controller container through Cloud Build (no local Docker required):
 
 ```sh
 gcloud builds submit deploy/github-runners/controller --project YOUR_PROJECT \
-  --pack 'image=us-central1-docker.pkg.dev/YOUR_PROJECT/firebird-ci/controller:REVISION,env=GOOGLE_PYTHON_VERSION=3.12'
+  --config=deploy/github-runners/controller/cloudbuild.yaml \
+  --gcs-source-staging-dir=gs://YOUR_PROJECT-firebird-ci-build/source \
+  --substitutions=_IMAGE=us-central1-docker.pkg.dev/YOUR_PROJECT/firebird-ci/controller:REVISION
 gcloud artifacts docker images describe \
   us-central1-docker.pkg.dev/YOUR_PROJECT/firebird-ci/controller:REVISION \
   --project YOUR_PROJECT --format='value(image_summary.digest)'
 ```
 
-The Cloud Build execution service account needs Artifact Registry writer on this
-repository, access to its build source bucket, and permission to write build
-logs. Configure that account according to your project's Cloud Build policy;
-the runtime controller account deliberately cannot build or publish images.
+Terraform gives the dedicated build account object access to its source/log
+bucket and writer access to the runner registry. Sources and build logs expire
+after seven days. The runtime controller cannot build or publish images.
 
 Set these values in `terraform.tfvars`:
 

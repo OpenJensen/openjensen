@@ -1,0 +1,18 @@
+steps:
+  - name: gcr.io/k8s-skaffold/pack
+    entrypoint: pack
+    args:
+      - build
+      - ${_IMAGE}
+      - --builder
+      - gcr.io/buildpacks/builder:google-24
+      - --network
+      - cloudbuild
+      - --env
+      - GOOGLE_PYTHON_VERSION=3.13.14
+images:
+  - ${_IMAGE}
+serviceAccount: projects/$PROJECT_ID/serviceAccounts/firebird-ci-builder@$PROJECT_ID.iam.gserviceaccount.com
+logsBucket: gs://$PROJECT_ID-firebird-ci-build/logs
+options:
+  logging: GCS_ONLY

@@ -59,3 +59,13 @@ def test_terraform_defaults():
     assert variables["machine_type"]["default"] == "e2-standard-2"
     with (DEPLOY / "terraform/main.tf").open() as source:
         hcl2.load(source, serialization_options=HCL_OPTIONS)
+
+
+def test_controller_runtime_pin():
+    document = yaml.safe_load((DEPLOY / "controller/cloudbuild.yaml").read_text())
+    args = document["steps"][0]["args"]
+    assert "gcr.io/buildpacks/builder:google-24" in args
+    assert "GOOGLE_PYTHON_VERSION=3.13.14" in args
+    assert document["serviceAccount"].endswith(
+        "firebird-ci-builder@$PROJECT_ID.iam.gserviceaccount.com"
+    )
