@@ -1,0 +1,5 @@
+-r requirements.txt
+pytest==9.1.1
+ruff==0.16.9
+PyYAML==6.0.3
+python-hcl2==8.1.4
