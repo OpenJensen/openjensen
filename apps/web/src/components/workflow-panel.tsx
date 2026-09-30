@@ -132,6 +132,7 @@ export function WorkflowPanel({
   onTabChange: setTab,
   onOpenQuantize,
   preferredArtifactId,
+  preferredJobId,
   onViewTraining,
 }: {
   projectId: string;
@@ -140,6 +141,7 @@ export function WorkflowPanel({
   onTabChange: (tab: "compute" | "settings" | "diagnostics") => void;
   onOpenQuantize: () => void;
   preferredArtifactId?: string;
+  preferredJobId?: string;
   onViewTraining?: () => void;
 }) {
   const client = useQueryClient();
@@ -147,13 +149,13 @@ export function WorkflowPanel({
   const [loadedProjectId, setLoadedProjectId] = useState<string | null>(null);
   const ready = !!projectId && loadedProjectId === projectId;
   const [runtimeId, setRuntimeId] = useState("");
-  const [input, setInput] = useState(preferredArtifactId ?? (stage === "settings" ? "" : "latest"));
+  const [input, setInput] = useState(preferredArtifactId ?? "");
   const [datasetId, setDatasetId] = useState("");
   const [method, setMethod] = useState("lora");
   const [resumeId, setResumeId] = useState("");
-  const [selectedJobId, setSelectedJobId] = useState("");
+  const [selectedJobId, setSelectedJobId] = useState(preferredJobId ?? "");
   const [detailsJobId, setDetailsJobId] = useState<string | null>(null);
-  const [view, setView] = useState<"history" | "new" | "detail">(preferredArtifactId ? "new" : "history");
+  const [view, setView] = useState<"history" | "new" | "detail">(preferredArtifactId ? "new" : preferredJobId ? 'detail' : "history");
   const options = useQuery({
     queryKey: ["policy-options"],
     queryFn: api.policyOptions,
@@ -221,7 +223,7 @@ export function WorkflowPanel({
   const datasets = (jobs.data ?? []).filter(
     (x) => x.kind === "dataset.inspect" && x.status === "succeeded",
   );
-  const inputs = (artifacts.data ?? []).filter((x) =>
+  const inputs = (artifacts.data ?? []).filter(x => x.project_id === projectId).filter((x) =>
     stage === "Quantize"
       ? ["training_checkpoint", "native_checkpoint"].includes(x.format) ||
         (x.format === "gguf" && x.metadata?.precision === "float")
@@ -229,10 +231,10 @@ export function WorkflowPanel({
         ? x.format === "gguf"
         : ["gguf", "deployment_package"].includes(x.format),
   );
-  const checkpoints = sortCheckpoints((artifacts.data ?? []).filter(
+  const checkpoints = sortCheckpoints((artifacts.data ?? []).filter(x => x.project_id === projectId).filter(
     (x) => x.format === "training_checkpoint" || x.format === "native_checkpoint",
   ), policyJobs);
-  const selectedInput = input === "latest" ? (stage === "Quantize" ? checkpoints[0]?.id : inputs[0]?.id) ?? "" : input;
+  const selectedInput = input;
   const inputArtifact = inputs.find(item => item.id === selectedInput);
   const inputIssue = stage === "Quantize" ? quantizationIssue(inputArtifact) : null;
   const cloudCheckpoint = !!inputArtifact && isCloudArtifact(inputArtifact);
@@ -254,9 +256,7 @@ export function WorkflowPanel({
     ? "This policy is stored on Google Cloud. Choose a cloud target."
     : cloudEngine && inputArtifact?.metadata?.architecture && inputArtifact.metadata.architecture !== "smolvla"
       ? "Cloud engine checks currently support SmolVLA GGUF policies."
-      : stage === "Quantize" && runtime?.execution === "skypilot" && selectedInput.startsWith("source:")
-        ? "Configured base policies require a native quantization target."
-        : (stage === "Evaluate" || stage === "Run") && !cloudEngine && preferences.mode === "libero" && runtime && !runtime.simulation
+      : (stage === "Evaluate" || stage === "Run") && !cloudEngine && preferences.mode === "libero" && runtime && !runtime.simulation
           ? "This target has no simulator. Choose engine checks or a simulation target."
           : null;
   const language =
@@ -334,9 +334,8 @@ export function WorkflowPanel({
           else body.artifact_id = resumeId;
         }
       } else {
-        if (!selectedInput) throw new Error("Choose an input policy.");
-        if (selectedInput.startsWith("source:")) body.source_id = selectedInput.slice(7);
-        else body.artifact_id = selectedInput;
+        if (!inputArtifact || inputArtifact.project_id !== projectId) throw new Error("Choose one of this project’s saved models.");
+        body.artifact_id = inputArtifact.id;
         if (nativeQuantization) {
           body.candidates = [{ language, vision: preferences.vision ? "Q8_0" : null }];
           if (preferences.compareQ4) body.candidates.push({ language: language === "Q4_0" ? "Q8_0" : "Q4_0", vision: null });
@@ -801,7 +800,7 @@ export function WorkflowPanel({
   const openNew = () => {
     mutation.reset();
     cancel.reset();
-    setInput("latest");
+    setInput("");
     setSelectedJobId("");
     setView("new");
   };
@@ -924,10 +923,11 @@ export function WorkflowPanel({
         icon: checkpoint ? "layers" as const : "compress" as const,
       };
     }),
-    ...(stage === "Quantize" ? (options.data?.sources ?? []).map(source => ({ value: `source:${source.id}`, label: source.label, meta: "Base policy", icon: "spark" as const })) : []),
     ...(stage === "Quantize" ? inputs.filter(artifact => !["training_checkpoint", "native_checkpoint"].includes(artifact.format)).map(artifact => ({ value: artifact.id, label: artifact.label, meta: "Floating-point", icon: "layers" as const })) : []),
   ];
-  const formIssue = inputIssue ?? executionIssue;
+  const selectionIssue = stage !== 'Fine-tune' && selectedInput && artifacts.isSuccess && !artifacts.isError && !inputArtifact
+    ? 'The selected model is unavailable. Refresh or choose another saved model explicitly.' : null;
+  const formIssue = selectionIssue ?? inputIssue ?? executionIssue;
   return (
     <section className="panel workflow-panel workflow-new-job">
       <div className="workflow-view-navigation"><button className="text-link" type="button" disabled={mutation.isPending} onClick={backToHistory}>← All {historyTitle.toLowerCase()}</button></div>
@@ -944,7 +944,7 @@ export function WorkflowPanel({
             <label>Inspected dataset<select value={datasetId || datasets[0]?.id || ""} onChange={event => setDatasetId(event.target.value)}><option value="" disabled>Select an inspection</option>{datasets.map(job => <option key={job.id} value={job.id}>{"repo_id" in job.request ? job.request.repo_id : job.id}</option>)}</select></label>
             <label>Resume checkpoint<select value={resumeId} onChange={event => setResumeId(event.target.value)}><option value="">Start a new training run</option>{checkpoints.map(artifact => <option key={artifact.id} value={artifact.id}>{checkpointLabel(artifact, policyJobs, options.data?.training_models)}</option>)}{policyJobs.filter(job => job.kind === "policy.finetune" && ["failed", "interrupted", "cancelled"].includes(job.status)).map(job => <option key={job.id} value={`job:${job.id}`}>Last saved checkpoint · {job.id.slice(0, 8)}</option>)}</select></label>
           </> : <>
-            <WorkflowChoiceGrid name="input-policy" label="Policy" value={selectedInput}
+            <WorkflowChoiceGrid name="input-policy" label="My model" value={selectedInput}
               options={policyChoices} onChange={value => { setInput(value); mutation.reset(); }}
               emptyMessage={artifacts.isPending ? "Loading policies…" : "Your saved policies will appear here."} />
             {(stage === "Evaluate" || stage === "Run") && !artifacts.isPending && !artifacts.isError && !inputs.length && <div className="workflow-storage-note" role="status">
@@ -978,7 +978,7 @@ export function WorkflowPanel({
             {!cloudEngine && preferences.mode === "libero" && !runtime?.simulation && <button type="button" className="text-link" onClick={() => setPreferences(old => ({ ...old, mode: "engine", suite: "libero_object" }))}>Use engine checks</button>}
           </>}
           {formIssue && <p className="warning-box" role="status">{formIssue}</p>}
-          <button className="primary-button" type="submit" disabled={!ready || !runtime || starting || (stage !== "Fine-tune" && !selectedInput) || !!formIssue || (stage === "Fine-tune" && !runtime.training)}>
+          <button className="primary-button" type="submit" disabled={!ready || !runtime || starting || (stage !== "Fine-tune" && !inputArtifact) || !!formIssue || (stage === "Fine-tune" && !runtime.training)}>
             {mutation.isPending ? "Starting…" : stage === "Quantize" ? nativeQuantization ? "Run quantization workflow" : "Start quantization" : stage === "Evaluate" ? "Start evaluation" : stage === "Fine-tune" ? "Start fine-tuning" : "Reload and run"}
           </button>
         </fieldset>

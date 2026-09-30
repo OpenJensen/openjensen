@@ -7,6 +7,13 @@ import { hasSimulatorControlContract, nativeQuantizationInput } from '../../apps
 // Generated API records exercise real workspace navigation; no model or cloud work runs.
 const time = '2026-09-27T12:00:00Z', model = `sha256:${'f'.repeat(64)}`;
 const policyChoices = (page: Page, label: string) => page.getByRole(label === 'ACT inference policy' ? 'group' : 'radiogroup', { name: label === 'ACT inference policy' ? 'Policy' : label, exact: true });
+async function openSavedAct(page: Page) {
+  const choice = page.getByRole('button', { name: 'Choose Generated teacher · teacher', exact: true });
+  const lane = page.getByRole('region', { name: 'ACT distillation', exact: true }).or(page.getByRole('region', { name: 'Native ACT quantization', exact: true }));
+  await expect(lane.or(choice).first()).toBeVisible();
+  if (await lane.isVisible()) return;
+  await choice.click();
+}
 const units = ['degrees', 'degrees', 'degrees', 'degrees', 'degrees', 'recorded_gripper'];
 const runtime = (id: string, capability: string) => ({ id, label: `Generated ${id}`, execution: 'native', provider: 'local', device: 'cpu', enabled: true, launchable: true, [capability]: true, [`${capability}_only`]: true, training: false, simulation: false, run: false, engine_evaluation: false });
 const runtimes = [runtime('student-cpu', 'native_distillation'), runtime('quant-cpu', 'native_quantization'), runtime('replay-cpu', 'native_replay')];
@@ -62,7 +69,7 @@ async function fixture(page: Page) {
 async function openStudent(page: Page, state: Awaited<ReturnType<typeof fixture>>) {
   const job = makeJob('student-job', studentRequest()); completeStudent(job); state.jobs.push(job);
   await page.getByRole('button', { name: 'Distill', exact: true }).click();
-  await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  await openSavedAct(page);
   await page.getByLabel('Saved distillation job', { exact: true }).selectOption(job.id);
   await page.getByRole('button', { name: 'Open ACT quantization', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toBeVisible();
@@ -70,7 +77,7 @@ async function openStudent(page: Page, state: Awaited<ReturnType<typeof fixture>
 async function openPacked(page: Page, state: Awaited<ReturnType<typeof fixture>>) {
   const job = makeJob('quant-job', quantRequest()); completeQuant(job); state.jobs.push(job);
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-  await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  await openSavedAct(page);
   await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption(job.id);
   await page.getByRole('button', { name: 'Replay recorded observations', exact: true }).click();
   await expect(page.getByRole('region', { name: 'CPU observation replay', exact: true })).toBeVisible();
@@ -86,7 +93,7 @@ async function simulationContinuationFixture(page: Page) {
   job.result!.artifacts = [first, target]; state.jobs.push(job); state.artifacts.push(structuredClone(first), structuredClone(target));
   await page.reload(); await expect(page.getByLabel('Current project')).toHaveValue('alpha');
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-  await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  await openSavedAct(page);
   await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption(job.id);
   const continueButton = page.locator(`[data-artifact-id="${target.id}"]`).getByRole('button', { name: 'Prepare simulation', exact: true });
   await expect(continueButton).toBeEnabled();
@@ -228,7 +235,7 @@ for (const fault of ['missing-profile', 'profile-error'] as const) test(`packed 
 test('explicit Distill to Quantize to Replay carries exact artifacts without submitting on navigation', async ({ page }) => {
   const state = await fixture(page);
   await page.getByRole('button', { name: 'Distill', exact: true }).click();
-  await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  await openSavedAct(page);
   await page.getByRole('group', { name: 'Teacher', exact: true }).locator(`input[value="${teacher.id}"]`).check();
   await page.getByRole('group', { name: 'Dataset', exact: true }).locator('input[value="alpha-data"]').check();
   for (const [label, value] of [['Training episodes', '0, 1'], ['Validation episodes', '2, 3'], ['Final episodes', '4, 5'], ['Six coordinate units', units.join(', ')]]) await page.getByLabel(label, { exact: true }).fill(value);
@@ -281,6 +288,14 @@ for (const target of ['quantization', 'replay'] as const) test(`${target} handof
   const label = target === 'quantization' ? 'ACT inference policy' : 'Packed ACT policy', expected = target === 'quantization' ? student.id : packed.id;
   await expect(policyChoices(page, label).locator('input:checked')).toHaveValue(expected);
   await page.getByLabel('Current project').selectOption('beta');
+  if (target === 'quantization') {
+    await expect(page.getByRole('region', { name: 'Your quantization models' }).locator('button[aria-pressed="true"]')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: `Choose Generated ${expected} · ${expected}`, exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Choose Generated beta-float · beta-float', exact: true }).click();
+    await expect(policyChoices(page, label).locator('input:checked')).toHaveValue('beta-float');
+    await expect(policyChoices(page, label).locator(`input[value="${expected}"]`)).toHaveCount(0);
+    expect(state.mutations).toHaveLength(0); return;
+  }
   const choice = page.getByRole('button', { name: target === 'quantization' ? 'ACT' : 'Replay observations', exact: true });
   await expect(choice).toHaveAttribute('aria-pressed', 'false');
   await expect(page.getByRole('article', { name: target === 'quantization' ? 'ACT quantization job details' : 'Observation replay details', exact: true })).toHaveCount(0);
@@ -299,7 +314,8 @@ test('owned saved history restores ACT quantization and exact replay without mut
   state.jobs.push(replay);
   await page.reload(); await expect(page.getByLabel('Current project')).toHaveValue('alpha');
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'ACT', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByText('Saved quantization work', { exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Open quantization quant-job', exact: true })).toBeVisible();
   await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toHaveAttribute('data-job-id', 'quant-job');
   await page.getByRole('button', { name: 'Run', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Replay observations', exact: true })).toHaveAttribute('aria-pressed', 'true');
@@ -334,7 +350,7 @@ for (const configured of ['none', 'native', 'engine', 'simulation'] as const) te
   await reloadProject(page);
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Workflow selection status', exact: true })).toHaveCount(0);
-  for (const name of ['ACT', 'SmolVLA']) await expect(page.getByRole('button', { name, exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByRole('region', { name: 'Your quantization models' }).locator('button[aria-pressed="true"]')).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Quantization jobs', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Run', exact: true }).click();
@@ -398,7 +414,8 @@ for (const mode of ['quantize', 'replay'] as const) test(`unknown ${mode} submis
   await page.evaluate(({ operation }) => sessionStorage.setItem(`firebird:job-attempt:${operation}:alpha`, JSON.stringify({ state: 'pending', message: 'Generated lost acknowledgement' })), { operation });
   state.runtimes = []; state.jobs.push(makeJob('other-mode', { operation: mode === 'quantize' ? 'policy.quantize' : 'policy.run', runtime_id: 'engine' })); await reloadProject(page);
   await page.getByRole('button', { name: mode === 'quantize' ? 'Quantize' : 'Run', exact: true }).click();
-  await expect(page.getByRole('button', { name: mode === 'quantize' ? 'ACT' : 'Replay observations', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  if (mode === 'quantize') await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toBeVisible();
+  else await expect(page.getByRole('button', { name: 'Replay observations', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByText(/An earlier request did not return a verified outcome/)).toBeVisible();
   await page.getByRole('button', { name: mode === 'quantize' ? 'Refresh ACT quantization jobs' : 'Refresh replay jobs', exact: true }).click();
   expect(state.mutations).toHaveLength(0);
@@ -447,12 +464,13 @@ test('query failures keep Evaluate availability unknown and do not choose an ini
   expect(state.mutations).toHaveLength(0);
 });
 
-test('the engine preparation link explicitly opens GGUF after a native quantization choice', async ({ page }) => {
+test('the engine preparation link returns to the saved model chooser', async ({ page }) => {
   const state = await fixture(page);
-  await page.getByRole('button', { name: 'Quantize', exact: true }).click(); await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  await page.getByRole('button', { name: 'Quantize', exact: true }).click(); await openSavedAct(page);
   await page.getByRole('button', { name: 'Evaluate', exact: true }).click(); await page.getByRole('button', { name: 'New evaluation', exact: true }).click();
   await page.getByRole('button', { name: 'Go to quantization', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'SmolVLA', exact: true })).toHaveAttribute('aria-pressed', 'true'); expect(state.mutations).toHaveLength(0);
+  await expect(page.getByRole('region', { name: 'Your quantization models' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Your quantization models' }).locator('button[aria-pressed="true"]')).toHaveCount(0); expect(state.mutations).toHaveLength(0);
 });
 
 test('saved simulation history opens once and preserves the manually selected exact job', async ({ page }) => {
@@ -484,11 +502,11 @@ test('mixed configured workflows start unselected and preserve a deliberate nati
 
 test('a detected training worker is not offered for GGUF quantization or engine evaluation', async ({ page }) => {
   const state = await fixture(page);
+  state.artifacts.push(artifact('smolvla-checkpoint', 'training_checkpoint', { architecture: 'smolvla' }));
   state.runtimes = [{ id: 'managed-local-smolvla-test', label: 'Detected GPU trainer', execution: 'native', provider: 'local', device: 'cuda', enabled: true, launchable: true, training: true, training_only: true, training_model_ids: ['smolvla'], simulation: false, run: false, engine_evaluation: false }];
   await reloadProject(page);
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-  await page.getByRole('button', { name: 'SmolVLA', exact: true }).click();
-  await page.getByRole('button', { name: 'New quantization', exact: true }).click();
+  await page.getByRole('button', { name: 'Choose Generated smolvla-checkpoint · smolvla-checkpoint', exact: true }).click();
   await expect(page.getByText('Connect a compatible worker in Compute settings.', { exact: true })).toBeVisible();
   await expect(page.getByRole('radio', { name: /Detected GPU trainer/ })).toHaveCount(0);
   await page.getByRole('button', { name: 'Evaluate', exact: true }).click();
@@ -503,13 +521,13 @@ for (const mode of ['distillation', 'quantization', 'replay'] as const) test(`${
   state.runtimes.push(alternate);
   await page.getByRole('button', { name: mode === 'distillation' ? 'Distill' : mode === 'quantization' ? 'Quantize' : 'Run', exact: true }).click();
   if (mode === 'distillation') {
-    await page.getByRole('button', { name: 'ACT', exact: true }).click();
+    await openSavedAct(page);
     await page.getByRole('group', { name: 'Teacher', exact: true }).locator(`input[value="${teacher.id}"]`).check();
     await page.getByRole('group', { name: 'Dataset', exact: true }).locator('input[value="alpha-data"]').check();
     for (const [label, value] of [['Training episodes', '0, 1'], ['Validation episodes', '2, 3'], ['Final episodes', '4, 5'], ['Six coordinate units', units.join(', ')]]) await page.getByLabel(label, { exact: true }).fill(value);
     await page.getByRole('checkbox', { name: /I verified that the dataset/ }).check();
   } else if (mode === 'quantization') {
-    await page.getByRole('button', { name: 'ACT', exact: true }).click();
+    await openSavedAct(page);
     await policyChoices(page, 'ACT inference policy').locator(`input[value="${teacher.id}"]`).check();
   } else {
     await page.getByRole('button', { name: 'Replay observations', exact: true }).click();
@@ -571,7 +589,8 @@ for (const mode of ['quantize', 'replay'] as const) test(`saved ${mode} history 
   state.jobs.push(saved); state.failOptions = true; state.failSimulation = true;
   await reloadProject(page);
   await page.getByRole('button', { name: mode === 'quantize' ? 'Quantize' : 'Run', exact: true }).click();
-  await expect(page.getByRole('button', { name: mode === 'quantize' ? 'ACT' : 'Replay observations', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  if (mode === 'quantize') await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toBeVisible();
+  else await expect(page.getByRole('button', { name: 'Replay observations', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('article', { name: mode === 'quantize' ? 'ACT quantization job details' : 'Observation replay details', exact: true })).toHaveAttribute('data-job-id', saved.id);
   expect(state.mutations).toEqual([]);
 });

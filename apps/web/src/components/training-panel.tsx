@@ -180,6 +180,7 @@ export function TrainingPanel({
   startNew,
   showJobsRequest,
   preferredRunId,
+  preferredCheckpointId,
   active = true,
 }: {
   projectId: string;
@@ -193,6 +194,7 @@ export function TrainingPanel({
   startNew?: { id: number; datasetId?: string };
   showJobsRequest?: number;
   preferredRunId?: string;
+  preferredCheckpointId?: string;
   active?: boolean;
 }) {
   const client = useQueryClient();
@@ -1292,6 +1294,7 @@ export function TrainingPanel({
               projectId={projectId}
               active={active}
               artifacts={(artifacts.data ?? []).filter(item => item.job_id === selectedRun.id)}
+              preferredCheckpointId={selectedRun.id === preferredRunId ? preferredCheckpointId : undefined}
               modelCatalog={models}
               exportRuntimes={options.isSuccess ? options.data.runtimes : []}
               exportJobs={jobs.data ?? []}
@@ -1302,9 +1305,11 @@ export function TrainingPanel({
               onQuantize={onQuantize}
               onNativeQuantize={onNativeQuantize}
               onNativeDistill={onNativeDistill}
-              onResume={resumeOptions.some(item => item.jobId === selectedRun.id) ? () => {
+              onResume={resumeOptions.some(item => item.jobId === selectedRun.id) ? checkpointId => {
                 selectionGeneration.current += 1;
-                setResumeId(resumeOptions.find(item => item.jobId === selectedRun.id)!.id);
+                const checkpoint = checkpointId ? resumeOptions.find(item => item.id === checkpointId && item.jobId === selectedRun.id) : resumeOptions.find(item => item.jobId === selectedRun.id);
+                if (!checkpoint) return;
+                setResumeId(checkpoint.id);
                 setStep(2);
                 mutation.reset();
                 setView("new");

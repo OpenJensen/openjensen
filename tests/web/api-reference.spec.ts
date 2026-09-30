@@ -1314,12 +1314,16 @@ test('training summarizes the latest checkpoint and keeps full activity behind d
   expect(unexpectedRequests).toEqual([]);
 });
 
+function savedWorkflowModel(projectId: string) {
+  return { id: 'source', project_id: projectId, job_id: 'import-source', label: 'Synthetic policy', format: 'gguf', path: 'fixture/policy', manifest_sha256: 'a'.repeat(64), file_bytes: 100, parent_ids: [], metadata: { architecture: 'smolvla', precision: 'float' } };
+}
+
 test('quantization submits Q4 only after an explicit experimental choice', async ({ page }) => {
   const requests: { candidates: { language: string; vision: string | null }[] }[] = [];
   const timestamp = '2026-09-26T12:00:00Z';
   await page.route('**/api/v1/projects', route => route.fulfill({ json: [{ id: 'precision-review', name: 'Precision fixture', created_at: timestamp }] }));
   await page.route('**/api/v1/projects/precision-review/jobs', route => route.fulfill({ json: [] }));
-  await page.route('**/api/v1/projects/precision-review/artifacts', route => route.fulfill({ json: [] }));
+  await page.route('**/api/v1/projects/precision-review/artifacts', route => route.fulfill({ json: [savedWorkflowModel('precision-review')] }));
   await page.route('**/api/v1/policy-options', route => route.fulfill({ json: {
     runtimes: [{ id: 'fixture', label: 'CPU fixture', device: 'cpu', training: false, simulation: false }],
     sources: [{ id: 'source', label: 'Synthetic policy', task: 'fixture' }],
@@ -1332,9 +1336,8 @@ test('quantization submits Q4 only after an explicit experimental choice', async
   });
   async function submitQuantization(count: number) {
     await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-    await page.getByRole('group', { name: 'Quantization mode', exact: true }).getByRole('button', { name: 'SmolVLA', exact: true }).click();
-    await page.getByRole('button', { name: 'New quantization', exact: true }).click();
-    await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="source:source"]').check();
+    await page.getByRole('button', { name: 'Choose Synthetic policy · source', exact: true }).click();
+    await page.getByRole('group', { name: 'My model', exact: true }).locator('input[value="source"]').check();
     await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
     await expect.poll(() => requests.length).toBe(count);
   }
@@ -1369,7 +1372,7 @@ test('Spatial settings require explicit task and parity choices in the submitted
     await route.fulfill({ json: [{ id: 'spatial-review', name: 'Spatial fixture', created_at: '2026-09-26T12:00:00Z' }] });
   });
   await page.route('**/api/v1/projects/spatial-review/jobs', route => route.fulfill({ json: [] }));
-  await page.route('**/api/v1/projects/spatial-review/artifacts', route => route.fulfill({ json: [] }));
+  await page.route('**/api/v1/projects/spatial-review/artifacts', route => route.fulfill({ json: [savedWorkflowModel('spatial-review')] }));
   await page.route('**/api/v1/policy-options', route => route.fulfill({ json: {
     runtimes: [{ id: 'fixture', label: 'Synthetic L4 fixture', device: 'cuda', training: false, simulation: true }],
     sources: [{ id: 'source', label: 'Synthetic Spatial policy', task: 'libero_spatial' }],
@@ -1390,10 +1393,9 @@ test('Spatial settings require explicit task and parity choices in the submitted
     await expect(page.getByLabel('Diagnostic mode')).toBeDisabled();
     await expect(page.getByRole('heading', { name: 'Recorded benchmark comparison' })).toBeVisible();
     await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'SmolVLA', exact: true })).toBeDisabled();
-    await expect(page.getByRole('button', { name: 'ACT', exact: true })).toBeDisabled();
+    await expect(page.getByRole('region', { name: 'Your quantization models' }).getByRole('button', { name: 'Choose Synthetic policy · source', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'New quantization', exact: true })).toHaveCount(0);
-    await expect(page.getByRole('group', { name: 'Policy', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('group', { name: 'My model', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toHaveCount(0);
     expect(await page.evaluate(() => localStorage.getItem('firebird.workflow.'))).toBeNull();
     expect(submitted).toEqual([]);
@@ -1414,9 +1416,8 @@ test('Spatial settings require explicit task and parity choices in the submitted
   await page.getByLabel('Maximum action RMSE').fill('0');
   await page.getByLabel('Maximum absolute action error').fill('0');
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-  await page.getByRole('group', { name: 'Quantization mode', exact: true }).getByRole('button', { name: 'SmolVLA', exact: true }).click();
-  await page.getByRole('button', { name: 'New quantization', exact: true }).click();
-  await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="source:source"]').check();
+  await page.getByRole('button', { name: 'Choose Synthetic policy · source', exact: true }).click();
+  await page.getByRole('group', { name: 'My model', exact: true }).locator('input[value="source"]').check();
   await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0].evaluation).toMatchObject({
@@ -1434,9 +1435,8 @@ test('Spatial settings require explicit task and parity choices in the submitted
   await expect(page.getByRole('combobox', { name: 'Protocol', exact: true })).toHaveValue('libero');
   await expect(page.getByLabel('Episode step limit')).toHaveValue('280');
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-  await page.getByRole('group', { name: 'Quantization mode', exact: true }).getByRole('button', { name: 'SmolVLA', exact: true }).click();
-  await page.getByRole('button', { name: 'New quantization', exact: true }).click();
-  await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="source:source"]').check();
+  await page.getByRole('button', { name: 'Choose Synthetic policy · source', exact: true }).click();
+  await page.getByRole('group', { name: 'My model', exact: true }).locator('input[value="source"]').check();
   await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(2);
   expect(submitted[1].evaluation).toEqual(submitted[0].evaluation);
@@ -1451,7 +1451,7 @@ async function workflowPreferenceFixture(page: Page) {
     { id: 'preferences-b', name: 'Project B', created_at: '2026-09-26T12:00:00Z' },
   ];
   await page.route('**/api/v1/projects/*/jobs', route => route.fulfill({ json: [] }));
-  await page.route('**/api/v1/projects/*/artifacts', route => route.fulfill({ json: [] }));
+  await page.route('**/api/v1/projects/*/artifacts', route => route.fulfill({ json: [savedWorkflowModel(new URL(route.request().url()).pathname.split('/').at(-2)!)] }));
   await page.route('**/api/v1/policy-options', route => route.fulfill({ json: {
     runtimes: [{ id: 'fixture', label: 'Synthetic target', device: 'cpu', training: false, simulation: true }],
     sources: [{ id: 'source', label: 'Synthetic policy', task: 'fixture' }],
@@ -1465,9 +1465,8 @@ async function workflowPreferenceFixture(page: Page) {
   async function submit() {
     const count = requests.length;
     await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-    await page.getByRole('group', { name: 'Quantization mode', exact: true }).getByRole('button', { name: 'SmolVLA', exact: true }).click();
-    await page.getByRole('button', { name: 'New quantization', exact: true }).click();
-    await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="source:source"]').check();
+    await page.getByRole('button', { name: 'Choose Synthetic policy · source', exact: true }).click();
+    await page.getByRole('group', { name: 'My model', exact: true }).locator('input[value="source"]').check();
     await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
     await expect.poll(() => requests.length).toBe(count + 1);
     return requests.at(-1)!;
@@ -1542,10 +1541,9 @@ for (const state of ['empty', 'error'] as const) {
     await page.getByLabel('Reference hardware').selectOption('rtx3070');
     await expect(page.getByRole('table', { name: 'NVIDIA RTX 3070 · recorded reference results' })).toBeVisible();
     await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'SmolVLA', exact: true })).toBeDisabled();
-    await expect(page.getByRole('button', { name: 'ACT', exact: true })).toBeDisabled();
+    await expect(page.getByRole('region', { name: 'Your quantization models' }).getByRole('button', { name: 'Choose Synthetic policy · source', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'New quantization', exact: true })).toHaveCount(0);
-    await expect(page.getByRole('group', { name: 'Policy', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('group', { name: 'My model', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toHaveCount(0);
     expect(fixture.requests).toEqual([]);
     expect(await page.evaluate(() => localStorage.getItem('firebird.workflow.'))).toBeNull();
@@ -1593,9 +1591,8 @@ test('a project removed during refetch cannot submit with its stale selection', 
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-  await page.getByRole('group', { name: 'Quantization mode', exact: true }).getByRole('button', { name: 'SmolVLA', exact: true }).click();
-  await page.getByRole('button', { name: 'New quantization', exact: true }).click();
-  await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="source:source"]').check();
+  await page.getByRole('button', { name: 'Choose Synthetic policy · source', exact: true }).click();
+  await page.getByRole('group', { name: 'My model', exact: true }).locator('input[value="source"]').check();
   await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toBeEnabled();
   removed = true;
   // Advance beyond the configured 5s freshness period without a wall-clock sleep.
@@ -1603,11 +1600,10 @@ test('a project removed during refetch cannot submit with its stale selection', 
   // React Query refetches stale project data when the browser regains visibility.
   await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
   await expect.poll(() => emptyResponses).toBeGreaterThan(0);
-  await expect(page.getByRole('button', { name: 'SmolVLA', exact: true })).toBeDisabled();
-    await expect(page.getByRole('button', { name: 'ACT', exact: true })).toBeDisabled();
+  await expect(page.getByRole('region', { name: 'Your quantization models' }).getByRole('button', { name: 'Choose Synthetic policy · source', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'New quantization', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('group', { name: 'Policy', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('group', { name: 'My model', exact: true })).toHaveCount(0);
   expect(fixture.requests).toEqual([]);
   expect(await page.evaluate(() => localStorage.getItem('firebird.workflow.'))).toBeNull();
 });

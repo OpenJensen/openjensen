@@ -85,8 +85,8 @@ test('the contextual guide covers every section and keeps API docs separate', as
   await expect(page).toHaveURL(/\/guide\/#distill$/);
   await expect(page.getByRole('heading', { name: 'Workspace guide', exact: true })).toBeVisible();
   const sections = page.locator('.guide-sections > section');
-  await expect(sections).toHaveCount(11);
-  for (const name of ['Dataset', 'Augmentation', 'Teaching', 'Fine-tune', 'Distill', 'Quantize', 'Evaluate', 'Run', 'Decision lab', 'Cloud runs', 'Settings & diagnostics']) {
+  await expect(sections).toHaveCount(12);
+  for (const name of ['My models', 'Dataset', 'Augmentation', 'Teaching', 'Fine-tune', 'Distill', 'Quantize', 'Evaluate', 'Run', 'Decision lab', 'Cloud runs', 'Settings & diagnostics']) {
     await expect(sections.getByRole('heading', { name, exact: true })).toBeVisible();
   }
   await expect(page.locator('#distill')).toContainText('ACT256');
@@ -110,10 +110,8 @@ test('the contextual guide covers every section and keeps API docs separate', as
 test('fresh workflows require explicit model and runner choices', async ({ page }, testInfo) => {
   const mutations = await workspace(page);
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-  const quantizers = page.getByRole('group', { name: 'Quantization mode', exact: true });
-  await expect(quantizers.getByRole('button', { name: 'SmolVLA', exact: true })).toHaveAttribute('aria-pressed', 'false');
-  await expect(quantizers.getByRole('button', { name: 'ACT', exact: true })).toHaveAttribute('aria-pressed', 'false');
-  await page.getByRole('region', { name: 'Quantization workflow', exact: true }).screenshot({ path: testInfo.outputPath('quantization-model-cards.png') });
+  await expect(page.getByText('No saved models in this project yet')).toBeVisible();
+  await page.getByRole('region', { name: 'Your quantization models', exact: true }).screenshot({ path: testInfo.outputPath('quantization-owned-models.png') });
   await expect(page.locator('.workflow-panel')).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toHaveCount(0);
 
@@ -187,7 +185,7 @@ test('project activity is recorded execution history, isolated from foreign jobs
   await expect(journey.getByRole('button', { name: 'Review Dataset activity', exact: true })).toContainText('2 succeeded');
   await expect(journey.getByRole('button', { name: 'Review Run activity', exact: true })).toContainText('1 stopped or failed');
   await journey.getByRole('button', { name: 'Review Quantize activity', exact: true }).click();
-  await expect(page.getByRole('group', { name: 'Quantization mode' }).getByRole('button', { pressed: true })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Your quantization models' }).getByRole('button', { pressed: true })).toHaveCount(0);
   await page.getByLabel('Current project').selectOption('beta');
   await expect(journey.locator('summary')).toContainText('0 recorded jobs');
   await expect(journey).not.toContainText('dataset-second');

@@ -570,7 +570,11 @@ test('ACT export-only computer never appears as an engine execution target', asy
   for (const [stage, create] of [['Run', 'New run'], ['Evaluate', 'New evaluation'], ['Quantize', 'New quantization']]) {
     await page.getByRole('button', { name: stage, exact: true }).click();
     if (stage === 'Run') await page.getByRole('button', { name: 'Check inference', exact: true }).click();
-    if (stage === 'Quantize') await page.getByRole('button', { name: 'SmolVLA', exact: true }).click();
+    if (stage === 'Quantize') {
+      await expect(page.getByRole('button', { name: 'Choose Checkpoint step 20 · checkpoint-artifact', exact: true })).toBeDisabled();
+      await expect(page.getByRole('button', { name: 'ACT', exact: true })).toHaveCount(0);
+      continue;
+    }
     await page.getByRole('button', { name: create, exact: true }).click();
     const target = page.getByRole('group', { name: 'Compute', exact: true });
     await expect(target).not.toContainText('Local CPU export');
@@ -1087,7 +1091,7 @@ test('ACT exported packages show distinct identities and hand the exact second p
   await exportSection.screenshot({ path: testInfo.outputPath('act-export-next-actions-dark.png') });
   await page.getByRole('button', { name: 'Light', exact: true }).click();
   await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
-  await expect(page.getByRole('button', { name: 'ACT', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: `Choose ACT inference export · ${state.packages[1].id}`, exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toBeChecked();
   expect(state.submitted).toEqual([]);
   await noOverflow(page);
@@ -1161,10 +1165,10 @@ test('ACT export preferred package stays within its owning project', async ({ pa
   await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
   await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toBeChecked();
   await page.getByLabel('Current project', { exact: true }).selectOption('other-project');
-  await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  await expect(page.getByText('No saved models in this project yet')).toBeVisible();
   await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator('input:checked')).toHaveCount(0);
   await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Create ACT quantized package', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Create ACT quantized package', exact: true })).toHaveCount(0);
   expect(state.submitted).toEqual([]);
 });
 
@@ -1212,8 +1216,8 @@ test('training export continues to Distill with the exact second same-label pack
   const panel = page.getByRole('region', { name: 'ACT distillation', exact: true });
   await expect(panel).toBeVisible();
   await expect(teacherChoices(page).locator('input:checked')).toHaveValue(chosen.id);
-  await expect(page.getByLabel('Teacher from training', { exact: true })).toContainText(chosen.id);
-  await expect(page.getByLabel('Teacher from training', { exact: true })).toContainText(`Export ${chosen.job_id.slice(0, 8)}`);
+  await expect(page.getByLabel('Selected teacher model', { exact: true })).toContainText(chosen.id);
+  await expect(page.getByLabel('Selected teacher model', { exact: true })).toContainText(`Run ${chosen.job_id.slice(0, 8)}`);
   await expect(page.getByRole('group', { name: 'Dataset', exact: true }).locator('input:checked')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
   expect(state.submitted).toEqual([]);
@@ -1271,10 +1275,10 @@ test('manual Distill teacher choices reject partial timing metadata and preserve
   await page.reload(); await reopenExport(page);
   await expect(useTeacher(page, changed.id)).toBeDisabled();
   await page.getByRole('button', { name: 'Distill', exact: true }).click();
-  await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  await page.getByRole('button', { name: `Choose ACT inference export · ${state.packages[0].id}`, exact: true }).click();
   await expect(teacherChoices(page).locator(`input[value="${changed.id}"]`)).toHaveCount(0);
   await expect(teacherChoices(page).locator(`input[value="${state.packages[0].id}"]`)).toHaveCount(1);
-  await expect(teacherChoices(page).locator('input:checked')).toHaveCount(0);
+  await expect(teacherChoices(page).locator('input:checked')).toHaveValue(state.packages[0].id);
   await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
   expect(state.submitted).toEqual([]);
 });
@@ -1294,20 +1298,20 @@ for (const location of ['metadata', 'checkpoint'] as const) for (const field of 
   await expect(useTeacher(page, legacy.id)).toBeEnabled();
   await expect(exportedPackage(page, legacy.id).getByRole('button', { name: 'Quantize this package' })).toBeEnabled();
   await page.getByRole('button', { name: 'Distill', exact: true }).click();
-  await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  await page.getByRole('button', { name: `Choose ACT inference export · ${state.packages[0].id}`, exact: true }).click();
   await expect(teacherChoices(page).locator(`input[value="${guarded.id}"]`)).toHaveCount(0);
   await expect(page.getByText('Some ACT packages are excluded because their model format, timing or simulator details are incomplete or unsupported. Refresh or export a complete inference package.', { exact: true })).toBeVisible();
   await expect(teacherChoices(page).locator(`input[value="${legacy.id}"]`)).toHaveCount(1);
-  await expect(teacherChoices(page).locator('input:checked')).toHaveCount(0);
+  await expect(teacherChoices(page).locator('input:checked')).toHaveValue(legacy.id);
   await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-  await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  await page.getByRole('button', { name: `Choose ACT inference export · ${state.packages[0].id}`, exact: true }).click();
   const policies = page.getByRole('group', { name: 'Policy', exact: true });
   await expect(policies.locator(`input[value="${guarded.id}"]`)).toHaveCount(0);
   await expect(page.getByText('Some ACT packages are excluded because their model format, timing or simulator details are incomplete or unsupported. Refresh or export a complete inference package.', { exact: true })).toBeVisible();
   await expect(policies.locator(`input[value="${legacy.id}"]`)).toHaveCount(1);
-  await expect(policies.locator('input:checked')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Create ACT quantized package', exact: true })).toBeDisabled();
+  await expect(policies.locator('input:checked')).toHaveValue(legacy.id);
+  await expect(page.getByRole('button', { name: 'Create ACT quantized package', exact: true })).toBeEnabled();
   expect(state.submitted).toEqual([]);
 });
 
@@ -1352,7 +1356,7 @@ test('training teacher continuation never replaces a manual selection when the p
   await page.getByRole('button', { name: 'Refresh distillation jobs', exact: true }).click();
   await expect(teacherChoices(page).locator(`input[value="${chosen.id}"]`)).toHaveCount(1);
   await expect(teacherChoices(page).locator('input:checked')).toHaveValue(manual.id);
-  await expect(page.getByLabel('Teacher from training', { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('Selected teacher model', { exact: true })).toHaveCount(0);
   expect(state.submitted).toEqual([]);
 });
 
@@ -1379,17 +1383,17 @@ test('training teacher handoff is cleared by a manual model choice or project sw
   await page.reload(); await reopenExport(page);
   await useTeacher(page, state.packages[1].id).click();
   await expect(teacherChoices(page).locator('input:checked')).toHaveValue(state.packages[1].id);
-  await page.getByRole('button', { name: 'All models', exact: true }).click();
-  await page.getByRole('button', { name: 'ACT', exact: true }).click();
-  await expect(teacherChoices(page).locator('input:checked')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Choose another teacher', exact: true }).click();
+  await page.getByRole('button', { name: `Choose ACT inference export · ${state.packages[0].id}`, exact: true }).click();
+  await expect(teacherChoices(page).locator('input:checked')).toHaveValue(state.packages[0].id);
   await reopenExport(page);
   await useTeacher(page, state.packages[1].id).click();
   await page.getByLabel('Current project', { exact: true }).selectOption('other-project');
-  await page.getByRole('button', { name: 'ACT', exact: true }).click();
-  await expect(teacherChoices(page).locator('input:checked')).toHaveCount(0);
+  await expect(page.getByText('No saved models in this project yet')).toBeVisible();
+  await expect(teacherChoices(page)).toHaveCount(0);
   await expect(teacherChoices(page).locator(`input[value="${state.packages[1].id}"]`)).toHaveCount(0);
-  await expect(page.getByLabel('Teacher from training', { exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
+  await expect(page.getByLabel('Selected teacher model', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toHaveCount(0);
   expect(state.submitted).toEqual([]);
 });
 

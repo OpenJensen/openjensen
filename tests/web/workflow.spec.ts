@@ -19,6 +19,8 @@ async function cli(...args: string[]) {
 }
 
 class WorkflowPage {
+  projectId = '';
+  modelId = '';
   constructor(readonly page: Page) {}
 
   async createProject(name: string) {
@@ -29,16 +31,23 @@ class WorkflowPage {
     const response = await created;
     expect(response.status()).toBe(201);
     const project = await response.json();
+    this.projectId = project.id;
     await expect(this.page.getByLabel('Current project')).toHaveValue(project.id);
     return project;
   }
 
   async quantize(runtime: string) {
+    if (!this.modelId) {
+      const imported = await this.page.request.post(`/api/v1/projects/${this.projectId}/policy-jobs`, { data: { operation: 'policy.import', runtime_id: 'browser-success', source_id: 'synthetic-source' } });
+      expect(imported.status()).toBe(202);
+      const receipt = await imported.json();
+      const completed = await waitForJob(this.page.request, receipt.id, 'succeeded');
+      this.modelId = completed.result.artifacts.find((item: { format: string }) => item.format === 'gguf').id;
+    }
     await this.page.getByRole('button', { name: 'Quantize', exact: true }).click();
-    await this.page.getByRole('group', { name: 'Quantization mode', exact: true }).getByRole('button', { name: 'SmolVLA', exact: true }).click();
-    await this.page.getByRole('button', { name: 'New quantization', exact: true }).click();
+    await this.page.getByRole('button', { name: `Choose float · ${this.modelId}`, exact: true }).click();
     await this.page.getByRole('group', { name: 'Compute', exact: true }).locator(`input[value="${runtime}"]`).check();
-    await this.page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="source:synthetic-source"]').check();
+    await this.page.getByRole('group', { name: 'My model', exact: true }).locator(`input[value="${this.modelId}"]`).check();
     const created = this.page.waitForResponse(response => response.url().endsWith('/policy-jobs') && response.request().method() === 'POST');
     await this.page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
     const response = await created;
@@ -83,10 +92,14 @@ test('browser workflow persists real subprocess results and downloads the same a
   await expect(page.getByText('Diagnostics complete.', { exact: true })).toBeVisible();
   expect(job.result.decision).toBe('diagnostics_only');
   expect(job.result.selected_artifact_id).toBeNull();
-  expect(job.result.artifacts.length).toBeGreaterThan(1);
+  expect(job.result.artifacts.length).toBeGreaterThanOrEqual(1);
+  expect(job.request.artifact_id).toBe(workflow.modelId);
+  expect(job.result.artifacts.every((artifact: { parent_ids: string[] }) => artifact.parent_ids.includes(workflow.modelId))).toBeTruthy();
   expect(job.result.artifacts.every((artifact: { metadata: { fixture_only: boolean } }) => artifact.metadata.fixture_only)).toBeTruthy();
   expect(await cli('jobs', 'show', submitted.id)).toEqual(job);
-  expect(await cli('policy', 'artifacts', project.id)).toEqual(job.result.artifacts);
+  const allArtifacts = await cli('policy', 'artifacts', project.id);
+  expect(allArtifacts).toEqual(expect.arrayContaining(job.result.artifacts));
+  expect(allArtifacts.some((artifact: { id: string }) => artifact.id === workflow.modelId)).toBeTruthy();
   const events = await cli('jobs', 'events', submitted.id);
   expect(events.some((event: { message: string }) => event.message === 'Optimizer step 1')).toBeTruthy();
 

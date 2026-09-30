@@ -92,15 +92,16 @@ function LossChart({ metrics }: { metrics: TrainingMetric[] }) {
   );
 }
 
-export function TrainingMonitor({ run, projectId, active, artifacts, onCancel, cancelling, cancelError, onResume, onQuantize, onNativeQuantize, onNativeDistill, modelCatalog = [], exportRuntimes = [], exportJobs = [], exportArtifacts = [] }: {
+export function TrainingMonitor({ run, projectId, active, artifacts, preferredCheckpointId, onCancel, cancelling, cancelError, onResume, onQuantize, onNativeQuantize, onNativeDistill, modelCatalog = [], exportRuntimes = [], exportJobs = [], exportArtifacts = [] }: {
   run: Job;
   projectId: string;
   active: boolean;
   artifacts: PolicyArtifact[];
+  preferredCheckpointId?: string;
   onCancel: () => void;
   cancelling: boolean;
   cancelError?: Error | null;
-  onResume?: () => void;
+  onResume?: (checkpointId?: string) => void;
   onQuantize?: (artifactId: string) => void;
   onNativeQuantize?: (artifactId: string) => void;
   onNativeDistill?: (artifactId: string) => void;
@@ -112,9 +113,9 @@ export function TrainingMonitor({ run, projectId, active, artifacts, onCancel, c
   const [now, setNow] = useState(() => Date.now());
   const [logFilter, setLogFilter] = useState("");
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [checkpointId, setCheckpointId] = useState("latest");
+  const [checkpointId, setCheckpointId] = useState(preferredCheckpointId ?? "latest");
   const savedCheckpoints = sortCheckpoints(artifacts.filter(item => item.format === "training_checkpoint" || item.format === "native_checkpoint"));
-  const chosenCheckpoint = savedCheckpoints.find(item => item.id === checkpointId) ?? savedCheckpoints[0];
+  const chosenCheckpoint = checkpointId === 'latest' ? savedCheckpoints[0] : savedCheckpoints.find(item => item.id === checkpointId);
   const checkpointIssue = quantizationIssue(chosenCheckpoint);
   const telemetry = useQuery({
     queryKey: ["training-telemetry", run.id, run.status],
@@ -186,7 +187,7 @@ export function TrainingMonitor({ run, projectId, active, artifacts, onCancel, c
         <div className="training-monitor-actions">
           <span className={`status status-${status}`}>{status}</span>
           {running && <button type="button" className="secondary-button" disabled={cancelling} onClick={onCancel}>{cancelling ? "Cancelling…" : "Cancel run"}</button>}
-          {!running && onResume && <button type="button" className="secondary-button" onClick={onResume}>Resume from checkpoint</button>}
+          {!running && onResume && <button type="button" className="secondary-button" disabled={checkpointId !== 'latest' && !chosenCheckpoint} onClick={() => onResume(chosenCheckpoint?.id)}>Resume from checkpoint</button>}
         </div>
       </header>
       <p className="training-current-action" role="status">{runSummary(run, phase, status)}</p>
@@ -223,7 +224,8 @@ export function TrainingMonitor({ run, projectId, active, artifacts, onCancel, c
         {chosenCheckpoint?.metadata?.architecture === "act" ? <ActExportControl
           projectId={projectId} checkpoint={chosenCheckpoint} runtimes={exportRuntimes}
           jobs={exportJobs} artifacts={exportArtifacts} active={active} onNativeQuantize={onNativeQuantize} onNativeDistill={onNativeDistill}
-        /> : <><button type="button" className="primary-button" disabled={!!checkpointIssue} onClick={() => chosenCheckpoint && onQuantize(chosenCheckpoint.id)}>Quantize checkpoint</button>
+        /> : <><button type="button" className="primary-button" disabled={!chosenCheckpoint || !!checkpointIssue} onClick={() => chosenCheckpoint && onQuantize(chosenCheckpoint.id)}>Quantize checkpoint</button>
+        {!chosenCheckpoint && <p className="training-monitor-note" role="status">The requested checkpoint is unavailable. Choose another saved checkpoint explicitly to continue.</p>}
         {checkpointIssue && <p className="training-monitor-note" role="status">{checkpointIssue}</p>}</>}
       </section>}
       <details className="training-monitor-disclosure training-details" onToggle={event => setDetailsOpen(event.currentTarget.open)}>

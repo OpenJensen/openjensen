@@ -21,7 +21,7 @@ if request["runtime"]["id"] == "browser-failure":
     raise SystemExit(1)
 if (
     request["runtime"]["id"] == "browser-delayed-success"
-    and request["operation"] == "policy.import"
+    and request["operation"] == "policy.quantize"
 ):
     # Reproduce a valid Windows startup exceeding Playwright's default 5s assertion.
     print(json.dumps({"step": 0}), flush=True)

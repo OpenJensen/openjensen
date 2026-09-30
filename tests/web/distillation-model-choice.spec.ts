@@ -9,7 +9,7 @@ function savedJob(id: string, project = 'alpha', adapter = 'act-act-v1') {
     request: { operation: 'policy.distill', runtime_id: worker.id, artifact_id: teacher.id, dataset_job_id: inspectedDataset.id, timeout_seconds: 600, native_distillation: { adapter, student: 'act-256', steps: 100, learning_rate: .0001, seed: 1729, frame_stride: 30, splits: { train: [0, 1], validation: [2, 3], final: [4, 5] }, coordinate_attestation: 'generated_fixture', units: ['degrees', 'degrees', 'degrees', 'degrees', 'degrees', 'recorded_gripper'] } } };
 }
 const overview = (page: Page) => page.getByRole('region', { name: 'Distillation models', exact: true });
-const act = (page: Page) => page.getByRole('button', { name: 'ACT', exact: true });
+const act = (page: Page) => page.getByRole('button', { name: 'Choose Saved ACT teacher · teacher', exact: true });
 const panel = (page: Page) => page.getByRole('region', { name: 'ACT distillation', exact: true });
 const openDistill = (page: Page) => page.getByRole('navigation', { name: 'Policy lifecycle' }).getByRole('button', { name: 'Distill', exact: true }).click();
 
@@ -35,7 +35,7 @@ async function fixture(page: Page, initialJobs: Record<string, any>[] = [inspect
 test('Distill has no default model even with an ACT worker and dataset, and model entry is keyboard accessible', async ({ page }, testInfo) => {
   const state = await fixture(page);
   await expect(overview(page)).toBeVisible();
-  await expect(overview(page)).toContainText('Action Chunking with Transformers');
+  await expect(overview(page)).toContainText('Saved ACT teacher');
   await expect(overview(page)).not.toContainText('Other model families are not supported yet.');
   await expect(act(page)).toBeEnabled();
   await expect(panel(page)).toHaveCount(0);
@@ -44,7 +44,7 @@ test('Distill has no default model even with an ACT worker and dataset, and mode
   await act(page).focus(); await page.keyboard.press('Enter');
   await expect(panel(page)).toBeVisible();
   await expect(page.getByRole('group', { name: 'Teacher', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'All models', exact: true }).click();
+  await page.getByRole('button', { name: 'Choose another teacher', exact: true }).click();
   await expect(overview(page)).toBeVisible();
   await expect(act(page)).toBeEnabled();
   await expect(panel(page)).toHaveCount(0);
@@ -63,7 +63,8 @@ test('explicit model choice stays with its project and survives stage navigation
   await expect(panel(page)).toBeVisible();
   await page.getByLabel('Current project').selectOption('beta');
   await expect(overview(page)).toBeVisible(); await expect(panel(page)).toHaveCount(0);
-  await expect(act(page)).toBeEnabled();
+  await expect(act(page)).toHaveCount(0);
+  await expect(page.getByText('No saved models in this project yet')).toBeVisible();
   await page.getByLabel('Current project').selectOption('alpha');
   await expect(panel(page)).toBeVisible();
   await page.reload(); await openDistill(page);
@@ -104,7 +105,7 @@ for (const status of ['pending', 'uncertain'] as const) test(`${status} request 
   await page.getByRole('button', { name: 'Refresh distillation jobs', exact: true }).click();
   await expect(acknowledgment).toBeEnabled();
   expect(await page.evaluate(key => sessionStorage.getItem(key), key)).toBe(journal);
-  await page.getByRole('button', { name: 'All models', exact: true }).click();
+  await page.getByRole('button', { name: 'Choose another teacher', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Review request', exact: true })).toBeVisible();
   await page.getByLabel('Current project').selectOption('beta');
   await expect(overview(page)).toBeVisible();

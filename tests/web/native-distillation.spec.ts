@@ -31,7 +31,7 @@ async function fixture(page: Page) {
   });
   await page.goto('/'); await expect(page.getByLabel('Current project')).toHaveValue('alpha');
   await page.getByRole('button', { name: 'Distill', exact: true }).click();
-  await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  await page.getByRole('button', { name: 'Choose Imported ACT teacher · teacher:policy', exact: true }).click();
   await expect(page.getByRole('region', { name: 'ACT distillation', exact: true })).toBeVisible();
   return state;
 }
@@ -298,8 +298,10 @@ async function confirmCancellation(page: Page) {
 }
 async function reopenCancellationLane(page: Page) {
   await page.getByRole('button', { name: 'Distill', exact: true }).click();
-  const choice = page.getByRole('button', { name: 'ACT', exact: true });
-  await expect(panel(page).or(choice).first()).toBeVisible();
+  const choice = page.getByRole('button', { name: 'Choose Imported ACT teacher · teacher:policy', exact: true });
+  const empty = page.getByText('No saved models in this project yet');
+  await expect(panel(page).or(choice).or(empty).first()).toBeVisible();
+  if (await empty.isVisible()) return;
   if (await choice.isVisible()) await choice.click();
   await expect(panel(page)).toBeVisible();
 }

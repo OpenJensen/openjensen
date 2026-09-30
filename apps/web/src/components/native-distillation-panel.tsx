@@ -170,20 +170,17 @@ export function NativeDistillationPanel({ projectId, preferredJobId, preferredTe
     {error && <p role="alert">{error}</p>}
     {journalReady && attempt.data?.state === 'pending' && <p role="status">{attempt.data.message}</p>}
     {attempt.data?.state === 'uncertain' && <div className="warning-box"><p>{attempt.data.message}</p><button className="secondary-button" disabled={!reviewed || jobs.isError} onClick={() => { try { saveAttempt(null); setReviewed(false); setError(''); } catch { setJournalReady(false); setError('Browser session storage is unavailable.'); } }}>I checked recorded jobs; allow a new request</button></div>}
-    {preferredTeacherArtifactId && pendingTeacher && <p role="status" className="field-help">{artifacts.isPending ? 'Loading the selected training package…' : artifacts.isError ? 'The selected training package could not be checked. Refresh teacher policies before continuing.' : 'The selected training package is unavailable or unsupported. Refresh, or choose another teacher explicitly; no replacement has been selected.'}</p>}
+    {preferredTeacherArtifactId && pendingTeacher && <p role="status" className="field-help">{artifacts.isPending ? 'Loading the selected model…' : artifacts.isError ? 'The selected model could not be checked. Refresh teacher policies before continuing.' : 'The selected model is unavailable or unsupported. Refresh, or choose another teacher explicitly; no replacement has been selected.'}</p>}
+    {continuedTeacher && <div className="distillation-continuation" aria-label="Selected teacher model">
+      <span className="distillation-continuation-step">My models → Distill</span><h3>Your saved teacher is selected</h3><p>{continuedTeacher.label} · Run {continuedTeacher.job_id.slice(0, 8)}</p><small>{continuedTeacher.id}</small>
+      <p>Choose a prepared dataset and independent episode splits, then confirm its coordinates.</p>
+    </div>}
     <NativePreparation key={selected ? 'another' : 'first'} title="Prepare another student" hasResult={!!selected}>
       {!projectId || !runtimes.length ? <div className="native-setup-empty">
         <p role="status">{!projectId ? 'Select a project to continue.' : options.isPending ? 'Loading workers…' : options.isError ? 'Worker availability is unknown.' : 'No local ACT distillation worker is configured.'}</p>
         <a className="text-link" href={publicPath('/guide/#distill')}>Set up distillation</a>
         <button className="primary-button" disabled>Train ACT256 student</button>
       </div> : <fieldset className="native-simulation-form" disabled={!!attempt.data || cancelling || cancellation.attempt?.state === 'pending'}><legend className="visually-hidden">Distillation setup</legend>
-        {continuedTeacher && <div className="distillation-continuation" aria-label="Teacher from training">
-          <span className="distillation-continuation-step">Training → Distill</span>
-          <h3>Your exported teacher is selected</h3>
-          <p>{continuedTeacher.label} <span>· Export {continuedTeacher.job_id.slice(0, 8)}</span></p>
-          <small>{continuedTeacher.id}</small>
-          <p>Choose a prepared dataset and independent episode splits, then confirm its coordinates. Training starts only when you submit.</p>
-        </div>}
         <WorkflowChoiceGrid name="teacher" label="Teacher" value={teacherId} onChange={chooseTeacher} options={teachers.map(item => ({ value: item.id, label: item.label, meta: item.id.slice(0, 8), icon: 'layers' }))} emptyMessage="No ACT teacher policies. Import or export a complete policy first." />
         {excludedTeachers && <p role="status">Some ACT packages are excluded because their model format, timing or simulator details are incomplete or unsupported. Refresh or export a complete inference package.</p>}
         {teacherSemantics && <p className="field-help">Inherited action timing: plans {teacherSemantics.prediction_horizon} actions and applies {teacherSemantics.execution_horizon} per update. The server checks the saved policy before training; these values do not establish task quality.</p>}

@@ -17,7 +17,7 @@ class SimulationJournalUnavailable extends Error {
   constructor() { super('Browser session storage is unavailable or its simulation receipt is unreadable. Restore it and reload, then inspect recorded jobs before another request.'); }
 }
 
-export function NativeSimulationPanel({ projectId, preferredJobId, preferredArtifact, onJobSelected, onTraining }: { projectId: string; preferredJobId?: string; preferredArtifact?: SimulationHandoff; onJobSelected?: (id: string) => void; onTraining: () => void }) {
+export function NativeSimulationPanel({ projectId, preferredJobId, preferredArtifact, preferredModelId, initialPolicySource = 'saved', onJobSelected, onTraining }: { projectId: string; preferredJobId?: string; preferredArtifact?: SimulationHandoff; preferredModelId?: string; initialPolicySource?: 'saved' | 'upload'; onJobSelected?: (id: string) => void; onTraining: () => void }) {
   const client = useQueryClient();
   const options = useQuery({ queryKey: ['simulation-options'], queryFn: simulationOptions, retry: false, refetchInterval: 10_000 });
   const jobs = useQuery({ queryKey: ['jobs', projectId], queryFn: () => api.jobs(projectId), enabled: !!projectId, retry: false, refetchInterval: 3_000 });
@@ -35,7 +35,15 @@ export function NativeSimulationPanel({ projectId, preferredJobId, preferredArti
   const input = inputs.find(item => item.id === artifactId && (!handoff || item === handedArtifact));
   const handoffProfiles = handedArtifact && options.isSuccess && !options.isError ? simulationHandoffProfiles(handedArtifact, options.data.profiles) : [];
   const [file, setFile] = useState<File | null>(null);
-  const [policySource, setPolicySource] = useState<'saved' | 'upload'>('saved');
+  const [policySource, setPolicySource] = useState<'saved' | 'upload'>(initialPolicySource);
+  const modelPreferenceConsumed = useRef(false);
+  useEffect(() => {
+    if (!preferredModelId || modelPreferenceConsumed.current || !artifacts.isSuccess || artifacts.isError || !profile) return;
+    const candidate = inputs.find(item => item.id === preferredModelId && item.format !== 'native_quantized');
+    if (!candidate) return;
+    modelPreferenceConsumed.current = true;
+    setArtifactId(candidate.id);
+  }, [preferredModelId, artifacts.isSuccess, artifacts.isError, profile, inputs]);
   const [timeout, setTimeoutValue] = useState('7200');
   const [experimentalProfile, setExperimentalProfile] = useState<string | null>(null);
   const experimental = !!profile && experimentalProfile === profile.id;
@@ -51,10 +59,10 @@ export function NativeSimulationPanel({ projectId, preferredJobId, preferredArti
   const storageError = useQuery<string | null>({ queryKey: storageKey, queryFn: async () => null, enabled: false, initialData: null, gcTime: Infinity });
   const [journalProject, setJournalProject] = useState('');
   const [reviewedAttempt, setReviewedAttempt] = useState<PolicyJobAttempt>(null);
-  const [jobId, setJobId] = useState(preferredArtifact ? '' : preferredJobId ?? '');
+  const [jobId, setJobId] = useState(preferredArtifact || preferredModelId || initialPolicySource === 'upload' ? '' : preferredJobId ?? '');
   const [confirmCancel, setConfirmCancel] = useState<string | null>(null);
   const [videoFailed, setVideoFailed] = useState(false);
-  const selection = useRef({ id: preferredArtifact ? '' : preferredJobId ?? '', generation: 0 });
+  const selection = useRef({ id: preferredArtifact || preferredModelId || initialPolicySource === 'upload' ? '' : preferredJobId ?? '', generation: 0 });
   const busy = useRef(false);
   const mounted = useRef(true);
   const abortUpload = useRef<(() => void) | null>(null);
@@ -73,7 +81,7 @@ export function NativeSimulationPanel({ projectId, preferredJobId, preferredArti
     setArtifactId(handedArtifact.id);
     setExperimentalProfile(null);
   }, [handoff, handedArtifact, profile, handoffProfiles, artifactId]);
-  function consumePreference() { setConsumedPreference(preferenceKey); }
+  function consumePreference() { modelPreferenceConsumed.current = true; setConsumedPreference(preferenceKey); }
   function chooseProfile(id: string) { setProfileId(id); setArtifactId(''); setExperimental(false); }
   function chooseArtifact(id: string) { consumePreference(); setArtifactId(id); setExperimental(false); }
   function choosePolicySource(value: 'saved' | 'upload') { consumePreference(); setPolicySource(value); setArtifactId(''); setExperimental(false); }
@@ -217,6 +225,7 @@ export function NativeSimulationPanel({ projectId, preferredJobId, preferredArti
       </section>
       <section className="simulation-step" aria-labelledby="simulation-policy-title">
         <h3 id="simulation-policy-title">Policy</h3>
+        {preferredModelId && !modelPreferenceConsumed.current && <p role="status">Model from My models: {preferredModelId}. Choose a compatible profile to use this exact model.</p>}
         <div className="simulation-choice-grid simulation-source-grid" role="radiogroup" aria-label="Policy source">
           <label className="simulation-choice"><input type="radio" name="simulation-source" aria-label="Saved policies" checked={policySource === 'saved'} onChange={() => choosePolicySource('saved')} /><span className="simulation-choice-icon"><Icon name="layers" /></span><span className="simulation-choice-copy"><strong>Saved policies</strong><span>{!profile ? 'Choose a profile first' : artifacts.isError || artifacts.isPending ? 'Availability unknown' : `${inputs.length} available`}</span></span></label>
           <label className="simulation-choice"><input type="radio" name="simulation-source" aria-label="Import package" checked={policySource === 'upload'} onChange={() => choosePolicySource('upload')} /><span className="simulation-choice-icon"><Icon name="folder" /></span><span className="simulation-choice-copy"><strong>Import package</strong><span>TAR archive</span></span></label>

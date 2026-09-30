@@ -20,7 +20,7 @@ function report() {
 }
 async function fixture(page: Page) {
   const state = { runtimes: [runtime, engine] as Record<string, unknown>[], optionsError: false, jobsError: false, artifactsError: false, submit: 'ok', postGate: null as Promise<void> | null, cancelGate: null as Promise<void> | null, posts: [] as Record<string, any>[], jobs: [] as Record<string, any>[], events: [] as string[], cancels: [] as string[], gets: [] as string[],
-    artifacts: [artifact('act-export'), artifact('act-native', 'native_checkpoint'), artifact('smol', 'inference_export', { architecture: 'smolvla' }), artifact('training', 'training_checkpoint', { method: 'full' }), artifact('wrong-project', 'inference_export', {}, 'beta'), artifact('remote', 'inference_export', { storage: 'gcs', remote_uri: 'gs://fixture' }), artifact('packed', 'native_quantized'), artifact('vae', 'native_checkpoint', { use_vae: true }), artifact('full', 'native_checkpoint', { method: 'full', training_backend: 'lerobot' })] };
+    artifacts: [artifact('act-export'), artifact('act-native', 'native_checkpoint'), artifact('smol', 'native_checkpoint', { architecture: 'smolvla' }), artifact('training', 'training_checkpoint', { method: 'full' }), artifact('wrong-project', 'inference_export', {}, 'beta'), artifact('remote', 'inference_export', { storage: 'gcs', remote_uri: 'gs://fixture' }), artifact('packed', 'native_quantized'), artifact('vae', 'native_checkpoint', { use_vae: true }), artifact('full', 'native_checkpoint', { method: 'full', training_backend: 'lerobot' })] };
   await page.route('**/api/v1/**', async route => {
     const req = route.request(), path = new URL(req.url()).pathname;
     if (req.method() === 'POST') {
@@ -50,7 +50,7 @@ async function fixture(page: Page) {
   });
   await page.goto('/'); await expect(page.getByLabel('Current project')).toHaveValue('alpha');
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-  await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  await page.getByRole('button', { name: 'Choose Generated act-export · act-export', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toBeVisible();
   return state;
 }
@@ -61,9 +61,8 @@ test('capability is required and native-only workers cannot leak into the existi
   const state = await fixture(page); state.runtimes = [{ ...runtime, native_quantization: false }, engine]; await refresh(page);
   await expect(page.getByText('No local ACT quantization worker is configured.', { exact: false })).toBeVisible();
   await expect(submit(page)).toBeDisabled();
-  await page.getByRole('button', { name: 'SmolVLA', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Quantization jobs', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'New quantization', exact: true }).click();
+  await page.getByRole('button', { name: 'Choose Generated smol · smol', exact: true }).click();
+  await expect(page.getByRole('group', { name: 'My model', exact: true })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Compute', exact: true }).locator('input[value="act-cpu"]')).toHaveCount(0);
   await expect(page.getByRole('group', { name: 'Compute', exact: true }).locator('input[value="engine"]')).toHaveCount(1);
   expect(state.posts).toEqual([]);
@@ -74,15 +73,16 @@ for (const bits of [8, 4]) test(`INT${bits} requires an owned compatible source 
   await expect(picker.getByRole('radio')).toHaveCount(2);
   await expect(picker.getByRole('radio', { name: 'Generated act-export', exact: true })).toBeVisible();
   await expect(picker.getByRole('radio', { name: 'Generated act-native', exact: true })).toBeVisible();
-  await expect(page.getByRole('group', { name: 'Compression', exact: true }).locator('input:checked')).toHaveValue('8'); await expect(submit(page)).toBeDisabled();
+  await expect(page.getByRole('group', { name: 'Compression', exact: true }).locator('input:checked')).toHaveValue('8'); await expect(submit(page)).toBeEnabled();
   await picker.locator('input[value="act-export"]').check(); if (bits === 4) await page.getByRole('group', { name: 'Compression', exact: true }).locator('input[value="4"]').check();
   await submit(page).dblclick();
   await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toHaveAttribute('data-job-id', 'submitted');
   expect(state.posts).toEqual([{ operation: 'policy.quantize', runtime_id: 'act-cpu', artifact_id: 'act-export', native_quantization: { format: 'firebird_quant', bits, group_size: 64 }, timeout_seconds: 600 }]);
   await page.getByText('Activity and recorded report', { exact: true }).click();
   await expect(page.getByRole('region', { name: 'ACT quantization event log' })).toContainText('Generated activity for submitted');
-  await page.getByRole('button', { name: 'SmolVLA', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Quantization jobs', exact: true })).not.toContainText('submitted');
+  await page.getByRole('button', { name: 'Choose Generated smol · smol', exact: true }).click();
+  await expect(page.getByRole('group', { name: 'My model', exact: true }).locator('input:checked')).toHaveValue('smol');
+  await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toHaveCount(0);
   expect(state.posts).toHaveLength(1);
 });
 
@@ -152,9 +152,9 @@ test('project switching resets precision/source and failed history blocks mutati
   const state = await fixture(page); await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="act-export"]').check(); await page.getByRole('group', { name: 'Compression', exact: true }).locator('input[value="4"]').check();
   state.jobsError = true; await refresh(page); await expect(page.getByText(/Job updates are unavailable/)).toBeVisible(); await expect(submit(page)).toBeDisabled();
   state.jobsError = false; await page.getByLabel('Current project').selectOption('beta');
-  await expect(page.getByRole('button', { name: 'SmolVLA', exact: true })).toHaveAttribute('aria-pressed', 'false');
-  await page.getByRole('button', { name: 'ACT', exact: true }).click();
-  await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator('input:checked')).toHaveCount(0); await expect(page.getByRole('group', { name: 'Compression', exact: true }).locator('input:checked')).toHaveValue('8'); await expect(submit(page)).toBeDisabled(); expect(state.posts).toEqual([]);
+  await expect(page.getByText('No saved models in this project yet')).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Policy', exact: true })).toHaveCount(0);
+  await expect(submit(page)).toHaveCount(0); expect(state.posts).toEqual([]);
 });
 
 test('disabled runtime and timeout bounds block submission without changing precision or source', async ({ page }) => {
@@ -227,7 +227,7 @@ test('uncertain quantization survives stage navigation and reload until fresh hi
   await expect(page.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toBeVisible();
   await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await page.getByRole('button', { name: 'Quantize', exact: true }).click();
   await expect(submit(page)).toBeDisabled();
-  await page.reload(); await page.getByRole('button', { name: 'Quantize', exact: true }).click(); await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  await page.reload(); await page.getByRole('button', { name: 'Quantize', exact: true }).click(); await page.getByRole('button', { name: 'Choose Generated act-export · act-export', exact: true }).click();
   const allow = page.getByRole('button', { name: 'I checked the jobs; allow a new request' }); await expect(allow).toBeDisabled();
   state.jobsError = true; await refresh(page); await expect(allow).toBeDisabled();
   state.jobsError = false; await refresh(page); await expect(allow).toBeEnabled(); expect(state.posts).toHaveLength(1);
@@ -239,7 +239,7 @@ async function fromStudent(page: Page, state: Awaited<ReturnType<typeof fixture>
   state.jobs.push({ id: 'distilled', project_id: 'alpha', kind: 'policy.distill', status: 'succeeded', stage: 'completed', created_at: timestamp, updated_at: timestamp,
     request: { operation: 'policy.distill', runtime_id: 'student', artifact_id: 'teacher', dataset_job_id: 'data', timeout_seconds: 600, native_distillation: { adapter: 'act-act-v1', coordinate_attestation: 'generated_fixture', steps: 1 } }, result: { reports: [], artifacts: [output] } });
   await page.getByRole('button', { name: 'Distill', exact: true }).click();
-  await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  await page.getByRole('button', { name: 'Choose Generated act-export · act-export', exact: true }).click();
   await page.getByRole('button', { name: 'Refresh distillation jobs', exact: true }).click();
   await page.getByLabel('Saved distillation job', { exact: true }).selectOption('distilled');
   await page.getByRole('button', { name: 'Open ACT quantization', exact: true }).click();
@@ -302,7 +302,7 @@ test('an acknowledged job remains visible when clearing its recovery journal fai
   await expect(page.getByText('Submitting one local quantization job…', { exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => (window as unknown as { journalRemovals: number }).journalRemovals)).toBe(1);
   await page.getByText('Prepare another ACT candidate', { exact: true }).click(); await expect(submit(page)).toBeDisabled(); expect(state.posts).toHaveLength(1);
-  await page.reload(); await page.getByRole('button', { name: 'Quantize', exact: true }).click(); await page.getByRole('button', { name: 'ACT', exact: true }).click();
+  await page.reload(); await page.getByRole('button', { name: 'Quantize', exact: true }).click(); await page.getByRole('button', { name: 'Choose Generated act-export · act-export', exact: true }).click();
   await expect(page.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toBeDisabled(); expect(state.posts).toHaveLength(1);
 });
 
