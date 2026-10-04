@@ -120,7 +120,7 @@ jobs:
           cache: false
       - run: uv sync --frozen --all-packages --extra tui
       - name: Install video validation tools (Linux)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && runner.environment != 'self-hosted'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Install isolated CPU preview reader (POSIX)
         if: runner.os != 'Windows'
@@ -145,8 +145,12 @@ jobs:
       - run: pnpm build:web
         if: runner.os == 'Linux' || inputs.windows_browser
       # All current projects use Chromium headless shell, without a channel.
-      - run: pnpm exec playwright install --with-deps --only-shell chromium
-        if: runner.os == 'Linux' || inputs.windows_browser
+      - name: Use preinstalled GCP browser dependencies
+        run: pnpm exec playwright install --only-shell chromium
+        if: runner.environment == 'self-hosted' && runner.os == 'Linux'
+      - name: Install hosted browser dependencies
+        run: pnpm exec playwright install --with-deps --only-shell chromium
+        if: runner.environment != 'self-hosted'
       - run: pnpm test:web --shard=${{ matrix.shard }}
         if: runner.os == 'Linux' || inputs.windows_browser
       - run: pnpm test:diagnostics
