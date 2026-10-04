@@ -12,6 +12,26 @@ SCRIPT = ROOT / ".github/scripts/prepare_runner.sh"
 GUARD = "runner.environment == 'self-hosted' && runner.os == 'Linux'"
 
 
+def test_gcp_reuses_browser_dependencies():
+    workflow = yaml.safe_load((ROOT / ".github/workflows/application.yml").read_text())
+    installers = [
+        step
+        for step in workflow["jobs"]["web"]["steps"]
+        if "playwright install" in step.get("run", "")
+    ]
+    assert len(installers) == 2
+    cached = next(step for step in installers if "--with-deps" not in step["run"])
+    hosted = next(step for step in installers if "--with-deps" in step["run"])
+    assert cached["if"] == "runner.environment == 'self-hosted' && runner.os == 'Linux'"
+    assert hosted["if"] == "runner.environment != 'self-hosted'"
+    video = next(
+        step
+        for step in workflow["jobs"]["web"]["steps"]
+        if step.get("name") == "Install video validation tools (Linux)"
+    )
+    assert video["if"] == "runner.os == 'Linux' && runner.environment != 'self-hosted'"
+
+
 @pytest.mark.skipif(os.name != "posix", reason="Linux runner setup requires a POSIX shell")
 def test_runner_upgrade_policy(tmp_path):
     config = tmp_path / "etc"

@@ -100,17 +100,22 @@ test('documents every live route and model, with the raw schema still accessible
   expect(response.ok()).toBeTruthy();
   const schema = await response.json();
   await openReference(page);
-  let expected = 0;
+  const expectedEndpoints: string[] = [];
   for (const [path, item] of Object.entries(schema.paths)) {
     for (const method of Object.keys(item as object).filter(method => methods.has(method))) {
-      expected += 1;
-      await expect(endpoint(page, method, path)).toBeVisible();
+      expectedEndpoints.push(`endpoint-${method}-${encodeURIComponent(path)}`);
     }
   }
-  await expect(page.locator('details[id^="endpoint-"]')).toHaveCount(expected);
-  for (const name of Object.keys(schema.components.schemas)) {
-    await expect(page.locator(`[id=${JSON.stringify(`schema-${name}`)}]`)).toHaveCount(1);
-  }
+  // Compare complete inventories in two browser reads, rather than hundreds of round trips.
+  await expect.poll(() => page.locator('details[id^="endpoint-"]').evaluateAll(nodes => nodes
+    .filter(node => {
+      const bounds = node.getBoundingClientRect();
+      return bounds.width > 0 && bounds.height > 0 && getComputedStyle(node).visibility === 'visible';
+    })
+    .map(node => node.id).sort())).toEqual(expectedEndpoints.sort());
+  const expectedSchemas = Object.keys(schema.components.schemas).map(name => `schema-${encodeURIComponent(name)}`).sort();
+  await expect.poll(() => page.locator('details[id^="schema-"]').evaluateAll(nodes => nodes
+    .map(node => node.id).sort())).toEqual(expectedSchemas);
   await expect(page.locator('a[href="/openapi.json"]').first()).toBeVisible();
   await expect(page.locator('.swagger-ui, .redoc-wrap')).toHaveCount(0);
 });
