@@ -13,6 +13,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - name: Protect disposable runner during package maintenance
+        if: runner.environment == 'self-hosted' && runner.os == 'Linux'
+        working-directory: ${{ github.workspace }}
+        run: sudo bash .github/scripts/prepare_runner.sh
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
