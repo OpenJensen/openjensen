@@ -1,8 +1,5 @@
 name: Simulation worker checks
 on:
-  push:
-    branches: [main]
-    paths: ['workers/isaac_sim/**', 'workers/skypilot/**', '.github/workflows/simulation.yml']
   workflow_dispatch:
 # Do not cancel another workflow, PR or a main-branch verification.
 concurrency:
@@ -12,7 +9,7 @@ permissions:
   contents: read
 jobs:
   simulation:
-    runs-on: ${{ fromJSON(vars.GCP_RUNNERS_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON((github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-latest"]') }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4

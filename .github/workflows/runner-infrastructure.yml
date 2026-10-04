@@ -10,13 +10,6 @@ on:
       - .python-version
   push:
     branches: [main]
-    paths:
-      - tests/test_ci_scope.py
-      - .github/scripts/**
-      - .github/workflows/**
-      - package.json
-      - .node-version
-      - .python-version
   workflow_dispatch:
 permissions:
   contents: read
@@ -25,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   validate:
-    runs-on: ${{ fromJSON(vars.GCP_RUNNERS_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON((github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-latest"]') }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4

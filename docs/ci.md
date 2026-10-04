@@ -1,15 +1,17 @@
 # Local and hosted verification
 
-GitHub Actions minutes are currently exhausted. An unstarted hosted job is not a pass. Local macOS and isolated Linux results are recorded with each delivery; Windows is deliberately excluded from default hackathon runs; its optional manual execution, hosted cache behavior and cold/warm timing remain separate acceptance items.
+Main pushes run the existing application, native-worker and routing workflows on GCP Linux runners. Simulation is manual-only. Fork PRs and optional Windows checks retain GitHub-hosted runners. An unstarted job is not a pass. Local macOS and isolated Linux results are recorded with each delivery; Windows is deliberately excluded from default hackathon runs; its optional manual execution, hosted cache behavior and cold/warm timing remain separate acceptance items.
 
 ## Affected checks
 
-Application and native-worker workflows inspect the local Git diff with `.github/scripts/ci_scope.py`. PRs use their base-to-head merge-base diff; main pushes and merge groups use their explicit before/after commits. Missing history, invalid event data, unknown paths and manual dispatch select all checks. Rename detection is disabled so both the removed and added paths are considered. Scope-job failure or missing/invalid outputs also selects all downstream checks. Stable `application-verification` and `native-worker-verification` aggregate jobs reject failed, cancelled or unexpectedly skipped suites; only an explicit successful scope decision permits a skip. These are available for future branch rules, without changing account or branch settings.
+Application and native-worker workflows inspect the local Git diff with `.github/scripts/ci_scope.py`. Main pushes always select every check. PRs use their base-to-head merge-base diff; merge groups use their explicit before/after commits. Missing history, invalid event data, unknown paths and manual dispatch select all checks. Rename detection is disabled so both the removed and added paths are considered. Scope-job failure or missing/invalid outputs also selects all downstream checks. Stable `application-verification` and `native-worker-verification` aggregate jobs reject failed, cancelled or unexpectedly skipped suites; only an explicit successful scope decision permits a skip. These are available for future branch rules, without changing account or branch settings.
+
+For PRs and merge groups:
 
 - Application/core/web/test changes run application checks. Core lifecycle/worker contracts also run all native boundaries.
 - Worker changes run their matching isolated suite and application adapters. Native training changes additionally check ACT export and teaching data consumers.
 - New/unknown workers, shared CI changes and selector tests run every scope.
-- Documentation-only changes skip those application/native jobs, except `docs/workspace-guide.md`: it ships in the web app and runs application checks. The independent simulation workflow keeps its existing behavior.
+- Documentation-only changes skip those application/native jobs, except `docs/workspace-guide.md`: it ships in the web app and runs application checks. Simulation runs only through manual dispatch.
 - Linux runs core, optional terminal tests, generated API checks, type checking, production build, all browser tests and diagnostics. Push, PR and merge-group application matrices contain Linux only. A manual application run defaults to Linux too; explicitly enabling **windows_browser** adds Windows core/terminal and complete web/build/browser checks. Native desktop packaging remains a separately recorded platform check.
 
 The teaching job checks the real CPU LeRobot recorder/readback and provider proposal contracts in one environment, and voice SDK contracts in another. A separate small decision-worker job runs contracts without installing Torch or downloading Muose; its opt-in real-model test is explicitly skipped. Actual model-scoring evidence remains a separate local receipt. It does not access voice providers, cloud credentials or GPUs. Dependencies are installed on every run; caches contain dependency downloads, not application workspaces, model weights, credentials or virtual environments.
@@ -52,4 +54,4 @@ The selector itself is exercised with real Git histories, including deletes/rena
 uv run --no-sync pytest -q tests/test_ci_scope.py
 ```
 
-If change selection is suspect, manually dispatch both workflows to request every scope (and explicitly enable **windows_browser** only when Windows verification is wanted). Revert the specific CI change to restore the prior unconditional matrix; do not relax tests, application admission or branch protection. Measure successful hosted runs before reporting a runtime or free-minute saving.
+If change selection is suspect, manually dispatch both workflows to request every scope (and explicitly enable **windows_browser** only when Windows verification is wanted). Main pushes already request every scope; do not relax tests, application admission or branch protection. Measure successful hosted runs before reporting a runtime or free-minute saving.

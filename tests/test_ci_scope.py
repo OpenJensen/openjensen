@@ -205,16 +205,39 @@ def test_unified_quantization_keeps_two_explicit_compatible_dependency_pairs():
     assert "uv pip check --python .venv/bin/python" in job
 
 
-@pytest.mark.parametrize("name", ["application", "native-workers", "simulation"])
-def test_linux_routing_is_opt_in(name):
+@pytest.mark.parametrize(
+    "name", ["application", "native-workers", "simulation", "runner-infrastructure"]
+)
+def test_linux_routing_defaults_to_gcp(name):
     import yaml
 
     document = yaml.safe_load((SCRIPT.parents[1] / f"workflows/{name}.yml").read_text())
     for job in document["jobs"].values():
         routing = job["runs-on"]
-        assert "vars.GCP_RUNNERS_ENABLED == 'true'" in routing
+        assert "vars.GCP_RUNNERS_ENABLED" not in routing
         assert "github.event.pull_request.head.repo.full_name == github.repository" in routing
         assert "firebird-gcp" in routing
         assert "ubuntu-latest" in routing
     if name == "application":
         assert "matrix.os == 'ubuntu-latest'" in document["jobs"]["application"]["runs-on"]
+
+
+def test_simulation_requires_dispatch():
+    import yaml
+
+    document = yaml.safe_load((SCRIPT.parents[1] / "workflows/simulation.yml").read_text())
+    assert set(document[True]) == {"workflow_dispatch"}
+
+
+def test_push_runs_every_scope(tmp_path, monkeypatch):
+    output = tmp_path / "output"
+    event = tmp_path / "event.json"
+    event.write_text("{}")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event))
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    monkeypatch.setattr(ci_scope, "changed_paths", lambda *_: ["README.md"])
+
+    ci_scope.main()
+
+    assert output.read_text().splitlines() == [f"{name}=true" for name in ci_scope.SCOPES]

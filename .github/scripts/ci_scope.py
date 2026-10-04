@@ -135,6 +135,8 @@ def changed_paths(event, document):
 
 def main():
     try:
+        if os.environ["GITHUB_EVENT_NAME"] == "push":
+            raise ValueError("Push requests complete verification")
         document = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
         selected = select(changed_paths(os.environ["GITHUB_EVENT_NAME"], document))
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
