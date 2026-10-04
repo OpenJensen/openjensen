@@ -47,6 +47,47 @@ jobs:
     runs-on: ${{ fromJSON(matrix.os == 'ubuntu-latest' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","firebird-gcp"]' || format('["{0}"]', matrix.os)) }}
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.19'
+          python-version: '3.14.7'
+          enable-cache: true
+          cache-suffix: application
+          cache-dependency-glob: |
+            uv.lock
+            .github/workflows/application.yml
+      - run: uv sync --frozen --all-packages --extra tui
+      - name: Install video validation tools (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Install isolated CPU preview reader (POSIX)
+        if: runner.os != 'Windows'
+        run: |
+          uv venv --python 3.14.7 workers/_cpu_readers/.venv
+          uv pip install --python workers/_cpu_readers/.venv/bin/python --no-deps pyarrow==25.0.1
+      - name: Install isolated CPU preview reader (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          uv venv --python 3.14.7 workers/_cpu_readers/.venv
+          uv pip install --python workers/_cpu_readers/.venv/Scripts/python.exe --no-deps pyarrow==25.0.1
+      - run: uv run --no-sync ruff check packages/core scripts tests .github/scripts
+        if: runner.os == 'Linux'
+      - run: uv run --no-sync ruff format --check packages/core scripts tests .github/scripts
+        if: runner.os == 'Linux'
+      - run: uv run --no-sync pytest -q
+  web:
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.application != 'false') }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ['1/2', '2/2']
+        # Hackathon default is Linux. Windows is an explicit manual opt-in.
+        os: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.windows_browser && '["ubuntu-latest","windows-latest"]' || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON(matrix.os == 'ubuntu-latest' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","firebird-gcp"]' || format('["{0}"]', matrix.os)) }}
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         if: runner.os == 'Linux' || inputs.windows_browser
         with:
@@ -79,11 +120,6 @@ jobs:
         run: |
           uv venv --python 3.14.7 workers/_cpu_readers/.venv
           uv pip install --python workers/_cpu_readers/.venv/Scripts/python.exe --no-deps pyarrow==25.0.1
-      - run: uv run --no-sync ruff check packages/core scripts tests .github/scripts
-        if: runner.os == 'Linux'
-      - run: uv run --no-sync ruff format --check packages/core scripts tests .github/scripts
-        if: runner.os == 'Linux'
-      - run: uv run --no-sync pytest -q
       - run: pnpm install --frozen-lockfile
         if: runner.os == 'Linux' || inputs.windows_browser
       - run: uv run --no-sync python scripts/export_openapi.py
@@ -99,20 +135,20 @@ jobs:
       # All current projects use Chromium headless shell, without a channel.
       - run: pnpm exec playwright install --with-deps --only-shell chromium
         if: runner.os == 'Linux' || inputs.windows_browser
-      - run: pnpm test:web
+      - run: pnpm test:web --shard=${{ matrix.shard }}
         if: runner.os == 'Linux' || inputs.windows_browser
       - run: pnpm test:diagnostics
-        if: runner.os == 'Linux' || inputs.windows_browser
+        if: matrix.shard == '1/2'
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: browser-test-results-${{ matrix.os }}
+          name: browser-test-results-${{ matrix.os }}-${{ strategy.job-index }}
           path: |
             playwright-report/
             test-results/
           retention-days: 7
   application-verification:
-    needs: [scope, application]
+    needs: [scope, application, web]
     if: ${{ always() }}
     runs-on: ${{ fromJSON((github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-latest"]') }}
     timeout-minutes: 2
@@ -125,7 +161,7 @@ jobs:
           import json, os
           results = json.loads(os.environ['CHECK_RESULTS'])
           scope = results['scope']
-          required = {'application': 'application'}
+          required = {'application': 'application', 'web': 'application'}
           failures = []
           for job, output in required.items():
               result = results[job]['result']

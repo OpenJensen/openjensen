@@ -4,6 +4,8 @@ Main pushes run the CI workflow (application and native-worker jobs) on GCP Linu
 
 ## Affected checks
 
+Python checks run in the `application` job with a 20-minute budget. Web build and browser checks run in two `web` shards with separate 35-minute budgets. Both shards retain desktop/mobile coverage; diagnostics run once per selected OS. The application result gate requires Python and both browser shards to pass. All jobs share the existing three-runner GCP pool.
+
 CI jobs inspect the local Git diff with `.github/scripts/ci_scope.py`. Main pushes always select every check. PRs use their base-to-head merge-base diff; merge groups use their explicit before/after commits. Missing history, invalid event data, unknown paths and manual dispatch select all checks. Rename detection is disabled so both the removed and added paths are considered. Scope-job failure or missing/invalid outputs also selects all downstream checks. Stable `application-verification` and `native-worker-verification` aggregate jobs reject failed, cancelled or unexpectedly skipped suites; only an explicit successful scope decision permits a skip. These are available for future branch rules, without changing account or branch settings.
 
 For PRs and merge groups:

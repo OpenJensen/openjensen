@@ -246,6 +246,44 @@ def test_pnpm_setup_does_not_cache():
     import yaml
 
     document = yaml.safe_load((SCRIPT.parents[1] / "workflows/application.yml").read_text())
-    steps = document["jobs"]["application"]["steps"]
+    steps = document["jobs"]["web"]["steps"]
     setup = next(step for step in steps if step.get("uses") == "pnpm/action-setup@v4")
     assert setup["with"]["cache"] is False
+
+
+def test_python_and_browser_budgets():
+    import yaml
+
+    jobs = yaml.safe_load((SCRIPT.parents[1] / "workflows/application.yml").read_text())["jobs"]
+    core = jobs["application"]
+    web = jobs["web"]
+    assert "pytest -q" in str(core["steps"])
+    assert "pnpm test:web" not in str(core["steps"])
+    assert web["strategy"]["matrix"]["shard"] == ["1/2", "2/2"]
+    assert web["strategy"]["matrix"]["os"] == core["strategy"]["matrix"]["os"]
+    assert "--shard=${{ matrix.shard }}" in str(web["steps"])
+    diagnostics = next(step for step in web["steps"] if step.get("run") == "pnpm test:diagnostics")
+    assert diagnostics["if"] == "matrix.shard == '1/2'"
+    assert set(jobs["application-verification"]["needs"]) == {"scope", "application", "web"}
+
+
+@pytest.mark.parametrize("status", ["failure", "cancelled", "skipped"])
+def test_web_failure_blocks_gate(status):
+    text = (SCRIPT.parents[1] / "workflows/application.yml").read_text()
+    gate = text.split("  application-verification:\n", 1)[1]
+    block = gate.split("python3 - <<'PY_GATE'\n", 1)[1].split("          PY_GATE", 1)[0]
+    script = "\n".join(line[10:] for line in block.splitlines())
+    results = {
+        "scope": {"result": "success", "outputs": {"application": "true"}},
+        "application": {"result": "success"},
+        "web": {"result": status},
+    }
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        env=os.environ | {"CHECK_RESULTS": json.dumps(results)},
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    assert result.returncode != 0
+    assert f"web: {status}" in result.stderr
