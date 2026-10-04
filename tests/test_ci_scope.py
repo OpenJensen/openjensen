@@ -203,3 +203,18 @@ def test_unified_quantization_keeps_two_explicit_compatible_dependency_pairs():
     assert "matrix:\n        include:" in job
     assert "numpy==${{ matrix.numpy }}" in job
     assert "uv pip check --python .venv/bin/python" in job
+
+
+@pytest.mark.parametrize("name", ["application", "native-workers", "simulation"])
+def test_linux_routing_is_opt_in(name):
+    import yaml
+
+    document = yaml.safe_load((SCRIPT.parents[1] / f"workflows/{name}.yml").read_text())
+    for job in document["jobs"].values():
+        routing = job["runs-on"]
+        assert "vars.GCP_RUNNERS_ENABLED == 'true'" in routing
+        assert "github.event.pull_request.head.repo.full_name == github.repository" in routing
+        assert "firebird-gcp" in routing
+        assert "ubuntu-latest" in routing
+    if name == "application":
+        assert "matrix.os == 'ubuntu-latest'" in document["jobs"]["application"]["runs-on"]
