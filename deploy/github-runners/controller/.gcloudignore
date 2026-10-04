@@ -1,5 +1,0 @@
-.gcloudignore
-.git
-.venv
-__pycache__
-tests

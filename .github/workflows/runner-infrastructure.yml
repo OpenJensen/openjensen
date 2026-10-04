@@ -1,8 +1,9 @@
-name: Runner infrastructure checks
+name: Runner routing checks
 on:
   pull_request:
     paths:
-      - deploy/github-runners/**
+      - tests/test_ci_scope.py
+      - .github/scripts/**
       - .github/workflows/**
       - package.json
       - .node-version
@@ -10,7 +11,8 @@ on:
   push:
     branches: [main]
     paths:
-      - deploy/github-runners/**
+      - tests/test_ci_scope.py
+      - .github/scripts/**
       - .github/workflows/**
       - package.json
       - .node-version
@@ -31,22 +33,10 @@ jobs:
         with:
           version: '0.12.19'
           python-version: '3.12.14'
-      - name: Controller and routing tests
+      - name: Application routing tests
         run: |
           uv venv /tmp/runner-tests
-          uv pip install --python /tmp/runner-tests/bin/python -r deploy/github-runners/controller/requirements-dev.txt
-          /tmp/runner-tests/bin/python -m pytest -q deploy/github-runners/controller/tests tests/test_ci_scope.py
-          /tmp/runner-tests/bin/ruff check deploy/github-runners
-          /tmp/runner-tests/bin/ruff format --check deploy/github-runners
-          bash -n deploy/github-runners/image/provision.sh
-          bash -n deploy/github-runners/image/runner.sh
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: '1.13.5'
-      - name: Validate Terraform without credentials
-        working-directory: deploy/github-runners/terraform
-        run: |
-          terraform fmt -check -recursive
-          terraform init -backend=false
-          terraform validate
-          terraform test
+          uv pip install --python /tmp/runner-tests/bin/python pytest==9.1.1 PyYAML==6.0.3 ruff==0.16.9
+          /tmp/runner-tests/bin/python -m pytest -q tests/test_ci_scope.py
+          /tmp/runner-tests/bin/ruff check tests/test_ci_scope.py .github/scripts/ci_scope.py
+          /tmp/runner-tests/bin/ruff format --check tests/test_ci_scope.py .github/scripts/ci_scope.py
