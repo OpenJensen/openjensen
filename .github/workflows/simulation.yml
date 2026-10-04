@@ -1,4 +1,4 @@
-name: Simulation worker checks
+name: Simulation
 on:
   workflow_dispatch:
 # Do not cancel another workflow, PR or a main-branch verification.

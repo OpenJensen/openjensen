@@ -94,17 +94,18 @@ def test_uncertain_history_never_skips_checks(tmp_path, monkeypatch, event, docu
     assert output.read_text().splitlines() == [f"{name}=true" for name in ci_scope.SCOPES]
 
 
-@pytest.mark.parametrize("workflow", ["application.yml", "native-workers.yml"])
+@pytest.mark.parametrize("gate", ["application-verification", "native-worker-verification"])
 @pytest.mark.parametrize(
     "case",
     ["pass", "skip", "failure", "cancelled", "unexpected_skip", "missing_output", "scope_failure"],
 )
-def test_stable_gate_does_not_hide_failed_or_missing_checks(workflow, case):
+def test_stable_gate_does_not_hide_failed_or_missing_checks(gate, case):
     # Execute the exact inline gate shipped to Actions, not a test reimplementation.
     import ast
     import re
 
-    text = (SCRIPT.parents[1] / "workflows" / workflow).read_text()
+    text = (SCRIPT.parents[1] / "workflows/application.yml").read_text()
+    text = text.split(f"  {gate}:\n", 1)[1]
     block = text.split("python3 - <<'PY_GATE'\n", 1)[1].split("          PY_GATE", 1)[0]
     script = "\n".join(line[10:] for line in block.splitlines())
     mapping = ast.literal_eval(re.search(r"required = (.*)", script)[1])
@@ -194,7 +195,7 @@ def test_windows_matrix_requires_explicit_manual_opt_in(event, windows):
 def test_unified_quantization_keeps_two_explicit_compatible_dependency_pairs():
     import re
 
-    workflow = (SCRIPT.parents[1] / "workflows/native-workers.yml").read_text()
+    workflow = (SCRIPT.parents[1] / "workflows/application.yml").read_text()
     job = workflow.split("  unified-quantization:\n", 1)[1].split("  training:\n", 1)[0]
     pairs = re.findall(
         r"^          - torch: '([^']+)'\n            numpy: '([^']+)'$", job, re.MULTILINE
@@ -205,9 +206,7 @@ def test_unified_quantization_keeps_two_explicit_compatible_dependency_pairs():
     assert "uv pip check --python .venv/bin/python" in job
 
 
-@pytest.mark.parametrize(
-    "name", ["application", "native-workers", "simulation", "runner-infrastructure"]
-)
+@pytest.mark.parametrize("name", ["application", "simulation"])
 def test_linux_routing_defaults_to_gcp(name):
     import yaml
 

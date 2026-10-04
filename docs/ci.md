@@ -1,10 +1,10 @@
 # Local and hosted verification
 
-Main pushes run the existing application, native-worker and routing workflows on GCP Linux runners. Simulation is manual-only. Fork PRs and optional Windows checks retain GitHub-hosted runners. An unstarted job is not a pass. Local macOS and isolated Linux results are recorded with each delivery; Windows is deliberately excluded from default hackathon runs; its optional manual execution, hosted cache behavior and cold/warm timing remain separate acceptance items.
+Main pushes run the CI workflow (application and native-worker jobs) on GCP Linux runners. Simulation is manual-only. Fork PRs and optional Windows checks retain GitHub-hosted runners. An unstarted job is not a pass. Local macOS and isolated Linux results are recorded with each delivery; Windows is deliberately excluded from default hackathon runs; its optional manual execution, hosted cache behavior and cold/warm timing remain separate acceptance items.
 
 ## Affected checks
 
-Application and native-worker workflows inspect the local Git diff with `.github/scripts/ci_scope.py`. Main pushes always select every check. PRs use their base-to-head merge-base diff; merge groups use their explicit before/after commits. Missing history, invalid event data, unknown paths and manual dispatch select all checks. Rename detection is disabled so both the removed and added paths are considered. Scope-job failure or missing/invalid outputs also selects all downstream checks. Stable `application-verification` and `native-worker-verification` aggregate jobs reject failed, cancelled or unexpectedly skipped suites; only an explicit successful scope decision permits a skip. These are available for future branch rules, without changing account or branch settings.
+CI jobs inspect the local Git diff with `.github/scripts/ci_scope.py`. Main pushes always select every check. PRs use their base-to-head merge-base diff; merge groups use their explicit before/after commits. Missing history, invalid event data, unknown paths and manual dispatch select all checks. Rename detection is disabled so both the removed and added paths are considered. Scope-job failure or missing/invalid outputs also selects all downstream checks. Stable `application-verification` and `native-worker-verification` aggregate jobs reject failed, cancelled or unexpectedly skipped suites; only an explicit successful scope decision permits a skip. These are available for future branch rules, without changing account or branch settings.
 
 For PRs and merge groups:
 
@@ -46,7 +46,7 @@ NEXT_PUBLIC_BASE_PATH=/firebird FIREBIRD_TEST_WEB_DIR="$PWD/apps/web/out/prefix-
 pnpm build:web
 ```
 
-The production-browser fixture owns a disposable local server and refuses an occupied port. Keep the developer's application running separately; do not kill a process without identifying it. Some core snapshot/video tests additionally require the isolated CPU reader and FFmpeg installed exactly as the application workflow describes. Native workers keep separate environments and commands in `.github/workflows/native-workers.yml`; the core environment must not absorb their Torch/CUDA dependencies.
+The production-browser fixture owns a disposable local server and refuses an occupied port. Keep the developer's application running separately; do not kill a process without identifying it. Some core snapshot/video tests additionally require the isolated CPU reader and FFmpeg installed exactly as the application workflow describes. Native workers keep separate environments and commands in `.github/workflows/application.yml`; the core environment must not absorb their Torch/CUDA dependencies.
 
 The selector itself is exercised with real Git histories, including deletes/renames and filenames containing newlines:
 
@@ -54,4 +54,4 @@ The selector itself is exercised with real Git histories, including deletes/rena
 uv run --no-sync pytest -q tests/test_ci_scope.py
 ```
 
-If change selection is suspect, manually dispatch both workflows to request every scope (and explicitly enable **windows_browser** only when Windows verification is wanted). Main pushes already request every scope; do not relax tests, application admission or branch protection. Measure successful hosted runs before reporting a runtime or free-minute saving.
+If change selection is suspect, manually dispatch CI to request every scope (and explicitly enable **windows_browser** only when Windows verification is wanted). Main pushes already request every scope; do not relax tests, application admission or branch protection. Measure successful hosted runs before reporting a runtime or free-minute saving.
