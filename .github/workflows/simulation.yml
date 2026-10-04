@@ -3,8 +3,6 @@ on:
   push:
     branches: [main]
     paths: ['workers/isaac_sim/**', 'workers/skypilot/**', '.github/workflows/simulation.yml']
-  pull_request:
-    paths: ['workers/isaac_sim/**', 'workers/skypilot/**', '.github/workflows/simulation.yml']
   workflow_dispatch:
 # Do not cancel another workflow, PR or a main-branch verification.
 concurrency:
