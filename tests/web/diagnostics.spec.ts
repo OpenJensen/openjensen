@@ -130,8 +130,10 @@ test('guides an empty project to Quantize and blocks unsupported simulation', as
   await expect(page.getByText('Evaluates LIBERO Object task 0', { exact: false })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start diagnostics', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Open Quantize', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Quantization jobs', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'New quantization', exact: true })).toBeEnabled();
+  const models = page.getByRole('region', { name: 'Your quantization models', exact: true });
+  await expect(models).toBeVisible();
+  await expect(models.getByRole('heading', { name: 'No saved models in this project yet', exact: true })).toBeVisible();
+  await expect(models.getByRole('button', { name: 'Open My models', exact: true })).toBeEnabled();
   const artifact = await policy(request, id);
   await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
   await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
