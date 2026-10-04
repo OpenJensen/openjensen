@@ -64,8 +64,7 @@ jobs:
         if: runner.os == 'Linux' || inputs.windows_browser
         with:
           version: '12.6.0'
-          cache: true
-          cache_dependency_path: pnpm-lock.yaml
+          cache: false
       - run: uv sync --frozen --all-packages --extra tui
       - name: Install video validation tools (Linux)
         if: runner.os == 'Linux'

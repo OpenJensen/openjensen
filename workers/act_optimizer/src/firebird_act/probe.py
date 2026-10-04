@@ -37,7 +37,7 @@ def runtime_versions() -> dict[str, str]:
     return versions
 
 
-def check_queue(policy, batch, chunk, execution, torch):
+def check_queue(policy: Any, batch: Any, chunk: Any, execution: int, torch: Any) -> None:
     """Check two real queue refills, the execution prefix and a subsequent reset."""
     from unittest.mock import patch
 

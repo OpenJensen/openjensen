@@ -6,7 +6,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from .bundle import (
     JSON_LIMIT,
@@ -138,6 +138,7 @@ def run_job(job: dict[str, Any]) -> dict[str, Any]:
         )
         if current != admission:
             raise ValueError("Training source changed before export publication")
+        dataset_metadata = cast(dict[str, Any], admission.dataset_metadata)
         metadata = {
             "architecture": "act",
             **control_metadata(policy),
@@ -168,9 +169,9 @@ def run_job(job: dict[str, Any]) -> dict[str, Any]:
                     "snapshot_id": admission.dataset_revision,
                     "manifest_sha256": admission.dataset_manifest_sha256,
                     **{
-                        k: admission.dataset_metadata[k]
+                        k: dataset_metadata[k]
                         for k in ("repo_id", "revision")
-                        if isinstance(admission.dataset_metadata.get(k), str)
+                        if isinstance(dataset_metadata.get(k), str)
                     },
                 }
                 if admission.dataset_manifest_sha256 is not None

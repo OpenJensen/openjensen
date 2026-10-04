@@ -240,3 +240,12 @@ def test_push_runs_every_scope(tmp_path, monkeypatch):
     ci_scope.main()
 
     assert output.read_text().splitlines() == [f"{name}=true" for name in ci_scope.SCOPES]
+
+
+def test_pnpm_setup_does_not_cache():
+    import yaml
+
+    document = yaml.safe_load((SCRIPT.parents[1] / "workflows/application.yml").read_text())
+    steps = document["jobs"]["application"]["steps"]
+    setup = next(step for step in steps if step.get("uses") == "pnpm/action-setup@v4")
+    assert setup["with"]["cache"] is False

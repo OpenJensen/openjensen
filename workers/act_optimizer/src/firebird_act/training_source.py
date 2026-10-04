@@ -7,7 +7,7 @@ import re
 import stat
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, cast
 
 from .bundle import (
     CORE_FILES,
@@ -309,10 +309,12 @@ def admit_training_source(
     for key in ("observation_history", "frame_stride"):
         if key in recipe and (type(recipe[key]) is not int or recipe[key] != 1):
             raise ValueError("Saved ACT sampling recipe differs from supported configuration")
-    temporal_source = checkpoint / "temporal-contract.json"
+    temporal_path = checkpoint / "temporal-contract.json"
+    temporal_source: Path | None = None
     temporal_sha = None
-    if os.path.lexists(temporal_source):
-        raw_temporal = safe_file(temporal_source, JSON_LIMIT)
+    if os.path.lexists(temporal_path):
+        temporal_source = temporal_path
+        raw_temporal = safe_file(temporal_path, JSON_LIMIT)
         validate_temporal_contract(config, decode(raw_temporal))
         temporal_sha = hashlib.sha256(raw_temporal).hexdigest()
         if inner_files.get("temporal-contract.json") != (temporal_sha, len(raw_temporal)):
@@ -324,7 +326,7 @@ def admit_training_source(
     dataset = metadata.get("dataset")
     dataset_sha = None
     if isinstance(dataset, dict) and dataset.get("source") == "local":
-        dataset_sha = recipe.get("dataset_manifest_sha256")
+        dataset_sha = cast(str, recipe.get("dataset_manifest_sha256"))
         snapshot = dataset.get("snapshot")
         if not isinstance(snapshot, dict):
             raise ValueError("Local ACT dataset lineage requires its complete snapshot profile")

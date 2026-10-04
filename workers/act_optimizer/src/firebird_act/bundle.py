@@ -10,7 +10,7 @@ import re
 import stat
 import struct
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from .control_schema import FILE as CONTROL_FILE
 from .control_schema import optional as control_optional
@@ -98,7 +98,7 @@ def temporal_dimensions(config: dict[str, Any]) -> dict[str, int]:
 def validate_temporal_contract(config: dict[str, Any], record: dict[str, Any]) -> None:
     """Bind optional native training sampling provenance to the exact saved ACT config."""
     horizons = temporal_dimensions(config)
-    fps = record.get("action_fps")
+    fps = cast(int | float, record.get("action_fps"))
     if type(fps) not in (int, float) or not math.isfinite(fps) or fps <= 0:
         raise ValueError("Temporal contract requires positive finite action FPS")
     observation = record.get("observation_delta_indices")

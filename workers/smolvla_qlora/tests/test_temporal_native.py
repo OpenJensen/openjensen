@@ -17,12 +17,13 @@ def test_native_act_horizons_dataset_padding_loss_queue_and_reload(tmp_path):
     assert version("lerobot") == "0.6.2"
     import numpy as np
     import torch
-    from firebird_vla.temporal import check_dataset_temporal, resolved_temporal
     from lerobot.configs.types import FeatureType, PolicyFeature
     from lerobot.datasets.lerobot_dataset import LeRobotDataset
     from lerobot.policies.act.configuration_act import ACTConfig
     from lerobot.policies.act.modeling_act import ACTPolicy
     from torch.utils.data import default_collate
+
+    from firebird_vla.temporal import check_dataset_temporal, resolved_temporal
 
     torch.set_num_threads(1)
     torch.manual_seed(42)

@@ -10,6 +10,7 @@ import os
 import re
 import stat
 from pathlib import Path
+from typing import Any
 
 FILE = "control-contract.json"
 LIMIT = 64 * 1024
@@ -18,20 +19,20 @@ _SHA = re.compile(r"[a-f0-9]{64}")
 _PRIM = re.compile(r"(/[A-Za-z_][A-Za-z_0-9]*)+")
 
 
-def canonical(value):
+def canonical(value: Any) -> bytes:
     return (json.dumps(value, sort_keys=True, indent=2, allow_nan=False) + "\n").encode()
 
 
-def _fields(value, keys):
+def _fields(value: Any, keys: str) -> None:
     if not isinstance(value, dict) or set(value) != set(keys.split()):
         raise ValueError("Invalid simulator control contract fields")
 
 
-def _sha(value):
+def _sha(value: Any) -> bool:
     return isinstance(value, str) and _SHA.fullmatch(value) is not None
 
 
-def validate(record, config=None):
+def validate(record: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:
     _fields(
         record,
         "schema_version kind controller state_key action_key state_units action_units "
@@ -115,7 +116,7 @@ def validate(record, config=None):
     return record
 
 
-def read(path):
+def read(path: str | Path) -> tuple[dict[str, Any], str]:
     path = Path(path)
     fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0))
     with os.fdopen(fd, "rb") as stream:
@@ -135,7 +136,9 @@ def read(path):
     return value, hashlib.sha256(raw).hexdigest()
 
 
-def optional(root, config=None):
+def optional(
+    root: str | Path, config: dict[str, Any] | None = None
+) -> tuple[dict[str, Any] | None, str | None]:
     path = Path(root) / FILE
     if not os.path.lexists(path):
         return None, None
@@ -144,6 +147,6 @@ def optional(root, config=None):
     return value, digest
 
 
-def metadata(root, config=None):
+def metadata(root: str | Path, config: dict[str, Any] | None = None) -> dict[str, Any]:
     value, digest = optional(root, config)
     return {} if value is None else {"control_contract": value, "control_contract_sha256": digest}

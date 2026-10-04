@@ -12,7 +12,7 @@ exclude = ["workers/*"]
 vla-platform = { workspace = true }
 
 [dependency-groups]
-dev = ["pytest==9.1.1", "ruff==0.16.9"]
+dev = ["pytest==9.1.1", "pyyaml==6.0.3", "ruff==0.16.9"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -23,4 +23,3 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
-

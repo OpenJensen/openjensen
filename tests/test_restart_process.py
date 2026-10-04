@@ -1,8 +1,8 @@
 """CPU-only crash evidence using unmodified app/worker entry points and real HTTP.
 
 The POSIX process test deliberately leaves its small workspace/logs under /tmp for
-review. FIFOs hold real metadata workers in read(), without patching the scheduler
-or seeding SQLite. SIGKILL targets only the Popen server owned by this harness.
+review. A test-only startup gate holds metadata workers before their real entrypoint,
+without patching the scheduler or seeding SQLite. SIGKILL targets only the owned server.
 Orphans are released with valid metadata, proving late results stay unpublished;
 failure cleanup signals only verified worker commands inside this unique workspace.
 Native Windows process-lifecycle evidence remains a separate validation gate.
@@ -20,6 +20,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import textwrap
 import time
 from pathlib import Path
 
@@ -32,6 +33,8 @@ from vla_platform.datasets.inspect import profile
 from vla_platform.execution import Execution
 from vla_platform.settings import Settings
 from vla_platform.storage import Storage
+
+GATE_NAME = "startup-gate"
 
 METADATA = json.dumps(
     {
@@ -63,6 +66,24 @@ class ProcessHarness:
         self.workspace = self.root / "workspace"
         self.datasets = self.root / "fixtures"
         self.datasets.mkdir()
+        # Delay only owned metadata workers; keep metadata itself a regular file.
+        (self.root / "sitecustomize.py").write_text(
+            textwrap.dedent(f"""\
+            import json
+            import sys
+            from pathlib import Path
+
+            args = sys.orig_argv
+            if args[-4:-2] == ["-m", "vla_platform.datasets.worker"]:
+                request = json.loads(Path(args[-2]).read_text())
+                gate = (
+                    Path(request["local_root"]) / request["intake"]["path"] / "meta" / {GATE_NAME!r}
+                )
+                if gate.exists():
+                    with gate.open("rb") as stream:
+                        stream.read()
+            """)
+        )
         self.servers = []
         self.logs = []
         self.writers = {}
@@ -90,6 +111,7 @@ class ProcessHarness:
             "FIREBIRD_DATA_DIR": str(self.workspace),
             "FIREBIRD_LOCAL_DATA_ROOT": str(self.datasets),
             "FIREBIRD_WEB_DIR": str(self.root / "no-static-assets"),
+            "PYTHONPATH": os.pathsep.join((str(self.root), os.environ.get("PYTHONPATH", ""))),
         }
         command = [
             sys.executable,
@@ -155,10 +177,10 @@ class ProcessHarness:
     def fixture(self, name, blocked=False):
         path = self.datasets / name / "meta" / "info.json"
         path.parent.mkdir(parents=True)
+        path.write_bytes(METADATA)
         if blocked:
+            path = path.with_name(GATE_NAME)
             os.mkfifo(path)
-        else:
-            path.write_bytes(METADATA)
         return path
 
     def hold_reader(self, path):

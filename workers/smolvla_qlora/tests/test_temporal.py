@@ -6,6 +6,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from test_lerobot_bridge import request
+
 from firebird_vla.config import TrainConfig
 from firebird_vla.lerobot_application import cli_arguments, resolve_recipe
 from firebird_vla.model import configure_policy_temporal
@@ -15,7 +17,6 @@ from firebird_vla.temporal import (
     resolved_temporal,
     validate_temporal,
 )
-from test_lerobot_bridge import request
 
 
 @pytest.mark.parametrize("family", ["diffusion", "multi_task_dit", "vqbet"])
