@@ -1074,8 +1074,7 @@ export function TrainingPanel({
                 <div><dt>Training budget</dt><dd>{resumeId ? 'Saved recipe' : trainingBudget}</dd></div>
                 <div><dt>Action timing</dt><dd>{resumeId ? checkpointTiming(originalTraining) : effectiveTiming ? `Predict ${effectiveTiming.prediction} · execute ${effectiveTiming.execution}${timing?.enabled ? '' : ' · default'}` : 'Model-owned settings'}</dd></div>
               </dl>
-              <p>{resumeId ? 'Dataset, model and timing stay bound to the saved checkpoint.' : 'Requested settings are checked by the worker. Training loss does not measure robot task success.'}</p>
-              {!resumeId && accumulationSupported && <p>Steps, learning-rate schedules and checkpoint/validation cadence count completed optimizer updates. One device is configured.</p>}
+              {resumeId && <p>Dataset, model and timing stay bound to the saved checkpoint.</p>}
               {accumulationIssue && <><p role="alert">{accumulationIssue}</p><button type="button" className="secondary-button" disabled={busy} onClick={() => update("gradientAccumulation", 1)}>Use accumulation 1</button></>}
             </section>
             <GpuPicker
