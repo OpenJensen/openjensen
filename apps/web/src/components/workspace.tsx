@@ -159,19 +159,20 @@ function IntakeForm({ project, readinessMessage, localAvailable, onCreated, navi
   }
   return <section className="panel intake-panel" aria-labelledby="intake-title">
     <div className="panel-title"><h2 id="intake-title">Import a dataset</h2></div>
-    <form onSubmit={submit}>
+    <form className={`dataset-intake-form${source === 'huggingface' ? ' hub-intake' : ''}`} onSubmit={submit}>
       <fieldset className="source-options">
         <legend className="visually-hidden">Dataset source</legend>
         <label className={source === 'huggingface' ? 'source-option selected' : 'source-option'}><input type="radio" name="source" value="huggingface" disabled={!project} checked={source === 'huggingface'} onChange={() => { setSource('huggingface'); mutation.reset(); }} /><span>Hugging Face</span></label>
         <label className={`source-option${source === 'local' ? ' selected' : ''}`}><input type="radio" name="source" value="local" checked={source === 'local'} disabled={!project} onChange={() => { setSource('local'); mutation.reset(); }} /><span>Local files</span></label>
       </fieldset>
       {source === 'huggingface' ? <>
-        <label className="field-label" htmlFor="repo-id">Dataset repository</label>
-        <input id="repo-id" name="repo_id" disabled={!project} value={repoId} onChange={event => {
-          setRepoId(event.target.value);
-
-          setRevision('');
-        }} required placeholder="owner/dataset-name" autoCapitalize="none" autoCorrect="off" spellCheck={false} />
+        <div className="intake-repository">
+          <label className="field-label" htmlFor="repo-id">Dataset repository</label>
+          <input id="repo-id" name="repo_id" disabled={!project} value={repoId} onChange={event => {
+            setRepoId(event.target.value);
+            setRevision('');
+          }} required placeholder="owner/dataset-name" autoCapitalize="none" autoCorrect="off" spellCheck={false} />
+        </div>
         <details className="intake-advanced"><summary>Revision (optional)</summary><label className="field-label visually-hidden" htmlFor="revision">Revision</label>
         <input id="revision" className="mono-input" name="revision" disabled={!project} value={revision} onChange={event => { setRevision(event.target.value); }} placeholder="Latest (main)" aria-describedby="revision-help" autoCapitalize="none" autoCorrect="off" spellCheck={false} />
         <p id="revision-help" className="field-help">Leave blank for the latest revision, or enter a branch, tag, or commit.</p>
@@ -192,7 +193,7 @@ function IntakeForm({ project, readinessMessage, localAvailable, onCreated, navi
           return fresh;
         }} />
       {!project && <p className="form-note" role="status">{readinessMessage}</p>}
-            <button className="primary-button inspect-button" type="submit" disabled={blocked || mutation.isPending || (source === 'local' && (!library ? !path : library.status !== 'ready'))}>{mutation.isPending || submission.busy ? 'Checking dataset…' : 'Inspect dataset'}<Icon name="arrow" size={17} /></button>
+      <button className="primary-button inspect-button" type="submit" disabled={blocked || mutation.isPending || (source === 'local' && (!library ? !path : library.status !== 'ready'))}>{mutation.isPending || submission.busy ? 'Checking dataset…' : 'Inspect dataset'}<Icon name="arrow" size={17} /></button>
     </form>
   </section>;
 }
