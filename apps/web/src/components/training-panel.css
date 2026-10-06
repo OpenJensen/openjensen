@@ -198,3 +198,9 @@
 .training-help > button { display: grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--muted); background: var(--surface); font-size: 11px; line-height: 1; cursor: help; }
 .training-help > [role=tooltip] { display: none; position: absolute; z-index: 20; bottom: calc(100% + 8px); left: -20px; width: min(260px, 65vw); padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--ink); box-shadow: 0 6px 20px #10294420; font-size: 12px; font-weight: 400; line-height: 1.6; }
 .training-help:hover > [role=tooltip], .training-help:focus-within > [role=tooltip] { display: block; }
+.training-camera-mapping { border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin: 16px 0; display: flex; flex-wrap: wrap; gap: 12px; }
+.training-camera-mapping legend { font-size: 12px; padding: 0 5px; }
+.training-camera-mapping label { display: grid; gap: 6px; font-size: 12px; flex: 1; min-width: 160px; }
+.training-camera-mapping select { padding: 8px 28px 8px 10px; border-radius: 8px; border: 1px solid var(--line); color: var(--ink); background: var(--surface); min-width: 0; width: 100%; }
+.training-mixture-recipe { display: grid; gap: 6px; font-size: 12px; margin-top: 10px; }
+.training-mixture-recipe span { color: var(--muted); overflow-wrap: anywhere; }

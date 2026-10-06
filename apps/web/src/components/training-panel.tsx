@@ -202,6 +202,8 @@ export function TrainingPanel({
   const [view, setView] = useState<"jobs" | "new" | "run">(startNew ? "new" : "jobs");
   const [step, setStep] = useState(0);
   const [datasetId, setDatasetId] = useState(startNew?.datasetId ?? preferredDatasetId ?? "");
+  const [extraDatasetIds, setExtraDatasetIds] = useState<string[]>([]);
+  const [cameraMappings, setCameraMappings] = useState<Record<string, Record<string, string>>>({});
   const [cameraSelections, setCameraSelections] = useState<
     Record<string, string[]>
   >({});
@@ -390,6 +392,9 @@ export function TrainingPanel({
           ),
     }));
   }
+  const selectedDatasets = dataset ? [dataset, ...extraDatasetIds.map(id => datasets.find(item => item.id === id)).filter((item): item is InspectedDataset => !!item && item.id !== dataset.id)] : [];
+  const mappings = Object.fromEntries(selectedDatasets.map((item, index) => [item.id, Object.fromEntries(selectedCameras.map(key => [key, index === 0 ? key : cameraMappings[item.id]?.[key] ?? (cameras(item.result).includes(key) ? key : "")]))]));
+  const mixtureIssue = extraDatasetIds.some(id => !datasets.some(item => item.id === id)) ? "A selected dataset is unavailable. Refresh or select it again explicitly." : selectedDatasets.length > 8 ? "Select up to eight datasets." : selectedDatasets.length > 1 ? selectedDatasets.some(item => item.result.source !== "huggingface" || item.result.format !== "lerobot_v3") ? "Combined training currently requires LeRobot v3 Hub datasets. Train local snapshots separately." : selectedDatasets.some(item => item.result.fps !== dataset?.result.fps || ["action", "observation.state"].some(key => ["shape", "dtype", "names"].some(field => JSON.stringify((item.result.features[key] as Record<string, unknown>)?.[field]) !== JSON.stringify((dataset?.result.features[key] as Record<string, unknown>)?.[field]))) || selectedCameras.some(key => { const mapped = mappings[item.id][key]; return !mapped || JSON.stringify((item.result.features[mapped] as { shape?: number[] })?.shape) !== JSON.stringify((dataset?.result.features[key] as { shape?: number[] })?.shape); }) || new Set(Object.values(mappings[item.id])).size !== selectedCameras.length) ? "Combined datasets need matching state/action definitions, frame rates and mapped camera dimensions." : null : null;
   const mergedModels = new Map(trainingModels.map((item) => [item.id, item]));
   for (const item of options.data?.training_models ?? [])
     mergedModels.set(item.id, {
@@ -558,8 +563,8 @@ export function TrainingPanel({
                 ? "Select at least one camera."
                 : !model || !activeMethod
                   ? "Select a model and method."
-                  : modelIssue
-                    ? modelIssue
+                  : mixtureIssue || modelIssue
+                    ? mixtureIssue || modelIssue
                   : !runtime
                     ? "Choose an available GPU."
                     : accumulationIssue
@@ -606,6 +611,10 @@ export function TrainingPanel({
           ...temporalRecipe(timingFamily, timing),
         };
       }
+      if (!resumeId && selectedDatasets.length > 1) {
+        body.dataset_job_ids = selectedDatasets.map(item => item.id);
+        body.dataset_camera_mappings = mappings;
+      }
       const generation = selectionGeneration.current;
       setHistoryReviewed(null);
       const job = await submission.submit(body, validateReceipt);
@@ -638,7 +647,7 @@ export function TrainingPanel({
 
   function openNew(dataset?: string) {
     selectionGeneration.current += 1;
-    if (dataset) setDatasetId(dataset);
+    if (dataset) { setDatasetId(dataset); setExtraDatasetIds([]); }
     setResumeId("");
     mutation.reset();
     setView("new");
@@ -783,14 +792,18 @@ export function TrainingPanel({
                       title={issue ?? profile.repo_id ?? "Local dataset"}
                     >
                       <input
-                        type="radio"
+                        type="checkbox"
                         name="training-dataset"
                         value={job.id}
                         aria-label={profile.repo_id ?? "Local dataset"}
-                        checked={activeDataset?.id === job.id}
+                        checked={resumeId ? activeDataset?.id === job.id : selectedDatasets.some(item => item.id === job.id)}
                         disabled={!!issue || !!resumeId || busy}
                         onChange={() => {
-                          setDatasetId(job.id);
+                          if (selectedDatasets.some(item => item.id === job.id)) {
+                            if (dataset?.id === job.id) { setDatasetId(extraDatasetIds[0] ?? "__none__"); setExtraDatasetIds(extraDatasetIds.slice(1)); }
+                            else setExtraDatasetIds(previous => previous.filter(id => id !== job.id));
+                          } else if (!dataset) setDatasetId(job.id);
+                          else setExtraDatasetIds(previous => [...previous, job.id]);
                           mutation.reset();
                         }}
                       />
@@ -828,6 +841,8 @@ export function TrainingPanel({
                 </button>
               </div>
             )}
+            {!resumeId && selectedDatasets.slice(1).map(item => <fieldset key={item.id} className="training-camera-mapping"><legend>Camera mapping · {item.result.repo_id}</legend>{selectedCameras.map(key => <label key={key}>{key.replace(/^observation\.images\./, "")}<select aria-label={`${item.result.repo_id}: ${key}`} value={mappings[item.id][key]} disabled={busy} onChange={event => setCameraMappings(previous => ({ ...previous, [item.id]: { ...previous[item.id], [key]: event.target.value } }))}><option value="">Choose matching camera</option>{cameras(item.result).map(source => <option key={source} value={source}>{source.replace(/^observation\.images\./, "")}</option>)}</select></label>)}</fieldset>)}
+            {mixtureIssue && <p className="error-notice" role="alert">{mixtureIssue}</p>}
             {activeDataset && (
               <>
                 <div className="training-data-facts">
@@ -958,7 +973,7 @@ export function TrainingPanel({
                 disabled={
                   !activeDataset ||
                   !activeCameraKeys.length ||
-                  (!resumeId && !!datasetIssue(activeDataset.result))
+                  (!resumeId && (!!datasetIssue(activeDataset.result) || !!mixtureIssue))
                 }
                 onClick={() => setStep(1)}
               >
@@ -1071,10 +1086,11 @@ export function TrainingPanel({
               <div className="training-recipe-title"><span>{resumeId ? 'Resume saved training' : 'Your training recipe'}</span><strong>{summaryModel} · {activeMethod?.toUpperCase()}</strong></div>
               <dl>
                 <div><dt>Dataset</dt><dd>{activeDataset?.result.repo_id ?? (activeDataset ? 'Local training snapshot' : 'Choose a dataset')}{activeDataset && <small className="training-recipe-identity" title={activeDataset.result.snapshot?.manifest_sha256 ?? activeDataset.result.revision}>{activeDataset.result.snapshot ? 'Snapshot' : 'Pinned revision'} {(activeDataset.result.snapshot?.manifest_sha256 ?? activeDataset.result.revision).slice(0, 12)}</small>}</dd></div>
-                <div><dt>Observations</dt><dd>{activeCameraKeys.length} {activeCameraKeys.length === 1 ? 'camera' : 'cameras'}{activeDataset ? ` · ${number(activeDataset.result.total_episodes)} episodes` : ''}</dd></div>
+                <div><dt>Observations</dt><dd>{activeCameraKeys.length} {activeCameraKeys.length === 1 ? 'camera' : 'cameras'}{activeDataset ? ` · ${number(resumeId ? activeDataset.result.total_episodes : selectedDatasets.reduce((sum, item) => sum + item.result.total_episodes, 0))} episodes` : ''}</dd></div>
                 <div><dt>Training budget</dt><dd>{resumeId ? 'Saved recipe' : trainingBudget}</dd></div>
                 <div><dt>Action timing</dt><dd>{resumeId ? checkpointTiming(originalTraining) : effectiveTiming ? `Predict ${effectiveTiming.prediction} · execute ${effectiveTiming.execution}${timing?.enabled ? '' : ' · default'}` : 'Model-owned settings'}</dd></div>
               </dl>
+              {!resumeId && selectedDatasets.length > 1 && <div className="training-mixture-recipe"><strong>Combined training set</strong>{selectedDatasets.map(item => <span key={item.id}>{item.result.repo_id} · {item.result.revision.slice(0, 12)}</span>)}</div>}
               {resumeId && <p>Dataset, model and timing stay bound to the saved checkpoint.</p>}
               {accumulationIssue && <><p role="alert">{accumulationIssue}</p><button type="button" className="secondary-button" disabled={busy} onClick={() => update("gradientAccumulation", 1)}>Use accumulation 1</button></>}
             </section>
