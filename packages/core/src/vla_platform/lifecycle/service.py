@@ -48,6 +48,8 @@ def digest(path: Path) -> str:
 
 def validate_training_inputs(recipe: dict) -> None:
     """Validate shared form fields before starting a worker or allocating a GPU."""
+    if "dataset_sources" in recipe:
+        raise ValueError("The application manages combined dataset identities and mappings")
     positive = {
         "steps",
         "batch_size",
