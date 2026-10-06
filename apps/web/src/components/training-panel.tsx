@@ -25,6 +25,7 @@ import { submissionOf, useDurableSubmission } from "@/lib/durable-submission";
 import { type PolicyJobAttempt } from "@/lib/policy-job-attempt";
 import { checkpointTiming, defaultTemporal, restoreTemporal, temporalFamily, temporalIssue, temporalRecipe, type TemporalDrafts } from "@/lib/training-temporal";
 import { useTrainingBatch } from "@/lib/training-batch";
+import { trainingMemory } from "@/lib/training-memory";
 import { TrainingHelp } from "./training-help";
 import "./training-panel.css";
 
@@ -1111,6 +1112,7 @@ export function TrainingPanel({
                 <div><dt>Training budget</dt><dd>{resumeId ? 'Saved recipe' : selectedModels.length > 1 ? `${number(recipe.trainingSteps)} steps per job` : trainingBudget}</dd></div>
                 <div><dt>Action timing</dt><dd>{resumeId ? checkpointTiming(originalTraining) : effectiveTiming ? `Predict ${effectiveTiming.prediction} · execute ${effectiveTiming.execution}${timing?.enabled ? '' : ' · default'}` : 'Model-owned settings'}</dd></div>
               </dl>
+              {!resumeId && selectedModels.map(item => { const family = temporalFamily(item.id); const draft = family ? temporalDrafts[family] ?? defaultTemporal(family) : null; const estimate = trainingMemory(item, methodFor(item), batchFor(item), activeCameraKeys, activeDataset?.result, draft?.prediction); return <div className="training-memory-estimate" key={item.id}><strong>{item.label}</strong><span>{selectedModels.length > 1 ? `${methodFor(item).toUpperCase()} · batch ${batchFor(item)} · ` : ""}{estimate ? `≈ ${estimate.gb} GB GPU memory` : "Memory estimate unavailable"}<TrainingHelp label={`${item.label} memory estimate`}>{estimate?.source ?? "This model has no verified catalog memory budget."}</TrainingHelp></span>{estimate && <small>{estimate.recommended ? `Suggested GPU: ${estimate.recommended}` : "No listed GPU meets this estimate. Try a smaller batch."}</small>}</div>; })}
               {!resumeId && selectedDatasets.length > 1 && <div className="training-mixture-recipe"><strong>Combined training set</strong>{selectedDatasets.map(item => <span key={item.id}>{item.result.repo_id} · {item.result.revision.slice(0, 12)}</span>)}</div>}
               {resumeId && <p>Dataset, model and timing stay bound to the saved checkpoint.</p>}
               {accumulationIssue && <><p role="alert">{accumulationIssue}</p><button type="button" className="secondary-button" disabled={busy} onClick={() => update("gradientAccumulation", 1)}>Use accumulation 1</button></>}
@@ -1198,7 +1200,7 @@ export function TrainingPanel({
 
                   </label>
                 </div>
-                {timing && <fieldset className="training-temporal" aria-describedby="training-timing-help">
+                {timing && <fieldset className="training-temporal" aria-label="Action timing" aria-describedby="training-timing-help">
                   <legend><span className="training-field-name">Action timing<TrainingHelp label="Action timing" id="training-timing-help">Prediction is how many future actions the model learns together. Execution is how many are used before the next observation. One observation at a time, using consecutive frames; existing checkpoints are not reshaped. This does not establish a safe robot control rate.</TrainingHelp></span></legend>
                   <div className="training-temporal-fields">
                     <label htmlFor="training-prediction"><span className="training-field-name">Prediction horizon<TrainingHelp label="Prediction horizon" id="training-prediction-help">Actions predicted together.</TrainingHelp></span><input id="training-prediction" aria-label="Prediction horizon" type="number" min="1" max="1024" step="1" value={effectiveTiming!.prediction} disabled={busy} aria-invalid={!!timingIssue} aria-describedby="training-timing-help training-prediction-help" onChange={event => updateTiming({ enabled: true, prediction: Number(event.target.value) })} /></label>
