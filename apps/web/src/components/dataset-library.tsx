@@ -12,8 +12,9 @@ export function DatasetLibrary({ projectId, onOpen, active }: {active:boolean;pr
   const [search,setSearch]=useState('');
   const entries=(datasets.data??[]).filter(entry=>entry.project_id===projectId && entry.name.toLowerCase().includes(search.toLowerCase()));
   return <section className="dataset-library" aria-labelledby="dataset-library-title">
-    <div className="library-heading"><h2 id="dataset-library-title">My datasets</h2></div>
-    {!!datasets.data?.length && <input className="library-search" aria-label="Search my datasets" placeholder="Search your datasets" value={search} onChange={event=>setSearch(event.target.value)} />}
+    <div className="library-heading"><h2 id="dataset-library-title">My datasets</h2>
+      {!!datasets.data?.length && <label className="library-search"><Icon name="search" size={18}/><input type="search" aria-label="Search my datasets" placeholder="Search your datasets" value={search} onChange={event=>setSearch(event.target.value)} /></label>}
+    </div>
     {datasets.isError ? <div role="alert"><p>Could not load your datasets.</p><button className="secondary-button" onClick={()=>void datasets.refetch()}>Retry datasets</button></div> : datasets.isPending && projectId ? <p role="status">Loading your datasets…</p> : !entries.length ? <div className="dataset-empty"><Icon name="database" size={32}/><h3>{search ? 'No matching datasets' : 'Your dataset collection starts here'}</h3><p>{search ? 'Try a different name.' : 'Imported and inspected datasets appear here, ready to revisit.'}</p></div> : <div className="dataset-library-grid">{entries.map(entry=><DatasetCard key={entry.id} entry={entry} active={active} onOpen={()=>onOpen(entry)}/>)}</div>}
   </section>;
 }
