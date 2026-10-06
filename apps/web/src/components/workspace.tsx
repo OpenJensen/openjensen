@@ -452,7 +452,7 @@ function Workbench() {
           </div>
           {jobs.error && datasetView === 'sources' && <ErrorNotice error={jobs.error} />}
         </div>
-        {activeStage === 12 && <WorkspaceDashboard projects={projects.data ?? []} onModels={() => navigateStage(11)} onDatasets={() => { navigateStage(0); setDatasetView('sources'); }} onDataset={openDataset} onSettings={() => { setSettingsTab('compute'); navigateStage(6); }} />}
+        {activeStage === 12 && <WorkspaceDashboard projects={projects.data ?? []} projectId={workflowProjectId} onModels={() => navigateStage(11)} onDatasets={() => { navigateStage(0); setDatasetView('sources'); }} onDataset={openDataset} onSettings={() => { setSettingsTab('compute'); navigateStage(6); }} />}
         {activeStage === 8 && <AugmentationPanel key={projectId} projectId={workflowProjectId} preferredDatasetId={selectedJob?.id} onOpenSettings={() => { setSettingsTab('compute'); navigateStage(6); }} onChooseDataset={() => { navigateStage(0); setDatasetView('sources'); }} />}
         {activeStage === 9 && <>
           <section className="panel" aria-label="Teaching connection"><h2>Choose a teaching connection</h2><div className="workbench-actions" role="group" aria-label="Teaching mode">
