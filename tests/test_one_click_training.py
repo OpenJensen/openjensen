@@ -298,3 +298,16 @@ def test_invalid_recipe_fails_before_preparation(one_click, field):
             assert len(await execution.list("project")) == 1
 
     asyncio.run(exercise())
+
+
+def test_caller_cannot_supply_worker_dataset_bindings(one_click):
+    state, workspace, _ = one_click
+
+    async def exercise():
+        async with workspace() as execution:
+            with pytest.raises(ValueError, match="application manages combined dataset"):
+                await execution.submit("project", recipe(training={"dataset_sources": [{"repo_id": "foreign/data"}]}))
+            assert state.prepare_calls == state.runner_calls == []
+            assert len(await execution.list("project")) == 1
+
+    asyncio.run(exercise())
