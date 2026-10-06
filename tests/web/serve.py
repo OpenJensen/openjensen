@@ -22,7 +22,7 @@ if not (static_dir / "docs" / "index.html").is_file():
     raise SystemExit("Build the web app before browser tests: pnpm build:web")
 
 with TemporaryDirectory(prefix="firebird-browser-tests-") as data_dir:
-    workspace = Path(data_dir)
+    workspace = Path(data_dir).resolve()
     source = workspace / "synthetic-source"
     source.write_bytes(b"synthetic browser fixture: not policy weights")
     runtime_config = workspace / "runtimes.json"

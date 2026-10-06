@@ -34,6 +34,8 @@ export function intakeAcknowledgement(value: unknown, project: string, original:
     if (request.repo_id !== body.repo_id || request.path != null || typeof request.revision !== 'string' ||
         (/^[a-f0-9]{40}$/i.test(submittedRevision) ? request.revision !== submittedRevision :
           request.revision !== submittedRevision && !/^[a-f0-9]{40}$/i.test(request.revision))) throw new UncertainPolicyJob();
+  } else if (body.library_id) {
+    if (request.library_id !== body.library_id || request.path != null || request.repo_id != null || request.revision !== 'main') throw new UncertainPolicyJob();
   } else {
     // Metadata inspection resolves allowed relative paths and symlinks on the API host.
     // A training snapshot retains its original path; never guess a host filesystem here.

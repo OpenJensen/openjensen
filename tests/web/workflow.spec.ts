@@ -61,7 +61,8 @@ class WorkflowPage {
 test('browser intake reads local metadata and preserves its limits after reload', async ({ page, request }, testInfo) => {
   const workflow = new WorkflowPage(page);
   const project = await workflow.createProject(`Synthetic intake ${testInfo.testId}`);
-  await page.getByRole('radio', { name: /Local directory/ }).check();
+  await page.getByRole('radio', { name: 'Local files' }).check();
+  await page.getByText('Folder on the app host', {exact:true}).click();
   await page.getByLabel('Dataset directory', { exact: true }).fill('lerobot_v3_preview');
   const created = page.waitForResponse(response => response.url().endsWith('/intakes') && response.request().method() === 'POST');
   await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();

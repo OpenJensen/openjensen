@@ -33,7 +33,7 @@ function guideHref(href: string) {
   if (/^[a-z]+:/i.test(href) || href.startsWith('//')) return '#';
   const target = path.posix.normalize(`docs/${href}`);
   if (target.startsWith('../')) return '#';
-  return `https://github.com/sobhanb-eth/firebird-hackathon-codebase/blob/main/${target}`;
+  return `https://github.com/OpenJensen/openjensen/blob/main/${target}`;
 }
 
 // The guide uses paragraphs, links, bold labels and inline code only.

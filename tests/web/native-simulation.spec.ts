@@ -368,7 +368,7 @@ for (const width of [320, 390]) test(`compact ${width}px navigation keeps stage 
   await expect(page.getByRole('heading', { name: 'Cloud runs', exact: true })).toBeVisible();
   await page.getByLabel('Current project').focus();
   await page.keyboard.press('Tab');
-  await expect(page.getByRole('button', { name: 'My models', exact: true })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Dashboard', exact: true })).toBeFocused();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
   expect(state.posts).toEqual([]);
 });

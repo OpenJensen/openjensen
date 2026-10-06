@@ -88,12 +88,12 @@ test('the contextual guide covers every section and keeps API docs separate', as
   await expect(page).toHaveURL(/\/guide\/#distill$/);
   await expect(page.getByRole('heading', { name: 'Workspace guide', exact: true })).toBeVisible();
   const sections = page.locator('.guide-sections > section');
-  await expect(sections).toHaveCount(12);
-  for (const name of ['My models', 'Dataset', 'Augmentation', 'Teaching', 'Fine-tune', 'Distill', 'Quantize', 'Evaluate', 'Run', 'Decision lab', 'Cloud runs', 'Settings & diagnostics']) {
+  await expect(sections).toHaveCount(13);
+  for (const name of ['Dashboard', 'My models', 'Dataset', 'Augmentation', 'Teaching', 'Fine-tune', 'Distill', 'Quantize', 'Evaluate', 'Run', 'Decision lab', 'Cloud runs', 'Settings & diagnostics']) {
     await expect(sections.getByRole('heading', { name, exact: true })).toBeVisible();
   }
   await expect(page.locator('#distill')).toContainText('ACT256');
-  await expect(page.getByRole('link', { name: 'Distillation setup', exact: true })).toHaveAttribute('href', 'https://github.com/sobhanb-eth/firebird-hackathon-codebase/blob/main/workers/policy_distillation/README.md');
+  await expect(page.getByRole('link', { name: 'Distillation setup', exact: true })).toHaveAttribute('href', 'https://github.com/OpenJensen/openjensen/blob/main/workers/policy_distillation/README.md');
   await page.reload();
   await expect(page.locator('#distill')).toContainText('ACT256');
   await page.setViewportSize({ width: 320, height: 900 });

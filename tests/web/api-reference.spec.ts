@@ -408,7 +408,7 @@ test('dataset inspection auto-loads camera previews only after opening and stays
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/');
   await expect(page.getByRole('button', { name: /^Inspection/ })).toBeEnabled();
-  await expect(page.getByRole('button', { name: 'Sources', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'My datasets', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('heading', { name: 'Import a dataset', exact: true })).toBeVisible();
   expect(previews).toEqual([]);
   expect(media).toEqual([]);
@@ -433,7 +433,7 @@ test('dataset inspection auto-loads camera previews only after opening and stays
   await expect.poll(() => previews).toEqual(['index', '0', '1']);
   await expect(page.getByText('policy-review', { exact: true })).toHaveCount(0);
   await expectNoPageOverflow(page);
-  await page.getByRole('button', { name: 'Sources', exact: true }).click();
+  await page.getByRole('button', { name: 'My datasets', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Import a dataset', exact: true })).toBeVisible();
   expect(previews).toEqual(['index', '0', '1']);
   expect(errors).toEqual([]);

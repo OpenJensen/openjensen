@@ -37,6 +37,7 @@ async function fixture(page: Page, mode: 'normal' | 'lost-ack' | 'lost-before-co
     if (request.method() === 'GET') {
       const responses: Record<string, unknown> = {
         '/api/v1/health': { status: 'ok', version: 'generated-browser-fixture' },
+        '/api/v1/datasets': [],
         '/api/v1/capabilities': [{ operation: 'dataset.inspect.local', status: 'available', reason: null }],
         '/api/v1/projects': [{ id: project, name: 'Intake recovery', created_at: timestamp }],
         [`/api/v1/projects/${project}/jobs`]: jobs,
@@ -48,6 +49,9 @@ async function fixture(page: Page, mode: 'normal' | 'lost-ack' | 'lost-before-co
   });
   await page.goto('/');
   await expect(page.getByLabel('Dataset repository')).toBeEnabled();
+  await page.getByLabel('Dataset repository').fill('fixture/robot');
+  await page.getByText('Revision (optional)', {exact:true}).click();
+  await page.getByLabel('Revision', {exact:true}).fill('a'.repeat(40));
   return { writes, reads, jobs, unexpected, releaseAck };
 }
 

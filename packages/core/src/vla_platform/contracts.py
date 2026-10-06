@@ -78,6 +78,9 @@ class IntakeRequest(Record):
         description="Branch, tag or commit. Omitted or blank uses the latest main revision.",
     )
     path: NonEmptyString | None = Field(default=None, max_length=4096)
+    library_id: str | None = Field(
+        default=None, pattern=r"^[a-f0-9]{32}$", exclude_if=lambda value: value is None
+    )
     snapshot_for_training: bool = Field(default=False, strict=True)
     recordings: RecordingPreparation | None = Field(
         default=None, exclude_if=lambda value: value is None
@@ -90,6 +93,18 @@ class IntakeRequest(Record):
 
     @model_validator(mode="after")
     def validate_source(self) -> IntakeRequest:
+        if self.library_id is not None:
+            if (
+                self.source != "local"
+                or self.path is not None
+                or self.repo_id is not None
+                or self.recordings is not None
+                or self.revision != "main"
+            ):
+                raise ValueError(
+                    "Library intake requires a local dataset ID without path overrides"
+                )
+            return self
         if self.recordings is not None:
             if (
                 self.source != "local"

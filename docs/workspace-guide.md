@@ -1,6 +1,10 @@
 # Workspace guide
 
-Use the project menu to select an existing project or choose **Create project…** to add one. Then choose a destination under **Models**, **Data**, **Train**, **Test** or **Workspace**. **Guide** opens `/guide/`; `/docs/` remains the separate API reference. Selecting a card does not start a job. Configuration, completed jobs and downloaded artifacts do not by themselves establish robot task quality.
+Use the project menu to select an existing project or choose **Create project…** to add one. Then choose a destination under **Overview**, **Data**, **Train**, **Test** or **Workspace**. **Guide** opens `/guide/`; `/docs/` remains the separate API reference. Selecting a card does not start a job. Configuration, completed jobs and downloaded artifacts do not by themselves establish robot task quality.
+
+## Dashboard
+
+Open **Dashboard** for your models, saved dataset history and separate readiness cards for local compute, Google Cloud and Hugging Face. **Check resources** refreshes configuration and hardware checks without starting training. Open **My models** or **My datasets** to continue with the collection.
 
 ## My models
 
@@ -13,6 +17,12 @@ Continue with a model's **Distill**, **Quantize**, **Evaluate**, **Replay observ
 **Train a model** opens training setup. **Import a model** opens the existing ACT/SmolVLA archive importer and requires a configured policy profile; importing does not launch simulation. Models appear in the collection after an operation registers their artifact.
 
 ## Dataset
+
+**My datasets** lists saved inspections and local imports for the current project. Pick an existing entry to reopen it without another inspection request. Hugging Face entries save the pinned inspection, not the complete dataset files.
+
+Import a Hugging Face repository or choose **Local files** and select a folder, ZIP or HDF5 file on your computer. The files are uploaded to the app host; format detection uses file structure and schema. LeRobot v3 folders can be inspected directly. LeRobot v2, robomimic HDF5, ALOHA HDF5 and image sequences with CSV/JSONL records can be converted to LeRobot v3. Review frame rate, task description and field mapping before conversion. Source files are preserved. RLDS/TFRecord and ROS recordings are recognized but require a synchronized export.
+
+Use **Create example** for a small synthetic two-camera dataset. Open a local dataset to rename camera views and label displayed sample images. Save labels before exporting; the ZIP contains LeRobot files plus annotations and source details. Display labels do not replace training task instructions. [Local formats and limits](dataset-import.md)
 
 Choose a source and **Inspect dataset**, then open **Load visual preview** to browse recorded episodes, cameras and sampled actions. Local data requires **Prepare immutable training copy** before supported training. Preview samples are not a dataset-wide audit. [Dataset setup](getting-started.md#inspect-a-public-dataset) · [Local training](local-training.md)
 

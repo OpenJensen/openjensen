@@ -32,7 +32,9 @@ from vla_platform.contracts import (
     Project,
     ProjectCreate,
 )
+from vla_platform.dataset_library_api import router as dataset_library_router
 from vla_platform.datasets.explore import DatasetExplorer, ExplorationError
+from vla_platform.datasets.library import DatasetLibrary, LibraryError
 from vla_platform.datasets.recordings import RecordingError
 from vla_platform.decision_api import router as decision_router
 from vla_platform.execution import Execution
@@ -120,6 +122,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await execution.reconcile()
             app.state.projects, app.state.execution = Projects(storage), execution
             app.state.explorer = explorer
+            app.state.dataset_library = DatasetLibrary(settings.data_dir)
             app.state.cloud_connections = CloudConnections(settings.data_dir)
             app.state.huggingface_connection = HuggingFaceConnection(settings.data_dir)
             yield
@@ -127,6 +130,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             try:
                 if initialized:
                     try:
+                        if hasattr(app.state, "dataset_library"):
+                            await app.state.dataset_library.close()
                         if hasattr(execution.lifecycle, "local_worker_setup"):
                             await execution.lifecycle.local_worker_setup.close()
                     finally:
@@ -169,6 +174,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(teaching_sessions_router)
     app.include_router(decision_router)
     app.include_router(recordings_router)
+    app.include_router(dataset_library_router)
+
+    @app.exception_handler(LibraryError)
+    async def dataset_library_error(_request: Request, exc: LibraryError):
+        return JSONResponse({"detail": str(exc)}, status_code=exc.status)
+
     app.add_middleware(
         TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]", "testserver"]
     )
@@ -327,6 +338,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             idempotency_key is None
             and payload.source == "local"
             and payload.recordings is None
+            and payload.library_id is None
             and settings.local_root is None
         ):
             raise HTTPException(422, "Local intake is disabled; configure FIREBIRD_LOCAL_DATA_ROOT")

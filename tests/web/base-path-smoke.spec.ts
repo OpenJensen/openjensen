@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 const origin = `http://127.0.0.1:${process.env.FIREBIRD_PREFIX_SMOKE_PORT ?? '18766'}`;
 const prefix = (process.env.NEXT_PUBLIC_BASE_PATH ?? '/firebird').replace(/\/+$/, '');
 
-test('prefixed export loads bundles, API, dataset posters and docs without escaping its mount', async ({ page }) => {
+test('prefixed export loads bundles, library media, API and docs without escaping its mount', async ({ page }) => {
   const escaped: string[] = [];
   const failures: string[] = [];
   page.on('request', request => {
@@ -13,15 +13,19 @@ test('prefixed export loads bundles, API, dataset posters and docs without escap
   page.on('response', response => {
     if (response.url().startsWith(origin) && response.status() >= 400) failures.push(`${response.status()} ${response.url()}`);
   });
+  const project = await (await page.request.post(`${origin}${prefix}/api/v1/projects`, {data:{name:'Prefix import check'}})).json();
+  await page.addInitScript(id=>localStorage.setItem('firebird.project',id),project.id);
   await page.goto(`${prefix}/`);
   await expect(page.getByRole('link', { name: 'Open Jensen workspace home' })).toHaveAttribute('href', `${prefix}/`);
   await expect(page.getByRole('button', { name: 'Fine-tune', exact: true })).toBeVisible();
-  const posters = page.locator('.starter-image img');
-  await expect(posters).toHaveCount(2);
-  for (const poster of await posters.all()) {
-    await expect(poster).toHaveAttribute('src', new RegExp(`^${prefix}/datasets/`));
-    await expect.poll(() => poster.evaluate(node => (node as HTMLImageElement).complete && (node as HTMLImageElement).naturalWidth > 0)).toBe(true);
-  }
+  await page.getByRole('button', {name:'Create example',exact:true}).click();
+  const poster = page.getByRole('region',{name:'Dataset labeling'}).getByRole('img');
+  await expect(poster).toBeVisible();
+  await expect(poster).toHaveAttribute('src',new RegExp(`^${prefix}/api/v1/datasets/`));
+  await expect.poll(()=>poster.evaluate(node=>(node as HTMLImageElement).complete&&(node as HTMLImageElement).naturalWidth>0)).toBe(true);
+  const download=page.getByRole('link',{name:'Export dataset'});
+  await expect(download).toHaveAttribute('href',new RegExp(`^${prefix}/api/v1/datasets/`));
+  expect((await page.request.get(origin+(await download.getAttribute('href')))).status()).toBe(200);
   await expect.poll(() => page.locator('.connection-notice').count()).toBe(0);
   await page.getByRole('button', { name: 'Cloud runs', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Cloud runs', exact: true, level: 1 })).toBeVisible();
@@ -41,7 +45,7 @@ test('prefixed export loads bundles, API, dataset posters and docs without escap
   await page.locator('.page-heading .page-guide').click();
   await expect(page).toHaveURL(new RegExp(`${prefix}/guide/#teaching$`));
   await expect(page.getByRole('heading', { name: 'Workspace guide', exact: true })).toBeVisible();
-  await expect(page.locator('.guide-sections > section')).toHaveCount(12);
+  await expect(page.locator('.guide-sections > section')).toHaveCount(13);
   await page.reload();
   await expect(page.locator('#teaching')).toContainText('Start recording');
   await page.getByRole('link', { name: 'API reference', exact: true }).first().click();

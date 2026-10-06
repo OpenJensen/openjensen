@@ -690,3 +690,7 @@ input[type=file]::file-selector-button { min-height: 40px; border: 1px solid var
 .replay-action-trace svg { display: block; width: 100%; margin-block: 12px 6px; color: var(--accent); }
 @media (max-width: 900px) { .replay-action-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 500px) { .replay-action-grid { grid-template-columns: 1fr; } }
+
+/* Source choices share one centered baseline, including the radio indicator. */
+.source-option { display:flex; align-items:center; justify-content:center; gap:8px; }
+.source-option > input { margin:0; align-self:center; flex-shrink:0; }

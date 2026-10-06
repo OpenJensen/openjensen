@@ -8,6 +8,7 @@ async function teaching(page: Page, connected = true) {
   const state = { mode: 'running', episode_id: 'episode-1', revision: 7, session_id: 'session-1', instruction: 'Move gripper', outcome: 'unknown', steps: 10, sim_time: .3, joints: ['gripper'], state_rad: [0], fault: null };
   await page.route('**/api/v1/**', async route => {
     const request = route.request(), path = new URL(request.url()).pathname;
+    if (request.method() === 'GET' && path === '/api/v1/datasets') return route.fulfill({ json: [] });
     if (path === '/api/v1/teaching/frame') {
       changes.frames += 1;
       if (changes.frameFailure) return route.fulfill({ status: 503, json: { detail: 'Generated unavailable frame' } });
@@ -54,7 +55,7 @@ async function teaching(page: Page, connected = true) {
 
 test('disconnected executor disables recording and voice without pretending monitor is control', async ({ page }) => {
   const { commands, unexpected } = await teaching(page, false);
-  await expect(page.getByRole('status', { name: 'Application API connection' })).toHaveText('App connected');
+  await expect(page.getByLabel('Current project')).toBeEnabled();
   await expect(page.getByRole('button', { name: 'Start recording' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Connect voice' })).toBeDisabled();
   await expect(page.getByText('Connect a teaching executor in the application host configuration.', { exact: true })).toBeVisible();
@@ -178,6 +179,7 @@ async function intelligence(page: Page, options: { fail?: boolean; hold?: boolea
   let saved = false;
   await page.route('**/api/v1/teaching/**', async route => {
     const request = route.request(), path = new URL(request.url()).pathname;
+    if (request.method() === 'GET' && path === '/api/v1/datasets') return route.fulfill({ json: [] });
     if (path === '/api/v1/teaching/state') return route.fulfill({ json: { connected: true, voice_configured: false, state: { mode: 'idle', episode_id: null, revision: changes.revision, session_id: 'session-advice', instruction: 'Review scene', outcome: 'unknown', steps: 0, sim_time: 0, joints: ['gripper'], state_rad: [0], fault: null } } });
     if (!path.includes('/intelligence/')) return route.fallback();
     if (request.method() !== 'GET') posts.push({ path, body: request.postData() ? request.postDataJSON() : undefined });

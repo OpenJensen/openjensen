@@ -42,6 +42,8 @@ class Inspections:
         self.lock = asyncio.Lock()
 
     async def prepare(self, request: IntakeRequest) -> IntakeRequest | None:
+        if request.library_id:
+            return None
         if request.source == "huggingface":
             revision = await resolve_hub_revision(request)
             return request.model_copy(update={"revision": revision})
@@ -76,6 +78,8 @@ class Inspections:
             return await self.execution.submit(project_id, prepared)
 
     def matches(self, job: Job, request: IntakeRequest) -> bool:
+        if request.library_id:
+            return False
         previous = job.request
         if isinstance(previous, IntakeRequest) and previous.snapshot_for_training:
             return False

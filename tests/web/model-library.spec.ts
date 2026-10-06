@@ -22,9 +22,9 @@ async function fixture(page: Page, models = [artifact('teacher'), artifact('stud
   });
   await page.goto('/'); return state;
 }
-const library = (page: Page) => page.getByRole('button', { name: 'My models', exact: true });
+async function openLibrary(page: Page) { await page.getByRole('button', {name:'Dashboard',exact:true}).click(); await page.getByRole('button', {name:'My models',exact:true}).click(); }
 test('collection shows model versions and their full recorded training and student history', async ({ page }, testInfo) => {
-  const state = await fixture(page); await library(page).click();
+  const state = await fixture(page); await openLibrary(page);
   await expect(page.getByRole('button', { name: 'Open model Saved other · other' })).toBeVisible();
   await page.getByRole('button', { name: 'Open model Saved student · student' }).click();
   const detail = page.getByRole('article', { name: 'Model details' });
@@ -51,11 +51,11 @@ test('empty collections cannot start work on nonexistent models', async ({ page 
   const state = await fixture(page, []); await page.getByRole('button', { name: 'Distill', exact: true }).click();
   await expect(page.getByText('No saved models in this project yet')).toBeVisible();
   await expect(page.getByRole('button', { name: 'ACT', exact: true })).toHaveCount(0);
-  await library(page).click(); await expect(page.getByText('Your models will live here')).toBeVisible();
+  await openLibrary(page); await expect(page.getByText('Your models will live here')).toBeVisible();
   expect(state.mutations).toEqual([]);
 });
 test('cross-project continuation selects the model owner and exact model', async ({ page }) => {
-  const state = await fixture(page); await library(page).click(); await page.getByRole('button', { name: 'Open model Saved other · other' }).click();
+  const state = await fixture(page); await openLibrary(page); await page.getByRole('button', { name: 'Open model Saved other · other' }).click();
   await page.getByRole('region', { name: 'Continue with this model' }).getByRole('button', { name: 'Distill', exact: true }).click();
   await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'beta');
   await expect(page.getByRole('group', { name: 'Teacher', exact: true }).locator('input:checked')).toHaveValue('other');
@@ -70,7 +70,7 @@ test('quantization selects the exact saved SmolVLA model and omits abstract sour
   await expect(page.getByRole('group', { name: 'My model', exact: true }).locator('input:checked')).toHaveValue('smol-second');
 });
 test('failed refresh keeps history visible and blocks actions until refreshed', async ({ page }) => {
-  const state = await fixture(page); await library(page).click(); await page.getByRole('button', { name: 'Open model Saved teacher · teacher' }).click();
+  const state = await fixture(page); await openLibrary(page); await page.getByRole('button', { name: 'Open model Saved teacher · teacher' }).click();
   state.fail = true; await expect(page.getByRole('button', { name: 'Refresh records', exact: true })).toBeVisible({ timeout: 10000 });
   await expect(page.getByRole('region', { name: 'Continue with this model' }).getByRole('button', { name: 'Distill', exact: true })).toBeDisabled();
   state.fail = false; await page.getByRole('button', { name: 'Refresh records', exact: true }).click();
@@ -80,7 +80,7 @@ test('opening training preserves the exact checkpoint and never replaces a missi
   const earlier = artifact('teacher', 'alpha', { format: 'training_checkpoint', metadata: { architecture: 'act', step: 20 } });
   const later = artifact('later', 'alpha', { job_id: earlier.job_id, format: 'training_checkpoint', metadata: { architecture: 'act', step: 100 } });
   const state = await fixture(page, [earlier, later]);
-  await library(page).click(); await page.getByRole('button', { name: 'Open model Saved teacher · teacher' }).click();
+  await openLibrary(page); await page.getByRole('button', { name: 'Open model Saved teacher · teacher' }).click();
   await page.getByRole('button', { name: 'Open this checkpoint’s training run and export →' }).click();
   await expect(page.getByLabel('Checkpoint', { exact: true })).toHaveValue('teacher');
   state.models = [later];
@@ -91,13 +91,13 @@ test('opening training preserves the exact checkpoint and never replaces a missi
 test('evaluation and simulation continue with the exact model without creating jobs', async ({ page }) => {
   const state = await fixture(page, [artifact('gguf', 'alpha', { format: 'gguf', metadata: { architecture: 'smolvla', precision: 'Q8_0' } }), artifact('teacher')]);
   await page.route('**/api/v1/simulation-options', route => route.fulfill({ json: { profiles: [{ id: 'cup', label: 'Cup simulator', architectures: ['act'], experimental: true, task_object: 'cup' }], max_archive_bytes: 4294967296, scored_evaluation: false } }));
-  await library(page).click(); await page.getByRole('button', { name: 'Open model Saved gguf · gguf' }).click();
+  await openLibrary(page); await page.getByRole('button', { name: 'Open model Saved gguf · gguf' }).click();
   await page.getByRole('region', { name: 'Continue with this model' }).getByRole('button', { name: 'Evaluate', exact: true }).click();
   await expect(page.getByRole('group', { name: 'My model', exact: true }).locator('input:checked')).toHaveValue('gguf');
   state.models = state.models.filter(item => item.id !== 'gguf');
   await expect(page.getByText('The selected model is unavailable. Refresh or choose another saved model explicitly.')).toBeVisible({ timeout: 10000 });
   await expect(page.getByRole('button', { name: 'Start evaluation', exact: true })).toBeDisabled();
-  await library(page).click(); await page.getByRole('button', { name: 'Open model Saved teacher · teacher' }).click();
+  await openLibrary(page); await page.getByRole('button', { name: 'Open model Saved teacher · teacher' }).click();
   await page.getByRole('region', { name: 'Continue with this model' }).getByRole('button', { name: 'Run in simulation', exact: true }).click();
   await expect(page.getByRole('radiogroup', { name: 'Native policy', exact: true }).locator('input:checked')).toHaveValue('teacher');
   await expect(page.getByRole('checkbox', { name: /experimental, paid cloud rollout/ })).not.toBeChecked();

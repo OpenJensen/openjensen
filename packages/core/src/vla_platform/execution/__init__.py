@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 import time
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -103,6 +104,7 @@ class Execution:
                 isinstance(prepared, IntakeRequest)
                 and prepared.source == "local"
                 and prepared.recordings is None
+                and prepared.library_id is None
                 and self.settings.local_root is None
             ):
                 raise ValueError("Local intake is disabled; configure FIREBIRD_LOCAL_DATA_ROOT")
@@ -128,6 +130,12 @@ class Execution:
             await self.augmentation.validate(project_id, request)
         elif request.recordings is not None:
             await self.recordings.validate(project_id, request)
+        elif request.library_id:
+            from vla_platform.datasets.library import DatasetLibrary
+
+            DatasetLibrary(self.settings.data_dir, reconcile=False).resolve(
+                request.library_id, project_id
+            )
         job = Job(
             id=str(uuid4()),
             project_id=project_id,
@@ -248,11 +256,21 @@ class Execution:
         directory = self.settings.data_dir / "jobs" / job.id
         directory.mkdir(parents=True, exist_ok=True)
         request_path, result_path = directory / "request.json", directory / "result.json"
+        intake = job.request
+        local_root = self.settings.local_root
+        if isinstance(intake, IntakeRequest) and intake.library_id:
+            from vla_platform.datasets.library import DatasetLibrary
+
+            library = DatasetLibrary(self.settings.data_dir, reconcile=False)
+            path = library.resolve(intake.library_id, job.project_id)
+            local_root = library.root
+            intake = intake.model_copy(update={"path": str(path), "library_id": None})
         request_path.write_text(
             WorkerRequest(
-                intake=job.request,
+                intake=intake,
                 snapshot_store=str(self.settings.data_dir / "dataset-snapshots"),
-                local_root=str(self.settings.local_root) if self.settings.local_root else None,
+                local_root=str(local_root) if local_root else None,
+                reader_python=os.environ.get("FIREBIRD_CPU_READER_PYTHON"),
             ).model_dump_json(),
             encoding="utf-8",
         )

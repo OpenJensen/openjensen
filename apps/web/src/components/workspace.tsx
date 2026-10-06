@@ -31,8 +31,9 @@ import { WorkspaceShell } from '@/components/workspace-shell';
 import { WorkspaceJourney } from '@/components/workspace-journey';
 import { ProjectMenu } from '@/components/project-menu';
 import { DatasetExplorer } from '@/components/dataset-explorer';
-import { DatasetStarters } from '@/components/dataset-starters';
-import { datasetStarters, type DatasetStarter } from '@/lib/dataset-starters';
+import { DatasetLibrary, DatasetLabeling, LocalDatasetImport } from '@/components/dataset-library';
+import { WorkspaceDashboard } from '@/components/workspace-dashboard';
+import { type LibraryDataset } from '@/lib/dataset-library';
 import { publicPath } from '@/lib/base-path';
 import { guideSectionId } from '@/lib/guide-section';
 import { useDurableSubmission } from '@/lib/durable-submission';
@@ -53,10 +54,11 @@ const stages = [
   { name: 'Teaching', icon: 'plus' },
   { name: 'Decision lab', icon: 'chart' },
   { name: 'My models', icon: 'layers' },
+  { name: 'Dashboard', icon: 'layers' },
 ] as const;
 
 const navigationGroups = [
-  { name: 'Models', items: [11] },
+  { name: 'Overview', items: [12] },
   { name: 'Data', items: [0, 8, 9] },
   { name: 'Train', items: [1, 2, 3] },
   { name: 'Test', items: [4, 5, 10] },
@@ -115,13 +117,14 @@ function DatasetResult({ profile }: { profile: DatasetProfile }) {
   </section>;
 }
 
-function IntakeForm({ project, readinessMessage, localAvailable, onCreated, starter, onSourceEdited, navigationToken }: { navigationToken: string; project: Project | undefined; readinessMessage: string; localAvailable: boolean; onCreated: (job: Job) => void; starter: DatasetStarter; onSourceEdited: () => void }) {
+function IntakeForm({ project, readinessMessage, localAvailable, onCreated, navigationToken, initialLibrary }: { initialLibrary?: LibraryDataset | null; navigationToken: string; project: Project | undefined; readinessMessage: string; localAvailable: boolean; onCreated: (job: Job) => void; }) {
   const queryClient = useQueryClient();
-  const [source, setSource] = useState<'huggingface' | 'local'>('huggingface');
-  const [repoId, setRepoId] = useState(starter.repoId);
-  const [revision, setRevision] = useState(starter.revision);
+  const [source, setSource] = useState<'huggingface' | 'local'>(initialLibrary ? 'local' : 'huggingface');
+  const [library, setLibrary] = useState<LibraryDataset | null>(initialLibrary ?? null);
+  const [repoId, setRepoId] = useState('');
+  const [revision, setRevision] = useState('');
   const [path, setPath] = useState('');
-  const [snapshotForTraining, setSnapshotForTraining] = useState(false);
+  const [snapshotForTraining, setSnapshotForTraining] = useState(Boolean(initialLibrary));
   const submission = useDurableSubmission({ project: project?.id ?? '', operation: 'dataset.inspect' });
   const selection = useRef({ token: navigationToken, generation: 0 });
   if (selection.current.token !== navigationToken) selection.current = { token: navigationToken, generation: selection.current.generation + 1 };
@@ -136,17 +139,16 @@ function IntakeForm({ project, readinessMessage, localAvailable, onCreated, star
   }
   const blocked = !project || !submission.hydrated || !submission.available || !!submission.attempt || submission.busy;
 
-  useEffect(() => {
-    if (!localAvailable && source === 'local') setSource('huggingface');
-  }, [localAvailable, source]);
   const mutation = useMutation({
     mutationFn: async () => {
       if (!project) throw new Error('Create or select a project first.');
-      if (source === 'local' && !localAvailable) throw new Error('Local intake is not enabled on this application.');
+      if (source === 'local' && !library && !localAvailable) throw new Error('Choose a dataset folder or file first.');
+      if (source === 'local' && library && library.status !== 'ready') throw new Error('Wait for the dataset conversion to finish.');
       if (blocked) throw new Error('Verify the saved request before starting another inspection.');
       const generation = selection.current.generation;
       const job = await submission.submit(source === 'huggingface'
         ? { source, repo_id: repoId.trim(), revision: revision.trim() || 'main' }
+        : library ? { source, library_id: library.id, revision: 'main', snapshot_for_training: snapshotForTraining }
         : { source, path: path.trim(), revision: 'main', snapshot_for_training: snapshotForTraining }, validate);
       accept(job, generation);
       return job;
@@ -161,26 +163,26 @@ function IntakeForm({ project, readinessMessage, localAvailable, onCreated, star
     <form onSubmit={submit}>
       <fieldset className="source-options">
         <legend className="visually-hidden">Dataset source</legend>
-        <label className={source === 'huggingface' ? 'source-option selected' : 'source-option'}><input type="radio" name="source" value="huggingface" disabled={!project} checked={source === 'huggingface'} onChange={() => { setSource('huggingface'); mutation.reset(); onSourceEdited(); }} /><span>Hugging Face</span></label>
-        <label className={`source-option${source === 'local' ? ' selected' : ''}${!localAvailable ? ' unavailable' : ''}`}><input type="radio" name="source" value="local" checked={source === 'local'} disabled={!project || !localAvailable} onChange={() => { setSource('local'); mutation.reset(); onSourceEdited(); }} /><span>Local directory</span>{!localAvailable && <span className="source-detail">Not enabled</span>}</label>
+        <label className={source === 'huggingface' ? 'source-option selected' : 'source-option'}><input type="radio" name="source" value="huggingface" disabled={!project} checked={source === 'huggingface'} onChange={() => { setSource('huggingface'); mutation.reset(); }} /><span>Hugging Face</span></label>
+        <label className={`source-option${source === 'local' ? ' selected' : ''}`}><input type="radio" name="source" value="local" checked={source === 'local'} disabled={!project} onChange={() => { setSource('local'); mutation.reset(); }} /><span>Local files</span></label>
       </fieldset>
       {source === 'huggingface' ? <>
         <label className="field-label" htmlFor="repo-id">Dataset repository</label>
         <input id="repo-id" name="repo_id" disabled={!project} value={repoId} onChange={event => {
           setRepoId(event.target.value);
-          onSourceEdited();
-          if (revision === starter.revision) setRevision('');
+
+          setRevision('');
         }} required placeholder="owner/dataset-name" autoCapitalize="none" autoCorrect="off" spellCheck={false} />
         <details className="intake-advanced"><summary>Revision (optional)</summary><label className="field-label visually-hidden" htmlFor="revision">Revision</label>
-        <input id="revision" className="mono-input" name="revision" disabled={!project} value={revision} onChange={event => { setRevision(event.target.value); onSourceEdited(); }} placeholder="Latest (main)" aria-describedby="revision-help" autoCapitalize="none" autoCorrect="off" spellCheck={false} />
+        <input id="revision" className="mono-input" name="revision" disabled={!project} value={revision} onChange={event => { setRevision(event.target.value); }} placeholder="Latest (main)" aria-describedby="revision-help" autoCapitalize="none" autoCorrect="off" spellCheck={false} />
         <p id="revision-help" className="field-help">Leave blank for the latest revision, or enter a branch, tag, or commit.</p>
         </details>
       </> : <>
-        <label className="field-label" htmlFor="local-path">Dataset directory</label>
-        <input id="local-path" name="path" disabled={!project} value={path} onChange={event => setPath(event.target.value)} required placeholder="Path to a LeRobot dataset" autoCapitalize="none" autoCorrect="off" spellCheck={false} aria-describedby="path-help" />
-        <p id="path-help" className="field-help">Path on the API host, inside the configured dataset directory.</p>
+        <LocalDatasetImport projectId={project?.id ?? ''} value={library} onChange={setLibrary} disabled={!project || blocked} />
+        {localAvailable && !library && <details className="intake-advanced"><summary>Folder on the app host</summary><label className="field-label" htmlFor="local-path">Dataset directory</label>
+        <input id="local-path" name="path" disabled={!project} value={path} onChange={event => setPath(event.target.value)} placeholder="Path inside the configured dataset directory" autoCapitalize="none" autoCorrect="off" spellCheck={false} /></details>}
         <label className="field-label"><input type="checkbox" checked={snapshotForTraining} onChange={event => setSnapshotForTraining(event.target.checked)} /> Prepare immutable training copy</label>
-        <p className="field-help">Validate all rows and videos in a finalized LeRobot v3 dataset, then copy it into this workspace. Up to 16 GiB; source files stay unchanged.</p>
+        <p className="field-help">Store a verified training copy. At least two complete episodes are required; original files stay unchanged.</p>
       </>}
       <ErrorNotice error={mutation.error} />
       <DatasetSubmissionRecovery submission={submission} onReconcile={async () => { const generation = selection.current.generation; accept(await submission.reconcile(validate), generation); }}
@@ -191,7 +193,7 @@ function IntakeForm({ project, readinessMessage, localAvailable, onCreated, star
           return fresh;
         }} />
       {!project && <p className="form-note" role="status">{readinessMessage}</p>}
-            <button className="primary-button inspect-button" type="submit" disabled={blocked || mutation.isPending}>{mutation.isPending || submission.busy ? 'Checking dataset…' : 'Inspect dataset'}<Icon name="arrow" size={17} /></button>
+            <button className="primary-button inspect-button" type="submit" disabled={blocked || mutation.isPending || (source === 'local' && (!library ? !path : library.status !== 'ready'))}>{mutation.isPending || submission.busy ? 'Checking dataset…' : 'Inspect dataset'}<Icon name="arrow" size={17} /></button>
     </form>
   </section>;
 }
@@ -235,10 +237,10 @@ function Workbench() {
   const [workflowNavigation, setWorkflowNavigation] = useState(0);
   const [startTraining, setStartTraining] = useState<{ id: number; datasetId?: string }>();
   const [settingsTab, setSettingsTab] = useState<'compute' | 'settings' | 'diagnostics'>('compute');
-  const [datasetView, setDatasetView] = useState<'sources' | 'inspection'>('sources');
-  const [starter, setStarter] = useState(datasetStarters[0]);
-  const [starterSelection, setStarterSelection] = useState(0);
-  const [activeStarterId, setActiveStarterId] = useState(datasetStarters[0].id);
+  const [datasetView, setDatasetView] = useState<'sources' | 'inspection' | 'labels'>('sources');
+  const [selectedLibrary, setSelectedLibrary] = useState<LibraryDataset | null>(null);
+  const [importLibrary, setImportLibrary] = useState<LibraryDataset | null>(null);
+  const [intakeSelection, setIntakeSelection] = useState(0);
   const health = useQuery({ queryKey: ['health'], queryFn: api.health, refetchInterval: 15_000, retry: false });
   const projects = useQuery({ queryKey: ['projects'], queryFn: api.projects, retry: false });
   const capabilities = useQuery({ queryKey: ['capabilities'], queryFn: api.capabilities, retry: false });
@@ -298,6 +300,7 @@ function Workbench() {
     setProjectId(id);
     setSelectedJobId('');
     setDatasetView('sources');
+    setSelectedLibrary(null); setImportLibrary(null);
     try { localStorage.setItem('firebird.project', id); } catch { /* Session selection still works. */ }
   }
   const projectMutation = useMutation({
@@ -308,6 +311,13 @@ function Workbench() {
     },
   });
   const project = projects.data?.find(item => item.id === projectId);
+  function openDataset(entry: LibraryDataset) {
+    selectProject(entry.project_id);
+    navigateStage(0);
+    if (entry.job_id && entry.id.startsWith('inspection:')) { setSelectedJobId(entry.job_id); setDatasetView('inspection'); }
+    else if (entry.status === 'ready' || entry.status === 'converting') { setSelectedLibrary(entry); setDatasetView('labels'); }
+    else { setImportLibrary(entry); setIntakeSelection(value=>value+1); setDatasetView('sources'); }
+  }
   // Only confirmed membership may enable project-scoped workflow controls.
   const workflowProjectId = projects.isSuccess ? project?.id ?? '' : '';
   function openModelWorkflow(artifact: PolicyArtifact, action: ModelAction) {
@@ -415,20 +425,21 @@ function Workbench() {
       </nav>
     </>}
   >
-        <div className={`page-heading${activeStage === 1 ? ' training-page-heading' : ''}`}><h1>{stage.name}</h1><div className="page-actions"><a className="page-guide" href={publicPath(`/guide/#${guideSectionId(stage.name)}`)}><Icon name="book" size={16} />Guide</a><div className={`connection ${connected ? 'connected' : ''}`} role="status" aria-label="Application API connection" title="Application API connection; simulator and voice connections are shown separately."><span />{health.isPending ? 'Connecting' : connected ? 'App connected' : 'App offline'}</div></div></div>
+        <div className={`page-heading${activeStage === 1 ? ' training-page-heading' : ''}`}><h1>{stage.name}</h1><div className="page-actions"><a className="page-guide" href={publicPath(`/guide/#${guideSectionId(stage.name)}`)}><Icon name="book" size={16} />Guide</a></div></div>
         {!connected && !health.isPending && <div className="connection-notice"><ErrorNotice error={health.error} /><button className="text-button" onClick={() => { void health.refetch(); void projects.refetch(); void capabilities.refetch(); }}>Retry connection</button></div>}
         {capabilities.error && connected && <div className="connection-notice"><ErrorNotice error={capabilities.error} /><button className="text-button" onClick={() => void capabilities.refetch()} disabled={capabilities.isFetching}>Retry capabilities</button></div>}
-        {activeStage !== 0 && <WorkspaceJourney key={`journey-${workflowProjectId}`} stage={activeStage} projectId={workflowProjectId} projectName={workflowProjectId ? project?.name : undefined}
+        {activeStage !== 0 && activeStage !== 12 && <WorkspaceJourney key={`journey-${workflowProjectId}`} stage={activeStage} projectId={workflowProjectId} projectName={workflowProjectId ? project?.name : undefined}
           jobs={jobs.data ?? []} historyState={!workflowProjectId ? 'unselected' : jobs.isError ? 'unavailable' : jobs.isPending ? 'loading' : 'ready'}
           inspection={selectedJob} inspectionExplicit={!!selectedJobId}
           workflow={activeStage === 3 ? quantizeMode === 'native' ? 'ACT · native quantization' : quantizeMode === 'gguf' ? 'SmolVLA · GGUF' : undefined : activeStage === 5 ? runMode === 'native' ? '3D simulation · ACT or SmolVLA' : runMode === 'replay' ? 'ACT · observation replay' : runMode === 'engine' ? 'GGUF · inference check' : undefined : activeStage === 2 && distillationModels[workflowProjectId] === 'act' ? 'ACT → ACT256' : undefined}
           onNavigate={navigateStage} onTrain={startTrainingOnDataset} onRefresh={() => void jobs.refetch()} />}
         <div className="dataset-view" hidden={activeStage !== 0}>
-          <div className="section-tabs"><nav className="dataset-tab-buttons" aria-label="Dataset views"><button type="button" className={`section-tab${datasetView === 'sources' ? ' active' : ''}`} aria-pressed={datasetView === 'sources'} onClick={() => setDatasetView('sources')}>Sources</button><button type="button" className={`section-tab${datasetView === 'inspection' ? ' active' : ''}`} aria-pressed={datasetView === 'inspection'} disabled={!selectedJob} onClick={() => setDatasetView('inspection')}>Inspection{sortedJobs.length > 0 && <span className="tab-count">{sortedJobs.length}</span>}</button></nav><span className="section-note">LeRobot v2 / v3</span></div>
+          <div className="section-tabs"><nav className="dataset-tab-buttons" aria-label="Dataset views"><button type="button" className={`section-tab${datasetView === 'sources' ? ' active' : ''}`} aria-pressed={datasetView === 'sources'} onClick={() => setDatasetView('sources')}>My datasets</button><button type="button" className={`section-tab${datasetView === 'inspection' ? ' active' : ''}`} aria-pressed={datasetView === 'inspection'} disabled={!selectedJob} onClick={() => setDatasetView('inspection')}>Inspection{sortedJobs.length > 0 && <span className="tab-count">{sortedJobs.length}</span>}</button></nav></div>
           <div className="content-grid source-grid" hidden={datasetView !== 'sources'}>
-            <div className="intake-column"><IntakeForm key={`${projectId}-${starterSelection}`} navigationToken={`${workflowNavigation}:${activeStage}:${datasetView}:${selectedJobId}`} project={workflowProjectId ? project : undefined} readinessMessage={projects.isPending ? 'Loading projects before importing a dataset.' : projects.isError ? 'Project list unavailable. Retry projects to continue.' : 'Create or select a project to import a dataset.'} starter={starter} onSourceEdited={() => setActiveStarterId('')} localAvailable={capabilities.data?.some(item => item.operation === 'dataset.inspect.local' && (item.status === 'available' || item.status === 'untested')) ?? false} onCreated={job => { setSelectedJobId(job.id); setDatasetView('inspection'); }} /></div>
-            <DatasetStarters selected={activeStarterId} onSelect={item => { setStarter(item); setActiveStarterId(item.id); setStarterSelection(previous => previous + 1); }} />
+            <div className="intake-column"><IntakeForm key={`${projectId}-${intakeSelection}`} navigationToken={`${workflowNavigation}:${activeStage}:${datasetView}:${selectedJobId}`} project={workflowProjectId ? project : undefined} readinessMessage={projects.isPending ? 'Loading projects before importing a dataset.' : projects.isError ? 'Project list unavailable. Retry projects to continue.' : 'Create or select a project to import a dataset.'} initialLibrary={importLibrary} localAvailable={capabilities.data?.some(item => item.operation === 'dataset.inspect.local' && (item.status === 'available' || item.status === 'untested')) ?? false} onCreated={job => { setSelectedJobId(job.id); setDatasetView('inspection'); }} /></div>
+            <DatasetLibrary active={activeStage === 0 && datasetView === 'sources'} projectId={workflowProjectId} onOpen={openDataset} onExample={entry => { if (entry.project_id === workflowProjectId && activeStage === 0 && datasetView === 'sources') openDataset(entry); }} />
           </div>
+          {datasetView === 'labels' && selectedLibrary?.project_id === workflowProjectId && <DatasetLabeling key={selectedLibrary.id} entry={selectedLibrary} onInspect={() => { setImportLibrary(selectedLibrary); setIntakeSelection(value=>value+1); setDatasetView('sources'); }} />}
           <div className="inspection-view" hidden={datasetView !== 'inspection'}>
             <section className="inspection-record" aria-labelledby="activity-title">
               <div className="activity-heading"><div><h2 id="activity-title">Dataset inspection</h2></div><button type="button" className="secondary-button" onClick={() => setDatasetView('sources')}>Change source</button></div>
@@ -438,13 +449,14 @@ function Workbench() {
               {selectedJob && <>
                 {sortedJobs.length > 1 && <div className="history-control"><label htmlFor="inspection-history">History</label><select id="inspection-history" value={selectedJob.id} onChange={event => setSelectedJobId(event.target.value)}>{sortedJobs.map(job => <option key={job.id} value={job.id}>{job.request.repo_id || 'Local dataset'} · {displayDate(job.created_at)} · {job.status}</option>)}</select></div>}
                 <JobDetail key={selectedJob.id} job={selectedJob} projectId={projectId} />
-                {selectedJob.result && <DatasetExplorer key={`explorer-${selectedJob.id}`} job={selectedJob} active={activeStage === 0 && datasetView === 'inspection'} />}
+                {selectedJob.result && !selectedJob.request.library_id && <DatasetExplorer key={`explorer-${selectedJob.id}`} job={selectedJob} active={activeStage === 0 && datasetView === 'inspection'} />}
                 {selectedJob.status === 'succeeded' && (selectedJob.result?.source === 'huggingface' || selectedJob.result?.snapshot) && <div className="dataset-train-action">{isAugmentationSource(selectedJob) && <button className="secondary-button" onClick={() => navigateStage(8)}><Icon name="spark" size={16} />Augment this dataset</button>}<button className="primary-button" onClick={() => startTrainingOnDataset(selectedJob.id)}>Train on this dataset <Icon name="arrow" size={16} /></button></div>}
               </>}
             </section>
           </div>
           {jobs.error && datasetView === 'sources' && <ErrorNotice error={jobs.error} />}
         </div>
+        {activeStage === 12 && <WorkspaceDashboard projects={projects.data ?? []} onModels={() => navigateStage(11)} onDatasets={() => { navigateStage(0); setDatasetView('sources'); }} onDataset={openDataset} onSettings={() => { setSettingsTab('compute'); navigateStage(6); }} />}
         {activeStage === 8 && <AugmentationPanel key={projectId} projectId={workflowProjectId} preferredDatasetId={selectedJob?.id} onOpenSettings={() => { setSettingsTab('compute'); navigateStage(6); }} onChooseDataset={() => { navigateStage(0); setDatasetView('sources'); }} />}
         {activeStage === 9 && <>
           <section className="panel" aria-label="Teaching connection"><h2>Choose a teaching connection</h2><div className="workbench-actions" role="group" aria-label="Teaching mode">

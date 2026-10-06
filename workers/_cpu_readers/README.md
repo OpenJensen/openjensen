@@ -17,10 +17,9 @@ uv pip install --python workers/_cpu_readers/.venv/Scripts/python.exe --no-deps 
 uv run --frozen pytest -q tests/test_explore.py tests/test_hub_parquet.py
 ```
 
-The ignored reader `.venv` contains only PyArrow. The core application and its
+Dataset import extends the reader with the exact NumPy, HDF5 and Pillow pins in `requirements.txt`; FFmpeg is installed on the app host. The core application and its
 tests do not import PyArrow; even synthetic Parquet fixtures are generated in the
-reader environment. There is no runtime installation, Torch, NumPy, pandas, or
-video decoder dependency. Both fixed reader scripts run with `-I -B`.
+reader environment. The app does not install packages at runtime or import these native dependencies. Torch and pandas are not required by this reader. Both fixed reader scripts run with `-I -B`.
 
 ## Hugging Face previews
 

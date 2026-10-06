@@ -23,7 +23,7 @@ if not prefix or not (static_dir / "index.html").is_file():
     )
 
 with TemporaryDirectory(prefix="firebird-prefix-smoke-") as data_dir:
-    application = create_app(Settings(data_dir=Path(data_dir), static_dir=static_dir))
+    application = create_app(Settings(data_dir=Path(data_dir).resolve(), static_dir=static_dir))
 
     @asynccontextmanager
     async def lifespan(_):

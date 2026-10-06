@@ -1463,6 +1463,46 @@
         "title": "Context",
         "type": "object"
       },
+      "Conversion": {
+        "additionalProperties": false,
+        "properties": {
+          "fps": {
+            "default": 30,
+            "maximum": 240.0,
+            "minimum": 1.0,
+            "title": "Fps",
+            "type": "integer"
+          },
+          "mapping": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mapping"
+          },
+          "robot_type": {
+            "default": "unspecified",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Robot Type",
+            "type": "string"
+          },
+          "task": {
+            "default": "Recorded robot task",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "title": "Conversion",
+        "type": "object"
+      },
       "DatasetProfile": {
         "additionalProperties": false,
         "properties": {
@@ -2434,6 +2474,18 @@
       "IntakeRequest": {
         "additionalProperties": false,
         "properties": {
+          "library_id": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{32}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Library Id"
+          },
           "path": {
             "anyOf": [
               {
@@ -2686,6 +2738,39 @@
         "type": "object"
       },
       "JsonValue": {},
+      "Labels": {
+        "additionalProperties": false,
+        "properties": {
+          "frames": {
+            "additionalProperties": {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            "maxProperties": 12000,
+            "title": "Frames",
+            "type": "object"
+          },
+          "revision": {
+            "minimum": 0.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "views": {
+            "additionalProperties": {
+              "maxLength": 100,
+              "type": "string"
+            },
+            "maxProperties": 8,
+            "title": "Views",
+            "type": "object"
+          }
+        },
+        "required": [
+          "revision"
+        ],
+        "title": "Labels",
+        "type": "object"
+      },
       "LifecycleResult": {
         "additionalProperties": false,
         "properties": {
@@ -5373,6 +5458,22 @@
         "title": "TrainingTelemetry",
         "type": "object"
       },
+      "UploadCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "UploadCreate",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -5904,6 +6005,413 @@
         "summary": "Add Local Worker",
         "tags": [
           "Compute settings"
+        ]
+      }
+    },
+    "/api/v1/dataset-uploads/{ident}/file": {
+      "put": {
+        "operationId": "upload_file_api_v1_dataset_uploads__ident__file_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "maxLength": 1024,
+              "minLength": 1,
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload File",
+        "tags": [
+          "Dataset library"
+        ]
+      }
+    },
+    "/api/v1/dataset-uploads/{ident}/finish": {
+      "post": {
+        "operationId": "finish_upload_api_v1_dataset_uploads__ident__finish_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Finish Upload",
+        "tags": [
+          "Dataset library"
+        ]
+      }
+    },
+    "/api/v1/datasets": {
+      "get": {
+        "operationId": "datasets_api_v1_datasets_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Datasets",
+        "tags": [
+          "Dataset library"
+        ]
+      }
+    },
+    "/api/v1/datasets/{ident}": {
+      "get": {
+        "operationId": "get_dataset_api_v1_datasets__ident__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Dataset",
+        "tags": [
+          "Dataset library"
+        ]
+      }
+    },
+    "/api/v1/datasets/{ident}/annotations": {
+      "put": {
+        "operationId": "annotations_api_v1_datasets__ident__annotations_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Labels"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Annotations",
+        "tags": [
+          "Dataset library"
+        ]
+      }
+    },
+    "/api/v1/datasets/{ident}/convert": {
+      "post": {
+        "operationId": "convert_dataset_api_v1_datasets__ident__convert_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Conversion"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Convert Dataset",
+        "tags": [
+          "Dataset library"
+        ]
+      }
+    },
+    "/api/v1/datasets/{ident}/download": {
+      "get": {
+        "operationId": "download_api_v1_datasets__ident__download_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download",
+        "tags": [
+          "Dataset library"
+        ]
+      }
+    },
+    "/api/v1/datasets/{ident}/preview/{name}": {
+      "get": {
+        "operationId": "preview_api_v1_datasets__ident__preview__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview",
+        "tags": [
+          "Dataset library"
+        ]
+      }
+    },
+    "/api/v1/datasets/{ident}/samples": {
+      "get": {
+        "operationId": "samples_api_v1_datasets__ident__samples_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Samples",
+        "tags": [
+          "Dataset library"
         ]
       }
     },
@@ -6891,6 +7399,96 @@
           }
         },
         "summary": "Augment Dataset"
+      }
+    },
+    "/api/v1/projects/{project_id}/dataset-uploads": {
+      "post": {
+        "operationId": "begin_upload_api_v1_projects__project_id__dataset_uploads_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Begin Upload",
+        "tags": [
+          "Dataset library"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/datasets/example": {
+      "post": {
+        "operationId": "example_api_v1_projects__project_id__datasets_example_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Example",
+        "tags": [
+          "Dataset library"
+        ]
       }
     },
     "/api/v1/projects/{project_id}/intakes": {
