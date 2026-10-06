@@ -5,7 +5,7 @@
 .settings-tabs .section-tab { white-space: nowrap; }
 .cloud-settings { max-width: 1040px; }
 .cloud-settings > h2, .cloud-workers h2 { font-size: 16px; font-weight: 600; letter-spacing: -.2px; margin: 0 0 18px; }
-.cloud-provider-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.cloud-provider-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
 .cloud-provider-card { min-width: 0; display: flex; flex-direction: column; padding: 21px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .cloud-provider-top { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .cloud-provider-top h3 { margin: 0; min-width: 0; color: var(--ink); font-size: 14px; font-weight: 550; letter-spacing: -.2px; }

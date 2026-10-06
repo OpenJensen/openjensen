@@ -54,6 +54,7 @@ class LocalWorkerCandidate(StrictRecord):
     status: Literal["ready", "registered", "setup_required"]
     runtime_id: str | None = None
     reason: str | None = None
+    setup_supported: bool = False
 
 
 class LocalWorkerDiscovery(StrictRecord):
@@ -162,6 +163,16 @@ def _worker_root():
     ):
         return None
     return root
+
+
+def worker_python(root: Path, lifecycle) -> Path:
+    """Prefer the stable environment installed by the app; keep manual workers usable."""
+    settings = getattr(lifecycle, "settings", None)
+    if settings:
+        managed = settings.data_dir / "local-environments/smolvla-cu126/bin/python"
+        if managed.is_file():
+            return managed
+    return root / ".venv/bin/python"
 
 
 def _safe_text(value, maximum=200):
@@ -299,7 +310,7 @@ class LocalWorkerDiscoveryService:
             architecture=platform.machine(),
         )
         candidate = LocalWorkerCandidate(
-            id="local-smolvla", label="SmolVLA training", status="setup_required"
+            id="local-smolvla", label="Local NVIDIA GPU", status="setup_required"
         )
         response = LocalWorkerDiscovery(
             host=host,
@@ -319,7 +330,7 @@ class LocalWorkerDiscoveryService:
         if root is None:
             candidate.reason = "The bundled SmolVLA worker sources are not installed on this host."
         else:
-            python = root / ".venv/bin/python"
+            python = worker_python(root, self.lifecycle)
             if env.get("CUDA_VISIBLE_DEVICES") in {"", "-1"}:
                 candidate.reason = "CUDA devices are hidden by this host's visible GPU selection."
             elif not python.is_file() or not os.access(python, os.X_OK):
@@ -391,6 +402,9 @@ class LocalWorkerDiscoveryService:
             hardware = _hardware(env)
             if hardware:
                 candidate.gpu_name, candidate.gpu_memory_mib = hardware[2:]
+                candidate.setup_supported = root is not None and env.get(
+                    "CUDA_VISIBLE_DEVICES"
+                ) not in {"", "-1"}
         return response, ready
 
     async def _scan(self):

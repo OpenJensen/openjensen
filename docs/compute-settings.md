@@ -10,58 +10,41 @@ their worker starts. An already running worker is not stopped by this switch.
 Dataset inspections and augmentation have their own execution paths and are not
 controlled by the native compute preference.
 
-## Add a local training worker
+## Local worker setup
 
 1. Open **Local runs** and select **Check this machine**.
-2. Review the detected worker and **App host** name, then select **Add worker**.
-3. Select **Enable local runs** and **Save local settings** when ready.
+2. Review the detected GPU and supported models. If dependencies are missing,
+   select **Set up locally**. If an existing environment is ready, select **Add worker**.
+3. Enable local runs and save when ready to use the worker.
 4. Choose the added compute target under **Fine-tune → SmolVLA**.
 
-The check runs on the machine hosting the application, which can differ from the
-computer running your browser. Opening Compute does not run a check. **Check again**
-refreshes the result; **Added** means the worker is already registered. Adding a
-worker preserves the saved local switch and label, including a disabled switch.
+Automatic setup supports the app host on Linux x86-64 with a visible NVIDIA GPU
+and `uv` installed. It installs the bundled, pinned Python 3.11 / CUDA 12.6 SmolVLA
+dependencies into the persistent workspace's `local-environments/smolvla-cu126`
+directory, checks the GPU and imports, and registers the verified worker. Setup
+requires 24 GiB free disk space, including a 10 GiB reserve, and refuses to install
+while jobs are queued or running. It never enables local runs, starts training,
+or downloads policy weights or datasets. A browser request cannot supply install
+commands, dependency versions or paths.
 
-The initial discovery adapter supports an existing SmolVLA worker at
-`workers/smolvla_qlora/.venv/bin/python` in the application's source checkout,
-on Linux x86_64 with an NVIDIA GPU of compute capability 7.0 or newer. It checks
-the first GPU visible to that worker, respecting the application's
-`CUDA_VISIBLE_DEVICES` selection, and requires a stable GPU UUID to keep the saved
-worker bound to that device across restarts. It does not enumerate remote machines, scan
-arbitrary Python environments, or add other model families. Packaged app installs
-without the worker source are not supported by this discovery path.
+Progress survives reloads. **Cancel setup** stops the owned installer process
+group; **Retry setup** reuses partial dependencies and downloads. A server restart
+marks unfinished setup as interrupted. Installer logs remain private to the server
+in `local-environments/install.log`; responses do not expose paths or credentials.
+Existing manual environments under the bundled worker's `.venv` remain supported.
 
-Install dependencies separately using the
-[pinned SmolVLA installation](../workers/smolvla_qlora/docs/training/smolvla-qlora.md#install-on-the-training-machine),
-then check again. The lightweight development install in the worker README is
-not enough for CUDA training. Readiness checks require an isolated Python 3.11 or
-3.12 environment with LeRobot 0.4.4, Torch 2.7.1, torchvision 0.22.1,
-Transformers 4.57.1, PEFT 0.18.0 and bitsandbytes 0.48.2, plus successful imports
-and CUDA access. The linked installation uses the pinned Linux dependency lock.
-
-Check and Add perform bounded, offline environment checks; they install nothing,
-download no models or datasets, and start no training or inference jobs. Add
-rechecks the worker before saving. A ready result describes the installed
-environment and GPU capacity, not model access, free VRAM, dataset compatibility
-or a successful training run. Missing prerequisites show **Setup needed** with a
-link to setup guidance.
-
-Added workers persist in the workspace's `local-workers.json`, separate from
-`compute-settings.json` and the operator's `FIREBIRD_RUNTIME_CONFIG`. The app merges
-managed workers with operator entries while preserving their configured sources;
-equivalent workers are reused and conflicting operator entries take precedence.
-The app never rewrites the operator's runtime configuration. Managed workers have
-`training_only: true` and accept fine-tuning only. Export, quantization,
-evaluation and Run require separately configured compatible workers.
-
-`POST /api/v1/compute-settings/local/check` accepts no body and returns the app-host
-identity, check time, candidate readiness and any setup issues.
-`POST /api/v1/compute-settings/local/workers` accepts only `candidate_id` from a
-recent check and returns the registered runtime, current compute preferences and
-updated discovery result. The server determines executable paths and GPU identity;
-the browser cannot supply worker paths or commands.
+This automatic adapter covers SmolVLA fine-tuning. ACT export, distillation,
+quantization and replay use separate local CPU workers; see
+[local CPU setup](../workers/local_cpu/README.md). Other native GPU training routes currently
+require at least 16 GiB of GPU memory, beyond the 8 GiB RTX 3070. Capacity checks
+are admission limits, not a guarantee that every dataset and batch size fits.
 
 ## Compute preferences API
+
+`GET /api/v1/compute-settings/local/setup` returns installer state. An explicit
+`POST` to that path starts or resumes the fixed installer; repeated requests reuse
+the active task. `POST /api/v1/compute-settings/local/setup/cancel` cancels it.
+The setup request accepts no parameters.
 
 `GET /api/v1/compute-settings` returns local and Google Cloud preferences, safe
 runtime descriptions, `gcp_status`, and `gpu_options`. `PUT` accepts either or both

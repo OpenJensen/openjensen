@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type ComputeSettings, type LocalComputeSettings, type LocalWorkerDiscovery, type PolicyOptions } from "@/lib/api";
-import { publicPath } from "@/lib/base-path";
 import "./local-compute-settings.css";
 
 export function LocalComputeSettingsPanel() {
@@ -13,6 +12,12 @@ export function LocalComputeSettingsPanel() {
   const [discovery, setDiscovery] = useState<LocalWorkerDiscovery | null>(null);
   const [workerNotice, setWorkerNotice] = useState("");
   const saved = options.data?.compute?.local;
+  const setup = useQuery({ queryKey: ["local-setup"], queryFn: api.localSetupStatus,
+    refetchInterval: (query) => query.state.data?.status === "running" ? 1500 : false });
+  const install = useMutation({ mutationFn: api.startLocalSetup,
+    onSuccess: (result) => client.setQueryData(["local-setup"], result) });
+  const cancel = useMutation({ mutationFn: api.cancelLocalSetup,
+    onSuccess: (result) => client.setQueryData(["local-setup"], result) });
   const current = draft ?? saved ?? { enabled: false, label: "Local machine" };
   const workers = (options.data?.runtimes ?? []).filter(
     (worker) => (worker.provider ?? "local") === "local" && worker.training && worker.device === "cuda",
@@ -44,10 +49,16 @@ export function LocalComputeSettingsPanel() {
     },
   });
   const dirty = !!saved && (current.enabled !== saved.enabled || current.label.trim() !== saved.label);
-  const busy = check.isPending || add.isPending;
+  const busy = check.isPending || add.isPending || install.isPending || setup.data?.status === "running";
   const registeredIds = new Set(discovery?.candidates.map((candidate) => candidate.runtime_id).filter(Boolean));
   const otherWorkers = workers.filter((worker) => !registeredIds.has(worker.id));
-  const needsSetup = discovery && (discovery.status !== "ready" || discovery.candidates.some((candidate) => candidate.status === "setup_required"));
+  useEffect(() => {
+    if (setup.data?.status === "succeeded") {
+      void client.invalidateQueries({ queryKey: ["policy-options"] });
+      void client.invalidateQueries({ queryKey: ["compute-settings"] });
+      void api.checkLocalWorkers().then(setDiscovery).catch(() => undefined);
+    }
+  }, [client, setup.data?.status, setup.data?.runtime_id]);
   const issues = [...new Set(discovery?.issues ?? [])].filter((issue) => issue !== discovery?.message);
   const gpuDetails = (gpu: { gpu_name?: string | null; gpu_memory_mib?: number | null }) => [
     gpu.gpu_name,
@@ -73,21 +84,32 @@ export function LocalComputeSettingsPanel() {
           {discovery.message && (discovery.status !== "ready" || !discovery.candidates.length) && <p className="local-compute-note">{discovery.message}</p>}
           {discovery.candidates.map((candidate) => <div className="local-worker-card" key={candidate.id}>
             <div className="local-worker-details">
-              <strong>{candidate.label}</strong>
+              <strong>{candidate.gpu_name ? "Local NVIDIA GPU" : candidate.label}</strong>
               {gpuDetails(candidate) && <span>{gpuDetails(candidate)}</span>}
+              <span>SmolVLA fine-tuning</span>
               {candidate.reason && <p>{candidate.reason}</p>}
             </div>
             {candidate.status === "ready" ? <button className="secondary-button" type="button"
               aria-label={`Add ${candidate.label}`} disabled={busy || save.isPending || check.isError}
               onClick={() => { setWorkerNotice(""); add.mutate(candidate.id); }}>
               {add.isPending && add.variables === candidate.id ? "Adding…" : "Add worker"}
+            </button> : candidate.status === "setup_required" && candidate.setup_supported ? <button className="secondary-button" type="button"
+              disabled={busy || save.isPending} onClick={() => install.mutate()}>
+              {install.isPending || setup.data?.status === "running" ? "Setting up…" : "Set up locally"}
             </button> : <span className="cloud-status">{candidate.status === "registered" ? "Added" : "Setup needed"}</span>}
           </div>)}
           {!!issues.length && <ul className="local-discovery-issues">{issues.map((issue) => <li key={issue}>{issue}</li>)}</ul>}
-          {needsSetup && <a className="text-link" href={publicPath('/guide/#settings-diagnostics')}>Setup guide</a>}
+          {discovery.candidates.some(candidate => candidate.setup_supported) && <p className="local-compute-note">Setup installs several GB of dependencies. Models and datasets download when you start a run.</p>}
+          <p className="local-compute-note">This setup supports SmolVLA fine-tuning. ACT export, distillation, quantization and replay use separate local CPU workers. Other GPU training routes currently require at least 16 GB.</p>
         </div>}
+        {setup.data && setup.data.status !== "idle" && <div className="local-setup-progress" role="status">
+          <p>{setup.data.status === "running" ? setup.data.stage : setup.data.message}</p>
+          {setup.data.status === "running" && <button className="text-button" type="button" disabled={cancel.isPending} onClick={() => cancel.mutate()}>Cancel setup</button>}
+          {["failed", "cancelled", "interrupted"].includes(setup.data.status) && <button className="secondary-button" type="button" disabled={busy} onClick={() => install.mutate()}>Retry setup</button>}
+        </div>}
+        {(install.error || cancel.error) && <p className="cloud-connection-error" role="alert">{install.error?.message ?? cancel.error?.message}</p>}
         {otherWorkers.map((worker) => <div className="local-worker-card" key={worker.id}>
-          <div className="local-worker-details"><strong>{worker.label}</strong><span>{gpuDetails(worker)}</span></div>
+          <div className="local-worker-details"><strong>{worker.gpu_name ? "Local NVIDIA GPU" : worker.label}</strong><span>{gpuDetails(worker)}</span><span>{worker.training_model_ids?.join(", ") || "Configured training worker"}</span></div>
           <span className="cloud-status">Configured</span>
         </div>)}
         {add.error && <p className="cloud-connection-error" role="alert">{add.error.message}</p>}

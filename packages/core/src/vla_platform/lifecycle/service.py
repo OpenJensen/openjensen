@@ -593,6 +593,16 @@ class Lifecycle:
 
     async def validate(self, project_id: str, request: PolicyRequest):
         selected_runtime = self.runtime(request.runtime_id)
+        setup = getattr(self, "local_worker_setup", None)
+        if (
+            setup
+            and setup.state.status == "running"
+            and selected_runtime
+            and selected_runtime.provider == "local"
+            and selected_runtime.training_python
+            == str(setup.directory / "smolvla-cu126/bin/python")
+        ):
+            raise ValueError("Wait for local setup to finish before using this worker")
         if (
             selected_runtime
             and selected_runtime.training_only

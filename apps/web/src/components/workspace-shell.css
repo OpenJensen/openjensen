@@ -55,7 +55,6 @@
   .grouped-navigation .navigation-group:last-child > p { display: block; }
   .grouped-navigation .navigation-group:last-child .stage-list { margin-top: 3px; }
   .grouped-navigation .navigation-group:last-child .stage-button { min-height: 44px; }
-  .grouped-navigation .stage-order { display: none; }
   .mode-card-grid, .mode-card-grid.two-columns { grid-template-columns: 1fr; }
   .mode-card { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 4px 13px; padding: 16px; }
   .mode-card-top { display: contents; }
@@ -100,7 +99,6 @@
   .mode-card-plain strong, .mode-card-plain .mode-card-detail { grid-column: 1; }
 }
 
-.stage-order { margin-left: auto; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; font-weight: 400; }
 @media (max-width: 700px) {
   .sidebar .brand { margin-bottom: 10px; }
   .sidebar .projects-section { margin-bottom: 10px; padding-bottom: 10px; }

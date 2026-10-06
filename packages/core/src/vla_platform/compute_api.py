@@ -11,6 +11,7 @@ from vla_platform.local_worker_discovery import (
     LocalWorkerDiscovery,
     LocalWorkerDiscoveryService,
 )
+from vla_platform.local_worker_setup import LocalSetupState, LocalWorkerSetup
 
 router = APIRouter(prefix="/api/v1/compute-settings", tags=["Compute settings"])
 
@@ -68,6 +69,46 @@ async def local_worker_discovery(lifecycle: LifecycleDep) -> LocalWorkerDiscover
 
 
 LocalDiscoveryDep = Annotated[LocalWorkerDiscoveryService, Depends(local_worker_discovery)]
+
+
+async def local_worker_setup(
+    lifecycle: LifecycleDep, discovery: LocalDiscoveryDep
+) -> LocalWorkerSetup:
+    if not hasattr(lifecycle, "local_worker_setup"):
+        lifecycle.local_worker_setup = LocalWorkerSetup(lifecycle, discovery)
+    return lifecycle.local_worker_setup
+
+
+LocalSetupDep = Annotated[LocalWorkerSetup, Depends(local_worker_setup)]
+
+
+class LocalSetupRequest(StrictRecord):
+    pass
+
+
+@router.get("/local/setup", response_model=LocalSetupState)
+async def local_setup_status(setup: LocalSetupDep) -> LocalSetupState:
+    return setup.public()
+
+
+@router.post("/local/setup", response_model=LocalSetupState, status_code=202)
+async def start_local_setup(
+    setup: LocalSetupDep, payload: LocalSetupRequest | None = None
+) -> LocalSetupState:
+    try:
+        return await setup.start()
+    except (ValueError, OSError) as exc:
+        message = (
+            str(exc)
+            if isinstance(exc, ValueError)
+            else "The installer could not start on this host."
+        )
+        raise HTTPException(409, message) from None
+
+
+@router.post("/local/setup/cancel", response_model=LocalSetupState)
+async def cancel_local_setup(setup: LocalSetupDep) -> LocalSetupState:
+    return await setup.cancel()
 
 
 @router.post("/local/check", response_model=LocalWorkerDiscovery)

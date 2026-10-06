@@ -74,6 +74,17 @@ async function mockWorkspace(page: Page, initial: Connection[] = [], initialComp
   };
   const localReplies: { status?: number; detail?: string; discovery?: LocalWorkerDiscovery }[] = [];
   const localWrites: unknown[] = [];
+  let setupStatus = { status: 'idle', stage: '', message: '', runtime_id: null as string | null };
+  function completeSetup() {
+    const candidate = discovery.candidates[0];
+    runtimes = [{ id: 'local-smolvla', label: 'Local NVIDIA GPU', device: 'cuda', training: true,
+      training_only: true, simulation: false, run: false, engine_evaluation: false,
+      gpu_name: candidate.gpu_name, gpu_memory_mib: candidate.gpu_memory_mib,
+      training_model_ids: candidate.training_model_ids, provider: 'local', enabled: false }];
+    discovery = { ...discovery, status: 'ready', candidates: [{ ...candidate, status: 'registered', runtime_id: 'local-smolvla' }] };
+    setupStatus = { status: 'succeeded', stage: '', message: 'SmolVLA is installed and added. Enable local runs when you are ready.', runtime_id: 'local-smolvla' };
+  }
+
   function computeResponse() {
     const config = providers.gcp.config;
     const gcp_status: ComputeStatus = {
@@ -98,6 +109,14 @@ async function mockWorkspace(page: Page, initial: Connection[] = [], initialComp
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (request.method() !== 'GET') mutations.push(`${request.method()} ${path}`);
+    if (request.method() === 'POST' && path.startsWith('/api/v1/compute-settings/local/setup')) {
+      setupStatus = path.endsWith('/cancel')
+        ? { status: 'cancelled', stage: '', message: 'Setup cancelled. Installed dependencies are retained for a retry.', runtime_id: null }
+        : { status: 'running', stage: 'Installing SmolVLA dependencies', message: '', runtime_id: null };
+      await route.fulfill({ status: path.endsWith('/cancel') ? 200 : 202, json: setupStatus });
+      return;
+    }
+
     if (request.method() === 'POST' && ['/api/v1/compute-settings/local/check', '/api/v1/compute-settings/local/workers'].includes(path)) {
       const reply = localReplies.shift();
       if (path.endsWith('/workers')) localWrites.push(request.postDataJSON());
@@ -162,6 +181,7 @@ async function mockWorkspace(page: Page, initial: Connection[] = [], initialComp
         '/api/v1/huggingface-connection': { configured: false, username: null, token_hint: null, checked_at: null, message: null },
         '/api/v1/cloud-connections': { providers: Object.values(providers) },
         '/api/v1/compute-settings': computeResponse(),
+        '/api/v1/compute-settings/local/setup': setupStatus,
         '/api/v1/policy-options': {
           runtimes, sources: [], training_models: [], training_methods: [], default_training_method: 'lora', compute: { local, gcp },
           quantization_defaults: { cuda: { language: 'Q8_0', vision: null }, cpu: { language: 'Q8_0', vision: null }, note: '' },
@@ -174,7 +194,7 @@ async function mockWorkspace(page: Page, initial: Connection[] = [], initialComp
   });
   await page.goto('/');
   await openCompute(page);
-  return { providers, writes, unexpected, replies, reads, computeWrites, mutations, localReplies, localWrites };
+  return { providers, writes, unexpected, replies, reads, computeWrites, mutations, localReplies, localWrites, completeSetup };
 }
 
 async function noOverflow(page: Page) {
@@ -189,11 +209,8 @@ test('Google Cloud opens a cancellable keyboard-accessible form without verifyin
   await expect(page.getByRole('region', { name: /Amazon|AWS/i })).toHaveCount(0);
   await expect(page.locator('.cloud-settings').getByText(/Amazon|AWS/i)).toHaveCount(0);
   await expect(page.locator('.cloud-settings').getByText('Connected', { exact: true })).toHaveCount(0);
-  await expect(page.locator('.cloud-provider-grid > .cloud-provider-card')).toHaveCount(2);
-  const upcoming = page.locator('.cloud-provider-grid > .cloud-provider-card').filter({ has: page.getByRole('heading', { name: 'Firebird', exact: true }) });
-  await expect(upcoming.getByText('Coming soon', { exact: true })).toBeVisible();
-  await expect(upcoming.getByRole('button')).toHaveCount(0);
-  await expect(upcoming.getByRole('link')).toHaveCount(0);
+  await expect(page.locator('.cloud-provider-grid > .cloud-provider-card')).toHaveCount(1);
+  await expect(page.locator('.cloud-provider-grid').getByText('Firebird', { exact: true })).toHaveCount(0);
   const connect = gcp.getByRole('button', { name: 'Connect', exact: true });
   await connect.focus();
   await page.keyboard.press('Enter');
@@ -386,7 +403,7 @@ test('local discovery and registration are explicit, preserve preferences, and s
   await local.screenshot({ path: testInfo.outputPath('local-worker-added.png') });
   await page.reload();
   await openCompute(page);
-  await expect(local.getByText('SmolVLA training', { exact: true })).toBeVisible();
+  await expect(local.getByText('Local NVIDIA GPU', { exact: true })).toBeVisible();
   await expect(local.getByText('Configured', { exact: true })).toBeVisible();
   await expect(local.getByRole('checkbox', { name: 'Enable local runs', exact: true })).not.toBeChecked();
   expect(mutations).toEqual(['POST /api/v1/compute-settings/local/check', 'POST /api/v1/compute-settings/local/workers']);
@@ -396,7 +413,7 @@ test('local discovery and registration are explicit, preserve preferences, and s
   expect(unexpected).toEqual([]);
 });
 
-test('local discovery without a compatible GPU provides setup guidance without an add action', async ({ page }) => {
+test('local discovery without a compatible GPU explains its host scope without an install action', async ({ page }) => {
   const { mutations, unexpected, localWrites } = await mockWorkspace(page, [], { discovery: {
     host: { name: 'application-server', platform: 'Darwin', architecture: 'arm64' },
     status: 'unavailable', message: 'No NVIDIA GPU found on this app host.', candidates: [],
@@ -405,7 +422,8 @@ test('local discovery without a compatible GPU provides setup guidance without a
   await local.getByRole('button', { name: 'Check this machine', exact: true }).click();
   await expect(local.getByText('App host · application-server', { exact: true })).toBeVisible();
   await expect(local.getByText('No NVIDIA GPU found on this app host.', { exact: true })).toBeVisible();
-  await expect(local.getByRole('link', { name: 'Setup guide', exact: true })).toHaveAttribute('href', '/guide/#settings-diagnostics');
+  await expect(local.getByRole('link', { name: 'Setup guide', exact: true })).toHaveCount(0);
+  await expect(local.getByRole('button', { name: 'Set up locally', exact: true })).toHaveCount(0);
   await expect(local.getByRole('button', { name: /^Add/ })).toHaveCount(0);
   await expect(local.getByRole('button', { name: 'Check again', exact: true })).toBeEnabled();
   expect(localWrites).toEqual([]);
@@ -417,17 +435,48 @@ test('missing local worker dependencies are never represented as ready', async (
   const { mutations, unexpected } = await mockWorkspace(page, [], { discovery: {
     host: { name: 'robotics-workstation-with-a-long-hostname.example.test', platform: 'Linux', architecture: 'x86_64' },
     status: 'unavailable', message: null,
-    candidates: [{ id: 'smolvla-cuda-0', label: 'SmolVLA training', gpu_name: 'NVIDIA RTX 3070', gpu_memory_mib: 8192, training_model_ids: ['smolvla'], status: 'setup_required', runtime_id: null, reason: 'Install the SmolVLA worker, then check again.' }],
+    candidates: [{ id: 'smolvla-cuda-0', label: 'SmolVLA training', gpu_name: 'NVIDIA RTX 3070', gpu_memory_mib: 8192, training_model_ids: ['smolvla'], status: 'setup_required', setup_supported: true, runtime_id: null, reason: 'Install the SmolVLA worker, then check again.' }],
   } });
   const local = page.getByRole('region', { name: 'Local runs', exact: true });
   await local.getByRole('button', { name: 'Check this machine', exact: true }).click();
-  await expect(local.getByText('Setup needed', { exact: true })).toBeVisible();
+  await expect(local.getByRole('button', { name: 'Set up locally', exact: true })).toBeEnabled();
   await expect(local.getByText('Install the SmolVLA worker, then check again.', { exact: true })).toBeVisible();
   await expect(local.getByRole('button', { name: /Add|Install/ })).toHaveCount(0);
-  await expect(local.getByRole('link', { name: 'Setup guide', exact: true })).toBeVisible();
+  await expect(local.getByRole('link', { name: 'Setup guide', exact: true })).toHaveCount(0);
   await noOverflow(page);
   await local.screenshot({ path: testInfo.outputPath('local-worker-setup-needed.png') });
   expect(mutations).toEqual(['POST /api/v1/compute-settings/local/check']);
+  expect(unexpected).toEqual([]);
+});
+
+test('automatic setup requires a click, survives reload, cancels and retries without enabling runs', async ({ page }) => {
+  const { mutations, unexpected, computeWrites, completeSetup } = await mockWorkspace(page, [], { discovery: {
+    status: 'unavailable', candidates: [{ id: 'smolvla-cuda-0', label: 'Local NVIDIA GPU',
+      gpu_name: 'NVIDIA RTX 3070', gpu_memory_mib: 8192, training_model_ids: ['smolvla'],
+      status: 'setup_required', setup_supported: true, runtime_id: null, reason: 'Install the pinned worker environment.' }],
+  } });
+  const local = page.getByRole('region', { name: 'Local runs', exact: true });
+  expect(mutations).toEqual([]);
+  await local.getByRole('button', { name: 'Check this machine', exact: true }).click();
+  await local.getByRole('button', { name: 'Set up locally', exact: true }).click();
+  await expect(local.getByRole('status')).toContainText('Installing SmolVLA dependencies');
+  await expect(local.getByRole('checkbox', { name: 'Enable local runs', exact: true })).toBeDisabled();
+  await page.reload();
+  await openCompute(page);
+  await expect(local.getByRole('status')).toContainText('Installing SmolVLA dependencies');
+  await local.getByRole('button', { name: 'Cancel setup', exact: true }).click();
+  await expect(local.getByRole('status')).toContainText('Setup cancelled');
+  await local.getByRole('button', { name: 'Retry setup', exact: true }).click();
+  completeSetup();
+  await expect(local.getByRole('status')).toContainText('SmolVLA is installed and added');
+  await expect(local.getByText('Added', { exact: true })).toBeVisible();
+  await expect(local.getByRole('checkbox', { name: 'Enable local runs', exact: true })).not.toBeChecked();
+  await expect(local.getByRole('button', { name: 'Set up locally', exact: true })).toHaveCount(0);
+  expect(computeWrites).toEqual([]);
+  expect(mutations.filter(path => path.includes('/local/setup'))).toEqual([
+    'POST /api/v1/compute-settings/local/setup', 'POST /api/v1/compute-settings/local/setup/cancel',
+    'POST /api/v1/compute-settings/local/setup',
+  ]);
   expect(unexpected).toEqual([]);
 });
 

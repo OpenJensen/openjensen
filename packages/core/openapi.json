@@ -2999,6 +2999,86 @@
         "title": "LocalPreviewLimits",
         "type": "object"
       },
+      "LocalSetupRequest": {
+        "additionalProperties": false,
+        "properties": {},
+        "title": "LocalSetupRequest",
+        "type": "object"
+      },
+      "LocalSetupState": {
+        "additionalProperties": false,
+        "properties": {
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "message": {
+            "default": "",
+            "title": "Message",
+            "type": "string"
+          },
+          "runtime_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime Id"
+          },
+          "stage": {
+            "default": "",
+            "title": "Stage",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "default": "idle",
+            "enum": [
+              "idle",
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled",
+              "interrupted"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "LocalSetupState",
+        "type": "object"
+      },
       "LocalWorkerAddRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3091,6 +3171,11 @@
               }
             ],
             "title": "Runtime Id"
+          },
+          "setup_supported": {
+            "default": false,
+            "title": "Setup Supported",
+            "type": "boolean"
           },
           "status": {
             "enum": [
@@ -5688,6 +5773,94 @@
           }
         },
         "summary": "Check Local Workers",
+        "tags": [
+          "Compute settings"
+        ]
+      }
+    },
+    "/api/v1/compute-settings/local/setup": {
+      "get": {
+        "operationId": "local_setup_status_api_v1_compute_settings_local_setup_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocalSetupState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Local Setup Status",
+        "tags": [
+          "Compute settings"
+        ]
+      },
+      "post": {
+        "operationId": "start_local_setup_api_v1_compute_settings_local_setup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/LocalSetupRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocalSetupState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Local Setup",
+        "tags": [
+          "Compute settings"
+        ]
+      }
+    },
+    "/api/v1/compute-settings/local/setup/cancel": {
+      "post": {
+        "operationId": "cancel_local_setup_api_v1_compute_settings_local_setup_cancel_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocalSetupState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Cancel Local Setup",
         "tags": [
           "Compute settings"
         ]

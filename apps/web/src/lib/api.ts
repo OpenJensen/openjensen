@@ -33,9 +33,11 @@ export type LocalWorkerDiscovery = {
     id: string; label: string; gpu_name: string | null; gpu_memory_mib: number | null;
     training_model_ids: string[]; status: 'ready' | 'registered' | 'setup_required';
     runtime_id: string | null; reason: string | null;
+    setup_supported?: boolean;
   }[];
   issues: string[];
 };
+export type LocalSetupState = components['schemas']['LocalSetupState'];
 export type LocalWorkerRegistration = {
   runtime: PolicyOptions['runtimes'][number];
   compute: ComputeSettings;
@@ -168,6 +170,9 @@ export const api = {
   prepareCloudCompute: () => request<ComputeSettings>('/compute-settings/gcp/prepare', { method: 'POST' }, 260_000),
   saveComputeSettings: (local: LocalComputeSettings) => request<ComputeSettings>('/compute-settings', { method: 'PUT', body: JSON.stringify({ local }) }),
   checkLocalWorkers: () => request<LocalWorkerDiscovery>('/compute-settings/local/check', { method: 'POST' }, 75_000),
+  localSetupStatus: () => request<LocalSetupState>('/compute-settings/local/setup'),
+  startLocalSetup: () => request<LocalSetupState>('/compute-settings/local/setup', { method: 'POST' }, 75_000),
+  cancelLocalSetup: () => request<LocalSetupState>('/compute-settings/local/setup/cancel', { method: 'POST' }, 20_000),
   addLocalWorker: (candidateId: string) => request<LocalWorkerRegistration>('/compute-settings/local/workers', { method: 'POST', body: JSON.stringify({ candidate_id: candidateId }) }, 75_000),
   cloudConnections: () => request<CloudConnections>('/cloud-connections'),
   connectCloud: (provider: CloudProvider, config: CloudConfig) => request<CloudConnection>(`/cloud-connections/${provider}/connect`, { method: 'POST', body: JSON.stringify(config) }, 45_000),

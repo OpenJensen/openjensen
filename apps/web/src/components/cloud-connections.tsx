@@ -403,14 +403,6 @@ export function CloudConnectionsPanel() {
               </section>
             );
           })}
-        {/* TODO: enable Firebird only after its provider contract and execution path are reviewed. */}
-        <section className="cloud-provider-card" aria-label="Firebird">
-          <div className="cloud-provider-top">
-            <span className="cloud-provider-mark" aria-hidden="true"><Icon name="layers" size={22} /></span>
-            <h3>Firebird</h3>
-            <span className="cloud-status">Coming soon</span>
-          </div>
-        </section>
       </div>
       {(recheck.error || disconnect.error) && (
         <p className="cloud-connection-error" role="alert">

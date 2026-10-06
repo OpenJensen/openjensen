@@ -126,7 +126,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             try:
                 if initialized:
-                    await execution.close()
+                    try:
+                        if hasattr(execution.lifecycle, "local_worker_setup"):
+                            await execution.lifecycle.local_worker_setup.close()
+                    finally:
+                        await execution.close()
             finally:
                 try:
                     try:

@@ -24,6 +24,8 @@ async function workspace(page: Page) {
 
 test('data tools are first-class pages with clear return paths and no job submission', async ({ page }) => {
   const mutations = await workspace(page);
+  await expect(page.locator('.stage-order')).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Workflow context' })).toHaveCount(0);
   const navigation = page.getByRole('navigation', { name: 'Policy lifecycle' });
   for (const name of ['Augmentation', 'Teaching', 'Decision lab']) {
     const entry = navigation.getByRole('button', { name, exact: true });
@@ -178,6 +180,7 @@ test('compact mobile navigation leaves useful stage content visible and every to
 
 test('project activity is recorded execution history, isolated from foreign jobs and fresh model choices', async ({ page }) => {
   const { mutations } = await journeyFixture(page);
+  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
   const journey = page.getByRole('region', { name: 'Workflow context', exact: true });
   await expect(journey.locator('summary')).toContainText('4 recorded jobs · 1 active');
   await journey.locator('summary').click();
@@ -193,13 +196,15 @@ test('project activity is recorded execution history, isolated from foreign jobs
   expect(mutations).toEqual([]);
 });
 
-test('journey continues with the exact viewed dataset and never submits a training job', async ({ page }) => {
+test('the clean dataset page continues with the exact viewed inspection without submitting training', async ({ page }) => {
   const { mutations } = await journeyFixture(page);
   await page.getByRole('button', { name: /^Inspection/ }).click();
   await page.getByLabel('History', { exact: true }).selectOption('dataset-first');
   const journey = page.getByRole('region', { name: 'Workflow context', exact: true });
-  await expect(journey).toContainText('Inspection viewed');
-  await journey.getByRole('button', { name: 'Continue with this dataset', exact: true }).click();
+  await expect(journey).toHaveCount(0);
+  await expect(page.getByText('Project activity', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Latest inspection', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Train on this dataset', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Fine-tune', exact: true, level: 1 })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Inspected dataset', exact: true }).locator('input:checked')).toHaveValue('dataset-first');
   expect(mutations).toEqual([]);
@@ -209,6 +214,7 @@ test('missing history stays unknown and recovery restores context without enabli
   const { state, mutations } = await journeyFixture(page);
   state.failed = true;
   await page.reload();
+  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
   const journey = page.getByRole('region', { name: 'Workflow context', exact: true });
   await expect(journey.getByRole('alert')).toContainText('unavailable');
   await expect(journey.locator('summary')).toHaveCount(0);
@@ -227,6 +233,7 @@ test('loading activity does not report zero jobs or offer a stale dataset contin
   let release!: () => void;
   state.gate = new Promise<void>(resolve => { release = resolve; });
   await page.reload();
+  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
   const journey = page.getByRole('region', { name: 'Workflow context', exact: true });
   await expect(journey.getByRole('status')).toHaveText('Loading project activity…');
   await expect(journey.locator('summary')).toHaveCount(0);

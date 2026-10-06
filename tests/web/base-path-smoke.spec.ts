@@ -41,7 +41,7 @@ test('prefixed export loads bundles, API, dataset posters and docs without escap
   await page.locator('.page-heading .page-guide').click();
   await expect(page).toHaveURL(new RegExp(`${prefix}/guide/#teaching$`));
   await expect(page.getByRole('heading', { name: 'Workspace guide', exact: true })).toBeVisible();
-  await expect(page.locator('.guide-sections > section')).toHaveCount(11);
+  await expect(page.locator('.guide-sections > section')).toHaveCount(12);
   await page.reload();
   await expect(page.locator('#teaching')).toContainText('Start recording');
   await page.getByRole('link', { name: 'API reference', exact: true }).first().click();

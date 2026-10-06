@@ -195,6 +195,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/compute-settings/local/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Local Setup Status */
+        get: operations["local_setup_status_api_v1_compute_settings_local_setup_get"];
+        put?: never;
+        /** Start Local Setup */
+        post: operations["start_local_setup_api_v1_compute_settings_local_setup_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compute-settings/local/setup/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Local Setup */
+        post: operations["cancel_local_setup_api_v1_compute_settings_local_setup_cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/compute-settings/local/workers": {
         parameters: {
             query?: never;
@@ -2185,6 +2220,35 @@ export interface components {
              */
             timeout_seconds: number;
         };
+        /** LocalSetupRequest */
+        LocalSetupRequest: Record<string, never>;
+        /** LocalSetupState */
+        LocalSetupState: {
+            /** Finished At */
+            finished_at?: string | null;
+            /** Id */
+            id?: string | null;
+            /**
+             * Message
+             * @default
+             */
+            message: string;
+            /** Runtime Id */
+            runtime_id?: string | null;
+            /**
+             * Stage
+             * @default
+             */
+            stage: string;
+            /** Started At */
+            started_at?: string | null;
+            /**
+             * Status
+             * @default idle
+             * @enum {string}
+             */
+            status: "idle" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted";
+        };
         /** LocalWorkerAddRequest */
         LocalWorkerAddRequest: {
             /** Candidate Id */
@@ -2210,6 +2274,11 @@ export interface components {
             reason?: string | null;
             /** Runtime Id */
             runtime_id?: string | null;
+            /**
+             * Setup Supported
+             * @default false
+             */
+            setup_supported: boolean;
             /**
              * Status
              * @enum {string}
@@ -3394,6 +3463,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LocalWorkerDiscovery"];
+                };
+            };
+        };
+    };
+    local_setup_status_api_v1_compute_settings_local_setup_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalSetupState"];
+                };
+            };
+        };
+    };
+    start_local_setup_api_v1_compute_settings_local_setup_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["LocalSetupRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalSetupState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_local_setup_api_v1_compute_settings_local_setup_cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalSetupState"];
                 };
             };
         };
