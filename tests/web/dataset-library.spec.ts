@@ -127,7 +127,13 @@ for (const available of [true, false]) {
       await mkdir(resolve(testInfo.outputPath('.')),{recursive:true});
       const result=spawnSync('ffmpeg',['-v','error','-f','lavfi','-i','color=c=blue:s=64x64:r=5:d=3','-c:v','libx264','-pix_fmt','yuv420p','-movflags','+faststart',media],{encoding:'utf8'});
       expect(result.status,result.stderr).toBe(0);
-      await page.route('**/api/v1/fixture-preview.mp4', async route=>route.fulfill({contentType:'video/mp4',body:await readFile(media)}));
+      const bytes=await readFile(media);
+      await page.route('**/api/v1/fixture-preview.mp4', async route=>{
+        const range=/^bytes=(\d+)-(\d*)$/.exec(route.request().headers()['range']??'');
+        const start=range ? Number(range[1]) : 0;
+        const end=range?.[2] ? Math.min(Number(range[2]),bytes.length-1) : bytes.length-1;
+        await route.fulfill({status:range ? 206 : 200,contentType:'video/mp4',body:bytes.subarray(start,end+1),headers:{'Accept-Ranges':'bytes','Content-Length':String(end-start+1),...(range ? {'Content-Range':`bytes ${start}-${end}/${bytes.length}`} : {})}});
+      });
     }
     const episode={episode_index:7,frame_count:5,duration_seconds:1,tasks:['Pick up']};
     const requests:string[]=[];
