@@ -71,6 +71,8 @@ test('workspace pages use a single title without introductory subtitles', async 
     await expect(page.getByRole('heading', { name, level: 1, exact: true })).toBeVisible();
     await expect(page.locator('.page-heading p')).toHaveCount(0);
     await expect(page.locator('.page-heading .page-guide')).toBeVisible();
+    await expect(page.locator('.journey-context')).toHaveCount(0);
+    await expect(page.getByText('Latest inspection', { exact: true })).toHaveCount(0);
   }
   await navigation.getByRole('button', { name: 'Distill', exact: true }).click();
   await expect(page.getByText('Teach a smaller ACT policy', { exact: true })).toHaveCount(0);

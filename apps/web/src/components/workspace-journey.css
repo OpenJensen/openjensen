@@ -4,11 +4,6 @@
 .journey-purpose p { color: var(--muted); font-size: 13px; line-height: 1.6; max-width: 650px; margin: 0; }
 .journey-continue { display: inline-flex; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0; margin-left: auto; color: var(--ink); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 8px; padding: 9px 12px; font-size: 12px; min-height: 40px; }
 .journey-continue:hover { border-color: var(--accent); background: var(--subtle); }
-.journey-context { display: flex; flex-wrap: wrap; gap: 5px 22px; margin: 11px 0; }
-.journey-context > div { display: flex; align-items: baseline; gap: 7px; min-width: 0; max-width: 100%; font-size: 11px; }
-.journey-context dt { flex-shrink: 0; color: var(--muted); }
-.journey-context dd { color: var(--ink); font-weight: 550; margin: 0; overflow-wrap: anywhere; }
-.journey-id { font-size: 10px; color: var(--muted); font-weight: 400; }
 @media (max-width: 1100px) { .journey-purpose { flex-wrap: wrap; } .journey-purpose p { flex: 1; min-width: 180px; } .journey-continue { margin-left: 0; } }
 @media (max-width: 700px) {
   .workspace-journey { margin: -5px 0 12px; }
@@ -16,6 +11,5 @@
   .journey-purpose { gap: 8px; }
   .journey-purpose p { font-size: 12px; }
   .journey-step { font-size: 10px; padding: 4px 6px; }
-  .journey-context { gap: 4px 14px; margin: 9px 0; }
   .journey-continue { min-height: 44px; }
 }

@@ -14,16 +14,13 @@ const steps = [
 type Props = {
   stage: number;
   projectId: string;
-  projectName?: string;
   historyState: 'unselected' | 'loading' | 'unavailable' | 'ready';
   inspection?: DatasetJob;
-  inspectionExplicit: boolean;
-  workflow?: string;
   onTrain: (datasetId: string) => void;
 };
 
 /** Navigation context only: records do not establish model readiness or quality. */
-export function WorkspaceJourney({ stage, projectId, projectName, historyState, inspection, inspectionExplicit, workflow, onTrain }: Props) {
+export function WorkspaceJourney({ stage, projectId, historyState, inspection, onTrain }: Props) {
   const step = steps[stage];
   if (!step) return null;
   const ready = historyState === 'ready';
@@ -35,10 +32,5 @@ export function WorkspaceJourney({ stage, projectId, projectName, historyState, 
     <div className="journey-purpose"><span className="journey-step" aria-hidden="true">{String(stage + 1).padStart(2, '0')}</span><p>{step.purpose}</p>
       {stage === 0 && trainable && dataset && <button className="journey-continue" type="button" onClick={() => onTrain(dataset.id)}>Continue with this dataset <Icon name="arrow" size={15} /></button>}
     </div>
-    <dl className="journey-context">
-      <div><dt>Project</dt><dd>{projectName ?? 'Choose a project'}</dd></div>
-      {stage <= 2 && profile && <div><dt>{inspectionExplicit ? 'Inspection viewed' : 'Latest inspection'}</dt><dd title={dataset?.id}>{profile.repo_id || 'Local dataset'} <span className="journey-id">· {dataset?.id.slice(0, 8)}</span></dd></div>}
-      {workflow && <div><dt>Workflow</dt><dd>{workflow}</dd></div>}
-    </dl>
   </section>;
 }
