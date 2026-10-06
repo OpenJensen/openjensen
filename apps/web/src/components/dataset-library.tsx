@@ -23,14 +23,12 @@ function DatasetCover({ entry, active }: { entry: LibraryDataset; active: boolea
   const local = !entry.id.startsWith('inspection:') && entry.status === 'ready';
   const hub = entry.source === 'huggingface' && !!entry.job_id && entry.status === 'ready';
   const samples = useQuery({ queryKey: ['dataset-samples', entry.id], queryFn: () => datasetLibrary.samples(entry.id), enabled: active && local, retry: false });
-  const episodes = useQuery({ queryKey: ['dataset-episodes', entry.job_id, 0, 1], queryFn: () => api.episodes(entry.job_id!, 0, 1), enabled: active && hub, staleTime: Infinity, retry: false });
-  const index = episodes.data?.episodes[0]?.episode_index;
-  const preview = useQuery({ queryKey: ['dataset-episode', entry.job_id, index], queryFn: () => api.episode(entry.job_id!, index!), enabled: active && hub && index !== undefined, staleTime: Infinity, retry: false });
+  const preview = useQuery({ queryKey: ['dataset-cover', entry.job_id], queryFn: () => api.datasetCover(entry.job_id!), enabled: active && hub, staleTime: Infinity, retry: false });
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   const sample = samples.data?.[0];
   const camera = preview.data?.cameras[0];
-  const loading = !failed && ((local && samples.isPending) || (hub && episodes.isPending) || (hub && index !== undefined && preview.isPending) || (!!(sample || camera) && !loaded));
+  const loading = !failed && ((local && samples.isPending) || (hub && preview.isPending) || (!!(sample || camera) && !loaded));
   return <div className="dataset-library-cover">
     {sample && !failed && <img src={sampleImage(entry.id, sample.path)} alt={`${entry.name} · ${sample.camera}`} onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />}
     {camera && !failed && <video src={`${apiMediaUrl(camera.url)}#t=${camera.start_seconds}`} preload="metadata" muted playsInline aria-label={`${entry.name} preview`} className={loaded ? 'loaded' : ''}
