@@ -6,18 +6,14 @@ import { datasetDownload, datasetLibrary, formatName, sampleImage, type DatasetL
 import { Icon } from './icon';
 import './dataset-library.css';
 
-export function DatasetLibrary({ projectId, onOpen, onExample, active }: {active:boolean;projectId:string; onOpen:(entry:LibraryDataset)=>void; onExample:(entry:LibraryDataset)=>void}) {
-  const client=useQueryClient();
+export function DatasetLibrary({ projectId, onOpen, active }: {active:boolean;projectId:string; onOpen:(entry:LibraryDataset)=>void}) {
   const datasets=useQuery({queryKey:['datasets',projectId],queryFn:()=>datasetLibrary.list(projectId),enabled:!!projectId&&active,retry:false,refetchInterval:active?5000:false});
   const [search,setSearch]=useState('');
-  const example=useMutation({mutationFn:()=>datasetLibrary.example(projectId),onSuccess:entry=>{void client.invalidateQueries({queryKey:['datasets']});if (entry.project_id === projectId) onExample(entry);}});
   const entries=(datasets.data??[]).filter(entry=>entry.project_id===projectId && entry.name.toLowerCase().includes(search.toLowerCase()));
   return <section className="dataset-library" aria-labelledby="dataset-library-title">
     <div className="library-heading"><div><h2 id="dataset-library-title">My datasets</h2><p>Pick a saved dataset or import another.</p></div><span className="library-count">{datasets.data?.length??0}</span></div>
     {!!datasets.data?.length && <input className="library-search" aria-label="Search my datasets" placeholder="Search your datasets" value={search} onChange={event=>setSearch(event.target.value)} />}
     {datasets.isError ? <div role="alert"><p>Could not load your datasets.</p><button className="secondary-button" onClick={()=>void datasets.refetch()}>Retry datasets</button></div> : datasets.isPending && projectId ? <p role="status">Loading your datasets…</p> : !entries.length ? <div className="dataset-empty"><Icon name="database" size={32}/><h3>{search ? 'No matching datasets' : 'Your dataset collection starts here'}</h3><p>{search ? 'Try a different name.' : 'Imported and inspected datasets appear here, ready to revisit.'}</p></div> : <div className="dataset-library-grid">{entries.map(entry=><DatasetCard key={entry.id} entry={entry} onOpen={()=>onOpen(entry)}/>)}</div>}
-    <div className="dataset-example"><span className="dataset-example-icon"><Icon name="spark" size={21}/></span><div><strong>Try the labeling playground</strong><p>A small synthetic dataset with two camera views. Add labels and export it.</p></div><button className="secondary-button" disabled={!projectId || example.isPending} onClick={()=>example.mutate()}>{example.isPending ? 'Creating…' : 'Create example'}</button></div>
-    {example.error && <p role="alert" className="error-notice">{example.error.message}</p>}
   </section>;
 }
 

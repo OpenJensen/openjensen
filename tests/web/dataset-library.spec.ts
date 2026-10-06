@@ -14,13 +14,17 @@ async function ownProject(page:Page,name:string) {
   return project;
 }
 
-test('create a real two-view example, save labels, reopen it and reach the dashboard',async({page},testInfo)=>{
-  await ownProject(page,`Label playground ${testInfo.project.name}`);
+test('open an imported two-view fixture, save labels, reopen it and reach the dashboard',async({page},testInfo)=>{
+  const project=await ownProject(page,`Label fixture ${testInfo.project.name}`);
   await expect(page.getByRole('heading',{name:'My datasets',exact:true})).toBeVisible();
   await expect(page.getByText('Example datasets',{exact:true})).toHaveCount(0);
   await expect(page.getByRole('status',{name:'Application API connection'})).toHaveCount(0);
   await expect(page.getByText('LeRobot v2 / v3',{exact:true})).toHaveCount(0);
-  await page.getByRole('button',{name:'Create example',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Create example',exact:true})).toHaveCount(0);
+  await expect(page.getByText('Try the labeling playground',{exact:true})).toHaveCount(0);
+  // The legacy API supplies an isolated test fixture; it has no product promotion.
+  expect((await page.request.post(`/api/v1/projects/${project.id}/datasets/example`)).status()).toBe(202);
+  await page.getByRole('button',{name:'Open dataset Robot labeling playground'}).click();
   const labels=page.getByRole('region',{name:'Dataset labeling'});
   await expect(labels.getByRole('heading',{name:'Robot labeling playground'})).toBeVisible();
   const image=labels.getByRole('img');

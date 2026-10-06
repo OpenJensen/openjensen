@@ -14,7 +14,6 @@ export const datasetLibrary = {
   list: (project?:string)=>request<LibraryDataset[]>(`/datasets${project ? `?project_id=${encodeURIComponent(project)}` : ''}`),
   get: (id:string)=>request<LibraryDataset>(`/datasets/${id}`),
   samples: (id:string)=>request<DatasetSample[]>(`/datasets/${id}/samples`),
-  example: (project:string)=>request<LibraryDataset>(`/projects/${encodeURIComponent(project)}/datasets/example`,{method:'POST'}),
   convert: (id:string,settings:{fps:number;task:string;robot_type:string;mapping?:DatasetDetection['mapping']})=>request<LibraryDataset>(`/datasets/${id}/convert`,{method:'POST',body:JSON.stringify(settings)}),
   annotate: (id:string,revision:number,labels:DatasetLabels)=>request<LibraryDataset>(`/datasets/${id}/annotations`,{method:'PUT',body:JSON.stringify({revision,...labels})}),
   async upload(project:string, files:File[], onProgress:(value:string)=>void) {
