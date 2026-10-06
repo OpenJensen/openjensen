@@ -1739,6 +1739,9 @@ test('selects two datasets and two models as independent GPU jobs with pinned re
    return route.fulfill({json:{valid:true,jobs:2,gpus_per_job:1}});
  });
  await expect(page.getByRole('region',{name:'Training recipe review'})).toContainText('≈');
+ const review = page.getByRole('region',{name:'Training recipe review'});
+ await expect(review.locator('.training-memory-estimate').filter({has:page.getByText('SmolVLA',{exact:true})})).toContainText('Predict 50 · execute 50');
+ await expect(review.locator('.training-memory-estimate').filter({has:page.getByText('ACT',{exact:true})})).toContainText('Predict 100 · execute 100');
  await noOverflow(page);
  await page.screenshot({path:testInfo.outputPath('multiple-model-recipe.png'),fullPage:true});
  await page.getByRole('button',{name:'Start 2 training jobs',exact:true}).click();

@@ -1110,9 +1110,20 @@ export function TrainingPanel({
                 <div><dt>Dataset</dt><dd>{activeDataset?.result.repo_id ?? (activeDataset ? 'Local training snapshot' : 'Choose a dataset')}{activeDataset && <small className="training-recipe-identity" title={activeDataset.result.snapshot?.manifest_sha256 ?? activeDataset.result.revision}>{activeDataset.result.snapshot ? 'Snapshot' : 'Pinned revision'} {(activeDataset.result.snapshot?.manifest_sha256 ?? activeDataset.result.revision).slice(0, 12)}</small>}</dd></div>
                 <div><dt>Observations</dt><dd>{activeCameraKeys.length} {activeCameraKeys.length === 1 ? 'camera' : 'cameras'}{activeDataset ? ` · ${number(resumeId ? activeDataset.result.total_episodes : selectedDatasets.reduce((sum, item) => sum + item.result.total_episodes, 0))} episodes` : ''}</dd></div>
                 <div><dt>Training budget</dt><dd>{resumeId ? 'Saved recipe' : selectedModels.length > 1 ? `${number(recipe.trainingSteps)} steps per job` : trainingBudget}</dd></div>
-                <div><dt>Action timing</dt><dd>{resumeId ? checkpointTiming(originalTraining) : effectiveTiming ? `Predict ${effectiveTiming.prediction} · execute ${effectiveTiming.execution}${timing?.enabled ? '' : ' · default'}` : 'Model-owned settings'}</dd></div>
+                {(resumeId || selectedModels.length <= 1) && <div><dt>Action timing</dt><dd>{resumeId ? checkpointTiming(originalTraining) : effectiveTiming ? `Predict ${effectiveTiming.prediction} · execute ${effectiveTiming.execution}${timing?.enabled ? '' : ' · default'}` : 'Model-owned settings'}</dd></div>}
               </dl>
-              {!resumeId && selectedModels.map(item => { const family = temporalFamily(item.id); const draft = family ? temporalDrafts[family] ?? defaultTemporal(family) : null; const estimate = trainingMemory(item, methodFor(item), batchFor(item), activeCameraKeys, activeDataset?.result, draft?.prediction); return <div className="training-memory-estimate" key={item.id}><strong>{item.label}</strong><span>{selectedModels.length > 1 ? `${methodFor(item).toUpperCase()} · batch ${batchFor(item)} · ` : ""}{estimate ? `≈ ${estimate.gb} GB GPU memory` : "Memory estimate unavailable"}<TrainingHelp label={`${item.label} memory estimate`}>{estimate?.source ?? "This model has no verified catalog memory budget."}</TrainingHelp></span>{estimate && <small>{estimate.recommended ? `Suggested GPU: ${estimate.recommended}` : "No listed GPU meets this estimate. Try a smaller batch."}</small>}</div>; })}
+              {!resumeId && selectedModels.map(item => {
+                const family = temporalFamily(item.id);
+                const draft = family ? temporalDrafts[family] ?? defaultTemporal(family) : null;
+                const modelTiming = family ? draft?.enabled ? draft : defaultTemporal(family) : null;
+                const estimate = trainingMemory(item, methodFor(item), batchFor(item), activeCameraKeys, activeDataset?.result, modelTiming?.prediction);
+                return <div className="training-memory-estimate" key={item.id}>
+                  <strong>{item.label}</strong>
+                  <span>{selectedModels.length > 1 ? `${methodFor(item).toUpperCase()} · batch ${batchFor(item)} · ` : ""}{estimate ? `≈ ${estimate.gb} GB GPU memory` : "Memory estimate unavailable"}<TrainingHelp label={`${item.label} memory estimate`}>{estimate?.source ?? "This model has no verified catalog memory budget."}</TrainingHelp></span>
+                  {selectedModels.length > 1 && <small>{modelTiming ? `Predict ${modelTiming.prediction} · execute ${modelTiming.execution}${draft?.enabled ? '' : ' · default'}` : 'Model-owned action timing'}</small>}
+                  {estimate && <small>{estimate.recommended ? `Suggested GPU: ${estimate.recommended}` : "No listed GPU meets this estimate. Try a smaller batch."}</small>}
+                </div>;
+              })}
               {!resumeId && selectedDatasets.length > 1 && <div className="training-mixture-recipe"><strong>Combined training set</strong>{selectedDatasets.map(item => <span key={item.id}>{item.result.repo_id} · {item.result.revision.slice(0, 12)}</span>)}</div>}
               {resumeId && <p>Dataset, model and timing stay bound to the saved checkpoint.</p>}
               {accumulationIssue && <><p role="alert">{accumulationIssue}</p><button type="button" className="secondary-button" disabled={busy} onClick={() => update("gradientAccumulation", 1)}>Use accumulation 1</button></>}
