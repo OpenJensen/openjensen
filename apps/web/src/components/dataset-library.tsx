@@ -28,15 +28,16 @@ function DatasetCover({ entry, active }: { entry: LibraryDataset; active: boolea
   const preview = useQuery({ queryKey: ['dataset-episode', entry.job_id, index], queryFn: () => api.episode(entry.job_id!, index!), enabled: active && hub && index !== undefined, staleTime: Infinity, retry: false });
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
+  useEffect(() => { setLoaded(false); setFailed(false); }, [active]);
   const sample = samples.data?.[0];
   const camera = preview.data?.cameras[0];
   const loading = !failed && ((local && samples.isPending) || (hub && episodes.isPending) || (hub && index !== undefined && preview.isPending) || (!!(sample || camera) && !loaded));
   return <div className="dataset-library-cover">
     {active && sample && !failed && <img src={sampleImage(entry.id, sample.path)} alt={`${entry.name} · ${sample.camera}`} onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />}
-    {active && camera && !failed && <video src={apiMediaUrl(camera.url)} preload="metadata" muted playsInline aria-label={`${entry.name} preview`} className={loaded ? 'loaded' : ''}
+    {active && camera && !failed && <video src={`${apiMediaUrl(camera.url)}#t=${camera.start_seconds}`} preload="metadata" muted playsInline aria-label={`${entry.name} preview`} className={loaded ? 'loaded' : ''}
       onLoadedMetadata={event => { event.currentTarget.currentTime = camera.start_seconds; }}
-      onLoadedData={event => { if (Math.abs(event.currentTarget.currentTime - camera.start_seconds) < .05) setLoaded(true); }}
-      onSeeked={() => setLoaded(true)} onError={() => setFailed(true)} />}
+      onLoadedData={() => { if (camera.start_seconds === 0) setLoaded(true); }}
+      onSeeked={event => { if (Math.abs(event.currentTarget.currentTime - camera.start_seconds) < .05) setLoaded(true); }} onError={() => setFailed(true)} />}
     {!loaded || failed ? <div className="dataset-cover-placeholder"><Icon name="database" size={32}/><small>{loading ? 'Loading preview…' : 'Preview unavailable'}</small></div> : null}
     <span>{entry.example ? 'Synthetic example' : entry.source === 'huggingface' ? 'Hugging Face' : 'Local import'}</span>
   </div>;

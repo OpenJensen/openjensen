@@ -149,7 +149,7 @@ for (const available of [true, false]) {
     if (available) {
       const video=card.locator('video');
       await expect(video).toHaveClass('loaded');
-      expect(await video.evaluate(node=>(node as HTMLVideoElement).currentTime)).toBeCloseTo(1,1);
+      await expect.poll(()=>video.evaluate(node=>(node as HTMLVideoElement).currentTime)).toBeCloseTo(1,1);
       expect(await video.evaluate(node=>(node as HTMLVideoElement).paused)).toBe(true);
       await expect(card.getByText('Preview unavailable',{exact:true})).toHaveCount(0);
     } else await expect(card.getByText('Preview unavailable',{exact:true})).toBeVisible();
@@ -157,6 +157,7 @@ for (const available of [true, false]) {
     expect(new URL(requests[0]).searchParams.get('limit')).toBe('1');
     await page.getByRole('button',{name:'Fine-tune',exact:true}).click();
     await page.getByRole('button',{name:'Dataset',exact:true}).click();
-    expect(requests).toHaveLength(1);
+    if (available) expect(requests).toHaveLength(1);
+    else await expect(card.getByText('Preview unavailable',{exact:true})).toBeVisible();
   });
 }
