@@ -95,3 +95,21 @@ test('saved Hugging Face inspections reopen without a new inspection request',as
   await expect(page.getByRole('heading',{name:'our/robot-data',exact:true})).toBeVisible();
   expect(writes).toEqual([]);
 });
+
+test('dashboard reports a failed local probe instead of successful resource checks',async({page},testInfo)=>{
+  const settings=await (await page.request.get('/api/v1/compute-settings')).json();
+  settings.local.enabled=false;
+  settings.runtimes=[{provider:'local',training:true,gpu_name:'Test GPU'}];
+  await page.route('**/api/v1/compute-settings',route=>route.fulfill({json:settings}));
+  await page.route('**/api/v1/compute-settings/gcp/check',route=>route.fulfill({json:settings}));
+  await page.route('**/api/v1/compute-settings/local/check',route=>route.fulfill({status:503,json:{detail:'Local GPU probe failed'}}));
+  await ownProject(page,`Resource failure ${testInfo.project.name}`);
+  await page.getByRole('button',{name:'Dashboard',exact:true}).click();
+  const local=page.getByRole('article').filter({has:page.getByRole('heading',{name:'Local compute',exact:true})});
+  await expect(local.getByText('Disabled',{exact:true})).toBeVisible();
+  await expect(local.locator('.resource-state')).not.toHaveClass(/ready/);
+  await page.getByRole('button',{name:'Check resources',exact:true}).click();
+  await expect(local.getByText('Check failed',{exact:true})).toBeVisible();
+  await expect(page.getByRole('region',{name:'Resources & connections'}).getByRole('alert')).toContainText('Local GPU probe failed');
+  await expect(page.getByText('Resource checks completed.',{exact:false})).toHaveCount(0);
+});
