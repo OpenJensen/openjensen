@@ -1,3 +1,4 @@
+import { selectProject } from './project-controls';
 import { createServer } from 'node:http';
 import { expect, test, type Page } from '@playwright/test';
 
@@ -43,7 +44,7 @@ async function fixture(page: Page) {
     if (path.startsWith('/api/v1/jobs/')) { const id = path.split('/').at(-1)!; const selected = state.jobs.find(item => item.id === id); if (selected) return route.fulfill({ json: selected }); }
     return route.continue();
   });
-  await page.goto('/'); await expect(page.getByLabel('Current project')).toHaveValue('alpha');
+  await page.goto('/'); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
   await page.getByRole('button', { name: 'Run', exact: true }).click();
   await page.getByRole('button', { name: '3D simulation', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Native Isaac simulation', exact: true })).toBeVisible();
@@ -183,7 +184,7 @@ test('failed run and project changes cannot reuse selected source or expose succ
   await expect(page.getByRole('link', { name: 'Download simulation record' })).toHaveCount(0);
   await page.getByText('Prepare another run', { exact: true }).click();
   await page.getByRole('radio', { name: 'Generated smol-export', exact: true }).check(); await acknowledge(page);
-  await page.getByLabel('Current project').selectOption('beta');
+  await selectProject(page, 'beta');
   await expect(page.getByRole('button', { name: 'Check inference', exact: true })).toHaveAttribute('aria-pressed', 'false');
   await page.getByRole('button', { name: '3D simulation', exact: true }).click();
   await expect(page.getByRole('radiogroup', { name: 'Native policy', exact: true }).locator('input:checked')).toHaveCount(0);
@@ -367,7 +368,7 @@ for (const width of [320, 390]) test(`compact ${width}px navigation keeps stage 
   await expect(page.getByRole('heading', { name: 'Cloud runs', exact: true })).toBeVisible();
   await page.getByLabel('Current project').focus();
   await page.keyboard.press('Tab');
-  await expect(page.getByLabel('New project', { exact: true })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'My models', exact: true })).toBeFocused();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
   expect(state.posts).toEqual([]);
 });
@@ -443,7 +444,7 @@ async function expectImportBlocked(page: Page) {
 }
 
 async function openNativeAgain(page: Page, reload = false) {
-  if (reload) { await page.reload(); await expect(page.getByLabel('Current project')).toHaveValue('alpha'); }
+  if (reload) { await page.reload(); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha'); }
   else await page.getByRole('button', { name: 'Dataset', exact: true }).click();
   await page.getByRole('button', { name: 'Run', exact: true }).click();
   await page.getByRole('button', { name: '3D simulation', exact: true }).click();
@@ -675,10 +676,10 @@ test('native pending restart preserves original context and project isolation wi
   await expect(page.getByRole('button', { name: '3D simulation', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('region', { name: 'Native simulation recovery' })).toContainText('Policy: act-export');
   await expect(page.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toBeDisabled();
-  await page.getByLabel('Current project').selectOption('beta');
+  await selectProject(page, 'beta');
   await page.getByRole('button', { name: '3D simulation', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Native simulation recovery' })).toHaveCount(0);
-  await page.getByLabel('Current project').selectOption('alpha');
+  await selectProject(page, 'alpha');
   await expect(page.getByRole('region', { name: 'Native simulation recovery' })).toContainText('Policy: act-export');
   expect(state.posts).toEqual([]);
 });
@@ -690,7 +691,7 @@ for (const both of [false, true]) test(`native recovery entry ${both ? 'asks whi
     sessionStorage.setItem('firebird:job-attempt:policy.run.simulation:alpha', JSON.stringify({ state: 'pending', message: 'Original native launch · act-export · 600 seconds' }));
     if (multiple) sessionStorage.setItem('firebird:job-attempt:policy.run.replay:alpha', JSON.stringify({ state: 'pending', message: 'Original CPU replay' }));
   }, both);
-  await page.reload(); await expect(page.getByLabel('Current project')).toHaveValue('alpha');
+  await page.reload(); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
   await page.getByRole('button', { name: 'Run', exact: true }).click();
   const nativeMode = page.getByRole('button', { name: '3D simulation', exact: true });
   if (both) {

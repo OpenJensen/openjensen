@@ -3,8 +3,6 @@
 .brand { margin-bottom: 22px; }
 .brand-mark, .main-shell { box-shadow: none; }
 .sidebar .projects-section { margin: 0 0 25px; padding: 0 5px 22px; border-bottom: 1px solid var(--line); }
-.sidebar .project-picker { margin: 10px 0 0; }
-.sidebar .project-form { margin: 12px 0 0; }
 .grouped-navigation { display: grid; gap: 19px; }
 .grouped-navigation .sidebar-section-label { font-size: 10px; letter-spacing: 1px; }
 .grouped-navigation .stage-list { margin-top: 7px; gap: 2px; }
@@ -44,7 +42,6 @@
   .sidebar { padding: 14px 16px 16px; }
   .sidebar .brand { margin-bottom: 14px; }
   .sidebar .projects-section { margin: 0 0 14px; padding: 0 0 14px; border-top: 0; }
-  .sidebar .project-picker, .sidebar .project-form { margin: 0; }
   .grouped-navigation { display: flex; align-items: stretch; gap: 16px; overflow-x: auto; overscroll-behavior-x: contain; padding: 4px 3px 7px; margin: -4px -3px -7px; scroll-padding-inline: 6px; scrollbar-width: thin; }
   .grouped-navigation .navigation-group { flex: 0 0 auto; min-width: 0; }
   .grouped-navigation .sidebar-section-label { display: block; padding: 0 7px; font-size: 9px; }

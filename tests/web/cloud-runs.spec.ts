@@ -1,3 +1,4 @@
+import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
 
 function run(id: string, changes: Record<string, unknown> = {}) {
@@ -150,7 +151,7 @@ test('cloud observation failure and project switch cannot show another projects 
   await expect(page.getByText('Application job updates are unavailable.', { exact: false })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Open training job' })).toBeDisabled();
   state.eventsOffline = false;
-  await page.getByLabel('Current project').selectOption('beta');
+  await selectProject(page, 'beta');
   await expect(page.getByLabel('Application cloud job', { exact: true })).toHaveValue('beta-cloud');
   await expect(page.getByRole('region', { name: 'Application job event log' })).toContainText('Recorded beta-cloud');
   await expect(page.getByRole('region', { name: 'Application job event log' })).not.toContainText('cloud-finished');

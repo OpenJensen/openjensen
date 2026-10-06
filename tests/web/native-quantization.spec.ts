@@ -1,3 +1,4 @@
+import { selectProject } from './project-controls';
 import { startNativeQuantization, cancelNativeQuantization } from '../../apps/web/src/lib/native-quantization';
 import { expect, test, type Page } from '@playwright/test';
 import { measuredNativeReport, replayableNativeOutput, type PackedArtifact } from '../../apps/web/src/lib/native-quantization';
@@ -48,7 +49,7 @@ async function fixture(page: Page) {
     if (path.startsWith('/api/v1/jobs/')) { const id = path.split('/').at(-1)!; state.gets.push(id); const current = state.jobs.find(item => item.id === id); if (current) return route.fulfill({ json: current }); }
     return route.continue();
   });
-  await page.goto('/'); await expect(page.getByLabel('Current project')).toHaveValue('alpha');
+  await page.goto('/'); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
   await page.getByRole('button', { name: 'Choose Generated act-export · act-export', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toBeVisible();
@@ -151,7 +152,7 @@ test('selection changing during cancellation preflight does not cancel the previ
 test('project switching resets precision/source and failed history blocks mutation', async ({ page }) => {
   const state = await fixture(page); await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="act-export"]').check(); await page.getByRole('group', { name: 'Compression', exact: true }).locator('input[value="4"]').check();
   state.jobsError = true; await refresh(page); await expect(page.getByText(/Job updates are unavailable/)).toBeVisible(); await expect(submit(page)).toBeDisabled();
-  state.jobsError = false; await page.getByLabel('Current project').selectOption('beta');
+  state.jobsError = false; await selectProject(page, 'beta');
   await expect(page.getByText('No saved models in this project yet')).toBeVisible();
   await expect(page.getByRole('group', { name: 'Policy', exact: true })).toHaveCount(0);
   await expect(submit(page)).toHaveCount(0); expect(state.posts).toEqual([]);

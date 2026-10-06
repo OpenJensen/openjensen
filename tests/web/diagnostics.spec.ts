@@ -77,7 +77,7 @@ test('keeps diagnostics open when the current project finishes loading', async (
   } finally {
     releaseProjects();
   }
-  await expect(page.getByRole('combobox', { name: 'Current project', exact: true })).toHaveValue(id);
+  await expect(page.getByRole('button', { name: 'Current project', exact: true })).toHaveAttribute('data-project-id', id);
   await expect(page.getByText('No execution target is configured.', { exact: false })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Run diagnostics', exact: true })).toBeVisible();
 });

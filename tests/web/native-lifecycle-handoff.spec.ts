@@ -1,3 +1,4 @@
+import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { initialQuantizeEntry, initialRunEntry } from '../../apps/web/src/lib/workflow-entry';
 import type { Job, PolicyArtifact } from '../../apps/web/src/lib/api';
@@ -63,7 +64,7 @@ async function fixture(page: Page) {
     if (path.startsWith('/api/v1/jobs/')) { const job = state.jobs.find(item => item.id === path.split('/').at(-1)); if (job) return route.fulfill({ json: job }); }
     return route.continue();
   });
-  await page.goto('/'); await expect(page.getByLabel('Current project')).toHaveValue('alpha');
+  await page.goto('/'); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
   return state;
 }
 async function openStudent(page: Page, state: Awaited<ReturnType<typeof fixture>>) {
@@ -91,7 +92,7 @@ async function simulationContinuationFixture(page: Page) {
   const first = { ...structuredClone(packed), label: 'Same generated package' };
   const target = { ...structuredClone(packed), id: 'quantized:second', label: first.label, manifest_sha256: 'd'.repeat(64) };
   job.result!.artifacts = [first, target]; state.jobs.push(job); state.artifacts.push(structuredClone(first), structuredClone(target));
-  await page.reload(); await expect(page.getByLabel('Current project')).toHaveValue('alpha');
+  await page.reload(); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
   await openSavedAct(page);
   await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption(job.id);
@@ -207,7 +208,7 @@ test('simulation continuation preserves uncertainty and clears on explicit proje
   await page.getByRole('button', { name: '3D simulation', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Package from quantization', exact: true })).toHaveCount(0);
   expect(await page.evaluate(key => sessionStorage.getItem(key), key)).toBe(saved);
-  await page.getByLabel('Current project').selectOption('beta');
+  await selectProject(page, 'beta');
   await page.getByRole('button', { name: '3D simulation', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Package from quantization', exact: true })).toHaveCount(0);
   await expect(page.getByRole('radiogroup', { name: 'Native policy', exact: true }).locator('input:checked')).toHaveCount(0);
@@ -287,7 +288,7 @@ for (const target of ['quantization', 'replay'] as const) test(`${target} handof
   if (target === 'quantization') await openStudent(page, state); else await openPacked(page, state);
   const label = target === 'quantization' ? 'ACT inference policy' : 'Packed ACT policy', expected = target === 'quantization' ? student.id : packed.id;
   await expect(policyChoices(page, label).locator('input:checked')).toHaveValue(expected);
-  await page.getByLabel('Current project').selectOption('beta');
+  await selectProject(page, 'beta');
   if (target === 'quantization') {
     await expect(page.getByRole('region', { name: 'Your quantization models' }).locator('button[aria-pressed="true"]')).toHaveCount(0);
     await expect(page.getByRole('button', { name: `Choose Generated ${expected} · ${expected}`, exact: true })).toHaveCount(0);
@@ -312,7 +313,7 @@ test('owned saved history restores ACT quantization and exact replay without mut
   const replay = savedReplay('replay-job');
   replay.result = { artifacts: [artifact('replay:record', 'native_run_record', { recipe: 'native-observation-replay-v1', model_id: model }, 'alpha', replay.id)], reports: [{ operation: 'policy.run', stage: 'native_replay', mode: 'independent_observation_replay', device: 'cpu', source_artifact_id: packed.id, dataset_job_id: 'alpha-data', observation_source: { kind: 'generated_fixture' }, model_id: model, observations: 1, action_shape: [100, 6], reset_repeat_exact: true, server_closed: true, task_success: null, quality_verified: false, calibration_verified: false, speedup_verified: false, isaac_runtime_verified: false, elapsed_seconds: 2 }] };
   state.jobs.push(replay);
-  await page.reload(); await expect(page.getByLabel('Current project')).toHaveValue('alpha');
+  await page.reload(); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
   await page.getByText('Saved quantization work', { exact: true }).click();
   await expect(page.getByRole('button', { name: 'Open quantization quant-job', exact: true })).toBeVisible();
@@ -329,7 +330,7 @@ test('engine history excludes replay while retaining an actual engine job', asyn
   const state = await fixture(page);
   const replay = makeJob('saved-replay', { operation: 'policy.run', runtime_id: 'replay-cpu', native_replay: { adapter: 'act-packed-observation-v1' } }); replay.status = 'succeeded';
   const engine = makeJob('saved-engine', { operation: 'policy.run', runtime_id: 'engine-cpu', artifact_id: 'gguf', evaluation: { mode: 'engine' } }); engine.status = 'succeeded'; state.jobs.push(replay, engine);
-  await page.reload(); await expect(page.getByLabel('Current project')).toHaveValue('alpha');
+  await page.reload(); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
   await page.getByRole('button', { name: 'Run', exact: true }).click();
   await page.getByRole('button', { name: 'Check inference', exact: true }).click();
   await expect(page.locator('.job-history-entry[data-job-id="saved-engine"]')).toBeVisible();
@@ -341,7 +342,7 @@ function savedReplay(id: string, status = 'succeeded', projectId = 'alpha') {
   return { ...makeJob(id, { operation: 'policy.run', runtime_id: 'replay-cpu', artifact_id: packed.id, dataset_job_id: 'alpha-data', timeout_seconds: 600,
     native_replay: { adapter: 'act-packed-observation-v1', selection: [{ episode_index: 0, frame_index: 3 }], units, coordinate_attestation: 'generated_fixture' } }), status, project_id: projectId };
 }
-async function reloadProject(page: Page) { await page.reload(); await expect(page.getByLabel('Current project')).toHaveValue('alpha'); }
+async function reloadProject(page: Page) { await page.reload(); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha'); }
 
 for (const configured of ['none', 'native', 'engine', 'simulation'] as const) test(`${configured} capabilities do not choose a model or workflow for a project without saved policy jobs`, async ({ page }) => {
   const state = await fixture(page);
@@ -399,11 +400,11 @@ test('delayed capability reads and history polling cannot replace a manual mode 
 test('manual mode is project scoped and saved foreign jobs never become entry context', async ({ page }) => {
   const state = await fixture(page); state.jobs.push(savedReplay('alpha-replay')); await reloadProject(page);
   await page.getByRole('button', { name: 'Run', exact: true }).click(); await page.getByRole('button', { name: 'Check inference', exact: true }).click();
-  await page.getByLabel('Current project').selectOption('beta');
+  await selectProject(page, 'beta');
   await expect(page.getByRole('region', { name: 'Workflow selection status', exact: true })).toHaveCount(0);
   for (const name of ['3D simulation', 'Replay observations', 'Check inference']) await expect(page.getByRole('button', { name, exact: true })).toHaveAttribute('aria-pressed', 'false');
   await expect(page.getByRole('article', { name: 'Observation replay details' })).toHaveCount(0);
-  await page.getByLabel('Current project').selectOption('alpha');
+  await selectProject(page, 'alpha');
   await expect(page.getByRole('button', { name: 'Check inference', exact: true })).toHaveAttribute('aria-pressed', 'true');
   expect(state.mutations).toHaveLength(0);
 });
@@ -599,7 +600,7 @@ for (const failedRead of ['profiles', 'history'] as const) test(`Evaluate keeps 
   const state = await fixture(page);
   const path = failedRead === 'profiles' ? '**/api/v1/simulation-options' : '**/api/v1/projects/alpha/jobs';
   await page.route(path, route => route.fulfill({ status: 503, json: { detail: 'Generated review read failure' } }));
-  await page.reload(); await expect(page.getByLabel('Current project')).toHaveValue('alpha');
+  await page.reload(); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
   await page.getByRole('button', { name: 'Evaluate', exact: true }).click();
   const purpose = page.getByRole('region', { name: 'Evaluation purpose' });
   await expect(purpose.locator('details')).not.toHaveAttribute('open');

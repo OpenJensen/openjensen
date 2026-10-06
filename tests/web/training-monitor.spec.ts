@@ -1,3 +1,4 @@
+import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { gradientAccumulationAvailable, type TrainingModel } from '../../apps/web/src/lib/training-models';
@@ -1164,7 +1165,7 @@ test('ACT export preferred package stays within its owning project', async ({ pa
   await page.reload(); await reopenExport(page);
   await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
   await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toBeChecked();
-  await page.getByLabel('Current project', { exact: true }).selectOption('other-project');
+  await selectProject(page, 'other-project');
   await expect(page.getByText('No saved models in this project yet')).toBeVisible();
   await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator('input:checked')).toHaveCount(0);
   await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toHaveCount(0);
@@ -1388,7 +1389,7 @@ test('training teacher handoff is cleared by a manual model choice or project sw
   await expect(teacherChoices(page).locator('input:checked')).toHaveValue(state.packages[0].id);
   await reopenExport(page);
   await useTeacher(page, state.packages[1].id).click();
-  await page.getByLabel('Current project', { exact: true }).selectOption('other-project');
+  await selectProject(page, 'other-project');
   await expect(page.getByText('No saved models in this project yet')).toBeVisible();
   await expect(teacherChoices(page)).toHaveCount(0);
   await expect(teacherChoices(page).locator(`input[value="${state.packages[1].id}"]`)).toHaveCount(0);

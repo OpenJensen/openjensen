@@ -1,3 +1,4 @@
+import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
 
 const methods = new Set(['get', 'post', 'put', 'patch', 'delete', 'options', 'head', 'trace']);
@@ -1136,7 +1137,7 @@ test('dataset intake waits for a confirmed project and preserves its draft durin
   await expect(revision).toHaveValue('operator-revision');
   await inspect.click();
   await expect.poll(() => submitted).toEqual([{ projectId: 'first', body: { source: 'huggingface', repo_id: 'fixture/operator-entry', revision: 'operator-revision' } }]);
-  await page.getByLabel('Current project', { exact: true }).selectOption('second');
+  await selectProject(page, 'second');
   await expect(repository).toHaveValue('codywang/so101_pickup_test');
   await repository.fill('fixture/second-project');
   await inspect.click();
@@ -1500,7 +1501,7 @@ test('restored workflow preferences and submitted requests stay isolated when sw
   await expect(page.getByLabel('Spatial task IDs')).toHaveValue('0,2');
   await expect(page.getByLabel('Episode step limit')).toHaveValue('280');
   await page.getByLabel('Spatial task IDs').fill('1,3');
-  await page.getByRole('combobox', { name: 'Current project', exact: true }).selectOption('preferences-b');
+  await selectProject(page, 'preferences-b');
   await expect(page.getByLabel('Task suite')).toHaveValue('libero_object');
   await expect(page.getByLabel('Timed predictions')).toHaveValue('6');
   await page.getByLabel('Timed predictions').fill('9');
@@ -1509,7 +1510,7 @@ test('restored workflow preferences and submitted requests stay isolated when sw
   expect(projectB.body.evaluation).toMatchObject({ mode: 'engine', suite: 'libero_object', steps: 500, repetitions: 9 });
   expect(projectB.body.evaluation).not.toHaveProperty('parity_limits');
   expect(projectB.body.candidates).toEqual([{ language: 'Q4_0', vision: null }]);
-  await page.getByRole('combobox', { name: 'Current project', exact: true }).selectOption('preferences-a');
+  await selectProject(page, 'preferences-a');
   const projectA = await fixture.submit();
   expect(projectA.projectId).toBe('preferences-a');
   expect(projectA.body.evaluation).toMatchObject({

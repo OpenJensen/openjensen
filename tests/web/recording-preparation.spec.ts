@@ -1,3 +1,4 @@
+import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { createHash } from 'node:crypto';
 
@@ -66,7 +67,7 @@ async function fixture(page: Page) {
     if (path.endsWith('/artifacts')) return route.fulfill({ json: [] });
     return route.fulfill({ status: 404, json: { detail: `Unexpected read ${path}` } });
   });
-  await page.goto('/'); await expect(page.getByLabel('Current project')).toHaveValue('alpha');
+  await page.goto('/'); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
   await page.getByRole('button', { name: 'Teaching', exact: true }).click(); await expect(panel(page)).toBeVisible();
   await expect(panel(page).getByText(options.setup_message)).toBeVisible();
   return state;
@@ -94,7 +95,7 @@ test('exact preparation submits once and minimal acknowledgement survives reload
   await page.reload(); await page.getByRole('button', { name: 'Teaching', exact: true }).click(); await expect(panel(page).getByRole('article')).toHaveAttribute('data-job-id', 'new-preparation'); await expect(panel(page).getByRole('button', { name: 'Train on this dataset' })).toHaveCount(0); expect(s.posts).toHaveLength(1);
 });
 test('draft and selected job are project isolated and restore without consent', async ({ page }) => {
-  const s = await fixture(page); await selectEpisodes(page); await page.getByLabel('Current project').selectOption('beta'); await expect(panel(page).getByRole('checkbox', { checked: true })).toHaveCount(0); await page.getByLabel('Current project').selectOption('alpha'); await expect(panel(page).getByRole('checkbox', { checked: true })).toHaveCount(2); await expect(submit(page)).toBeDisabled(); expect(s.posts).toEqual([]);
+  const s = await fixture(page); await selectEpisodes(page); await selectProject(page, 'beta'); await expect(panel(page).getByRole('checkbox', { checked: true })).toHaveCount(0); await selectProject(page, 'alpha'); await expect(panel(page).getByRole('checkbox', { checked: true })).toHaveCount(2); await expect(submit(page)).toBeDisabled(); expect(s.posts).toEqual([]);
 });
 test('changed metadata before preparation refuses all POST and does not substitute bytes', async ({ page }) => {
   const s = await fixture(page); await selectEpisodes(page); s.captures.captures[0].session_sha256 = hex('f'); await submit(page).click(); await expect(panel(page).getByRole('alert').filter({ hasText: 'changed' })).toBeVisible(); expect(s.posts).toEqual([]);
@@ -163,7 +164,7 @@ test('Teaching draft is not remounted by recording project changes', async ({ pa
   const s = await fixture(page);
   await page.route('**/api/v1/teaching/state', route => route.fulfill({ json: { connected: true, voice_configured: false, state: { session_id: 'generated-live-session', revision: 1, episode_id: null, mode: 'idle', instruction: '', joints: ['joint_one'], state_rad: [0], steps: 0, sim_time: 0, outcome: 'unknown', fault: null } } }));
   const instruction = page.getByRole('textbox', { name: 'Task instruction', exact: true }); await expect(instruction).toBeEnabled(); await instruction.fill('Unsubmitted live teaching draft');
-  await page.getByLabel('Current project').selectOption('beta'); await expect(instruction).toHaveValue('Unsubmitted live teaching draft'); expect(s.posts).toEqual([]);
+  await selectProject(page, 'beta'); await expect(instruction).toHaveValue('Unsubmitted live teaching draft'); expect(s.posts).toEqual([]);
 });
 
 for (const action of ['submit', 'cancel'] as const) test(`post-ACK storage read denial retains exact ${action} identity and disables further mutation`, async ({ page }) => {
@@ -225,9 +226,9 @@ test('delayed legacy history response cannot authorize recovery after project na
   await page.reload(); await page.getByRole('button', { name: 'Dataset', exact: true }).click(); const gate = deferred(); let started = false;
   await page.route('**/api/v1/projects/alpha/jobs', async route => { started = true; await gate.promise; await route.fulfill({ json: [] }); });
   await page.getByRole('button', { name: 'Refresh job history', exact: true }).click(); await expect.poll(() => started).toBe(true);
-  await page.getByLabel('Current project').selectOption('beta'); gate.release();
+  await selectProject(page, 'beta'); gate.release();
   await expect(page.getByRole('button', { name: 'I reviewed the jobs; allow a new request', exact: true })).toHaveCount(0);
-  await page.getByLabel('Current project').selectOption('alpha'); await expect(page.getByRole('button', { name: 'I reviewed the jobs; allow a new request', exact: true })).toBeDisabled(); expect(s.posts).toEqual([]);
+  await selectProject(page, 'alpha'); await expect(page.getByRole('button', { name: 'I reviewed the jobs; allow a new request', exact: true })).toBeDisabled(); expect(s.posts).toEqual([]);
 });
 
 test('remount preserves newer cancellation receipt instead of replacing it with initial intake acknowledgement', async ({ page }) => {

@@ -1,3 +1,4 @@
+import { selectProject } from './project-controls';
 import { startReplay, cancelReplay } from '../../apps/web/src/lib/native-replay';
 import { expect, test, type Page } from '@playwright/test';
 
@@ -34,7 +35,7 @@ async function fixture(page: Page) {
     if (req.method() !== 'GET') return route.fulfill({ status: 405, json: {} });
     return route.continue();
   });
-  await page.goto('/'); await expect(page.getByLabel('Current project')).toHaveValue('alpha');
+  await page.goto('/'); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
   await page.getByRole('button', { name: 'Run', exact: true }).click();
   await page.getByRole('button', { name: 'Replay observations', exact: true }).click();
   await expect(page.getByRole('region', { name: 'CPU observation replay', exact: true })).toBeVisible();
@@ -471,9 +472,9 @@ test('cancellation review rejects changed original identity and survives another
   await expect(acknowledgeCancellation(page)).toBeDisabled();
   await page.route('**/api/v1/projects', route => route.fulfill({ json: [{ id: 'alpha', name: 'Original project', created_at: time }, { id: 'beta', name: 'Another project', created_at: time }] }));
   await page.reload(); await reopenCancellationLane(page);
-  await page.getByLabel('Current project').selectOption('beta'); await reopenCancellationLane(page);
+  await selectProject(page, 'beta'); await reopenCancellationLane(page);
   await expect(cancellationRecovery(page)).toHaveCount(0);
-  await page.getByLabel('Current project').selectOption('alpha'); await reopenCancellationLane(page);
+  await selectProject(page, 'alpha'); await reopenCancellationLane(page);
   await expect(cancellationRecovery(page)).toContainText('replay-001');
   await expect(acknowledgeCancellation(page)).toBeDisabled(); expect(state.cancelled).toEqual(['replay-001']);
 });

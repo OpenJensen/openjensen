@@ -1,0 +1,33 @@
+.project-menu { min-width: 0; margin-top: 10px; }
+.project-menu-trigger { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 40px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); text-align: left; font-size: 12px; }
+.project-menu-trigger > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-menu-trigger > svg { flex-shrink: 0; color: var(--muted); }
+.project-menu-trigger:hover:not(:disabled), .project-menu-trigger[aria-expanded="true"] { border-color: var(--accent); }
+.project-menu-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.project-menu-chevron { transition: transform .15s ease; }
+.project-menu-trigger[aria-expanded="true"] .project-menu-chevron { transform: rotate(180deg); }
+.project-menu-popover { position: fixed; z-index: 100; overflow-y: auto; overscroll-behavior: contain; padding: 5px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); color: var(--ink); box-shadow: 0 10px 30px color-mix(in srgb, var(--ink) 14%, transparent); }
+.project-menu-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 42px; padding: 10px; border: 0; border-radius: 6px; background: transparent; color: var(--ink); font-size: 12px; line-height: 1.5; text-align: left; }
+.project-menu-item > svg { flex-shrink: 0; color: var(--muted); }
+.project-menu-item > span:not(.project-menu-check) { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.project-menu-item:hover, .project-menu-item:focus-visible { outline: none; background: var(--hover); }
+.project-menu-item[aria-checked="true"] { background: var(--selected); color: var(--accent); font-weight: 600; }
+.project-menu-item:focus-visible { box-shadow: inset 0 0 0 1px var(--accent); }
+.project-menu-check { display: grid; place-items: center; width: 16px; flex-shrink: 0; }
+.project-menu-divider { height: 1px; margin: 5px 8px; background: var(--line); }
+.project-menu-create, .project-menu-create > svg { color: var(--accent); }
+.project-menu-empty { padding: 10px; font-size: 12px; color: var(--muted); }
+.project-create-dialog { width: min(420px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); margin: auto; overflow: auto; padding: 0; border: 1px solid var(--line-strong); border-radius: 14px; background: var(--surface); color: var(--ink); box-shadow: 0 20px 60px #0003; }
+.project-create-dialog::backdrop { background: #0006; }
+.project-create-dialog form { padding: 24px; }
+.project-create-dialog header { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; }
+.project-dialog-mark { display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 9px; background: var(--subtle); color: var(--accent); }
+.project-create-dialog h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -.3px; }
+.project-dialog-close { display: grid; place-items: center; margin-left: auto; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 24px; }
+.project-dialog-close:hover:not(:disabled) { background: var(--hover); }
+.project-create-dialog label { display: block; margin-bottom: 8px; font-size: 13px; }
+.project-create-dialog input { width: 100%; min-height: 44px; padding: 11px 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 14px; }
+.project-create-dialog footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+.project-create-error { margin-top: 12px; color: var(--error); font-size: 13px; overflow-wrap: anywhere; }
+.project-create-note { margin-top: 12px; color: var(--muted); font-size: 13px; }
+@media (max-width: 700px) { .sidebar .projects-section { grid-template-columns: minmax(0, 1fr); } .project-menu { margin-top: 0; } .project-menu-trigger { min-height: 44px; } .project-create-dialog input { font-size: 16px; } }

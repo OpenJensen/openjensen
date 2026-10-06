@@ -29,6 +29,7 @@ import { AugmentationPanel } from '@/components/augmentation-panel';
 import { Icon } from '@/components/icon';
 import { WorkspaceShell } from '@/components/workspace-shell';
 import { WorkspaceJourney } from '@/components/workspace-journey';
+import { ProjectMenu } from '@/components/project-menu';
 import { DatasetExplorer } from '@/components/dataset-explorer';
 import { DatasetStarters } from '@/components/dataset-starters';
 import { datasetStarters, type DatasetStarter } from '@/lib/dataset-starters';
@@ -214,7 +215,6 @@ function JobDetail({ job, projectId }: { job: DatasetJob; projectId: string }) {
 function Workbench() {
   const queryClient = useQueryClient();
   const [projectId, setProjectId] = useState('');
-  const [projectName, setProjectName] = useState('');
   const [selectedJobId, setSelectedJobId] = useState('');
   const [activeStage, setActiveStage] = useState(0);
   const [entries, setEntries] = useState<Record<string, ProjectEntry>>({});
@@ -301,10 +301,9 @@ function Workbench() {
     try { localStorage.setItem('firebird.project', id); } catch { /* Session selection still works. */ }
   }
   const projectMutation = useMutation({
-    mutationFn: () => api.createProject(projectName.trim()),
+    mutationFn: (name: string) => api.createProject(name),
     onSuccess: (project) => {
       queryClient.setQueryData<Project[]>(['projects'], previous => [...(previous ?? []), project]);
-      setProjectName('');
       selectProject(project.id);
     },
   });
@@ -400,14 +399,8 @@ function Workbench() {
         {projects.isPending && <p className="sidebar-note" role="status">Loading projects…</p>}
         <ErrorNotice error={projects.error} />
         {projects.isError && <button className="text-button" onClick={() => void projects.refetch()} disabled={projects.isFetching}>Retry projects</button>}
-        {!!projects.data?.length && <div className="project-picker"><Icon name="folder" size={16} /><label className="visually-hidden" htmlFor="project-select">Current project</label><select id="project-select" value={projectId} onChange={event => selectProject(event.target.value)}>{projects.data.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>}
-        {projects.data?.length === 0 && <p className="sidebar-note">No projects yet.</p>}
-        <form className="project-form" onSubmit={event => { event.preventDefault(); if (projectName.trim()) projectMutation.mutate(); }}>
-          <label htmlFor="project-name">New project</label>
-          <div className="project-input-row"><input id="project-name" name="name" value={projectName} onChange={event => setProjectName(event.target.value)} required maxLength={100} placeholder="Project name" /><button type="submit" aria-label="Create project" title="Create project" disabled={!projectName.trim() || projectMutation.isPending}><Icon name="plus" size={17} /></button></div>
-          {projectMutation.isPending && <p className="sidebar-note" role="status">Creating project…</p>}
-          <ErrorNotice error={projectMutation.error} />
-        </form>
+        <ProjectMenu projects={projects.data ?? []} value={projectId} disabled={projects.isPending}
+          onSelect={selectProject} onCreate={name => projectMutation.mutateAsync(name)} />
       </section>
       <nav className="stage-navigation grouped-navigation" aria-label="Policy lifecycle">
         {navigationGroups.map(group => <div className="navigation-group" key={group.name}>

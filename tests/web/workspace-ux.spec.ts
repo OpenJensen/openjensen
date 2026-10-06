@@ -1,3 +1,4 @@
+import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
 
 async function workspace(page: Page) {
@@ -18,7 +19,7 @@ async function workspace(page: Page) {
     return route.continue();
   });
   await page.goto('/');
-  await expect(page.getByLabel('Current project')).toHaveValue('ux-review');
+  await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'ux-review');
   return mutations;
 }
 
@@ -151,7 +152,7 @@ async function journeyFixture(page: Page) {
     return state.failed ? route.fulfill({ status: 503, json: { detail: 'Generated unavailable history' } }) : route.fulfill({ json: state.jobs }); // Includes foreign records to verify ownership filtering.
   });
   await page.reload();
-  await expect(page.getByLabel('Current project')).toHaveValue('ux-review');
+  await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'ux-review');
   return { state, mutations };
 }
 
@@ -189,7 +190,7 @@ test('project activity is recorded execution history, isolated from foreign jobs
   await expect(journey.getByRole('button', { name: 'Review Run activity', exact: true })).toContainText('1 stopped or failed');
   await journey.getByRole('button', { name: 'Review Quantize activity', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Your quantization models' }).getByRole('button', { pressed: true })).toHaveCount(0);
-  await page.getByLabel('Current project').selectOption('beta');
+  await selectProject(page, 'beta');
   await expect(journey.locator('summary')).toContainText('0 recorded jobs');
   await expect(journey).not.toContainText('dataset-second');
   await expect(journey).toContainText('Empty second project');

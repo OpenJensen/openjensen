@@ -85,16 +85,6 @@ svg { flex-shrink: 0; }
 .projects-section { margin-top: 24px; padding-bottom: 5px; }
 .projects-section > .text-button { margin: 5px; }
 .sidebar-note { margin: 12px; font-size: 12px; color: var(--muted); line-height: 1.7; }
-.project-picker { display: flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 7px; margin: 13px 5px 0; padding: 0 12px 0 10px; color: var(--muted); background: var(--surface); }
-.project-picker select { width: 100%; min-width: 0; background: transparent; color: var(--ink); border: 0; padding: 10px 7px 10px 0; font-size: 12px; text-overflow: ellipsis; }
-.project-picker:has(select:focus-visible) { outline: 2px solid var(--ink); outline-offset: -2px; }
-.project-picker select:focus-visible { outline: none; }
-.project-form { margin: 17px 5px 0; }
-.project-form > label { display: block; font-size: 12px; margin-bottom: 7px; color: var(--muted); }
-.project-input-row { display: flex; gap: 6px; }
-.project-input-row input { min-width: 0; width: 100%; padding: 9px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; font-size: 12px; }
-.project-input-row button { display: grid; place-items: center; width: 34px; flex-shrink: 0; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--surface); }
-.project-input-row button:hover:not(:disabled) { background: var(--hover); }
 .sidebar-bottom { flex-shrink: 0; margin-top: auto; padding: 20px 9px 0; }
 .sidebar-link { display: flex; align-items: center; gap: 10px; text-decoration: none; font-size: 12px; color: var(--muted); }
 .sidebar-link:hover { color: var(--ink); }
@@ -143,7 +133,7 @@ h1 { margin-top: 0; font-size: 32px; font-weight: 650; letter-spacing: -1.1px; l
 .local-source-help { margin: -10px 0 22px !important; }
 .field-label { display: block; font-size: 12px; font-weight: 500; margin: 24px 0 8px; }
 .intake-panel input:not([type=radio]) { width: 100%; min-height: 44px; padding: 11px 12px; border: 1px solid var(--line-strong); border-radius: 7px; color: var(--ink); background: var(--canvas); font-size: 13px; }
-.intake-panel input:not([type=radio]):hover, .project-input-row input:hover { border-color: var(--muted); }
+.intake-panel input:not([type=radio]):hover { border-color: var(--muted); }
 input::placeholder { color: var(--muted); opacity: .8; }
 .mono-input { font-family: ui-monospace, 'SFMono-Regular', Consolas, monospace; font-size: 11px !important; }
 .field-help { color: var(--muted); font-size: 11px; line-height: 1.7; margin-top: 7px; }
@@ -276,8 +266,6 @@ input::placeholder { color: var(--muted); opacity: .8; }
   .projects-section { margin-top: 22px; padding-top: 17px; border-top: 1px solid var(--line); display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; align-items: center; overflow: visible; }
   .projects-section > .sidebar-section-label { grid-column: 1 / -1; padding: 0 4px; }
   .sidebar-note { margin: 0 4px; }
-  .project-picker, .project-form { margin: 0; }
-  .project-form > label { font-size: 11px; margin-bottom: 5px; }
   .projects-section > .error-notice { grid-column: 1 / -1; }
   .sidebar-bottom { display: none; }
   .main-shell { margin: 0 8px 8px; border-radius: 12px; }
@@ -289,7 +277,7 @@ input::placeholder { color: var(--muted); opacity: .8; }
   .connection { font-size: 10px; }
   .section-tabs { margin-bottom: 26px; }
   .source-option { padding: 11px 10px; }
-  .intake-panel input:not([type=radio]), .project-input-row input { font-size: 16px; }
+  .intake-panel input:not([type=radio]) { font-size: 16px; }
   .mono-input { font-size: 11px !important; }
   .empty-metrics > div { padding: 12px; }
   .workspace-footer { margin-top: 32px; font-size: 10px; }
@@ -670,10 +658,7 @@ input[type=file]::file-selector-button { min-height: 40px; border: 1px solid var
   .stage-navigation .stage-list { display: flex; flex-direction: row; flex: 0 0 auto; gap: 5px; }
   .stage-navigation .stage-button { flex: 0 0 auto; width: auto; white-space: nowrap; }
   .projects-section { margin-top: 10px; padding-top: 10px; padding-bottom: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
-  .projects-section > .sidebar-section-label, .project-form > label { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
-  .project-picker, .project-form { min-width: 0; }
-  .project-picker select, .project-input-row input { min-height: 44px; }
-  .project-input-row button { width: 38px; }
+  .projects-section > .sidebar-section-label { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
   .sidebar .brand-mark { width: 32px; height: 32px; }
   .sidebar .brand-subtitle { margin-top: 0; }
   .topbar { min-height: 54px; height: 54px; }

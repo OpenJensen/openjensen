@@ -1,6 +1,6 @@
 # Workspace guide
 
-Create or select a project, then choose a destination under **Models**, **Data**, **Train**, **Test** or **Workspace**. **Guide** opens `/guide/`; `/docs/` remains the separate API reference. Selecting a card does not start a job. Configuration, completed jobs and downloaded artifacts do not by themselves establish robot task quality.
+Use the project menu to select an existing project or choose **Create project…** to add one. Then choose a destination under **Models**, **Data**, **Train**, **Test** or **Workspace**. **Guide** opens `/guide/`; `/docs/` remains the separate API reference. Selecting a card does not start a job. Configuration, completed jobs and downloaded artifacts do not by themselves establish robot task quality.
 
 ## My models
 

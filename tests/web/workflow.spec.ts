@@ -1,3 +1,4 @@
+import { openCreateProject } from './project-controls';
 import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
@@ -25,14 +26,15 @@ class WorkflowPage {
 
   async createProject(name: string) {
     await this.page.goto('/');
-    await this.page.getByLabel('New project', { exact: true }).fill(name);
+    await openCreateProject(this.page);
+    await this.page.getByLabel('Project name', { exact: true }).fill(name);
     const created = this.page.waitForResponse(response => response.url().endsWith('/api/v1/projects') && response.request().method() === 'POST');
     await this.page.getByRole('button', { name: 'Create project', exact: true }).click();
     const response = await created;
     expect(response.status()).toBe(201);
     const project = await response.json();
     this.projectId = project.id;
-    await expect(this.page.getByLabel('Current project')).toHaveValue(project.id);
+    await expect(this.page.getByLabel('Current project')).toHaveAttribute('data-project-id', project.id);
     return project;
   }
 
@@ -72,7 +74,7 @@ test('browser intake reads local metadata and preserves its limits after reload'
   expect(job.result.robot_type).toBe('synthetic_fixture');
   expect(await cli('jobs', 'show', submitted.id)).toEqual(job);
   await page.reload();
-  await expect(page.getByLabel('Current project')).toHaveValue(project.id);
+  await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', project.id);
   await page.getByRole('button', { name: /^Inspection/ }).click();
   await expect(page.getByRole('heading', { name: 'Local dataset', exact: true })).toBeVisible();
   await page.getByText('Source details', { exact: true }).click();
@@ -104,7 +106,7 @@ test('browser workflow persists real subprocess results and downloads the same a
   expect(events.some((event: { message: string }) => event.message === 'Optimizer step 1')).toBeTruthy();
 
   await page.reload();
-  await expect(page.getByLabel('Current project')).toHaveValue(project.id);
+  await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', project.id);
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
   await page.locator(`.job-history-entry[data-job-id="${submitted.id}"]`).click();
   await expect(page.getByRole('article', { name: 'Quantize job details' })).toBeVisible();

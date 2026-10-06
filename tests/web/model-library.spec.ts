@@ -57,7 +57,7 @@ test('empty collections cannot start work on nonexistent models', async ({ page 
 test('cross-project continuation selects the model owner and exact model', async ({ page }) => {
   const state = await fixture(page); await library(page).click(); await page.getByRole('button', { name: 'Open model Saved other · other' }).click();
   await page.getByRole('region', { name: 'Continue with this model' }).getByRole('button', { name: 'Distill', exact: true }).click();
-  await expect(page.getByLabel('Current project')).toHaveValue('beta');
+  await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'beta');
   await expect(page.getByRole('group', { name: 'Teacher', exact: true }).locator('input:checked')).toHaveValue('other');
   expect(state.mutations).toEqual([]);
 });

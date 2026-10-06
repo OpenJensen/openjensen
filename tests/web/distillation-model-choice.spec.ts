@@ -1,3 +1,4 @@
+import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
 
 const time = '2026-09-27T12:00:00Z';
@@ -27,7 +28,7 @@ async function fixture(page: Page, initialJobs: Record<string, any>[] = [inspect
     return route.continue();
   });
   await page.goto('/');
-  await expect(page.getByLabel('Current project')).toHaveValue('alpha');
+  await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
   await openDistill(page);
   return state;
 }
@@ -61,11 +62,11 @@ test('explicit model choice stays with its project and survives stage navigation
   await act(page).click(); await expect(panel(page)).toBeVisible();
   await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await openDistill(page);
   await expect(panel(page)).toBeVisible();
-  await page.getByLabel('Current project').selectOption('beta');
+  await selectProject(page, 'beta');
   await expect(overview(page)).toBeVisible(); await expect(panel(page)).toHaveCount(0);
   await expect(act(page)).toHaveCount(0);
   await expect(page.getByText('No saved models in this project yet')).toBeVisible();
-  await page.getByLabel('Current project').selectOption('alpha');
+  await selectProject(page, 'alpha');
   await expect(panel(page)).toBeVisible();
   await page.reload(); await openDistill(page);
   await expect(overview(page)).toBeVisible(); await expect(panel(page)).toHaveCount(0);
@@ -107,7 +108,7 @@ for (const status of ['pending', 'uncertain'] as const) test(`${status} request 
   expect(await page.evaluate(key => sessionStorage.getItem(key), key)).toBe(journal);
   await page.getByRole('button', { name: 'Choose another teacher', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Review request', exact: true })).toBeVisible();
-  await page.getByLabel('Current project').selectOption('beta');
+  await selectProject(page, 'beta');
   await expect(overview(page)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Review request', exact: true })).toHaveCount(0);
   expect(state.mutations).toEqual([]);
