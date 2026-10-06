@@ -280,6 +280,7 @@ function Workbench() {
       setStartTraining(undefined);
       setTrainingNavigation(value => value + 1);
     }
+    if (index === 0) setDatasetView('sources');
     setActiveStage(index);
   }
   function startTrainingOnDataset(datasetId: string) {
@@ -430,16 +431,15 @@ function Workbench() {
         {!connected && !health.isPending && <div className="connection-notice"><ErrorNotice error={health.error} /><button className="text-button" onClick={() => { void health.refetch(); void projects.refetch(); void capabilities.refetch(); }}>Retry connection</button></div>}
         {capabilities.error && connected && <div className="connection-notice"><ErrorNotice error={capabilities.error} /><button className="text-button" onClick={() => void capabilities.refetch()} disabled={capabilities.isFetching}>Retry capabilities</button></div>}
         <div className="dataset-view" hidden={activeStage !== 0}>
-          <div className="section-tabs"><nav className="dataset-tab-buttons" aria-label="Dataset views"><button type="button" className={`section-tab${datasetView === 'sources' ? ' active' : ''}`} aria-pressed={datasetView === 'sources'} onClick={() => setDatasetView('sources')}>Library</button><button type="button" className={`section-tab${datasetView === 'inspection' ? ' active' : ''}`} aria-pressed={datasetView === 'inspection'} disabled={!selectedJob} onClick={() => setDatasetView('inspection')}>Explore dataset</button></nav></div>
           <div className="dataset-sources" hidden={datasetView !== 'sources'}>
             <div className="intake-column"><IntakeForm key={`${projectId}-${intakeSelection}`} navigationToken={`${workflowNavigation}:${activeStage}:${datasetView}:${selectedJobId}`} project={workflowProjectId ? project : undefined} readinessMessage={projects.isPending ? 'Loading projects before importing a dataset.' : projects.isError ? 'Project list unavailable. Retry projects to continue.' : 'Create or select a project to import a dataset.'} initialLibrary={importLibrary} localAvailable={capabilities.data?.some(item => item.operation === 'dataset.inspect.local' && (item.status === 'available' || item.status === 'untested')) ?? false} onCreated={job => { setSelectedJobId(job.id); setDatasetView('inspection'); }} /></div>
             <div className="dataset-choice-divider"><span>or</span></div>
             <DatasetLibrary active={activeStage === 0 && datasetView === 'sources'} projectId={workflowProjectId} onOpen={openDataset} />
           </div>
-          {datasetView === 'labels' && selectedLibrary?.project_id === workflowProjectId && <DatasetLabeling key={selectedLibrary.id} entry={selectedLibrary} onInspect={() => { setImportLibrary(selectedLibrary); setIntakeSelection(value=>value+1); setDatasetView('sources'); }} />}
+          {datasetView === 'labels' && selectedLibrary?.project_id === workflowProjectId && <><div className="dataset-back-navigation"><button type="button" className="text-link" onClick={() => setDatasetView('sources')}>← Back to library</button></div><DatasetLabeling key={selectedLibrary.id} entry={selectedLibrary} onInspect={() => { setImportLibrary(selectedLibrary); setIntakeSelection(value=>value+1); setDatasetView('sources'); }} /></>}
           <div className="inspection-view" hidden={datasetView !== 'inspection'}>
-            <section className="inspection-record" aria-labelledby="activity-title">
-              <div className="activity-heading"><div><h2 id="activity-title">Explore dataset</h2></div><button type="button" className="secondary-button" onClick={() => setDatasetView('sources')}>Back to library</button></div>
+            <section className="inspection-record" aria-label="Dataset inspection">
+              <div className="dataset-back-navigation"><button type="button" className="text-link" onClick={() => setDatasetView('sources')}>← Back to library</button></div>
               <ErrorNotice error={jobs.error} />
               {jobs.isPending && projectId && <p className="loading-note" role="status">Loading inspections…</p>}
               {selectedJobId && !selectedJob && !jobs.isPending && <p className="warning-box" role="alert">Selected inspection {selectedJobId} is unavailable in this project. Another dataset has not been substituted. Refresh or choose a source explicitly.</p>}
