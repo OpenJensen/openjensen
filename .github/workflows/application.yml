@@ -2,8 +2,8 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
-  merge_group:
   workflow_dispatch:
     inputs:
       windows_browser:
@@ -18,7 +18,7 @@ permissions:
   contents: read
 jobs:
   scope:
-    runs-on: ${{ fromJSON((github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON((vars.CI_RUNNER == 'gcp' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-24.04"]') }}
     timeout-minutes: 3
     outputs:
       application: ${{ steps.changes.outputs.application }}
@@ -29,6 +29,13 @@ jobs:
       act: ${{ steps.changes.outputs.act }}
       teaching: ${{ steps.changes.outputs.teaching }}
       decision: ${{ steps.changes.outputs.decision }}
+      desktop_lane: ${{ steps.changes.outputs.desktop_lane }}
+      mobile_lane: ${{ steps.changes.outputs.mobile_lane }}
+      web_lane: ${{ steps.changes.outputs.web_lane }}
+      docs_only: ${{ steps.changes.outputs.docs_only }}
+      full: ${{ steps.changes.outputs.full }}
+      py_shards: ${{ steps.changes.outputs.py_shards }}
+      web_matrix: ${{ steps.changes.outputs.web_matrix }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,16 +46,24 @@ jobs:
         run: sudo bash .github/scripts/prepare_runner.sh
       - id: changes
         run: python3 .github/scripts/ci_scope.py
+        env:
+          # Optional repository variables; blank = built-in defaults (2 / 4 / 6).
+          CI_PY_SHARDS: ${{ vars.CI_PY_SHARDS }}
+          CI_DESKTOP_SHARDS: ${{ vars.CI_DESKTOP_SHARDS }}
+          CI_MOBILE_SHARDS: ${{ vars.CI_MOBILE_SHARDS }}
   application:
     needs: scope
     if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.application != 'false') }}
-    timeout-minutes: 20
+    name: application (${{ matrix.os }}, ${{ matrix.shard }})
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
+        # Test files are packed into balanced shards by ci_pyshard.py; xdist fans out inside each.
+        shard: ${{ fromJSON(needs.scope.outputs.py_shards || '["1/1"]') }}
         # Hackathon default is Linux. Windows is an explicit manual opt-in.
-        os: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.windows_browser && '["ubuntu-latest","windows-latest"]' || '["ubuntu-latest"]') }}
-    runs-on: ${{ fromJSON(matrix.os == 'ubuntu-latest' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","firebird-gcp"]' || format('["{0}"]', matrix.os)) }}
+        os: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.windows_browser && '["ubuntu-24.04","windows-latest"]' || '["ubuntu-24.04"]') }}
+    runs-on: ${{ fromJSON(matrix.os == 'ubuntu-24.04' && (vars.CI_RUNNER == 'gcp' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","x64","firebird-gcp"]' || format('["{0}"]', matrix.os)) }}
     steps:
       - uses: actions/checkout@v4
       - name: Protect disposable runner during package maintenance
@@ -61,9 +76,11 @@ jobs:
           python-version: '3.14.7'
           enable-cache: true
           cache-suffix: application
+          # Real dependency inputs only: editing this workflow must not evict the cache.
           cache-dependency-glob: |
             uv.lock
-            .github/workflows/application.yml
+            pyproject.toml
+            packages/core/pyproject.toml
       - run: uv sync --frozen --all-packages --extra tui
       - name: Install video validation tools (Linux)
         if: runner.os == 'Linux'
@@ -79,21 +96,32 @@ jobs:
           uv venv --python 3.14.7 workers/_cpu_readers/.venv
           uv pip install --python workers/_cpu_readers/.venv/Scripts/python.exe --no-deps pyarrow==25.0.1
       - run: uv run --no-sync ruff check packages/core scripts tests .github/scripts
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && startsWith(matrix.shard, '1/')
       - run: uv run --no-sync ruff format --check packages/core scripts tests .github/scripts
-        if: runner.os == 'Linux'
-      - run: uv run --no-sync pytest -q
+        if: runner.os == 'Linux' && startsWith(matrix.shard, '1/')
+      - name: pytest (this shard, parallel with xdist)
+        shell: bash
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          mapfile -t files < <(uv run --no-sync python .github/scripts/ci_pyshard.py --shard "$SHARD")
+          test "${#files[@]}" -gt 0
+          uv run --frozen pytest -q -n auto --dist loadfile "${files[@]}"
   web:
     needs: scope
-    if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.application != 'false') }}
-    timeout-minutes: 35
+    if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.web_lane != 'false') }}
+    name: web (${{ matrix.os }}, ${{ matrix.leg.name }})
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        shard: ['1/2', '2/2']
+        # core = OpenAPI/type/build checks + pure/openapi/workflow + diagnostics.
+        # desktop/mobile legs are Playwright --shard slices; mobile legs exist only when
+        # scope selected mobile_lane. The list comes from ci_scope.py (web_matrix).
+        leg: ${{ fromJSON(needs.scope.outputs.web_matrix || '[{"name":"core","kind":"core","project":"","shard":""},{"name":"desktop 1/1","kind":"shard","project":"desktop","shard":"1/1"}]') }}
         # Hackathon default is Linux. Windows is an explicit manual opt-in.
-        os: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.windows_browser && '["ubuntu-latest","windows-latest"]' || '["ubuntu-latest"]') }}
-    runs-on: ${{ fromJSON(matrix.os == 'ubuntu-latest' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","firebird-gcp"]' || format('["{0}"]', matrix.os)) }}
+        os: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.windows_browser && '["ubuntu-24.04","windows-latest"]' || '["ubuntu-24.04"]') }}
+    runs-on: ${{ fromJSON(matrix.os == 'ubuntu-24.04' && (vars.CI_RUNNER == 'gcp' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","x64","firebird-gcp"]' || format('["{0}"]', matrix.os)) }}
     steps:
       - uses: actions/checkout@v4
       - name: Protect disposable runner during package maintenance
@@ -110,14 +138,27 @@ jobs:
           python-version: '3.14.7'
           enable-cache: true
           cache-suffix: application
+          # Real dependency inputs only: editing this workflow must not evict the cache.
           cache-dependency-glob: |
             uv.lock
-            .github/workflows/application.yml
+            pyproject.toml
+            packages/core/pyproject.toml
       - uses: pnpm/action-setup@v4
         if: runner.os == 'Linux' || inputs.windows_browser
         with:
           version: '12.6.0'
           cache: false
+      # pnpm store cache (the only package-manager cache; setup-node cache would duplicate it).
+      - id: pnpm-store
+        if: runner.os == 'Linux' && runner.environment != 'self-hosted'
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        if: runner.os == 'Linux' && runner.environment != 'self-hosted'
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
       - run: uv sync --frozen --all-packages --extra tui
       - name: Install video validation tools (Linux)
         if: runner.os == 'Linux' && runner.environment != 'self-hosted'
@@ -132,29 +173,53 @@ jobs:
         run: |
           uv venv --python 3.14.7 workers/_cpu_readers/.venv
           uv pip install --python workers/_cpu_readers/.venv/Scripts/python.exe --no-deps pyarrow==25.0.1
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --prefer-offline
         if: runner.os == 'Linux' || inputs.windows_browser
+      # OpenAPI contract, generated client and type checks are identical on every leg:
+      # run them once, on the core leg.
       - run: uv run --no-sync python scripts/export_openapi.py
-        if: runner.os == 'Linux' || inputs.windows_browser
+        if: matrix.leg.kind == 'core' && (runner.os == 'Linux' || inputs.windows_browser)
       - run: pnpm generate:client
-        if: runner.os == 'Linux' || inputs.windows_browser
+        if: matrix.leg.kind == 'core' && (runner.os == 'Linux' || inputs.windows_browser)
       - run: git diff --exit-code -- packages/core/openapi.json apps/web/src/lib/api.generated.ts
-        if: runner.os == 'Linux' || inputs.windows_browser
+        if: matrix.leg.kind == 'core' && (runner.os == 'Linux' || inputs.windows_browser)
       - run: pnpm check:web
-        if: runner.os == 'Linux' || inputs.windows_browser
+        if: matrix.leg.kind == 'core' && (runner.os == 'Linux' || inputs.windows_browser)
+      # Every leg serves the static export (tests/web/serve.py), so every leg builds it.
       - run: pnpm build:web
         if: runner.os == 'Linux' || inputs.windows_browser
       # All current projects use Chromium headless shell, without a channel.
       - name: Use preinstalled GCP browser dependencies
         run: pnpm exec playwright install --only-shell chromium
         if: runner.environment == 'self-hosted' && runner.os == 'Linux'
-      - name: Install hosted browser dependencies
+      - id: playwright-version
+        if: runner.os == 'Linux' && runner.environment != 'self-hosted'
+        run: echo "version=$(node -p "require('./package.json').devDependencies['@playwright/test']")" >> "$GITHUB_OUTPUT"
+      - id: playwright-cache
+        uses: actions/cache@v4
+        if: runner.os == 'Linux' && runner.environment != 'self-hosted'
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+      - name: Install hosted browser and OS dependencies (cold cache)
         run: pnpm exec playwright install --with-deps --only-shell chromium
-        if: runner.environment != 'self-hosted'
-      - run: pnpm test:web --shard=${{ matrix.shard }}
-        if: runner.os == 'Linux' || inputs.windows_browser
+        if: runner.os != 'Linux' && runner.environment != 'self-hosted' || runner.os == 'Linux' && runner.environment != 'self-hosted' && steps.playwright-cache.outputs.cache-hit != 'true'
+      - name: Install hosted OS dependencies only (browser restored from cache)
+        run: pnpm exec playwright install-deps chromium
+        if: runner.os == 'Linux' && runner.environment != 'self-hosted' && steps.playwright-cache.outputs.cache-hit == 'true'
+      - name: Browser tests (core leg - pure, openapi, workflow)
+        run: pnpm test:web --project=pure --project=openapi --project=workflow
+        if: matrix.leg.kind == 'core' && (runner.os == 'Linux' || inputs.windows_browser)
+        env:
+          # GCP image = 2 vCPU: keep 2 workers. Hosted = 4 vCPU: 4 workers.
+          PW_WORKERS: ${{ runner.environment == 'self-hosted' && '2' || '4' }}
       - run: pnpm test:diagnostics
-        if: matrix.shard == '1/2'
+        if: matrix.leg.kind == 'core'
+      - name: Browser tests (${{ matrix.leg.project }} ${{ matrix.leg.shard }})
+        run: pnpm test:web --project=${{ matrix.leg.project }} --shard=${{ matrix.leg.shard }}
+        if: matrix.leg.kind == 'shard' && (runner.os == 'Linux' || inputs.windows_browser)
+        env:
+          PW_WORKERS: ${{ runner.environment == 'self-hosted' && '2' || '4' }}
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -166,7 +231,7 @@ jobs:
   application-verification:
     needs: [scope, application, web]
     if: ${{ always() }}
-    runs-on: ${{ fromJSON((github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON((vars.CI_RUNNER == 'gcp' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-24.04"]') }}
     timeout-minutes: 2
     steps:
       - name: Verify every selected check completed
@@ -177,7 +242,8 @@ jobs:
           import json, os
           results = json.loads(os.environ['CHECK_RESULTS'])
           scope = results['scope']
-          required = {'application': 'application', 'web': 'application'}
+          # web covers every browser lane: core, desktop and (when selected) mobile legs.
+          required = {'application': 'application', 'web': 'web_lane'}
           failures = []
           for job, output in required.items():
               result = results[job]['result']
@@ -190,12 +256,14 @@ jobs:
               failures.append('scope: ' + scope['result'])
           if failures:
               raise SystemExit('; '.join(failures))
+          if scope['outputs'].get('docs_only') == 'true':
+              print('Documentation-only change: no code checks were required.')
           print('All selected checks passed; unrelated scopes were explicitly skipped.')
           PY_GATE
   quantization:
     needs: scope
     if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.quantization != 'false') }}
-    runs-on: ${{ fromJSON((github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON((vars.CI_RUNNER == 'gcp' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-24.04"]') }}
     timeout-minutes: 10
     defaults:
       run:
@@ -218,7 +286,7 @@ jobs:
   unified-quantization:
     needs: scope
     if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.unified_quantization != 'false') }}
-    runs-on: ${{ fromJSON((github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON((vars.CI_RUNNER == 'gcp' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-24.04"]') }}
     timeout-minutes: 10
     strategy:
       fail-fast: false
@@ -257,7 +325,7 @@ jobs:
   training:
     needs: scope
     if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.training != 'false') }}
-    runs-on: ${{ fromJSON((github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON((vars.CI_RUNNER == 'gcp' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-24.04"]') }}
     timeout-minutes: 10
     defaults:
       run:
@@ -282,7 +350,7 @@ jobs:
   benchmark:
     needs: scope
     if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.benchmark != 'false') }}
-    runs-on: ${{ fromJSON((github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON((vars.CI_RUNNER == 'gcp' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-24.04"]') }}
     timeout-minutes: 10
     defaults:
       run:
@@ -299,7 +367,7 @@ jobs:
           python-version: '3.11'
           enable-cache: true
           cache-suffix: benchmark
-          cache-dependency-glob: .github/workflows/application.yml
+          cache-dependency-glob: workers/benchmark_gpu/pyproject.toml
       - run: uv venv --python 3.11
       - run: uv pip install --python .venv/bin/python pytest==8.4.2 ruff==0.13.2
       - run: .venv/bin/python -m pytest -q -rs
@@ -310,7 +378,7 @@ jobs:
   act-inference-export:
     needs: scope
     if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.act != 'false') }}
-    runs-on: ${{ fromJSON((github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON((vars.CI_RUNNER == 'gcp' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-24.04"]') }}
     timeout-minutes: 15
     defaults:
       run:
@@ -339,7 +407,7 @@ jobs:
   teaching:
     needs: scope
     if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.teaching != 'false') }}
-    runs-on: ${{ fromJSON((github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON((vars.CI_RUNNER == 'gcp' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-24.04"]') }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -353,9 +421,7 @@ jobs:
           python-version: '3.12.14'
           enable-cache: true
           cache-suffix: teaching
-          cache-dependency-glob: |
-            workers/teaching/requirements-*.txt
-            .github/workflows/application.yml
+          cache-dependency-glob: workers/teaching/requirements-*.txt
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Install isolated CPU dataset writer
         run: |
@@ -379,7 +445,7 @@ jobs:
   decision:
     needs: scope
     if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.decision != 'false') }}
-    runs-on: ${{ fromJSON((github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON((vars.CI_RUNNER == 'gcp' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-24.04"]') }}
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -393,7 +459,7 @@ jobs:
           python-version: '3.12.14'
           enable-cache: true
           cache-suffix: decision-contracts
-          cache-dependency-glob: .github/workflows/application.yml
+          cache-dependency-glob: workers/decision/requirements*.txt
       - run: uv venv --python 3.12.14 workers/decision/.venv-ci
       - run: uv pip install --python workers/decision/.venv-ci/bin/python pytest==8.4.2
       - name: Advisory worker contracts without model downloads
@@ -405,7 +471,7 @@ jobs:
   native-worker-verification:
     needs: [scope, quantization, unified-quantization, training, benchmark, act-inference-export, teaching, decision]
     if: ${{ always() }}
-    runs-on: ${{ fromJSON((github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON((vars.CI_RUNNER == 'gcp' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-24.04"]') }}
     timeout-minutes: 2
     steps:
       - name: Verify every selected check completed
