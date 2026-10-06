@@ -140,9 +140,9 @@ test('fresh workflows require explicit model and runner choices', async ({ page 
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
   await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Model', exact: true }).click();
   const models = page.getByRole('group', { name: 'Base model', exact: true });
-  await expect(models.getByRole('radio', { checked: true })).toHaveCount(0);
-  await page.getByRole('radio', { name: 'SmolVLA', exact: true }).locator('..').click();
-  await expect(page.getByRole('radio', { name: 'SmolVLA', exact: true })).toBeChecked();
+  await expect(models.getByRole('checkbox', { checked: true })).toHaveCount(0);
+  await page.getByRole('checkbox', { name: 'SmolVLA', exact: true }).locator('..').click();
+  await expect(page.getByRole('checkbox', { name: 'SmolVLA', exact: true })).toBeChecked();
   expect(mutations).toEqual([]);
 });
 
