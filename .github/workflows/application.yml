@@ -89,12 +89,12 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           uv venv --python 3.14.7 workers/_cpu_readers/.venv
-          uv pip install --python workers/_cpu_readers/.venv/bin/python --no-deps pyarrow==25.0.1
+          uv pip install --python workers/_cpu_readers/.venv/bin/python -r workers/_cpu_readers/requirements.txt
       - name: Install isolated CPU preview reader (Windows)
         if: runner.os == 'Windows'
         run: |
           uv venv --python 3.14.7 workers/_cpu_readers/.venv
-          uv pip install --python workers/_cpu_readers/.venv/Scripts/python.exe --no-deps pyarrow==25.0.1
+          uv pip install --python workers/_cpu_readers/.venv/Scripts/python.exe -r workers/_cpu_readers/requirements.txt
       - run: uv run --no-sync ruff check packages/core scripts tests .github/scripts
         if: runner.os == 'Linux' && startsWith(matrix.shard, '1/')
       - run: uv run --no-sync ruff format --check packages/core scripts tests .github/scripts
@@ -167,12 +167,12 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           uv venv --python 3.14.7 workers/_cpu_readers/.venv
-          uv pip install --python workers/_cpu_readers/.venv/bin/python --no-deps pyarrow==25.0.1
+          uv pip install --python workers/_cpu_readers/.venv/bin/python -r workers/_cpu_readers/requirements.txt
       - name: Install isolated CPU preview reader (Windows)
         if: runner.os == 'Windows'
         run: |
           uv venv --python 3.14.7 workers/_cpu_readers/.venv
-          uv pip install --python workers/_cpu_readers/.venv/Scripts/python.exe --no-deps pyarrow==25.0.1
+          uv pip install --python workers/_cpu_readers/.venv/Scripts/python.exe -r workers/_cpu_readers/requirements.txt
       - run: pnpm install --frozen-lockfile --prefer-offline
         if: runner.os == 'Linux' || inputs.windows_browser
       # OpenAPI contract, generated client and type checks are identical on every leg:
