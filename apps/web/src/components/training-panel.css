@@ -190,3 +190,5 @@
 .training-recipe-identity { display: block; color: var(--muted); font-size: 10px; margin-top: 3px; overflow-wrap: anywhere; }
 .training-temporal-fields input { min-height: 44px; }
 .training-recovery-note { font-size: 12px; line-height: 1.65; }
+
+.training-settings-actions { display: flex; justify-content: flex-end; margin: 4px 0 14px; }

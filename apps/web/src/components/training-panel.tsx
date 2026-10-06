@@ -1089,17 +1089,13 @@ export function TrainingPanel({
             />
             <details className="training-disclosure">
               <summary>
-                Training settings
-                <span>
-                  {resumeId
-                    ? "Original recipe"
-                    : trainingBudget}
-                </span>
+                Advanced settings
               </summary>
               {resumeId ? (
                 <div className="training-saved-recipe"><p>Original recipe preserved.</p><p>{checkpointTiming(originalTraining)}</p><p>Resume loads the saved architecture and processors. Start a new run to request different horizons.</p></div>
               ) : (
                 <>
+                <div className="training-settings-actions"><button type="button" className="text-button" disabled={busy} onClick={() => { setRecipe({ ...defaults }); setModelBatchSizes({}); setTemporalDrafts({}); }}>Reset settings</button></div>
                 <div className="training-fields">
                   <label>
                     Steps
