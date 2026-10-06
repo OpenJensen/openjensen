@@ -35,6 +35,7 @@ function DatasetCover({ entry, active }: { entry: LibraryDataset; active: boolea
     wantsPlayback.current = false;
     setHovered(false);
     video.current?.pause();
+    if (video.current && camera && loaded) video.current.currentTime = camera.start_seconds;
   }
   function playPreview() {
     if (!active || failed) return;

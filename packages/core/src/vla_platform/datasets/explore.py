@@ -268,9 +268,13 @@ class DatasetExplorer:
                     cached = EpisodePreview.model_validate_json(path.read_bytes())
                     if (cached.repo_id, cached.revision) != (source.repo_id, source.revision):
                         raise ValueError("Cached cover identity differs")
-                    if len(cached.cameras) > 1 or cached.samples or any(not allowed_url(c.url) for c in cached.cameras):
+                    if cached.episode_index >= source.total_episodes or len(cached.cameras) > 1 or cached.samples or any(not allowed_url(c.url) or c.end_seconds <= c.start_seconds or c.key not in source.features for c in cached.cameras):
                         raise ValueError("Invalid cached cover")
                     self.covers[key] = cached
+                    while len(self.covers) > 128:
+                        old_key, _ = self.covers.popitem(last=False)
+                        if not self.cover_locks[old_key].locked():
+                            self.cover_locks.pop(old_key, None)
                     return cached.model_copy(deep=True)
                 except (ValueError, OSError):
                     pass
