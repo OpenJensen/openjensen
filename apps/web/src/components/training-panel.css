@@ -28,8 +28,9 @@
 .training-data-facts span { padding: 4px 9px; border-radius: 5px; background: var(--subtle); color: var(--muted); font-size: 11px; }
 .training-data-facts span:empty { display: none; }
 .training-camera-heading { margin-bottom: 12px; }
-.training-episode-picker { min-width: 0; max-width: 100%; }
-.training-episode-picker select { min-width: 0; max-width: 100%; min-height: 44px; border: 1px solid var(--line); padding: 6px 9px; border-radius: 5px; color: var(--ink); background: var(--surface); font-size: 11px; text-overflow: ellipsis; }
+.training-episode-picker { position: relative; min-width: 0; max-width: 100%; }
+.training-episode-picker select { appearance: none; min-width: 0; max-width: 100%; min-height: 44px; border: 1px solid var(--line); padding: 6px 32px 6px 12px; border-radius: 5px; color: var(--ink); background: var(--surface); font-size: 11px; text-overflow: ellipsis; }
+.training-select-arrow { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--muted); }
 .training-workspace .dx-camera-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
 .training-workspace .dx-camera-grid:not(:has(> :nth-child(3))) { grid-template-columns: repeat(2,minmax(0,1fr)); }
 .training-workspace .dx-camera-grid-single { grid-template-columns: minmax(0,420px) !important; }
