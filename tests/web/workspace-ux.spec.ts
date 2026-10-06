@@ -51,7 +51,7 @@ test('run choices are visible, keyboard accessible and stay within a narrow scre
     await choice.focus();
     await page.keyboard.press('Enter');
     await expect(choice).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByRole('region', { name: 'Workflow context', exact: true })).toHaveCount(1);
+    await expect(page.getByRole('region', { name: 'Workflow context', exact: true })).toHaveCount(0);
   }
   await choices.getByRole('button', { name: '3D simulation', exact: true }).click();
   await page.screenshot({ path: testInfo.outputPath('run-workspace.png'), fullPage: false });
@@ -66,14 +66,22 @@ test('run choices are visible, keyboard accessible and stay within a narrow scre
 test('workspace pages use a single title without introductory subtitles', async ({ page }, testInfo) => {
   await workspace(page);
   const navigation = page.getByRole('navigation', { name: 'Policy lifecycle' });
-  for (const name of ['Dataset', 'Augmentation', 'Teaching', 'Fine-tune', 'Distill', 'Quantize', 'Evaluate', 'Run', 'Decision lab', 'Cloud runs', 'Settings & diagnostics']) {
+  for (const name of ['Dataset', 'Augmentation', 'Teaching', 'Fine-tune', 'Distill', 'Quantize', 'Evaluate', 'Run', 'Decision lab', 'Cloud runs', 'Settings & diagnostics', 'Dashboard']) {
     await navigation.getByRole('button', { name, exact: true }).click();
     await expect(page.getByRole('heading', { name, level: 1, exact: true })).toBeVisible();
     await expect(page.locator('.page-heading p')).toHaveCount(0);
     await expect(page.locator('.page-heading .page-guide')).toBeVisible();
     await expect(page.locator('.journey-context')).toHaveCount(0);
     await expect(page.getByText('Latest inspection', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Workflow context', exact: true })).toHaveCount(0);
+    await expect(page.locator('.journey-step')).toHaveCount(0);
+    await expect(page.getByText('Project activity', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('status', { name: 'Application API connection', exact: true })).toHaveCount(0);
+    await expect(page.getByText('App connected', { exact: true })).toHaveCount(0);
   }
+  await page.getByRole('button', { name: 'My models', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'My models', level: 1, exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Workflow context', exact: true })).toHaveCount(0);
   await navigation.getByRole('button', { name: 'Distill', exact: true }).click();
   await expect(page.getByText('Teach a smaller ACT policy', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Train an ACT256 student to imitate your teacher’s action chunks, then reload the saved student in a fresh process.', { exact: true })).toHaveCount(0);
@@ -139,7 +147,7 @@ test('fresh workflows require explicit model and runner choices', async ({ page 
 });
 
 
-async function journeyFixture(page: Page) {
+async function workflowFixture(page: Page) {
   const mutations = await workspace(page);
   const time = '2026-09-27T12:00:00Z';
   const inspection = (id: string, project_id = 'ux-review', snapshot = true) => ({
@@ -169,7 +177,7 @@ test('compact mobile navigation leaves useful stage content visible and every to
     const intake = await page.getByRole('heading', { name: 'Import a dataset', exact: true }).boundingBox();
     expect(intake!.y).toBeLessThan(590);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
-    await page.screenshot({ path: testInfo.outputPath(`journey-empty-${width}.png`), fullPage: false });
+    await page.screenshot({ path: testInfo.outputPath(`workspace-empty-${width}.png`), fullPage: false });
   }
   for (const name of ['Teaching', 'Fine-tune', 'Distill', 'Quantize', 'Evaluate', 'Run', 'Decision lab', 'Cloud runs', 'Settings & diagnostics', 'Dataset']) {
     const button = navigation.getByRole('button', { name, exact: true });
@@ -181,11 +189,12 @@ test('compact mobile navigation leaves useful stage content visible and every to
   expect(mutations).toEqual([]);
 });
 
-test('workflow pages keep their job history without the duplicate project activity panel', async ({ page }) => {
-  const { mutations } = await journeyFixture(page);
+test('workflow pages keep their job history without the duplicate project activity panel', async ({ page }, testInfo) => {
+  const { mutations } = await workflowFixture(page);
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
   await expect(page.getByText('Project activity', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Fine-tuning jobs', exact: true }).locator('[data-job-id="training-job"]')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('clean-fine-tune.png'), fullPage: true });
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Your quantization models' }).getByRole('button', { pressed: true })).toHaveCount(0);
   await selectProject(page, 'beta');
@@ -196,7 +205,7 @@ test('workflow pages keep their job history without the duplicate project activi
 });
 
 test('the clean dataset page continues with the exact viewed inspection without submitting training', async ({ page }) => {
-  const { mutations } = await journeyFixture(page);
+  const { mutations } = await workflowFixture(page);
   await page.getByRole('button', { name: /^Inspection/ }).click();
   await page.getByLabel('History', { exact: true }).selectOption('dataset-first');
   const journey = page.getByRole('region', { name: 'Workflow context', exact: true });
@@ -210,7 +219,7 @@ test('the clean dataset page continues with the exact viewed inspection without 
 });
 
 test('missing history stays visible in the run list and cannot enable metadata-only training', async ({ page }) => {
-  const { state, mutations } = await journeyFixture(page);
+  const { state, mutations } = await workflowFixture(page);
   state.failed = true;
   await page.reload();
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
@@ -228,7 +237,7 @@ test('missing history stays visible in the run list and cannot enable metadata-o
 });
 
 test('loading history does not claim the run list is empty', async ({ page }) => {
-  const { state, mutations } = await journeyFixture(page);
+  const { state, mutations } = await workflowFixture(page);
   let release!: () => void;
   state.gate = new Promise<void>(resolve => { release = resolve; });
   await page.reload();

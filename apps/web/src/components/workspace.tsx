@@ -28,7 +28,6 @@ import { TrainingPanel } from '@/components/training-panel';
 import { AugmentationPanel } from '@/components/augmentation-panel';
 import { Icon } from '@/components/icon';
 import { WorkspaceShell } from '@/components/workspace-shell';
-import { WorkspaceJourney } from '@/components/workspace-journey';
 import { ProjectMenu } from '@/components/project-menu';
 import { DatasetExplorer } from '@/components/dataset-explorer';
 import { DatasetLibrary, DatasetLabeling, LocalDatasetImport } from '@/components/dataset-library';
@@ -428,10 +427,6 @@ function Workbench() {
         <div className={`page-heading${activeStage === 1 ? ' training-page-heading' : ''}`}><h1>{stage.name}</h1><div className="page-actions"><a className="page-guide" href={publicPath(`/guide/#${guideSectionId(stage.name)}`)}><Icon name="book" size={16} />Guide</a></div></div>
         {!connected && !health.isPending && <div className="connection-notice"><ErrorNotice error={health.error} /><button className="text-button" onClick={() => { void health.refetch(); void projects.refetch(); void capabilities.refetch(); }}>Retry connection</button></div>}
         {capabilities.error && connected && <div className="connection-notice"><ErrorNotice error={capabilities.error} /><button className="text-button" onClick={() => void capabilities.refetch()} disabled={capabilities.isFetching}>Retry capabilities</button></div>}
-        {activeStage !== 0 && activeStage !== 12 && <WorkspaceJourney key={`journey-${workflowProjectId}`} stage={activeStage} projectId={workflowProjectId}
-          historyState={!workflowProjectId ? 'unselected' : jobs.isError ? 'unavailable' : jobs.isPending ? 'loading' : 'ready'}
-          inspection={selectedJob}
-          onTrain={startTrainingOnDataset} />}
         <div className="dataset-view" hidden={activeStage !== 0}>
           <div className="section-tabs"><nav className="dataset-tab-buttons" aria-label="Dataset views"><button type="button" className={`section-tab${datasetView === 'sources' ? ' active' : ''}`} aria-pressed={datasetView === 'sources'} onClick={() => setDatasetView('sources')}>My datasets</button><button type="button" className={`section-tab${datasetView === 'inspection' ? ' active' : ''}`} aria-pressed={datasetView === 'inspection'} disabled={!selectedJob} onClick={() => setDatasetView('inspection')}>Inspection{sortedJobs.length > 0 && <span className="tab-count">{sortedJobs.length}</span>}</button></nav></div>
           <div className="content-grid source-grid" hidden={datasetView !== 'sources'}>
