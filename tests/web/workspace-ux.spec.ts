@@ -231,7 +231,7 @@ test('missing history stays visible in the run list and cannot enable metadata-o
   state.jobs[0].result.snapshot = null;
   await page.reload();
   await page.getByRole('button', { name: /^Inspection/ }).click();
-  await expect(page.getByRole('heading', { name: 'Dataset inspection', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Explore dataset', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Train on this dataset', exact: true })).toHaveCount(0);
   expect(mutations).toEqual([]);
 });

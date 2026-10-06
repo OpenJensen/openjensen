@@ -140,6 +140,7 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
         [`/api/v1/projects/${projectId}/jobs`]: jobs,
         [`/api/v1/projects/${projectId}/artifacts`]: artifacts,
         '/api/v1/jobs/dataset/episodes': { repo_id: 'fixture/robot', revision, episodes: [], total_episodes: 10, offset: 0, limit: 6, warnings: [] },
+        '/api/v1/datasets': [],
         '/api/v1/policy-options': {
           runtimes: [...extraRuntimes, ...(exportMode && exportMode !== 'unconfigured' ? [{ id: 'act-cpu', label: 'Local CPU export', provider: 'local', execution: 'native', device: 'cpu', enabled: true, training: false, act_export: true, export_only: true, engine_evaluation: false, run: false, simulation: false }] : []), { id: 'skypilot-gcp-A100', label: 'A100', accelerator: 'A100', execution: 'skypilot', provider: 'gcp', device: 'cuda', enabled: true, training: true, simulation: false, training_model_ids: localDataset ? ['smolvla', 'act'] : ['smolvla'] }],
           compute: { local: { enabled: false, label: 'Local' }, gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 } },
@@ -217,19 +218,19 @@ test('new fine-tuning is a separate view with bold catalog memory budgets and a 
   const setup = page.getByRole('navigation', { name: 'Training setup' });
   await expect(setup).toBeVisible();
   await setup.getByRole('button', { name: 'Model', exact: true }).click();
-  const budget = (model: string) => page.getByRole('radio', { name: model, exact: true }).locator('..').locator('.training-model-memory strong');
+  const budget = (model: string) => page.getByRole('checkbox', { name: model, exact: true }).locator('..').locator('.training-model-memory strong');
   await expect(budget('SmolVLA')).toHaveText('16 GB+');
   await expect(budget('π₀.₅')).toHaveText('40 GB+');
   await expect(budget('OpenVLA')).toHaveText('GPU budget not verified');
   expect(await budget('SmolVLA').evaluate(element => Number(getComputedStyle(element).fontWeight))).toBeGreaterThanOrEqual(700);
-  await page.getByRole('radio', { name: 'SmolVLA', exact: true }).locator('..').click();
+  await chooseOnlyModel(page, 'SmolVLA');
   await setup.getByRole('button', { name: 'Compute', exact: true }).click();
-  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
   await page.getByRole('spinbutton', { name: 'Batch size', exact: true }).fill('3');
   await page.getByRole('button', { name: 'Back to jobs', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
   await setup.getByRole('button', { name: 'Compute', exact: true }).click();
-  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
   await expect(page.getByRole('spinbutton', { name: 'Batch size', exact: true })).toHaveValue('3');
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Fine-tuning jobs', exact: true })).toBeVisible();
@@ -245,10 +246,10 @@ test('empty history offers an explicit new job and repeated dataset shortcuts op
   await expect(page.getByRole('navigation', { name: 'Training setup' })).toHaveCount(0);
   for (let attempt = 0; attempt < 2; attempt += 1) {
     await page.getByRole('button', { name: 'Dataset', exact: true }).click();
-    await page.getByRole('button', { name: /^Inspection/ }).click();
+    await page.getByRole('button', { name: 'Explore dataset', exact: true }).click();
     await page.getByRole('button', { name: 'Train on this dataset', exact: true }).click();
     await expect(page.getByRole('navigation', { name: 'Training setup' })).toBeVisible();
-    await expect(page.getByRole('radio', { name: 'fixture/robot', exact: true })).toBeChecked();
+    await expect(page.getByRole('checkbox', { name: 'fixture/robot', exact: true })).toBeChecked();
     await page.getByRole('button', { name: 'Back to jobs', exact: true }).click();
   }
   expect(submitted).toEqual([]);
@@ -258,14 +259,14 @@ test('empty history offers an explicit new job and repeated dataset shortcuts op
 test('local training copies open the jobs-first wizard and retain native model admission', async ({ page }) => {
   const { submitted, unexpected } = await workspace(page, 'local-snapshot', false);
   await page.getByRole('button', { name: 'Dataset', exact: true }).click();
-  await page.getByRole('button', { name: /^Inspection/ }).click();
+  await page.getByRole('button', { name: 'Explore dataset', exact: true }).click();
   await page.getByRole('button', { name: 'Train on this dataset', exact: true }).click();
-  await expect(page.getByRole('radio', { name: 'Local dataset', exact: true })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'Local dataset', exact: true })).toBeChecked();
   const setup = page.getByRole('navigation', { name: 'Training setup' });
   await setup.getByRole('button', { name: 'Model', exact: true }).click();
-  await page.getByRole('radio', { name: 'SmolVLA', exact: true }).locator('..').click();
+  await chooseOnlyModel(page, 'SmolVLA');
   await expect(page.getByText('Local snapshots currently support native LeRobot models, including ACT.')).toBeVisible();
-  await page.getByRole('radio', { name: 'ACT', exact: true }).locator('..').click();
+  await chooseOnlyModel(page, 'ACT');
   await setup.getByRole('button', { name: 'Compute', exact: true }).click();
   await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
@@ -278,11 +279,11 @@ test('local training copies open the jobs-first wizard and retain native model a
 test('metadata-only local inspections cannot enter the training creation flow', async ({ page }) => {
   const { submitted, unexpected } = await workspace(page, 'local-unprepared', false);
   await page.getByRole('button', { name: 'Dataset', exact: true }).click();
-  await page.getByRole('button', { name: /^Inspection/ }).click();
+  await page.getByRole('button', { name: 'Explore dataset', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Train on this dataset', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
-  await expect(page.getByRole('radio', { name: 'Local dataset', exact: true })).toBeDisabled();
+  await expect(page.getByRole('checkbox', { name: 'Local dataset', exact: true })).toBeDisabled();
   await expect(page.getByText('Prepare an immutable training copy when importing this local dataset.')).toBeVisible();
   expect(submitted).toEqual([]);
   expect(unexpected).toEqual([]);
@@ -377,7 +378,7 @@ test('failed runs retain evidence and resume the original recipe from their chec
   await expect(monitor.getByRole('button', { name: 'Cancel run' })).toHaveCount(0);
   await expect(monitor.getByRole('progressbar')).toHaveAttribute('value', '25');
   await monitor.getByRole('button', { name: 'Resume from checkpoint' }).click();
-  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
   await expect(page.getByText('Original recipe preserved.')).toBeVisible();
   await page.getByRole('button', { name: 'Resume fine-tuning', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
@@ -409,15 +410,15 @@ test('submits explicit reproducible training settings supported by the worker', 
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
   await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Model', exact: true }).click();
   const models = page.getByRole('group', { name: 'Base model', exact: true });
-  if (!await models.locator('input:checked').count()) await models.getByRole('radio', { name: 'SmolVLA', exact: true }).locator('..').click();
+  if (!await models.locator('input:checked').count()) await chooseOnlyModel(page, 'SmolVLA');
   await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Compute', exact: true }).click();
-  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
   await page.getByLabel('Steps', { exact: true }).fill('200');
   await page.getByLabel('Batch size', { exact: true }).fill('8');
-  await page.getByLabel('Random seed', { exact: false }).fill('7');
+  await page.getByLabel('Random seed', { exact: true }).fill('7');
   await page.getByLabel('Learning rate', { exact: true }).fill('0.0002');
-  await page.getByLabel('Gradient accumulation', { exact: false }).fill('2');
-  await page.getByLabel('Validation fraction', { exact: false }).fill('0.3');
+  await page.getByLabel('Gradient accumulation', { exact: true }).fill('2');
+  await page.getByLabel('Validation fraction', { exact: true }).fill('0.3');
   await page.getByLabel('Validate every (steps)', { exact: true }).fill('20');
   await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
@@ -588,7 +589,7 @@ async function newTraining(page: Page) {
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
   await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Model', exact: true }).click();
   const models = page.getByRole('group', { name: 'Base model', exact: true });
-  if (!await models.locator('input:checked').count()) await models.getByRole('radio', { name: 'SmolVLA', exact: true }).locator('..').click();
+  if (!await models.locator('input:checked').count()) await chooseOnlyModel(page, 'SmolVLA');
   await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Compute', exact: true }).click();
   return page.getByRole('button', { name: 'Start fine-tuning', exact: true });
 }
@@ -1411,9 +1412,9 @@ async function temporalTraining(page: Page, model = 'ACT', accumulationCatalog: 
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
   const setup = page.getByRole('navigation', { name: 'Training setup' });
   await setup.getByRole('button', { name: 'Model', exact: true }).click();
-  await page.getByRole('radio', { name: model, exact: true }).locator('..').click();
+  await chooseOnlyModel(page, model);
   await setup.getByRole('button', { name: 'Compute', exact: true }).click();
-  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
   return { ...state, setup };
 }
 
@@ -1421,8 +1422,7 @@ for (const model of ['ACT', 'SmolVLA']) {
   test(`training horizons submit independent ${model} action timing with exact dataset identity`, async ({ page }, testInfo) => {
     const state = await temporalTraining(page, model);
     const timing = page.getByRole('group', { name: 'Action timing', exact: true });
-    await expect(timing).toContainText(model === 'ACT' ? '100 actions' : '50 actions');
-    await timing.getByRole('checkbox', { name: 'Customize action horizons' }).check();
+    await expect(timing.getByRole('spinbutton', { name: 'Prediction horizon', exact: true })).toHaveValue(model === 'ACT' ? '100' : '50');
     await timing.getByRole('spinbutton', { name: 'Prediction horizon', exact: true }).fill('24');
     await timing.getByRole('spinbutton', { name: 'Execution horizon', exact: true }).fill('8');
     await expect(page.getByRole('region', { name: 'Training recipe review' })).toContainText('Predict 24 · execute 8');
@@ -1441,7 +1441,6 @@ for (const model of ['ACT', 'SmolVLA']) {
 test('training horizons reject invalid order and bounds before any POST', async ({ page }) => {
   const state = await temporalTraining(page);
   const timing = page.getByRole('group', { name: 'Action timing', exact: true });
-  await timing.getByRole('checkbox', { name: 'Customize action horizons' }).check();
   const prediction = timing.getByRole('spinbutton', { name: 'Prediction horizon', exact: true });
   const execution = timing.getByRole('spinbutton', { name: 'Execution horizon', exact: true });
   const submit = page.getByRole('button', { name: 'Start fine-tuning', exact: true });
@@ -1458,18 +1457,16 @@ test('training horizons reject invalid order and bounds before any POST', async 
 test('training horizons keep model drafts separate and omit unsupported family overrides', async ({ page }) => {
   const state = await temporalTraining(page);
   const timing = page.getByRole('group', { name: 'Action timing', exact: true });
-  await timing.getByRole('checkbox', { name: 'Customize action horizons' }).check();
   await timing.getByRole('spinbutton', { name: 'Prediction horizon', exact: true }).fill('12');
   await timing.getByRole('spinbutton', { name: 'Execution horizon', exact: true }).fill('4');
   async function choose(model: string) {
     await state.setup.getByRole('button', { name: 'Model', exact: true }).click();
-    await page.getByRole('radio', { name: model, exact: true }).locator('..').click();
+    await chooseOnlyModel(page, model);
     await state.setup.getByRole('button', { name: 'Compute', exact: true }).click();
-    await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+    await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
   }
   await choose('SmolVLA');
-  await expect(timing.getByRole('checkbox')).not.toBeChecked();
-  await expect(timing).toContainText('50 actions');
+  await expect(timing.getByRole('spinbutton', { name: 'Prediction horizon', exact: true })).toHaveValue('50');
   await choose('ACT');
   await expect(timing.getByRole('spinbutton', { name: 'Prediction horizon', exact: true })).toHaveValue('12');
   await expect(timing.getByRole('spinbutton', { name: 'Execution horizon', exact: true })).toHaveValue('4');
@@ -1485,7 +1482,7 @@ test('training horizons leave checkpoint resume unchanged and show recorded timi
   const state = await workspace(page, 'failed');
   state.job.request.training = { ...state.job.request.training, prediction_horizon: 24, execution_horizon: 6 };
   await state.monitor.getByRole('button', { name: 'Resume from checkpoint' }).click();
-  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
   await expect(page.getByText('Original recipe preserved.', { exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Training recipe review' })).toContainText('Checkpoint-owned timing');
   await expect(page.getByRole('checkbox', { name: 'Customize action horizons' })).toHaveCount(0);
@@ -1496,12 +1493,10 @@ test('training horizons leave checkpoint resume unchanged and show recorded timi
 
 test('training horizons keep uncustomized recipes compatible with the prior form', async ({ page }) => {
   const state = await temporalTraining(page);
-  const customize = page.getByRole('checkbox', { name: 'Customize action horizons' });
-  await expect(customize).not.toBeChecked();
-  await customize.check();
+  await expect(page.getByRole('checkbox', { name: 'Customize action horizons' })).toHaveCount(0);
   await page.getByRole('spinbutton', { name: 'Prediction horizon', exact: true }).fill('24');
   await page.getByRole('spinbutton', { name: 'Execution horizon', exact: true }).fill('8');
-  await customize.uncheck();
+  await page.getByRole('button', { name: 'Reset settings', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Training recipe review' })).toContainText('Predict 100 · execute 100 · default');
   await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
   await expect.poll(() => state.submitted.length).toBe(1);
@@ -1644,14 +1639,15 @@ for (const [model, method] of [['ACT', 'full'], ['SmolVLA', 'lora'], ['SmolVLA',
     await state.setup.getByRole('button', { name: 'Model', exact: true }).click();
     await page.getByRole('group', { name: 'Training method', exact: true }).getByRole('radio', { name: 'QLoRA', exact: true }).check();
     await state.setup.getByRole('button', { name: 'Compute', exact: true }).click();
-    await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+    await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
   }
   await page.getByLabel('Steps', { exact: true }).fill('20');
   await page.getByLabel('Batch size', { exact: true }).fill('3');
   await page.getByLabel('Gradient accumulation', { exact: true }).fill('4');
-  await expect(page.getByText('Nominal effective batch: 12 examples (3 × 4 × 1 device). Short final windows contain fewer examples.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Help for Gradient accumulation', exact: true }).focus();
+  await expect(page.getByRole('tooltip').filter({ hasText: 'Nominal effective batch: 12' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Training recipe review', exact: true })).toContainText('20 optimizer updates');
-  await expect(page.getByRole('region', { name: 'Training recipe review', exact: true })).toContainText('checkpoint/validation cadence count completed optimizer updates');
+  await expect(page.getByRole('region', { name: 'Training recipe review', exact: true })).not.toContainText('checkpoint/validation cadence count completed optimizer updates');
   expect(state.submitted).toEqual([]);
   await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
   await expect.poll(() => state.submitted.length).toBe(1);
@@ -1677,16 +1673,16 @@ test('switching to another model keeps accumulation visible and blocked until an
   const state = await temporalTraining(page);
   await page.getByLabel('Gradient accumulation', { exact: true }).fill('3');
   await state.setup.getByRole('button', { name: 'Model', exact: true }).click();
-  await page.getByRole('radio', { name: 'π₀.₅', exact: true }).locator('..').click();
+  await chooseOnlyModel(page, 'π₀.₅');
   await state.setup.getByRole('button', { name: 'Compute', exact: true }).click();
-  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
   await expect(page.getByLabel('Gradient accumulation', { exact: true })).toHaveValue('3');
   await expect(page.getByLabel('Gradient accumulation', { exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Start fine-tuning', exact: true })).toBeDisabled();
   await state.setup.getByRole('button', { name: 'Model', exact: true }).click();
-  await page.getByRole('radio', { name: 'ACT', exact: true }).locator('..').click();
+  await chooseOnlyModel(page, 'ACT');
   await state.setup.getByRole('button', { name: 'Compute', exact: true }).click();
-  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
   await expect(page.getByLabel('Gradient accumulation', { exact: true })).toHaveValue('3');
   await expect(page.getByLabel('Gradient accumulation', { exact: true })).toBeEnabled();
   expect(state.submitted).toEqual([]);
@@ -1696,7 +1692,7 @@ test('accumulation capability never rewrites an exact checkpoint resume recipe',
   const state = await workspace(page, 'failed', true, undefined, 'missing');
   state.job.request.training.gradient_accumulation_steps = 4;
   await state.monitor.getByRole('button', { name: 'Resume from checkpoint' }).click();
-  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
   await expect(page.getByText('Original recipe preserved.', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Gradient accumulation', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Use accumulation 1', exact: true })).toHaveCount(0);
@@ -1718,4 +1714,69 @@ test('accumulation predicate requires exact model method runtime and complete ca
   expect(gradientAccumulationAvailable(smol, 'worker', 'lora')).toBe(true);
   expect(gradientAccumulationAvailable(smol, 'worker', 'qlora')).toBe(true);
   expect(gradientAccumulationAvailable(smol, 'worker', 'full')).toBe(false);
+});
+
+async function chooseOnlyModel(page: Page, name: string) {
+ const group = page.getByRole('group', { name: 'Base model', exact: true });
+ const checked = group.locator('input:checked');
+ for (const input of await checked.all()) if (await input.getAttribute('aria-label') !== name) await input.uncheck();
+ await group.getByRole('checkbox', { name, exact: true }).check();
+}
+
+test('selects two datasets and two models as independent GPU jobs with pinned recipes', async ({page}, testInfo) => {
+ const state = await temporalTraining(page, 'ACT');
+ const dataset = state.jobs.find(item => item.id === 'dataset')!;
+ const data = {...dataset, id:'dataset-two', result:{...dataset.result, repo_id:'fixture/second', revision:'c'.repeat(40)}};
+ await page.route(`**/api/v1/projects/${projectId}/jobs`, route => route.fulfill({json:[dataset, data]}));
+ await state.setup.getByRole('button', {name:'Dataset',exact:true}).click();
+ await page.getByRole('checkbox',{name:'fixture/second',exact:true}).check();
+ await state.setup.getByRole('button',{name:'Model',exact:true}).click();
+ await page.getByRole('checkbox',{name:'SmolVLA',exact:true}).check();
+ await state.setup.getByRole('button',{name:'Compute',exact:true}).click();
+ await page.route(`**/api/v1/projects/${projectId}/training-plan`, route => {
+   const requests=route.request().postDataJSON();
+   expect(requests).toHaveLength(2);
+   return route.fulfill({json:{valid:true,jobs:2,gpus_per_job:1}});
+ });
+ await expect(page.getByRole('region',{name:'Training recipe review'})).toContainText('≈');
+ await noOverflow(page);
+ await page.screenshot({path:testInfo.outputPath('multiple-model-recipe.png'),fullPage:true});
+ await page.getByRole('button',{name:'Start 2 training jobs',exact:true}).click();
+ await expect.poll(() => state.submitted.length).toBe(2);
+ expect(new Set(state.submitted.map(item => item.training.model_id)).size).toBe(2);
+ for(const body of state.submitted) {
+   expect(body.dataset_job_ids).toEqual(['dataset','dataset-two']);
+   expect(body.dataset_camera_mappings['dataset-two']).toEqual({'observation.images.front':'observation.images.front'});
+   expect(body.runtime_id).toBe('all-models-a100');
+ }
+});
+
+test('an interrupted multi-model plan reloads without POST and retries its saved recipe and keys', async ({page}) => {
+ const state = await temporalTraining(page, 'ACT');
+ await state.setup.getByRole('button',{name:'Model',exact:true}).click();
+ await page.getByRole('checkbox',{name:'SmolVLA',exact:true}).check();
+ await state.setup.getByRole('button',{name:'Compute',exact:true}).click();
+ await page.route(`**/api/v1/projects/${projectId}/training-plan`, route => route.fulfill({json:{valid:true,jobs:2,gpus_per_job:1}}));
+ const sent: {key:string;body:Record<string,any>}[] = [];
+ let failed = false;
+ await page.route(`**/api/v1/projects/${projectId}/policy-jobs`, async route => {
+   const key=route.request().headers()['idempotency-key'], body=route.request().postDataJSON();
+   sent.push({key,body});
+   if(!failed) { failed=true; await route.abort(); return; }
+   await route.fallback();
+ });
+ await page.getByRole('button',{name:'Start 2 training jobs',exact:true}).click();
+ await expect.poll(() => sent.length).toBe(1);
+ await expect(page.getByRole('region',{name:'Multi-model submission recovery'})).toBeVisible();
+ await page.reload();
+ await page.getByRole('button',{name:'Fine-tune',exact:true}).click();
+ expect(sent).toHaveLength(1);
+ const recovery=page.getByRole('region',{name:'Multi-model submission recovery'});
+ await recovery.getByRole('button',{name:'Check saved jobs'}).click();
+ await expect(recovery.getByRole('button',{name:'Continue saved plan'})).toBeEnabled();
+ await recovery.getByRole('button',{name:'Continue saved plan'}).click();
+ await expect.poll(() => sent.length).toBe(3);
+ expect(sent[1]).toEqual(sent[0]);
+ expect(sent[2].key).not.toBe(sent[0].key);
+ await expect(recovery).toHaveCount(0);
 });
