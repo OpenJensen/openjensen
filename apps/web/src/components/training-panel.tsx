@@ -1095,7 +1095,7 @@ export function TrainingPanel({
                 <div className="training-saved-recipe"><p>Original recipe preserved.</p><p>{checkpointTiming(originalTraining)}</p><p>Resume loads the saved architecture and processors. Start a new run to request different horizons.</p></div>
               ) : (
                 <>
-                <div className="training-settings-actions"><button type="button" className="text-button" disabled={busy} onClick={() => { setRecipe({ ...defaults }); setModelBatchSizes({}); setTemporalDrafts({}); }}>Reset settings</button></div>
+                <div className="training-settings-actions"><button type="button" className="text-button" disabled={busy} onClick={() => { setRecipe({ ...defaults, batchSize: model?.id === "smolvla" ? defaults.batchSize : model?.id === "psi0" ? 2 : 4 }); setModelBatchSizes({}); setTemporalDrafts({}); }}>Reset settings</button></div>
                 <div className="training-fields">
                   <label>
                     Steps
@@ -1172,11 +1172,10 @@ export function TrainingPanel({
                 {timing && <fieldset className="training-temporal" aria-describedby="training-timing-help">
                   <legend>Action timing</legend>
                   <p id="training-timing-help">Prediction is how many future actions the model learns together. Execution is how many are used before the next observation.</p>
-                  <label className="training-temporal-toggle"><input type="checkbox" checked={timing.enabled} disabled={busy} onChange={event => updateTiming({ enabled: event.target.checked })} />Customize action horizons</label>
-                  {timing.enabled ? <div className="training-temporal-fields">
-                    <label htmlFor="training-prediction">Prediction horizon<input id="training-prediction" aria-label="Prediction horizon" type="number" min="1" max="1024" step="1" value={timing.prediction} disabled={busy} aria-invalid={!!timingIssue} aria-describedby="training-timing-help training-prediction-help" onChange={event => updateTiming({ prediction: Number(event.target.value) })} /><small id="training-prediction-help">Actions predicted together</small></label>
-                    <label htmlFor="training-execution">Execution horizon<input id="training-execution" aria-label="Execution horizon" type="number" min="1" max={timing.prediction >= 1 ? timing.prediction : 1024} step="1" value={timing.execution} disabled={busy} aria-invalid={!!timingIssue} aria-describedby="training-timing-help training-execution-help" onChange={event => updateTiming({ execution: Number(event.target.value) })} /><small id="training-execution-help">Actions used before observing again</small></label>
-                  </div> : <p className="training-temporal-default">Model default: predict and execute {defaultTemporal(timingFamily!).prediction} actions.</p>}
+                  <div className="training-temporal-fields">
+                    <label htmlFor="training-prediction">Prediction horizon<input id="training-prediction" aria-label="Prediction horizon" type="number" min="1" max="1024" step="1" value={effectiveTiming!.prediction} disabled={busy} aria-invalid={!!timingIssue} aria-describedby="training-timing-help training-prediction-help" onChange={event => updateTiming({ enabled: true, prediction: Number(event.target.value) })} /><small id="training-prediction-help">Actions predicted together</small></label>
+                    <label htmlFor="training-execution">Execution horizon<input id="training-execution" aria-label="Execution horizon" type="number" min="1" max={effectiveTiming!.prediction >= 1 ? effectiveTiming!.prediction : 1024} step="1" value={effectiveTiming!.execution} disabled={busy} aria-invalid={!!timingIssue} aria-describedby="training-timing-help training-execution-help" onChange={event => updateTiming({ enabled: true, execution: Number(event.target.value) })} /><small id="training-execution-help">Actions used before observing again</small></label>
+                  </div>
                   {timingIssue && <p className="error-notice" role="alert">{timingIssue}</p>}
                   <p className="training-temporal-note">One observation at a time, using consecutive frames. New runs only; existing checkpoints are not reshaped. These settings do not establish a safe robot control rate.</p>
                 </fieldset>}
