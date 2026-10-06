@@ -24,6 +24,7 @@ import { trainingReceipt } from "@/lib/training-submission";
 import { submissionOf, useDurableSubmission } from "@/lib/durable-submission";
 import { type PolicyJobAttempt } from "@/lib/policy-job-attempt";
 import { checkpointTiming, defaultTemporal, restoreTemporal, temporalFamily, temporalIssue, temporalRecipe, type TemporalDrafts } from "@/lib/training-temporal";
+import { useTrainingBatch } from "@/lib/training-batch";
 import { TrainingHelp } from "./training-help";
 import "./training-panel.css";
 
@@ -204,6 +205,8 @@ export function TrainingPanel({
   const [datasetId, setDatasetId] = useState(startNew?.datasetId ?? preferredDatasetId ?? "");
   const [extraDatasetIds, setExtraDatasetIds] = useState<string[]>([]);
   const [cameraMappings, setCameraMappings] = useState<Record<string, Record<string, string>>>({});
+  const [modelIds, setModelIds] = useState<string[]>([]);
+  const batch = useTrainingBatch(projectId);
   const [cameraSelections, setCameraSelections] = useState<
     Record<string, string[]>
   >({});
@@ -444,6 +447,9 @@ export function TrainingPanel({
         ? models.find((item) => item.id === "smolvla")
         : undefined))
     : models.find((item) => item.id === modelId);
+  const selectedModels = resumeId ? model ? [model] : [] : models.filter(item => (modelIds.length ? modelIds : model ? [model.id] : []).includes(item.id));
+  const methodFor = (item: TrainingModel) => item.methods.includes(method) ? method : item.methods.includes(options.data?.default_training_method ?? "") ? options.data!.default_training_method : item.methods[0];
+  const batchFor = (item: TrainingModel) => item.id === model?.id ? recipe.batchSize : modelBatchSizes[item.id] ?? (item.id === "smolvla" ? 64 : item.id === "psi0" ? 2 : 4);
   const timingFamily = temporalFamily(model?.id);
   const timing = timingFamily ? temporalDrafts[timingFamily] ?? defaultTemporal(timingFamily) : null;
   const timingIssue = !resumeId && timing ? temporalIssue(timing) : null;
@@ -462,13 +468,10 @@ export function TrainingPanel({
     availableMethods[0]?.id;
   const supportsModel = (item: (typeof runtimes)[number]) =>
     item.enabled !== false &&
-    !!model && hasAdapter(item, model);
-  const gpuChoices = ["L4", "T4", "A100"].filter(gpu => !model?.minimum_gpu_memory_gb ||
-    (runtimes.find(item => item.execution === "skypilot" && item.accelerator === gpu)?.gpu_memory_mib
-      ? runtimeMemory(runtimes.find(item => item.execution === "skypilot" && item.accelerator === gpu)!)
-      : cloudGpuMemory[gpu]) >= model.minimum_gpu_memory_gb);
+    selectedModels.length > 0 && selectedModels.every(model => hasAdapter(item, model));
+  const gpuChoices = ["L4", "T4", "A100"].filter(gpu => selectedModels.every(item => !item.minimum_gpu_memory_gb || cloudGpuMemory[gpu] >= item.minimum_gpu_memory_gb));
   const defaultGpu = options.data?.compute?.gcp?.default_gpu ?? "A100";
-  const localRuntimes = options.data?.compute?.local.enabled
+  const localRuntimes = selectedModels.length <= 1 && options.data?.compute?.local.enabled
     ? runtimes.filter((item) => (item.provider ?? "local") === "local" && item.training && item.device === "cuda" && item.enabled !== false &&
       (!model?.minimum_gpu_memory_gb || runtimeMemory(item) >= model.minimum_gpu_memory_gb))
     : [];
@@ -504,7 +507,8 @@ export function TrainingPanel({
         )
       : [String(originalTraining?.camera_key ?? "observation.images.front")]
     : selectedCameras;
-  const modelIssue = !resumeId ? modelDatasetIssue(model, activeDataset?.result, activeCameraKeys) : null;
+  const modelIssue = !resumeId ? selectedModels.map(item => modelDatasetIssue(item, activeDataset?.result, activeCameraKeys) || (selectedDatasets.length > 1 && item.backend === "psi0" ? "Psi-Zero does not support combined datasets." : null)).find(Boolean) ?? null : null;
+  const batchIssue = selectedModels.length > 1 && selectedModels.some(item => recipe.gradientAccumulation !== 1 && !gradientAccumulationAvailable(item, runtime?.id, methodFor(item))) ? "At least one selected model requires gradient accumulation 1." : null;
   const episodes = useQuery({
     queryKey: ["training-episodes", activeDataset?.id],
     queryFn: () => api.episodes(activeDataset!.id, 0, 6),
@@ -549,6 +553,10 @@ export function TrainingPanel({
       ? "Browser recovery storage is unavailable. Restore it before starting a job."
     : attempt
       ? "Inspect the earlier training request before submitting another job."
+    : !batch.hydrated || !batch.available || batch.journal
+      ? "Resolve the saved multi-model plan before starting another job."
+    : modelIds.some(id => !models.some(item => item.id === id))
+      ? "A selected model is unavailable. Select your models again."
     : !loaded || options.isPending || jobs.isPending
       ? "Loading…"
       : options.isError || jobs.isError
@@ -563,8 +571,8 @@ export function TrainingPanel({
                 ? "Select at least one camera."
                 : !model || !activeMethod
                   ? "Select a model and method."
-                  : mixtureIssue || modelIssue
-                    ? mixtureIssue || modelIssue
+                  : mixtureIssue || modelIssue || batchIssue
+                    ? mixtureIssue || modelIssue || batchIssue
                   : !runtime
                     ? "Choose an available GPU."
                     : accumulationIssue
@@ -617,6 +625,13 @@ export function TrainingPanel({
       }
       const generation = selectionGeneration.current;
       setHistoryReviewed(null);
+      if (!resumeId && selectedModels.length > 1) {
+        const shared = Object.fromEntries(Object.entries(body.training!).filter(([key]) => !["prediction_horizon", "execution_horizon", "observation_history", "frame_stride", "chunk_size", "checkpoint_subdirectory"].includes(key)));
+        const bodies = selectedModels.map(item => ({ ...body, training_method: methodFor(item), training: { ...shared, model_id: item.model_id, model_revision: item.model_revision, ...(item.checkpoint_subdirectory ? { checkpoint_subdirectory: item.checkpoint_subdirectory } : {}), batch_size: batchFor(item), ...temporalRecipe(temporalFamily(item.id), temporalFamily(item.id) ? temporalDrafts[temporalFamily(item.id)!] ?? defaultTemporal(temporalFamily(item.id)!) : null) } }));
+        const accepted = await batch.start(bodies);
+        if (mounted.current && generation === selectionGeneration.current) showHistory();
+        return accepted[0] ?? null;
+      }
       const job = await submission.submit(body, validateReceipt);
       // The shared hook retains the verified ACK before fallible storage cleanup.
       // A late completion may add history, but never replace a manual selection.
@@ -637,10 +652,10 @@ export function TrainingPanel({
     ? trainingRuns.find((job) => job.id === mutation.data?.id) ?? mutation.data
     : undefined;
   const runStarting = !!submittedRun && isActive(submittedRun);
-  const busy = mutation.isPending || submission.busy || runStarting || !!attempt;
+  const busy = batch.busy || !!batch.journal || mutation.isPending || submission.busy || runStarting || !!attempt;
   const startLabel = mutation.isPending ? "Starting…"
     : runStarting ? (submittedRun?.stage === "preparing" || submittedRun?.status === "queued" ? "Preparing GPU…" : "Training…")
-    : resumeId ? "Resume fine-tuning" : "Start fine-tuning";
+    : resumeId ? "Resume fine-tuning" : selectedModels.length > 1 ? `Start ${selectedModels.length} training jobs` : "Start fine-tuning";
   const summaryModel = resumeId
     ? String(model?.label ?? originalTraining?.model_id ?? "Original model")
     : (model?.label ?? "Choose a model");
@@ -695,6 +710,7 @@ export function TrainingPanel({
 
   return (
     <>
+      {(batch.journal || batch.error) && <section className="warning-box training-recovery" aria-label="Multi-model submission recovery"><h2>Independent training jobs</h2>{batch.error && <p role="alert">{batch.error}</p>}{batch.journal && <><ul>{batch.journal.entries.map(entry => <li key={entry.key}>{String(entry.body.training?.model_id)} · {entry.state}{entry.job && <button type="button" className="text-button" onClick={() => chooseRun(entry.job!.id)}>Open job</button>}</li>)}</ul><div className="training-recovery-actions"><button type="button" className="secondary-button" disabled={batch.busy} onClick={() => void batch.check()}>Check saved jobs</button><button type="button" className="secondary-button" disabled={batch.busy || !batch.canContinue} onClick={() => void batch.continue()}>Continue saved plan</button><button type="button" className="text-button" disabled={batch.busy || batch.journal.entries.some(item => ["pending", "unknown"].includes(item.state))} onClick={batch.dismiss}>Dismiss unsubmitted recipes</button></div></>}</section>}
       {(attempt || (!submission.available && submission.error)) && <section className="warning-box training-recovery" aria-label="Training submission recovery">
         <h2>{attempt?.state === 'pending' && !submission.error ? 'Starting training' : 'Check your training request'}</h2>
         <p role={attempt?.state === 'pending' ? 'status' : 'alert'}>{submission.error || attempt?.message}</p>
@@ -1002,15 +1018,19 @@ export function TrainingPanel({
                   title={`${item.model_id} · ${item.description}`}
                 >
                   <input
-                    type="radio"
+                    type="checkbox"
                     name="training-model"
                     aria-label={item.label}
-                    checked={displayedModelId === item.id}
+                    checked={selectedModels.some(model => model.id === item.id)}
                     disabled={!!resumeId || busy || !modelSupported(item)}
                     onChange={() => {
                       if (displayedModelId) setModelBatchSizes(previous => ({ ...previous, [displayedModelId]: recipe.batchSize }));
-                      setRecipe(previous => ({ ...previous, batchSize: modelBatchSizes[item.id] ?? (item.id === "smolvla" ? defaults.batchSize : item.id === "psi0" ? 2 : 4) }));
-                      setModelId(item.id);
+                      const selected = selectedModels.map(model => model.id);
+                      const next = selected.includes(item.id) ? selected.filter(id => id !== item.id) : [...selected, item.id];
+                      const editId = next.includes(item.id) ? item.id : next[0] ?? "";
+                      setRecipe(previous => ({ ...previous, batchSize: modelBatchSizes[editId] ?? (editId === "smolvla" ? defaults.batchSize : editId === "psi0" ? 2 : 4) }));
+                      setModelIds(next);
+                      setModelId(next.includes(item.id) ? item.id : next[0] ?? "");
                       setRuntimeId("");
                       mutation.reset();
                     }}
@@ -1046,7 +1066,8 @@ export function TrainingPanel({
                 );
               })}
             </fieldset>
-            {model && <div className="training-method-choices">
+            {selectedModels.length > 1 && <p className="training-selection-note">{selectedModels.length} independent jobs · one cloud GPU per model</p>}
+            {model && <div className="training-method-choices"><div className="training-edit-model">{selectedModels.length > 1 && selectedModels.map(item => <button type="button" key={item.id} aria-pressed={model.id === item.id} className="secondary-button" disabled={busy} onClick={() => { setModelBatchSizes(previous => ({ ...previous, [model.id]: recipe.batchSize })); setModelId(item.id); setRecipe(previous => ({ ...previous, batchSize: batchFor(item) })); }}>Settings for {item.label}</button>)}</div>
               <WorkflowChoiceGrid name="training-method" label="Training method" value={activeMethod ?? ""} disabled={!!resumeId || busy}
                 options={availableMethods.map(item => ({ value: item.id, label: item.label,
                   meta: item.id === "lora" ? "Adapters" : item.id === "qlora" ? "Quantized adapters" : item.id === "full" ? "Trainable weights" : undefined,
@@ -1083,11 +1104,11 @@ export function TrainingPanel({
 
             </div>
             <section className="training-recipe-review" aria-label="Training recipe review">
-              <div className="training-recipe-title"><span>{resumeId ? 'Resume saved training' : 'Your training recipe'}</span><strong>{summaryModel} · {activeMethod?.toUpperCase()}</strong></div>
+              <div className="training-recipe-title"><span>{resumeId ? 'Resume saved training' : 'Your training recipe'}</span><strong>{selectedModels.length > 1 && !resumeId ? `${selectedModels.length} independent jobs · 1 GPU each` : `${summaryModel} · ${activeMethod?.toUpperCase()}`}</strong></div>
               <dl>
                 <div><dt>Dataset</dt><dd>{activeDataset?.result.repo_id ?? (activeDataset ? 'Local training snapshot' : 'Choose a dataset')}{activeDataset && <small className="training-recipe-identity" title={activeDataset.result.snapshot?.manifest_sha256 ?? activeDataset.result.revision}>{activeDataset.result.snapshot ? 'Snapshot' : 'Pinned revision'} {(activeDataset.result.snapshot?.manifest_sha256 ?? activeDataset.result.revision).slice(0, 12)}</small>}</dd></div>
                 <div><dt>Observations</dt><dd>{activeCameraKeys.length} {activeCameraKeys.length === 1 ? 'camera' : 'cameras'}{activeDataset ? ` · ${number(resumeId ? activeDataset.result.total_episodes : selectedDatasets.reduce((sum, item) => sum + item.result.total_episodes, 0))} episodes` : ''}</dd></div>
-                <div><dt>Training budget</dt><dd>{resumeId ? 'Saved recipe' : trainingBudget}</dd></div>
+                <div><dt>Training budget</dt><dd>{resumeId ? 'Saved recipe' : selectedModels.length > 1 ? `${number(recipe.trainingSteps)} steps per job` : trainingBudget}</dd></div>
                 <div><dt>Action timing</dt><dd>{resumeId ? checkpointTiming(originalTraining) : effectiveTiming ? `Predict ${effectiveTiming.prediction} · execute ${effectiveTiming.execution}${timing?.enabled ? '' : ' · default'}` : 'Model-owned settings'}</dd></div>
               </dl>
               {!resumeId && selectedDatasets.length > 1 && <div className="training-mixture-recipe"><strong>Combined training set</strong>{selectedDatasets.map(item => <span key={item.id}>{item.result.repo_id} · {item.result.revision.slice(0, 12)}</span>)}</div>}
