@@ -1213,41 +1213,6 @@ export function TrainingPanel({
           </section>
         )}
 
-        {!!resumeOptions.length && (
-          <details className="training-disclosure training-resume">
-            <summary>Resume a previous run</summary>
-            <fieldset className="training-resume-options">
-              <legend className="visually-hidden">Resume checkpoint</legend>
-              <label>
-                <input
-                  type="radio"
-                  name="resume-checkpoint"
-                  checked={!resumeId}
-                  disabled={busy}
-                  onChange={() => setResumeId("")}
-                />
-                Start a new run
-              </label>
-              {resumeOptions.map((item) => (
-                <label key={item.id}>
-                  <input
-                    type="radio"
-                    name="resume-checkpoint"
-                    aria-label={item.label}
-                    checked={resumeId === item.id}
-                    disabled={busy}
-                    onChange={() => {
-                      setResumeId(item.id);
-                      setStep(2);
-                      mutation.reset();
-                    }}
-                  />
-                  {item.label}
-                </label>
-              ))}
-            </fieldset>
-          </details>
-        )}
         {submission.error && submission.available && !attempt && <p className="error-notice" role="alert">{submission.error}</p>}
         {[options.error, jobs.error, artifacts.error, mutation.error]
           .filter(Boolean)
