@@ -36,6 +36,14 @@ def load_data(cfg, splits=None):
     from huggingface_hub import snapshot_download
     from lerobot.datasets.lerobot_dataset import LeRobotDataset, LeRobotDatasetMetadata
 
+    if cfg.dataset_sources:
+        from .dataset_mixture import load_mixture
+        def component(source, root, episodes, evaluation):
+            return LeRobotDataset(source["repo_id"], root=root, revision=source["revision"], episodes=episodes, delta_timestamps={"action": action_timestamps(cfg.temporal["prediction_horizon"], source["fps"])}, video_backend="pyav")
+        result = load_mixture(cfg.dataset_sources, cfg.selected_camera_keys, cfg.validation_fraction, cfg.seed, component)
+        if splits is not None and splits != result[3]:
+            raise ValueError("Checkpoint split differs from the combined pinned recipe")
+        return result
     # SHA-addressed snapshot avoids LeRobot's repo-id-only cache silently reusing another revision.
     root = snapshot_download(cfg.dataset_id, repo_type="dataset", revision=cfg.dataset_revision)
     meta = LeRobotDatasetMetadata(cfg.dataset_id, root=root, revision=cfg.dataset_revision)

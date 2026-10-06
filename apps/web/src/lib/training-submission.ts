@@ -23,6 +23,7 @@ export function trainingReceipt(value: unknown, project: string, originalBody: u
   // Resume restores checkpoint-owned dataset/method/recipe. A new run must
   // retain every submitted setting; only the catalog-owned subdirectory may resolve.
   if (!body.resume_job_id && !body.artifact_id) {
+    for (const key of ['dataset_job_ids', 'dataset_camera_mappings'] as const) if (!sameJson(request[key] ?? null, body[key] ?? null)) throw new UncertainPolicyJob();
     if (request.dataset_job_id !== body.dataset_job_id || request.training_method !== body.training_method || !record(request.training) || !body.training) throw new UncertainPolicyJob();
     for (const [key, expected] of Object.entries(body.training)) {
       if (key !== 'checkpoint_subdirectory' && !sameJson(request.training[key], expected)) throw new UncertainPolicyJob();

@@ -106,6 +106,10 @@ def resolve_recipe(job):
             "dataset_revision": data["revision"],
         }
     )
+    from .dataset_mixture import bind_sources
+    sources = bind_sources(job, cameras)
+    if sources:
+        recipe["dataset_sources"] = sources
     if data.get("source") == "local":
         bind_local_recipe(job, recipe)
     return recipe, profile
@@ -194,6 +198,9 @@ def main():
             recipe = json.loads((resume / "recipe.json").read_text())
             profile = native_profile_for_recipe(recipe)
             data = job["dataset"]
+            from .dataset_mixture import bind_sources
+            if recipe.get("dataset_sources") != bind_sources(job, recipe["camera_keys"]):
+                raise ValueError("Resume must preserve every combined dataset and camera mapping")
             identity = dict(recipe)
             if data.get("source") == "local":
                 bind_local_recipe(job, identity)

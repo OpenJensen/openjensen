@@ -208,6 +208,8 @@ class PolicyRequest(StrictRecord):
     source_id: str | None = Field(default=None, max_length=100, pattern=r"^[\w-]+$")
     artifact_id: str | None = None
     dataset_job_id: str | None = None
+    dataset_job_ids: list[str] | None = Field(default=None, min_length=2, max_length=8)
+    dataset_camera_mappings: dict[str, dict[str, str]] | None = None
     resume_job_id: str | None = None
     training_method: str = Field(default="lora", pattern=r"^[\w-]+$")
     training: dict[str, Any] | None = None
@@ -240,6 +242,15 @@ class PolicyRequest(StrictRecord):
 
     @model_validator(mode="after")
     def input_contract(self):
+        if self.dataset_job_ids is not None:
+            if (self.operation != "policy.finetune"
+                or self.dataset_job_ids[0] != self.dataset_job_id
+                or len(set(self.dataset_job_ids)) != len(self.dataset_job_ids)):
+                raise ValueError("Combined datasets require fine-tuning and a unique ordered selection")
+            if set(self.dataset_camera_mappings or {}) != set(self.dataset_job_ids):
+                raise ValueError("Provide camera mappings for every selected dataset")
+        elif self.dataset_camera_mappings is not None:
+            raise ValueError("Camera mappings require a combined dataset selection")
         if self.native_replay is not None:
             if (
                 self.operation != "policy.run"
