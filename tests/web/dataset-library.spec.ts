@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 
 test.describe.configure({timeout:60000});
 async function ownProject(page:Page,name:string) {
@@ -117,3 +117,46 @@ test('dashboard reports a failed local probe instead of successful resource chec
   await expect(page.getByRole('region',{name:'Resources & connections'}).getByRole('alert')).toContainText('Local GPU probe failed');
   await expect(page.getByText('Resource checks completed.',{exact:false})).toHaveCount(0);
 });
+
+for (const available of [true, false]) {
+  test(`saved Hub cards ${available ? 'show a paused frame at the inspected episode boundary' : 'explain unavailable previews'}`, async ({page}, testInfo) => {
+    const project='preview-project', time='2026-10-06T08:00:00Z', job='preview-inspection';
+    const profile={source:'huggingface',repo_id:'our/camera-data',revision:'a'.repeat(40),format:'lerobot_v3',total_episodes:8,total_frames:80,fps:5,features:{'observation.images.front':{dtype:'video',shape:[64,64,3]}},warnings:[],inspection_scope:'metadata_only'};
+    const media=resolve(testInfo.outputPath('preview.mp4'));
+    if (available) {
+      await mkdir(resolve(testInfo.outputPath('.')),{recursive:true});
+      const result=spawnSync('ffmpeg',['-v','error','-f','lavfi','-i','color=c=blue:s=64x64:r=5:d=3','-c:v','libx264','-pix_fmt','yuv420p','-movflags','+faststart',media],{encoding:'utf8'});
+      expect(result.status,result.stderr).toBe(0);
+      await page.route('**/api/v1/fixture-preview.mp4', async route=>route.fulfill({contentType:'video/mp4',body:await readFile(media)}));
+    }
+    const episode={episode_index:7,frame_count:5,duration_seconds:1,tasks:['Pick up']};
+    const requests:string[]=[];
+    await page.route('**/api/v1/**', route=>{
+      const path=new URL(route.request().url()).pathname;
+      if(path==='/api/v1/fixture-preview.mp4')return route.fallback();
+      if(path==='/api/v1/projects')return route.fulfill({json:[{id:project,name:'Preview library',created_at:time}]});
+      if(path.endsWith('/jobs'))return route.fulfill({json:[]});
+      if(path==='/api/v1/datasets')return route.fulfill({json:[{id:`inspection:${job}`,job_id:job,project_id:project,name:profile.repo_id,source:'huggingface',status:'ready',created_at:time,profile}]});
+      if(path.endsWith('/episodes')) {
+        requests.push(route.request().url());
+        return available ? route.fulfill({json:{repo_id:profile.repo_id,revision:profile.revision,total_episodes:8,offset:0,limit:1,episodes:[episode],warnings:[]}}) : route.fulfill({status:422,json:{detail:'Preview unavailable'}});
+      }
+      if(path.endsWith('/episodes/7'))return route.fulfill({json:{...episode,repo_id:profile.repo_id,revision:profile.revision,cameras:[{key:'observation.images.front',url:'/api/v1/fixture-preview.mp4',start_seconds:1,end_seconds:2,width:64,height:64,fps:5}],samples:[],warnings:[],action_names:[],state_names:[]}});
+      return route.continue();
+    });
+    await page.goto('/');
+    const card=page.getByRole('button',{name:'Open dataset our/camera-data'});
+    if (available) {
+      const video=card.locator('video');
+      await expect(video).toHaveClass('loaded');
+      expect(await video.evaluate(node=>(node as HTMLVideoElement).currentTime)).toBeCloseTo(1,1);
+      expect(await video.evaluate(node=>(node as HTMLVideoElement).paused)).toBe(true);
+      await expect(card.getByText('Preview unavailable',{exact:true})).toHaveCount(0);
+    } else await expect(card.getByText('Preview unavailable',{exact:true})).toBeVisible();
+    expect(requests).toHaveLength(1);
+    expect(new URL(requests[0]).searchParams.get('limit')).toBe('1');
+    await page.getByRole('button',{name:'Fine-tune',exact:true}).click();
+    await page.getByRole('button',{name:'Dataset',exact:true}).click();
+    expect(requests).toHaveLength(1);
+  });
+}
