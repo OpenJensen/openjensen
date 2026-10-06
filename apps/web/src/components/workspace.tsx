@@ -29,7 +29,7 @@ import { AugmentationPanel } from '@/components/augmentation-panel';
 import { Icon } from '@/components/icon';
 import { WorkspaceShell } from '@/components/workspace-shell';
 import { ProjectMenu } from '@/components/project-menu';
-import { DatasetExplorer } from '@/components/dataset-explorer';
+import { DatasetExplorer, FeatureChips } from '@/components/dataset-explorer';
 import { DatasetLibrary, DatasetLabeling, LocalDatasetImport } from '@/components/dataset-library';
 import { WorkspaceDashboard } from '@/components/workspace-dashboard';
 import { type LibraryDataset } from '@/lib/dataset-library';
@@ -103,7 +103,7 @@ function DatasetResult({ profile, history }: { profile: DatasetProfile; history?
       <div><dt>fps</dt><dd>{profile.fps}</dd></div>
       <div><dt className="visually-hidden">Robot type</dt><dd>{profile.robot_type || 'Unknown robot'}</dd></div>
     </dl>
-      <h4>Source details</h4>
+      <FeatureChips features={profile.features} /><h4>Source details</h4>
       {profile.warnings.length > 0 && <div className="warning-box"><h4>Inspection notes</h4><ul>{profile.warnings.map((warning, index) => <li key={`${index}-${warning}`}>{warning}</li>)}</ul></div>}
       <dl>
         <div><dt>Source</dt><dd>{profile.repo_id || 'Local metadata snapshot'}</dd></div>
