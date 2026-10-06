@@ -24,6 +24,7 @@ import { trainingReceipt } from "@/lib/training-submission";
 import { submissionOf, useDurableSubmission } from "@/lib/durable-submission";
 import { type PolicyJobAttempt } from "@/lib/policy-job-attempt";
 import { checkpointTiming, defaultTemporal, restoreTemporal, temporalFamily, temporalIssue, temporalRecipe, type TemporalDrafts } from "@/lib/training-temporal";
+import { TrainingHelp } from "./training-help";
 import "./training-panel.css";
 
 const steps = ["Dataset", "Model", "Compute"];
@@ -1098,8 +1099,8 @@ export function TrainingPanel({
                 <div className="training-settings-actions"><button type="button" className="text-button" disabled={busy} onClick={() => { setRecipe({ ...defaults, batchSize: model?.id === "smolvla" ? defaults.batchSize : model?.id === "psi0" ? 2 : 4 }); setModelBatchSizes({}); setTemporalDrafts({}); }}>Reset settings</button></div>
                 <div className="training-fields">
                   <label>
-                    Steps
-                    <input
+                    <span className="training-field-name">Steps<TrainingHelp label="Steps">Completed optimizer updates when supported; learning-rate schedules and save/validation intervals use the same step count.</TrainingHelp></span>
+                    <input aria-label="Steps"
                       type="number"
                       min="2"
                       step="1"
@@ -1111,8 +1112,8 @@ export function TrainingPanel({
                     />
                   </label>
                   <label>
-                    Batch size
-                    <input
+                    <span className="training-field-name">Batch size<TrainingHelp label="Batch size">Examples in each GPU microbatch. Larger batches generally need more GPU memory.</TrainingHelp></span>
+                    <input aria-label="Batch size"
                       type="number"
                       min="1"
                       step="1"
@@ -1124,60 +1125,50 @@ export function TrainingPanel({
                     />
                   </label>
                   <label>
-                    Learning rate
-                    <input type="number" min="0.000000001" step="any" value={recipe.learningRate} disabled={busy}
+                    <span className="training-field-name">Learning rate<TrainingHelp label="Learning rate">Size of each optimizer update.</TrainingHelp></span>
+                    <input aria-label="Learning rate" type="number" min="0.000000001" step="any" value={recipe.learningRate} disabled={busy}
                       onChange={event => update("learningRate", Number(event.target.value))} />
                   </label>
                   <label>
-                    Gradient accumulation
+                    <span className="training-field-name">Gradient accumulation<TrainingHelp label="Gradient accumulation" id="training-accumulation-help">{accumulationSupported ? `Nominal effective batch: ${number(nominalBatch)} examples (${recipe.batchSize} × ${recipe.gradientAccumulation} × 1 GPU). Short final windows contain fewer examples.` : "Only accumulation 1 is available for this model, method and compute target."}</TrainingHelp></span>
                     <input type="number" min="1" step="1" aria-label="Gradient accumulation" aria-describedby="training-accumulation-help" value={recipe.gradientAccumulation} disabled={busy || !accumulationSupported}
                       onChange={event => update("gradientAccumulation", Number(event.target.value))} />
-                    <small id="training-accumulation-help">{accumulationSupported
-                      ? positiveInteger(recipe.batchSize) && positiveInteger(recipe.gradientAccumulation) && Number.isSafeInteger(nominalBatch)
-                        ? `Nominal effective batch: ${number(nominalBatch)} examples (${recipe.batchSize} × ${recipe.gradientAccumulation} × 1 device). Short final windows contain fewer examples.`
-                        : "Microbatches per completed optimizer update on one device."
-                      : "Only accumulation 1 is available: this model, method and compute target do not advertise complete accumulation support."}</small>
+
                   </label>
                   <label>
-                    Random seed
-                    <input type="number" min="0" max="2147483647" step="1" value={recipe.seed} disabled={busy}
+                    <span className="training-field-name">Random seed<TrainingHelp label="Random seed">Controls episode splitting and training randomness.</TrainingHelp></span>
+                    <input aria-label="Random seed" type="number" min="0" max="2147483647" step="1" value={recipe.seed} disabled={busy}
                       onChange={event => update("seed", Number(event.target.value))} />
-                    <small>Controls episode split and training randomness.</small>
+
                   </label>
                   <label>
-                    Validation fraction
-                    <input type="number" min="0.01" max="0.99" step="any" value={recipe.validationFraction} disabled={busy}
+                    <span className="training-field-name">Validation fraction<TrainingHelp label="Validation fraction">Fraction of separate episodes held out for validation.</TrainingHelp></span>
+                    <input aria-label="Validation fraction" type="number" min="0.01" max="0.99" step="any" value={recipe.validationFraction} disabled={busy}
                       onChange={event => update("validationFraction", Number(event.target.value))} />
-                    <small>Separate episodes reserved for validation.</small>
+
                   </label>
                   <label>
-                    Validate every (steps)
-                    <input type="number" min="1" step="1" value={recipe.evalEvery} disabled={busy}
+                    <span className="training-field-name">Validate every (steps)<TrainingHelp label="Validate every (steps)">Optimizer updates between held-out validation checks.</TrainingHelp></span>
+                    <input aria-label="Validate every (steps)" type="number" min="1" step="1" value={recipe.evalEvery} disabled={busy}
                       onChange={event => update("evalEvery", Number(event.target.value))} />
                   </label>
                   <label>
-                  Checkpoints
+                  <span className="training-field-name">Checkpoints<TrainingHelp label="Checkpoints" id="training-checkpoint-help">{`Every ${number(checkpointInterval)} steps, including the final checkpoint. ${runtime?.execution === "skypilot" ? "Saved on Google Cloud." : "Saved on the selected compute storage."}`}</TrainingHelp></span>
                     <input type="number" min="1" step="1" value={checkpointCount} disabled={busy}
                       aria-label="Checkpoints"
                       aria-describedby="training-checkpoint-help"
                       onChange={(event) => setRecipe(previous => ({ ...previous, checkpointCount: Number(event.target.value), checkpointIntervalOverride: null }))} />
-                    {positiveInteger(checkpointInterval) && <small id="training-checkpoint-help">
-                      {recipe.checkpointIntervalOverride
-                        ? `Saved preference: every ${number(checkpointInterval)} steps. Change this count to replace it.`
-                        : `Every ${number(checkpointInterval)} steps. Final checkpoint included.`}
-                      {runtime?.execution === "skypilot" ? " Saved on Google Cloud; only checkpoint details are kept on the application host." : " Saved on the selected compute storage."}
-                    </small>}
+
                   </label>
                 </div>
                 {timing && <fieldset className="training-temporal" aria-describedby="training-timing-help">
-                  <legend>Action timing</legend>
-                  <p id="training-timing-help">Prediction is how many future actions the model learns together. Execution is how many are used before the next observation.</p>
+                  <legend><span className="training-field-name">Action timing<TrainingHelp label="Action timing" id="training-timing-help">Prediction is how many future actions the model learns together. Execution is how many are used before the next observation. One observation at a time, using consecutive frames; existing checkpoints are not reshaped. This does not establish a safe robot control rate.</TrainingHelp></span></legend>
                   <div className="training-temporal-fields">
-                    <label htmlFor="training-prediction">Prediction horizon<input id="training-prediction" aria-label="Prediction horizon" type="number" min="1" max="1024" step="1" value={effectiveTiming!.prediction} disabled={busy} aria-invalid={!!timingIssue} aria-describedby="training-timing-help training-prediction-help" onChange={event => updateTiming({ enabled: true, prediction: Number(event.target.value) })} /><small id="training-prediction-help">Actions predicted together</small></label>
-                    <label htmlFor="training-execution">Execution horizon<input id="training-execution" aria-label="Execution horizon" type="number" min="1" max={effectiveTiming!.prediction >= 1 ? effectiveTiming!.prediction : 1024} step="1" value={effectiveTiming!.execution} disabled={busy} aria-invalid={!!timingIssue} aria-describedby="training-timing-help training-execution-help" onChange={event => updateTiming({ enabled: true, execution: Number(event.target.value) })} /><small id="training-execution-help">Actions used before observing again</small></label>
+                    <label htmlFor="training-prediction"><span className="training-field-name">Prediction horizon<TrainingHelp label="Prediction horizon" id="training-prediction-help">Actions predicted together.</TrainingHelp></span><input id="training-prediction" aria-label="Prediction horizon" type="number" min="1" max="1024" step="1" value={effectiveTiming!.prediction} disabled={busy} aria-invalid={!!timingIssue} aria-describedby="training-timing-help training-prediction-help" onChange={event => updateTiming({ enabled: true, prediction: Number(event.target.value) })} /></label>
+                    <label htmlFor="training-execution"><span className="training-field-name">Execution horizon<TrainingHelp label="Execution horizon" id="training-execution-help">Actions used before observing again.</TrainingHelp></span><input id="training-execution" aria-label="Execution horizon" type="number" min="1" max={effectiveTiming!.prediction >= 1 ? effectiveTiming!.prediction : 1024} step="1" value={effectiveTiming!.execution} disabled={busy} aria-invalid={!!timingIssue} aria-describedby="training-timing-help training-execution-help" onChange={event => updateTiming({ enabled: true, execution: Number(event.target.value) })} /></label>
                   </div>
                   {timingIssue && <p className="error-notice" role="alert">{timingIssue}</p>}
-                  <p className="training-temporal-note">One observation at a time, using consecutive frames. New runs only; existing checkpoints are not reshaped. These settings do not establish a safe robot control rate.</p>
+
                 </fieldset>}
                 {!timing && <p className="training-native-timing">Action timing follows this model’s native configuration.</p>}
                 </>

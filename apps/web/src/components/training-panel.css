@@ -192,3 +192,9 @@
 .training-recovery-note { font-size: 12px; line-height: 1.65; }
 
 .training-settings-actions { display: flex; justify-content: flex-end; margin: 4px 0 14px; }
+
+.training-field-name { display: flex; align-items: center; gap: 8px; }
+.training-help { position: relative; display: inline-flex; align-items: center; }
+.training-help > button { display: grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--muted); background: var(--surface); font-size: 11px; line-height: 1; cursor: help; }
+.training-help > [role=tooltip] { display: none; position: absolute; z-index: 20; bottom: calc(100% + 8px); left: -20px; width: min(260px, 65vw); padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--ink); box-shadow: 0 6px 20px #10294420; font-size: 12px; font-weight: 400; line-height: 1.6; }
+.training-help:hover > [role=tooltip], .training-help:focus-within > [role=tooltip] { display: block; }
