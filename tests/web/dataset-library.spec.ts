@@ -163,7 +163,17 @@ for (const available of [true, false]) {
     expect(new URL(requests[0]).searchParams.get('limit')).toBe('1');
     await page.getByRole('button',{name:'Fine-tune',exact:true}).click();
     await page.getByRole('button',{name:'Dataset',exact:true}).click();
-    if (available) expect(requests).toHaveLength(1);
+    if (available) {
+      expect(requests).toHaveLength(1);
+      await expect(card.locator('video')).toHaveClass('loaded');
+      await expect.poll(()=>card.locator('video').evaluate(node=>(node as HTMLVideoElement).currentTime)).toBeCloseTo(1,1);
+      await page.getByRole('searchbox',{name:'Search my datasets',exact:true}).fill('no matching dataset');
+      await expect(page.getByText('No matching datasets',{exact:true})).toBeVisible();
+      await page.getByRole('searchbox',{name:'Search my datasets',exact:true}).fill('');
+      await expect(card.locator('video')).toHaveClass('loaded');
+      await expect.poll(()=>card.locator('video').evaluate(node=>(node as HTMLVideoElement).currentTime)).toBeCloseTo(1,1);
+      expect(requests).toHaveLength(1);
+    }
     else await expect(card.getByText('Preview unavailable',{exact:true})).toBeVisible();
   });
 }
