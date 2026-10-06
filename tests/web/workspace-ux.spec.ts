@@ -149,7 +149,7 @@ async function journeyFixture(page: Page) {
   await page.route('**/api/v1/projects', route => route.fulfill({ json: [{ id: 'ux-review', name: 'Robot workspace', created_at: time }, { id: 'beta', name: 'Empty second project', created_at: time }] }));
   await page.route('**/api/v1/projects/*/jobs', async route => {
     if (state.gate) await state.gate;
-    return state.failed ? route.fulfill({ status: 503, json: { detail: 'Generated unavailable history' } }) : route.fulfill({ json: state.jobs }); // Includes foreign records to verify ownership filtering.
+    return state.failed ? route.fulfill({ status: 503, json: { detail: 'Generated unavailable history' } }) : route.fulfill({ json: state.jobs.filter(job => job.project_id === new URL(route.request().url()).pathname.split('/')[4]) });
   });
   await page.reload();
   await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'ux-review');
@@ -179,21 +179,17 @@ test('compact mobile navigation leaves useful stage content visible and every to
   expect(mutations).toEqual([]);
 });
 
-test('project activity is recorded execution history, isolated from foreign jobs and fresh model choices', async ({ page }) => {
+test('workflow pages keep their job history without the duplicate project activity panel', async ({ page }) => {
   const { mutations } = await journeyFixture(page);
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
-  const journey = page.getByRole('region', { name: 'Workflow context', exact: true });
-  await expect(journey.locator('summary')).toContainText('4 recorded jobs · 1 active');
-  await journey.locator('summary').click();
-  await expect(journey).toContainText('not a completion checklist');
-  await expect(journey.getByRole('button', { name: 'Review Dataset activity', exact: true })).toContainText('2 succeeded');
-  await expect(journey.getByRole('button', { name: 'Review Run activity', exact: true })).toContainText('1 stopped or failed');
-  await journey.getByRole('button', { name: 'Review Quantize activity', exact: true }).click();
+  await expect(page.getByText('Project activity', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Fine-tuning jobs', exact: true }).locator('[data-job-id="training-job"]')).toBeVisible();
+  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Your quantization models' }).getByRole('button', { pressed: true })).toHaveCount(0);
   await selectProject(page, 'beta');
-  await expect(journey.locator('summary')).toContainText('0 recorded jobs');
-  await expect(journey).not.toContainText('dataset-second');
-  await expect(journey).toContainText('Empty second project');
+  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Fine-tuning jobs', exact: true }).getByText('No fine-tuning jobs yet.')).toBeVisible();
+  await expect(page.locator('[data-job-id="training-job"]')).toHaveCount(0);
   expect(mutations).toEqual([]);
 });
 
@@ -211,35 +207,34 @@ test('the clean dataset page continues with the exact viewed inspection without 
   expect(mutations).toEqual([]);
 });
 
-test('missing history stays unknown and recovery restores context without enabling metadata-only training', async ({ page }) => {
+test('missing history stays visible in the run list and cannot enable metadata-only training', async ({ page }) => {
   const { state, mutations } = await journeyFixture(page);
   state.failed = true;
   await page.reload();
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
-  const journey = page.getByRole('region', { name: 'Workflow context', exact: true });
-  await expect(journey.getByRole('alert')).toContainText('unavailable');
-  await expect(journey.locator('summary')).toHaveCount(0);
-  await expect(journey.getByRole('button', { name: 'Continue with this dataset' })).toHaveCount(0);
+  const history = page.getByRole('region', { name: 'Fine-tuning jobs', exact: true });
+  await expect(history.getByRole('alert')).toContainText('Generated unavailable history');
+  await expect(history.getByText('No fine-tuning jobs yet.')).toHaveCount(0);
   state.failed = false;
   state.jobs = state.jobs.filter(job => job.id === 'dataset-first');
   state.jobs[0].result.snapshot = null;
-  await journey.getByRole('button', { name: 'Refresh project activity' }).click();
-  await expect(journey.locator('summary')).toContainText('1 recorded job');
-  await expect(journey.getByRole('button', { name: 'Continue with this dataset' })).toHaveCount(0);
+  await page.reload();
+  await page.getByRole('button', { name: /^Inspection/ }).click();
+  await expect(page.getByRole('heading', { name: 'Dataset inspection', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Train on this dataset', exact: true })).toHaveCount(0);
   expect(mutations).toEqual([]);
 });
 
-test('loading activity does not report zero jobs or offer a stale dataset continuation', async ({ page }) => {
+test('loading history does not claim the run list is empty', async ({ page }) => {
   const { state, mutations } = await journeyFixture(page);
   let release!: () => void;
   state.gate = new Promise<void>(resolve => { release = resolve; });
   await page.reload();
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
-  const journey = page.getByRole('region', { name: 'Workflow context', exact: true });
-  await expect(journey.getByRole('status')).toHaveText('Loading project activity…');
-  await expect(journey.locator('summary')).toHaveCount(0);
-  await expect(journey.getByRole('button', { name: 'Continue with this dataset' })).toHaveCount(0);
+  const history = page.getByRole('region', { name: 'Fine-tuning jobs', exact: true });
+  await expect(history.getByRole('status')).toHaveText('Loading jobs…');
+  await expect(history.getByText('No fine-tuning jobs yet.')).toHaveCount(0);
   release(); state.gate = null;
-  await expect(journey.locator('summary')).toContainText('4 recorded jobs');
+  await expect(history.locator('[data-job-id="training-job"]')).toBeVisible();
   expect(mutations).toEqual([]);
 });
