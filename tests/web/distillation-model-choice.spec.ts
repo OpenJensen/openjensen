@@ -13,7 +13,7 @@ function savedJob(id: string, project = 'alpha', adapter = 'act-act-v1') {
 const overview = (page: Page) => page.getByRole('region', { name: 'Distillation workspace', exact: true });
 const act = (page: Page) => page.getByRole('button', { name: 'Choose Saved ACT teacher · teacher', exact: true });
 const panel = (page: Page) => page.getByRole('region', { name: 'ACT distillation', exact: true });
-const openDistill = (page: Page) => page.getByRole('navigation', { name: 'Policy lifecycle' }).getByRole('button', { name: 'Distill', exact: true }).click();
+const openDistill = (page: Page) => page.getByRole('navigation', { name: 'Policy lifecycle' }).getByRole('link', { name: 'Distill', exact: true }).click();
 
 async function fixture(page: Page, initialJobs: Record<string, any>[] = [inspectedDataset], workers: Record<string, unknown>[] = [worker]) {
   const state = { jobs: initialJobs, workers, mutations: [] as string[] };
