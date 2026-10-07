@@ -32,7 +32,9 @@ export function QuantizationPanel({ projectId, preferredArtifactId, preferredJob
     try {setRecovery({pending:!!storedAttempt('policy.quantize',projectId),unreadable:false});}
     catch {setRecovery({pending:false,unreadable:true});}
   },[projectId,cached.data]);
-  const history=(jobs.data??[]).filter(job=>quantizeJobMode(job,projectId)).sort((a,b)=>b.created_at.localeCompare(a.created_at)||a.id.localeCompare(b.id));
+  const ownArtifacts=(artifacts.data??[]).filter(item=>item.project_id===projectId);
+  const ownJobs=(jobs.data??[]).filter(item=>item.project_id===projectId);
+  const history=ownJobs.filter(job=>quantizeJobMode(job,projectId)).sort((a,b)=>b.created_at.localeCompare(a.created_at)||a.id.localeCompare(b.id));
   useEffect(()=>{
     if(handoffConsumed) return;
     if(preferredArtifactId && artifacts.isSuccess && !artifacts.isError) {
@@ -51,7 +53,7 @@ export function QuantizationPanel({ projectId, preferredArtifactId, preferredJob
   return <section aria-label="Quantization workspace">
     {(preferredArtifactId || preferredJobId) && !handoffConsumed && <p role={artifacts.isError || jobs.isError ? 'alert' : 'status'}>{artifacts.isPending || jobs.isPending ? 'Loading the selected model or job…' : 'The selected model or job is unavailable or unsupported. No replacement has been selected.'}<button className="text-link" onClick={back}>Back to jobs</button></p>}
     {view==='jobs' ? <JobHistory title="Quantization jobs" newLabel="Start a new quantization"
-      entries={history.map(job=>({id:job.id,title:[trainingRunModelLabel(job,[],artifacts.data??[],jobs.data??[])??'Policy',nativeQuantizationOf(job)?`INT${nativeQuantizationOf(job)!.bits}`:'GGUF'].join(' · '),subtitle:artifacts.data?.find(item=>item.project_id===projectId && 'artifact_id' in job.request && item.id===job.request.artifact_id)?.label,status:job.status,createdAt:job.created_at,progress:isActive(job)?job.stage??job.status:undefined}))}
+      entries={history.map(job=>({id:job.id,title:[trainingRunModelLabel(job,[],ownArtifacts,ownJobs)??'Policy',nativeQuantizationOf(job)?`INT${nativeQuantizationOf(job)!.bits}`:'GGUF'].join(' · '),subtitle:artifacts.data?.find(item=>item.project_id===projectId && 'artifact_id' in job.request && item.id===job.request.artifact_id)?.label,status:job.status,createdAt:job.created_at,progress:isActive(job)?job.stage??job.status:undefined}))}
       onNew={()=>{setHandoffConsumed(true);setView('new');}} onSelect={id=>{const job=history.find(item=>item.id===id)!;setHandoffConsumed(true);setEntry({mode:quantizeJobMode(job,projectId)!,jobId:id});}}
       loading={jobs.isPending && !!projectId} error={jobs.error} disabled={!projectId} emptyMessage={projectId?'No quantization jobs yet.':'Select a project to see its jobs.'}/>
       : <><div className="workflow-view-navigation"><button type="button" className="text-link" onClick={back}>← Back to jobs</button></div><ModelWorkflowPicker projectId={projectId} action="quantize" onLibrary={onLibrary} onSelect={artifact=>{const mode=quantizeModeFor(artifact);if(mode)setEntry({mode,artifactId:artifact.id});}}/></>}

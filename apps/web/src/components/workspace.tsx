@@ -294,6 +294,7 @@ function Workbench() {
     setActiveStage(1);
   }
   function selectProject(id: string) {
+    setDistillationModels({});setDistillTeachers({});
     setOpenQuantizationRun(null);
     setOpenDistillationRun(null);
     setSelectedModel(null);
