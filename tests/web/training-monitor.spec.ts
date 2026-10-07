@@ -1170,7 +1170,7 @@ test('ACT export preferred package stays within its owning project', async ({ pa
   await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
   await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toBeChecked();
   await selectProject(page, 'other-project');
-  await page.getByRole('button',{name:'Start a new distillation',exact:true}).click();
+  await page.getByRole('button',{name:'Start a new quantization',exact:true}).click();
   await expect(page.getByText('No saved models in this project yet')).toBeVisible();
   await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator('input:checked')).toHaveCount(0);
   await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toHaveCount(0);
