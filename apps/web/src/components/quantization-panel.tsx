@@ -16,8 +16,8 @@ import { WorkflowPanel } from './workflow-panel';
 
 /** One project-owned history for native packing and GGUF conversion. Adapters
  * keep their existing admission, cancellation and submission recovery logic. */
-export function QuantizationPanel({ projectId, preferredArtifactId, preferredJobId, onLibrary, onPrepare, onReplay, onPrepareSimulation, onModel }: {
-  projectId: string; preferredArtifactId?: string; preferredJobId?: string;
+export function QuantizationPanel({ projectId, preferredArtifactId, preferredMode, preferredJobId, onLibrary, onPrepare, onReplay, onPrepareSimulation, onModel }: {
+  projectId: string; preferredArtifactId?: string; preferredMode?: QuantizeMode; preferredJobId?: string;
   onLibrary: () => void; onPrepare: () => void; onReplay: (id: string) => void;
   onPrepareSimulation: (source: SimulationHandoff) => void; onModel: (id: string) => void;
 }) {
@@ -25,9 +25,9 @@ export function QuantizationPanel({ projectId, preferredArtifactId, preferredJob
   const artifacts = useQuery({queryKey:['artifacts',projectId],queryFn:()=>api.artifacts(projectId),enabled:!!projectId,retry:false,refetchInterval:3000});
   const cached = useQuery<PolicyJobAttempt>({queryKey:['native-quantization-attempt',projectId],queryFn:async()=>null,enabled:false,initialData:null,gcTime:Infinity});
   const [recovery,setRecovery] = useState({pending:false,unreadable:false});
-  const [entry,setEntry] = useState<{mode:QuantizeMode;artifactId?:string;jobId?:string} | null>(null);
+  const [entry,setEntry] = useState<{mode:QuantizeMode;artifactId?:string;jobId?:string} | null>(preferredArtifactId && preferredMode ? {mode:preferredMode,artifactId:preferredArtifactId} : null);
   const [view,setView] = useState<'jobs'|'new'>(preferredArtifactId ? 'new' : 'jobs');
-  const [handoffConsumed,setHandoffConsumed] = useState(false);
+  const [handoffConsumed,setHandoffConsumed] = useState(!!(preferredArtifactId && preferredMode));
   useEffect(()=>{
     try {setRecovery({pending:!!storedAttempt('policy.quantize',projectId),unreadable:false});}
     catch {setRecovery({pending:false,unreadable:true});}
@@ -56,7 +56,7 @@ export function QuantizationPanel({ projectId, preferredArtifactId, preferredJob
       entries={history.map(job=>({id:job.id,title:[trainingRunModelLabel(job,[],ownArtifacts,ownJobs)??'Policy',nativeQuantizationOf(job)?`INT${nativeQuantizationOf(job)!.bits}`:'GGUF'].join(' · '),subtitle:artifacts.data?.find(item=>item.project_id===projectId && 'artifact_id' in job.request && item.id===job.request.artifact_id)?.label,status:job.status,createdAt:job.created_at,progress:isActive(job)?job.stage??job.status:undefined}))}
       onNew={()=>{setHandoffConsumed(true);setView('new');}} onSelect={id=>{const job=history.find(item=>item.id===id)!;setHandoffConsumed(true);setEntry({mode:quantizeJobMode(job,projectId)!,jobId:id});}}
       loading={jobs.isPending && !!projectId} error={jobs.error} disabled={!projectId} emptyMessage={projectId?'No quantization jobs yet.':'Select a project to see its jobs.'}/>
-      : <><div className="workflow-view-navigation"><button type="button" className="text-link" onClick={back}>← Back to jobs</button></div><ModelWorkflowPicker projectId={projectId} action="quantize" onLibrary={onLibrary} onSelect={artifact=>{const mode=quantizeModeFor(artifact);if(mode)setEntry({mode,artifactId:artifact.id});}}/></>}
+      : <><div className="workflow-view-navigation"><button type="button" className="text-link" onClick={back}>← Back to jobs</button></div><ModelWorkflowPicker projectId={projectId} action="quantize" onLibrary={onLibrary} onSelect={artifact=>{const mode=quantizeModeFor(artifact);if(mode){setHandoffConsumed(true);setEntry({mode,artifactId:artifact.id});}}}/></>}
     {(cached.data || recovery.pending || recovery.unreadable) && <div className="warning-box" role={recovery.unreadable?'alert':'status'}><p>{recovery.unreadable?'Saved request status could not be read.':'A quantization request needs review.'}</p><button type="button" className="secondary-button" onClick={()=>{setHandoffConsumed(true);setEntry({mode:'native'});}}>Review request</button></div>}
   </section>;
 }
