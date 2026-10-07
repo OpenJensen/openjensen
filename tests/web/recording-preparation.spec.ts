@@ -195,7 +195,7 @@ test('generic Dataset recovers a recording key and Recording recovers a generic 
   const s = await fixture(page); s.lost = true; s.commitLost = true; await selectEpisodes(page); await submit(page).click(); await expect(checkSaved(page)).toBeEnabled();
   await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await page.getByRole('button', { name: 'Check saved request', exact: true }).click(); await expect(page.getByRole('button', { name: 'Check saved request', exact: true })).toHaveCount(0); expect(s.posts).toHaveLength(1);
   // A genuinely different generic request is only admitted after the first key was resolved.
-  await page.getByRole('button', { name: '← Back to library', exact: true }).click(); s.nextId = 'generic-intake'; await page.getByLabel('Dataset repository', { exact: true }).fill('owned/recorded'); await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click(); await expect.poll(() => s.posts.length).toBe(2);
+  await page.getByRole('button', { name: 'Library', exact: true }).click(); s.nextId = 'generic-intake'; await page.getByLabel('Dataset repository', { exact: true }).fill('owned/recorded'); await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click(); await expect.poll(() => s.posts.length).toBe(2);
   await expect(page.getByRole('button', { name: 'Check saved request', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Teaching', exact: true }).click(); await checkSaved(page).click(); await expect(panel(page).getByText(/Recovered dataset intake generic-intake/)).toBeVisible(); expect(s.posts).toHaveLength(2);
 });
