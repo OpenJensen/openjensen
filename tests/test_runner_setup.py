@@ -19,11 +19,23 @@ def test_gcp_reuses_browser_dependencies():
         for step in workflow["jobs"]["web"]["steps"]
         if "playwright install" in step.get("run", "")
     ]
-    assert len(installers) == 2
-    cached = next(step for step in installers if "--with-deps" not in step["run"])
-    hosted = next(step for step in installers if "--with-deps" in step["run"])
-    assert cached["if"] == "runner.environment == 'self-hosted' && runner.os == 'Linux'"
-    assert hosted["if"] == "runner.environment != 'self-hosted'"
+    # Three installers since the hosted lane grew a browser cache:
+    # 1. GCP: browsers ship in the image, runner script only registers.
+    # 2. Hosted cold cache: browsers + OS deps.
+    # 3. Hosted cache hit: OS deps only (browser binaries restored from cache).
+    assert len(installers) == 3
+    by_name = {step["name"]: step for step in installers}
+    gcp = by_name["Use preinstalled GCP browser dependencies"]
+    assert "--with-deps" not in gcp["run"]
+    assert gcp["if"] == "runner.environment == 'self-hosted' && runner.os == 'Linux'"
+    cold = by_name["Install hosted browser and OS dependencies (cold cache)"]
+    assert "--with-deps" in cold["run"]
+    assert "cache-hit != 'true'" in cold["if"]
+    assert "runner.environment != 'self-hosted'" in cold["if"]
+    deps_only = by_name["Install hosted OS dependencies only (browser restored from cache)"]
+    assert "--with-deps" not in deps_only["run"]
+    assert "install-deps" in deps_only["run"]
+    assert "cache-hit == 'true'" in deps_only["if"]
     video = next(
         step
         for step in workflow["jobs"]["web"]["steps"]

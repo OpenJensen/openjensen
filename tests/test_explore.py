@@ -27,23 +27,27 @@ SHA = "a" * 40
 CAMERA = "observation.images.wrist"
 
 
-@pytest.mark.asyncio
-async def test_cover_avoids_frames_and_video_probes_and_survives_restart(dataset, tmp_path):
-    job, _, calls, respond, _, _ = dataset
-    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
-        explorer = DatasetExplorer(client, cover_cache=tmp_path)
-        cover = await explorer.cover(job)
-        assert len(cover.cameras) == 1 and not cover.samples
-        assert not any(method == "HEAD" or "/data/" in url or url.endswith("mp4") for method, url in calls)
-        before = len(calls)
-        assert await explorer.cover(job) == cover
-        restarted = DatasetExplorer(client, cover_cache=tmp_path)
-        assert await restarted.cover(job) == cover
-        assert len(calls) == before
-        cache = next(tmp_path.glob("*.json"))
-        cache.write_text('{"repo_id":"wrong"}')
-        assert await DatasetExplorer(client, cover_cache=tmp_path).cover(job) == cover
-        assert len(calls) > before
+def test_cover_avoids_frames_and_video_probes_and_survives_restart(dataset, tmp_path):
+    async def check():
+        job, _, calls, respond, _, _ = dataset
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            explorer = DatasetExplorer(client, cover_cache=tmp_path)
+            cover = await explorer.cover(job)
+            assert len(cover.cameras) == 1 and not cover.samples
+            assert not any(
+                method == "HEAD" or "/data/" in url or url.endswith("mp4") for method, url in calls
+            )
+            before = len(calls)
+            assert await explorer.cover(job) == cover
+            restarted = DatasetExplorer(client, cover_cache=tmp_path)
+            assert await restarted.cover(job) == cover
+            assert len(calls) == before
+            cache = next(tmp_path.glob("*.json"))
+            cache.write_text('{"repo_id":"wrong"}')
+            assert await DatasetExplorer(client, cover_cache=tmp_path).cover(job) == cover
+            assert len(calls) > before
+
+    asyncio.run(check())
 
 
 def parquet(rows, *, row_group_size=None, repeat_column=None):
@@ -372,7 +376,9 @@ def test_preview_routes_validate_state_bounds_and_serialize_contract(
     monkeypatch.setattr(
         api,
         "DatasetExplorer",
-        lambda **kwargs: DatasetExplorer(httpx.AsyncClient(transport=httpx.MockTransport(respond)), **kwargs),
+        lambda **kwargs: DatasetExplorer(
+            httpx.AsyncClient(transport=httpx.MockTransport(respond)), **kwargs
+        ),
     )
     with TestClient(api.create_app(Settings(data_dir=tmp_path))) as client:
         base = "/api/v1/jobs"

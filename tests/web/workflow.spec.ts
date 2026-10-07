@@ -68,7 +68,11 @@ test('browser intake reads local metadata and preserves its limits after reload'
   await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
   const response = await created;
   expect(response.status()).toBe(202);
-  const submitted = await response.json();
+  const history = await request.get(`/api/v1/projects/${project.id}/jobs`);
+  expect(history.status()).toBe(200);
+  const receipts = await history.json();
+  expect(receipts).toHaveLength(1);
+  const submitted = receipts[0];
   const job = await waitForJob(request, submitted.id, 'succeeded');
   await expect(page.getByRole('heading', { name: 'Local dataset', exact: true })).toBeVisible();
   expect(job.result.inspection_scope).toBe('metadata_only');

@@ -15,6 +15,8 @@ async function ownProject(page:Page,name:string) {
 }
 
 test('open an imported two-view fixture, save labels, reopen it and reach the dashboard',async({page},testInfo)=>{
+  // Conversion and immutable-copy validation run real CPU subprocesses.
+  test.setTimeout(120_000);
   const project=await ownProject(page,`Label fixture ${testInfo.project.name}`);
   await expect(page.getByRole('heading',{name:'My datasets',exact:true})).toBeVisible();
   await expect(page.getByText('Example datasets',{exact:true})).toHaveCount(0);
@@ -28,7 +30,7 @@ test('open an imported two-view fixture, save labels, reopen it and reach the da
   const labels=page.getByRole('region',{name:'Dataset labeling'});
   await expect(labels.getByRole('heading',{name:'Robot labeling playground'})).toBeVisible();
   const image=labels.getByRole('img');
-  await expect(image).toBeVisible();
+  await expect(image).toBeVisible({timeout:30_000});
   await expect.poll(()=>image.evaluate(node=>(node as HTMLImageElement).complete&&(node as HTMLImageElement).naturalWidth>0)).toBe(true);
   const views=labels.locator('input[aria-label^="View name"]');
   await expect(views).toHaveCount(2);
@@ -48,7 +50,18 @@ test('open an imported two-view fixture, save labels, reopen it and reach the da
   await page.screenshot({path:testInfo.outputPath('dataset-labeling.png'),fullPage:true});
   await labels.getByRole('button',{name:'Inspect for training'}).click();
   await expect(page.getByRole('checkbox',{name:'Prepare immutable training copy'})).toBeChecked();
+  const submitted=page.waitForResponse(response=>response.url().endsWith(`/projects/${project.id}/intakes`)&&response.request().method()==='POST');
   await page.getByRole('button',{name:'Inspect dataset',exact:true}).click();
+  const response=await submitted;
+  expect(response.status()).toBe(202);
+  const history=await page.request.get(`/api/v1/projects/${project.id}/jobs`);
+  expect(history.status()).toBe(200);
+  const recorded=await history.json();
+  expect(recorded).toHaveLength(1);
+  expect(recorded[0].request).toMatchObject({library_id:response.request().postDataJSON().library_id,snapshot_for_training:true});
+  const completed=await waitForJob(page.request,recorded[0].id,'succeeded');
+  expect(completed.project_id).toBe(project.id);
+  expect(completed.result.inspection_scope).toBe('complete_snapshot');
   await expect(page.getByText(/Training copy verified/)).toBeVisible();
   await expect(page.getByRole('button',{name:'Train on this dataset'})).toBeEnabled();
   await page.getByRole('button',{name:'Dashboard',exact:true}).click();
@@ -73,7 +86,7 @@ test('native folder selection uploads files, detects records and converts for in
   await page.getByLabel('Frame rate (FPS)',{exact:true}).fill('6');
   await page.getByLabel('Task description',{exact:true}).fill('Move the block');
   await page.getByRole('button',{name:'Convert to LeRobot'}).click();
-  await expect(detected.getByText(/Ready to inspect/)).toBeVisible();
+  await expect(detected.getByText(/Ready to inspect/)).toBeVisible({timeout:30_000});
   await page.getByRole('button',{name:'Inspect dataset',exact:true}).click();
   await expect(page.getByRole('region',{name:'Dataset inspection',exact:true})).toBeVisible();
   await expect(page.getByRole('heading',{name:'Local dataset',exact:true})).toBeVisible();

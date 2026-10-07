@@ -84,19 +84,36 @@ def test_cors_preflight_keeps_current_allowed_headers(client):
 
 def test_multi_model_plan_validates_every_recipe_without_accepting_jobs(client, monkeypatch):
     from types import SimpleNamespace
+
     from vla_platform.lifecycle.service import Lifecycle
 
     project = client.post("/api/v1/projects", json={"name": "Training plan"}).json()["id"]
     checked = []
-    monkeypatch.setattr(Lifecycle, "runtime", lambda self, ident: SimpleNamespace(execution="skypilot"))
+    monkeypatch.setattr(
+        Lifecycle, "runtime", lambda self, ident: SimpleNamespace(execution="skypilot")
+    )
+
     async def validate(self, project_id, request):
         checked.append(request.training["model_id"])
         if request.training["model_id"] == "invalid":
             raise ValueError("Incompatible dataset")
+
     monkeypatch.setattr(Lifecycle, "validate", validate)
-    recipes = [{"operation": "policy.finetune", "runtime_id": "gpu", "dataset_job_id": "dataset", "training": {"model_id": model}} for model in ("first", "second")]
+    recipes = [
+        {
+            "operation": "policy.finetune",
+            "runtime_id": "gpu",
+            "dataset_job_id": "dataset",
+            "training": {"model_id": model},
+        }
+        for model in ("first", "second")
+    ]
     response = client.post(f"/api/v1/projects/{project}/training-plan", json=recipes)
-    assert response.status_code == 200 and response.json() == {"valid": True, "jobs": 2, "gpus_per_job": 1}
+    assert response.status_code == 200 and response.json() == {
+        "valid": True,
+        "jobs": 2,
+        "gpus_per_job": 1,
+    }
     assert checked == ["first", "second"]
     assert client.get(f"/api/v1/projects/{project}/jobs").json() == []
     recipes[-1]["training"]["model_id"] = "invalid"

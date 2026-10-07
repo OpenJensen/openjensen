@@ -87,6 +87,7 @@ test('clear admission failures stay actionable and missing workers never enable 
 });
 test('completed generated evidence has scoped metrics and missing report never implies quality', async ({ page }, testInfo) => {
   const state = await fixture(page); await prepare(page); await page.getByRole('checkbox', { name: 'This snapshot contains generated test observations.' }).check(); await page.getByRole('checkbox', { name: /I verified that/ }).check(); await submit(page).click();
+  await expect(page.getByRole('article', { name: 'Distillation job details' })).toHaveAttribute('data-job-id', 'student-001');
   const saved = state.jobs.find(item => item.id === 'student-001')!;
   saved.status = 'succeeded'; saved.stage = 'distilling'; saved.result = { artifacts: [{ ...teacher, id: 'student-001:distilled', job_id: 'student-001', label: 'ACT256 student', metadata: { architecture: 'act', recipe: 'act-action-distillation-v1' } }], reports: [{ operation: 'policy.distill', adapter: 'act-act-v1', teacher_artifact_id: teacher.id, dataset_job_id: 'data', steps: 100, fresh_reload_verified: true, quality_verified: false, calibration_verified: false, speedup_verified: false, task_success: null, dataset_kind: 'generated_fixture', student_weights_bytes: 55971416, teacher_inference_tensor_bytes: 136972568, trained_student: { validation: { teacher_normalized_l1: .33 }, final: { teacher_normalized_l1: .39 } } }] };
   await refresh(page); await expect(page.getByText('Generated observations · software verification only')).toBeVisible();

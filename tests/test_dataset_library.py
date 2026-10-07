@@ -115,11 +115,11 @@ for episode in range(2):
         settings={"fps": 10, "task": "Pick up block"},
     )
     assert result["episodes"] == 2 and result["frames"] == 6
-    verify = '''import pyarrow.parquet as p,sys
+    verify = """import pyarrow.parquet as p,sys
 r=p.read_table(sys.argv[1]).to_pylist()
 assert r[0]["action"]==[.25,.25]
 assert r[0]["observation.state"]==[.5,.5]
-'''
+"""
     subprocess.run(
         [str(reader_python()), "-I", "-c", verify, str(output / "data/chunk-000/file-000.parquet")],
         check=True,
@@ -207,11 +207,11 @@ def test_managed_intake_without_host_root_and_project_boundary(tmp_path):
 
 
 def test_hdf5_external_link_is_not_followed(tmp_path):
-    script = '''import h5py,sys
+    script = """import h5py,sys
 f=h5py.File(sys.argv[1],"w")
 f["secret"]=h5py.ExternalLink("/etc/passwd","/")
 f.close()
-'''
+"""
     subprocess.run(
         [str(reader_python()), "-I", "-c", script, str(tmp_path / "dataset.h5")], check=True
     )

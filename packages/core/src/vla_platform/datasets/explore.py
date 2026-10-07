@@ -235,7 +235,10 @@ async def frame_samples(
 
 class DatasetExplorer:
     def __init__(
-        self, client: httpx.AsyncClient | None = None, *, reader_python: str | Path | None = None,
+        self,
+        client: httpx.AsyncClient | None = None,
+        *,
+        reader_python: str | Path | None = None,
         cover_cache: Path | None = None,
     ):
         self.client = client or httpx.AsyncClient(timeout=20, follow_redirects=False)
@@ -268,7 +271,17 @@ class DatasetExplorer:
                     cached = EpisodePreview.model_validate_json(path.read_bytes())
                     if (cached.repo_id, cached.revision) != (source.repo_id, source.revision):
                         raise ValueError("Cached cover identity differs")
-                    if cached.episode_index >= source.total_episodes or len(cached.cameras) > 1 or cached.samples or any(not allowed_url(c.url) or c.end_seconds <= c.start_seconds or c.key not in source.features for c in cached.cameras):
+                    if (
+                        cached.episode_index >= source.total_episodes
+                        or len(cached.cameras) > 1
+                        or cached.samples
+                        or any(
+                            not allowed_url(c.url)
+                            or c.end_seconds <= c.start_seconds
+                            or c.key not in source.features
+                            for c in cached.cameras
+                        )
+                    ):
                         raise ValueError("Invalid cached cover")
                     self.covers[key] = cached
                     while len(self.covers) > 128:
@@ -276,7 +289,7 @@ class DatasetExplorer:
                         if not self.cover_locks[old_key].locked():
                             self.cover_locks.pop(old_key, None)
                     return cached.model_copy(deep=True)
-                except (ValueError, OSError):
+                except ValueError, OSError:
                     pass
             async with self.slots, asyncio.timeout(60):
                 budget = Budget()
@@ -287,9 +300,19 @@ class DatasetExplorer:
                 row = rows[0]
                 item = summary(row, source.fps)
                 warnings: list[str] = []
-                cameras = await self.cameras(source, info, row, item, budget, warnings, limit=1, verify=False)
-                result = EpisodePreview(**item.model_dump(), repo_id=source.repo_id,
-                    revision=source.revision, cameras=cameras, samples=[], action_names=[], state_names=[], warnings=warnings)
+                cameras = await self.cameras(
+                    source, info, row, item, budget, warnings, limit=1, verify=False
+                )
+                result = EpisodePreview(
+                    **item.model_dump(),
+                    repo_id=source.repo_id,
+                    revision=source.revision,
+                    cameras=cameras,
+                    samples=[],
+                    action_names=[],
+                    state_names=[],
+                    warnings=warnings,
+                )
             self.covers[key] = result
             while len(self.covers) > 128:
                 old_key, _ = self.covers.popitem(last=False)
@@ -299,7 +322,9 @@ class DatasetExplorer:
                 try:
                     path.parent.mkdir(parents=True, exist_ok=True)
                     # Only this generated cache directory is bounded; original data is untouched.
-                    owned = sorted(path.parent.glob("[0-9a-f]" * 64 + ".json"), key=lambda p: p.stat().st_mtime)
+                    owned = sorted(
+                        path.parent.glob("[0-9a-f]" * 64 + ".json"), key=lambda p: p.stat().st_mtime
+                    )
                     for old in owned[:-127]:
                         if old != path and not old.is_symlink():
                             old.unlink()
@@ -467,7 +492,9 @@ class DatasetExplorer:
         item: EpisodeSummary,
         budget: Budget,
         warnings: list[str],
-        *, limit: int = 8, verify: bool = True,
+        *,
+        limit: int = 8,
+        verify: bool = True,
     ) -> list[CameraPreview]:
         result = []
         camera_features = [

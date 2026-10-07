@@ -1,16 +1,20 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const python = process.platform === 'win32' ? '.venv/Scripts/python.exe' : '.venv/bin/python';
+const port = process.env.FIREBIRD_BROWSER_PORT ?? '8765';
 
 export default defineConfig({
   testDir: './tests/web',
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 2 : 4,
+  // Stop a red run early instead of retrying the whole suite into the timeout.
+  maxFailures: process.env.CI ? 15 : 0,
+  // PW_WORKERS lets each runner size parallelism: 4 on hosted (4 vCPU), 2 on GCP (2 vCPU).
+  workers: Number(process.env.PW_WORKERS) || (process.env.CI ? 2 : 4),
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
-    baseURL: 'http://127.0.0.1:8765',
+    baseURL: `http://127.0.0.1:${port}`,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     reducedMotion: 'reduce',
@@ -26,7 +30,7 @@ export default defineConfig({
   // a server: the developer's workspace and running application stay untouched.
   webServer: {
     command: process.env.CI ? 'uv run --frozen python tests/web/serve.py' : `${python} tests/web/serve.py`,
-    url: 'http://127.0.0.1:8765/api/v1/health',
+    url: `http://127.0.0.1:${port}/api/v1/health`,
     reuseExistingServer: false,
     timeout: 30_000,
   },
