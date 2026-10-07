@@ -5,7 +5,7 @@ this separate CPU environment. From the application repository root on POSIX:
 
 ```sh
 uv venv --python 3.14.7 workers/_cpu_readers/.venv
-uv pip install --python workers/_cpu_readers/.venv/bin/python --no-deps pyarrow==25.0.1
+uv pip install --python workers/_cpu_readers/.venv/bin/python --no-deps -r workers/_cpu_readers/requirements.txt
 uv run --frozen pytest -q tests/test_explore.py tests/test_hub_parquet.py tests/test_local_preview.py
 ```
 
@@ -13,7 +13,7 @@ On Windows (PowerShell):
 
 ```powershell
 uv venv --python 3.14.7 workers/_cpu_readers/.venv
-uv pip install --python workers/_cpu_readers/.venv/Scripts/python.exe --no-deps pyarrow==25.0.1
+uv pip install --python workers/_cpu_readers/.venv/Scripts/python.exe --no-deps -r workers/_cpu_readers/requirements.txt
 uv run --frozen pytest -q tests/test_explore.py tests/test_hub_parquet.py
 ```
 
