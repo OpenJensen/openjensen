@@ -375,7 +375,8 @@ test('dataset handoff only offers supported video sources and preserves the sele
   await page.route('**/api/v1/jobs/*/episodes**', route => route.fulfill({ json: { episodes: [], total_episodes: 12, offset: 0, limit: 6, warnings: [] } }));
   await page.route('**/api/v1/datasets**', route => route.fulfill({ json: jobs.filter(job=>job.kind==='dataset.inspect' && job.result).map(job=>({id:`inspection:${job.id}`,job_id:job.id,project_id:projectId,name:job.id,source:job.result.source,status:'ready',created_at:job.created_at,profile:job.result})) }));
   await page.reload();
-  await page.getByRole('button', { name: 'Explore dataset', exact: true }).click();
+  await page.getByRole('button', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('button', { name: 'Open dataset inspected-video', exact: true }).click();
   await page.getByText('Advanced', { exact: true }).click();
   const history = page.getByRole('combobox', { name: 'History', exact: true });
   const augment = page.getByRole('button', { name: 'Augment this dataset', exact: true });
@@ -388,7 +389,7 @@ test('dataset handoff only offers supported video sources and preserves the sele
   if (!await history.isVisible()) await page.getByText('Advanced', { exact: true }).click();
   await history.selectOption('failed-inspection');
   await expect(augment).toHaveCount(0);
-  await page.getByRole('button', { name: 'Library', exact: true }).click();
+  await page.getByRole('button', { name: '← Back to library', exact: true }).click();
   await page.getByRole('button', { name: 'Open dataset second-video', exact: true }).click();
   await expect(augment).toBeVisible();
   await augment.click();
