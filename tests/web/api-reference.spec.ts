@@ -422,7 +422,8 @@ test('dataset inspection auto-loads camera previews only after opening and stays
   await expect(page.locator('.dx-camera video')).toHaveCount(2);
   await expect(page.getByLabel(/^observation.images.front, episode 0/)).toHaveAttribute('src', '/fixture-camera-front-0.mp4');
   await expect.poll(() => previews).toEqual(['index', '0']);
-  await expect.poll(() => media.length).toBe(2);
+  // Browsers may retry or range-request a media URL; check the actual camera resources.
+  await expect.poll(() => [...new Set(media)].sort()).toEqual(['/fixture-camera-front-0.mp4', '/fixture-camera-wrist-0.mp4']);
   await expect(page.locator('.dx-samples')).not.toHaveAttribute('open', '');
   await expect(page.locator('.dx-schema')).not.toHaveAttribute('open', '');
   await page.locator('.dx-samples > summary').click();
