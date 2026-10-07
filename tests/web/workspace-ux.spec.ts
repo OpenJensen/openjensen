@@ -56,7 +56,7 @@ test('run choices are visible, keyboard accessible and stay within a narrow scre
   await choices.getByRole('button', { name: '3D simulation', exact: true }).click();
   await page.screenshot({ path: testInfo.outputPath('run-workspace.png'), fullPage: false });
   await page.setViewportSize({ width: 320, height: 900 });
-  await expect(page.getByRole('navigation', { name: 'Policy lifecycle' }).getByRole('button', { name: 'Augmentation', exact: true })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Policy lifecycle' }).getByRole('link', { name: 'Augmentation', exact: true })).toBeVisible();
   await expect(choices.getByRole('button', { name: '3D simulation', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
   expect(mutations).toEqual([]);

@@ -114,14 +114,14 @@ test('distilled and quantized models share the model collection and reopen their
   state.jobs.find(job=>job.id==='run-student')!.result={artifacts:[student],reports:[]};
   const quant=job('run-packed','policy.quantize',{operation:'policy.quantize',runtime_id:'quant-cpu',artifact_id:'student',native_quantization:{format:'firebird_quant',bits:8,group_size:64}});
   quant.result={artifacts:[packed],reports:[]} as any;state.jobs.push(quant);
-  await page.getByRole('navigation',{name:'Policy lifecycle'}).getByRole('button',{name:'Distill',exact:true}).click();
+  await page.getByRole('navigation',{name:'Policy lifecycle'}).getByRole('link',{name:'Distill',exact:true}).click();
   await openTransformationJob(page,'distillation','run-student');
   await expect(page.getByRole('group',{name:'Distillation setup',exact:true})).toHaveCount(0);
   await page.getByRole('button',{name:'View Saved student in My models',exact:true}).click();
   await expect(page.getByRole('article',{name:'Model details',exact:true})).toHaveAttribute('data-model-id','student');
   await page.getByRole('button',{name:'Open this model’s distillation job →',exact:true}).click();
   await expect(page.getByRole('article',{name:'Distillation job details',exact:true})).toHaveAttribute('data-job-id','run-student');
-  await page.getByRole('navigation',{name:'Policy lifecycle'}).getByRole('button',{name:'Quantize',exact:true}).click();
+  await page.getByRole('navigation',{name:'Policy lifecycle'}).getByRole('link',{name:'Quantize',exact:true}).click();
   await expect(page.getByRole('region',{name:'Quantization jobs',exact:true}).locator('[data-job-id="run-packed"]')).toBeVisible();
   await openTransformationJob(page,'quantization','run-packed');
   await expect(page.getByRole('group',{name:'ACT quantization setup',exact:true})).toHaveCount(0);

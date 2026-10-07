@@ -623,7 +623,7 @@ for (const fault of ['lost', 'wrong-project', 'changed-budget', 'redirect'] as c
     await expect(recovery).toContainText('unverified');
     await expect(start).toBeDisabled();
     await expect(recovery.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toHaveCount(0);
-    await page.getByRole('navigation', { name: 'Policy lifecycle' }).getByRole('button', { name: 'Dataset', exact: true }).click();
+    await page.getByRole('navigation', { name: 'Policy lifecycle' }).getByRole('link', { name: 'Dataset', exact: true }).click();
     await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
     await expect(recovery).toBeVisible();
     await page.reload();
