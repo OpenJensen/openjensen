@@ -114,8 +114,8 @@ test('preserves an earlier checkpoint selected from a training run through quant
   expect(submitted[0]).toMatchObject({ artifact_id: 'recent-20', precision: { language: 'Q8_0', vision: null } });
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Quantization jobs', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'New quantization', exact: true }).click();
-  await expect(choice(page, 'My model', 'recent-100')).not.toBeChecked();
+  await page.getByRole('button', { name: 'Start a new quantization', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Your quantization models', exact: true }).locator('button[aria-pressed="true"]')).toHaveCount(0);
   expect(submitted).toHaveLength(1);
   expect(unexpected).toEqual([]);
 });
@@ -144,6 +144,7 @@ test('keeps unsupported checkpoints visible and explains the SmolVLA quantizatio
   const { artifacts, submitted, unexpected } = await workspace(page);
   Object.assign(artifacts.find(item => item.id === 'recent-100')!.metadata, { architecture: 'psi0' });
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('button', { name: 'Start a new quantization', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Choose LoRA checkpoint · recent-100', exact: true })).toBeDisabled();
   await chooseTransformationModel(page, 'quantization', 'Choose LoRA checkpoint · recent-20');
   await choice(page, 'My model', 'recent-100').check();
@@ -319,7 +320,7 @@ for (const stage of ['Evaluate', 'Run']) {
     await expect(page.getByText('Quantize a SmolVLA checkpoint first.', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: stage === 'Evaluate' ? 'Start evaluation' : 'Reload and run', exact: true })).toBeDisabled();
     await page.getByRole('button', { name: 'Go to quantization', exact: true }).click();
-    await expect(page.getByRole('region', { name: 'Your quantization models', exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Quantization jobs', exact: true })).toBeVisible();
     await chooseTransformationModel(page, 'quantization', 'Choose LoRA checkpoint · recent-100');
     await expect(choice(page, 'My model', 'recent-100')).toBeChecked();
     await expect(page.getByRole('button', { name: 'Start quantization', exact: true })).toBeEnabled();

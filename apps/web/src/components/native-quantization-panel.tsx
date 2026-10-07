@@ -149,6 +149,7 @@ export function NativeQuantizationPanel({ projectId, preferredArtifactId, prefer
         {reports.length > 0 && <pre className="cloud-log-tail">{JSON.stringify(reports, null, 2)}</pre>}
       </WorkbenchDisclosure>
     </article>}
+    {jobs.isError && <p role="alert">Job updates are unavailable; displayed status may be stale. {jobs.error.message}</p>}
     {options.isError && <p role="alert">Native quantization options are unavailable. {options.error.message}</p>}
     {artifacts.isError && <p role="alert">Saved policies are unavailable. {artifacts.error.message}</p>}
     {error && <p role="alert" className="error-notice">{error}</p>}

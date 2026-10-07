@@ -99,7 +99,7 @@ function sizeLabel(bytes: number): string {
     : `${(bytes / 1024 ** 2).toLocaleString(undefined, { maximumFractionDigits: 1 })} MiB`;
 }
 
-function currentStage(job: Job, phase = job.stage): string {
+export function currentStage(job: Job, phase = job.stage): string {
   if (job.status === "succeeded") return "Completed";
   if (job.status === "failed") return "Failed";
   if (job.status === "cancelled") return "Cancelled";
