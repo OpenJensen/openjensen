@@ -13,6 +13,7 @@ async function openSavedAct(page: Page) {
   const choice = page.getByRole('button', { name: 'Choose Generated teacher · teacher', exact: true });
   const lane = page.getByRole('region', { name: 'ACT distillation', exact: true }).or(page.getByRole('region', { name: 'Native ACT quantization', exact: true }));
   const newJob=page.getByRole('button',{name:/^Start a new (distillation|quantization)$/});
+  await expect.poll(async()=>await newJob.isVisible() || await lane.isVisible() || await choice.isVisible()).toBe(true);
   if(await newJob.isVisible()) await newJob.click();
   await expect(lane.or(choice).first()).toBeVisible();
   if (await lane.isVisible()) return;
