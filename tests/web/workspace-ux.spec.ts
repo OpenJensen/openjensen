@@ -233,6 +233,7 @@ test('missing history stays visible in the run list and cannot enable metadata-o
   state.jobs = state.jobs.filter(job => job.id === 'dataset-first');
   state.jobs[0].result.snapshot = null;
   await page.reload();
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
   await page.getByRole('button', { name: 'Open dataset dataset-first',exact:true }).click();
   await expect(page.getByRole('region', { name: 'Dataset inspection', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Train on this dataset', exact: true })).toHaveCount(0);

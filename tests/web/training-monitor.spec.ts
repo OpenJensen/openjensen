@@ -980,6 +980,12 @@ test('ACT export ignores another project receipt and download ancestry', async (
   state.artifacts.push({ ...state.artifacts.find(item => item.id === 'checkpoint-artifact')!, id: 'foreign-output', project_id: 'foreign-project', format: 'inference_export', parent_ids: ['checkpoint-artifact'] });
   state.artifacts.push({ ...state.artifacts.find(item => item.id === 'checkpoint-artifact')!, id: 'foreign-copy', project_id: 'foreign-project', format: 'native_checkpoint', parent_ids: ['checkpoint-artifact'] });
   state.artifacts.push({ ...state.artifacts.find(item => item.id === 'checkpoint-artifact')!, id: 'unbound-output', format: 'inference_export', parent_ids: ['foreign-copy'] });
+  // A direct training reload must reject a mixed-project canonical history.
+  await page.reload();
+  await expect(page.getByRole('region', { name: 'Fine-tuning jobs', exact: true }).getByRole('alert')).toContainText('contains another project');
+  await expect(page.getByRole('region', { name: 'ACT inference export' })).toHaveCount(0);
+  expect(state.submitted).toHaveLength(0);
+  state.jobs.splice(state.jobs.findIndex(item => item.id === 'foreign-export'), 1);
   await page.reload(); await reopenExport(page);
   await expect(exportButton(page)).toBeEnabled();
   const control = page.getByRole('region', { name: 'ACT inference export' });
