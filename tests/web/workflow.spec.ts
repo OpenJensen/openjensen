@@ -80,9 +80,9 @@ test('browser intake reads local metadata and preserves its limits after reload'
   expect(await cli('jobs', 'show', submitted.id)).toEqual(job);
   await page.reload();
   await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', project.id);
-  await page.getByRole('button', { name: /^Inspection/ }).click();
+  await page.getByRole('button', { name: 'Open dataset Local dataset', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Local dataset', exact: true })).toBeVisible();
-  await page.getByText('Source details', { exact: true }).click();
+  await page.getByText('Advanced', { exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Inspection notes', exact: true })).toBeVisible();
   await expect(page.getByText('Metadata-only inspection: episode counts and schemas are source-declared, not validated against frames.', { exact: true })).toBeVisible();
   await expect(page.getByText(job.result.revision, { exact: true })).toBeVisible();
