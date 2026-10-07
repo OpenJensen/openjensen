@@ -575,6 +575,7 @@ test('ACT export-only computer never appears as an engine execution target', asy
     await page.getByRole('button', { name: stage, exact: true }).click();
     if (stage === 'Run') await page.getByRole('button', { name: 'Check inference', exact: true }).click();
     if (stage === 'Quantize') {
+      await page.getByRole('button', { name: 'Start a new quantization', exact: true }).click();
       await expect(page.getByRole('button', { name: 'Choose Checkpoint step 20 · checkpoint-artifact', exact: true })).toBeDisabled();
       await expect(page.getByRole('button', { name: 'ACT', exact: true })).toHaveCount(0);
       continue;
@@ -1280,7 +1281,7 @@ test('manual Distill teacher choices reject partial timing metadata and preserve
   await page.reload(); await reopenExport(page);
   await expect(useTeacher(page, changed.id)).toBeDisabled();
   await page.getByRole('button', { name: 'Distill', exact: true }).click();
-  await chooseTransformationModel(page,'quantization',`Choose ACT inference export · ${state.packages[0].id}`);
+  await chooseTransformationModel(page,'distillation',`Choose ACT inference export · ${state.packages[0].id}`);
   await expect(teacherChoices(page).locator(`input[value="${changed.id}"]`)).toHaveCount(0);
   await expect(teacherChoices(page).locator(`input[value="${state.packages[0].id}"]`)).toHaveCount(1);
   await expect(teacherChoices(page).locator('input:checked')).toHaveValue(state.packages[0].id);
@@ -1303,7 +1304,7 @@ for (const location of ['metadata', 'checkpoint'] as const) for (const field of 
   await expect(useTeacher(page, legacy.id)).toBeEnabled();
   await expect(exportedPackage(page, legacy.id).getByRole('button', { name: 'Quantize this package' })).toBeEnabled();
   await page.getByRole('button', { name: 'Distill', exact: true }).click();
-  await chooseTransformationModel(page,'quantization',`Choose ACT inference export · ${state.packages[0].id}`);
+  await chooseTransformationModel(page,'distillation',`Choose ACT inference export · ${state.packages[0].id}`);
   await expect(teacherChoices(page).locator(`input[value="${guarded.id}"]`)).toHaveCount(0);
   await expect(page.getByText('Some ACT packages are excluded because their model format, timing or simulator details are incomplete or unsupported. Refresh or export a complete inference package.', { exact: true })).toBeVisible();
   await expect(teacherChoices(page).locator(`input[value="${legacy.id}"]`)).toHaveCount(1);

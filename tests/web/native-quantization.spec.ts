@@ -145,14 +145,18 @@ test('selection changing during cancellation preflight does not cancel the previ
   let entered!: () => void, release!: () => void; const enteredPromise = new Promise<void>(resolve => { entered = resolve; }); const barrier = new Promise<void>(resolve => { release = resolve; });
   await page.route('**/api/v1/jobs/one', async route => { entered(); await barrier; await route.fulfill({ json: state.jobs.find(item => item.id === 'one') }); });
   await page.getByRole('button', { name: 'Cancel selected ACT quantization' }).click(); await page.getByRole('button', { name: 'Confirm cancellation', exact: true }).click(); await enteredPromise;
-  await openTransformationJob(page, 'quantization', 'two'); release();
-  await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true }).getByRole('alert')).toContainText('Selection changed; cancellation was not submitted'); expect(state.cancels).toEqual([]);
+  await openTransformationJob(page, 'quantization', 'two');
+  const response = page.waitForResponse('**/api/v1/jobs/one'); release(); await response;
+  await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toHaveAttribute('data-job-id', 'two');
+  await expect(page.getByRole('button', { name: 'Cancel selected ACT quantization' })).toBeEnabled();
+  expect(state.cancels).toEqual([]);
 });
 
 test('project switching resets precision/source and failed history blocks mutation', async ({ page }) => {
   const state = await fixture(page); await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="act-export"]').check(); await page.getByRole('group', { name: 'Compression', exact: true }).locator('input[value="4"]').check();
   state.jobsError = true; await refresh(page); await expect(page.getByText(/Job updates are unavailable/)).toBeVisible(); await expect(submit(page)).toBeDisabled();
   state.jobsError = false; await selectProject(page, 'beta');
+  await page.getByRole('button', { name: 'Start a new quantization', exact: true }).click();
   await expect(page.getByText('No saved models in this project yet')).toBeVisible();
   await expect(page.getByRole('group', { name: 'Policy', exact: true })).toHaveCount(0);
   await expect(submit(page)).toHaveCount(0); expect(state.posts).toEqual([]);
@@ -227,6 +231,7 @@ test('uncertain quantization survives stage navigation and reload until fresh hi
   const state = await fixture(page); state.submit = 'lost'; await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="act-export"]').check(); await submit(page).click();
   await expect(page.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toBeVisible();
   await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('button', { name: 'Review request', exact: true }).click();
   await expect(submit(page)).toBeDisabled();
   await page.reload(); await page.getByRole('button', { name: 'Quantize', exact: true }).click(); await chooseTransformationModel(page, 'quantization', 'Choose Generated act-export · act-export');
   const allow = page.getByRole('button', { name: 'I checked the jobs; allow a new request' }); await expect(allow).toBeDisabled();
@@ -240,8 +245,6 @@ async function fromStudent(page: Page, state: Awaited<ReturnType<typeof fixture>
   state.jobs.push({ id: 'distilled', project_id: 'alpha', kind: 'policy.distill', status: 'succeeded', stage: 'completed', created_at: timestamp, updated_at: timestamp,
     request: { operation: 'policy.distill', runtime_id: 'student', artifact_id: 'teacher', dataset_job_id: 'data', timeout_seconds: 600, native_distillation: { adapter: 'act-act-v1', coordinate_attestation: 'generated_fixture', steps: 1 } }, result: { reports: [], artifacts: [output] } });
   await page.getByRole('button', { name: 'Distill', exact: true }).click();
-  await chooseTransformationModel(page, 'quantization', 'Choose Generated act-export · act-export');
-  await page.getByRole('button', { name: 'Refresh distillation jobs', exact: true }).click();
   await openTransformationJob(page, 'distillation', 'distilled');
   await page.getByRole('button', { name: 'Open ACT quantization', exact: true }).click();
 }

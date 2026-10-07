@@ -596,7 +596,7 @@ for (const mode of ['quantize', 'replay'] as const) test(`saved ${mode} history 
   await reloadProject(page);
   await page.getByRole('button', { name: mode === 'quantize' ? 'Quantize' : 'Run', exact: true }).click();
   if (mode === 'quantize') {
-    await page.getByRole('button', { name: 'Review request', exact: true }).click();
+    await openTransformationJob(page, 'quantization', saved.id);
     await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toBeVisible();
   }
   else await expect(page.getByRole('button', { name: 'Replay observations', exact: true })).toHaveAttribute('aria-pressed', 'true');
