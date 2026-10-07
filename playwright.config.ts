@@ -7,7 +7,10 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 2 : 4,
+  // Stop a red run early instead of retrying the whole suite into the timeout.
+  maxFailures: process.env.CI ? 15 : 0,
+  // PW_WORKERS lets each runner size parallelism: 4 on hosted (4 vCPU), 2 on GCP (2 vCPU).
+  workers: Number(process.env.PW_WORKERS) || (process.env.CI ? 2 : 4),
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: 'http://127.0.0.1:8765',

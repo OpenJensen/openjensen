@@ -9,7 +9,7 @@ permissions:
   contents: read
 jobs:
   simulation:
-    runs-on: ${{ fromJSON((github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON(vars.SIM_RUNNER == 'hosted' && '["ubuntu-24.04"]' || '["self-hosted","linux","x64","firebird-gcp"]') }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -30,6 +30,7 @@ jobs:
       - run: >-
           python -m pip install
           -r workers/isaac_sim/calibration-offline.requirements.txt
+          pytest==8.4.2
       - name: Worker and encoding tests
         working-directory: workers/isaac_sim
         env:

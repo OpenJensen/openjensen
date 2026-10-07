@@ -174,7 +174,7 @@ async function mockWorkspace(page: Page, initial: Connection[] = [], initialComp
       reads.push(path);
       const responses: Record<string, unknown> = {
         '/api/v1/health': { status: 'ok', version: 'browser-fixture' },
-        '/api/v1/capabilities': [],
+        '/api/v1/capabilities': [], '/api/v1/datasets': [],
         '/api/v1/projects': [{ id: projectId, name: 'Cloud review', created_at: timestamp }],
         [`/api/v1/projects/${projectId}/jobs`]: [],
         [`/api/v1/projects/${projectId}/artifacts`]: [],

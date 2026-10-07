@@ -74,7 +74,7 @@ async function fixture(page: Page, initial: any[] = []) {
     if (path.endsWith('/recordings')) return route.fulfill({ json: s.catalog });
     if (path.endsWith('/jobs') && path.includes('/projects/')) return route.fulfill({ status: s.failHistory ? 503 : 200, json: s.failHistory ? { detail: 'History unavailable' } : s.jobs.filter(j => j.project_id === project) });
     if (path.startsWith('/api/v1/jobs/')) { const saved = s.jobs.find(j => j.id === path.split('/')[4]); if (path.endsWith('/events')) return route.fulfill({ json: [] }); return route.fulfill({ status: saved ? 200 : 404, json: saved ?? { detail: 'Missing job' } }); }
-    const replies: Record<string, unknown> = { '/api/v1/health': { status: 'ok', version: 'fixture' }, '/api/v1/projects': ['alpha', 'beta'].map(id => ({ id, name: `Teaching ${id}`, created_at: stamp })), '/api/v1/capabilities': [], '/api/v1/policy-options': { runtimes: [], sources: [], training_models: [], training_methods: [], default_training_method: 'full' } };
+    const replies: Record<string, unknown> = { '/api/v1/health': { status: 'ok', version: 'fixture' }, '/api/v1/projects': ['alpha', 'beta'].map(id => ({ id, name: `Teaching ${id}`, created_at: stamp })), '/api/v1/capabilities': [], '/api/v1/datasets': [], '/api/v1/policy-options': { runtimes: [], sources: [], training_models: [], training_methods: [], default_training_method: 'full' } };
     if (path in replies) return route.fulfill({ json: replies[path] });
     if (path.endsWith('/artifacts')) return route.fulfill({ json: [] });
     s.unexpected.push(`${request.method()} ${path}`); return route.fulfill({ status: 404, json: { detail: 'Unexpected fixture read' } });

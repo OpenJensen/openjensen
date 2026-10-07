@@ -115,7 +115,7 @@ async function mockWorkspace(page: Page, config: { configured?: boolean; empty?:
       }
       const responses: Record<string, unknown> = {
         '/api/v1/health': { status: 'ok', version: 'browser-fixture' },
-        '/api/v1/capabilities': [],
+        '/api/v1/capabilities': [], '/api/v1/datasets': [],
         '/api/v1/projects': [{ id: projectId, name: 'Augmentation review', created_at: timestamp }],
         [`/api/v1/projects/${projectId}/jobs`]: jobs,
         '/api/v1/augmentation-options': {
@@ -303,7 +303,7 @@ test('waits for confirmed project membership and preserves the first setup error
   let releaseProjects!: () => void;
   const projectsReady = new Promise<void>(resolve => { releaseProjects = resolve; });
   const fixture = await mockWorkspace(page, { projectsReady, failFirst: true });
-  await expect(page.getByText('Loading projects…', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Project', exact: true }).getByRole('status')).toBeVisible();
   await expect(page.getByLabel('Additional instructions (optional)')).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeDisabled();
   expect(fixture.optionsAttempts()).toBe(0);

@@ -70,7 +70,7 @@
   .cloud-provider-top .cloud-status { margin-left: 51px; }
   .cloud-provider-actions { padding-top: 20px; }
   .cloud-provider-actions .secondary-button, .cloud-dialog-close, .cloud-dialog footer button { min-width: 44px; min-height: 44px; }
-  .settings-tabs { gap: 18px; }
+  .panel .settings-tabs { flex-wrap: wrap; gap: 12px 18px; }
   .settings-tabs .section-tab { font-size: 11px; }
   .cloud-dialog form { padding: 19px; }
   .cloud-dialog h2 { font-size: 15px; }
