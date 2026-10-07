@@ -1,3 +1,4 @@
+import { chooseTransformationModel, transformationJobs } from './lifecycle-controls';
 import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -136,11 +137,12 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
       const replies: Record<string, unknown> = {
         '/api/v1/health': { status: 'ok', version: 'training-fixture' }, '/api/v1/capabilities': [],
         '/api/v1/simulation-options': { profiles: [] },
+        '/api/v1/jobs/dataset/cover': { cameras:[],repo_id:dataset.result.repo_id,revision:dataset.result.revision,episode_index:0 },
         '/api/v1/projects': [{ id: projectId, name: 'Training visibility', created_at: timestamp() }],
         [`/api/v1/projects/${projectId}/jobs`]: jobs,
         [`/api/v1/projects/${projectId}/artifacts`]: artifacts,
         '/api/v1/jobs/dataset/episodes': { repo_id: 'fixture/robot', revision, episodes: [], total_episodes: 10, offset: 0, limit: 6, warnings: [] },
-        '/api/v1/datasets': [],
+        '/api/v1/datasets': ['empty','local-snapshot','local-unprepared'].includes(mode) ? [{id:'inspection:dataset',job_id:dataset.id,project_id:projectId,name:dataset.result.repo_id || 'Local dataset',source:dataset.result.source,status:'ready',created_at:dataset.created_at,profile:dataset.result}] : [],
         '/api/v1/policy-options': {
           runtimes: [...extraRuntimes, ...(exportMode && exportMode !== 'unconfigured' ? [{ id: 'act-cpu', label: 'Local CPU export', provider: 'local', execution: 'native', device: 'cpu', enabled: true, training: false, act_export: true, export_only: true, engine_evaluation: false, run: false, simulation: false }] : []), { id: 'skypilot-gcp-A100', label: 'A100', accelerator: 'A100', execution: 'skypilot', provider: 'gcp', device: 'cuda', enabled: true, training: true, simulation: false, training_model_ids: localDataset ? ['smolvla', 'act'] : ['smolvla'] }],
           compute: { local: { enabled: false, label: 'Local' }, gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 } },
@@ -246,7 +248,7 @@ test('empty history offers an explicit new job and repeated dataset shortcuts op
   await expect(page.getByRole('navigation', { name: 'Training setup' })).toHaveCount(0);
   for (let attempt = 0; attempt < 2; attempt += 1) {
     await page.getByRole('button', { name: 'Dataset', exact: true }).click();
-    await page.getByRole('button', { name: 'Explore dataset', exact: true }).click();
+    await page.getByRole('button', { name: 'Open dataset fixture/robot', exact: true }).click();
     await page.getByRole('button', { name: 'Train on this dataset', exact: true }).click();
     await expect(page.getByRole('navigation', { name: 'Training setup' })).toBeVisible();
     await expect(page.getByRole('checkbox', { name: 'fixture/robot', exact: true })).toBeChecked();
@@ -259,7 +261,7 @@ test('empty history offers an explicit new job and repeated dataset shortcuts op
 test('local training copies open the jobs-first wizard and retain native model admission', async ({ page }) => {
   const { submitted, unexpected } = await workspace(page, 'local-snapshot', false);
   await page.getByRole('button', { name: 'Dataset', exact: true }).click();
-  await page.getByRole('button', { name: 'Explore dataset', exact: true }).click();
+  await page.getByRole('button', { name: 'Open dataset Local dataset', exact: true }).click();
   await page.getByRole('button', { name: 'Train on this dataset', exact: true }).click();
   await expect(page.getByRole('checkbox', { name: 'Local dataset', exact: true })).toBeChecked();
   const setup = page.getByRole('navigation', { name: 'Training setup' });
@@ -279,7 +281,7 @@ test('local training copies open the jobs-first wizard and retain native model a
 test('metadata-only local inspections cannot enter the training creation flow', async ({ page }) => {
   const { submitted, unexpected } = await workspace(page, 'local-unprepared', false);
   await page.getByRole('button', { name: 'Dataset', exact: true }).click();
-  await page.getByRole('button', { name: 'Explore dataset', exact: true }).click();
+  await page.getByRole('button', { name: 'Open dataset Local dataset', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Train on this dataset', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
@@ -1093,7 +1095,7 @@ test('ACT exported packages show distinct identities and hand the exact second p
   await exportSection.screenshot({ path: testInfo.outputPath('act-export-next-actions-dark.png') });
   await page.getByRole('button', { name: 'Light', exact: true }).click();
   await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
-  await expect(page.getByRole('button', { name: `Choose ACT inference export · ${state.packages[1].id}`, exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('region',{name:'Native ACT quantization',exact:true})).toBeVisible();
   await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toBeChecked();
   expect(state.submitted).toEqual([]);
   await noOverflow(page);
@@ -1167,6 +1169,7 @@ test('ACT export preferred package stays within its owning project', async ({ pa
   await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
   await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toBeChecked();
   await selectProject(page, 'other-project');
+  await page.getByRole('button',{name:'Start a new distillation',exact:true}).click();
   await expect(page.getByText('No saved models in this project yet')).toBeVisible();
   await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator('input:checked')).toHaveCount(0);
   await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toHaveCount(0);
@@ -1277,7 +1280,7 @@ test('manual Distill teacher choices reject partial timing metadata and preserve
   await page.reload(); await reopenExport(page);
   await expect(useTeacher(page, changed.id)).toBeDisabled();
   await page.getByRole('button', { name: 'Distill', exact: true }).click();
-  await page.getByRole('button', { name: `Choose ACT inference export · ${state.packages[0].id}`, exact: true }).click();
+  await chooseTransformationModel(page,'quantization',`Choose ACT inference export · ${state.packages[0].id}`);
   await expect(teacherChoices(page).locator(`input[value="${changed.id}"]`)).toHaveCount(0);
   await expect(teacherChoices(page).locator(`input[value="${state.packages[0].id}"]`)).toHaveCount(1);
   await expect(teacherChoices(page).locator('input:checked')).toHaveValue(state.packages[0].id);
@@ -1300,14 +1303,14 @@ for (const location of ['metadata', 'checkpoint'] as const) for (const field of 
   await expect(useTeacher(page, legacy.id)).toBeEnabled();
   await expect(exportedPackage(page, legacy.id).getByRole('button', { name: 'Quantize this package' })).toBeEnabled();
   await page.getByRole('button', { name: 'Distill', exact: true }).click();
-  await page.getByRole('button', { name: `Choose ACT inference export · ${state.packages[0].id}`, exact: true }).click();
+  await chooseTransformationModel(page,'quantization',`Choose ACT inference export · ${state.packages[0].id}`);
   await expect(teacherChoices(page).locator(`input[value="${guarded.id}"]`)).toHaveCount(0);
   await expect(page.getByText('Some ACT packages are excluded because their model format, timing or simulator details are incomplete or unsupported. Refresh or export a complete inference package.', { exact: true })).toBeVisible();
   await expect(teacherChoices(page).locator(`input[value="${legacy.id}"]`)).toHaveCount(1);
   await expect(teacherChoices(page).locator('input:checked')).toHaveValue(legacy.id);
   await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-  await page.getByRole('button', { name: `Choose ACT inference export · ${state.packages[0].id}`, exact: true }).click();
+  await chooseTransformationModel(page,'quantization',`Choose ACT inference export · ${state.packages[0].id}`);
   const policies = page.getByRole('group', { name: 'Policy', exact: true });
   await expect(policies.locator(`input[value="${guarded.id}"]`)).toHaveCount(0);
   await expect(page.getByText('Some ACT packages are excluded because their model format, timing or simulator details are incomplete or unsupported. Refresh or export a complete inference package.', { exact: true })).toBeVisible();
@@ -1385,12 +1388,13 @@ test('training teacher handoff is cleared by a manual model choice or project sw
   await page.reload(); await reopenExport(page);
   await useTeacher(page, state.packages[1].id).click();
   await expect(teacherChoices(page).locator('input:checked')).toHaveValue(state.packages[1].id);
-  await page.getByRole('button', { name: 'Choose another teacher', exact: true }).click();
-  await page.getByRole('button', { name: `Choose ACT inference export · ${state.packages[0].id}`, exact: true }).click();
+  await transformationJobs(page,'distillation');
+  await chooseTransformationModel(page,'distillation',`Choose ACT inference export · ${state.packages[0].id}`);
   await expect(teacherChoices(page).locator('input:checked')).toHaveValue(state.packages[0].id);
   await reopenExport(page);
   await useTeacher(page, state.packages[1].id).click();
   await selectProject(page, 'other-project');
+  await page.getByRole('button',{name:'Start a new distillation',exact:true}).click();
   await expect(page.getByText('No saved models in this project yet')).toBeVisible();
   await expect(teacherChoices(page)).toHaveCount(0);
   await expect(teacherChoices(page).locator(`input[value="${state.packages[1].id}"]`)).toHaveCount(0);

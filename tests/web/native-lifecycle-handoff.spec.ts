@@ -1,3 +1,4 @@
+import { chooseTransformationModel, openTransformationJob, transformationJobs } from './lifecycle-controls';
 import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { initialQuantizeEntry, initialRunEntry } from '../../apps/web/src/lib/workflow-entry';
@@ -11,6 +12,8 @@ const policyChoices = (page: Page, label: string) => page.getByRole(label === 'A
 async function openSavedAct(page: Page) {
   const choice = page.getByRole('button', { name: 'Choose Generated teacher · teacher', exact: true });
   const lane = page.getByRole('region', { name: 'ACT distillation', exact: true }).or(page.getByRole('region', { name: 'Native ACT quantization', exact: true }));
+  const newJob=page.getByRole('button',{name:/^Start a new (distillation|quantization)$/});
+  if(await newJob.isVisible()) await newJob.click();
   await expect(lane.or(choice).first()).toBeVisible();
   if (await lane.isVisible()) return;
   await choice.click();
@@ -70,16 +73,14 @@ async function fixture(page: Page) {
 async function openStudent(page: Page, state: Awaited<ReturnType<typeof fixture>>) {
   const job = makeJob('student-job', studentRequest()); completeStudent(job); state.jobs.push(job);
   await page.getByRole('button', { name: 'Distill', exact: true }).click();
-  await openSavedAct(page);
-  await page.getByLabel('Saved distillation job', { exact: true }).selectOption(job.id);
+  await openTransformationJob(page, 'distillation', job.id);
   await page.getByRole('button', { name: 'Open ACT quantization', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toBeVisible();
 }
 async function openPacked(page: Page, state: Awaited<ReturnType<typeof fixture>>) {
   const job = makeJob('quant-job', quantRequest()); completeQuant(job); state.jobs.push(job);
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-  await openSavedAct(page);
-  await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption(job.id);
+  await openTransformationJob(page, 'quantization', job.id);
   await page.getByRole('button', { name: 'Replay recorded observations', exact: true }).click();
   await expect(page.getByRole('region', { name: 'CPU observation replay', exact: true })).toBeVisible();
 }
@@ -94,8 +95,7 @@ async function simulationContinuationFixture(page: Page) {
   job.result!.artifacts = [first, target]; state.jobs.push(job); state.artifacts.push(structuredClone(first), structuredClone(target));
   await page.reload(); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-  await openSavedAct(page);
-  await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption(job.id);
+  await openTransformationJob(page, 'quantization', job.id);
   const continueButton = page.locator(`[data-artifact-id="${target.id}"]`).getByRole('button', { name: 'Prepare simulation', exact: true });
   await expect(continueButton).toBeEnabled();
   return { ...state, target, first, continueButton };
@@ -224,7 +224,7 @@ for (const fault of ['missing-profile', 'profile-error'] as const) test(`packed 
   await page.getByRole('button', { name: '3D simulation', exact: true }).click();
   await page.getByRole('button', { name: 'Refresh simulation jobs', exact: true }).click();
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-  await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption('quant-job');
+  await openTransformationJob(page, 'quantization', 'quant-job');
   const result = page.locator(`[data-artifact-id="${state.target.id}"]`);
   await expect(result.getByRole('button', { name: 'Prepare simulation', exact: true })).toBeDisabled();
   await expect(result).toContainText(fault === 'missing-profile' ? 'No packed ACT simulation profile is configured.' : 'Simulation profile availability is unknown.');
@@ -292,7 +292,7 @@ for (const target of ['quantization', 'replay'] as const) test(`${target} handof
   if (target === 'quantization') {
     await expect(page.getByRole('region', { name: 'Your quantization models' }).locator('button[aria-pressed="true"]')).toHaveCount(0);
     await expect(page.getByRole('button', { name: `Choose Generated ${expected} · ${expected}`, exact: true })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Choose Generated beta-float · beta-float', exact: true }).click();
+    await chooseTransformationModel(page, 'quantization', 'Choose Generated beta-float · beta-float');
     await expect(policyChoices(page, label).locator('input:checked')).toHaveValue('beta-float');
     await expect(policyChoices(page, label).locator(`input[value="${expected}"]`)).toHaveCount(0);
     expect(state.mutations).toHaveLength(0); return;
@@ -507,7 +507,7 @@ test('a detected training worker is not offered for GGUF quantization or engine 
   state.runtimes = [{ id: 'managed-local-smolvla-test', label: 'Detected GPU trainer', execution: 'native', provider: 'local', device: 'cuda', enabled: true, launchable: true, training: true, training_only: true, training_model_ids: ['smolvla'], simulation: false, run: false, engine_evaluation: false }];
   await reloadProject(page);
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-  await page.getByRole('button', { name: 'Choose Generated smolvla-checkpoint · smolvla-checkpoint', exact: true }).click();
+  await chooseTransformationModel(page, 'quantization', 'Choose Generated smolvla-checkpoint · smolvla-checkpoint');
   await expect(page.getByText('Connect a compatible worker in Compute settings.', { exact: true })).toBeVisible();
   await expect(page.getByRole('radio', { name: /Detected GPU trainer/ })).toHaveCount(0);
   await page.getByRole('button', { name: 'Evaluate', exact: true }).click();
