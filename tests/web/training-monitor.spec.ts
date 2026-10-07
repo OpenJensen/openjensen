@@ -134,7 +134,7 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
         return;
       }
       const replies: Record<string, unknown> = {
-        '/api/v1/health': { status: 'ok', version: 'training-fixture' }, '/api/v1/capabilities': [], '/api/v1/datasets': [],
+        '/api/v1/health': { status: 'ok', version: 'training-fixture' }, '/api/v1/capabilities': [],
         '/api/v1/simulation-options': { profiles: [] },
         '/api/v1/projects': [{ id: projectId, name: 'Training visibility', created_at: timestamp() }],
         [`/api/v1/projects/${projectId}/jobs`]: jobs,
