@@ -9,7 +9,7 @@ async function ownProject(page:Page,name:string) {
   expect(response.status()).toBe(201);
   const project=await response.json();
   await page.addInitScript(id=>localStorage.setItem('firebird.project',id),project.id);
-  await page.goto('/');
+  await page.goto('/datasets/');
   await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id',project.id);
   return project;
 }
@@ -47,7 +47,7 @@ test('create a real two-view example, save labels, reopen it and reach the dashb
   await page.getByRole('button',{name:'Inspect dataset',exact:true}).click();
   await expect(page.getByText(/Training copy verified/)).toBeVisible();
   await expect(page.getByRole('button',{name:'Train on this dataset'})).toBeEnabled();
-  await page.getByRole('button',{name:'Dashboard',exact:true}).click();
+  await page.getByRole('link',{name:'Dashboard',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Resources & connections'})).toBeVisible();
   await expect(page.getByRole('button',{name:'My models',exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'My datasets',exact:true})).toBeVisible();
@@ -90,7 +90,7 @@ test('saved Hugging Face inspections reopen without a new inspection request',as
     if(path.endsWith('/episodes'))return route.fulfill({status:422,json:{detail:'Preview is offline in this test'}});
     return route.continue();
   });
-  await page.goto('/');
+  await page.goto('/datasets/');
   await page.getByRole('button',{name:'Open dataset our/robot-data'}).click();
   await expect(page.getByRole('heading',{name:'our/robot-data',exact:true})).toBeVisible();
   expect(writes).toEqual([]);
@@ -104,7 +104,7 @@ test('dashboard reports a failed local probe instead of successful resource chec
   await page.route('**/api/v1/compute-settings/gcp/check',route=>route.fulfill({json:settings}));
   await page.route('**/api/v1/compute-settings/local/check',route=>route.fulfill({status:503,json:{detail:'Local GPU probe failed'}}));
   await ownProject(page,`Resource failure ${testInfo.project.name}`);
-  await page.getByRole('button',{name:'Dashboard',exact:true}).click();
+  await page.getByRole('link',{name:'Dashboard',exact:true}).click();
   const local=page.getByRole('article').filter({has:page.getByRole('heading',{name:'Local compute',exact:true})});
   await expect(local.getByText('Disabled',{exact:true})).toBeVisible();
   await expect(local.locator('.resource-state')).not.toHaveClass(/ready/);

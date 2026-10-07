@@ -25,7 +25,7 @@ async function fixture(page: Page, empty = false) {
     if (path === '/api/v1/projects') return route.fulfill({ json: projects });
     return route.fulfill({ json: [] });
   });
-  await page.goto('/');
+  await page.goto('/datasets/');
   await expect(page.getByRole('button', { name: 'Current project', exact: true })).toBeEnabled();
   return { writes, control, projects };
 }
@@ -59,7 +59,7 @@ test('project switching and keyboard navigation preserve scope without creating 
   await current(page).click();
   await page.keyboard.press('Tab');
   await expect(menu(page)).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Dashboard', exact: true })).toBeFocused();
+  await expect(page.getByRole('link', { name: 'Dashboard', exact: true })).toBeFocused();
   await current(page).click();
   await page.getByRole('heading', { name: 'Dataset', exact: true, level: 1 }).click();
   await expect(menu(page)).toHaveCount(0);

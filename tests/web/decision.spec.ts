@@ -18,8 +18,8 @@ async function lab(page: Page, configured = true) {
     };
     await route.fulfill({ json: replies[path] ?? [] });
   });
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Decision lab', exact: true }).click();
+  await page.goto('/datasets/');
+  await page.getByRole('link', { name: 'Decision lab', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Decision lab', level: 1 })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Advisory model', exact: true })).toContainText('Muose-50M');
   return { posts, controls };

@@ -47,7 +47,7 @@ async function fixture(page: Page, mode: 'normal' | 'lost-ack' | 'lost-before-co
     unexpected.push(`${request.method()} ${path}`);
     await route.fulfill({ status: 405, json: { detail: 'Blocked by generated intake fixture.' } });
   });
-  await page.goto('/');
+  await page.goto('/datasets/');
   await expect(page.getByLabel('Dataset repository')).toBeEnabled();
   await page.getByLabel('Dataset repository').fill('fixture/robot');
   await page.getByText('Revision (optional)', {exact:true}).click();
@@ -153,10 +153,10 @@ test('late intake acknowledgement records the job without replacing later stage 
   const state = await fixture(page, 'delayed-ack');
   await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
   await expect.poll(() => state.writes.length).toBe(1);
-  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   state.releaseAck();
   await expect.poll(() => page.evaluate(() => Object.keys(sessionStorage).filter(key => key.startsWith('firebird:submission:')).length)).toBe(0);
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
   await expect(page.getByLabel('Dataset repository')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Waiting to inspect' })).not.toBeVisible();
   expect(state.writes).toHaveLength(1);

@@ -46,8 +46,8 @@ async function teaching(page: Page, connected = true) {
     unexpected.push(request.method() + ' ' + path);
     await route.fulfill({ status: 405, json: { detail: 'No external calls allowed by test.' } });
   });
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Teaching', exact: true }).click();
+  await page.goto('/datasets/');
+  await page.getByRole('link', { name: 'Teaching', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Teaching', level: 1 })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Control source', exact: true })).toContainText('Isaac Sim');
   return { commands, unexpected, changes };
@@ -202,7 +202,7 @@ async function consentAdvice(page: Page) {
 test('optional intelligence requires consent and never dispatches a control command', async ({ page }) => {
   const base = await teaching(page);
   const fixture = await intelligence(page);
-  await page.reload(); await page.getByRole('button', { name: 'Teaching', exact: true }).click();
+  await page.reload(); await page.getByRole('link', { name: 'Teaching', exact: true }).click();
   const ask = page.getByRole('button', { name: 'Ask Jev for a review suggestion' });
   await expect(ask).toBeDisabled();
   await consentAdvice(page); await ask.dblclick();
@@ -217,7 +217,7 @@ test('optional intelligence requires consent and never dispatches a control comm
 
 test('camera advice displays captured scope and never sends browser pixels', async ({ page }) => {
   await teaching(page);const fixture = await intelligence(page);
-  await page.reload(); await page.getByRole('button', { name: 'Teaching', exact: true }).click();
+  await page.reload(); await page.getByRole('link', { name: 'Teaching', exact: true }).click();
   await consentAdvice(page);await page.getByRole('button', { name: 'Ask Mk1.5 about the camera' }).click();
   await expect(page.getByRole('article', { name: 'Intelligence suggestion' })).toContainText('captured frame 1');
   expect(Object.keys(fixture.posts[0].body).sort()).toEqual(['consent', 'episode_id', 'expected_revision', 'prompt', 'request_id', 'session_id']);
@@ -226,7 +226,7 @@ test('camera advice displays captured scope and never sends browser pixels', asy
 
 test('private intelligence settings clear password without browser persistence or provider verification', async ({ page }) => {
   await teaching(page);const fixture = await intelligence(page);
-  await page.reload(); await page.getByRole('button', { name: 'Teaching', exact: true }).click();
+  await page.reload(); await page.getByRole('link', { name: 'Teaching', exact: true }).click();
   await page.getByText('Configure optional services', { exact: true }).click();
   await page.getByLabel('OpenRouter API key').fill('fixture-private-key-not-real');
   await page.getByLabel('Voice chat model', { exact: true }).fill('provider/chat');
@@ -239,7 +239,7 @@ test('private intelligence settings clear password without browser persistence o
 
 test('ambiguous intelligence failure never retries and requires renewed consent', async ({ page }) => {
   await teaching(page);const fixture = await intelligence(page, { fail: true });
-  await page.reload(); await page.getByRole('button', { name: 'Teaching', exact: true }).click();
+  await page.reload(); await page.getByRole('link', { name: 'Teaching', exact: true }).click();
   await consentAdvice(page);await page.getByRole('button', { name: 'Ask Jev for a review suggestion' }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'provider deadline expired' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Ask Jev for a review suggestion' })).toBeDisabled();
@@ -249,7 +249,7 @@ test('ambiguous intelligence failure never retries and requires renewed consent'
 
 test('explicit intelligence cancel preserves request identity and withholds late response', async ({ page }) => {
   await teaching(page);const fixture = await intelligence(page, { hold: true });
-  await page.reload(); await page.getByRole('button', { name: 'Teaching', exact: true }).click();
+  await page.reload(); await page.getByRole('link', { name: 'Teaching', exact: true }).click();
   await consentAdvice(page);await page.getByRole('button', { name: 'Ask Jev for a review suggestion' }).click();
   await expect.poll(() => fixture.posts.filter(p => p.path.endsWith('/decision')).length).toBe(1);
   await page.getByRole('button', { name: 'Cancel intelligence request' }).click();
@@ -262,7 +262,7 @@ test('explicit intelligence cancel preserves request identity and withholds late
 
 test('revision change cancels advice and cannot promote a late response', async ({ page }) => {
   await teaching(page);const fixture = await intelligence(page, { hold: true });
-  await page.reload(); await page.getByRole('button', { name: 'Teaching', exact: true }).click();
+  await page.reload(); await page.getByRole('link', { name: 'Teaching', exact: true }).click();
   await consentAdvice(page);await page.getByRole('button', { name: 'Ask Jev for a review suggestion' }).click();
   await expect.poll(() => fixture.posts.length).toBe(1);
   fixture.changes.revision = 3;

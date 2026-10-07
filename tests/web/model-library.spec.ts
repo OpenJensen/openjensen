@@ -20,9 +20,9 @@ async function fixture(page: Page, models = [artifact('teacher'), artifact('stud
     if (path.endsWith('/events')) return route.fulfill({ json: [] });
     return route.continue();
   });
-  await page.goto('/'); return state;
+  await page.goto('/datasets/'); return state;
 }
-async function openLibrary(page: Page) { await page.getByRole('button', {name:'Dashboard',exact:true}).click(); await page.getByRole('button', {name:'My models',exact:true}).click(); }
+async function openLibrary(page: Page) { await page.getByRole('link', {name:'Dashboard',exact:true}).click(); await page.getByRole('button', {name:'My models',exact:true}).click(); }
 test('collection shows model versions and their full recorded training and student history', async ({ page }, testInfo) => {
   const state = await fixture(page); await openLibrary(page);
   await expect(page.getByRole('button', { name: 'Open model Saved other · other' })).toBeVisible();
@@ -40,7 +40,7 @@ test('collection shows model versions and their full recorded training and stude
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
 });
 test('Distill explicitly selects an owned teacher instead of an abstract architecture', async ({ page }) => {
-  const state = await fixture(page); await page.getByRole('button', { name: 'Distill', exact: true }).click();
+  const state = await fixture(page); await page.getByRole('link', { name: 'Distill', exact: true }).click();
   await expect(page.getByRole('button', { name: 'ACT', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Choose Saved other · other' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Choose Saved teacher · teacher' }).click();
@@ -48,7 +48,7 @@ test('Distill explicitly selects an owned teacher instead of an abstract archite
   expect(state.mutations).toEqual([]);
 });
 test('empty collections cannot start work on nonexistent models', async ({ page }) => {
-  const state = await fixture(page, []); await page.getByRole('button', { name: 'Distill', exact: true }).click();
+  const state = await fixture(page, []); await page.getByRole('link', { name: 'Distill', exact: true }).click();
   await expect(page.getByText('No saved models in this project yet')).toBeVisible();
   await expect(page.getByRole('button', { name: 'ACT', exact: true })).toHaveCount(0);
   await openLibrary(page); await expect(page.getByText('Your models will live here')).toBeVisible();
@@ -63,7 +63,7 @@ test('cross-project continuation selects the model owner and exact model', async
 });
 test('quantization selects the exact saved SmolVLA model and omits abstract sources', async ({ page }) => {
   const state = await fixture(page, ['smol', 'smol-second'].map(id => artifact(id, 'alpha', { format: 'training_checkpoint', metadata: { architecture: 'smolvla' } })));
-  await page.getByRole('button', { name: 'Quantize', exact: true }).click(); await page.getByRole('button', { name: 'Choose Saved smol · smol' }).click();
+  await page.getByRole('link', { name: 'Quantize', exact: true }).click(); await page.getByRole('button', { name: 'Choose Saved smol · smol' }).click();
   await expect(page.getByRole('group', { name: 'My model', exact: true }).locator('input:checked')).toHaveValue('smol');
   await expect(page.getByText('Abstract base', { exact: true })).toHaveCount(0); expect(state.mutations).toEqual([]);
   await page.getByRole('button', { name: 'Choose Saved smol-second · smol-second' }).click();

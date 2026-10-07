@@ -49,8 +49,8 @@ async function fixture(page: Page) {
     if (path.startsWith('/api/v1/jobs/')) { const id = path.split('/').at(-1)!; state.gets.push(id); const current = state.jobs.find(item => item.id === id); if (current) return route.fulfill({ json: current }); }
     return route.continue();
   });
-  await page.goto('/'); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
-  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.goto('/datasets/'); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
+  await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await page.getByRole('button', { name: 'Choose Generated act-export · act-export', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toBeVisible();
   return state;
@@ -120,7 +120,7 @@ test('completed candidate shows measured storage and drift separately from exact
   await page.screenshot({ path: testInfo.outputPath('quantization-result.png'), fullPage: true });
   await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="packed-result"]')).toHaveCount(0);
   await page.setViewportSize({ width: 320, height: 900 }); const widths = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth, offenders: [...document.querySelectorAll('body *')].filter(item => item.getBoundingClientRect().right > document.documentElement.clientWidth + 1).slice(-15).map(item => ({ tag: item.tagName, cls: item.className, right: item.getBoundingClientRect().right })) })); expect(widths.scroll, JSON.stringify(widths)).toBeLessThanOrEqual(widths.width + 1);
-  await page.getByRole('button', { name: 'Run', exact: true }).click(); await page.getByRole('button', { name: '3D simulation', exact: true }).click();
+  await page.getByRole('link', { name: 'Run', exact: true }).click(); await page.getByRole('button', { name: '3D simulation', exact: true }).click();
   await expect(page.locator('.native-simulation').locator('input[type=radio][value="packed-result"]')).toHaveCount(0); expect(state.posts).toEqual([]);
 });
 
@@ -226,9 +226,9 @@ test('a delayed cancel response keeps the newly selected quantization job', asyn
 test('uncertain quantization survives stage navigation and reload until fresh history review', async ({ page }) => {
   const state = await fixture(page); state.submit = 'lost'; await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="act-export"]').check(); await submit(page).click();
   await expect(page.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toBeVisible();
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click(); await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await expect(submit(page)).toBeDisabled();
-  await page.reload(); await page.getByRole('button', { name: 'Quantize', exact: true }).click(); await page.getByRole('button', { name: 'Choose Generated act-export · act-export', exact: true }).click();
+  await page.reload(); await page.getByRole('link', { name: 'Quantize', exact: true }).click(); await page.getByRole('button', { name: 'Choose Generated act-export · act-export', exact: true }).click();
   const allow = page.getByRole('button', { name: 'I checked the jobs; allow a new request' }); await expect(allow).toBeDisabled();
   state.jobsError = true; await refresh(page); await expect(allow).toBeDisabled();
   state.jobsError = false; await refresh(page); await expect(allow).toBeEnabled(); expect(state.posts).toHaveLength(1);
@@ -239,7 +239,7 @@ async function fromStudent(page: Page, state: Awaited<ReturnType<typeof fixture>
   const output = { ...artifact(id, 'native_checkpoint', { recipe: 'act-action-distillation-v1' }), job_id: 'distilled' };
   state.jobs.push({ id: 'distilled', project_id: 'alpha', kind: 'policy.distill', status: 'succeeded', stage: 'completed', created_at: timestamp, updated_at: timestamp,
     request: { operation: 'policy.distill', runtime_id: 'student', artifact_id: 'teacher', dataset_job_id: 'data', timeout_seconds: 600, native_distillation: { adapter: 'act-act-v1', coordinate_attestation: 'generated_fixture', steps: 1 } }, result: { reports: [], artifacts: [output] } });
-  await page.getByRole('button', { name: 'Distill', exact: true }).click();
+  await page.getByRole('link', { name: 'Distill', exact: true }).click();
   await page.getByRole('button', { name: 'Choose Generated act-export · act-export', exact: true }).click();
   await page.getByRole('button', { name: 'Refresh distillation jobs', exact: true }).click();
   await page.getByLabel('Saved distillation job', { exact: true }).selectOption('distilled');
@@ -303,7 +303,7 @@ test('an acknowledged job remains visible when clearing its recovery journal fai
   await expect(page.getByText('Submitting one local quantization job…', { exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => (window as unknown as { journalRemovals: number }).journalRemovals)).toBe(1);
   await page.getByText('Prepare another ACT candidate', { exact: true }).click(); await expect(submit(page)).toBeDisabled(); expect(state.posts).toHaveLength(1);
-  await page.reload(); await page.getByRole('button', { name: 'Quantize', exact: true }).click(); await page.getByRole('button', { name: 'Choose Generated act-export · act-export', exact: true }).click();
+  await page.reload(); await page.getByRole('link', { name: 'Quantize', exact: true }).click(); await page.getByRole('button', { name: 'Choose Generated act-export · act-export', exact: true }).click();
   await expect(page.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toBeDisabled(); expect(state.posts).toHaveLength(1);
 });
 
@@ -313,7 +313,7 @@ test('journal cleanup after navigation exposes recovery instead of a permanent p
   const state = await fixture(page); await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="act-export"]').check();
   let release!: () => void; state.postGate = new Promise<void>(resolve => { release = resolve; });
   await submit(page).click(); await expect.poll(() => state.posts.length).toBe(1);
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click(); await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await expect(page.getByText('Submitting one local quantization job…', { exact: true })).toBeVisible(); release();
   await expect(page.getByText(/Browser session storage is unavailable/)).toBeVisible();
   await expect(page.getByText('Submitting one local quantization job…', { exact: true })).toHaveCount(0);

@@ -16,7 +16,7 @@ async function openDiagnostics(page: Page, id: string, origin = '', preferences 
     localStorage.setItem(`firebird.workflow.${id}`, JSON.stringify(preferences));
   }, { id, preferences });
   await page.goto(`${origin}/`);
-  await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+  await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
   await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Run diagnostics', exact: true })).toBeVisible();
 }
@@ -118,7 +118,7 @@ test('submits the selected policy through the real API and shows subprocess resu
   expect(completed.result.reports[0].scope).toBe('test_fixture');
   await expect(page.getByRole('combobox', { name: 'Run', exact: true })).toHaveValue(job.id);
   await page.reload();
-  await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+  await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
   await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
   await expect(page.getByRole('table', { name: 'Recorded policy measurements' })).toBeVisible();
 });
@@ -135,7 +135,7 @@ test('guides an empty project to Quantize and blocks unsupported simulation', as
   await expect(models.getByRole('heading', { name: 'No saved models in this project yet', exact: true })).toBeVisible();
   await expect(models.getByRole('button', { name: 'Open My models', exact: true })).toBeEnabled();
   const artifact = await policy(request, id);
-  await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+  await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
   await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
   await page.getByRole('combobox', { name: 'Diagnostic policy', exact: true }).selectOption(artifact);
   await page.getByRole('combobox', { name: 'Diagnostic execution target' }).selectOption('cpu-only');

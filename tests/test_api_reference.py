@@ -30,6 +30,17 @@ def exported_web(tmp_path: Path) -> Path:
         "<body><h1>Firebird API reference</h1></body></html>",
         encoding="utf-8",
     )
+    for section in (
+        "dashboard", "datasets", "training", "distillation", "quantization",
+        "evaluation", "simulation", "settings", "cloud-runs", "augmentation",
+        "teaching", "decision-lab", "models",
+    ):
+        page = directory / section
+        page.mkdir()
+        (page / "index.html").write_text(
+            f"<!doctype html><html><head>{shared_stylesheet}</head>"
+            f"<body><h1>{section}</h1></body></html>", encoding="utf-8",
+        )
     (assets / "site.css").write_text("body { color: #eef0f3; }", encoding="utf-8")
     # The API's schema must take precedence over even a stale exported copy.
     (directory / "openapi.json").write_text('{"stale": true}', encoding="utf-8")
@@ -64,6 +75,24 @@ def test_api_reference_redirect_preserves_query_string(web_client):
     assert response.status_code == 307
     assert response.headers["location"] == "http://testserver/docs/?search=projects"
     assert web_client.get(response.headers["location"]).status_code == 200
+
+
+@pytest.mark.parametrize("section", [
+    "dashboard", "datasets", "training", "distillation", "quantization",
+    "evaluation", "simulation", "settings", "cloud-runs", "augmentation",
+    "teaching", "decision-lab", "models",
+])
+def test_workspace_sections_serve_exported_pages_and_preserve_redirect_queries(
+    web_client, exported_web, section,
+):
+    redirect = web_client.get(f"/{section}?project=example", follow_redirects=False)
+    assert redirect.status_code == 307
+    assert redirect.headers["location"] == f"http://testserver/{section}/?project=example"
+    response = web_client.get(redirect.headers["location"])
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert response.text == (exported_web / section / "index.html").read_text()
+    assert web_client.get(f"/{section}/missing-page/").status_code == 404
 
 
 def test_shared_web_assets_are_available_from_api_reference(web_client, exported_web):

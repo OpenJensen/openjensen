@@ -25,7 +25,7 @@ class WorkflowPage {
   constructor(readonly page: Page) {}
 
   async createProject(name: string) {
-    await this.page.goto('/');
+    await this.page.goto('/datasets/');
     await openCreateProject(this.page);
     await this.page.getByLabel('Project name', { exact: true }).fill(name);
     const created = this.page.waitForResponse(response => response.url().endsWith('/api/v1/projects') && response.request().method() === 'POST');
@@ -46,7 +46,7 @@ class WorkflowPage {
       const completed = await waitForJob(this.page.request, receipt.id, 'succeeded');
       this.modelId = completed.result.artifacts.find((item: { format: string }) => item.format === 'gguf').id;
     }
-    await this.page.getByRole('button', { name: 'Quantize', exact: true }).click();
+    await this.page.getByRole('link', { name: 'Quantize', exact: true }).click();
     await this.page.getByRole('button', { name: `Choose float · ${this.modelId}`, exact: true }).click();
     await this.page.getByRole('group', { name: 'Compute', exact: true }).locator(`input[value="${runtime}"]`).check();
     await this.page.getByRole('group', { name: 'My model', exact: true }).locator(`input[value="${this.modelId}"]`).check();
@@ -108,7 +108,7 @@ test('browser workflow persists real subprocess results and downloads the same a
 
   await page.reload();
   await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', project.id);
-  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await page.locator(`.job-history-entry[data-job-id="${submitted.id}"]`).click();
   await expect(page.getByRole('article', { name: 'Quantize job details' })).toBeVisible();
   await expect(page.getByText('Diagnostics complete.', { exact: true })).toBeVisible();
@@ -144,7 +144,7 @@ test('cancelling a started worker remains cancelled after browser reload and in 
   const cancelled = await waitForJob(request, submitted.id, 'cancelled');
   expect(await cli('jobs', 'show', submitted.id)).toEqual(cancelled);
   await page.reload();
-  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await expect(page.locator(`.job-history-entry[data-job-id="${submitted.id}"]`)).toContainText('cancelled');
   await page.locator(`.job-history-entry[data-job-id="${submitted.id}"]`).click();
   await expect(page.getByRole('button', { name: 'Cancel run', exact: true })).toHaveCount(0);
@@ -164,7 +164,7 @@ test('a real worker failure is visible and does not prevent a subsequent success
   await expect(page.locator('.workflow-job-technical')).toContainText('Intentional synthetic browser worker failure');
   expect((await cli('jobs', 'show', failed.id)).status).toBe('failed');
   await page.reload();
-  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await page.locator(`.job-history-entry[data-job-id="${failed.id}"]`).click();
   await page.getByText('Details and logs', { exact: true }).click();
   await expect(page.locator('.workflow-job-technical')).toContainText('Intentional synthetic browser worker failure');

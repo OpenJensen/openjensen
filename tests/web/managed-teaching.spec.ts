@@ -23,7 +23,7 @@ function prepared(body: any) {
     result: { schema_version: 1, source: 'local', repo_id: null, revision: `metadata-sha256:${hex('f')}`, format: 'lerobot_v3', robot_type: 'generated', total_frames: 3, total_episodes: 1, fps: 10, features: { 'observation.state': { dtype: 'float32', shape: [1] }, action: { dtype: 'float32', shape: [1] } }, license: null, metadata_sha256: hex('f'), inspected_at: stamp, warnings: [], inspection_scope: 'complete_snapshot', snapshot: { schema_version: 1, id: `sha256:${hex('c')}`, manifest_sha256: hex('c'), format: 'lerobot_v3', total_bytes: 1000, file_count: 5, total_frames: 3, total_episodes: 1, lineage_validated: true, warnings: [] }, recording_preparation: { job_id: 'prepared-a', source_count: 1, lineage_group_count: 1, writer_readback_verified: true, source_preserved: true, task_success_verified: false, selection_sha256: createHash('sha256').update(JSON.stringify(canonical(body.recordings))).digest('hex') } } };
 }
 async function enterManaged(page: Page) {
-  await page.getByRole('button', { name: 'Teaching', exact: true }).click();
+  await page.getByRole('link', { name: 'Teaching', exact: true }).click();
   await page.getByRole('group', { name: 'Teaching mode', exact: true }).getByRole('button', { name: 'Managed session', exact: true }).click();
   await expect(managed(page)).toBeVisible();
 }
@@ -74,12 +74,12 @@ async function fixture(page: Page, initial: any[] = []) {
     if (path.endsWith('/recordings')) return route.fulfill({ json: s.catalog });
     if (path.endsWith('/jobs') && path.includes('/projects/')) return route.fulfill({ status: s.failHistory ? 503 : 200, json: s.failHistory ? { detail: 'History unavailable' } : s.jobs.filter(j => j.project_id === project) });
     if (path.startsWith('/api/v1/jobs/')) { const saved = s.jobs.find(j => j.id === path.split('/')[4]); if (path.endsWith('/events')) return route.fulfill({ json: [] }); return route.fulfill({ status: saved ? 200 : 404, json: saved ?? { detail: 'Missing job' } }); }
-    const replies: Record<string, unknown> = { '/api/v1/health': { status: 'ok', version: 'fixture' }, '/api/v1/projects': ['alpha', 'beta'].map(id => ({ id, name: `Teaching ${id}`, created_at: stamp })), '/api/v1/capabilities': [], '/api/v1/policy-options': { runtimes: [], sources: [], training_models: [], training_methods: [], default_training_method: 'full' } };
+    const replies: Record<string, unknown> = { '/api/v1/health': { status: 'ok', version: 'fixture' }, '/api/v1/projects': ['alpha', 'beta'].map(id => ({ id, name: `Teaching ${id}`, created_at: stamp })), '/api/v1/capabilities': [], '/api/v1/datasets': [], '/api/v1/policy-options': { runtimes: [], sources: [], training_models: [], training_methods: [], default_training_method: 'full' } };
     if (path in replies) return route.fulfill({ json: replies[path] });
     if (path.endsWith('/artifacts')) return route.fulfill({ json: [] });
     s.unexpected.push(`${request.method()} ${path}`); return route.fulfill({ status: 404, json: { detail: 'Unexpected fixture read' } });
   });
-  await page.goto('/'); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha'); await enterManaged(page);
+  await page.goto('/datasets/'); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha'); await enterManaged(page);
   await expect(managed(page).getByText(s.options.message)).toBeVisible();
   return s;
 }
@@ -118,7 +118,7 @@ test('completed reconciliation retains minimal accepted identity when history an
   const s = await fixture(page); s.lostStart = true; s.commitLost = true; await reviewStart(page); await start(page).click(); await expect(check(page)).toBeEnabled();
   const saved = job('capture-a', 'alpha', 'succeeded'); s.bindings.set(s.posts[0].key, saved); s.jobs = [saved]; s.failHistory = true; s.failStatus = true;
   await check(page).click(); await expect(managed(page).getByLabel('Saved teaching session', { exact: true })).toHaveValue('capture-a');
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await enterManaged(page);
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click(); await enterManaged(page);
   await expect(managed(page).getByText(/Acknowledgement retained for job capture-a/)).toBeVisible(); await chooseSaved(page);
   await expect(managed(page).getByText(/selected session is unavailable or changed/)).toBeVisible();
   await expect(managed(page).getByRole('button', { name: 'Review for dataset preparation', exact: true })).toHaveCount(0); await expect(managed(page).getByRole('region', { name: 'Teaching controls', exact: true })).toHaveCount(0); expect(s.posts).toHaveLength(1);

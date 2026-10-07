@@ -12,7 +12,7 @@ function savedJob(id: string, project = 'alpha', adapter = 'act-act-v1') {
 const overview = (page: Page) => page.getByRole('region', { name: 'Distillation models', exact: true });
 const act = (page: Page) => page.getByRole('button', { name: 'Choose Saved ACT teacher · teacher', exact: true });
 const panel = (page: Page) => page.getByRole('region', { name: 'ACT distillation', exact: true });
-const openDistill = (page: Page) => page.getByRole('navigation', { name: 'Policy lifecycle' }).getByRole('button', { name: 'Distill', exact: true }).click();
+const openDistill = (page: Page) => page.getByRole('navigation', { name: 'Policy lifecycle' }).getByRole('link', { name: 'Distill', exact: true }).click();
 
 async function fixture(page: Page, initialJobs: Record<string, any>[] = [inspectedDataset], workers: Record<string, unknown>[] = [worker]) {
   const state = { jobs: initialJobs, workers, mutations: [] as string[] };
@@ -27,7 +27,7 @@ async function fixture(page: Page, initialJobs: Record<string, any>[] = [inspect
     if (path.endsWith('/events')) return route.fulfill({ json: [] });
     return route.continue();
   });
-  await page.goto('/');
+  await page.goto('/datasets/');
   await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
   await openDistill(page);
   return state;
@@ -60,7 +60,7 @@ test('Distill has no default model even with an ACT worker and dataset, and mode
 test('explicit model choice stays with its project and survives stage navigation but not reload', async ({ page }) => {
   const state = await fixture(page);
   await act(page).click(); await expect(panel(page)).toBeVisible();
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await openDistill(page);
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click(); await openDistill(page);
   await expect(panel(page)).toBeVisible();
   await selectProject(page, 'beta');
   await expect(overview(page)).toBeVisible(); await expect(panel(page)).toHaveCount(0);

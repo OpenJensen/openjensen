@@ -144,7 +144,7 @@ export function ApiReference() {
   const schemas = Object.entries(document?.components?.schemas ?? {});
   const navigation = <nav className="reference-navigation" aria-label="API navigation">
     <p className="sidebar-section-label">Workspace</p>
-    <ul className="stage-list"><li><a className="stage-button" href={publicPath('/')}><Icon name="database" size={19} /><span>Dataset workspace</span></a></li><li><a className="stage-button selected" href={apiReferenceUrl} aria-current="page"><Icon name="book" size={19} /><span>API reference</span></a></li></ul>
+    <ul className="stage-list"><li><a className="stage-button" href={publicPath('/datasets/')}><Icon name="database" size={19} /><span>Dataset workspace</span></a></li><li><a className="stage-button selected" href={apiReferenceUrl} aria-current="page"><Icon name="book" size={19} /><span>API reference</span></a></li></ul>
     <div className="reference-nav-section"><p className="sidebar-section-label">On this page</p><ul className="stage-list"><li><a className="stage-button" href="#overview">Overview</a></li><li><a className="stage-button" href="#endpoints">Endpoints <small>{endpoints.length || '—'}</small></a></li><li><a className="stage-button" href="#schemas">Data models <small>{schemas.length || '—'}</small></a></li></ul></div>
   </nav>;
 
@@ -165,7 +165,7 @@ export function ApiReference() {
         {!filtered.length && <div className="reference-state"><h3>No endpoints found</h3><button className="secondary-button" type="button" onClick={() => { setSearch(''); setMethod('ALL'); }}>Clear filters</button></div>}
       </section>
       <section id="schemas" className="reference-section" aria-labelledby="schemas-heading"><div className="section-tabs"><h2 className="section-tab" id="schemas-heading">Data models</h2><span className="section-note">{schemas.length} schemas</span></div><div className="reference-models">{schemas.map(([name, schema]) => <details className="reference-model" id={`schema-${encodeURIComponent(name)}`} key={name}><summary><Icon name="layers" size={17} /><code>{name}</code><span>{Object.keys(schema.properties ?? {}).length} fields</span><span className="endpoint-chevron" aria-hidden="true">⌄</span></summary><div className="reference-model-body">{schema.description && <p className="reference-hint">{schema.description}</p>}<SchemaFields schema={schema} /><details className="reference-raw"><summary>Full JSON schema</summary><pre className="reference-code"><code>{JSON.stringify(schema, null, 2)}</code></pre></details></div></details>)}</div></section>
-      <footer className="workspace-footer"><a className="text-link" href={publicPath('/')}>Back to workspace <Icon name="arrow" size={13} /></a></footer>
+      <footer className="workspace-footer"><a className="text-link" href={publicPath('/dashboard/')}>Back to workspace <Icon name="arrow" size={13} /></a></footer>
     </>}
   </WorkspaceShell>;
 }

@@ -14,8 +14,8 @@ function feed(runs: ReturnType<typeof run>[], errors: { run_id: string | null; m
   return { enabled: true, server_time: '2026-09-27T00:00:01Z', stale_after_seconds: 90, runs, errors };
 }
 async function openCloud(page: Page) {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Cloud runs', exact: true }).click();
+  await page.goto('/datasets/');
+  await page.getByRole('link', { name: 'Cloud runs', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'External observations' })).toBeVisible();
 }
 
@@ -113,6 +113,7 @@ async function managedWorkspace(page: Page) {
     if (path.endsWith('/training')) return route.fulfill({ status: 404, json: { detail: 'Legacy fixture' } });
     const replies: Record<string, unknown> = {
       '/api/v1/health': { status: 'ok', version: 'test' }, '/api/v1/capabilities': [],
+      '/api/v1/datasets': [],
       '/api/v1/projects': ['alpha', 'beta'].map(id => ({ id, name: id, created_at: timestamp })),
       '/api/v1/projects/beta/jobs': [job('beta-cloud', 'beta', cloud)],
       '/api/v1/projects/alpha/artifacts': [], '/api/v1/projects/beta/artifacts': [],

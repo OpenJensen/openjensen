@@ -24,9 +24,10 @@ const active = (job: RecordingJob) => job.status === 'queued' || job.status === 
 const message = (cause: unknown) => cause instanceof Error ? cause.message : 'Recording preparation is unavailable.';
 
 /** Mount with key=projectId. This owns no live Teaching executor or microphone state. */
-export function RecordingPreparationPanel({ projectId, onInspect, onTrain, teachingCapture, onTeachingCaptureConsumed }: {
+export function RecordingPreparationPanel({ projectId, onInspect, onTrain, teachingCapture, onTeachingCaptureConsumed, isActive = () => true }: {
   projectId: string; onInspect: (job: RecordingJob) => void; onTrain: (job: RecordingJob) => void;
   teachingCapture?: ManagedPublishedCapture; onTeachingCaptureConsumed?: () => void;
+  isActive?: () => boolean;
 }) {
   const client = useQueryClient();
   const submission = useDurableSubmission({ project: projectId, operation: 'dataset.inspect' });
@@ -45,7 +46,7 @@ export function RecordingPreparationPanel({ projectId, onInspect, onTrain, teach
   const [accepted, setAccepted] = useState<RecordingJob | null>(null);
   const [error, setError] = useState(''), [consent, setConsent] = useState(false), [timeout, setTimeoutValue] = useState('600');
   const [cancelId, setCancelId] = useState('');
-  const live = () => mounted.current && currentProject.current === projectId;
+  const live = () => mounted.current && currentProject.current === projectId && isActive();
   function storageFailure() { const e = new RecordingStorageUnavailable(); if (live()) { setStorageReady(false); setError(e.message); setReviewed(false); setConsent(false); } return e; }
   function persist(next: RecordingState) {
     try { writeRecordingState(projectId, next); stateRef.current = next; if (live()) setState(next); }

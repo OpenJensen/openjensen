@@ -51,7 +51,7 @@ async function shellAppearance(page: Page) {
 
 for (const theme of ['Light', 'Dark']) {
   test(`workspace and API reference share rendered styling in ${theme.toLowerCase()} mode`, async ({ page }, testInfo) => {
-    await page.goto('/');
+    await page.goto('/datasets/');
     await page.getByRole('button', { name: theme, exact: true }).click();
     await expect(page.getByRole('button', { name: theme, exact: true })).toHaveAttribute('aria-pressed', 'true');
     const home = await shellAppearance(page);
@@ -70,7 +70,7 @@ for (const theme of ['Light', 'Dark']) {
 }
 
 test('theme selection survives home/reference navigation and direct reloads', async ({ page, context }) => {
-  await page.goto('/');
+  await page.goto('/datasets/');
   await page.getByRole('button', { name: 'Dark', exact: true }).click();
   await page.locator('a[href="/docs/"]:visible').first().click();
   await expect(page).toHaveURL(/\/docs\/$/);
@@ -79,7 +79,7 @@ test('theme selection survives home/reference navigation and direct reloads', as
   await expect(page.getByRole('button', { name: 'Dark', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: 'Light', exact: true }).click();
   await page.getByRole('link', { name: 'OPEN JENSEN workspace home' }).click();
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/dashboard\/$/);
   await expect(page.getByRole('button', { name: 'Light', exact: true })).toHaveAttribute('aria-pressed', 'true');
   expect(await page.evaluate(() => localStorage.getItem('firebird.theme'))).toBe('light');
   expect(context.pages()).toHaveLength(1);
@@ -332,12 +332,12 @@ test('direct docs URLs and reloads render without hydration or runtime errors', 
 test('shared workspace shell preserves training, defaults, and separate diagnostics', async ({ page }) => {
   // This view-only check requires an empty workspace even when real journey tests run.
   await page.route('**/api/v1/projects', route => route.fulfill({ json: [] }));
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.goto('/datasets/');
+  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Fine-tuning jobs', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start a new fine-tuning', exact: true })).toBeDisabled();
   await expect(page.getByRole('navigation', { name: 'Training setup' })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+  await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
   await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
   await expect(page.getByLabel('Quantization recipe')).toHaveValue('recommended');
   await expect(page.getByLabel('Also quantize vision to Q8 (experimental)')).not.toBeChecked();
@@ -406,7 +406,7 @@ test('dataset inspection auto-loads camera previews only after opening and stays
   });
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
-  await page.goto('/');
+  await page.goto('/datasets/');
   await expect(page.getByRole('button', { name: /^Inspection/ })).toBeEnabled();
   await expect(page.getByRole('button', { name: 'My datasets', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('heading', { name: 'Import a dataset', exact: true })).toBeVisible();
@@ -632,6 +632,7 @@ async function mockTrainingWorkspace(page: Page, {
         '/api/v1/projects': [{ id: trainingProject, name: 'Training review', created_at: trainingTimestamp }],
         [`/api/v1/projects/${trainingProject}/jobs`]: jobs,
         [`/api/v1/projects/${trainingProject}/artifacts`]: artifacts,
+        '/api/v1/compute-settings/local/setup': { status: 'idle', stage: '', message: '', runtime_id: null },
         '/api/v1/huggingface-connection': { configured: false, username: null, token_hint: null, checked_at: null, message: null },
         '/api/v1/cloud-connections': { providers: [{ provider: 'gcp', name: 'Google Cloud', status: 'connected', config: { project_id: 'training-project-123', region: 'us-central1' }, identity: { account: 'robotics@example.test' }, checked_at: trainingTimestamp, message: null, setup_commands: [] }] },
         '/api/v1/compute-settings': {
@@ -686,8 +687,7 @@ async function mockTrainingWorkspace(page: Page, {
     unexpectedRequests.push(`${request.method()} ${path}`);
     await route.fulfill({ status: 405, json: { detail: 'Request intentionally blocked by the training browser fixture.' } });
   });
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.goto('/training/');
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Dataset', level: 2, exact: true })).toBeVisible();
   await expect(page.getByRole('radio', { name: 'fixture/pick-and-place', exact: true })).toBeVisible();
@@ -1104,7 +1104,7 @@ test('dataset intake waits for a confirmed project and preserves its draft durin
     if (path === '/api/v1/health') return route.fulfill({ json: { status: 'ok', version: 'intake-fixture' } });
     return route.fulfill({ json: [] });
   });
-  await page.goto('/');
+  await page.goto('/datasets/');
   const repository = page.getByLabel('Dataset repository', { exact: true });
   const revision = page.getByLabel('Revision', { exact: true });
   const inspect = page.getByRole('button', { name: 'Inspect dataset', exact: true });
@@ -1138,7 +1138,7 @@ test('dataset intake waits for a confirmed project and preserves its draft durin
   await inspect.click();
   await expect.poll(() => submitted).toEqual([{ projectId: 'first', body: { source: 'huggingface', repo_id: 'fixture/operator-entry', revision: 'operator-revision' } }]);
   await selectProject(page, 'second');
-  await expect(repository).toHaveValue('codywang/so101_pickup_test');
+  await expect(repository).toHaveValue('');
   await repository.fill('fixture/second-project');
   await inspect.click();
   await expect.poll(() => submitted).toEqual([
@@ -1204,7 +1204,7 @@ test('blank dataset revision uses latest and reused inspections keep one history
       repo_id: repoId, revision, total_episodes: 1, offset: 0, limit: 6, episodes: [episode], warnings: [],
     } : { ...episode, repo_id: repoId, revision, cameras: [], samples: [], state_names: [], action_names: [], warnings: [] } });
   });
-  await page.goto('/');
+  await page.goto('/datasets/');
   await page.getByLabel('Dataset repository', { exact: true }).fill(repoId);
   await page.locator('.intake-advanced > summary').click();
   await expect(page.getByLabel('Revision', { exact: true })).toHaveValue('');
@@ -1240,7 +1240,7 @@ test('visiting compute settings preserves the draft through the jobs-first entry
   await page.getByRole('button', { name: 'Connect account', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Cloud providers', exact: true })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Training setup', exact: true })).toBeHidden();
-  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
   await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Compute', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Compute', level: 2, exact: true })).toBeVisible();
@@ -1341,23 +1341,23 @@ test('quantization submits Q4 only after an explicit experimental choice', async
     return route.fulfill({ status: 422, json: { detail: 'Captured request; no worker started' } });
   });
   async function submitQuantization(count: number) {
-    await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+    await page.getByRole('link', { name: 'Quantize', exact: true }).click();
     await page.getByRole('button', { name: 'Choose Synthetic policy · source', exact: true }).click();
     await page.getByRole('group', { name: 'My model', exact: true }).locator('input[value="source"]').check();
     await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
     await expect.poll(() => requests.length).toBe(count);
   }
-  await page.goto('/');
+  await page.goto('/datasets/');
   await submitQuantization(1);
   expect(requests[0].candidates).toEqual([{ language: 'Q8_0', vision: null }]);
-  await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+  await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
   await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
   const compare = page.getByLabel('Compare Q8 and Q4 (experimental)');
   await expect(compare).not.toBeChecked();
   await compare.check();
   await submitQuantization(2);
   expect(requests[1].candidates).toEqual([{ language: 'Q8_0', vision: null }, { language: 'Q4_0', vision: null }]);
-  await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+  await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
   await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
   const restoredCompare = page.getByLabel('Compare Q8 and Q4 (experimental)');
   // Settings remounts; wait until its saved preference has been restored.
@@ -1389,16 +1389,16 @@ test('Spatial settings require explicit task and parity choices in the submitted
     submitted.push(route.request().postDataJSON());
     return route.fulfill({ status: 422, json: { detail: 'Captured request; no worker started' } });
   });
-  await page.goto('/');
+  await page.goto('/datasets/');
   try {
-    await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+    await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
   await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
     await expect(page.getByLabel('Task suite')).toBeDisabled();
     await expect(page.getByLabel('Quantization recipe')).toBeDisabled();
     await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
     await expect(page.getByLabel('Diagnostic mode')).toBeDisabled();
     await expect(page.getByRole('heading', { name: 'Recorded benchmark comparison' })).toBeVisible();
-    await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+    await page.getByRole('link', { name: 'Quantize', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Your quantization models' }).getByRole('button', { name: 'Choose Synthetic policy · source', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'New quantization', exact: true })).toHaveCount(0);
     await expect(page.getByRole('group', { name: 'My model', exact: true })).toHaveCount(0);
@@ -1408,7 +1408,7 @@ test('Spatial settings require explicit task and parity choices in the submitted
   } finally {
     releaseProjects();
   }
-  await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+  await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
   await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
   await page.getByLabel('Task suite').selectOption('libero_spatial');
   await expect(page.getByLabel('Spatial task IDs')).toHaveValue('0,1,2,3,4,5,6,7,8,9');
@@ -1421,7 +1421,7 @@ test('Spatial settings require explicit task and parity choices in the submitted
   await page.getByLabel('Approved parity profile').fill('synthetic-test-only');
   await page.getByLabel('Maximum action RMSE').fill('0');
   await page.getByLabel('Maximum absolute action error').fill('0');
-  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await page.getByRole('button', { name: 'Choose Synthetic policy · source', exact: true }).click();
   await page.getByRole('group', { name: 'My model', exact: true }).locator('input[value="source"]').check();
   await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
@@ -1436,11 +1436,11 @@ test('Spatial settings require explicit task and parity choices in the submitted
     localStorage.setItem(key, JSON.stringify({ ...JSON.parse(localStorage.getItem(key) ?? '{}'), mode: 'engine', steps: 1 }));
   });
   await page.reload();
-  await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+  await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
   await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
   await expect(page.getByRole('combobox', { name: 'Protocol', exact: true })).toHaveValue('libero');
   await expect(page.getByLabel('Episode step limit')).toHaveValue('280');
-  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await page.getByRole('button', { name: 'Choose Synthetic policy · source', exact: true }).click();
   await page.getByRole('group', { name: 'My model', exact: true }).locator('input[value="source"]').check();
   await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
@@ -1470,7 +1470,7 @@ async function workflowPreferenceFixture(page: Page) {
   });
   async function submit() {
     const count = requests.length;
-    await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+    await page.getByRole('link', { name: 'Quantize', exact: true }).click();
     await page.getByRole('button', { name: 'Choose Synthetic policy · source', exact: true }).click();
     await page.getByRole('group', { name: 'My model', exact: true }).locator('input[value="source"]').check();
     await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
@@ -1495,8 +1495,8 @@ test('restored workflow preferences and submitted requests stay isolated when sw
       suite: 'libero_object', mode: 'engine', steps: 500, repetitions: 6, precision: 'Q4_0',
     }));
   });
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+  await page.goto('/datasets/');
+  await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
   await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
   await expect(page.getByLabel('Spatial task IDs')).toHaveValue('0,2');
   await expect(page.getByLabel('Episode step limit')).toHaveValue('280');
@@ -1537,8 +1537,8 @@ for (const state of ['empty', 'error'] as const) {
     await page.route('**/api/v1/projects', route => route.fulfill(recovered
       ? { json: fixture.projects }
       : state === 'empty' ? { json: [] } : { status: 503, json: { detail: 'Project fixture unavailable' } }));
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+    await page.goto('/datasets/');
+    await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
   await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
     await expect(page.getByLabel('Task suite')).toBeDisabled();
     await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
@@ -1546,7 +1546,7 @@ for (const state of ['empty', 'error'] as const) {
     await expect(page.getByRole('button', { name: 'Start diagnostics', exact: true })).toBeDisabled();
     await page.getByLabel('Reference hardware').selectOption('rtx3070');
     await expect(page.getByRole('table', { name: 'NVIDIA RTX 3070 · recorded reference results' })).toBeVisible();
-    await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+    await page.getByRole('link', { name: 'Quantize', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Your quantization models' }).getByRole('button', { name: 'Choose Synthetic policy · source', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'New quantization', exact: true })).toHaveCount(0);
     await expect(page.getByRole('group', { name: 'My model', exact: true })).toHaveCount(0);
@@ -1575,8 +1575,8 @@ for (const storage of ['invalid JSON', 'unavailable'] as const) {
         Storage.prototype.setItem = () => { throw new DOMException('Storage unavailable', 'SecurityError'); };
       }
     }, storage);
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+    await page.goto('/datasets/');
+    await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
   await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
     await expect(page.getByLabel('Quantization recipe')).toHaveValue('recommended');
     await page.getByLabel('Quantization recipe').selectOption('Q4_0');
@@ -1595,8 +1595,8 @@ test('a project removed during refetch cannot submit with its stale selection', 
     if (removed) emptyResponses += 1;
     return route.fulfill({ json: removed ? [] : fixture.projects });
   });
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.goto('/datasets/');
+  await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await page.getByRole('button', { name: 'Choose Synthetic policy · source', exact: true }).click();
   await page.getByRole('group', { name: 'My model', exact: true }).locator('input[value="source"]').check();
   await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toBeEnabled();

@@ -116,6 +116,7 @@ async function mockWorkspace(page: Page, config: { configured?: boolean; empty?:
       const responses: Record<string, unknown> = {
         '/api/v1/health': { status: 'ok', version: 'browser-fixture' },
         '/api/v1/capabilities': [],
+        '/api/v1/datasets': [],
         '/api/v1/projects': [{ id: projectId, name: 'Augmentation review', created_at: timestamp }],
         [`/api/v1/projects/${projectId}/jobs`]: jobs,
         '/api/v1/augmentation-options': {
@@ -141,8 +142,8 @@ async function mockWorkspace(page: Page, config: { configured?: boolean; empty?:
     unexpected.push(`${request.method()} ${path}`);
     await route.fulfill({ status: 405, json: { detail: 'Blocked by augmentation browser fixture.' } });
   });
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Augmentation', exact: true }).click();
+  await page.goto('/datasets/');
+  await page.getByRole('link', { name: 'Augmentation', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Augmentation', exact: true, level: 1 })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Generator', exact: true })).toContainText('Gemini Omni');
   return { submitted, unexpected, jobs, cancelled, keys, lookups, releaseAck, optionsAttempts: () => optionsAttempts };
@@ -224,8 +225,8 @@ test('running augmentation persists across tab changes, polls for completion and
   const { submitted, unexpected, jobs, cancelled } = await mockWorkspace(page);
   await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Cancel augmentation', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click();
-  await page.getByRole('button', { name: 'Augmentation', exact: true }).click();
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Augmentation', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Cancel augmentation', exact: true })).toBeVisible();
   jobs[0].status = 'succeeded';
   jobs[0].result = resultFor(submitted[0]);
@@ -303,7 +304,7 @@ test('waits for confirmed project membership and preserves the first setup error
   let releaseProjects!: () => void;
   const projectsReady = new Promise<void>(resolve => { releaseProjects = resolve; });
   const fixture = await mockWorkspace(page, { projectsReady, failFirst: true });
-  await expect(page.getByText('Loading projects…', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Project', exact: true }).getByRole('status')).toHaveText('Loading projects…');
   await expect(page.getByLabel('Additional instructions (optional)')).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeDisabled();
   expect(fixture.optionsAttempts()).toBe(0);
@@ -374,6 +375,7 @@ test('dataset handoff only offers supported video sources and preserves the sele
   jobs.push({ ...inspectedDataset('second-video', 'fixture/second'), created_at: '2026-09-25T12:00:00Z' });
   await page.route('**/api/v1/jobs/*/episodes**', route => route.fulfill({ json: { episodes: [], total_episodes: 12, offset: 0, limit: 6, warnings: [] } }));
   await page.reload();
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
   await page.getByRole('button', { name: /^Inspection/ }).click();
   const history = page.getByRole('combobox', { name: 'History', exact: true });
   const augment = page.getByRole('button', { name: 'Augment this dataset', exact: true });
@@ -404,7 +406,7 @@ test('lost augmentation acknowledgement recovers its original job by saved key a
   expect(fixture.submitted).toHaveLength(1);
   expect(fixture.keys[0]).toMatch(/^[a-f0-9-]{36}$/);
   await page.reload();
-  await page.getByRole('button', { name: 'Augmentation', exact: true }).click();
+  await page.getByRole('link', { name: 'Augmentation', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeDisabled();
   await recovery.getByRole('button', { name: 'Check saved request' }).click();
   await expect(recovery).toHaveCount(0);

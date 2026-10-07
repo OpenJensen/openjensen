@@ -42,8 +42,8 @@ async function settings(page: Page, reject = false) {
     else return route.fulfill({ status: 404, json: { detail: 'Not used by this fixture' } });
     return route.fulfill({ json: value });
   });
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+  await page.goto('/datasets/');
+  await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
   await page.getByRole('button', { name: 'Compute', exact: true }).click();
   return { panel: page.getByRole('region', { name: 'Hugging Face', exact: true }), requests };
 }

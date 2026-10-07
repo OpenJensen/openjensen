@@ -1,5 +1,10 @@
 # Workspace guide
 
+Each sidebar destination has its own address: `/dashboard/`, `/datasets/`,
+`/training/` and the other section routes. You can bookmark a section, open it in
+another tab, refresh it, or return with browser Back and Forward. The selected
+project and appearance stay shared across workspace sections.
+
 Use the project menu to select an existing project or choose **Create project…** to add one. Then choose a destination under **Overview**, **Data**, **Train**, **Test** or **Workspace**. **Guide** opens `/guide/`; `/docs/` remains the separate API reference. Selecting a card does not start a job. Configuration, completed jobs and downloaded artifacts do not by themselves establish robot task quality.
 
 ## Dashboard
