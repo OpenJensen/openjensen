@@ -24,7 +24,7 @@ async function openGpuPicker(page: Page, local = false) {
     }
     const replies: Record<string, unknown> = {
       '/api/v1/health': { status: 'ok', version: 'gpu-picker-fixture' },
-      '/api/v1/capabilities': [],
+      '/api/v1/capabilities': [], '/api/v1/datasets': [],
       '/api/v1/projects': [{ id: 'picker', name: 'GPU selection', created_at: timestamp }],
       '/api/v1/projects/picker/jobs': [],
       '/api/v1/projects/picker/artifacts': [],
@@ -204,7 +204,7 @@ async function trainingAdmission(page: Page, { format = 'lerobot_v3', dimensions
       return;
     }
     const replies: Record<string, unknown> = {
-      '/api/v1/health': { status: 'ok', version: 'admission-fixture' }, '/api/v1/capabilities': [],
+      '/api/v1/health': { status: 'ok', version: 'admission-fixture' }, '/api/v1/capabilities': [], '/api/v1/datasets': [],
       '/api/v1/projects/admission/jobs': [dataset], '/api/v1/projects/admission/artifacts': [],
       '/api/v1/jobs/admission-dataset/episodes': { episodes: [], total: 10, offset: 0, limit: 6 },
       '/api/v1/policy-options': { runtimes: cloudConnected ? [runtime] : [], sources: [],

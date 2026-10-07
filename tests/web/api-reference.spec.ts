@@ -628,10 +628,11 @@ async function mockTrainingWorkspace(page: Page, {
       }
       const responses: Record<string, unknown> = {
         '/api/v1/health': { status: 'ok', version: 'browser-fixture' },
-        '/api/v1/capabilities': [],
+        '/api/v1/capabilities': [], '/api/v1/datasets': [],
         '/api/v1/projects': [{ id: trainingProject, name: 'Training review', created_at: trainingTimestamp }],
         [`/api/v1/projects/${trainingProject}/jobs`]: jobs,
         [`/api/v1/projects/${trainingProject}/artifacts`]: artifacts,
+        '/api/v1/compute-settings/local/setup': { status: 'idle', stage: '', message: '', runtime_id: null },
         '/api/v1/huggingface-connection': { configured: false, username: null, token_hint: null, checked_at: null, message: null },
         '/api/v1/cloud-connections': { providers: [{ provider: 'gcp', name: 'Google Cloud', status: 'connected', config: { project_id: 'training-project-123', region: 'us-central1' }, identity: { account: 'robotics@example.test' }, checked_at: trainingTimestamp, message: null, setup_commands: [] }] },
         '/api/v1/compute-settings': {
@@ -1138,7 +1139,7 @@ test('dataset intake waits for a confirmed project and preserves its draft durin
   await inspect.click();
   await expect.poll(() => submitted).toEqual([{ projectId: 'first', body: { source: 'huggingface', repo_id: 'fixture/operator-entry', revision: 'operator-revision' } }]);
   await selectProject(page, 'second');
-  await expect(repository).toHaveValue('codywang/so101_pickup_test');
+  await expect(repository).toHaveValue('');
   await repository.fill('fixture/second-project');
   await inspect.click();
   await expect.poll(() => submitted).toEqual([

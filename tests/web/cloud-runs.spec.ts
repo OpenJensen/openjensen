@@ -112,7 +112,7 @@ async function managedWorkspace(page: Page) {
     if (/\/jobs\/[^/]+\/events$/.test(path)) { eventRequests.push(path); return route.fulfill(state.eventsOffline ? { status: 503, json: { detail: 'Fixture events outage' } } : { json: [{ sequence: 1, stage: 'completed', timestamp, message: `Recorded ${path.split('/')[4]}`, data: {} }] }); }
     if (path.endsWith('/training')) return route.fulfill({ status: 404, json: { detail: 'Legacy fixture' } });
     const replies: Record<string, unknown> = {
-      '/api/v1/health': { status: 'ok', version: 'test' }, '/api/v1/capabilities': [],
+      '/api/v1/health': { status: 'ok', version: 'test' }, '/api/v1/capabilities': [], '/api/v1/datasets': [],
       '/api/v1/projects': ['alpha', 'beta'].map(id => ({ id, name: id, created_at: timestamp })),
       '/api/v1/projects/beta/jobs': [job('beta-cloud', 'beta', cloud)],
       '/api/v1/projects/alpha/artifacts': [], '/api/v1/projects/beta/artifacts': [],
