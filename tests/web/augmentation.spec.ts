@@ -373,18 +373,24 @@ test('dataset handoff only offers supported video sources and preserves the sele
   jobs.find(job => job.id === 'local-inspection')!.result.snapshot = { path: '/fixture/local', lineage_validated: true, total_episodes: 12 };
   jobs.push({ ...inspectedDataset('second-video', 'fixture/second'), created_at: '2026-09-25T12:00:00Z' });
   await page.route('**/api/v1/jobs/*/episodes**', route => route.fulfill({ json: { episodes: [], total_episodes: 12, offset: 0, limit: 6, warnings: [] } }));
+  await page.route('**/api/v1/datasets**', route => route.fulfill({ json: jobs.filter(job=>job.kind==='dataset.inspect' && job.result).map(job=>({id:`inspection:${job.id}`,job_id:job.id,project_id:projectId,name:job.id,source:job.result.source,status:'ready',created_at:job.created_at,profile:job.result})) }));
   await page.reload();
-  await page.getByRole('button', { name: /^Inspection/ }).click();
+  await page.getByRole('button', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('button', { name: 'Open dataset inspected-video', exact: true }).click();
+  await page.getByText('Advanced', { exact: true }).click();
   const history = page.getByRole('combobox', { name: 'History', exact: true });
   const augment = page.getByRole('button', { name: 'Augment this dataset', exact: true });
   for (const id of ['local-inspection', 'image-only']) {
+    if (!await history.isVisible()) await page.getByText('Advanced', { exact: true }).click();
     await history.selectOption(id);
     await expect(augment).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Train on this dataset', exact: true })).toBeVisible();
   }
+  if (!await history.isVisible()) await page.getByText('Advanced', { exact: true }).click();
   await history.selectOption('failed-inspection');
   await expect(augment).toHaveCount(0);
-  await history.selectOption('second-video');
+  await page.getByRole('button', { name: '← Back to library', exact: true }).click();
+  await page.getByRole('button', { name: 'Open dataset second-video', exact: true }).click();
   await expect(augment).toBeVisible();
   await augment.click();
   await expect(page.getByRole('radiogroup', { name: 'Dataset', exact: true }).getByRole('radio', { name: /^fixture\/second,/ })).toBeChecked();
