@@ -3703,6 +3703,23 @@
             "title": "Candidates",
             "type": "array"
           },
+          "dataset_camera_mappings": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Camera Mappings"
+          },
           "dataset_job_id": {
             "anyOf": [
               {
@@ -3713,6 +3730,22 @@
               }
             ],
             "title": "Dataset Job Id"
+          },
+          "dataset_job_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 8,
+                "minItems": 2,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Job Ids"
           },
           "evaluation": {
             "$ref": "#/components/schemas/Evaluation"
@@ -6833,6 +6866,45 @@
         "summary": "Cancel Job"
       }
     },
+    "/api/v1/jobs/{job_id}/cover": {
+      "get": {
+        "operationId": "dataset_cover_api_v1_jobs__job_id__cover_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EpisodePreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dataset Cover"
+      }
+    },
     "/api/v1/jobs/{job_id}/episodes": {
       "get": {
         "operationId": "list_episodes_api_v1_jobs__job_id__episodes_get",
@@ -8312,6 +8384,58 @@
         "tags": [
           "Managed teaching"
         ]
+      }
+    },
+    "/api/v1/projects/{project_id}/training-plan": {
+      "post": {
+        "description": "Validate all independent recipes without accepting jobs or allocating GPUs.",
+        "operationId": "training_plan_api_v1_projects__project_id__training_plan_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "items": {
+                  "$ref": "#/components/schemas/PolicyRequest"
+                },
+                "title": "Payload",
+                "type": "array"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Training Plan"
       }
     },
     "/api/v1/simulation-options": {

@@ -4,7 +4,7 @@ Read the current task card and source before editing. Preserve working configura
 
 ## Local verification and publication
 
-GitHub Actions runs application and native-worker checks on GCP Linux runners. Run the applicable checks locally, retain source-bound results, and verify the actual PR check status before reporting CI as passing. After review and local verification, merge into local `main` and push it to the remote. Do not report resource-stopped or unexecuted checks as passing, and do not remove workflow definitions merely because hosted execution is unavailable.
+GitHub Actions is unavailable for this project. Run the applicable checks locally and retain source-bound results; hosted CI is not an acceptance gate. Keep each independent change in its own focused commit, push a feature branch and open a pull request with the local verification results. Do not merge or push directly to `main` unless the user explicitly requests it. Leave previously published runs and commit history as they are. Do not report resource-stopped or unexecuted checks as passing, and do not remove workflow definitions merely because hosted execution is unavailable.
 
 ## Local resource budget
 

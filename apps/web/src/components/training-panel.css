@@ -28,8 +28,9 @@
 .training-data-facts span { padding: 4px 9px; border-radius: 5px; background: var(--subtle); color: var(--muted); font-size: 11px; }
 .training-data-facts span:empty { display: none; }
 .training-camera-heading { margin-bottom: 12px; }
-.training-episode-picker { min-width: 0; max-width: 100%; }
-.training-episode-picker select { min-width: 0; max-width: 100%; min-height: 44px; border: 1px solid var(--line); padding: 6px 9px; border-radius: 5px; color: var(--ink); background: var(--surface); font-size: 11px; text-overflow: ellipsis; }
+.training-episode-picker { position: relative; min-width: 0; max-width: 100%; }
+.training-episode-picker select { appearance: none; min-width: 0; max-width: 100%; min-height: 44px; border: 1px solid var(--line); padding: 6px 32px 6px 12px; border-radius: 5px; color: var(--ink); background: var(--surface); font-size: 11px; text-overflow: ellipsis; }
+.training-select-arrow { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--muted); }
 .training-workspace .dx-camera-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
 .training-workspace .dx-camera-grid:not(:has(> :nth-child(3))) { grid-template-columns: repeat(2,minmax(0,1fr)); }
 .training-workspace .dx-camera-grid-single { grid-template-columns: minmax(0,420px) !important; }
@@ -189,3 +190,33 @@
 .training-recipe-identity { display: block; color: var(--muted); font-size: 10px; margin-top: 3px; overflow-wrap: anywhere; }
 .training-temporal-fields input { min-height: 44px; }
 .training-recovery-note { font-size: 12px; line-height: 1.65; }
+
+.training-settings-actions { display: flex; justify-content: flex-end; margin: 4px 0 14px; }
+
+.training-field-name { display: flex; align-items: center; gap: 8px; }
+.training-help { position: relative; display: inline-flex; align-items: center; }
+.training-help > button { display: grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--muted); background: var(--surface); font-size: 11px; line-height: 1; cursor: help; }
+.training-help > [role=tooltip] { display: none; position: absolute; z-index: 20; bottom: calc(100% + 8px); left: -20px; width: min(260px, 65vw); padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--ink); box-shadow: 0 6px 20px #10294420; font-size: 12px; font-weight: 400; line-height: 1.6; }
+.training-help:hover > [role=tooltip], .training-help:focus-within > [role=tooltip] { display: block; }
+
+.training-edit-model { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.training-edit-model button { padding: 8px 12px; font-size: 12px; }
+.training-edit-model button[aria-pressed=true] { border-color: var(--accent); background: var(--accent-soft); }
+.training-camera-mapping { border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin: 16px 0; display: flex; flex-wrap: wrap; gap: 12px; }
+.training-camera-mapping legend { font-size: 12px; padding: 0 5px; }
+.training-camera-mapping label { display: grid; gap: 6px; font-size: 12px; flex: 1; min-width: 160px; }
+.training-camera-mapping select { padding: 8px 28px 8px 10px; border-radius: 8px; border: 1px solid var(--line); color: var(--ink); background: var(--surface); min-width: 0; width: 100%; }
+.training-memory-estimate { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 12px; }
+.training-memory-estimate > span { display: flex; align-items: center; gap: 8px; }
+.training-memory-estimate small { color: var(--muted); }
+.training-mixture-recipe { display: grid; gap: 6px; font-size: 12px; margin-top: 10px; }
+.training-mixture-recipe span { color: var(--muted); overflow-wrap: anywhere; }
+.training-selection-note { color: var(--muted); font-size: 12px; }
+.training-field-name { position: relative; }
+.training-fields label:nth-child(3n) .training-help > [role=tooltip] { left: auto; right: 0; }
+@media(max-width: 600px) { .training-help > [role=tooltip] { left: 0; max-width: calc(100vw - 70px); } .training-memory-estimate .training-help > [role=tooltip] { left: auto; right: 0; } }
+
+.training-model-tile, .training-dataset { padding-right: 28px; }
+.training-model-tile input, .training-dataset input { left: auto; right: 8px; top: 8px; width: 14px; height: 14px; opacity: 1; clip: auto; clip-path: none; appearance: none; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--surface); margin: 0; cursor: pointer; }
+.training-model-tile input:checked, .training-dataset input:checked { background: var(--accent); border-color: var(--accent); }
+.training-model-tile input:checked::after, .training-dataset input:checked::after { content: ''; position: absolute; width: 3px; height: 6px; border: solid white; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); left: 4px; top: 1px; }

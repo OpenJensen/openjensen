@@ -28,7 +28,7 @@ function numberLabel(value: number | undefined) {
   return value.toLocaleString('en-US', { maximumFractionDigits: 4 });
 }
 
-function FeatureChips({ features }: { features: Record<string, unknown> }) {
+export function FeatureChips({ features }: { features: Record<string, unknown> }) {
   return <details className="dx-schema"><summary>Data structure</summary><div className="dx-features">{Object.entries(features).map(([key, value]) => {
     const feature = value && typeof value === 'object' ? value as { dtype?: unknown; shape?: unknown } : {};
     const shape = Array.isArray(feature.shape) ? feature.shape.filter(item => typeof item === 'number').join(' × ') : '';
@@ -302,7 +302,7 @@ function Explorer({ job, active }: { job: DatasetJob; active: boolean }) {
         <PreviewWarnings warnings={episodes.data.warnings} />
       </>}
     </>}
-    <FeatureChips features={profile.features} />
+
   </section>;
 }
 

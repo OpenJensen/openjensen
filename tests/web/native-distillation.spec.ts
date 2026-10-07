@@ -1,3 +1,4 @@
+import { chooseTransformationModel, openTransformationJob, transformationJobs } from './lifecycle-controls';
 import { selectProject } from './project-controls';
 import { startStudent, cancelStudent } from '../../apps/web/src/lib/native-distillation';
 import { expect, test, type Page } from '@playwright/test';
@@ -32,7 +33,7 @@ async function fixture(page: Page) {
   });
   await page.goto('/datasets/'); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
   await page.getByRole('link', { name: 'Distill', exact: true }).click();
-  await page.getByRole('button', { name: 'Choose Imported ACT teacher · teacher:policy', exact: true }).click();
+  await chooseTransformationModel(page, 'distillation', 'Choose Imported ACT teacher · teacher:policy');
   await expect(page.getByRole('region', { name: 'ACT distillation', exact: true })).toBeVisible();
   return state;
 }
@@ -120,7 +121,7 @@ test('a delayed cancellation never steals the newly selected job', async ({ page
   await page.getByRole('button', { name: 'Cancel selected distillation', exact: true }).click();
   await page.getByRole('button', { name: 'Confirm cancellation', exact: true }).click();
   await expect.poll(() => state.cancel.length).toBe(1);
-  await page.getByLabel('Saved distillation job', { exact: true }).selectOption('student-002'); release();
+  await openTransformationJob(page, 'distillation', 'student-002'); release();
   await expect(page.getByRole('article', { name: 'Distillation job details' })).toHaveAttribute('data-job-id', 'student-002');
   await expect(page.getByRole('button', { name: 'Cancel selected distillation', exact: true })).toBeEnabled();
   expect(state.cancel).toEqual(['student-001']);
@@ -143,11 +144,11 @@ test('switching project during admission never displays another project job', as
   await submit(page).click(); await expect.poll(() => state.posts.length).toBe(1);
   await selectProject(page, 'beta'); release();
   await expect(page.getByRole('article', { name: 'Distillation job details' })).toHaveCount(0);
-  await expect(page.getByRole('region', { name: 'Distillation models', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Distillation workspace', exact: true })).toBeVisible();
   await expect(panel(page)).toHaveCount(0);
   await expect(submit(page)).toHaveCount(0);
-  await selectProject(page, 'alpha'); await refresh(page);
-  await page.getByLabel('Saved distillation job', { exact: true }).selectOption('student-001');
+  await selectProject(page, 'alpha');
+  await openTransformationJob(page, 'distillation', 'student-001');
   await expect(page.getByRole('article', { name: 'Distillation job details' })).toHaveAttribute('data-job-id', 'student-001');
   expect(state.posts).toHaveLength(1);
 });
@@ -182,7 +183,7 @@ test('acknowledged job remains visible when journal cleanup fails', async ({ pag
   await submit(page).click();
   await expect(page.getByRole('article', { name: 'Distillation job details' })).toHaveAttribute('data-job-id', 'student-001');
   expect(state.posts).toHaveLength(1);
-  await page.getByText('Prepare another student', { exact: true }).click();
+  await chooseTransformationModel(page,'distillation','Choose Imported ACT teacher · teacher:policy');
   await expect(submit(page)).toBeDisabled();
   const pending = await page.evaluate(() => Object.keys(sessionStorage).filter(key => key.startsWith('firebird:job-attempt:')).map(key => JSON.parse(sessionStorage.getItem(key)!)));
   expect(pending).toHaveLength(1);
@@ -208,6 +209,7 @@ test('journal cleanup failure after navigation preserves recovery guidance', asy
   await page.getByRole('link', { name: 'Dataset', exact: true }).click(); release();
   await expect.poll(() => page.evaluate(() => (window as unknown as { journalCleanupFailures?: number }).journalCleanupFailures)).toBe(1);
   await page.getByRole('link', { name: 'Distill', exact: true }).click();
+  await page.getByRole('button', { name: 'Review request', exact: true }).click();
 
   await expect(page.getByRole('button', { name: 'I checked recorded jobs; allow a new request' })).toBeVisible();
   await expect(page.getByText(/^Submitting one /)).toHaveCount(0);
@@ -300,12 +302,12 @@ async function confirmCancellation(page: Page) {
 }
 async function reopenCancellationLane(page: Page) {
   await page.getByRole('link', { name: 'Distill', exact: true }).click();
-  const choice = page.getByRole('button', { name: 'Choose Imported ACT teacher · teacher:policy', exact: true });
-  const empty = page.getByText('No saved models in this project yet');
-  await expect(panel(page).or(choice).or(empty).first()).toBeVisible();
-  if (await empty.isVisible()) return;
-  if (await choice.isVisible()) await choice.click();
-  await expect(panel(page)).toBeVisible();
+  const history = page.getByRole('region', { name: 'Distillation jobs', exact: true });
+  await expect(history).toBeVisible();
+  if (await page.getByLabel('Current project').getAttribute('data-project-id') === 'alpha') {
+    await history.locator('[data-job-id="student-001"]').click();
+    await expect(panel(page)).toBeVisible();
+  }
 }
 const cancellationRecovery = (page: Page) => page.getByRole('region', { name: 'Cancellation recovery', exact: true });
 const acknowledgeCancellation = (page: Page) => page.getByRole('button', { name: 'I reviewed cancellation history; allow another cancellation', exact: true });
@@ -341,7 +343,7 @@ for (const method of ['getItem', 'setItem'] as const) test(`cancellation ${metho
   await expect(page.getByText(/Cancellation recovery storage is unavailable/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Cancel selected distillation', exact: true })).toBeDisabled();
   await page.getByRole('link', { name: 'Dataset', exact: true }).click(); await reopenCancellationLane(page);
-  await page.getByLabel('Saved distillation job', { exact: true }).selectOption('student-001');
+  await openTransformationJob(page, 'distillation', 'student-001');
   await expect(page.getByText(/Cancellation recovery storage is unavailable/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Cancel selected distillation', exact: true })).toBeDisabled();
   expect(reads).toBe(0); expect(state.cancel).toEqual([]);
@@ -381,7 +383,7 @@ test('validated cancellation acknowledgment survives a newly denied storage read
   await expect(page.getByText(/Cancellation recovery storage is unavailable/)).toBeVisible();
   await expect(cancellationRecovery(page)).toContainText('student-001');
   await page.getByRole('link', { name: 'Dataset', exact: true }).click(); await reopenCancellationLane(page);
-  await page.getByLabel('Saved distillation job', { exact: true }).selectOption('student-001');
+  await openTransformationJob(page, 'distillation', 'student-001');
   await expect(page.getByText('Cancellation response for student-001: cancelled. Recorded job history remains authoritative.', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Cancel selected distillation', exact: true })).toBeDisabled();
   expect(state.cancel).toEqual(['student-001']); expect(state.posts).toHaveLength(1);
@@ -395,8 +397,8 @@ test('cancellation selection A to B to A invalidates the old preflight', async (
   let reads = 0, release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
   await page.route('**/api/v1/jobs/student-001', async route => { reads++; await gate; return route.fulfill({ json: original }); });
   await confirmCancellation(page); await expect.poll(() => reads).toBe(1);
-  await page.getByLabel('Saved distillation job', { exact: true }).selectOption('student-002');
-  await page.getByLabel('Saved distillation job', { exact: true }).selectOption('student-001'); release();
+  await openTransformationJob(page, 'distillation', 'student-002');
+  await openTransformationJob(page, 'distillation', 'student-001'); release();
   await expect(cancellationRecovery(page)).toContainText('Cancellation outcome is unverified');
   expect(state.cancel).toEqual([]);
 });
@@ -408,7 +410,7 @@ test('late cancellation receipt survives unmount without replacing a manual save
   await page.route('**/api/v1/jobs/student-001/cancel', async route => { state.cancel.push('student-001'); await gate; return route.fulfill({ json: { ...original, status: 'cancelled' } }); });
   await confirmCancellation(page); await expect.poll(() => state.cancel.length).toBe(1);
   await page.getByRole('link', { name: 'Dataset', exact: true }).click(); await reopenCancellationLane(page);
-  await page.getByLabel('Saved distillation job', { exact: true }).selectOption('student-002'); release();
+  await openTransformationJob(page, 'distillation', 'student-002'); release();
   await expect(page.getByText('Cancellation response for student-001: cancelled. Recorded job history remains authoritative.', { exact: true })).toBeVisible();
   await expect(page.getByRole('article', { name: 'Distillation job details' })).toHaveAttribute('data-job-id', 'student-002');
   expect(state.cancel).toEqual(['student-001']); expect(state.posts).toHaveLength(1);
@@ -442,7 +444,7 @@ test('cancellation review cannot authorize a changed selection generation', asyn
   let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; }); let reads = 0;
   await page.route('**/api/v1/projects/alpha/jobs', async route => { reads++; await gate; return route.fulfill({ json: state.jobs }); });
   await page.getByRole('button', { name: 'Refresh cancellation history', exact: true }).click(); await expect.poll(() => reads).toBeGreaterThan(0);
-  await page.getByLabel('Saved distillation job', { exact: true }).selectOption('student-002'); await page.getByLabel('Saved distillation job', { exact: true }).selectOption('student-001'); release();
+  await openTransformationJob(page, 'distillation', 'student-002'); await openTransformationJob(page, 'distillation', 'student-001'); release();
   await expect(page.getByRole('button', { name: 'Refresh cancellation history', exact: true })).toBeEnabled();
   await expect(acknowledgeCancellation(page)).toBeDisabled(); expect(state.cancel).toEqual(['student-001']);
 });

@@ -206,6 +206,7 @@ export const api = {
   episodes: (jobId: string, offset = 0, limit = 6) => request<EpisodePage>(
     `/jobs/${encodeURIComponent(jobId)}/episodes?offset=${offset}&limit=${limit}`, undefined, 60_000,
   ),
+  datasetCover: (jobId: string) => request<EpisodePreview>(`/jobs/${encodeURIComponent(jobId)}/cover`, undefined, 60_000),
   episode: (jobId: string, episodeIndex: number) => request<EpisodePreview>(
     `/jobs/${encodeURIComponent(jobId)}/episodes/${episodeIndex}`, undefined, 60_000,
   ),

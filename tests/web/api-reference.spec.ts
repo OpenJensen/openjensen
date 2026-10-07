@@ -79,7 +79,7 @@ test('theme selection survives home/reference navigation and direct reloads', as
   await expect(page.getByRole('button', { name: 'Dark', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: 'Light', exact: true }).click();
   await page.getByRole('link', { name: 'OPEN JENSEN workspace home' }).click();
-  await expect(page).toHaveURL(/\/dashboard\/$/);
+  await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole('button', { name: 'Light', exact: true })).toHaveAttribute('aria-pressed', 'true');
   expect(await page.evaluate(() => localStorage.getItem('firebird.theme'))).toBe('light');
   expect(context.pages()).toHaveLength(1);
@@ -380,6 +380,8 @@ test('dataset inspection auto-loads camera previews only after opening and stays
   };
   await page.route('**/api/v1/projects', route => route.fulfill({ json: [{ id: 'mixed-review', name: 'Mixed jobs', created_at: timestamp }] }));
   await page.route('**/api/v1/projects/mixed-review/jobs', route => route.fulfill({ json: [policyJob, datasetJob] }));
+  await page.route('**/api/v1/datasets**',route=>route.fulfill({json:[{id:'inspection:dataset-review',job_id:datasetJob.id,project_id:datasetJob.project_id,name:'fixture/robot',source:'huggingface',status:'ready',created_at:timestamp,profile:datasetJob.result}]}));
+  await page.route('**/api/v1/jobs/dataset-review/cover',route=>route.fulfill({status:422,json:{detail:'Cover offline'}}));
   const previews: string[] = [];
   const media: string[] = [];
   await page.route('**/api/v1/jobs/dataset-review/episodes**', route => {
@@ -407,13 +409,13 @@ test('dataset inspection auto-loads camera previews only after opening and stays
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/datasets/');
-  await expect(page.getByRole('button', { name: /^Inspection/ })).toBeEnabled();
-  await expect(page.getByRole('button', { name: 'My datasets', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('navigation',{name:'Dataset views'})).toHaveCount(0);
+  await expect(page.getByRole('button', { name:'Open dataset fixture/robot',exact:true })).toBeEnabled();
   await expect(page.getByRole('heading', { name: 'Import a dataset', exact: true })).toBeVisible();
   expect(previews).toEqual([]);
   expect(media).toEqual([]);
 
-  await page.getByRole('button', { name: /^Inspection/ }).click();
+  await page.getByRole('button', { name:'Open dataset fixture/robot',exact:true }).click();
   await expect(page.getByRole('heading', { name: 'fixture/robot', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Cameras', exact: true })).toBeVisible();
   await expect(page.locator('.dx-camera video')).toHaveCount(2);
@@ -433,7 +435,7 @@ test('dataset inspection auto-loads camera previews only after opening and stays
   await expect.poll(() => previews).toEqual(['index', '0', '1']);
   await expect(page.getByText('policy-review', { exact: true })).toHaveCount(0);
   await expectNoPageOverflow(page);
-  await page.getByRole('button', { name: 'My datasets', exact: true }).click();
+  await page.getByRole('button', { name: '← Back to library', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Import a dataset', exact: true })).toBeVisible();
   expect(previews).toEqual(['index', '0', '1']);
   expect(errors).toEqual([]);
@@ -490,6 +492,18 @@ function trainingDataset(id: string, repo: string, camera = 'front', created = t
       metadata_sha256: 'b'.repeat(64), inspected_at: created, warnings: [],
     },
   };
+}
+
+async function chooseOnlyModel(page: Page, name: string) {
+  const choices = page.getByRole('group', { name: 'Base model', exact: true });
+  for (const choice of await choices.locator('input:checked').all()) await choice.uncheck();
+  await choices.getByRole('checkbox', { name, exact: true }).check();
+}
+
+async function chooseOnlyDataset(page: Page, name: string) {
+  const choices = page.getByRole('group', { name: 'Inspected dataset', exact: true });
+  for (const choice of await choices.locator('input:checked').all()) await choice.uncheck();
+  await choices.getByRole('checkbox', { name, exact: true }).check();
 }
 
 async function mockTrainingWorkspace(page: Page, {
@@ -629,10 +643,11 @@ async function mockTrainingWorkspace(page: Page, {
       const responses: Record<string, unknown> = {
         '/api/v1/health': { status: 'ok', version: 'browser-fixture' },
         '/api/v1/capabilities': [],
+        '/api/v1/datasets': [],
+        '/api/v1/compute-settings/local/setup': { status: 'idle', stage: '', message: '', id: null, runtime_id: null, started_at: null, finished_at: null },
         '/api/v1/projects': [{ id: trainingProject, name: 'Training review', created_at: trainingTimestamp }],
         [`/api/v1/projects/${trainingProject}/jobs`]: jobs,
         [`/api/v1/projects/${trainingProject}/artifacts`]: artifacts,
-        '/api/v1/compute-settings/local/setup': { status: 'idle', stage: '', message: '', runtime_id: null },
         '/api/v1/huggingface-connection': { configured: false, username: null, token_hint: null, checked_at: null, message: null },
         '/api/v1/cloud-connections': { providers: [{ provider: 'gcp', name: 'Google Cloud', status: 'connected', config: { project_id: 'training-project-123', region: 'us-central1' }, identity: { account: 'robotics@example.test' }, checked_at: trainingTimestamp, message: null, setup_commands: [] }] },
         '/api/v1/compute-settings': {
@@ -687,16 +702,17 @@ async function mockTrainingWorkspace(page: Page, {
     unexpectedRequests.push(`${request.method()} ${path}`);
     await route.fulfill({ status: 405, json: { detail: 'Request intentionally blocked by the training browser fixture.' } });
   });
-  await page.goto('/training/');
+  await page.goto('/datasets/');
+  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Dataset', level: 2, exact: true })).toBeVisible();
-  await expect(page.getByRole('radio', { name: 'fixture/pick-and-place', exact: true })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'fixture/pick-and-place', exact: true })).toBeVisible();
   await expect.poll(() => previews.length).toBeGreaterThanOrEqual(2);
   if (!emptyPreview) await expect(page.locator('.training-workspace .dx-camera video')).toHaveCount(2);
   const setup = page.getByRole('navigation', { name: 'Training setup' });
   await setup.getByRole('button', { name: 'Model', exact: true }).click();
   if (!await page.getByRole('group', { name: 'Base model', exact: true }).locator('input:checked').count()) {
-    await page.getByRole('radio', { name: 'SmolVLA', exact: true }).locator('..').click();
+    await page.getByRole('checkbox', { name: 'SmolVLA', exact: true }).locator('..').click();
   }
   await setup.getByRole('button', { name: 'Dataset', exact: true }).click();
   return { submitted, unexpectedRequests, previews, jobs };
@@ -705,15 +721,15 @@ async function mockTrainingWorkspace(page: Page, {
 test('training choices submit both selected cameras, pinned model, method and GPU', async ({ page }) => {
   const { submitted, unexpectedRequests } = await mockTrainingWorkspace(page);
   const datasetChoices = page.getByRole('group', { name: 'Inspected dataset', exact: true });
-  await expect(datasetChoices.getByRole('radio')).toHaveCount(4);
-  await expect(datasetChoices.getByRole('radio', { name: 'fixture/pick-and-place', exact: true })).toHaveCount(1);
-  await expect(datasetChoices.getByRole('radio', { name: 'fixture/local', exact: true })).toBeDisabled();
-  await expect(datasetChoices.getByRole('radio', { name: 'fixture/unpinned', exact: true })).toBeDisabled();
-  await expect(datasetChoices.getByRole('radio', { name: 'fixture/failed', exact: true })).toHaveCount(0);
+  await expect(datasetChoices.getByRole('checkbox')).toHaveCount(4);
+  await expect(datasetChoices.getByRole('checkbox', { name: 'fixture/pick-and-place', exact: true })).toHaveCount(1);
+  await expect(datasetChoices.getByRole('checkbox', { name: 'fixture/local', exact: true })).toBeDisabled();
+  await expect(datasetChoices.getByRole('checkbox', { name: 'fixture/unpinned', exact: true })).toBeDisabled();
+  await expect(datasetChoices.getByRole('checkbox', { name: 'fixture/failed', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Start fine-tuning', exact: true })).toHaveCount(0);
   await expect(page.getByRole('checkbox', { name: 'observation.images.front', exact: true })).toBeChecked();
   await expect(page.getByRole('checkbox', { name: 'observation.images.wrist', exact: true })).toBeChecked();
-  await page.getByRole('radio', { name: 'fixture/stack-blocks', exact: true }).locator('..').click();
+  await chooseOnlyDataset(page, 'fixture/stack-blocks');
   await expect(page.getByLabel(/^observation.images.side, episode 0/)).toBeVisible();
   const sideCamera = page.getByRole('checkbox', { name: 'observation.images.side', exact: true });
   const wristCamera = page.getByRole('checkbox', { name: 'observation.images.wrist', exact: true });
@@ -727,14 +743,14 @@ test('training choices submit both selected cameras, pinned model, method and GP
   await expect(page.getByLabel(/^observation.images.side, episode 1/)).toHaveAttribute('src', /dataset-stack\/observation.images.side\/1$/);
   await expect(wristCamera).toBeChecked();
   await page.getByRole('button', { name: 'Next', exact: true }).click();
-  await expect(page.getByRole('radio', { name: 'SmolVLA', exact: true })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'SmolVLA', exact: true })).toBeChecked();
   await expect(page.getByRole('radio', { name: 'LoRA', exact: true })).toBeChecked();
   await page.getByRole('radio', { name: 'QLoRA', exact: true }).locator('..').click();
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   const compute = page.getByRole('combobox', { name: 'GPU', exact: true });
   await expectGpuChoices(page, ['L4', 'T4', 'A100']);
   await chooseGpu(page, 'L4');
-  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
   await expect(page.getByRole('spinbutton', { name: 'Learning rate', exact: true })).toHaveValue('0.0001');
   await page.getByRole('spinbutton', { name: 'Steps', exact: true }).fill('123');
   await page.getByRole('spinbutton', { name: 'Batch size', exact: true }).fill('2');
@@ -758,7 +774,7 @@ test('training choices submit both selected cameras, pinned model, method and GP
 test('Psi-Zero explains incompatible v3 data before any training can be submitted', async ({ page }) => {
   const { submitted, unexpectedRequests } = await mockTrainingWorkspace(page, { configuredPsi: true });
   await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Model', exact: true }).click();
-  await page.getByRole('radio', { name: 'Psi-Zero', exact: true }).locator('..').click();
+  await chooseOnlyModel(page, 'Psi-Zero');
   await expect(page.getByText(/Psi-Zero currently needs a LeRobot v2 dataset/)).toBeVisible();
   await expect(page.locator('.training-workspace').getByRole('button', { name: 'Next', exact: true })).toBeDisabled();
   await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Compute', exact: true }).click();
@@ -771,7 +787,7 @@ test('Psi-Zero requires one camera and submits its frozen-backbone action-expert
   const { submitted, unexpectedRequests } = await mockTrainingWorkspace(page, { configuredPsi: true, datasetFormat: 'lerobot_v2' });
   const setup = page.getByRole('navigation', { name: 'Training setup' });
   await setup.getByRole('button', { name: 'Model', exact: true }).click();
-  await page.getByRole('radio', { name: 'Psi-Zero', exact: true }).locator('..').click();
+  await chooseOnlyModel(page, 'Psi-Zero');
   await expect(page.getByText(/Psi-Zero requires 1 selected camera/)).toBeVisible();
   await setup.getByRole('button', { name: 'Dataset', exact: true }).click();
   await page.getByRole('checkbox', { name: 'observation.images.wrist', exact: true }).uncheck();
@@ -823,13 +839,13 @@ test('model picker offers SmolVLA on demand and marks unimplemented adapters Com
   const { submitted, unexpectedRequests } = await mockTrainingWorkspace(page, { needsPreparation: true });
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   const models = page.getByRole('group', { name: 'Base model', exact: true });
-  await expect(models.getByRole('radio')).toHaveCount(6);
-  await expect(models.getByRole('radio', { name: 'SmolVLA', exact: true })).toBeEnabled();
-  await expect(models.getByRole('radio', { name: 'SmolVLA', exact: true })).toBeChecked();
-  await expect(models.getByRole('radio', { name: 'SmolVLA', exact: true }).locator('..').getByText('Setup required', { exact: true })).toBeVisible();
-  await expect(models.getByRole('radio', { name: 'SmolVLA', exact: true }).locator('..').getByText('Coming soon', { exact: true })).toHaveCount(0);
+  await expect(models.getByRole('checkbox')).toHaveCount(6);
+  await expect(models.getByRole('checkbox', { name: 'SmolVLA', exact: true })).toBeEnabled();
+  await expect(models.getByRole('checkbox', { name: 'SmolVLA', exact: true })).toBeChecked();
+  await expect(models.getByRole('checkbox', { name: 'SmolVLA', exact: true }).locator('..').getByText('Setup required', { exact: true })).toBeVisible();
+  await expect(models.getByRole('checkbox', { name: 'SmolVLA', exact: true }).locator('..').getByText('Coming soon', { exact: true })).toHaveCount(0);
   for (const name of ['OpenVLA-OFT', 'OpenVLA', 'π₀', 'π₀.₅', 'GR00T N1.7']) {
-    const choice = models.getByRole('radio', { name, exact: true });
+    const choice = models.getByRole('checkbox', { name, exact: true });
     await expect(choice).toBeDisabled();
     await expect(choice.locator('..').getByText('Coming soon', { exact: true })).toBeVisible();
   }
@@ -846,9 +862,9 @@ test('model picker offers SmolVLA on demand and marks unimplemented adapters Com
 test('training honors the configured model recipe and its eligible runtime IDs', async ({ page }) => {
   const { submitted, unexpectedRequests } = await mockTrainingWorkspace(page, { configuredPi0: true });
   await page.getByRole('button', { name: 'Next', exact: true }).click();
-  await expect(page.getByRole('radio', { name: 'π₀', exact: true })).toBeEnabled();
-  await expect(page.getByRole('radio', { name: 'π₀', exact: true }).locator('..').getByText('Coming soon', { exact: true })).toHaveCount(0);
-  await page.getByRole('radio', { name: 'π₀', exact: true }).locator('..').click();
+  await expect(page.getByRole('checkbox', { name: 'π₀', exact: true })).toBeEnabled();
+  await expect(page.getByRole('checkbox', { name: 'π₀', exact: true }).locator('..').getByText('Coming soon', { exact: true })).toHaveCount(0);
+  await chooseOnlyModel(page, 'π₀');
   await expect(page.getByRole('radio', { name: 'LoRA', exact: true })).toBeChecked();
   await expect(page.getByRole('radio', { name: 'QLoRA', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Next', exact: true }).click();
@@ -887,7 +903,8 @@ test('training cannot start when no CUDA training runtime is configured', async 
 test('training cards and step navigation work from the keyboard at 320px', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 740 });
   const { submitted, unexpectedRequests } = await mockTrainingWorkspace(page);
-  const dataset = page.getByRole('radio', { name: 'fixture/stack-blocks', exact: true });
+  await page.getByRole('checkbox', { name: 'fixture/pick-and-place', exact: true }).uncheck();
+  const dataset = page.getByRole('checkbox', { name: 'fixture/stack-blocks', exact: true });
   await dataset.focus();
   await page.keyboard.press('Space');
   await expect(dataset).toBeChecked();
@@ -910,7 +927,7 @@ test('training cards and step navigation work from the keyboard at 320px', async
   // Playwright's native picker API is portable across desktop/mobile OS menus.
   await chooseGpu(page, 'T4');
   await expect(runtime).toHaveAttribute('value', 'T4');
-  await page.locator('summary').filter({ hasText: /^Training settings/ }).focus();
+  await page.locator('summary').filter({ hasText: /^Advanced settings/ }).focus();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('spinbutton', { name: 'Steps', exact: true })).toBeVisible();
   await expectNoPageOverflow(page);
@@ -921,22 +938,20 @@ test('training cards and step navigation work from the keyboard at 320px', async
 test('resuming an interrupted run keeps its original dataset, method and training recipe', async ({ page }) => {
   const { submitted, unexpectedRequests } = await mockTrainingWorkspace(page, { previousRun: true });
   const steps = page.getByRole('navigation', { name: 'Training setup' });
-  await steps.getByRole('button', { name: 'Compute', exact: true }).click();
-  await page.getByText('Resume a previous run', { exact: true }).click();
-  const resumeChoices = page.getByRole('group', { name: 'Resume checkpoint', exact: true });
-  await expect(resumeChoices.getByRole('radio')).toHaveCount(2);
-  await expect(resumeChoices.getByRole('radio', { name: 'Completed training checkpoint', exact: true })).toHaveCount(0);
-  await page.getByRole('radio', { name: 'Last saved checkpoint · interrup', exact: true }).locator('..').click();
+  await expect(page.getByText('Resume a previous run', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Back to jobs', exact: true }).click();
+  await page.locator('[data-job-id="interrupted-training"]').click();
+  await page.getByRole('region', { name: 'Fine-tuning job', exact: true }).getByRole('button', { name: 'Resume from checkpoint', exact: true }).click();
   await steps.getByRole('button', { name: 'Dataset', exact: true }).click();
-  await expect(page.getByRole('radio', { name: 'fixture/stack-blocks', exact: true })).toBeChecked();
-  await expect(page.getByRole('radio', { name: 'fixture/stack-blocks', exact: true })).toBeDisabled();
-  await expect(page.getByRole('radio', { name: 'fixture/pick-and-place', exact: true })).not.toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'fixture/stack-blocks', exact: true })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'fixture/stack-blocks', exact: true })).toBeDisabled();
+  await expect(page.getByRole('checkbox', { name: 'fixture/pick-and-place', exact: true })).not.toBeChecked();
   await expect(page.getByRole('checkbox', { name: 'observation.images.side', exact: true })).toBeChecked();
   await expect(page.getByRole('checkbox', { name: 'observation.images.side', exact: true })).toBeDisabled();
   await expect(page.getByRole('checkbox', { name: 'observation.images.wrist', exact: true })).not.toBeChecked();
   await steps.getByRole('button', { name: 'Model', exact: true }).click();
-  await expect(page.getByRole('radio', { name: 'SmolVLA', exact: true })).toBeChecked();
-  await expect(page.getByRole('radio', { name: 'SmolVLA', exact: true })).toBeDisabled();
+  await expect(page.getByRole('checkbox', { name: 'SmolVLA', exact: true })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'SmolVLA', exact: true })).toBeDisabled();
   await expect(page.getByRole('radio', { name: 'QLoRA', exact: true })).toBeChecked();
   await expect(page.getByRole('radio', { name: 'QLoRA', exact: true })).toBeDisabled();
   await expect(page.getByRole('radio', { name: 'LoRA', exact: true })).not.toBeChecked();
@@ -965,7 +980,7 @@ for (const gpu of ['L4', 'T4', 'A100']) {
     await expect(form.getByText(/SkyPilot|GiB|1 GPU per run/)).toHaveCount(0);
     await expect(form.getByRole('button', { name: 'Refresh', exact: true })).toHaveCount(0);
     await expect(form.getByText('Worker setup', { exact: true })).toHaveCount(0);
-    await form.locator('summary').filter({ hasText: /^Training settings/ }).click();
+    await form.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
     await expect(form.getByRole('spinbutton', { name: 'Steps', exact: true })).toHaveValue('20000');
     await expect(form.getByRole('spinbutton', { name: 'Batch size', exact: true })).toHaveValue('64');
     await expect(form.getByRole('spinbutton', { name: 'Checkpoints', exact: true })).toHaveValue('5');
@@ -1212,10 +1227,10 @@ test('blank dataset revision uses latest and reused inspections keep one history
   await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
   await expect(page.getByRole('heading', { name: repoId, exact: true })).toBeVisible();
   await expect.poll(() => previews).toEqual(['index', 'episode']);
-  await page.getByRole('button', { name: 'Change source', exact: true }).click();
+  await page.getByRole('button', { name: '← Back to library', exact: true }).click();
   await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
   await expect(page.getByRole('heading', { name: repoId, exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Inspection/ })).toHaveText('Inspection1');
+  await expect(page.getByRole('navigation',{name:'Dataset views'})).toHaveCount(0);
   await expect(page.getByLabel('History', { exact: true })).toHaveCount(0);
   expect(submitted).toEqual([
     { source: 'huggingface', repo_id: repoId, revision: 'main' },
@@ -1234,7 +1249,7 @@ test('visiting compute settings preserves the draft through the jobs-first entry
   await page.getByRole('radio', { name: 'QLoRA', exact: true }).locator('..').click();
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await chooseGpu(page, 'T4');
-  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
   await page.getByRole('spinbutton', { name: 'Steps', exact: true }).fill('123');
   await page.getByRole('spinbutton', { name: 'Batch size', exact: true }).fill('2');
   await page.getByRole('button', { name: 'Connect account', exact: true }).click();
@@ -1245,7 +1260,7 @@ test('visiting compute settings preserves the draft through the jobs-first entry
   await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Compute', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Compute', level: 2, exact: true })).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'GPU', exact: true })).toHaveAttribute('value', 'T4');
-  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
   await expect(page.getByRole('spinbutton', { name: 'Steps', exact: true })).toHaveValue('123');
   await expect(page.getByRole('spinbutton', { name: 'Batch size', exact: true })).toHaveValue('2');
   await expect(page.getByRole('button', { name: 'Start fine-tuning', exact: true })).toBeDisabled();
@@ -1267,11 +1282,11 @@ for (const fixture of [
     await page.addInitScript(({ key, saved }) => localStorage.setItem(key, JSON.stringify(saved)), { key: `firebird.workflow.${trainingProject}`, saved: fixture.saved });
     const { submitted, unexpectedRequests } = await mockTrainingWorkspace(page);
     await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Compute', exact: true }).click();
-    await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+    await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
     await expect(page.getByRole('spinbutton', { name: 'Steps', exact: true })).toHaveValue(String(fixture.expected.trainingSteps));
     await expect(page.getByRole('spinbutton', { name: 'Batch size', exact: true })).toHaveValue(String(fixture.expected.batchSize));
     await expect(page.getByRole('spinbutton', { name: 'Checkpoints', exact: true })).toHaveValue(String(fixture.expected.checkpointCount));
-    if (fixture.expected.checkpointIntervalOverride) await expect(page.getByText(`Saved preference: every ${fixture.interval} steps. Change this count to replace it.`, { exact: false })).toBeVisible();
+    if (fixture.expected.checkpointIntervalOverride) { await page.getByRole('button', { name: 'Help for Checkpoints', exact: true }).focus(); await expect(page.getByRole('tooltip')).toContainText(`Every ${fixture.interval} steps`); }
     await expect.poll(() => page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? '{}'), `firebird.workflow.${trainingProject}`)).toMatchObject({ ...fixture.expected, trainingDefaultsVersion: 3 });
     await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
     await expect.poll(() => submitted.length).toBe(1);
@@ -1284,11 +1299,13 @@ test('checkpoint count follows run length and replaces a clearly identified save
   await page.addInitScript(key => localStorage.setItem(key, JSON.stringify({ trainingSteps: 1234, batchSize: 3, checkpointEvery: 7, trainingDefaultsVersion: 2 })), `firebird.workflow.${trainingProject}`);
   const { submitted, unexpectedRequests } = await mockTrainingWorkspace(page);
   await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Compute', exact: true }).click();
-  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
-  await expect(page.getByText('Saved preference: every 7 steps. Change this count to replace it.', { exact: false })).toBeVisible();
+  await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
+  await page.getByRole('button', { name: 'Help for Checkpoints', exact: true }).focus();
+  await expect(page.getByRole('tooltip')).toContainText('Every 7 steps');
   await page.getByRole('spinbutton', { name: 'Checkpoints', exact: true }).fill('5');
   await page.getByRole('spinbutton', { name: 'Steps', exact: true }).fill('20000');
-  await expect(page.getByText('Every 4,000 steps. Final checkpoint included.', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Help for Checkpoints', exact: true }).focus();
+  await expect(page.getByRole('tooltip')).toContainText('Every 4,000 steps, including the final checkpoint');
   await expect(page.getByText(/Saved preference:/)).toHaveCount(0);
   await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);

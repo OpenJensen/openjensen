@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { api, artifactDownloadUrl, isDatasetJob, type Job, type PolicyArtifact, type Project } from '@/lib/api';
 import { episodePartitions, modelActionIssue, modelDataset, modelFamily, modelFormat, modelLineage, ownedModels, record, textValue, type LineageStep, type ModelAction } from '@/lib/model-library';
@@ -61,9 +61,10 @@ function ModelStep({ step, jobs }: { step: LineageStep; jobs: Job[] }) {
   </li>;
 }
 
-type Props = { projects: Project[]; currentProjectId: string; onAction: (artifact: PolicyArtifact, action: ModelAction) => void; onTrain: () => void; onImport: () => void; onTrainingRun: (projectId: string, jobId: string, artifactId?: string) => void };
-export function ModelLibrary({ projects, currentProjectId, onAction, onTrain, onImport, onTrainingRun }: Props) {
+type Props = { projects: Project[]; currentProjectId: string; onAction: (artifact: PolicyArtifact, action: ModelAction) => void; onTrain: () => void; onImport: () => void; preferredModelId?: string; onModelRun?: (projectId:string,jobId:string,kind:string,artifactId?:string)=>void; onTrainingRun: (projectId: string, jobId: string, artifactId?: string) => void };
+export function ModelLibrary({ projects, currentProjectId, onAction, onTrain, onImport, onTrainingRun, preferredModelId, onModelRun }: Props) {
   const [scope, setScope] = useState('all'), [search, setSearch] = useState(''), [selected, setSelected] = useState<{ project: string; artifact: string } | null>(null);
+  useEffect(()=>{if(preferredModelId)setSelected({project:currentProjectId,artifact:preferredModelId});},[preferredModelId,currentProjectId]);
   const visibleProjects = projects.filter(project => scope === 'all' || project.id === currentProjectId);
   const artifactQueries = useQueries({ queries: visibleProjects.map(project => ({ queryKey: ['artifacts', project.id], queryFn: () => api.artifacts(project.id), retry: false, refetchInterval: 5000 })) });
   const jobQueries = useQueries({ queries: visibleProjects.map(project => ({ queryKey: ['jobs', project.id], queryFn: () => api.jobs(project.id), retry: false, refetchInterval: 5000 })) });
@@ -87,7 +88,7 @@ export function ModelLibrary({ projects, currentProjectId, onAction, onTrain, on
       <section className="model-next-actions" aria-label="Continue with this model"><h3>Continue with this model</h3><div className="model-actions">{(Object.keys(actionNames) as ModelAction[]).map(action => {
         const issue = modelActionIssue(artifact, action);
         return <div key={action}><button type="button" className="secondary-button" disabled={!chosen.fresh || !!issue} onClick={() => onAction(artifact, action)}>{actionNames[action]}</button>{issue && <small>{issue}</small>}</div>;
-      })}</div>{producer?.kind === 'policy.finetune' && <button type="button" className="text-link" disabled={!chosen.fresh} onClick={() => onTrainingRun(project.id, producer.id, artifact.id)}>Open this checkpoint’s training run and export →</button>}</section>
+      })}</div>{producer && ['policy.distill','policy.quantize','policy.workflow'].includes(producer.kind) && onModelRun && <button type="button" className="text-link" disabled={!chosen.fresh} onClick={()=>onModelRun(project.id,producer.id,producer.kind,artifact.id)}>Open this model’s {producer.kind==='policy.distill'?'distillation':'quantization'} job →</button>}{producer?.kind === 'policy.finetune' && <button type="button" className="text-link" disabled={!chosen.fresh} onClick={() => onTrainingRun(project.id, producer.id, artifact.id)}>Open this checkpoint’s training run and export →</button>}</section>
       <section className="model-lineage" aria-label="Model lineage"><div className="model-section-heading"><div><h3>How this model was made</h3><p>Recorded parent models and producing runs, from the original model to this version.</p></div><span>{lineage.length} recorded steps</span></div><ol>{lineage.map(step => <ModelStep key={step.id} step={step} jobs={jobs} />)}</ol></section>
       <section className="model-activity" aria-label="Model activity"><h3>Work using this model</h3>{activity.length ? <ul>{activity.map(job => <li key={job.id}><strong>{operationNames[job.kind] ?? job.kind}</strong><span>{date(job.created_at)} · {job.status} · Run {job.id}</span>{job.error && <p>{job.error}</p>}</li>)}</ul> : <p>No subsequent work has been recorded for this version.</p>}</section>
     </article>;

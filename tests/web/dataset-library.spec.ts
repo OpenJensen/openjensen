@@ -1,8 +1,8 @@
+import { waitForJob } from './job-waiter';
 import { expect, test, type Page } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
-import { mkdir } from 'node:fs/promises';
-import { waitForJob } from './job-waiter';
+import { mkdir, readFile } from 'node:fs/promises';
 
 test.describe.configure({timeout:60000});
 async function ownProject(page:Page,name:string) {
@@ -15,15 +15,19 @@ async function ownProject(page:Page,name:string) {
   return project;
 }
 
-test('create a real two-view example, save labels, reopen it and reach the dashboard',async({page},testInfo)=>{
+test('open an imported two-view fixture, save labels, reopen it and reach the dashboard',async({page},testInfo)=>{
   // Conversion and immutable-copy validation run real CPU subprocesses.
   test.setTimeout(120_000);
-  const project=await ownProject(page,`Label playground ${testInfo.project.name}`);
+  const project=await ownProject(page,`Label fixture ${testInfo.project.name}`);
   await expect(page.getByRole('heading',{name:'My datasets',exact:true})).toBeVisible();
   await expect(page.getByText('Example datasets',{exact:true})).toHaveCount(0);
   await expect(page.getByRole('status',{name:'Application API connection'})).toHaveCount(0);
   await expect(page.getByText('LeRobot v2 / v3',{exact:true})).toHaveCount(0);
-  await page.getByRole('button',{name:'Create example',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Create example',exact:true})).toHaveCount(0);
+  await expect(page.getByText('Try the labeling playground',{exact:true})).toHaveCount(0);
+  // The legacy API supplies an isolated test fixture; it has no product promotion.
+  expect((await page.request.post(`/api/v1/projects/${project.id}/datasets/example`)).status()).toBe(202);
+  await page.getByRole('button',{name:'Open dataset Robot labeling playground'}).click();
   const labels=page.getByRole('region',{name:'Dataset labeling'});
   await expect(labels.getByRole('heading',{name:'Robot labeling playground'})).toBeVisible();
   const image=labels.getByRole('img');
@@ -40,7 +44,7 @@ test('create a real two-view example, save labels, reopen it and reach the dashb
   await expect(labels.getByRole('textbox',{name:'Image label'})).toHaveValue('');
   await labels.getByRole('button',{name:'Previous image',exact:true}).click();
   await expect(labels.getByRole('textbox',{name:'Image label'})).toHaveValue('Red block approaching the target');
-  await page.getByRole('button',{name:'My datasets',exact:true}).click();
+  await page.getByRole('button',{name:'← Back to library',exact:true}).click();
   await page.getByRole('button',{name:'Open dataset Robot labeling playground'}).click();
   await expect(page.getByRole('textbox',{name:'Image label'})).toHaveValue('Red block approaching the target');
   await expect(labels.getByRole('link',{name:'Export dataset'})).toHaveAttribute('href',/\/datasets\/[a-f0-9]{32}\/download$/);
@@ -51,7 +55,6 @@ test('create a real two-view example, save labels, reopen it and reach the dashb
   await page.getByRole('button',{name:'Inspect dataset',exact:true}).click();
   const response=await submitted;
   expect(response.status()).toBe(202);
-  // Read the durable receipt from this fresh project's canonical history.
   const history=await page.request.get(`/api/v1/projects/${project.id}/jobs`);
   expect(history.status()).toBe(200);
   const recorded=await history.json();
@@ -64,7 +67,7 @@ test('create a real two-view example, save labels, reopen it and reach the dashb
   await expect(page.getByRole('button',{name:'Train on this dataset'})).toBeEnabled();
   await page.getByRole('link',{name:'Dashboard',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Resources & connections'})).toBeVisible();
-  await expect(page.getByRole('button',{name:'My models',exact:true})).toBeVisible();
+  await expect(page.getByRole('link',{name:'My models',exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'My datasets',exact:true})).toBeVisible();
   await page.screenshot({path:testInfo.outputPath('workspace-dashboard.png'),fullPage:true});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth+1)).toBe(true);
@@ -86,9 +89,9 @@ test('native folder selection uploads files, detects records and converts for in
   await page.getByRole('button',{name:'Convert to LeRobot'}).click();
   await expect(detected.getByText(/Ready to inspect/)).toBeVisible({timeout:30_000});
   await page.getByRole('button',{name:'Inspect dataset',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'Dataset inspection',exact:true})).toBeVisible();
+  await expect(page.getByRole('region',{name:'Dataset inspection',exact:true})).toBeVisible();
   await expect(page.getByRole('heading',{name:'Local dataset',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'My datasets',exact:true}).click();
+  await page.getByRole('button',{name:'← Back to library',exact:true}).click();
   await expect(page.getByRole('button',{name:'Open dataset source-folder'})).toBeVisible();
 });
 
@@ -127,4 +130,102 @@ test('dashboard reports a failed local probe instead of successful resource chec
   await expect(local.getByText('Check failed',{exact:true})).toBeVisible();
   await expect(page.getByRole('region',{name:'Resources & connections'}).getByRole('alert')).toContainText('Local GPU probe failed');
   await expect(page.getByText('Resource checks completed.',{exact:false})).toHaveCount(0);
+});
+
+for (const available of [true, false]) {
+  test(`saved Hub cards ${available ? 'show a paused frame at the inspected episode boundary' : 'explain unavailable previews'}`, async ({page}, testInfo) => {
+    const project='preview-project', time='2026-10-06T08:00:00Z', job='preview-inspection';
+    const profile={source:'huggingface',repo_id:'our/camera-data',revision:'a'.repeat(40),format:'lerobot_v3',total_episodes:8,total_frames:80,fps:5,features:{'observation.images.front':{dtype:'video',shape:[64,64,3]}},warnings:[],inspection_scope:'metadata_only'};
+    const media=resolve(testInfo.outputPath('preview.mp4'));
+    if (available) {
+      await mkdir(resolve(testInfo.outputPath('.')),{recursive:true});
+      const result=spawnSync('ffmpeg',['-v','error','-f','lavfi','-i','color=c=blue:s=64x64:r=5:d=3','-c:v','libx264','-pix_fmt','yuv420p','-movflags','+faststart',media],{encoding:'utf8'});
+      expect(result.status,result.stderr).toBe(0);
+      const bytes=await readFile(media);
+      await page.route('**/api/v1/fixture-preview.mp4', async route=>{
+        const range=/^bytes=(\d+)-(\d*)$/.exec(route.request().headers()['range']??'');
+        const start=range ? Number(range[1]) : 0;
+        const end=range?.[2] ? Math.min(Number(range[2]),bytes.length-1) : bytes.length-1;
+        await route.fulfill({status:range ? 206 : 200,contentType:'video/mp4',body:bytes.subarray(start,end+1),headers:{'Accept-Ranges':'bytes','Content-Length':String(end-start+1),...(range ? {'Content-Range':`bytes ${start}-${end}/${bytes.length}`} : {})}});
+      });
+    }
+    const episode={episode_index:7,frame_count:5,duration_seconds:1,tasks:['Pick up']};
+    const requests:string[]=[];
+    await page.route('**/api/v1/**', route=>{
+      const path=new URL(route.request().url()).pathname;
+      if(path==='/api/v1/fixture-preview.mp4')return route.fallback();
+      if(path==='/api/v1/projects')return route.fulfill({json:[{id:project,name:'Preview library',created_at:time}]});
+      if(path.endsWith('/jobs'))return route.fulfill({json:[]});
+      if(path==='/api/v1/datasets')return route.fulfill({json:[{id:`inspection:${job}`,job_id:job,project_id:project,name:profile.repo_id,source:'huggingface',status:'ready',created_at:time,profile}]});
+      if(path.endsWith('/cover')) {
+        requests.push(route.request().url());
+        return available ? route.fulfill({json:{...episode,repo_id:profile.repo_id,revision:profile.revision,cameras:[{key:'observation.images.front',url:'/api/v1/fixture-preview.mp4',start_seconds:1,end_seconds:2,width:64,height:64,fps:5}],samples:[],warnings:[],action_names:[],state_names:[]}}) : route.fulfill({status:422,json:{detail:'Preview unavailable'}});
+      }
+      return route.continue();
+    });
+    await page.goto('/datasets/');
+    const card=page.getByRole('button',{name:'Open dataset our/camera-data'});
+    if (available) {
+      const video=card.locator('video');
+      await expect(video).toHaveClass('loaded');
+      await expect.poll(()=>video.evaluate(node=>(node as HTMLVideoElement).currentTime)).toBeCloseTo(1,1);
+      expect(await video.evaluate(node=>(node as HTMLVideoElement).paused)).toBe(true);
+      await expect(card.getByText('Preview unavailable',{exact:true})).toHaveCount(0);
+    } else await expect(card.getByText('Preview unavailable',{exact:true})).toBeVisible();
+    expect(requests).toHaveLength(1);
+    expect(new URL(requests[0]).pathname).toContain('/cover');
+    if (available && testInfo.project.name === 'desktop') {
+      const video = card.locator('video');
+      await card.hover();
+      await expect.poll(() => video.evaluate(node => (node as HTMLVideoElement).paused)).toBe(false);
+      await page.waitForTimeout(1200); // Exercise the exclusive end boundary across a full loop.
+      expect(await video.evaluate(node => (node as HTMLVideoElement).currentTime)).toBeLessThan(2);
+      await page.getByRole('heading', { name: 'Dataset', exact: true }).hover();
+      await expect.poll(() => video.evaluate(node => (node as HTMLVideoElement).paused)).toBe(true);
+    }
+    await page.getByRole('link',{name:'Fine-tune',exact:true}).click();
+    await page.getByRole('link',{name:'Dataset',exact:true}).click();
+    if (available) {
+      expect(requests).toHaveLength(1);
+      await expect(card.locator('video')).toHaveClass('loaded');
+      await expect.poll(()=>card.locator('video').evaluate(node=>(node as HTMLVideoElement).currentTime)).toBeCloseTo(1,1);
+      await page.getByRole('searchbox',{name:'Search my datasets',exact:true}).fill('no matching dataset');
+      await expect(page.getByText('No matching datasets',{exact:true})).toBeVisible();
+      await page.getByRole('searchbox',{name:'Search my datasets',exact:true}).fill('');
+      await expect(card.locator('video')).toHaveClass('loaded');
+      await expect.poll(()=>card.locator('video').evaluate(node=>(node as HTMLVideoElement).currentTime)).toBeCloseTo(1,1);
+      expect(requests).toHaveLength(1);
+    }
+    else await expect(card.getByText('Preview unavailable',{exact:true})).toBeVisible();
+  });
+}
+
+test('dashboard uses the current project library scope, and inspection is reached only through its card',async({page})=>{
+  const time='2026-10-07T00:00:00Z',project='alpha';const writes:string[]=[];const reads:string[]=[];
+  const profile={source:'huggingface',repo_id:'our/robot-data',revision:'a'.repeat(40),format:'lerobot_v3',robot_type:'test',total_episodes:4,total_frames:40,fps:10,features:{action:{dtype:'float32',shape:[2]}},license:null,metadata_sha256:'b'.repeat(64),inspected_at:time,warnings:[],inspection_scope:'metadata_only'};
+  const datasets=[0,1,2,3,4].map(index=>({id:`inspection:data-${index}`,job_id:`data-${index}`,project_id:index<3?project:'beta',name:`our/data-${index}`,source:'huggingface',status:'ready',created_at:time,profile:{...profile,repo_id:`our/data-${index}`}}));
+  await page.route('**/api/v1/**',route=>{
+    const request=route.request(),url=new URL(request.url()),path=url.pathname;
+    if(request.method()!=='GET'){writes.push(path);return route.fulfill({status:405,json:{detail:'Navigation must not create jobs'}});}
+    if(path==='/api/v1/projects')return route.fulfill({json:[{id:project,name:'Selected',created_at:time},{id:'beta',name:'Other',created_at:time}]});
+    if(path==='/api/v1/datasets'){reads.push(url.searchParams.get('project_id')??'all');return route.fulfill({json:datasets});} // Includes foreign rows to exercise the client boundary too.
+    if(path.endsWith('/jobs'))return route.fulfill({json:datasets.map(entry=>({id:entry.job_id,project_id:entry.project_id,kind:'dataset.inspect',status:'succeeded',created_at:time,updated_at:time,request:{source:'huggingface',repo_id:entry.name},result:entry.profile}))});
+    if(path.endsWith('/artifacts'))return route.fulfill({json:[]});
+    if(path.endsWith('/episodes')||path.endsWith('/cover'))return route.fulfill({status:422,json:{detail:'Preview offline in this navigation test'}});
+    return route.continue();
+  });
+  await page.goto('/datasets/');
+  await expect(page.getByRole('navigation',{name:'Dataset views'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:/Open dataset/})).toHaveCount(3);
+  await page.getByRole('link',{name:'Dashboard',exact:true}).click();
+  await expect(page.getByRole('button',{name:'My datasets',exact:true})).toContainText('3 saved datasets');
+  await expect(page.getByRole('region',{name:'Recent datasets'}).getByText('our/data-3')).toHaveCount(0);
+  await page.getByRole('button',{name:'My datasets',exact:true}).click();
+  await page.getByRole('button',{name:'Open dataset our/data-0',exact:true}).click();
+  await expect(page.getByRole('region',{name:'Dataset inspection',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Explore dataset',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'← Back to library',exact:true})).toHaveCount(1);
+  await page.getByRole('button',{name:'← Back to library',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'My datasets',exact:true})).toBeVisible();
+  expect(reads).not.toContain('all');expect(reads).toContain(project);expect(writes).toEqual([]);
 });

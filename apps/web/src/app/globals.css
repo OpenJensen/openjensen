@@ -577,7 +577,7 @@ input::placeholder { color: var(--muted); opacity: .8; }
 .panel-title p, .activity-heading p, .field-help, .form-note { font-size: 12px; }
 .section-tabs { margin-bottom: 28px; }
 .dataset-tab-buttons .section-tab { min-height: 44px; font-size: 13px; }
-.source-option { border-radius: 9px; min-height: 70px; align-content: center; }
+.source-option { border-radius: 9px; min-height: 44px; align-content: center; }
 .source-option.selected { border-color: var(--accent); background: var(--subtle); }
 .starter-card { border-radius: 13px; transition: border-color .15s, box-shadow .15s; }
 .starter-card:hover, .starter-card.selected { border-color: var(--accent); box-shadow: var(--shadow); }
@@ -692,5 +692,7 @@ input[type=file]::file-selector-button { min-height: 40px; border: 1px solid var
 @media (max-width: 500px) { .replay-action-grid { grid-template-columns: 1fr; } }
 
 /* Source choices share one centered baseline, including the radio indicator. */
-.source-option { display:flex; align-items:center; justify-content:center; gap:8px; }
+.source-option { display:flex; align-items:center; justify-content:flex-start; gap:8px; text-align:left; }
 .source-option > input { margin:0; align-self:center; flex-shrink:0; }
+
+.dataset-back-navigation { margin: 0 0 20px; }

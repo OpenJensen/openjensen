@@ -22,6 +22,7 @@ class TrainConfig:
     output_dir: str = "outputs/smolvla-qlora"
     camera_key: str = "observation.images.front"
     camera_keys: list[str] | None = None
+    dataset_sources: list[dict] | None = None
     steps: int = 20000
     batch_size: int = 64
     gradient_accumulation_steps: int = 1
@@ -63,6 +64,26 @@ class TrainConfig:
                 raise ValueError("camera_keys must contain non-empty strings")
             if len(set(self.camera_keys)) != len(self.camera_keys):
                 raise ValueError("camera_keys must not contain duplicates")
+        if self.dataset_sources is not None:
+            from .dataset_mixture import bind_sources
+
+            primary = {
+                "source": "huggingface",
+                "format": "lerobot_v3",
+                "repo_id": self.dataset_id,
+                "revision": self.dataset_revision,
+                "features": self.dataset_sources[0]["features"],
+                "fps": self.dataset_sources[0]["fps"],
+            }
+            entries = [
+                {"profile": {**primary, **item}, "camera_mapping": item["camera_mapping"]}
+                for item in self.dataset_sources
+            ]
+            if (
+                bind_sources({"dataset": primary, "datasets": entries}, self.selected_camera_keys)
+                != self.dataset_sources
+            ):
+                raise ValueError("Invalid combined dataset recipe")
         positive = (
             "steps",
             "batch_size",
@@ -121,6 +142,8 @@ class TrainConfig:
 
     def to_dict(self):
         data = asdict(self)
+        if data["dataset_sources"] is None:
+            data.pop("dataset_sources")
         for key in TEMPORAL_FIELDS:
             if data[key] is None:
                 data.pop(key)

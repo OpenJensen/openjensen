@@ -235,15 +235,105 @@ async def frame_samples(
 
 class DatasetExplorer:
     def __init__(
-        self, client: httpx.AsyncClient | None = None, *, reader_python: str | Path | None = None
+        self,
+        client: httpx.AsyncClient | None = None,
+        *,
+        reader_python: str | Path | None = None,
+        cover_cache: Path | None = None,
     ):
         self.client = client or httpx.AsyncClient(timeout=20, follow_redirects=False)
         self.reader = HubReader(self.client)
         self.reader_python = reader_python
         self.slots = asyncio.Semaphore(2)
+        self.cover_cache = cover_cache
+        self.covers: OrderedDict[str, EpisodePreview] = OrderedDict()
+        self.cover_locks: dict[str, asyncio.Lock] = {}
 
     async def close(self) -> None:
         await self.client.aclose()
+
+    async def cover(self, job: Job) -> EpisodePreview:
+        """First camera only: no frame shard downloads or repeated index parsing.
+
+        The cache is addressed by the immutable source and verified metadata hash,
+        so a new inspection revision never inherits another revision's preview.
+        """
+        source = source_profile(job)
+        identity = json.dumps([source.repo_id, source.revision, source.metadata_sha256])
+        key = hashlib.sha256(identity.encode()).hexdigest()
+        async with self.cover_locks.setdefault(key, asyncio.Lock()):
+            if key in self.covers:
+                self.covers.move_to_end(key)
+                return self.covers[key].model_copy(deep=True)
+            path = self.cover_cache / f"{key}.json" if self.cover_cache else None
+            if path and path.is_file() and not path.is_symlink() and path.stat().st_size <= 65536:
+                try:
+                    cached = EpisodePreview.model_validate_json(path.read_bytes())
+                    if (cached.repo_id, cached.revision) != (source.repo_id, source.revision):
+                        raise ValueError("Cached cover identity differs")
+                    if (
+                        cached.episode_index >= source.total_episodes
+                        or len(cached.cameras) > 1
+                        or cached.samples
+                        or any(
+                            not allowed_url(c.url)
+                            or c.end_seconds <= c.start_seconds
+                            or c.key not in source.features
+                            for c in cached.cameras
+                        )
+                    ):
+                        raise ValueError("Invalid cached cover")
+                    self.covers[key] = cached
+                    while len(self.covers) > 128:
+                        old_key, _ = self.covers.popitem(last=False)
+                        if not self.cover_locks[old_key].locked():
+                            self.cover_locks.pop(old_key, None)
+                    return cached.model_copy(deep=True)
+                except ValueError, OSError:
+                    pass
+            async with self.slots, asyncio.timeout(60):
+                budget = Budget()
+                info = await self.metadata(source, budget)
+                rows = await self.episodes(source, budget, 0, 1)
+                if not rows:
+                    raise ExplorationError("No preview episode was found", 404)
+                row = rows[0]
+                item = summary(row, source.fps)
+                warnings: list[str] = []
+                cameras = await self.cameras(
+                    source, info, row, item, budget, warnings, limit=1, verify=False
+                )
+                result = EpisodePreview(
+                    **item.model_dump(),
+                    repo_id=source.repo_id,
+                    revision=source.revision,
+                    cameras=cameras,
+                    samples=[],
+                    action_names=[],
+                    state_names=[],
+                    warnings=warnings,
+                )
+            self.covers[key] = result
+            while len(self.covers) > 128:
+                old_key, _ = self.covers.popitem(last=False)
+                if not self.cover_locks[old_key].locked():
+                    self.cover_locks.pop(old_key, None)
+            if path:
+                try:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    # Only this generated cache directory is bounded; original data is untouched.
+                    owned = sorted(
+                        path.parent.glob("[0-9a-f]" * 64 + ".json"), key=lambda p: p.stat().st_mtime
+                    )
+                    for old in owned[:-127]:
+                        if old != path and not old.is_symlink():
+                            old.unlink()
+                    temporary = path.with_suffix(".tmp")
+                    temporary.write_text(result.model_dump_json())
+                    temporary.replace(path)
+                except OSError:
+                    pass  # A cache failure must not turn a valid preview into an error.
+            return result.model_copy(deep=True)
 
     async def metadata(self, source: DatasetProfile, budget: Budget) -> dict[str, Any]:
         raw = await self.reader.read(hub_url(source, "meta/info.json"), MAX_JSON_BYTES, budget)
@@ -402,6 +492,9 @@ class DatasetExplorer:
         item: EpisodeSummary,
         budget: Budget,
         warnings: list[str],
+        *,
+        limit: int = 8,
+        verify: bool = True,
     ) -> list[CameraPreview]:
         result = []
         camera_features = [
@@ -409,7 +502,7 @@ class DatasetExplorer:
             for key, feature in source.features.items()
             if feature.get("dtype") in {"video", "image"}
         ]
-        for key, feature in camera_features[:8]:
+        for key, feature in camera_features[:limit]:
             if feature.get("dtype") == "image":
                 warnings.append(f"{key}: embedded image previews are not available yet.")
                 continue
@@ -438,7 +531,8 @@ class DatasetExplorer:
                     if end <= start:
                         raise ExplorationError("Video segment has invalid time boundaries")
                 url = hub_url(source, path)
-                await self.reader.read(url, 0, budget, head=True)
+                if verify:
+                    await self.reader.read(url, 0, budget, head=True)
                 video_info = feature.get("info") or feature.get("video_info") or {}
                 if not isinstance(video_info, dict):
                     raise ExplorationError("Camera metadata is not a valid object")

@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { api, isActive, isDatasetJob, type PolicyArtifact, type Project } from '@/lib/api';
 import { quantizeModeFor, type ModelAction } from '@/lib/model-library';
-import { engineRuntime, initialQuantizeEntry, initialRunEntry, runJobMode, type Entry, type ProjectEntry, type QuantizeMode, type RunMode } from '@/lib/workflow-entry';
+import { engineRuntime, initialRunEntry, runJobMode, type Entry, type ProjectEntry, type QuantizeMode, type RunMode } from '@/lib/workflow-entry';
 import { storedSimulationAttempt } from '@/lib/native-simulation-recovery';
 import { storedAttempt, type PolicyJobAttempt } from '@/lib/policy-job-attempt';
 import { replayRuntime } from '@/lib/native-replay';
@@ -49,6 +49,8 @@ export function useWorkbenchState() {
   const [teachingCapture, setTeachingCapture] = useState<ManagedPublishedCapture | null>(null);
   const [trainingNavigation, setTrainingNavigation] = useState(0);
   const [openTrainingRun, setOpenTrainingRun] = useState<{ projectId: string; id: string; artifactId?: string } | null>(null);
+  const [openDistillationRun, setOpenDistillationRun] = useState<{projectId:string;id:string} | null>(null);
+  const [selectedModel, setSelectedModel] = useState<{projectId:string;id:string} | null>(null);
   const [openQuantizationRun, setOpenQuantizationRun] = useState<{ projectId: string; id: string } | null>(null);
   const [workflowNavigation, setWorkflowNavigation] = useState(0);
   const [startTraining, setStartTraining] = useState<{ id: number; datasetId?: string }>();
@@ -83,6 +85,8 @@ export function useWorkbenchState() {
   }, [projects.data, projectId]);
   function navigateStage(index: number) {
     setOpenQuantizationRun(null);
+    setOpenDistillationRun(null);
+    setSelectedModel(null);
     setModelInput(null); setImportModel(false);
     setOpenTrainingRun(null);
     setOpenSimulation(null);
@@ -95,6 +99,8 @@ export function useWorkbenchState() {
       setStartTraining(undefined);
       setTrainingNavigation(value => value + 1);
     }
+    if (index === 2 && workflowProjectId) {setDistillationModels(previous=>({...previous,[workflowProjectId]:undefined}));setDistillTeachers(previous=>({...previous,[workflowProjectId]:undefined}));}
+    if (index === 0) setDatasetView('sources');
     openStage(index);
   }
   function startTrainingOnDataset(datasetId: string) {
@@ -104,7 +110,10 @@ export function useWorkbenchState() {
     openStage(1);
   }
   function selectProject(id: string) {
+    setDistillationModels({});setDistillTeachers({});
     setOpenQuantizationRun(null);
+    setOpenDistillationRun(null);
+    setSelectedModel(null);
     setModelInput(null); setImportModel(false);
     setOpenTrainingRun(null);
     setOpenSimulation(null);
@@ -156,6 +165,13 @@ export function useWorkbenchState() {
       setEntries(previous => ({ ...previous, [artifact.project_id]: { ...previous[artifact.project_id], run: { mode: action === 'replay' ? 'replay' : 'native', origin: 'handoff' } } }));
     }
   }
+  function openSavedModel(id:string) { const owner=workflowProjectId; navigateStage(11);setSelectedModel({projectId:owner,id}); }
+  function openModelRun(owner:string, id:string, kind:string, artifactId?:string) {
+    selectProject(owner);
+    if(kind==='policy.finetune'){navigateStage(1);setOpenTrainingRun({projectId:owner,id,artifactId});}
+    else if(kind==='policy.distill'){navigateStage(2);setDistillationModels(previous=>({...previous,[owner]:'act'}));setOpenDistillationRun({projectId:owner,id});}
+    else {navigateStage(3);setOpenQuantizationRun({projectId:owner,id});}
+  }
   const teachingContext = useRef({ project: workflowProjectId, stage: activeStage, mode: teachingMode });
   teachingContext.current = { project: workflowProjectId, stage: activeStage, mode: teachingMode };
   function reviewTeachingCapture(capture: ManagedPublishedCapture) {
@@ -180,14 +196,14 @@ export function useWorkbenchState() {
     setEntryError(null);
   }
   useEffect(() => {
-    const stage = activeStage === 3 ? 'quantize' : activeStage === 5 ? 'run' : null;
+    const stage = activeStage === 5 ? 'run' : null;
     if (!stage || !workflowProjectId || context?.[stage]) return;
     // An unfinished request has priority over restoring owned history.
     // Read only: the child owns its journal and explicit recovery acknowledgement.
     let recovery = false, simulationRecovery = false;
     try {
-      const operation = stage === 'quantize' ? 'policy.quantize' : 'policy.run.replay';
-      const cacheKey = [stage === 'quantize' ? 'native-quantization-attempt' : 'native-replay-attempt', workflowProjectId];
+      const operation = 'policy.run.replay';
+      const cacheKey = ['native-replay-attempt', workflowProjectId];
       recovery = !!queryClient.getQueryData<PolicyJobAttempt>(cacheKey) || !!storedAttempt(operation, workflowProjectId);
       if (stage === 'run') simulationRecovery = !!queryClient.getQueryData<PolicyJobAttempt>(['native-simulation-attempt', workflowProjectId]) || !!storedSimulationAttempt(workflowProjectId);
       if (recovery && simulationRecovery) { setEntryError({ projectId: workflowProjectId, stage: activeStage, message: 'Both observation replay and native simulation have unresolved requests. Choose either workflow to inspect its recovery record; neither request was retried.' }); return; }
@@ -196,9 +212,7 @@ export function useWorkbenchState() {
       return;
     }
     if (!recovery && !simulationRecovery && (!jobs.isSuccess || jobs.isError)) return;
-    const next = stage === 'quantize'
-      ? recovery ? { mode: 'native' as const, origin: 'recovery' as const } : initialQuantizeEntry(workflowProjectId, jobs.data!)
-      : simulationRecovery ? { mode: 'native' as const, origin: 'recovery' as const } : recovery ? { mode: 'replay' as const, origin: 'recovery' as const } : initialRunEntry(workflowProjectId, jobs.data!);
+    const next = simulationRecovery ? { mode: 'native' as const, origin: 'recovery' as const } : recovery ? { mode: 'replay' as const, origin: 'recovery' as const } : initialRunEntry(workflowProjectId, jobs.data!);
     if (next) setEntries(previous => previous[workflowProjectId]?.[stage] ? previous : { ...previous, [workflowProjectId]: { ...previous[workflowProjectId], [stage]: next } });
     setEntryError(null);
   }, [activeStage, workflowProjectId, context, jobs.data, jobs.isSuccess, jobs.isError, queryClient]);
@@ -208,7 +222,7 @@ export function useWorkbenchState() {
   const replayConfigured = options.isSuccess && !options.isError && options.data.runtimes.some(replayRuntime);
   const simulationConfigured = simulation.isSuccess && !simulation.isError && simulation.data.profiles.length > 0;
   const engineConfigured = options.isSuccess && !options.isError && options.data.runtimes.some(item => engineRuntime(item, activeStage === 4 ? 'Evaluate' : activeStage === 3 ? 'Quantize' : 'Run'));
-  const entryPending = (activeStage === 3 && !quantizeMode) || (activeStage === 5 && !runMode);
+  const entryPending = activeStage === 5 && !runMode;
   const entryFailed = jobs.isError || options.isError || (activeStage === 5 && simulation.isError);
   const recoveryError = entryError?.projectId === workflowProjectId && entryError.stage === activeStage ? entryError.message : null;
   const sortedJobs = [...(jobs.data ?? [])].filter(job => job.project_id === workflowProjectId).filter(isDatasetJob).sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -220,7 +234,7 @@ export function useWorkbenchState() {
   return {
     projectId, selectedJobId, activeStage, distillationModels, openSimulation, quantizeArtifact,
     distillTeachers, replayArtifact, simulationArtifact, modelInput, importModel, teachingMode,
-    teachingCapture, trainingNavigation, openTrainingRun, openQuantizationRun, workflowNavigation, startTraining,
+    teachingCapture, trainingNavigation, openTrainingRun, openDistillationRun, selectedModel, openQuantizationRun, workflowNavigation, startTraining,
     settingsTab, datasetView, selectedLibrary, importLibrary, intakeSelection, health,
     projects, capabilities, jobs, project, projectMutation, workflowProjectId,
     context, quantizeMode, runMode, options, simulation, ownedJobs,
@@ -229,7 +243,7 @@ export function useWorkbenchState() {
     setSelectedJobId, setDistillationModels, setOpenSimulation, setQuantizeArtifact, setDistillTeachers, setReplayArtifact,
     setSimulationArtifact, setImportModel, setTeachingMode, setTeachingCapture, setOpenTrainingRun, setOpenQuantizationRun,
     setWorkflowNavigation, setStartTraining, setSettingsTab, setDatasetView, setImportLibrary, setIntakeSelection,
-    openStage, navigateStage, startTrainingOnDataset, selectProject, openDataset, openModelWorkflow,
+    openStage, navigateStage, startTrainingOnDataset, selectProject, openDataset, openModelWorkflow, openSavedModel, openModelRun,
     reviewTeachingCapture, chooseQuantize, chooseRun, isSectionCurrent,
   };
 }

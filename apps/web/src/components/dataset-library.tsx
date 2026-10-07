@@ -3,32 +3,91 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { datasetDownload, datasetLibrary, formatName, sampleImage, type DatasetLabels, type LibraryDataset } from '@/lib/dataset-library';
+import { api, apiMediaUrl } from '@/lib/api';
 import { Icon } from './icon';
 import './dataset-library.css';
 
-export function DatasetLibrary({ projectId, onOpen, onExample, active }: {active:boolean;projectId:string; onOpen:(entry:LibraryDataset)=>void; onExample:(entry:LibraryDataset)=>void}) {
-  const client=useQueryClient();
+export function DatasetLibrary({ projectId, onOpen, active }: {active:boolean;projectId:string; onOpen:(entry:LibraryDataset)=>void}) {
   const datasets=useQuery({queryKey:['datasets',projectId],queryFn:()=>datasetLibrary.list(projectId),enabled:!!projectId&&active,retry:false,refetchInterval:active?5000:false});
   const [search,setSearch]=useState('');
-  const example=useMutation({mutationFn:()=>datasetLibrary.example(projectId),onSuccess:entry=>{void client.invalidateQueries({queryKey:['datasets']});if (entry.project_id === projectId) onExample(entry);}});
   const entries=(datasets.data??[]).filter(entry=>entry.project_id===projectId && entry.name.toLowerCase().includes(search.toLowerCase()));
   return <section className="dataset-library" aria-labelledby="dataset-library-title">
-    <div className="library-heading"><div><h2 id="dataset-library-title">My datasets</h2><p>Pick a saved dataset or import another.</p></div><span className="library-count">{datasets.data?.length??0}</span></div>
-    {!!datasets.data?.length && <input className="library-search" aria-label="Search my datasets" placeholder="Search your datasets" value={search} onChange={event=>setSearch(event.target.value)} />}
-    {datasets.isError ? <div role="alert"><p>Could not load your datasets.</p><button className="secondary-button" onClick={()=>void datasets.refetch()}>Retry datasets</button></div> : datasets.isPending && projectId ? <p role="status">Loading your datasets…</p> : !entries.length ? <div className="dataset-empty"><Icon name="database" size={32}/><h3>{search ? 'No matching datasets' : 'Your dataset collection starts here'}</h3><p>{search ? 'Try a different name.' : 'Imported and inspected datasets appear here, ready to revisit.'}</p></div> : <div className="dataset-library-grid">{entries.map(entry=><DatasetCard key={entry.id} entry={entry} onOpen={()=>onOpen(entry)}/>)}</div>}
-    <div className="dataset-example"><span className="dataset-example-icon"><Icon name="spark" size={21}/></span><div><strong>Try the labeling playground</strong><p>A small synthetic dataset with two camera views. Add labels and export it.</p></div><button className="secondary-button" disabled={!projectId || example.isPending} onClick={()=>example.mutate()}>{example.isPending ? 'Creating…' : 'Create example'}</button></div>
-    {example.error && <p role="alert" className="error-notice">{example.error.message}</p>}
+    <div className="library-heading"><h2 id="dataset-library-title">My datasets</h2>
+      {!!datasets.data?.length && <label className="library-search"><Icon name="search" size={18}/><input type="search" aria-label="Search my datasets" placeholder="Search your datasets" value={search} onChange={event=>setSearch(event.target.value)} /></label>}
+    </div>
+    {datasets.isError ? <div role="alert"><p>Could not load your datasets.</p><button className="secondary-button" onClick={()=>void datasets.refetch()}>Retry datasets</button></div> : datasets.isPending && projectId ? <p role="status">Loading your datasets…</p> : !entries.length ? <div className="dataset-empty"><Icon name="database" size={32}/><h3>{search ? 'No matching datasets' : 'Your dataset collection starts here'}</h3><p>{search ? 'Try a different name.' : 'Imported and inspected datasets appear here, ready to revisit.'}</p></div> : <div className="dataset-library-grid">{entries.map(entry=><DatasetCard key={entry.id} entry={entry} active={active} onOpen={()=>onOpen(entry)}/>)}</div>}
   </section>;
 }
 
-function DatasetCard({entry,onOpen}:{entry:LibraryDataset;onOpen:()=>void}) {
-  const samples=useQuery({queryKey:['dataset-samples',entry.id],queryFn:()=>datasetLibrary.samples(entry.id),enabled:!entry.id.startsWith('inspection:') && entry.status==='ready',retry:false});
+function DatasetCover({ entry, active }: { entry: LibraryDataset; active: boolean }) {
+  const local = !entry.id.startsWith('inspection:') && entry.status === 'ready';
+  const hub = entry.source === 'huggingface' && !!entry.job_id && entry.status === 'ready';
+  const samples = useQuery({ queryKey: ['dataset-samples', entry.id], queryFn: () => datasetLibrary.samples(entry.id), enabled: active && local, retry: false });
+  const preview = useQuery({ queryKey: ['dataset-cover', entry.job_id], queryFn: () => api.datasetCover(entry.job_id!), enabled: active && hub, staleTime: Infinity, retry: false });
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const video = useRef<HTMLVideoElement>(null);
+  const wantsPlayback = useRef(false);
+  const [hovered, setHovered] = useState(false);
+  const sample = samples.data?.[0];
+  const camera = preview.data?.cameras[0];
+  function stopPreview() {
+    wantsPlayback.current = false;
+    setHovered(false);
+    video.current?.pause();
+    if (video.current && camera && loaded) video.current.currentTime = camera.start_seconds;
+  }
+  function playPreview() {
+    if (!active || failed) return;
+    wantsPlayback.current = true;
+    setHovered(true);
+    const element = video.current;
+    if (!element || !camera || !loaded) return;
+    if (element.currentTime >= camera.end_seconds - 1 / camera.fps || element.currentTime < camera.start_seconds)
+      element.currentTime = camera.start_seconds;
+    void element.play().then(() => { if (!wantsPlayback.current || !active) element.pause(); }).catch(() => {});
+  }
+  useEffect(() => { if (!active) stopPreview(); }, [active]);
+  useEffect(() => {
+    if (!hovered || !camera || !loaded || !active) return;
+    playPreview();
+    let frame = 0;
+    const advance = () => {
+      const element = video.current;
+      if (!element || !wantsPlayback.current) return;
+      // Chunked LeRobot videos may contain the next episode immediately after
+      // this interval. Loop one frame before its exclusive end boundary.
+      const end = Math.min(camera.end_seconds, Number.isFinite(element.duration) ? element.duration : Infinity) - 1 / camera.fps;
+      if (element.currentTime >= Math.max(camera.start_seconds, end)) element.currentTime = camera.start_seconds;
+      frame = requestAnimationFrame(advance);
+    };
+    frame = requestAnimationFrame(advance);
+    return () => { cancelAnimationFrame(frame); video.current?.pause(); };
+  }, [hovered, camera, loaded, active]);
+  useEffect(() => {
+    const pause = () => { if (document.hidden) stopPreview(); };
+    document.addEventListener('visibilitychange', pause);
+    return () => { document.removeEventListener('visibilitychange', pause); video.current?.pause(); };
+  }, []);
+  const loading = !failed && ((local && samples.isPending) || (hub && preview.isPending) || (!!(sample || camera) && !loaded));
+  return <div className="dataset-library-cover" onPointerEnter={event => { if (event.pointerType === 'mouse') playPreview(); }} onPointerLeave={stopPreview}>
+    {sample && !failed && <img src={sampleImage(entry.id, sample.path)} alt={`${entry.name} · ${sample.camera}`} onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />}
+    {camera && !failed && <video ref={video} src={`${apiMediaUrl(camera.url)}#t=${camera.start_seconds}`} preload="metadata" muted playsInline aria-label={`${entry.name} preview`} className={loaded ? 'loaded' : ''}
+      onLoadedMetadata={event => { event.currentTarget.currentTime = camera.start_seconds; }}
+      onLoadedData={() => { if (camera.start_seconds === 0) setLoaded(true); }}
+      onSeeked={event => { if (Math.abs(event.currentTarget.currentTime - camera.start_seconds) < .05) setLoaded(true); }} onError={() => setFailed(true)} />}
+    {!loaded || failed ? <div className="dataset-cover-placeholder"><Icon name="database" size={32}/><small>{loading ? 'Loading preview…' : 'Preview unavailable'}</small></div> : null}
+    <span>{entry.example ? 'Synthetic example' : entry.source === 'huggingface' ? 'Hugging Face' : 'Local import'}</span>
+    {camera && loaded && !failed && <span className="dataset-hover-hint"><Icon name="play" size={12}/>{hovered ? 'Playing preview' : 'Hover to preview'}</span>}
+  </div>;
+}
+
+function DatasetCard({entry,onOpen,active}:{entry:LibraryDataset;onOpen:()=>void;active:boolean}) {
   const stats=entry.converted??entry.detection;
   const episodes=entry.profile?.total_episodes??stats?.episodes;
   const cameras=entry.profile ? Object.values(entry.profile.features).filter(feature=>['video','image'].includes(String((feature as {dtype?:string}).dtype))).length : stats?.cameras?.length;
-  const cover=samples.data?.[0];
   return <button type="button" className="dataset-library-card" aria-label={`Open dataset ${entry.name}`} onClick={onOpen}>
-    <div className={`dataset-library-cover${entry.source==='huggingface' ? ' hub-cover' : ''}`}>{cover ? <img src={sampleImage(entry.id,cover.path)} alt={`${entry.name} · ${cover.camera}`} /> : <Icon name="database" size={38}/>}<span>{entry.example ? 'Synthetic example' : entry.source==='huggingface' ? 'Hugging Face' : 'Local import'}</span></div>
+    <DatasetCover entry={entry} active={active}/>
     <div className="dataset-library-copy"><h3>{entry.name}</h3><p>{formatName(entry.profile?.format??stats?.format)}</p><div className="dataset-card-facts"><span>{episodes!=null ? `${episodes} episodes` : 'Format detected'}</span>{!!cameras && <span>{cameras} {cameras===1?'view':'views'}</span>}</div><div className="dataset-card-footer"><span>{entry.status==='converting' ? 'Converting…' : entry.status==='failed' ? 'Needs attention' : entry.training_copy ? 'Training copy saved' : entry.profile?.source==='huggingface' ? 'Inspection saved' : entry.status==='ready' ? 'Files saved' : 'Ready to convert'}</span><Icon name="arrow" size={15}/></div></div>
   </button>;
 }

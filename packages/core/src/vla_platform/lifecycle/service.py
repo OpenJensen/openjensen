@@ -48,6 +48,8 @@ def digest(path: Path) -> str:
 
 def validate_training_inputs(recipe: dict) -> None:
     """Validate shared form fields before starting a worker or allocating a GPU."""
+    if "dataset_sources" in recipe:
+        raise ValueError("The application manages combined dataset identities and mappings")
     positive = {
         "steps",
         "batch_size",
@@ -584,6 +586,8 @@ class Lifecycle:
                     # Legacy default SmolVLA jobs may have no explicit recipe.
                     recipe = {}
             recipe = {**fallback, **recipe}
+            request.dataset_job_ids = original.request.dataset_job_ids
+            request.dataset_camera_mappings = original.request.dataset_camera_mappings
             return (
                 recipe,
                 recipe.get("method", original.request.training_method),
@@ -865,6 +869,41 @@ class Lifecycle:
                     recipe.get("validation_fraction", 0.2),
                     recipe.get("seed", 42),
                 )
+            if request.dataset_job_ids:
+                if model.backend not in {"lerobot", "smolvla"}:
+                    raise ValueError("This model's adapter does not support combined datasets")
+                from vla_platform.lifecycle.dataset_mixture import validate_mixture
+
+                profiles = []
+                for ident in request.dataset_job_ids:
+                    item = await self.execution.get(ident)
+                    if (
+                        not item
+                        or item.project_id != project_id
+                        or item.status != "succeeded"
+                        or not isinstance(item.result, DatasetProfile)
+                    ):
+                        raise ValueError(
+                            "Every selected dataset must have a successful intake in this project"
+                        )
+                    profiles.append(item.result)
+                canonical = recipe.get("camera_keys") or [recipe.get("camera_key")]
+                mappings = [
+                    request.dataset_camera_mappings[ident] for ident in request.dataset_job_ids
+                ]
+                validate_mixture(profiles, canonical, mappings)
+                for ident, mapping in (
+                    [] if resuming else zip(request.dataset_job_ids[1:], mappings[1:], strict=True)
+                ):
+                    check = request.model_copy(deep=True)
+                    check.dataset_job_id, check.dataset_job_ids, check.dataset_camera_mappings = (
+                        ident,
+                        None,
+                        None,
+                    )
+                    check.training["camera_keys"] = [mapping[key] for key in canonical]
+                    check.training["camera_key"] = check.training["camera_keys"][0]
+                    await self.validate(project_id, check)
         if (
             request.operation in {"policy.evaluate", "policy.run", "policy.workflow"}
             and request.evaluation.mode == "libero"
@@ -1173,6 +1212,15 @@ class Lifecycle:
         if training and operation == "policy.finetune":
             dataset = await self.execution.get(request.dataset_job_id)
             payload["dataset"] = dataset.result.model_dump()
+            if request.dataset_job_ids:
+                payload["datasets"] = []
+                for index, ident in enumerate(request.dataset_job_ids):
+                    item = await self.execution.get(ident)
+                    entry = {
+                        "profile": item.result.model_dump(),
+                        "camera_mapping": request.dataset_camera_mappings[ident],
+                    }
+                    payload["datasets"].append(entry)
             if dataset.result.source == "local":
                 from vla_platform.datasets.snapshots import resolve_snapshot, stage_snapshot
 

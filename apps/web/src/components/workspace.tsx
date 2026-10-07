@@ -8,7 +8,6 @@ import { useWorkbenchState } from '@/components/workspace-state';
 import { WorkspaceContext } from '@/components/workspace-context';
 import { Icon } from '@/components/icon';
 import { WorkspaceShell } from '@/components/workspace-shell';
-import { WorkspaceJourney } from '@/components/workspace-journey';
 import { ProjectMenu } from '@/components/project-menu';
 import { ErrorNotice } from '@/components/workspace-ui';
 import { publicPath } from '@/lib/base-path';
@@ -51,16 +50,6 @@ function Workbench({ children }: { children: ReactNode }) {
         <div className={`page-heading${activeStage === 1 ? ' training-page-heading' : ''}`}><h1>{stage.name}</h1><div className="page-actions"><a className="page-guide" href={publicPath(`/guide/#${guideSectionId(stage.name)}`)}><Icon name="book" size={16} />Guide</a></div></div>
         {!connected && !health.isPending && <div className="connection-notice"><ErrorNotice error={health.error} /><button className="text-button" onClick={() => { void health.refetch(); void projects.refetch(); void capabilities.refetch(); }}>Retry connection</button></div>}
         {capabilities.error && connected && <div className="connection-notice"><ErrorNotice error={capabilities.error} /><button className="text-button" onClick={() => void capabilities.refetch()} disabled={capabilities.isFetching}>Retry capabilities</button></div>}
-        {activeStage !== 0 && activeStage !== 12 && <WorkspaceJourney key={`journey-${workflowProjectId}`} stage={activeStage} projectId={workflowProjectId} projectName={workflowProjectId ? project?.name : undefined}
-          jobs={jobs.data ?? []} historyState={!workflowProjectId ? 'unselected' : jobs.isError ? 'unavailable' : jobs.isPending ? 'loading' : 'ready'}
-          inspection={selectedJob} inspectionExplicit={!!selectedJobId}
-          workflow={activeStage === 3 ? quantizeMode === 'native' ? 'ACT · native quantization' : quantizeMode === 'gguf' ? 'SmolVLA · GGUF' : undefined : activeStage === 5 ? runMode === 'native' ? '3D simulation · ACT or SmolVLA' : runMode === 'replay' ? 'ACT · observation replay' : runMode === 'engine' ? 'GGUF · inference check' : undefined : activeStage === 2 && distillationModels[workflowProjectId] === 'act' ? 'ACT → ACT256' : undefined}
-          onNavigate={navigateStage} onTrain={startTrainingOnDataset} onRefresh={() => void jobs.refetch()} />}
-
-        {/* Retain intake drafts and pending uploads when another section opens. */}
-        {(datasetsVisited || activeStage === 0) && <DatasetsSection />}
-        {/* A compute-settings detour retains the exact unfinished training recipe. */}
-        {(activeStage === 1 || activeStage === 6) && <TrainingSection />}
         {entryPending && (!workflowProjectId || jobs.isPending || entryFailed || recoveryError) && <section className="panel" aria-label="Workflow selection status"><p role={entryFailed || recoveryError ? 'alert' : 'status'}>{!workflowProjectId ? 'Select a project to see its workflow history.' : recoveryError ?? (entryFailed ? 'Workflow availability or history could not be loaded. Choose a mode to inspect it, or retry these reads.' : 'Loading this project’s workflow history and configured workers…')}</p>{entryFailed && <button className="secondary-button" onClick={() => { void jobs.refetch(); void options.refetch(); if (activeStage === 5) void simulation.refetch(); }}>Retry workflow context</button>}</section>}
         {state.isSectionCurrent(activeStage) ? children : <p role="status">Opening workspace section…</p>}
   </WorkspaceShell></WorkspaceContext.Provider>;

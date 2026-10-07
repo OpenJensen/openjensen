@@ -9,7 +9,6 @@ import { nativeTransformIssue, nativeTransformMetadata } from '@/lib/native-quan
 import { storeAttempt, storedAttempt, type PolicyJobAttempt } from '@/lib/policy-job-attempt';
 import { useNativeCancellation } from '@/lib/native-cancellation-attempt';
 import { WorkflowChoiceGrid } from './workflow-choice-grid';
-import { NativePreparation } from './native-preparation';
 import { publicPath } from '@/lib/base-path';
 import { WorkbenchDisclosure } from './workbench-disclosure';
 
@@ -22,7 +21,7 @@ class JournalUnavailable extends Error {
   constructor() { super('Browser session storage is unavailable. Restore it and reload, then inspect recorded jobs before submitting again.'); }
 }
 
-export function NativeDistillationPanel({ projectId, preferredJobId, preferredTeacherArtifactId, onDataset, onQuantize }: { projectId: string; preferredJobId?: string; preferredTeacherArtifactId?: string; onDataset: () => void; onQuantize: (artifactId: string) => void }) {
+export function NativeDistillationPanel({ projectId, preferredJobId, preferredTeacherArtifactId, onDataset, onQuantize, onBack, onModel }: { projectId: string; preferredJobId?: string; preferredTeacherArtifactId?: string; onDataset: () => void; onQuantize: (artifactId: string) => void; onBack: () => void; onModel?: (artifactId: string) => void }) {
   const client = useQueryClient();
   const options = useQuery({ queryKey: ['policy-options'], queryFn: api.policyOptions, retry: false, refetchInterval: 10_000 });
   const jobs = useQuery({ queryKey: ['jobs', projectId], queryFn: () => api.jobs(projectId), enabled: !!projectId, retry: false, refetchInterval: 2_000 });
@@ -141,6 +140,7 @@ export function NativeDistillationPanel({ projectId, preferredJobId, preferredTe
     } finally { busy.current = false; if (mounted.current) { setCancelling(false); setCancelId(''); } }
   }
   return <section className="panel native-simulation native-distillation native-workflow" aria-label="ACT distillation">
+    <div className="workflow-view-navigation"><button type="button" className="text-link" onClick={onBack}>← Back to jobs</button></div>
     <div className="native-workflow-toolbar"><span className="native-model-badge">ACT → ACT256</span><button className="text-link" aria-label="Refresh distillation jobs" disabled={!projectId || jobs.isFetching} onClick={() => void refresh()}>Refresh</button></div>
     {cancellation.error && <p role="alert">{cancellation.error}</p>}
     {cancellation.receipt && <p role="status">Cancellation response for {cancellation.receipt.jobId}: {cancellation.receipt.status}. Recorded job history remains authoritative.</p>}
@@ -152,6 +152,7 @@ export function NativeDistillationPanel({ projectId, preferredJobId, preferredTe
         <button className="secondary-button" disabled={!cancellation.available || !cancellation.canAcknowledge || cancellation.refreshing || jobs.isError} onClick={() => { if (!jobs.isError) cancellation.acknowledge(selectionGeneration.current); }}>I reviewed cancellation history; allow another cancellation</button>
       </>}
     </section>}
+    {selectedId && !selected && <p role="status">{jobs.isPending ? 'Loading job…' : 'This distillation job is unavailable. No replacement has been selected.'}</p>}
     {selected && <article className="native-simulation-result" aria-label="Distillation job details" data-job-id={selected.id}>
       <div className="native-result-header"><h3>ACT256 student</h3><span className={`status status-${selected.status}`}>{selected.status}</span></div>
       <p className="native-result-summary">{isActive(selected) ? selected.stage ?? selected.status : 'Recorded job'} · {selected.id}</p>
@@ -161,21 +162,21 @@ export function NativeDistillationPanel({ projectId, preferredJobId, preferredTe
       {selected.status === 'succeeded' && outputs.length > 0 && <div className="native-result-actions"><button className="primary-button" onClick={() => onQuantize(outputs[0].id)}>Open ACT quantization</button>{outputs.map(item => <a key={item.id} className="secondary-button" href={artifactDownloadUrl(projectId, item.id)}>Download tested student package</a>)}</div>}
       {isActive(selected) && <><progress aria-label="Distillation in progress" /><button className="secondary-button" disabled={cancelling || jobs.isError || !cancellation.available || !!cancellation.attempt} onClick={() => setCancelId(selected.id)}>Cancel selected distillation</button></>}
       {cancelId === selected.id && isActive(selected) && <div className="warning-box" role="group" aria-label="Confirm distillation cancellation"><p>Stop this job and its owned local processes?</p><button className="secondary-button" disabled={cancelling || jobs.isError || !cancellation.available || !!cancellation.attempt} onClick={() => void cancel()}>Confirm cancellation</button><button className="text-link" disabled={cancelling} onClick={() => setCancelId('')}>Keep running</button></div>}
+      {outputs.length > 0 && onModel && <div className="native-result-actions">{outputs.map(item => <button type="button" key={item.id} className="secondary-button" onClick={() => onModel(item.id)}>View {item.label} in My models</button>)}</div>}
       <WorkbenchDisclosure title="Activity and measurements"><p>Errors use masked normalized L1 against teacher actions.</p><p>Inference-only output; interrupted training cannot resume from this student.</p>{events.isError && <p role="alert">Activity unavailable. {events.error.message}</p>}<pre className="cloud-log-tail" aria-label="Distillation activity">{events.data?.map(item => `${item.timestamp} · ${item.stage} · ${item.message}`).join('\n') || 'No recorded activity yet.'}</pre>{result && <pre className="cloud-log-tail">{JSON.stringify(result.reports, null, 2)}</pre>}</WorkbenchDisclosure>
     </article>}
-    {history.length > 0 && <label className="distillation-history">Saved distillation job<select aria-label="Saved distillation job" value={selected?.id ?? ''} onChange={event => selectJob(event.target.value)}><option value="">Choose a recorded job</option>{history.map(item => <option key={item.id} value={item.id}>{item.id.slice(0, 8)} · {item.status}</option>)}</select></label>}
     {jobs.isError && <p role="alert">Job updates are unavailable; displayed status may be stale. {jobs.error.message}</p>}
     {options.isError && <p role="alert">Worker options are unavailable. {options.error.message}</p>}
     {artifacts.isError && <p role="alert">Teacher policies are unavailable. {artifacts.error.message}</p>}
     {error && <p role="alert">{error}</p>}
     {journalReady && attempt.data?.state === 'pending' && <p role="status">{attempt.data.message}</p>}
     {attempt.data?.state === 'uncertain' && <div className="warning-box"><p>{attempt.data.message}</p><button className="secondary-button" disabled={!reviewed || jobs.isError} onClick={() => { try { saveAttempt(null); setReviewed(false); setError(''); } catch { setJournalReady(false); setError('Browser session storage is unavailable.'); } }}>I checked recorded jobs; allow a new request</button></div>}
-    {preferredTeacherArtifactId && pendingTeacher && <p role="status" className="field-help">{artifacts.isPending ? 'Loading the selected model…' : artifacts.isError ? 'The selected model could not be checked. Refresh teacher policies before continuing.' : 'The selected model is unavailable or unsupported. Refresh, or choose another teacher explicitly; no replacement has been selected.'}</p>}
-    {continuedTeacher && <div className="distillation-continuation" aria-label="Selected teacher model">
+    {!selected && preferredTeacherArtifactId && pendingTeacher && <p role="status" className="field-help">{artifacts.isPending ? 'Loading the selected model…' : artifacts.isError ? 'The selected model could not be checked. Refresh teacher policies before continuing.' : 'The selected model is unavailable or unsupported. Refresh, or choose another teacher explicitly; no replacement has been selected.'}</p>}
+    {!selected && continuedTeacher && <div className="distillation-continuation" aria-label="Selected teacher model">
       <span className="distillation-continuation-step">My models → Distill</span><h3>Your saved teacher is selected</h3><p>{continuedTeacher.label} · Run {continuedTeacher.job_id.slice(0, 8)}</p><small>{continuedTeacher.id}</small>
       <p>Choose a prepared dataset and independent episode splits, then confirm its coordinates.</p>
     </div>}
-    <NativePreparation key={selected ? 'another' : 'first'} title="Prepare another student" hasResult={!!selected}>
+    {!selected && !selectedId && <div className="native-preparation-content">
       {!projectId || !runtimes.length ? <div className="native-setup-empty">
         <p role="status">{!projectId ? 'Select a project to continue.' : options.isPending ? 'Loading workers…' : options.isError ? 'Worker availability is unknown.' : 'No local ACT distillation worker is configured.'}</p>
         <a className="text-link" href={publicPath('/guide/#distill')}>Set up distillation</a>
@@ -213,6 +214,6 @@ export function NativeDistillationPanel({ projectId, preferredJobId, preferredTe
         </>}
         <button type="button" className="primary-button" disabled={!ready} onClick={() => void submit()}>Train ACT256 student</button>
       </fieldset>}
-    </NativePreparation>
+    </div>}
   </section>;
 }
