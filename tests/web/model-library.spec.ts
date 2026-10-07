@@ -45,12 +45,13 @@ test('Distill explicitly selects an owned teacher instead of an abstract archite
   const state = await fixture(page); await page.getByRole('button', { name: 'Distill', exact: true }).click();
   await expect(page.getByRole('button', { name: 'ACT', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Choose Saved other · other' })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Choose Saved teacher · teacher' }).click();
+  await chooseTransformationModel(page,'distillation','Choose Saved teacher · teacher');
   await expect(page.getByRole('group', { name: 'Teacher', exact: true }).locator('input:checked')).toHaveValue('teacher');
   expect(state.mutations).toEqual([]);
 });
 test('empty collections cannot start work on nonexistent models', async ({ page }) => {
   const state = await fixture(page, []); await page.getByRole('button', { name: 'Distill', exact: true }).click();
+  await page.getByRole('button',{name:'Start a new distillation',exact:true}).click();
   await expect(page.getByText('No saved models in this project yet')).toBeVisible();
   await expect(page.getByRole('button', { name: 'ACT', exact: true })).toHaveCount(0);
   await openLibrary(page); await expect(page.getByText('Your models will live here')).toBeVisible();

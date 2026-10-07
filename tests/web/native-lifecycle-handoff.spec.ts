@@ -315,8 +315,7 @@ test('owned saved history restores ACT quantization and exact replay without mut
   state.jobs.push(replay);
   await page.reload(); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-  await page.getByText('Saved quantization work', { exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Open quantization quant-job', exact: true })).toBeVisible();
+  await openTransformationJob(page, 'quantization', 'quant-job');
   await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toHaveAttribute('data-job-id', 'quant-job');
   await page.getByRole('button', { name: 'Run', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Replay observations', exact: true })).toHaveAttribute('aria-pressed', 'true');
@@ -353,7 +352,7 @@ for (const configured of ['none', 'native', 'engine', 'simulation'] as const) te
   await expect(page.getByRole('region', { name: 'Workflow selection status', exact: true })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Your quantization models' }).locator('button[aria-pressed="true"]')).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('region', { name: 'Quantization jobs', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Quantization jobs', exact: true })).toContainText('No quantization jobs yet.');
   await page.getByRole('button', { name: 'Run', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Workflow selection status', exact: true })).toHaveCount(0);
   for (const name of ['3D simulation', 'Replay observations', 'Check inference']) await expect(page.getByRole('button', { name, exact: true })).toHaveAttribute('aria-pressed', 'false');
@@ -366,10 +365,11 @@ for (const configured of ['none', 'native', 'engine', 'simulation'] as const) te
   expect(state.mutations).toEqual([]);
 });
 
-for (const mode of ['quantize', 'replay'] as const) test(`automatically opened active ${mode} can cancel only that exact job`, async ({ page }) => {
+for (const mode of ['quantize', 'replay'] as const) test(`explicitly opened active ${mode} can cancel only that exact job`, async ({ page }) => {
   const state = await fixture(page), job = mode === 'quantize' ? makeJob('active-quant', quantRequest()) : savedReplay('active-replay', 'running');
   state.jobs.push(job); await reloadProject(page);
   await page.getByRole('button', { name: mode === 'quantize' ? 'Quantize' : 'Run', exact: true }).click();
+  if (mode === 'quantize') await openTransformationJob(page, 'quantization', job.id);
   const details = page.getByRole('article', { name: mode === 'quantize' ? 'ACT quantization job details' : 'Observation replay details' });
   await expect(details).toHaveAttribute('data-job-id', job.id);
   await page.getByRole('button', { name: mode === 'quantize' ? 'Cancel selected ACT quantization' : 'Cancel selected replay', exact: true }).click();
@@ -415,7 +415,10 @@ for (const mode of ['quantize', 'replay'] as const) test(`unknown ${mode} submis
   await page.evaluate(({ operation }) => sessionStorage.setItem(`firebird:job-attempt:${operation}:alpha`, JSON.stringify({ state: 'pending', message: 'Generated lost acknowledgement' })), { operation });
   state.runtimes = []; state.jobs.push(makeJob('other-mode', { operation: mode === 'quantize' ? 'policy.quantize' : 'policy.run', runtime_id: 'engine' })); await reloadProject(page);
   await page.getByRole('button', { name: mode === 'quantize' ? 'Quantize' : 'Run', exact: true }).click();
-  if (mode === 'quantize') await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toBeVisible();
+  if (mode === 'quantize') {
+    await page.getByRole('button', { name: 'Review request', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toBeVisible();
+  }
   else await expect(page.getByRole('button', { name: 'Replay observations', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByText(/An earlier request did not return a verified outcome/)).toBeVisible();
   await page.getByRole('button', { name: mode === 'quantize' ? 'Refresh ACT quantization jobs' : 'Refresh replay jobs', exact: true }).click();
@@ -470,6 +473,8 @@ test('the engine preparation link returns to the saved model chooser', async ({ 
   await page.getByRole('button', { name: 'Quantize', exact: true }).click(); await openSavedAct(page);
   await page.getByRole('button', { name: 'Evaluate', exact: true }).click(); await page.getByRole('button', { name: 'New evaluation', exact: true }).click();
   await page.getByRole('button', { name: 'Go to quantization', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Quantization jobs', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Start a new quantization', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Your quantization models' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Your quantization models' }).locator('button[aria-pressed="true"]')).toHaveCount(0); expect(state.mutations).toHaveLength(0);
 });
@@ -590,7 +595,10 @@ for (const mode of ['quantize', 'replay'] as const) test(`saved ${mode} history 
   state.jobs.push(saved); state.failOptions = true; state.failSimulation = true;
   await reloadProject(page);
   await page.getByRole('button', { name: mode === 'quantize' ? 'Quantize' : 'Run', exact: true }).click();
-  if (mode === 'quantize') await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toBeVisible();
+  if (mode === 'quantize') {
+    await page.getByRole('button', { name: 'Review request', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toBeVisible();
+  }
   else await expect(page.getByRole('button', { name: 'Replay observations', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('article', { name: mode === 'quantize' ? 'ACT quantization job details' : 'Observation replay details', exact: true })).toHaveAttribute('data-job-id', saved.id);
   expect(state.mutations).toEqual([]);

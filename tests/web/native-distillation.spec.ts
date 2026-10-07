@@ -208,6 +208,7 @@ test('journal cleanup failure after navigation preserves recovery guidance', asy
   await page.getByRole('button', { name: 'Dataset', exact: true }).click(); release();
   await expect.poll(() => page.evaluate(() => (window as unknown as { journalCleanupFailures?: number }).journalCleanupFailures)).toBe(1);
   await page.getByRole('button', { name: 'Distill', exact: true }).click();
+  await page.getByRole('button', { name: 'Review request', exact: true }).click();
 
   await expect(page.getByRole('button', { name: 'I checked recorded jobs; allow a new request' })).toBeVisible();
   await expect(page.getByText(/^Submitting one /)).toHaveCount(0);
@@ -300,12 +301,12 @@ async function confirmCancellation(page: Page) {
 }
 async function reopenCancellationLane(page: Page) {
   await page.getByRole('button', { name: 'Distill', exact: true }).click();
-  const choice = page.getByRole('button', { name: 'Choose Imported ACT teacher · teacher:policy', exact: true });
-  const empty = page.getByText('No saved models in this project yet');
-  await expect(panel(page).or(choice).or(empty).first()).toBeVisible();
-  if (await empty.isVisible()) return;
-  if (await choice.isVisible()) await choice.click();
-  await expect(panel(page)).toBeVisible();
+  const history = page.getByRole('region', { name: 'Distillation jobs', exact: true });
+  await expect(history).toBeVisible();
+  if (await page.getByLabel('Current project').getAttribute('data-project-id') === 'alpha') {
+    await history.locator('[data-job-id="student-001"]').click();
+    await expect(panel(page)).toBeVisible();
+  }
 }
 const cancellationRecovery = (page: Page) => page.getByRole('region', { name: 'Cancellation recovery', exact: true });
 const acknowledgeCancellation = (page: Page) => page.getByRole('button', { name: 'I reviewed cancellation history; allow another cancellation', exact: true });

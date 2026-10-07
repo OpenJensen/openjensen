@@ -314,6 +314,7 @@ test('journal cleanup after navigation exposes recovery instead of a permanent p
   let release!: () => void; state.postGate = new Promise<void>(resolve => { release = resolve; });
   await submit(page).click(); await expect.poll(() => state.posts.length).toBe(1);
   await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('button', { name: 'Review request', exact: true }).click();
   await expect(page.getByText('Submitting one local quantization job…', { exact: true })).toBeVisible(); release();
   await expect(page.getByText(/Browser session storage is unavailable/)).toBeVisible();
   await expect(page.getByText('Submitting one local quantization job…', { exact: true })).toHaveCount(0);
