@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { expect, test, type Page } from '@playwright/test';
 import { waitForJob } from './job-waiter';
+import { chooseTransformationModel } from './lifecycle-controls';
 
 const execute = promisify(execFile);
 const python = process.platform === 'win32' ? '.venv/Scripts/python.exe' : '.venv/bin/python';
@@ -47,7 +48,7 @@ class WorkflowPage {
       this.modelId = completed.result.artifacts.find((item: { format: string }) => item.format === 'gguf').id;
     }
     await this.page.getByRole('link', { name: 'Quantize', exact: true }).click();
-    await this.page.getByRole('button', { name: `Choose float · ${this.modelId}`, exact: true }).click();
+    await chooseTransformationModel(this.page, 'quantization', `Choose float · ${this.modelId}`);
     await this.page.getByRole('group', { name: 'Compute', exact: true }).locator(`input[value="${runtime}"]`).check();
     await this.page.getByRole('group', { name: 'My model', exact: true }).locator(`input[value="${this.modelId}"]`).check();
     const created = this.page.waitForResponse(response => response.url().endsWith('/policy-jobs') && response.request().method() === 'POST');
@@ -80,7 +81,7 @@ test('browser intake reads local metadata and preserves its limits after reload'
   expect(await cli('jobs', 'show', submitted.id)).toEqual(job);
   await page.reload();
   await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', project.id);
-  await page.getByRole('button', { name: 'Open dataset Local dataset', exact: true }).click();
+  await page.getByRole('button', { name: 'Open dataset lerobot_v3_preview', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Local dataset', exact: true })).toBeVisible();
   await page.getByText('Advanced', { exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Inspection notes', exact: true })).toBeVisible();
