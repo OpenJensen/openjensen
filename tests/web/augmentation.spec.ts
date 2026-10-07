@@ -374,7 +374,8 @@ test('dataset handoff only offers supported video sources and preserves the sele
   jobs.push({ ...inspectedDataset('second-video', 'fixture/second'), created_at: '2026-09-25T12:00:00Z' });
   await page.route('**/api/v1/jobs/*/episodes**', route => route.fulfill({ json: { episodes: [], total_episodes: 12, offset: 0, limit: 6, warnings: [] } }));
   await page.reload();
-  await page.getByRole('button', { name: /^Inspection/ }).click();
+  await page.getByRole('button', { name: 'Explore dataset', exact: true }).click();
+  await page.getByText('Advanced', { exact: true }).click();
   const history = page.getByRole('combobox', { name: 'History', exact: true });
   const augment = page.getByRole('button', { name: 'Augment this dataset', exact: true });
   for (const id of ['local-inspection', 'image-only']) {
