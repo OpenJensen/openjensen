@@ -66,5 +66,3 @@
 .native-workflow .native-simulation-history { padding: 0; }
 .native-workflow .native-simulation-form > .primary-button { justify-self: start; }
 .native-workflow .simulation-submit { margin-top: 4px; }
-
-.native-distillation .native-recipe-controls { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; min-width: 0; margin-bottom: 16px; }
