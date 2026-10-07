@@ -877,15 +877,30 @@ class Lifecycle:
                 profiles = []
                 for ident in request.dataset_job_ids:
                     item = await self.execution.get(ident)
-                    if not item or item.project_id != project_id or item.status != "succeeded" or not isinstance(item.result, DatasetProfile):
-                        raise ValueError("Every selected dataset must have a successful intake in this project")
+                    if (
+                        not item
+                        or item.project_id != project_id
+                        or item.status != "succeeded"
+                        or not isinstance(item.result, DatasetProfile)
+                    ):
+                        raise ValueError(
+                            "Every selected dataset must have a successful intake in this project"
+                        )
                     profiles.append(item.result)
                 canonical = recipe.get("camera_keys") or [recipe.get("camera_key")]
-                mappings = [request.dataset_camera_mappings[ident] for ident in request.dataset_job_ids]
+                mappings = [
+                    request.dataset_camera_mappings[ident] for ident in request.dataset_job_ids
+                ]
                 validate_mixture(profiles, canonical, mappings)
-                for ident, mapping in ([] if resuming else zip(request.dataset_job_ids[1:], mappings[1:], strict=True)):
+                for ident, mapping in (
+                    [] if resuming else zip(request.dataset_job_ids[1:], mappings[1:], strict=True)
+                ):
                     check = request.model_copy(deep=True)
-                    check.dataset_job_id, check.dataset_job_ids, check.dataset_camera_mappings = ident, None, None
+                    check.dataset_job_id, check.dataset_job_ids, check.dataset_camera_mappings = (
+                        ident,
+                        None,
+                        None,
+                    )
                     check.training["camera_keys"] = [mapping[key] for key in canonical]
                     check.training["camera_key"] = check.training["camera_keys"][0]
                     await self.validate(project_id, check)
@@ -1201,7 +1216,10 @@ class Lifecycle:
                 payload["datasets"] = []
                 for index, ident in enumerate(request.dataset_job_ids):
                     item = await self.execution.get(ident)
-                    entry = {"profile": item.result.model_dump(), "camera_mapping": request.dataset_camera_mappings[ident]}
+                    entry = {
+                        "profile": item.result.model_dump(),
+                        "camera_mapping": request.dataset_camera_mappings[ident],
+                    }
                     payload["datasets"].append(entry)
             if dataset.result.source == "local":
                 from vla_platform.datasets.snapshots import resolve_snapshot, stage_snapshot

@@ -274,6 +274,7 @@ def install_training_hooks(
     def make_data(cfg):
         if recipe.get("dataset_sources"):
             from .dataset_mixture import native_mixture
+
             datasets = native_mixture(cfg, recipe)
         else:
             datasets = make_local_datasets(cfg, recipe) if local_root else original_data(cfg)

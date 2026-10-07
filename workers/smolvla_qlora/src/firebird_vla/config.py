@@ -66,9 +66,23 @@ class TrainConfig:
                 raise ValueError("camera_keys must not contain duplicates")
         if self.dataset_sources is not None:
             from .dataset_mixture import bind_sources
-            primary = {"source": "huggingface", "format": "lerobot_v3", "repo_id": self.dataset_id, "revision": self.dataset_revision, "features": self.dataset_sources[0]["features"], "fps": self.dataset_sources[0]["fps"]}
-            entries = [{"profile": {**primary, **item}, "camera_mapping": item["camera_mapping"]} for item in self.dataset_sources]
-            if bind_sources({"dataset": primary, "datasets": entries}, self.selected_camera_keys) != self.dataset_sources:
+
+            primary = {
+                "source": "huggingface",
+                "format": "lerobot_v3",
+                "repo_id": self.dataset_id,
+                "revision": self.dataset_revision,
+                "features": self.dataset_sources[0]["features"],
+                "fps": self.dataset_sources[0]["fps"],
+            }
+            entries = [
+                {"profile": {**primary, **item}, "camera_mapping": item["camera_mapping"]}
+                for item in self.dataset_sources
+            ]
+            if (
+                bind_sources({"dataset": primary, "datasets": entries}, self.selected_camera_keys)
+                != self.dataset_sources
+            ):
                 raise ValueError("Invalid combined dataset recipe")
         positive = (
             "steps",

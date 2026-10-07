@@ -107,6 +107,7 @@ def resolve_recipe(job):
         }
     )
     from .dataset_mixture import bind_sources
+
     sources = bind_sources(job, cameras)
     if sources:
         recipe["dataset_sources"] = sources
@@ -199,6 +200,7 @@ def main():
             profile = native_profile_for_recipe(recipe)
             data = job["dataset"]
             from .dataset_mixture import bind_sources
+
             if recipe.get("dataset_sources") != bind_sources(job, recipe["camera_keys"]):
                 raise ValueError("Resume must preserve every combined dataset and camera mapping")
             identity = dict(recipe)

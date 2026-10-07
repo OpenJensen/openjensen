@@ -204,17 +204,36 @@ def test_start_returns_while_real_compute_preparation_is_blocked(one_click):
 
 def test_combined_admission_checks_all_project_owned_sources_before_preparation(one_click):
     state, workspace, _ = one_click
+
     async def exercise():
         async with workspace() as execution:
             first = await execution.get("dataset")
-            first.result.features["observation.images.front"] = {"dtype": "video", "shape": [3, 32, 32]}
+            first.result.features["observation.images.front"] = {
+                "dtype": "video",
+                "shape": [3, 32, 32],
+            }
             await execution.save(first)
             second = first.model_copy(deep=True, update={"id": "second"})
             second.result.repo_id = "fixture/second"
             async with execution.storage.engine.begin() as db:
-                await db.execute(insert(jobs).values(id=second.id, project_id=second.project_id, status=second.status, record=second.model_dump()))
-            request = recipe(dataset_job_ids=["dataset", "second"], dataset_camera_mappings={ident: {"observation.images.front": "observation.images.front"} for ident in ("dataset", "second")})
-            request.training.update(camera_keys=["observation.images.front"], camera_key="observation.images.front")
+                await db.execute(
+                    insert(jobs).values(
+                        id=second.id,
+                        project_id=second.project_id,
+                        status=second.status,
+                        record=second.model_dump(),
+                    )
+                )
+            request = recipe(
+                dataset_job_ids=["dataset", "second"],
+                dataset_camera_mappings={
+                    ident: {"observation.images.front": "observation.images.front"}
+                    for ident in ("dataset", "second")
+                },
+            )
+            request.training.update(
+                camera_keys=["observation.images.front"], camera_key="observation.images.front"
+            )
             await execution.lifecycle.validate("project", request)
             assert not state.prepare_calls and not state.runner_calls
             second.result.features["action"]["shape"] = [7]
@@ -222,6 +241,7 @@ def test_combined_admission_checks_all_project_owned_sources_before_preparation(
             with pytest.raises(ValueError, match="matching action"):
                 await execution.lifecycle.validate("project", request)
             assert not state.prepare_calls and not state.runner_calls
+
     asyncio.run(exercise())
 
 
@@ -306,7 +326,9 @@ def test_caller_cannot_supply_worker_dataset_bindings(one_click):
     async def exercise():
         async with workspace() as execution:
             with pytest.raises(ValueError, match="application manages combined dataset"):
-                await execution.submit("project", recipe(training={"dataset_sources": [{"repo_id": "foreign/data"}]}))
+                await execution.submit(
+                    "project", recipe(training={"dataset_sources": [{"repo_id": "foreign/data"}]})
+                )
             assert state.prepare_calls == state.runner_calls == []
             assert len(await execution.list("project")) == 1
 

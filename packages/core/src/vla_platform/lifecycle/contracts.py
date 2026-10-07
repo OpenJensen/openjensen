@@ -243,10 +243,14 @@ class PolicyRequest(StrictRecord):
     @model_validator(mode="after")
     def input_contract(self):
         if self.dataset_job_ids is not None:
-            if (self.operation != "policy.finetune"
+            if (
+                self.operation != "policy.finetune"
                 or self.dataset_job_ids[0] != self.dataset_job_id
-                or len(set(self.dataset_job_ids)) != len(self.dataset_job_ids)):
-                raise ValueError("Combined datasets require fine-tuning and a unique ordered selection")
+                or len(set(self.dataset_job_ids)) != len(self.dataset_job_ids)
+            ):
+                raise ValueError(
+                    "Combined datasets require fine-tuning and a unique ordered selection"
+                )
             if set(self.dataset_camera_mappings or {}) != set(self.dataset_job_ids):
                 raise ValueError("Provide camera mappings for every selected dataset")
         elif self.dataset_camera_mappings is not None:
