@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const python = process.platform === 'win32' ? '.venv/Scripts/python.exe' : '.venv/bin/python';
+const port = process.env.FIREBIRD_BROWSER_PORT ?? '8765';
 
 export default defineConfig({
   testDir: './tests/web',
@@ -13,7 +14,7 @@ export default defineConfig({
   workers: Number(process.env.PW_WORKERS) || (process.env.CI ? 2 : 4),
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
-    baseURL: 'http://127.0.0.1:8765',
+    baseURL: `http://127.0.0.1:${port}`,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     reducedMotion: 'reduce',
@@ -29,7 +30,7 @@ export default defineConfig({
   // a server: the developer's workspace and running application stay untouched.
   webServer: {
     command: process.env.CI ? 'uv run --frozen python tests/web/serve.py' : `${python} tests/web/serve.py`,
-    url: 'http://127.0.0.1:8765/api/v1/health',
+    url: `http://127.0.0.1:${port}/api/v1/health`,
     reuseExistingServer: false,
     timeout: 30_000,
   },
