@@ -1,3 +1,4 @@
+import { waitForJob } from './job-waiter';
 import { expect, test, type Page } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
