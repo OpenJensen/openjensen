@@ -2,7 +2,10 @@ import { expect, type Page } from '@playwright/test';
 
 export async function transformationJobs(page: Page, operation: 'distillation' | 'quantization') {
   const history=page.getByRole('region',{name:`${operation === 'distillation' ? 'Distillation' : 'Quantization'} jobs`,exact:true});
-  if(!await history.isVisible()) await page.getByRole('button',{name:/^(← )?(Back to jobs|All quantization jobs)$/}).click();
+  const back=page.getByRole('button',{name:/^(← )?(Back to jobs|All quantization jobs)$/});
+  // Navigation may still be committing the destination when the helper starts.
+  await expect.poll(async()=>await history.isVisible() || await back.isVisible()).toBe(true);
+  if(!await history.isVisible()) await back.click();
   await expect(history).toBeVisible();
   return history;
 }
