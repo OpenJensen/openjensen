@@ -373,7 +373,7 @@ test('dataset handoff only offers supported video sources and preserves the sele
   jobs.find(job => job.id === 'local-inspection')!.result.snapshot = { path: '/fixture/local', lineage_validated: true, total_episodes: 12 };
   jobs.push({ ...inspectedDataset('second-video', 'fixture/second'), created_at: '2026-09-25T12:00:00Z' });
   await page.route('**/api/v1/jobs/*/episodes**', route => route.fulfill({ json: { episodes: [], total_episodes: 12, offset: 0, limit: 6, warnings: [] } }));
-  await page.route('**/api/v1/jobs/*/cover', route => route.fulfill({ json: { episode_index: 0, cameras: [], samples: [], warnings: [] } }));
+  await page.route('**/api/v1/jobs/*/cover', route => route.fulfill({ status: 422, json: { detail: 'Cover media is unavailable in this handoff fixture' } }));
   await page.route('**/api/v1/datasets**', route => route.fulfill({ json: jobs.filter(job=>job.kind==='dataset.inspect' && job.result).map(job=>({id:`inspection:${job.id}`,job_id:job.id,project_id:projectId,name:job.id,source:job.result.source,status:'ready',created_at:job.created_at,profile:job.result})) }));
   await page.reload();
   await page.getByRole('button', { name: 'Dataset', exact: true }).click();
