@@ -572,7 +572,7 @@ test('completed cloud ACT checkpoint explicitly downloads and exports with separ
 test('ACT export-only computer never appears as an engine execution target', async ({ page }) => {
   const { submitted } = await workspace(page, 'running', true, 'local');
   for (const [stage, create] of [['Run', 'New run'], ['Evaluate', 'New evaluation'], ['Quantize', 'New quantization']]) {
-    await page.getByRole('button', { name: stage, exact: true }).click();
+    await page.getByRole('link', { name: stage, exact: true }).click();
     if (stage === 'Run') await page.getByRole('button', { name: 'Check inference', exact: true }).click();
     if (stage === 'Quantize') {
       await page.getByRole('button', { name: 'Start a new quantization', exact: true }).click();

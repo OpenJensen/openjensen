@@ -161,7 +161,7 @@ for (const stage of ['Evaluate', 'Run']) {
   test(`${stage} explains a cloud-only setup and cannot submit to an unsupported cloud runtime`, async ({ page }) => {
     const { artifacts, submitted, unexpected } = await workspace(page, true);
     artifacts.push({ ...artifacts[0], id: 'packed-policy', label: 'Compressed policy', format: 'gguf' });
-    await page.getByRole('button', { name: stage, exact: true }).click();
+    await page.getByRole('link', { name: stage, exact: true }).click();
     if (stage === 'Run') await page.getByRole('group', { name: 'Run mode', exact: true }).getByRole('button', { name: 'Check inference', exact: true }).click();
     await page.getByRole('button', { name: stage === 'Evaluate' ? 'New evaluation' : 'New run', exact: true }).click();
     await expect(page.getByRole('group', { name: 'Compute', exact: true }).getByRole('radio')).toHaveCount(0);
@@ -266,7 +266,7 @@ for (const stage of ['Evaluate', 'Run']) {
       artifacts.push({ ...artifacts[0], id: 'cloud-q8', label: 'Cloud Q8 policy', format: 'gguf',
         metadata: { architecture: 'smolvla', storage: 'gcs', precision: 'Q8_0' } });
     });
-    await page.getByRole('button', { name: stage, exact: true }).click();
+    await page.getByRole('link', { name: stage, exact: true }).click();
     if (stage === 'Run') await page.getByRole('group', { name: 'Run mode', exact: true }).getByRole('button', { name: 'Check inference', exact: true }).click();
     await expect(page.getByRole('region', { name: stage === 'Evaluate' ? 'Evaluation jobs' : 'Run jobs', exact: true })).toBeVisible();
     await expect(page.getByRole('group', { name: 'My model', exact: true })).toHaveCount(0);
@@ -316,7 +316,7 @@ test('shows native build progress as a setup stage without presenting it as over
 for (const stage of ['Evaluate', 'Run']) {
   test(`${stage} explains how to prepare a trained checkpoint when no GGUF is available`, async ({ page }) => {
     const { submitted, unexpected } = await workspace(page, true, true);
-    await page.getByRole('button', { name: stage, exact: true }).click();
+    await page.getByRole('link', { name: stage, exact: true }).click();
     if (stage === 'Run') await page.getByRole('group', { name: 'Run mode', exact: true }).getByRole('button', { name: 'Check inference', exact: true }).click();
     await page.getByRole('button', { name: stage === 'Evaluate' ? 'New evaluation' : 'New run', exact: true }).click();
     await expect(choice(page, 'Compute', 'gcp')).toBeChecked();

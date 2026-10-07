@@ -368,7 +368,7 @@ for (const configured of ['none', 'native', 'engine', 'simulation'] as const) te
 for (const mode of ['quantize', 'replay'] as const) test(`explicitly opened active ${mode} can cancel only that exact job`, async ({ page }) => {
   const state = await fixture(page), job = mode === 'quantize' ? makeJob('active-quant', quantRequest()) : savedReplay('active-replay', 'running');
   state.jobs.push(job); await reloadProject(page);
-  await page.getByRole('button', { name: mode === 'quantize' ? 'Quantize' : 'Run', exact: true }).click();
+  await page.getByRole('link', { name: mode === 'quantize' ? 'Quantize' : 'Run', exact: true }).click();
   if (mode === 'quantize') await openTransformationJob(page, 'quantization', job.id);
   const details = page.getByRole('article', { name: mode === 'quantize' ? 'ACT quantization job details' : 'Observation replay details' });
   await expect(details).toHaveAttribute('data-job-id', job.id);
@@ -414,7 +414,7 @@ for (const mode of ['quantize', 'replay'] as const) test(`unknown ${mode} submis
   const operation = mode === 'quantize' ? 'policy.quantize' : 'policy.run.replay';
   await page.evaluate(({ operation }) => sessionStorage.setItem(`firebird:job-attempt:${operation}:alpha`, JSON.stringify({ state: 'pending', message: 'Generated lost acknowledgement' })), { operation });
   state.runtimes = []; state.jobs.push(makeJob('other-mode', { operation: mode === 'quantize' ? 'policy.quantize' : 'policy.run', runtime_id: 'engine' })); await reloadProject(page);
-  await page.getByRole('button', { name: mode === 'quantize' ? 'Quantize' : 'Run', exact: true }).click();
+  await page.getByRole('link', { name: mode === 'quantize' ? 'Quantize' : 'Run', exact: true }).click();
   if (mode === 'quantize') {
     await page.getByRole('button', { name: 'Review request', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toBeVisible();
@@ -525,7 +525,7 @@ for (const mode of ['distillation', 'quantization', 'replay'] as const) test(`${
   const primary = runtimes[mode === 'distillation' ? 0 : mode === 'quantization' ? 1 : 2];
   const alternate = { ...primary, id: `${primary.id}-alternate`, label: 'Alternate local worker' };
   state.runtimes.push(alternate);
-  await page.getByRole('button', { name: mode === 'distillation' ? 'Distill' : mode === 'quantization' ? 'Quantize' : 'Run', exact: true }).click();
+  await page.getByRole('link', { name: mode === 'distillation' ? 'Distill' : mode === 'quantization' ? 'Quantize' : 'Run', exact: true }).click();
   if (mode === 'distillation') {
     await openSavedAct(page);
     await page.getByRole('group', { name: 'Teacher', exact: true }).locator(`input[value="${teacher.id}"]`).check();
@@ -594,7 +594,7 @@ for (const mode of ['quantize', 'replay'] as const) test(`saved ${mode} history 
   const saved = mode === 'quantize' ? makeJob('offline-quantization', quantRequest()) : savedReplay('offline-replay', 'running');
   state.jobs.push(saved); state.failOptions = true; state.failSimulation = true;
   await reloadProject(page);
-  await page.getByRole('button', { name: mode === 'quantize' ? 'Quantize' : 'Run', exact: true }).click();
+  await page.getByRole('link', { name: mode === 'quantize' ? 'Quantize' : 'Run', exact: true }).click();
   if (mode === 'quantize') {
     await openTransformationJob(page, 'quantization', saved.id);
     await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toBeVisible();
