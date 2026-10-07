@@ -80,7 +80,7 @@ test('browser intake reads local metadata and preserves its limits after reload'
   expect(await cli('jobs', 'show', submitted.id)).toEqual(job);
   await page.reload();
   await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', project.id);
-  await page.getByRole('button', { name: 'Open dataset Local dataset', exact: true }).click();
+  await page.getByRole('button', { name: 'Open dataset lerobot_v3_preview', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Local dataset', exact: true })).toBeVisible();
   await page.getByText('Advanced', { exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Inspection notes', exact: true })).toBeVisible();
