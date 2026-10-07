@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
-import { WorkspaceHome } from '@/components/workspace-home';
+import DashboardSection from '@/components/workspace-sections/dashboard';
 
 export const metadata: Metadata = { title: 'Open Jensen · Dashboard' };
 
 export default function Home() {
-  return <WorkspaceHome />;
+  return <DashboardSection />;
 }

@@ -35,8 +35,14 @@ async function fixture(page: Page) {
 test('home opens the dashboard and every section supports a direct visit and refresh', async ({ page }) => {
   test.setTimeout(90_000);
   const { writes, errors } = await fixture(page);
-  await page.goto('/');
-  await expect(page).toHaveURL(/\/dashboard\/$/);
+  const home = await page.goto('/');
+  // The server must redirect before hydration, so an immediate sidebar click
+  // cannot be overwritten by a later client-side dashboard redirect.
+  expect(home?.url()).toMatch(/\/dashboard\/$/);
+  await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
+  await expect(page).toHaveURL(/\/settings\/$/);
+  await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Run diagnostics', exact: true })).toBeVisible();
   for (const [path, title] of destinations) {
     const response = await page.goto(`/${path}/`);
     expect(response?.status()).toBe(200);

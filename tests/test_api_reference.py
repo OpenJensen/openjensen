@@ -68,7 +68,7 @@ def web_client(tmp_path: Path, exported_web: Path):
 
 @pytest.mark.parametrize(
     ("url", "exported_file"),
-    [("/", "index.html"), ("/docs/", "docs/index.html")],
+    [("/", "dashboard/index.html"), ("/docs/", "docs/index.html")],
 )
 def test_home_and_api_reference_serve_the_web_export(web_client, exported_web, url, exported_file):
     response = web_client.get(url)
@@ -78,6 +78,26 @@ def test_home_and_api_reference_serve_the_web_export(web_client, exported_web, u
     assert response.text == (exported_web / exported_file).read_text(encoding="utf-8")
     assert "swagger-ui" not in response.text.lower()
     assert "cdn.jsdelivr.net" not in response.text.lower()
+
+
+@pytest.mark.parametrize("method", ["GET", "HEAD"])
+def test_home_redirects_before_rendering_and_preserves_query(web_client, method):
+    response = web_client.request(method, "/?project=example", follow_redirects=False)
+
+    assert response.status_code == 307
+    assert response.headers["location"] == "http://testserver/dashboard/?project=example"
+
+
+def test_home_redirect_preserves_proxy_mount_prefix(tmp_path, exported_web):
+    app = create_app(Settings(data_dir=tmp_path / "workspace", static_dir=exported_web))
+    with TestClient(app, root_path="/firebird") as client:
+        response = client.get("/firebird/?project=example", follow_redirects=False)
+
+        assert response.status_code == 307
+        assert (
+            response.headers["location"] == "http://testserver/firebird/dashboard/?project=example"
+        )
+        assert client.get(response.headers["location"]).status_code == 200
 
 
 def test_api_reference_redirect_preserves_query_string(web_client):
