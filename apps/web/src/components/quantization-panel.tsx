@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, isActive } from '@/lib/api';
-import { trainingRunModelLabel } from '@/lib/checkpoints';
+import { checkpointStep, trainingRunModelLabel } from '@/lib/checkpoints';
 import { quantizeModeFor } from '@/lib/model-library';
 import { nativeQuantizationOf } from '@/lib/native-quantization';
 import { storedAttempt, type PolicyJobAttempt } from '@/lib/policy-job-attempt';
@@ -12,7 +12,7 @@ import type { SimulationHandoff } from '@/lib/native-simulation-handoff';
 import { JobHistory } from './job-history';
 import { ModelWorkflowPicker } from './model-library';
 import { NativeQuantizationPanel } from './native-quantization-panel';
-import { currentStage, WorkflowPanel } from './workflow-panel';
+import { currentStage, precisionName, WorkflowPanel } from './workflow-panel';
 
 /** One project-owned history for native packing and GGUF conversion. Adapters
  * keep their existing admission, cancellation and submission recovery logic. */
@@ -53,7 +53,13 @@ export function QuantizationPanel({ projectId, preferredArtifactId, preferredMod
   return <section aria-label="Quantization workspace">
     {(preferredArtifactId || preferredJobId) && !handoffConsumed && <p role={artifacts.isError || jobs.isError ? 'alert' : 'status'}>{artifacts.isPending || jobs.isPending ? 'Loading the selected model or job…' : 'The selected model or job is unavailable or unsupported. No replacement has been selected.'}<button className="text-link" onClick={back}>Back to jobs</button></p>}
     {view==='jobs' ? <JobHistory title="Quantization jobs" newLabel="Start a new quantization"
-      entries={history.map(job=>({id:job.id,title:[trainingRunModelLabel(job,[],ownArtifacts,ownJobs)??'Policy',nativeQuantizationOf(job)?`INT${nativeQuantizationOf(job)!.bits}`:'GGUF'].join(' · '),subtitle:artifacts.data?.find(item=>item.project_id===projectId && 'artifact_id' in job.request && item.id===job.request.artifact_id)?.label,status:job.status,createdAt:job.created_at,progress:isActive(job)?currentStage(job):undefined}))}
+      entries={history.map(job=>{
+        const native=nativeQuantizationOf(job);
+        const precision=native?`INT${native.bits}`:'precision' in job.request?precisionName(job.request.precision):'GGUF';
+        const source=ownArtifacts.find(item=>'artifact_id' in job.request && item.id===job.request.artifact_id);
+        const step=source?checkpointStep(source):null;
+        return {id:job.id,title:[trainingRunModelLabel(job,[],ownArtifacts,ownJobs)??'Policy',precision==='—'?'GGUF':precision].join(' · '),subtitle:step!==null?`Step ${step.toLocaleString()}`:source?.label,status:job.status,createdAt:job.created_at,progress:isActive(job)?currentStage(job):undefined};
+      })}
       onNew={()=>{setHandoffConsumed(true);setView('new');}} onSelect={id=>{const job=history.find(item=>item.id===id)!;setHandoffConsumed(true);setEntry({mode:quantizeJobMode(job,projectId)!,jobId:id});}}
       loading={jobs.isPending && !!projectId} error={jobs.error} disabled={!projectId} emptyMessage={projectId?'No quantization jobs yet.':'Select a project to see its jobs.'}/>
       : <><div className="workflow-view-navigation"><button type="button" className="text-link" onClick={back}>← Back to jobs</button></div><ModelWorkflowPicker projectId={projectId} action="quantize" onLibrary={onLibrary} onSelect={artifact=>{const mode=quantizeModeFor(artifact);if(mode){setHandoffConsumed(true);setEntry({mode,artifactId:artifact.id});}}}/></>}

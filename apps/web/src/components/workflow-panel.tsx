@@ -83,7 +83,7 @@ function policyRequest(job?: Job): PolicyRequest | undefined {
   return job && "runtime_id" in job.request ? job.request as PolicyRequest : undefined;
 }
 
-function precisionName(precision: unknown): string {
+export function precisionName(precision: unknown): string {
   if (precision === "float") return "Floating point";
   if (typeof precision === "string") return precision.replace("_0", "");
   if (precision && typeof precision === "object" && "language" in precision) {

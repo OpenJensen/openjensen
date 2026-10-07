@@ -232,6 +232,9 @@ test('opens a previous quantization job from history without mixing its details 
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
   const history = page.getByRole('region', { name: 'Quantization jobs', exact: true });
   await expect(history.locator('.job-history-entry')).toHaveCount(2);
+  await expect(history.locator('[data-job-id="prior-quantization"]')).toContainText('SmolVLA · Q4');
+  await expect(history.locator('[data-job-id="prior-quantization"]')).toContainText('Step 20');
+  await expect(history.locator('[data-job-id="newer-quantization"]')).toContainText('SmolVLA · Q8');
   await expect(history.locator('.job-history-entry').first()).toContainText('Preparing worker');
   await expect(page.getByRole('group', { name: 'My model', exact: true })).toHaveCount(0);
   await history.locator('[data-job-id="prior-quantization"]').click();
