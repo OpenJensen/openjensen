@@ -1,0 +1,3 @@
+.quantization-components { display: grid; gap: 24px; min-width: 0; }
+.quantization-components .workflow-choice-grid legend { display: flex; align-items: center; gap: 4px; }
+.quantization-components .workflow-choice-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }

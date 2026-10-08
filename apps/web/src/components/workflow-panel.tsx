@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CloudConnectionsPanel } from "@/components/cloud-connections";
+import { QuantizationCompression } from "@/components/quantization-settings";
 import { ModelVersionPicker } from "@/components/model-version-picker";
 import { ownedModels } from "@/lib/model-library";
 import { JobHistory } from "@/components/job-history";
@@ -66,7 +67,7 @@ const initial: Preferences = {
   minSuccess: 100,
   maxLatency: 1000,
   maxMemory: 8192,
-  precision: "recommended",
+  precision: "Q8_0",
   vision: false,
   compareQ4: false,
 };
@@ -433,7 +434,7 @@ export function WorkflowPanel({
             <label>
               Quantization recipe
               <select
-                value={preferences.precision}
+                value={language}
                 onChange={(e) =>
                   update(
                     "precision",
@@ -441,9 +442,6 @@ export function WorkflowPanel({
                   )
                 }
               >
-                <option value="recommended">
-                  Recommended · Q8
-                </option>
                 <option value="Q4_0">LM Q4 (experimental)</option>
                 <option value="Q8_0">LM Q8</option>
               </select>
@@ -963,13 +961,8 @@ export function WorkflowPanel({
               <button type="button" className="text-link" onClick={onOpenQuantize}>Go to quantization</button>
             </div>}
             {stage === "Quantize" && <>
-              <WorkflowChoiceGrid name="quantization-precision" label="Compression" value={preferences.precision}
-                options={[
-                  { value: "recommended", label: "Recommended", meta: "Q8 · 8-bit", icon: "spark" },
-                  { value: "Q8_0", label: "8-bit", meta: "Q8", icon: "layers" },
-                  { value: "Q4_0", label: "4-bit", meta: "Q4 · Experimental", icon: "compress" },
-                ]} onChange={value => update("precision", value as Preferences["precision"])} />
-              <details className="workflow-advanced"><summary>Advanced quantization</summary><label className="workflow-check"><input type="checkbox" checked={preferences.vision} onChange={event => update("vision", event.target.checked)} />Also quantize vision to Q8 (experimental)</label>{nativeQuantization && <label className="workflow-check"><input type="checkbox" checked={preferences.compareQ4} onChange={event => update("compareQ4", event.target.checked)} />Compare Q8 and Q4 (experimental)</label>}</details>
+              <QuantizationCompression language={language} vision={preferences.vision} onLanguage={value=>update("precision",value)} onVision={value=>update("vision",value)} />
+              {nativeQuantization && <details className="workflow-advanced"><summary>Compare language formats</summary><label className="workflow-check"><input type="checkbox" checked={preferences.compareQ4} onChange={event=>update("compareQ4",event.target.checked)} />Compare Q8 and Q4 (experimental)</label></details>}
             </>}
           </>}
           <WorkflowChoiceGrid name="execution-target" label="Compute" value={runtime?.id ?? ""}
