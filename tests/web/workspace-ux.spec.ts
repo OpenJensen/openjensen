@@ -18,7 +18,7 @@ async function workspace(page: Page) {
     } });
     return route.continue();
   });
-  await page.goto('/');
+  await page.goto('/datasets/');
   await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'ux-review');
   return mutations;
 }
@@ -29,13 +29,13 @@ test('data tools are first-class pages with clear return paths and no job submis
   await expect(page.getByRole('region', { name: 'Workflow context' })).toHaveCount(0);
   const navigation = page.getByRole('navigation', { name: 'Policy lifecycle' });
   for (const name of ['Augmentation', 'Teaching', 'Decision lab']) {
-    const entry = navigation.getByRole('button', { name, exact: true });
+    const entry = navigation.getByRole('link', { name, exact: true });
     await entry.click();
     await expect(entry).toHaveAttribute('aria-current', 'page');
     await expect(page.getByRole('heading', { name, level: 1, exact: true })).toBeVisible();
     await expect(page.locator('.workflow-panel')).toHaveCount(0);
   }
-  await navigation.getByRole('button', { name: 'Augmentation', exact: true }).click();
+  await navigation.getByRole('link', { name: 'Augmentation', exact: true }).click();
   await page.getByRole('button', { name: 'Import a dataset', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Dataset', level: 1, exact: true })).toBeVisible();
   expect(mutations).toEqual([]);
@@ -43,7 +43,7 @@ test('data tools are first-class pages with clear return paths and no job submis
 
 test('run choices are visible, keyboard accessible and stay within a narrow screen', async ({ page }, testInfo) => {
   const mutations = await workspace(page);
-  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Run', exact: true }).click();
   const choices = page.getByRole('group', { name: 'Run mode', exact: true });
   await expect(choices.getByRole('button')).toHaveCount(3);
   for (const name of ['3D simulation', 'Replay observations', 'Check inference']) {
@@ -56,7 +56,7 @@ test('run choices are visible, keyboard accessible and stay within a narrow scre
   await choices.getByRole('button', { name: '3D simulation', exact: true }).click();
   await page.screenshot({ path: testInfo.outputPath('run-workspace.png'), fullPage: false });
   await page.setViewportSize({ width: 320, height: 900 });
-  await expect(page.getByRole('navigation', { name: 'Policy lifecycle' }).getByRole('button', { name: 'Augmentation', exact: true })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Policy lifecycle' }).getByRole('link', { name: 'Augmentation', exact: true })).toBeVisible();
   await expect(choices.getByRole('button', { name: '3D simulation', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
   expect(mutations).toEqual([]);
@@ -67,7 +67,7 @@ test('workspace pages use a single title without introductory subtitles', async 
   await workspace(page);
   const navigation = page.getByRole('navigation', { name: 'Policy lifecycle' });
   for (const name of ['Dataset', 'Augmentation', 'Teaching', 'Fine-tune', 'Distill', 'Quantize', 'Evaluate', 'Run', 'Decision lab', 'Cloud runs', 'Settings & diagnostics', 'Dashboard']) {
-    await navigation.getByRole('button', { name, exact: true }).click();
+    await navigation.getByRole('link', { name, exact: true }).click();
     await expect(page.getByRole('heading', { name, level: 1, exact: true })).toBeVisible();
     await expect(page.locator('.page-heading p')).toHaveCount(0);
     await expect(page.locator('.page-heading .page-guide')).toBeVisible();
@@ -79,10 +79,10 @@ test('workspace pages use a single title without introductory subtitles', async 
     await expect(page.getByRole('status', { name: 'Application API connection', exact: true })).toHaveCount(0);
     await expect(page.getByText('App connected', { exact: true })).toHaveCount(0);
   }
-  await page.getByRole('button', { name: 'My models', exact: true }).click();
+  await page.getByRole('link', { name: 'My models', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'My models', level: 1, exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Workflow context', exact: true })).toHaveCount(0);
-  await navigation.getByRole('button', { name: 'Distill', exact: true }).click();
+  await navigation.getByRole('link', { name: 'Distill', exact: true }).click();
   await expect(page.getByText('Teach a smaller ACT policy', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Train an ACT256 student to imitate your teacher’s action chunks, then reload the saved student in a fresh process.', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('group', { name: 'Teacher', exact: true })).toHaveCount(0);
@@ -93,7 +93,7 @@ test('the contextual guide covers every section and keeps API docs separate', as
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await workspace(page);
-  await page.getByRole('button', { name: 'Distill', exact: true }).click();
+  await page.getByRole('link', { name: 'Distill', exact: true }).click();
   await page.locator('.page-heading .page-guide').click();
   await expect(page).toHaveURL(/\/guide\/#distill$/);
   await expect(page.getByRole('heading', { name: 'Workspace guide', exact: true })).toBeVisible();
@@ -122,14 +122,14 @@ test('the contextual guide covers every section and keeps API docs separate', as
 
 test('fresh workflows require explicit model and runner choices', async ({ page }, testInfo) => {
   const mutations = await workspace(page);
-  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await page.getByRole('button',{name:'Start a new quantization',exact:true}).click();
   await expect(page.getByText('No saved models in this project yet')).toBeVisible();
   await page.getByRole('region', { name: 'Your quantization models', exact: true }).screenshot({ path: testInfo.outputPath('quantization-owned-models.png') });
   await expect(page.locator('.workflow-panel')).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Run', exact: true }).click();
   const runners = page.getByRole('group', { name: 'Run mode', exact: true });
   for (const name of ['3D simulation', 'Replay observations', 'Check inference']) {
     await expect(runners.getByRole('button', { name, exact: true })).toHaveAttribute('aria-pressed', 'false');
@@ -137,7 +137,7 @@ test('fresh workflows require explicit model and runner choices', async ({ page 
   await expect(page.locator('.workflow-panel')).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Native Isaac simulation', exact: true })).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
   await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Model', exact: true }).click();
   const models = page.getByRole('group', { name: 'Base model', exact: true });
@@ -182,7 +182,7 @@ test('compact mobile navigation leaves useful stage content visible and every to
     await page.screenshot({ path: testInfo.outputPath(`workspace-empty-${width}.png`), fullPage: false });
   }
   for (const name of ['Teaching', 'Fine-tune', 'Distill', 'Quantize', 'Evaluate', 'Run', 'Decision lab', 'Cloud runs', 'Settings & diagnostics', 'Dataset']) {
-    const button = navigation.getByRole('button', { name, exact: true });
+    const button = navigation.getByRole('link', { name, exact: true });
     await button.focus();
     await page.keyboard.press('Enter');
     await expect(button).toHaveAttribute('aria-current', 'page');
@@ -193,14 +193,14 @@ test('compact mobile navigation leaves useful stage content visible and every to
 
 test('workflow pages keep their job history without the duplicate project activity panel', async ({ page }, testInfo) => {
   const { mutations } = await workflowFixture(page);
-  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   await expect(page.getByText('Project activity', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Fine-tuning jobs', exact: true }).locator('[data-job-id="training-job"]')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('clean-fine-tune.png'), fullPage: true });
-  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Quantization jobs',exact:true })).toBeVisible();
   await selectProject(page, 'beta');
-  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Fine-tuning jobs', exact: true }).getByText('No fine-tuning jobs yet.')).toBeVisible();
   await expect(page.locator('[data-job-id="training-job"]')).toHaveCount(0);
   expect(mutations).toEqual([]);
@@ -225,7 +225,7 @@ test('missing history stays visible in the run list and cannot enable metadata-o
   const { state, mutations } = await workflowFixture(page);
   state.failed = true;
   await page.reload();
-  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   const history = page.getByRole('region', { name: 'Fine-tuning jobs', exact: true });
   await expect(history.getByRole('alert')).toContainText('Generated unavailable history');
   await expect(history.getByText('No fine-tuning jobs yet.')).toHaveCount(0);
@@ -233,6 +233,7 @@ test('missing history stays visible in the run list and cannot enable metadata-o
   state.jobs = state.jobs.filter(job => job.id === 'dataset-first');
   state.jobs[0].result.snapshot = null;
   await page.reload();
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
   await page.getByRole('button', { name: 'Open dataset dataset-first',exact:true }).click();
   await expect(page.getByRole('region', { name: 'Dataset inspection', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Train on this dataset', exact: true })).toHaveCount(0);
@@ -244,7 +245,7 @@ test('loading history does not claim the run list is empty', async ({ page }) =>
   let release!: () => void;
   state.gate = new Promise<void>(resolve => { release = resolve; });
   await page.reload();
-  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   const history = page.getByRole('region', { name: 'Fine-tuning jobs', exact: true });
   await expect(history.getByRole('status')).toHaveText('Loading jobs…');
   await expect(history.getByText('No fine-tuning jobs yet.')).toHaveCount(0);

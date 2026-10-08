@@ -10,7 +10,7 @@ async function ownProject(page:Page,name:string) {
   expect(response.status()).toBe(201);
   const project=await response.json();
   await page.addInitScript(id=>localStorage.setItem('firebird.project',id),project.id);
-  await page.goto('/');
+  await page.goto('/datasets/');
   await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id',project.id);
   return project;
 }
@@ -65,9 +65,9 @@ test('open an imported two-view fixture, save labels, reopen it and reach the da
   expect(completed.result.inspection_scope).toBe('complete_snapshot');
   await expect(page.getByText(/Training copy verified/)).toBeVisible();
   await expect(page.getByRole('button',{name:'Train on this dataset'})).toBeEnabled();
-  await page.getByRole('button',{name:'Dashboard',exact:true}).click();
+  await page.getByRole('link',{name:'Dashboard',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Resources & connections'})).toBeVisible();
-  await expect(page.getByRole('button',{name:'My models',exact:true})).toBeVisible();
+  await expect(page.getByRole('link',{name:'My models',exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'My datasets',exact:true})).toBeVisible();
   await page.screenshot({path:testInfo.outputPath('workspace-dashboard.png'),fullPage:true});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth+1)).toBe(true);
@@ -108,7 +108,7 @@ test('saved Hugging Face inspections reopen without a new inspection request',as
     if(path.endsWith('/episodes'))return route.fulfill({status:422,json:{detail:'Preview is offline in this test'}});
     return route.continue();
   });
-  await page.goto('/');
+  await page.goto('/datasets/');
   await page.getByRole('button',{name:'Open dataset our/robot-data'}).click();
   await expect(page.getByRole('heading',{name:'our/robot-data',exact:true})).toBeVisible();
   expect(writes).toEqual([]);
@@ -122,7 +122,7 @@ test('dashboard reports a failed local probe instead of successful resource chec
   await page.route('**/api/v1/compute-settings/gcp/check',route=>route.fulfill({json:settings}));
   await page.route('**/api/v1/compute-settings/local/check',route=>route.fulfill({status:503,json:{detail:'Local GPU probe failed'}}));
   await ownProject(page,`Resource failure ${testInfo.project.name}`);
-  await page.getByRole('button',{name:'Dashboard',exact:true}).click();
+  await page.getByRole('link',{name:'Dashboard',exact:true}).click();
   const local=page.getByRole('article').filter({has:page.getByRole('heading',{name:'Local compute',exact:true})});
   await expect(local.getByText('Disabled',{exact:true})).toBeVisible();
   await expect(local.locator('.resource-state')).not.toHaveClass(/ready/);
@@ -163,7 +163,7 @@ for (const available of [true, false]) {
       }
       return route.continue();
     });
-    await page.goto('/');
+    await page.goto('/datasets/');
     const card=page.getByRole('button',{name:'Open dataset our/camera-data'});
     if (available) {
       const video=card.locator('video');
@@ -183,8 +183,8 @@ for (const available of [true, false]) {
       await page.getByRole('heading', { name: 'Dataset', exact: true }).hover();
       await expect.poll(() => video.evaluate(node => (node as HTMLVideoElement).paused)).toBe(true);
     }
-    await page.getByRole('button',{name:'Fine-tune',exact:true}).click();
-    await page.getByRole('button',{name:'Dataset',exact:true}).click();
+    await page.getByRole('link',{name:'Fine-tune',exact:true}).click();
+    await page.getByRole('link',{name:'Dataset',exact:true}).click();
     if (available) {
       expect(requests).toHaveLength(1);
       await expect(card.locator('video')).toHaveClass('loaded');
@@ -214,10 +214,10 @@ test('dashboard uses the current project library scope, and inspection is reache
     if(path.endsWith('/episodes')||path.endsWith('/cover'))return route.fulfill({status:422,json:{detail:'Preview offline in this navigation test'}});
     return route.continue();
   });
-  await page.goto('/');
+  await page.goto('/datasets/');
   await expect(page.getByRole('navigation',{name:'Dataset views'})).toHaveCount(0);
   await expect(page.getByRole('button',{name:/Open dataset/})).toHaveCount(3);
-  await page.getByRole('button',{name:'Dashboard',exact:true}).click();
+  await page.getByRole('link',{name:'Dashboard',exact:true}).click();
   await expect(page.getByRole('button',{name:'My datasets',exact:true})).toContainText('3 saved datasets');
   await expect(page.getByRole('region',{name:'Recent datasets'}).getByText('our/data-3')).toHaveCount(0);
   await page.getByRole('button',{name:'My datasets',exact:true}).click();

@@ -65,7 +65,7 @@ export default async function GuidePage() {
   return <WorkspaceShell showGuideShortcut={false} contentClassName="guide-page" skipLabel="Skip to guide" sidebarLabel="Guide navigation"
     breadcrumb={<><Icon name="book" size={18} /><strong>Guide</strong></>}
     navigation={<nav className="guide-navigation" aria-label="Guide sections">
-      <a className="guide-back" href={publicPath('/')}><Icon name="arrow" size={16} />Back to workspace</a>
+      <a className="guide-back" href={publicPath('/dashboard/')}><Icon name="arrow" size={16} />Back to workspace</a>
       <ul>{guide.sections.map(section => <li key={section.id}><a href={`#${section.id}`}>{section.title}</a></li>)}</ul>
     </nav>}>
     <div className="page-heading"><h1>Workspace guide</h1></div>

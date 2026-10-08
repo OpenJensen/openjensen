@@ -65,13 +65,13 @@ async function workspace(page: Page, cloudOnly = false, cloudChecks = false,
     await route.fulfill({ status: 405, json: { detail: 'Unexpected fixture request.' } });
   });
   initialize?.({ jobs, artifacts });
-  await page.goto('/');
+  await page.goto('/datasets/');
   return { jobs, artifacts, submitted, unexpected };
 }
 
 test('explicitly selects a cloud checkpoint and quantizes it with visible precision and activity', async ({ page }) => {
   const { jobs, submitted, unexpected } = await workspace(page);
-  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await chooseTransformationModel(page, 'quantization', 'Choose LoRA checkpoint · recent-100');
   await expect(page.getByRole('group', { name: 'My model', exact: true })).toBeVisible();
   const picker = page.getByRole('group', { name: 'My model', exact: true });
@@ -102,7 +102,7 @@ test('explicitly selects a cloud checkpoint and quantizes it with visible precis
 
 test('preserves an earlier checkpoint selected from a training run through quantization', async ({ page }) => {
   const { submitted, unexpected } = await workspace(page);
-  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   await page.locator('.job-history-entry[data-job-id="recent-run"]').click();
   const checkpointActions = page.getByRole('region', { name: 'Use a trained checkpoint' });
   await expect(checkpointActions).toBeVisible();
@@ -112,7 +112,7 @@ test('preserves an earlier checkpoint selected from a training run through quant
   await page.getByRole('button', { name: 'Start quantization', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0]).toMatchObject({ artifact_id: 'recent-20', precision: { language: 'Q8_0', vision: null } });
-  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Quantization jobs', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Start a new quantization', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Your quantization models', exact: true }).locator('button[aria-pressed="true"]')).toHaveCount(0);
@@ -125,7 +125,7 @@ test('cloud quantization keeps Q8 by default and accepts explicit experimental p
     suite: 'libero_spatial', mode: 'engine', steps: 10, compareQ4: true,
   })), projectId);
   const { submitted, unexpected } = await workspace(page, true);
-  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await chooseTransformationModel(page, 'quantization', 'Choose LoRA checkpoint · recent-100');
   await expect(choice(page, 'Compression', 'recommended')).toBeChecked();
   await expect(page.getByRole('radio', { name: '4-bit', exact: true })).toBeVisible();
@@ -143,7 +143,7 @@ test('cloud quantization keeps Q8 by default and accepts explicit experimental p
 test('keeps unsupported checkpoints visible and explains the SmolVLA quantization limit before submission', async ({ page }) => {
   const { artifacts, submitted, unexpected } = await workspace(page);
   Object.assign(artifacts.find(item => item.id === 'recent-100')!.metadata, { architecture: 'psi0' });
-  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new quantization', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Choose LoRA checkpoint · recent-100', exact: true })).toBeDisabled();
   await chooseTransformationModel(page, 'quantization', 'Choose LoRA checkpoint · recent-20');
@@ -161,7 +161,7 @@ for (const stage of ['Evaluate', 'Run']) {
   test(`${stage} explains a cloud-only setup and cannot submit to an unsupported cloud runtime`, async ({ page }) => {
     const { artifacts, submitted, unexpected } = await workspace(page, true);
     artifacts.push({ ...artifacts[0], id: 'packed-policy', label: 'Compressed policy', format: 'gguf' });
-    await page.getByRole('button', { name: stage, exact: true }).click();
+    await page.getByRole('link', { name: stage, exact: true }).click();
     if (stage === 'Run') await page.getByRole('group', { name: 'Run mode', exact: true }).getByRole('button', { name: 'Check inference', exact: true }).click();
     await page.getByRole('button', { name: stage === 'Evaluate' ? 'New evaluation' : 'New run', exact: true }).click();
     await expect(page.getByRole('group', { name: 'Compute', exact: true }).getByRole('radio')).toHaveCount(0);
@@ -178,7 +178,7 @@ for (const stage of ['Evaluate', 'Run']) {
 test('native evaluation targets remain usable while cloud training targets are excluded', async ({ page }) => {
   const { artifacts, unexpected } = await workspace(page);
   artifacts.push({ ...artifacts[0], id: 'packed-policy', label: 'Compressed policy', format: 'gguf', metadata: { architecture: 'smolvla', precision: 'Q8_0' } });
-  await page.getByRole('button', { name: 'Evaluate', exact: true }).click();
+  await page.getByRole('link', { name: 'Evaluate', exact: true }).click();
   await page.getByRole('button', { name: 'New evaluation', exact: true }).click();
   await expect(choice(page, 'Compute', 'xbox')).toBeChecked();
   await expect(choice(page, 'Compute', 'gcp')).toHaveCount(0);
@@ -196,14 +196,14 @@ test('model names distinguish checkpoint choices and training runs while legacy 
   jobs.push({ ...jobs[1], id: 'psi-run', request: { ...jobs[1].request, training: { model_id: 'USC-PSI-Lab/psi-model', steps: 30 } } });
   artifacts.push({ ...artifacts[0], id: 'psi-checkpoint', job_id: 'psi-run', metadata: { step: 30, storage: 'gcs', remote_uri: 'gs://fixture/psi-run/checkpoint-30', base_model: { repository: 'USC-PSI-Lab/psi-model' } } } as typeof artifacts[number]);
   jobs.push({ ...jobs[1], id: 'legacy-run', request: { ...jobs[1].request, training: null }, created_at: '2026-09-24T10:00:00Z' });
-  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await chooseTransformationModel(page, 'quantization', 'Choose LoRA checkpoint · recent-100');
   const picker = page.getByRole('group', { name: 'My model', exact: true });
   await expect(picker.getByRole('radio', { name: 'SmolVLA · Step 100', exact: true })).toBeVisible();
   await expect(choice(page, 'My model', 'recent-100').locator('..')).toContainText('Run recent-r');
   await expect(picker.getByRole('radio', { name: 'ACT · Step 900', exact: true })).toBeVisible();
   await expect(picker.getByRole('radio', { name: 'Psi-Zero · Step 30', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   const runs = page.locator('.job-history-entry');
   await expect(runs.filter({ hasText: /SmolVLA · LORA/ })).toHaveCount(1);
   await expect(runs.filter({ hasText: /ACT · FULL/ })).toHaveCount(1);
@@ -229,7 +229,7 @@ test('opens a previous quantization job from history without mixing its details 
       created_at: '2026-09-26T14:00:00Z', updated_at: '2026-09-26T14:00:00Z',
       request: { operation: 'policy.quantize', runtime_id: 'gcp', artifact_id: 'recent-100', precision: { language: 'Q8_0', vision: null } } });
   });
-  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   const history = page.getByRole('region', { name: 'Quantization jobs', exact: true });
   await expect(history.locator('.job-history-entry')).toHaveCount(2);
   await expect(history.locator('[data-job-id="prior-quantization"]')).toContainText('SmolVLA · Q4');
@@ -266,7 +266,7 @@ for (const stage of ['Evaluate', 'Run']) {
       artifacts.push({ ...artifacts[0], id: 'cloud-q8', label: 'Cloud Q8 policy', format: 'gguf',
         metadata: { architecture: 'smolvla', storage: 'gcs', precision: 'Q8_0' } });
     });
-    await page.getByRole('button', { name: stage, exact: true }).click();
+    await page.getByRole('link', { name: stage, exact: true }).click();
     if (stage === 'Run') await page.getByRole('group', { name: 'Run mode', exact: true }).getByRole('button', { name: 'Check inference', exact: true }).click();
     await expect(page.getByRole('region', { name: stage === 'Evaluate' ? 'Evaluation jobs' : 'Run jobs', exact: true })).toBeVisible();
     await expect(page.getByRole('group', { name: 'My model', exact: true })).toHaveCount(0);
@@ -301,7 +301,7 @@ test('shows native build progress as a setup stage without presenting it as over
     sequence: 1, stage: 'compiling', message: 'Compiling native engine · build progress 35%',
     timestamp: '2026-09-26T14:25:00Z', data: { scope: 'native_build', build_percent: 35 },
   }] }));
-  await page.getByRole('button', { name: 'Evaluate', exact: true }).click();
+  await page.getByRole('link', { name: 'Evaluate', exact: true }).click();
   const job = page.locator('.job-history-entry[data-job-id="compiling-run"]');
   await expect(job).toContainText('Compiling native engine');
   await job.click();
@@ -316,7 +316,7 @@ test('shows native build progress as a setup stage without presenting it as over
 for (const stage of ['Evaluate', 'Run']) {
   test(`${stage} explains how to prepare a trained checkpoint when no GGUF is available`, async ({ page }) => {
     const { submitted, unexpected } = await workspace(page, true, true);
-    await page.getByRole('button', { name: stage, exact: true }).click();
+    await page.getByRole('link', { name: stage, exact: true }).click();
     if (stage === 'Run') await page.getByRole('group', { name: 'Run mode', exact: true }).getByRole('button', { name: 'Check inference', exact: true }).click();
     await page.getByRole('button', { name: stage === 'Evaluate' ? 'New evaluation' : 'New run', exact: true }).click();
     await expect(choice(page, 'Compute', 'gcp')).toBeChecked();

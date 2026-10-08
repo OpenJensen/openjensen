@@ -44,8 +44,8 @@ async function fixture(page: Page) {
     if (path.startsWith('/api/v1/jobs/')) { const id = path.split('/').at(-1)!; const selected = state.jobs.find(item => item.id === id); if (selected) return route.fulfill({ json: selected }); }
     return route.continue();
   });
-  await page.goto('/'); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
-  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await page.goto('/datasets/'); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
+  await page.getByRole('link', { name: 'Run', exact: true }).click();
   await page.getByRole('button', { name: '3D simulation', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Native Isaac simulation', exact: true })).toBeVisible();
   return state;
@@ -57,7 +57,7 @@ test('a packed CPU profile is never selected automatically on direct Run entry',
   const cpu = { ...profile, id: 'packed-cpu', label: 'Generated packed CPU profile', architectures: ['act'], policy_runtime: 'packed-act-cpu', policy_device: 'cpu', policy_formats: ['firebird_quant'], provider: 'gcp', accelerators: ['L4'] };
   state.profiles = [cpu];
   state.artifacts.push(artifact('packed-policy', 'act', 'native_quantized', { format: 'firebird_quant' }));
-  await page.reload(); await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await page.reload(); await page.getByRole('link', { name: 'Run', exact: true }).click();
   await page.getByRole('button', { name: '3D simulation', exact: true }).click();
   const profiles = page.getByRole('radiogroup', { name: 'Isaac profile', exact: true });
   const policies = page.getByRole('radiogroup', { name: 'Native policy', exact: true });
@@ -74,7 +74,7 @@ test('a packed CPU profile is never selected automatically on direct Run entry',
 
 test('native Run preserves engine navigation and fails closed when profiles are missing', async ({ page }) => {
   const state = await fixture(page); state.profiles = [];
-  await page.reload(); await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await page.reload(); await page.getByRole('link', { name: 'Run', exact: true }).click();
   await expect(page.getByRole('group', { name: 'Run mode', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Run jobs', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: '3D simulation' }).click();
@@ -82,7 +82,7 @@ test('native Run preserves engine navigation and fails closed when profiles are 
   await expect(page.getByRole('button', { name: 'Start experimental simulation' })).toBeDisabled();
   await expect(page.getByRole('radiogroup', { name: 'Policy source', exact: true })).toHaveCount(0);
   expect(state.posts).toEqual([]);
-  await page.getByRole('button', { name: 'Evaluate', exact: true }).click();
+  await page.getByRole('link', { name: 'Evaluate', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Evaluation purpose' })).toContainText('scored ACT / Isaac evaluation is not configured');
 });
 
@@ -169,7 +169,7 @@ test('verified native record exposes fixed video/download paths without claiming
   await expect(page.getByRole('link', { name: 'Download simulation record' })).toHaveAttribute('href', '/api/v1/projects/alpha/artifacts/record/download');
   await expect(page.getByText(/The recorded video is unavailable/)).toBeVisible();
   await expect(page.getByText('Execution completed. This is not a scored evaluation or proof of cup pickup.')).toBeVisible();
-  await page.getByRole('button', { name: 'Cloud runs', exact: true }).click();
+  await page.getByRole('link', { name: 'Cloud runs', exact: true }).click();
   await expect(page.getByLabel('Application cloud job', { exact: true })).toHaveValue('done');
   await expect(page.getByText('Execution target', { exact: true }).locator('..')).toContainText('L4 + H100');
   await page.getByRole('button', { name: 'Open simulation job' }).click();
@@ -217,7 +217,7 @@ test('native and Cloud event views display bounded observed worker states as the
   await expect(page.getByRole('region', { name: 'Native simulation event log' })).toContainText('Isaac: RUNNING · VLA: STARTING');
   state.tasks = { isaac: 'SUCCEEDED', vla: 'CANCELLING' };
   await expect(page.getByRole('region', { name: 'Native simulation event log' })).toContainText('Isaac: SUCCEEDED · VLA: CANCELLING', { timeout: 7000 });
-  await page.getByRole('button', { name: 'Cloud runs', exact: true }).click();
+  await page.getByRole('link', { name: 'Cloud runs', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Application job event log', exact: true })).toContainText('Isaac: SUCCEEDED · VLA: CANCELLING');
   state.tasks = { isaac: 'UNRECOGNIZED_STATUS', vla: 'arbitrary-not-a-worker-state' };
   await page.getByRole('button', { name: 'Refresh application jobs' }).click();
@@ -255,7 +255,7 @@ for (const view of ['native', 'cloud'] as const) test(`${view} final events refr
     await page.getByLabel('Saved simulation job').selectOption(quick.id);
     await page.getByText('Activity and technical details', { exact: true }).click();
   }
-  else await page.getByRole('button', { name: 'Cloud runs', exact: true }).click();
+  else await page.getByRole('link', { name: 'Cloud runs', exact: true }).click();
   const log = page.getByRole('region', { name: view === 'native' ? 'Native simulation event log' : 'Application job event log', exact: true });
   await expect(log).toContainText(view === 'native' ? 'No recorded events yet.' : 'No events received for this job yet.');
   armed = true;
@@ -339,7 +339,7 @@ test('failed activity refresh visibly marks cached worker states stale while det
 for (const width of [320, 390]) test(`compact ${width}px navigation keeps stage content visible and every action keyboard reachable`, async ({ page }) => {
   await page.setViewportSize({ width, height: 844 });
   const state = await fixture(page);
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
   const heading = page.getByRole('heading', { name: 'Dataset', exact: true });
   const bounds = await heading.boundingBox();
   // The grouped navigation exposes all destinations; the stage heading and
@@ -351,14 +351,16 @@ for (const width of [320, 390]) test(`compact ${width}px navigation keeps stage 
   expect(navigationBounds!.x).toBeGreaterThanOrEqual(0);
   expect(navigationBounds!.x + navigationBounds!.width).toBeLessThanOrEqual(width);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
-  await page.getByRole('button', { name: 'Run', exact: true }).focus();
+  await page.getByRole('link', { name: 'Run', exact: true }).focus();
   await page.keyboard.press('Tab');
-  await expect(page.getByRole('button', { name: 'Decision lab', exact: true })).toBeFocused();
+  await expect(page.getByRole('link', { name: 'Decision lab', exact: true })).toBeFocused();
   await page.keyboard.press('Tab');
-  const cloud = page.getByRole('button', { name: 'Cloud runs', exact: true });
+  await expect(navigation.getByRole('link', { name: 'My models', exact: true })).toBeFocused();
+  await page.keyboard.press('Tab');
+  const cloud = page.getByRole('link', { name: 'Cloud runs', exact: true });
   await expect(cloud).toBeFocused();
   await page.keyboard.press('Tab');
-  await expect(page.getByRole('button', { name: 'Settings & diagnostics', exact: true })).toBeFocused();
+  await expect(page.getByRole('link', { name: 'Settings & diagnostics', exact: true })).toBeFocused();
   await page.keyboard.press('Shift+Tab');
   await expect(cloud).toBeFocused();
   const buttonBounds = await cloud.boundingBox();
@@ -368,7 +370,7 @@ for (const width of [320, 390]) test(`compact ${width}px navigation keeps stage 
   await expect(page.getByRole('heading', { name: 'Cloud runs', exact: true })).toBeVisible();
   await page.getByLabel('Current project').focus();
   await page.keyboard.press('Tab');
-  await expect(page.getByRole('button', { name: 'Dashboard', exact: true })).toBeFocused();
+  await expect(page.getByRole('link', { name: 'Dashboard', exact: true })).toBeFocused();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
   expect(state.posts).toEqual([]);
 });
@@ -445,8 +447,8 @@ async function expectImportBlocked(page: Page) {
 
 async function openNativeAgain(page: Page, reload = false) {
   if (reload) { await page.reload(); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha'); }
-  else await page.getByRole('button', { name: 'Dataset', exact: true }).click();
-  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  else await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Run', exact: true }).click();
   await page.getByRole('button', { name: '3D simulation', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Native Isaac simulation', exact: true })).toBeVisible();
 }
@@ -692,7 +694,7 @@ for (const both of [false, true]) test(`native recovery entry ${both ? 'asks whi
     if (multiple) sessionStorage.setItem('firebird:job-attempt:policy.run.replay:alpha', JSON.stringify({ state: 'pending', message: 'Original CPU replay' }));
   }, both);
   await page.reload(); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
-  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Run', exact: true }).click();
   const nativeMode = page.getByRole('button', { name: '3D simulation', exact: true });
   if (both) {
     await expect(page.getByRole('region', { name: 'Workflow selection status' })).toContainText('Both observation replay and native simulation have unresolved requests');
@@ -701,8 +703,8 @@ for (const both of [false, true]) test(`native recovery entry ${both ? 'asks whi
   } else await expect(nativeMode).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('region', { name: 'Native simulation recovery' })).toContainText('Original native launch');
   await page.getByRole('button', { name: 'Check inference', exact: true }).click();
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click();
-  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Run', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Check inference', exact: true })).toHaveAttribute('aria-pressed', 'true');
   expect(await page.evaluate(() => sessionStorage.getItem('firebird:job-attempt:policy.run.simulation:alpha'))).toContain('Original native launch');
   expect(state.posts).toEqual([]);

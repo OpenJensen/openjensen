@@ -170,8 +170,8 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
     unexpected.push(`${request.method()} ${path}`);
     await route.fulfill({ status: 405, json: { detail: 'Blocked by training monitor fixture.' } });
   });
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.goto('/datasets/');
+  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   const monitor = page.getByRole('article', { name: 'Training run monitor' });
   if (openDetails) {
     await page.locator('.job-history-entry[data-job-id="run-001"]').click();
@@ -234,7 +234,7 @@ test('new fine-tuning is a separate view with bold catalog memory budgets and a 
   await setup.getByRole('button', { name: 'Compute', exact: true }).click();
   await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
   await expect(page.getByRole('spinbutton', { name: 'Batch size', exact: true })).toHaveValue('3');
-  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Fine-tuning jobs', exact: true })).toBeVisible();
   await expect(setup).toHaveCount(0);
   expect(submitted).toEqual([]);
@@ -247,7 +247,7 @@ test('empty history offers an explicit new job and repeated dataset shortcuts op
   await expect(page.getByRole('button', { name: 'Start a new fine-tuning', exact: true })).toBeEnabled();
   await expect(page.getByRole('navigation', { name: 'Training setup' })).toHaveCount(0);
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    await page.getByRole('button', { name: 'Dataset', exact: true }).click();
+    await page.getByRole('link', { name: 'Dataset', exact: true }).click();
     await page.getByRole('button', { name: 'Open dataset fixture/robot', exact: true }).click();
     await page.getByRole('button', { name: 'Train on this dataset', exact: true }).click();
     await expect(page.getByRole('navigation', { name: 'Training setup' })).toBeVisible();
@@ -260,7 +260,7 @@ test('empty history offers an explicit new job and repeated dataset shortcuts op
 
 test('local training copies open the jobs-first wizard and retain native model admission', async ({ page }) => {
   const { submitted, unexpected } = await workspace(page, 'local-snapshot', false);
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
   await page.getByRole('button', { name: 'Open dataset Local dataset', exact: true }).click();
   await page.getByRole('button', { name: 'Train on this dataset', exact: true }).click();
   await expect(page.getByRole('checkbox', { name: 'Local dataset', exact: true })).toBeChecked();
@@ -280,10 +280,10 @@ test('local training copies open the jobs-first wizard and retain native model a
 
 test('metadata-only local inspections cannot enter the training creation flow', async ({ page }) => {
   const { submitted, unexpected } = await workspace(page, 'local-unprepared', false);
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
   await page.getByRole('button', { name: 'Open dataset Local dataset', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Train on this dataset', exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
   await expect(page.getByRole('checkbox', { name: 'Local dataset', exact: true })).toBeDisabled();
   await expect(page.getByText('Prepare an immutable training copy when importing this local dataset.')).toBeVisible();
@@ -572,7 +572,7 @@ test('completed cloud ACT checkpoint explicitly downloads and exports with separ
 test('ACT export-only computer never appears as an engine execution target', async ({ page }) => {
   const { submitted } = await workspace(page, 'running', true, 'local');
   for (const [stage, create] of [['Run', 'New run'], ['Evaluate', 'New evaluation'], ['Quantize', 'New quantization']]) {
-    await page.getByRole('button', { name: stage, exact: true }).click();
+    await page.getByRole('link', { name: stage, exact: true }).click();
     if (stage === 'Run') await page.getByRole('button', { name: 'Check inference', exact: true }).click();
     if (stage === 'Quantize') {
       await page.getByRole('button', { name: 'Start a new quantization', exact: true }).click();
@@ -623,11 +623,11 @@ for (const fault of ['lost', 'wrong-project', 'changed-budget', 'redirect'] as c
     await expect(recovery).toContainText('unverified');
     await expect(start).toBeDisabled();
     await expect(recovery.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toHaveCount(0);
-    await page.getByRole('navigation', { name: 'Policy lifecycle' }).getByRole('button', { name: 'Dataset', exact: true }).click();
-    await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+    await page.getByRole('navigation', { name: 'Policy lifecycle' }).getByRole('link', { name: 'Dataset', exact: true }).click();
+    await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
     await expect(recovery).toBeVisible();
     await page.reload();
-    await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+    await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
     await expect(recovery).toBeVisible();
     await expect(recovery.getByRole('button', { name: 'Retry same request', exact: true })).toBeDisabled();
     if (fault === 'lost') {
@@ -701,7 +701,7 @@ test('legacy training recovery requires fresh history and explicit acknowledgeme
   const { submitted } = await workspace(page, 'empty', false);
   await page.evaluate(project => sessionStorage.setItem(`firebird:job-attempt:policy.finetune:${project}`, JSON.stringify({ state: 'uncertain', message: 'Legacy request outcome is unverified.' })), projectId);
   await page.reload();
-  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   const recovery = page.getByRole('region', { name: 'Training submission recovery' });
   await expect(recovery).toContainText('no server request key');
   const acknowledge = recovery.getByRole('button', { name: 'I checked the jobs; allow a new request' });
@@ -744,7 +744,7 @@ async function exportRecoveryFixture(page: Page) {
 }
 const exportButton = (page: Page) => page.getByRole('button', { name: 'Download checkpoint and export', exact: true });
 async function reopenExport(page: Page) {
-  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   await page.locator('.job-history-entry[data-job-id="run-001"]').click();
   await expect(page.getByRole('article', { name: 'Training run monitor' })).toBeVisible();
 }
@@ -779,7 +779,7 @@ test('ACT export retains acknowledged job while history is stale and prevents an
   await expect(page.getByRole('region', { name: 'ACT export receipt' })).toContainText('acknowledged-export');
   await expect(page.getByRole('region', { name: 'ACT export receipt' })).toContainText('queued');
   await expect(page.getByRole('button', { name: 'Exporting ACT policy…', exact: true })).toBeDisabled();
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await reopenExport(page);
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click(); await reopenExport(page);
   await expect(page.getByRole('region', { name: 'ACT export receipt' })).toContainText('acknowledged-export');
   await expect(page.getByRole('button', { name: 'Exporting ACT policy…', exact: true })).toBeDisabled();
   expect(state.submitted).toHaveLength(1);
@@ -797,7 +797,7 @@ test('ACT export unmount during submission preserves pending identity and late a
   });
   try {
     await exportButton(page).click(); await expect.poll(() => state.submitted.length).toBe(1);
-    await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await reopenExport(page);
+    await page.getByRole('link', { name: 'Dataset', exact: true }).click(); await reopenExport(page);
     await expect(page.getByRole('button', { name: 'Exporting ACT policy…', exact: true })).toBeDisabled();
     release();
     await expect(page.getByRole('region', { name: 'ACT export receipt' })).toContainText('acknowledged-export');
@@ -850,7 +850,7 @@ test('ACT export cannot POST when its pending journal cannot be written', async 
   await exportButton(page).click();
   await expect(page.getByRole('region', { name: 'ACT inference export' })).toContainText('storage is unavailable');
   await expect(exportButton(page)).toBeDisabled();
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await reopenExport(page);
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click(); await reopenExport(page);
   await expect(exportButton(page)).toBeDisabled(); expect(state.submitted).toHaveLength(0);
 });
 
@@ -877,7 +877,7 @@ for (const failure of ['receipt-write', 'cleanup', 'unmounted-cleanup'] as const
     try {
       await exportButton(page).click(); await expect.poll(() => state.submitted.length).toBe(1);
       if (failure === 'unmounted-cleanup') {
-        await page.getByRole('button', { name: 'Dataset', exact: true }).click(); release(); await reopenExport(page);
+        await page.getByRole('link', { name: 'Dataset', exact: true }).click(); release(); await reopenExport(page);
       }
       await expect(page.getByRole('region', { name: 'ACT export receipt' })).toContainText('acknowledged-export');
       await expect(page.getByRole('region', { name: 'ACT export recovery' })).toContainText('storage is unavailable');
@@ -980,6 +980,12 @@ test('ACT export ignores another project receipt and download ancestry', async (
   state.artifacts.push({ ...state.artifacts.find(item => item.id === 'checkpoint-artifact')!, id: 'foreign-output', project_id: 'foreign-project', format: 'inference_export', parent_ids: ['checkpoint-artifact'] });
   state.artifacts.push({ ...state.artifacts.find(item => item.id === 'checkpoint-artifact')!, id: 'foreign-copy', project_id: 'foreign-project', format: 'native_checkpoint', parent_ids: ['checkpoint-artifact'] });
   state.artifacts.push({ ...state.artifacts.find(item => item.id === 'checkpoint-artifact')!, id: 'unbound-output', format: 'inference_export', parent_ids: ['foreign-copy'] });
+  // A direct training reload must reject a mixed-project canonical history.
+  await page.reload();
+  await expect(page.getByRole('region', { name: 'Fine-tuning jobs', exact: true }).getByRole('alert')).toContainText('contains another project');
+  await expect(page.getByRole('region', { name: 'ACT inference export' })).toHaveCount(0);
+  expect(state.submitted).toHaveLength(0);
+  state.jobs.splice(state.jobs.findIndex(item => item.id === 'foreign-export'), 1);
   await page.reload(); await reopenExport(page);
   await expect(exportButton(page)).toBeEnabled();
   const control = page.getByRole('region', { name: 'ACT inference export' });
@@ -1280,7 +1286,7 @@ test('manual Distill teacher choices reject partial timing metadata and preserve
   Object.assign(changed.metadata, { prediction_horizon: 32 });
   await page.reload(); await reopenExport(page);
   await expect(useTeacher(page, changed.id)).toBeDisabled();
-  await page.getByRole('button', { name: 'Distill', exact: true }).click();
+  await page.getByRole('link', { name: 'Distill', exact: true }).click();
   await chooseTransformationModel(page,'distillation',`Choose ACT inference export · ${state.packages[0].id}`);
   await expect(teacherChoices(page).locator(`input[value="${changed.id}"]`)).toHaveCount(0);
   await expect(teacherChoices(page).locator(`input[value="${state.packages[0].id}"]`)).toHaveCount(1);
@@ -1303,14 +1309,14 @@ for (const location of ['metadata', 'checkpoint'] as const) for (const field of 
   await expect(card.getByRole('link', { name: 'Download ACT inference package' })).toHaveAttribute('href', `/api/v1/projects/${projectId}/artifacts/${encodeURIComponent(guarded.id)}/download`);
   await expect(useTeacher(page, legacy.id)).toBeEnabled();
   await expect(exportedPackage(page, legacy.id).getByRole('button', { name: 'Quantize this package' })).toBeEnabled();
-  await page.getByRole('button', { name: 'Distill', exact: true }).click();
+  await page.getByRole('link', { name: 'Distill', exact: true }).click();
   await chooseTransformationModel(page,'distillation',`Choose ACT inference export · ${state.packages[0].id}`);
   await expect(teacherChoices(page).locator(`input[value="${guarded.id}"]`)).toHaveCount(0);
   await expect(page.getByText('Some ACT packages are excluded because their model format, timing or simulator details are incomplete or unsupported. Refresh or export a complete inference package.', { exact: true })).toBeVisible();
   await expect(teacherChoices(page).locator(`input[value="${legacy.id}"]`)).toHaveCount(1);
   await expect(teacherChoices(page).locator('input:checked')).toHaveValue(legacy.id);
   await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
-  await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await chooseTransformationModel(page,'quantization',`Choose ACT inference export · ${state.packages[0].id}`);
   const policies = page.getByRole('group', { name: 'Policy', exact: true });
   await expect(policies.locator(`input[value="${guarded.id}"]`)).toHaveCount(0);
@@ -1413,7 +1419,7 @@ async function temporalTraining(page: Page, model = 'ACT', accumulationCatalog: 
   state.extraRuntimes.push({ id: 'all-models-a100', label: 'A100', accelerator: 'A100', provider: 'gcp', execution: 'skypilot', device: 'cuda', enabled: true, training: true, training_model_ids: ['act', 'smolvla', 'pi05'], gpu_memory_mib: 40960 });
   if (savedAccumulation !== undefined) await page.evaluate(({ projectId, savedAccumulation }) => { const key = `firebird.workflow.${projectId}`; localStorage.setItem(key, JSON.stringify({ ...JSON.parse(localStorage.getItem(key) ?? '{}'), gradientAccumulation: savedAccumulation })); }, { projectId, savedAccumulation });
   await page.reload();
-  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
   const setup = page.getByRole('navigation', { name: 'Training setup' });
   await setup.getByRole('button', { name: 'Model', exact: true }).click();
@@ -1528,7 +1534,7 @@ test('keyed training retry after reload preserves the original key and recipe wi
   await expect(recovery.getByRole('button', { name: 'Check saved request' })).toBeEnabled();
   await page.evaluate(project => localStorage.setItem(`firebird.workflow.${project}`, JSON.stringify({ trainingDefaultsVersion: 3, trainingSteps: 777, trainingModelId: 'smolvla' })), projectId);
   await page.reload();
-  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   await expect(recovery.getByRole('button', { name: 'Retry same request' })).toBeDisabled();
   await recovery.getByRole('button', { name: 'Check saved request' }).click();
   await expect(recovery).toContainText('new request remains blocked');
@@ -1621,7 +1627,7 @@ for (const fault of ['malformed', 'foreign'] as const) test(`legacy training rec
   const state = await workspace(page, 'empty', false);
   await page.evaluate(project => sessionStorage.setItem(`firebird:job-attempt:policy.finetune:${project}`, JSON.stringify({ state: 'uncertain', message: 'Legacy request outcome is unverified.' })), projectId);
   await page.reload();
-  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   const recovery = page.getByRole('region', { name: 'Training submission recovery' });
   const acknowledge = recovery.getByRole('button', { name: 'I checked the jobs; allow a new request' });
   const path = `**/api/v1/projects/${projectId}/jobs`;
@@ -1777,7 +1783,7 @@ test('an interrupted multi-model plan reloads without POST and retries its saved
  await expect.poll(() => sent.length).toBe(1);
  await expect(page.getByRole('region',{name:'Multi-model submission recovery'})).toBeVisible();
  await page.reload();
- await page.getByRole('button',{name:'Fine-tune',exact:true}).click();
+ await page.getByRole('link',{name:'Fine-tune',exact:true}).click();
  expect(sent).toHaveLength(1);
  const recovery=page.getByRole('region',{name:'Multi-model submission recovery'});
  await recovery.getByRole('button',{name:'Check saved jobs'}).click();

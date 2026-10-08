@@ -67,8 +67,8 @@ async function fixture(page: Page) {
     if (path.endsWith('/artifacts')) return route.fulfill({ json: [] });
     return route.fulfill({ status: 404, json: { detail: `Unexpected read ${path}` } });
   });
-  await page.goto('/'); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
-  await page.getByRole('button', { name: 'Teaching', exact: true }).click(); await expect(panel(page)).toBeVisible();
+  await page.goto('/datasets/'); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
+  await page.getByRole('link', { name: 'Teaching', exact: true }).click(); await expect(panel(page)).toBeVisible();
   await expect(panel(page).getByText(options.setup_message)).toBeVisible();
   return state;
 }
@@ -92,7 +92,7 @@ test('configured catalog is metadata only with zero automatic selection or submi
 test('exact preparation submits once and minimal acknowledgement survives reload', async ({ page }) => {
   const s = await fixture(page); await selectEpisodes(page); await submit(page).dblclick(); await expect(panel(page).getByRole('article')).toHaveAttribute('data-job-id', 'new-preparation');
   expect(s.posts).toEqual([{ path: '/api/v1/projects/alpha/intakes', body: request() }]);
-  await page.reload(); await page.getByRole('button', { name: 'Teaching', exact: true }).click(); await expect(panel(page).getByRole('article')).toHaveAttribute('data-job-id', 'new-preparation'); await expect(panel(page).getByRole('button', { name: 'Train on this dataset' })).toHaveCount(0); expect(s.posts).toHaveLength(1);
+  await page.reload(); await page.getByRole('link', { name: 'Teaching', exact: true }).click(); await expect(panel(page).getByRole('article')).toHaveAttribute('data-job-id', 'new-preparation'); await expect(panel(page).getByRole('button', { name: 'Train on this dataset' })).toHaveCount(0); expect(s.posts).toHaveLength(1);
 });
 test('draft and selected job are project isolated and restore without consent', async ({ page }) => {
   const s = await fixture(page); await selectEpisodes(page); await selectProject(page, 'beta'); await expect(panel(page).getByRole('checkbox', { checked: true })).toHaveCount(0); await selectProject(page, 'alpha'); await expect(panel(page).getByRole('checkbox', { checked: true })).toHaveCount(2); await expect(submit(page)).toBeDisabled(); expect(s.posts).toEqual([]);
@@ -105,12 +105,12 @@ for (const unavailable of ['unconfigured', 'empty', 'error']) test(`${unavailabl
   await expect(panel(page).getByText(unavailable === 'unconfigured' ? /Remote Isaac captures/ : unavailable === 'empty' ? 'No finalized episodes are published for this project.' : /Recording availability is unverified/)).toBeVisible(); await expect(submit(page)).toBeDisabled(); expect(s.posts).toEqual([]);
 });
 for (const bad of ['array', 'foreign', 'recipe']) test(`${bad} invalid acknowledgement remains uncertain after reload`, async ({ page }) => {
-  const s = await fixture(page); s.bad = bad; await selectEpisodes(page); await submit(page).click(); await expect(checkSaved(page)).toBeEnabled(); await page.reload(); await page.getByRole('button', { name: 'Teaching', exact: true }).click(); await expect(checkSaved(page)).toBeEnabled(); await expect(ack(page)).toHaveCount(0); await expect(submit(page)).toBeDisabled(); expect(s.posts).toHaveLength(1);
+  const s = await fixture(page); s.bad = bad; await selectEpisodes(page); await submit(page).click(); await expect(checkSaved(page)).toBeEnabled(); await page.reload(); await page.getByRole('link', { name: 'Teaching', exact: true }).click(); await expect(checkSaved(page)).toBeEnabled(); await expect(ack(page)).toHaveCount(0); await expect(submit(page)).toBeDisabled(); expect(s.posts).toHaveLength(1);
 });
 test('lost recording response keeps the saved key despite empty history and retries only explicitly', async ({ page }) => {
   const s = await fixture(page); s.lost = true; await selectEpisodes(page); await submit(page).click(); await expect(checkSaved(page)).toBeEnabled();
   await refresh(page).click(); await expect(ack(page)).toHaveCount(0); await expect(submit(page)).toBeDisabled(); expect(s.posts).toHaveLength(1);
-  const key = s.keys[0]; await page.reload(); await page.getByRole('button', { name: 'Teaching', exact: true }).click(); await expect(retrySaved(page)).toHaveCount(0);
+  const key = s.keys[0]; await page.reload(); await page.getByRole('link', { name: 'Teaching', exact: true }).click(); await expect(retrySaved(page)).toHaveCount(0);
   await checkSaved(page).click(); await expect(retrySaved(page)).toBeEnabled(); expect(s.posts).toHaveLength(1);
   s.lost = false; await retrySaved(page).click(); await expect(panel(page).getByRole('article')).toHaveAttribute('data-job-id', 'new-preparation');
   expect(s.keys).toEqual([key, key]); expect(s.posts.map(p => p.body)).toEqual([request(), request()]);
@@ -118,7 +118,7 @@ test('lost recording response keeps the saved key despite empty history and retr
 for (const failure of ['first pending write', 'journal read']) test(`${failure} latches intake admission off before I/O until browser recovery`, async ({ page }) => {
   const s = await fixture(page); await selectEpisodes(page); await storageFault(page, 'firebird:submission:v1:', failure === 'journal read' ? 'getItem' : 'setItem');
   const reads = s.lookupReads; await submit(page).click(); await expect(panel(page).getByText(/Intake recovery is unavailable/)).toBeVisible(); await expect(submit(page)).toBeDisabled(); expect(s.posts).toEqual([]); expect(s.lookupReads).toBe(reads);
-  await page.evaluate(() => (window as any).__restoreRecordingStorage()); await page.reload(); await page.getByRole('button', { name: 'Teaching', exact: true }).click();
+  await page.evaluate(() => (window as any).__restoreRecordingStorage()); await page.reload(); await page.getByRole('link', { name: 'Teaching', exact: true }).click();
   await expect(submit(page)).toBeDisabled(); await panel(page).getByRole('checkbox', { name: /I reviewed these exact/ }).check(); await expect(submit(page)).toBeEnabled();
 });
 test('known accepted ID stays visible when first receipt persistence fails and history is unavailable', async ({ page }) => {
@@ -126,8 +126,8 @@ test('known accepted ID stays visible when first receipt persistence fails and h
 });
 for (const outcome of ['ack', 'error']) test(`remounted recording controller cannot replace a still-pending ${outcome} with another key`, async ({ page }) => {
   const s = await fixture(page), first = deferred(); s.gate = first; s.lost = outcome === 'error'; s.nextId = 'old-job'; await selectEpisodes(page); await submit(page).click(); await expect.poll(() => s.posts.length).toBe(1);
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await expect(page.getByRole('button', { name: 'Checking dataset…', exact: true })).toBeDisabled();
-  await page.getByRole('button', { name: 'Teaching', exact: true }).click(); await expect(submit(page)).toBeDisabled(); await expect(checkSaved(page)).toBeDisabled(); await expect(ack(page)).toHaveCount(0);
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click(); await expect(page.getByRole('button', { name: 'Checking dataset…', exact: true })).toBeDisabled();
+  await page.getByRole('link', { name: 'Teaching', exact: true }).click(); await expect(submit(page)).toBeDisabled(); await expect(checkSaved(page)).toBeDisabled(); await expect(ack(page)).toHaveCount(0);
   first.release(); if (outcome === 'ack') await expect(panel(page).getByText(/Retained acknowledgement: job old-job/)).toBeVisible(); else await expect(checkSaved(page)).toBeEnabled();
   expect(s.posts).toHaveLength(1); expect(new Set(s.keys).size).toBe(1);
 });
@@ -157,7 +157,7 @@ test('cancellation takes fresh exact identity and selection change prevents POST
   const s = await fixture(page), running = await openSaved(page, s, job('running-job', 'alpha', true, 'running')); s.jobs.push(job('other-job')); await refresh(page).click(); await panel(page).getByRole('button', { name: 'Cancel selected preparation' }).click(); const gate = deferred(); s.getGate = gate; s.getGateId = running.id; await panel(page).getByRole('button', { name: 'Confirm preparation cancellation' }).click(); await panel(page).getByLabel('Saved recording preparation', { exact: true }).selectOption('other-job'); gate.release(); await expect(panel(page).getByRole('alert').filter({ hasText: 'Selection changed' })).toBeVisible(); expect(s.posts).toEqual([]);
 });
 test('lost cancellation preserves exact original job across reload and blocks duplicate cancellation', async ({ page }) => {
-  const s = await fixture(page); await openSaved(page, s, job('running-job', 'alpha', true, 'running')); s.lost = true; await panel(page).getByRole('button', { name: 'Cancel selected preparation' }).click(); await panel(page).getByRole('button', { name: 'Confirm preparation cancellation' }).click(); await expect(ack(page)).toBeDisabled(); await page.reload(); await page.getByRole('button', { name: 'Teaching', exact: true }).click(); await expect(panel(page).getByRole('alert').filter({ hasText: 'Cancel job running-job' })).toBeVisible(); await refresh(page).click(); await expect(ack(page)).toBeDisabled(); expect(s.posts).toEqual([{ path: '/api/v1/jobs/running-job/cancel', body: {} }]);
+  const s = await fixture(page); await openSaved(page, s, job('running-job', 'alpha', true, 'running')); s.lost = true; await panel(page).getByRole('button', { name: 'Cancel selected preparation' }).click(); await panel(page).getByRole('button', { name: 'Confirm preparation cancellation' }).click(); await expect(ack(page)).toBeDisabled(); await page.reload(); await page.getByRole('link', { name: 'Teaching', exact: true }).click(); await expect(panel(page).getByRole('alert').filter({ hasText: 'Cancel job running-job' })).toBeVisible(); await refresh(page).click(); await expect(ack(page)).toBeDisabled(); expect(s.posts).toEqual([{ path: '/api/v1/jobs/running-job/cancel', body: {} }]);
 });
 
 test('Teaching draft is not remounted by recording project changes', async ({ page }) => {
@@ -180,24 +180,30 @@ for (const action of ['submit', 'cancel'] as const) test(`post-ACK storage read 
 
 test('lost ACK committed before reload recovers its exact job without a second POST', async ({ page }) => {
   const s = await fixture(page); s.lost = true; s.commitLost = true; await selectEpisodes(page); await submit(page).click(); await expect(checkSaved(page)).toBeEnabled();
-  await page.reload(); await page.getByRole('button', { name: 'Teaching', exact: true }).click(); s.failCatalog = true; await checkSaved(page).click();
+  await page.reload(); await page.getByRole('link', { name: 'Teaching', exact: true }).click(); s.failCatalog = true; await checkSaved(page).click();
   await expect(panel(page).getByRole('article')).toHaveAttribute('data-job-id', 'new-preparation'); expect(s.posts).toHaveLength(1);
 });
 
 test('unsupported durable endpoint refuses recording POST and preserves exact request', async ({ page }) => {
   const s = await fixture(page); s.support = false; await selectEpisodes(page); await submit(page).click(); await expect(checkSaved(page)).toBeEnabled(); await expect(retrySaved(page)).toHaveCount(0); await expect(submit(page)).toBeDisabled(); expect(s.posts).toEqual([]);
 });
-test('navigation during fresh recording catalog check prevents POST', async ({ page }) => {
+for (const destination of ['Dataset', 'Open Jensen workspace home']) test(`${destination} navigation during fresh recording catalog check prevents POST`, async ({ page }) => {
   const s = await fixture(page); await selectEpisodes(page); const gate = deferred(); s.catalogGate = gate; await submit(page).click(); await expect.poll(() => s.lookupReads).toBe(1);
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); gate.release(); await expect(page.getByText('Selection changed; preparation was not submitted.', { exact: true })).toBeVisible(); expect(s.posts).toEqual([]);
+  await page.getByRole('link', { name: destination, exact: true }).click();
+  gate.release();
+  const notice = page.getByText('Selection changed; preparation was not submitted.', { exact: true });
+  await expect(notice).toHaveCount(1);
+  if (destination !== 'Dataset') await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await expect(notice).toBeVisible();
+  expect(s.posts).toEqual([]);
 });
 test('generic Dataset recovers a recording key and Recording recovers a generic intake without relabeling', async ({ page }) => {
   const s = await fixture(page); s.lost = true; s.commitLost = true; await selectEpisodes(page); await submit(page).click(); await expect(checkSaved(page)).toBeEnabled();
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await page.getByRole('button', { name: 'Check saved request', exact: true }).click(); await expect(page.getByRole('button', { name: 'Check saved request', exact: true })).toHaveCount(0); expect(s.posts).toHaveLength(1);
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click(); await page.getByRole('button', { name: 'Check saved request', exact: true }).click(); await expect(page.getByRole('button', { name: 'Check saved request', exact: true })).toHaveCount(0); expect(s.posts).toHaveLength(1);
   // A genuinely different generic request is only admitted after the first key was resolved.
   await page.getByRole('button', { name: '← Back to library', exact: true }).click(); s.nextId = 'generic-intake'; await page.getByLabel('Dataset repository', { exact: true }).fill('owned/recorded'); await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click(); await expect.poll(() => s.posts.length).toBe(2);
   await expect(page.getByRole('button', { name: 'Check saved request', exact: true })).toBeEnabled();
-  await page.getByRole('button', { name: 'Teaching', exact: true }).click(); await checkSaved(page).click(); await expect(panel(page).getByText(/Recovered dataset intake generic-intake/)).toBeVisible(); expect(s.posts).toHaveLength(2);
+  await page.getByRole('link', { name: 'Teaching', exact: true }).click(); await checkSaved(page).click(); await expect(panel(page).getByText(/Recovered dataset intake generic-intake/)).toBeVisible(); expect(s.posts).toHaveLength(2);
 });
 for (const kind of ['generic', 'recording']) test(`legacy recording recovery on Dataset rejects active ${kind} intake and failed history`, async ({ page }) => {
   const s = await fixture(page);
@@ -205,25 +211,25 @@ for (const kind of ['generic', 'recording']) test(`legacy recording recovery on 
     sessionStorage.setItem('firebird:recording-preparation:alpha', JSON.stringify({ schema_version: 1, project_id: 'alpha', recipe, selected_job_id: '', pending: { attempt_id: 'f'.repeat(32), action: 'submit', recipe, job_id: null } }));
     sessionStorage.setItem('firebird:job-attempt:dataset.inspect.recordings:alpha', JSON.stringify({ state: 'pending', message: 'Original recording submission' }));
   }, { recipe: recipe() });
-  await page.reload(); await page.getByRole('button', { name: 'Dataset', exact: true }).click();
+  await page.reload(); await page.getByRole('link', { name: 'Dataset', exact: true }).click();
   const value = job('active-intake', 'alpha', true, 'running'); if (kind === 'generic') value.request = { source: 'huggingface', repo_id: 'owned/data', revision: 'main' }; s.jobs.push(value);
   const review = page.getByRole('button', { name: 'Refresh job history', exact: true }), allow = page.getByRole('button', { name: 'I reviewed the jobs; allow a new request', exact: true });
   await review.click(); await expect(page.getByText(/Dataset intake active-intake is still running/)).toBeVisible(); await expect(allow).toBeDisabled();
   s.jobs = []; s.failHistory = true; await review.click(); await expect(allow).toBeDisabled();
   s.failHistory = false; await review.click(); await expect(allow).toBeEnabled(); await allow.click(); await expect(page.getByRole('button', { name: 'Inspect dataset', exact: true })).toBeEnabled();
-  await page.getByRole('button', { name: 'Teaching', exact: true }).click(); await expect(panel(page).getByRole('checkbox', { checked: true })).toHaveCount(2); await expect(submit(page)).toBeDisabled(); expect(s.posts).toEqual([]);
+  await page.getByRole('link', { name: 'Teaching', exact: true }).click(); await expect(panel(page).getByRole('checkbox', { checked: true })).toHaveCount(2); await expect(submit(page)).toBeDisabled(); expect(s.posts).toEqual([]);
 });
 
 test('Dataset retry of an unresolved recording request fences navigation during catalog validation', async ({ page }) => {
   const s = await fixture(page); s.lost = true; await selectEpisodes(page); await submit(page).click(); await expect(checkSaved(page)).toBeEnabled();
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); const gate = deferred(); s.catalogGate = gate;
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click(); const gate = deferred(); s.catalogGate = gate;
   await page.getByRole('button', { name: 'Retry same request', exact: true }).click(); await expect.poll(() => s.lookupReads).toBe(2);
-  await page.getByRole('button', { name: 'Teaching', exact: true }).click(); gate.release();
+  await page.getByRole('link', { name: 'Teaching', exact: true }).click(); gate.release();
   await expect(recovery(page).getByText('Selection changed; the saved request was not retried.', { exact: true })).toBeVisible(); await expect(checkSaved(page)).toBeEnabled(); expect(s.posts).toHaveLength(1);
 });
 test('delayed legacy history response cannot authorize recovery after project navigation', async ({ page }) => {
   const s = await fixture(page); await page.evaluate(() => sessionStorage.setItem('firebird:job-attempt:dataset.inspect.recordings:alpha', '{'));
-  await page.reload(); await page.getByRole('button', { name: 'Dataset', exact: true }).click(); const gate = deferred(); let started = false;
+  await page.reload(); await page.getByRole('link', { name: 'Dataset', exact: true }).click(); const gate = deferred(); let started = false;
   await page.route('**/api/v1/projects/alpha/jobs', async route => { started = true; await gate.promise; await route.fulfill({ json: [] }); });
   await page.getByRole('button', { name: 'Refresh job history', exact: true }).click(); await expect.poll(() => started).toBe(true);
   await selectProject(page, 'beta'); gate.release();
@@ -238,7 +244,7 @@ test('remount preserves newer cancellation receipt instead of replacing it with 
   await expect.poll(() => s.posts.length).toBe(2);
   await expect.poll(() => page.evaluate(() => JSON.parse(sessionStorage.getItem('firebird:recording-receipt:alpha')!).status)).toBe('cancelled');
   await panel(page).getByLabel('Saved recording preparation', { exact: true }).selectOption('other-saved');
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await page.getByRole('button', { name: 'Teaching', exact: true }).click();
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click(); await page.getByRole('link', { name: 'Teaching', exact: true }).click();
   await expect(panel(page).getByText(/Retained acknowledgement: job new-preparation · cancelled/)).toBeVisible();
   await expect(panel(page).getByText(/Retained acknowledgement: job new-preparation · queued/)).toHaveCount(0); expect(s.posts).toHaveLength(2);
 });

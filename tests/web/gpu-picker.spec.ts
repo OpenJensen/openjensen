@@ -49,8 +49,7 @@ async function openGpuPicker(page: Page, local = false) {
       await route.fulfill({ status: 405, json: { detail: 'Unexpected picker fixture request.' } });
     }
   });
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.goto('/training/');
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
   await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Model', exact: true }).click();
   await chooseOnlyModel(page, 'SmolVLA');
@@ -226,8 +225,7 @@ async function trainingAdmission(page: Page, { format = 'lerobot_v3', dimensions
     if (!(path in replies)) throw new Error(`Unexpected admission request ${path}`);
     await route.fulfill({ json: replies[path] });
   });
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
+  await page.goto('/training/');
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
   await expect(page.getByRole('checkbox', { name: 'fixture/admission', exact: true })).toBeVisible();
   const setup = page.getByRole('navigation', { name: 'Training setup' });

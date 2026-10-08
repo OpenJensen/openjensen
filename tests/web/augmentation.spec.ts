@@ -141,8 +141,8 @@ async function mockWorkspace(page: Page, config: { configured?: boolean; empty?:
     unexpected.push(`${request.method()} ${path}`);
     await route.fulfill({ status: 405, json: { detail: 'Blocked by augmentation browser fixture.' } });
   });
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Augmentation', exact: true }).click();
+  await page.goto('/datasets/');
+  await page.getByRole('link', { name: 'Augmentation', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Augmentation', exact: true, level: 1 })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Generator', exact: true })).toContainText('Gemini Omni');
   return { submitted, unexpected, jobs, cancelled, keys, lookups, releaseAck, optionsAttempts: () => optionsAttempts };
@@ -224,8 +224,8 @@ test('running augmentation persists across tab changes, polls for completion and
   const { submitted, unexpected, jobs, cancelled } = await mockWorkspace(page);
   await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Cancel augmentation', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click();
-  await page.getByRole('button', { name: 'Augmentation', exact: true }).click();
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Augmentation', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Cancel augmentation', exact: true })).toBeVisible();
   jobs[0].status = 'succeeded';
   jobs[0].result = resultFor(submitted[0]);
@@ -376,7 +376,7 @@ test('dataset handoff only offers supported video sources and preserves the sele
   await page.route('**/api/v1/jobs/*/cover', route => route.fulfill({ status: 422, json: { detail: 'Cover media is unavailable in this handoff fixture' } }));
   await page.route('**/api/v1/datasets**', route => route.fulfill({ json: jobs.filter(job=>job.kind==='dataset.inspect' && job.result).map(job=>({id:`inspection:${job.id}`,job_id:job.id,project_id:projectId,name:job.id,source:job.result.source,status:'ready',created_at:job.created_at,profile:job.result})) }));
   await page.reload();
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
   await page.getByRole('button', { name: 'Open dataset inspected-video', exact: true }).click();
   await page.getByText('Advanced', { exact: true }).click();
   const history = page.getByRole('combobox', { name: 'History', exact: true });
@@ -411,7 +411,7 @@ test('lost augmentation acknowledgement recovers its original job by saved key a
   expect(fixture.submitted).toHaveLength(1);
   expect(fixture.keys[0]).toMatch(/^[a-f0-9-]{36}$/);
   await page.reload();
-  await page.getByRole('button', { name: 'Augmentation', exact: true }).click();
+  await page.getByRole('link', { name: 'Augmentation', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeDisabled();
   await recovery.getByRole('button', { name: 'Check saved request' }).click();
   await expect(recovery).toHaveCount(0);

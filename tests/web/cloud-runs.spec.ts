@@ -14,8 +14,8 @@ function feed(runs: ReturnType<typeof run>[], errors: { run_id: string | null; m
   return { enabled: true, server_time: '2026-09-27T00:00:01Z', stale_after_seconds: 90, runs, errors };
 }
 async function openCloud(page: Page) {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Cloud runs', exact: true }).click();
+  await page.goto('/datasets/');
+  await page.getByRole('link', { name: 'Cloud runs', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'External observations' })).toBeVisible();
 }
 

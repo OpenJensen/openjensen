@@ -10,7 +10,7 @@ from uuid import uuid4
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from filelock import FileLock, Timeout
 from starlette.background import BackgroundTask
@@ -769,5 +769,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return job
 
     if settings.static_dir:
+
+        @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
+        async def workspace_home(request: Request):
+            # Canonicalize before rendering: a delayed client-side redirect can
+            # otherwise overwrite the user's first sidebar navigation.
+            prefix = request.scope.get("root_path", "").rstrip("/")
+            return RedirectResponse(request.url.replace(path=f"{prefix}/dashboard/"))
+
         app.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="web")
     return app

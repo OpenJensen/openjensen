@@ -35,8 +35,8 @@ async function fixture(page: Page) {
     if (req.method() !== 'GET') return route.fulfill({ status: 405, json: {} });
     return route.continue();
   });
-  await page.goto('/'); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
-  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await page.goto('/datasets/'); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
+  await page.getByRole('link', { name: 'Run', exact: true }).click();
   await page.getByRole('button', { name: 'Replay observations', exact: true }).click();
   await expect(page.getByRole('region', { name: 'CPU observation replay', exact: true })).toBeVisible();
   return state;
@@ -73,7 +73,7 @@ test('replay submits once with full identity and cancellation is explicit', asyn
 for (const outcome of ['lost', 'wrong']) test(`${outcome} mutation remains paused after reload`, async ({ page }) => {
   const state = await fixture(page); state.outcome = outcome; await prepare(page); await submit(page).click();
   await expect(page.getByText(/request outcome is unverified/).first()).toBeVisible();
-  await page.reload(); await page.getByRole('button', { name: 'Run', exact: true }).click(); await page.getByRole('button', { name: 'Replay observations', exact: true }).click();
+  await page.reload(); await page.getByRole('link', { name: 'Run', exact: true }).click(); await page.getByRole('button', { name: 'Replay observations', exact: true }).click();
   const acknowledgment = page.getByRole('button', { name: 'I checked replay jobs; allow a new request' }); await expect(acknowledgment).toBeDisabled(); await expect(submit(page)).toBeDisabled();
   await page.getByRole('button', { name: 'Refresh replay jobs' }).click(); await expect(acknowledgment).toBeEnabled(); expect(state.posts).toHaveLength(1);
 });
@@ -150,9 +150,9 @@ test('journal cleanup failure after navigation preserves recovery guidance', asy
     };
   });
   await submit(page).click(); await expect.poll(() => state.posts.length).toBe(1);
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); release();
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click(); release();
   await expect.poll(() => page.evaluate(() => (window as unknown as { journalCleanupFailures?: number }).journalCleanupFailures)).toBe(1);
-  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Run', exact: true }).click();
   await page.getByRole('button', { name: 'Replay observations', exact: true }).click();
   await expect(page.getByRole('button', { name: 'I checked replay jobs; allow a new request' })).toBeVisible();
   await expect(page.getByText(/^Submitting one /)).toHaveCount(0);
@@ -302,7 +302,7 @@ async function confirmCancellation(page: Page) {
   await page.getByRole('button', { name: 'Confirm cancellation', exact: true }).click();
 }
 async function reopenCancellationLane(page: Page) {
-  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await page.getByRole('link', { name: 'Run', exact: true }).click();
   const choice = page.getByRole('button', { name: 'Replay observations', exact: true });
   await expect(panel(page).or(choice).first()).toBeVisible();
   if (await choice.isVisible()) await choice.click();
@@ -316,7 +316,7 @@ test('cancellation outcome survives stage navigation and reload without another 
   await page.route('**/api/v1/jobs/replay-001/cancel', async route => { state.cancelled.push('replay-001'); await route.abort('failed'); });
   await confirmCancellation(page);
   await expect(cancellationRecovery(page)).toContainText('Cancellation outcome is unverified for replay-001');
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await reopenCancellationLane(page);
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click(); await reopenCancellationLane(page);
   await expect(cancellationRecovery(page)).toContainText('replay-001');
   await page.reload(); await reopenCancellationLane(page);
   await expect(cancellationRecovery(page)).toContainText('replay-001');
@@ -341,7 +341,7 @@ for (const method of ['getItem', 'setItem'] as const) test(`cancellation ${metho
   await confirmCancellation(page);
   await expect(page.getByText(/Cancellation recovery storage is unavailable/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Cancel selected replay', exact: true })).toBeDisabled();
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await reopenCancellationLane(page);
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click(); await reopenCancellationLane(page);
   await page.getByLabel('Saved replay', { exact: true }).selectOption('replay-001');
   await expect(page.getByText(/Cancellation recovery storage is unavailable/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Cancel selected replay', exact: true })).toBeDisabled();
@@ -381,7 +381,7 @@ test('validated cancellation acknowledgment survives a newly denied storage read
   await expect(page.getByText('Cancellation response for replay-001: cancelled. Recorded job history remains authoritative.', { exact: true })).toBeVisible();
   await expect(page.getByText(/Cancellation recovery storage is unavailable/)).toBeVisible();
   await expect(cancellationRecovery(page)).toContainText('replay-001');
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await reopenCancellationLane(page);
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click(); await reopenCancellationLane(page);
   await page.getByLabel('Saved replay', { exact: true }).selectOption('replay-001');
   await expect(page.getByText('Cancellation response for replay-001: cancelled. Recorded job history remains authoritative.', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Cancel selected replay', exact: true })).toBeDisabled();
@@ -408,7 +408,7 @@ test('late cancellation receipt survives unmount without replacing a manual save
   let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
   await page.route('**/api/v1/jobs/replay-001/cancel', async route => { state.cancelled.push('replay-001'); await gate; return route.fulfill({ json: { ...original, status: 'cancelled' } }); });
   await confirmCancellation(page); await expect.poll(() => state.cancelled.length).toBe(1);
-  await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await reopenCancellationLane(page);
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click(); await reopenCancellationLane(page);
   await page.getByLabel('Saved replay', { exact: true }).selectOption('replay-002'); release();
   await expect(page.getByText('Cancellation response for replay-001: cancelled. Recorded job history remains authoritative.', { exact: true })).toBeVisible();
   await expect(page.getByRole('article', { name: 'Observation replay details' })).toHaveAttribute('data-job-id', 'replay-002');

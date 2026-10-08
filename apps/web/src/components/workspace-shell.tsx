@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import Link from 'next/link';
 import './workspace-shell.css';
 import { Icon } from '@/components/icon';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -14,6 +15,7 @@ type WorkspaceShellProps = {
   contentClassName?: string;
   sidebarFooter?: ReactNode;
   showGuideShortcut?: boolean;
+  onHomeNavigate?: () => void;
 };
 
 // Both the workspace and reference use this shell so navigation, branding,
@@ -27,11 +29,12 @@ export function WorkspaceShell({
   contentClassName,
   sidebarFooter,
   showGuideShortcut = true,
+  onHomeNavigate,
 }: WorkspaceShellProps) {
   return <div className="workspace">
     <a href="#main" className="skip-link">{skipLabel}</a>
     <aside className="sidebar" aria-label={sidebarLabel}>
-      <a className="brand" href={publicPath('/')} aria-label="Open Jensen workspace home"><span className="brand-mark"><Icon name="layers" size={21} /></span><span className="brand-copy">Open Jensen</span></a>
+      <Link className="brand" href="/dashboard/" prefetch={false} onNavigate={onHomeNavigate ? event => { event.preventDefault(); onHomeNavigate(); } : undefined} aria-label="Open Jensen workspace home"><span className="brand-mark"><Icon name="layers" size={21} /></span><span className="brand-copy">Open Jensen</span></Link>
       <div className="sidebar-content">{navigation}</div>
       <div className="sidebar-bottom">
         {sidebarFooter}

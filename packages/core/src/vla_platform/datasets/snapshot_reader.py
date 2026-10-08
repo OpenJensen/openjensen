@@ -412,7 +412,9 @@ def validate(root, limits):
                 "-select_streams",
                 "v:0",
                 "-show_entries",
-                "frame=best_effort_timestamp_time",
+                # The common section name also works with FFmpeg 4.4; its
+                # frame-specific alias is unavailable on older installations.
+                "frame=best_effort_timestamp_time:side_data=",
                 "-of",
                 "json=compact=1",
                 *VIDEO_INPUT,

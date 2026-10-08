@@ -47,7 +47,7 @@ function connected(provider: Provider, config: NonNullable<Connection['config']>
 }
 
 async function openCompute(page: Page) {
-  await page.getByRole('button', { name: 'Settings & diagnostics', exact: true }).click();
+  await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
   await page.getByRole('button', { name: 'Compute', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Google Cloud', exact: true })).toBeVisible();
 }
@@ -192,7 +192,7 @@ async function mockWorkspace(page: Page, initial: Connection[] = [], initialComp
     unexpected.push(`${request.method()} ${path}`);
     await route.fulfill({ status: 405, json: { detail: 'Blocked by cloud connection browser fixture.' } });
   });
-  await page.goto('/');
+  await page.goto('/datasets/');
   await openCompute(page);
   return { providers, writes, unexpected, replies, reads, computeWrites, mutations, localReplies, localWrites, completeSetup };
 }
