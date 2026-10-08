@@ -659,8 +659,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.put("/api/v1/projects/{project_id}/model-runs/{job_id}/name", response_model=ModelRunName)
     async def rename_model_run(
-        project_id: str, job_id: str, body: ModelRunName,
-        projects: ProjectsDep, execution: ExecutionDep,
+        project_id: str,
+        job_id: str,
+        body: ModelRunName,
+        projects: ProjectsDep,
+        execution: ExecutionDep,
     ):
         if await projects.get(project_id) is None:
             raise HTTPException(404, "Project not found")

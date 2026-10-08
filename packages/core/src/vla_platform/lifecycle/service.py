@@ -359,8 +359,10 @@ class Lifecycle:
 
     async def rename_model_run(self, project_id: str, job_id: str, name: str):
         job = await self.execution.get(job_id)
-        if not job or job.project_id != project_id or not any(
-            artifact.job_id == job_id for artifact in await self.artifacts(project_id)
+        if (
+            not job
+            or job.project_id != project_id
+            or not any(artifact.job_id == job_id for artifact in await self.artifacts(project_id))
         ):
             raise ValueError("Model run does not exist in this project")
         return self.model_names.rename(project_id, job_id, name)
