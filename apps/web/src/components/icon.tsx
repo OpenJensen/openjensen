@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-export function Icon({ name, size = 20 }: { name: 'search' | 'arrow' | 'plus' | 'database' | 'folder' | 'check' | 'clock' | 'spark' | 'external' | 'sliders' | 'layers' | 'compress' | 'chart' | 'play' | 'book'; size?: number }) {
+export function Icon({ name, size = 20 }: { name: 'search' | 'arrow' | 'plus' | 'database' | 'folder' | 'check' | 'clock' | 'spark' | 'external' | 'sliders' | 'layers' | 'compress' | 'chart' | 'play' | 'book' | 'help'; size?: number }) {
   const paths: Record<typeof name, ReactNode> = {
     search: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" /></>,
     arrow: <><path d="M5 12h14M13 6l6 6-6 6" /></>,
@@ -8,6 +8,7 @@ export function Icon({ name, size = 20 }: { name: 'search' | 'arrow' | 'plus' | 
     database: <><ellipse cx="12" cy="5" rx="8" ry="3" /><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" /></>,
     folder: <><path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Z" /></>,
     check: <path d="m5 12 4 4L19 6" />,
+    help: <><circle cx="12" cy="12" r="9" /><path d="M9.5 9a2.5 2.5 0 1 1 4.2 1.8c-1.1.6-1.7 1.1-1.7 2.2" /><circle cx="12" cy="16.5" r=".7" fill="currentColor" stroke="none" /></>,
     clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
     spark: <><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z" /></>,
     external: <><path d="M14 3h7v7M21 3l-9 9M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5" /></>,
