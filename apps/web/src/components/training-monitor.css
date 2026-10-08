@@ -100,3 +100,15 @@
   .training-checkpoint-actions select { font-size: 16px; }
   .training-event-log li { grid-template-columns: minmax(0, 1fr); }
 }
+.training-timeline { list-style: none; display: grid; gap: 18px; margin: 22px 0 28px; padding: 0; }
+.training-timeline li { position: relative; display: flex; align-items: flex-start; gap: 12px; min-width: 0; }
+.training-timeline li:not(:last-child)::after { content: ''; position: absolute; left: 11px; top: 27px; bottom: -14px; width: 1px; background: var(--line); }
+.training-timeline-marker { display: grid; place-items: center; width: 24px; height: 24px; flex-shrink: 0; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--muted); font-size: 10px; }
+.training-timeline li > div { display: grid; gap: 4px; min-width: 0; }
+.training-timeline strong { font-size: 12px; font-weight: 600; }
+.training-timeline small, .training-timeline time { color: var(--muted); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+.training-timeline time { font-size: 10px; }
+.timeline-active .training-timeline-marker { background: var(--accent); border-color: var(--accent); color: white; }
+.timeline-complete .training-timeline-marker { background: var(--selected); color: var(--accent); border-color: var(--accent); }
+.timeline-pending { color: var(--muted); }
+.timeline-stopped .training-timeline-marker { color: var(--error, #b54646); border-color: currentColor; }
