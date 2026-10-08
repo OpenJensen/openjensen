@@ -18,3 +18,12 @@ test('repeated validation and checkpoint events stay in training; terminal failu
   expect(stopped.at(-1)?.state).toBe('pending');
   expect(trainingProgress('succeeded', 'completed', 'Complete', events).every(stage => stage.state === 'complete')).toBe(true);
 });
+
+test('shutdown and completion messages cannot replace allocation or receipt milestones', () => {
+  const events = [event('preparing', 'Provisioning A100:1'), event('preparing', 'Verifying the dataset snapshot'), event('training', 'Optimizer step 2'), event('verifying', 'Checkpoint reload verified'), event('operation', 'Stopping Google Cloud resources'), event('operation', 'Completed policy.finetune')];
+  const stages = trainingProgress('succeeded', 'completed', 'Training completed', events);
+  expect(stages.find(stage => stage.id === 'accepted')?.message).toBeUndefined();
+  expect(stages.find(stage => stage.id === 'compute')?.message).toBe('Provisioning A100:1');
+  expect(stages.find(stage => stage.id === 'inputs')?.message).toBe('Verifying the dataset snapshot');
+  expect(stages.find(stage => stage.id === 'verification')?.message).toBe('Checkpoint reload verified');
+});
