@@ -148,7 +148,7 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
           compute: { local: { enabled: false, label: 'Local' }, gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 } },
           training_models: [
             { id: 'smolvla', label: 'SmolVLA', description: 'Compact policy', model_id: 'lerobot/smolvla_base', model_revision: revision, methods: nativeSmol ? ['lora','qlora','full'] : ['lora','qlora'], native_full_runtime_ids: nativeSmol ? ['skypilot-gcp-A100','skypilot-gcp-A100-80GB'] : [], suggested_gpu_memory_gb: 16, ...accumulationCapabilities(accumulationCatalog) },
-            { id: 'pi05', label: 'π₀.₅', description: 'Flow policy', model_id: 'lerobot/pi05_base', model_revision: revision, methods: ['full'], minimum_gpu_memory_gb: 40, runtime_ids: ['all-models-a100'] },
+            { id: 'pi05', label: 'π₀.₅', description: 'Flow policy', model_id: 'lerobot/pi05_base', model_revision: revision, methods: ['full'], minimum_gpu_memory_gb: 40, available: true, status: 'ready', runtime_ids: ['all-models-a100'] },
             ...(localDataset ? [{ id: 'act', label: 'ACT', description: 'Native policy', model_id: 'code://lerobot/act', model_revision: revision, methods: ['full'], backend: 'lerobot', minimum_gpu_memory_gb: 16, ...accumulationCapabilities(accumulationCatalog) }] : []),
           ], sources: [], training_methods: [{ id: 'lora', label: 'LoRA', description: 'Train adapters.' }, { id: 'qlora', label: 'QLoRA', description: 'Train quantized adapters.' }, { id: 'full', label: 'Full training', description: 'Train policy.' }], default_training_method: 'lora',
           quantization_defaults: { cuda: { language: 'Q8_0', vision: null }, cpu: { language: 'Q8_0', vision: null }, note: '' },
@@ -282,14 +282,20 @@ test('local training copies open the jobs-first wizard and retain native model a
   expect(unexpected).toEqual([]);
 });
 
-test('metadata-only local inspections cannot enter the training creation flow', async ({ page }) => {
+test('metadata-only local inspections stay removable but cannot be added or submitted', async ({ page }) => {
   const { submitted, unexpected } = await workspace(page, 'local-unprepared', false);
   await page.getByRole('link', { name: 'Dataset', exact: true }).click();
   await page.getByRole('button', { name: 'Open dataset Local dataset', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Train on this dataset', exact: true })).toHaveCount(0);
   await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
-  await expect(page.getByRole('checkbox', { name: 'Local dataset', exact: true })).toBeDisabled();
+  const dataset = page.getByRole('checkbox', { name: 'Local dataset', exact: true });
+  await expect(dataset).toBeChecked();
+  await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeDisabled();
+  await dataset.uncheck();
+  await expect(dataset).not.toBeChecked();
+  await expect(dataset).toBeDisabled();
+  await dataset.locator('..').focus();
   await expect(page.getByText('Prepare an immutable training copy when importing this local dataset.')).toBeVisible();
   expect(submitted).toEqual([]);
   expect(unexpected).toEqual([]);
