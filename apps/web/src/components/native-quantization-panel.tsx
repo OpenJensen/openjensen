@@ -8,6 +8,7 @@ import { ModelVersionPicker } from './model-version-picker';
 import { WorkflowChoiceGrid } from './workflow-choice-grid';
 import { publicPath } from '@/lib/base-path';
 import { WorkbenchDisclosure } from './workbench-disclosure';
+import { QuantizationComparison } from './quantization-comparison';
 import { simulationOptions } from '@/lib/native-simulation';
 import { quantizedSimulationHandoff, simulationHandoffProfiles, type SimulationHandoff } from '@/lib/native-simulation-handoff';
 import { availableNativeQuantizer, nativeTransformIssue, nativeTransformMetadata, cancelNativeQuantization, nativeQuantizationInput, nativeQuantizationOf, measuredNativeReport, replayableNativeOutput, object, startNativeQuantization, UncertainQuantization, type NativeQuantizationRuntime, type PackedArtifact } from '@/lib/native-quantization';
@@ -128,6 +129,7 @@ export function NativeQuantizationPanel({ projectId, preferredArtifactId, prefer
         {selected.status === 'succeeded' && (measured ? <section aria-label="Measured ACT quantization results">
           <h4>Stored bytes and action drift</h4>
           <dl className="cloud-run-facts"><div><dt>Source FP32 weights</dt><dd>{measured.source_weight_bytes.toLocaleString()} bytes</dd></div><div><dt>Packed weights</dt><dd>{measured.packed_weight_bytes.toLocaleString()} bytes</dd></div><div><dt>Inference payload</dt><dd>{measured.policy_package_bytes.toLocaleString()} bytes</dd></div><div><dt>Fresh packed CPU reload</dt><dd>Exact agreement with the packed candidate</dd></div></dl>
+          <QuantizationComparison job={selected} reports={reports} />
           <p>Generated observations only. Exact reload does not mean unchanged FP32 actions.</p>
           <WorkbenchDisclosure title="Action differences"><p>Payload size excludes the outer download envelope. These observations are not held-out robotics evaluation.</p><div className="native-quantization-drift" role="region" aria-label="FP32 action differences" tabIndex={0}><table><caption>Difference from FP32 across each full {measured.prediction_horizon} × 6 action chunk</caption><thead><tr><th>Fixture seed</th><th>Raw RMSE</th><th>Raw maximum</th><th>Postprocessed RMSE</th><th>Postprocessed maximum</th></tr></thead><tbody>{measured.drift_from_fp32.map((row, index) => <tr key={`${row.input_sha256}-${index}`}><th scope="row">{row.seed}</th><td>{row.raw.rmse.toPrecision(6)}</td><td>{row.raw.maximum_absolute_difference.toPrecision(6)}</td><td>{row.postprocessed.rmse.toPrecision(6)}</td><td>{row.postprocessed.maximum_absolute_difference.toPrecision(6)}</td></tr>)}</tbody></table></div>
           <p>Postprocessed differences use saved processor output coordinates; physical units are unverified. No accepted quality threshold or GPU memory/latency improvement is established.</p></WorkbenchDisclosure>

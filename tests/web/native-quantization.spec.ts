@@ -121,6 +121,11 @@ test('completed candidate shows measured storage and drift separately from exact
   await refresh(page); await openTransformationJob(page, 'quantization', done.id);
   const measured = page.getByRole('region', { name: 'Measured ACT quantization results' });
   await expect(measured).toContainText('136,991,488 bytes'); await expect(measured).toContainText('36,694,284 bytes');
+  const comparison = measured.getByRole('region', { name: 'Comparison with original model', exact: true });
+  await expect(comparison.getByRole('img', { name: 'Action difference from original model on fixed inputs' })).toBeVisible();
+  await expect(comparison).toContainText('0.0035');
+  await expect(comparison).toContainText('Original FP32');
+  await expect(comparison).toContainText('2 fixed inputs');
   await page.getByText('Action differences', { exact: true }).focus(); await page.keyboard.press('Enter');
   await expect(page.getByRole('region', { name: 'FP32 action differences', exact: true })).toBeVisible();
   await expect(measured).toContainText('Exact agreement with the packed candidate'); await expect(measured).toContainText('0.0948200');
