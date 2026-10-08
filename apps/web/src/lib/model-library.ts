@@ -1,5 +1,5 @@
 import { isDatasetJob, type Job, type PolicyArtifact } from './api';
-import { checkpointStep, trainingRunModelLabel } from './checkpoints';
+import { checkpointStep, quantizationIssue, trainingRunModelLabel } from './checkpoints';
 import { studentTeacher } from './native-distillation';
 import { nativeQuantizationInput } from './native-quantization';
 import { replayPolicy } from './native-replay';
@@ -30,6 +30,7 @@ export function modelFormat(artifact: PolicyArtifact): string {
   return [labels[artifact.format] ?? artifact.format, precision, step !== null ? `Step ${step.toLocaleString()}` : null].filter(Boolean).join(' · ');
 }
 export function quantizeModeFor(artifact: PolicyArtifact): 'native' | 'gguf' | null {
+  if (artifact.metadata?.architecture === 'smolvla' && quantizationIssue(artifact)) return null;
   if (nativeQuantizationInput(artifact, artifact.project_id)) return 'native';
   const architecture = artifact.metadata?.architecture;
   if (artifact.format === 'gguf' && artifact.metadata?.precision === 'float' && (!architecture || architecture === 'smolvla')) return 'gguf';
@@ -37,6 +38,7 @@ export function quantizeModeFor(artifact: PolicyArtifact): 'native' | 'gguf' | n
   return null;
 }
 export function modelActionIssue(artifact: PolicyArtifact, action: ModelAction): string | null {
+  if (action === 'quantize' && artifact.metadata?.architecture === 'smolvla' && quantizationIssue(artifact)) return quantizationIssue(artifact);
   if (action === 'distill' && studentTeacher(artifact, artifact.project_id)) return null;
   if (action === 'quantize' && quantizeModeFor(artifact)) return null;
   if (action === 'evaluate' && artifact.format === 'gguf') return null;

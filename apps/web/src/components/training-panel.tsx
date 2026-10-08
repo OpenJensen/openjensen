@@ -474,9 +474,10 @@ export function TrainingPanel({
     )?.id ??
     availableMethods[0]?.id;
   const supportsModel = (item: (typeof runtimes)[number]) =>
+    selectedModels.every(model => model.id !== "smolvla" || methodFor(model) !== "full" || (model.native_full_runtime_ids ?? []).includes(item.id)) &&
     item.enabled !== false &&
     selectedModels.length > 0 && selectedModels.every(model => hasAdapter(item, model));
-  const gpuChoices = ["L4", "T4", "A100", "A100-80GB"].filter(gpu => selectedModels.every(item => !item.minimum_gpu_memory_gb || cloudGpuMemory[gpu] >= item.minimum_gpu_memory_gb));
+  const gpuChoices = ["L4", "T4", "A100", "A100-80GB"].filter(gpu => selectedModels.every(item => cloudGpuMemory[gpu] >= (item.id === "smolvla" && methodFor(item) === "full" ? 24 : item.minimum_gpu_memory_gb ?? 0)));
   const defaultGpu = options.data?.compute?.gcp?.default_gpu ?? "A100";
   const localRuntimes = selectedModels.length <= 1 && options.data?.compute?.local.enabled
     ? runtimes.filter((item) => (item.provider ?? "local") === "local" && item.training && item.device === "cuda" && item.enabled !== false &&
@@ -514,7 +515,7 @@ export function TrainingPanel({
         )
       : [String(originalTraining?.camera_key ?? "observation.images.front")]
     : selectedCameras;
-  const modelIssue = !resumeId ? selectedModels.map(item => modelDatasetIssue(item, activeDataset?.result, activeCameraKeys) || (selectedDatasets.length > 1 && item.backend === "psi0" ? "Psi-Zero does not support combined datasets." : null)).find(Boolean) ?? null : null;
+  const modelIssue = !resumeId ? selectedModels.map(item => modelDatasetIssue(item.id === "smolvla" && methodFor(item) === "full" ? {...item, backend: "lerobot"} : item, activeDataset?.result, activeCameraKeys) || (selectedDatasets.length > 1 && item.backend === "psi0" ? "Psi-Zero does not support combined datasets." : null)).find(Boolean) ?? null : null;
   const batchIssue = selectedModels.length > 1 && selectedModels.some(item => recipe.gradientAccumulation !== 1 && !gradientAccumulationAvailable(item, runtime?.id, methodFor(item))) ? "At least one selected model requires gradient accumulation 1." : null;
   const episodes = useQuery({
     queryKey: ["training-episodes", activeDataset?.id],

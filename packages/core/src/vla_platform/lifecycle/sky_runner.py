@@ -223,7 +223,7 @@ def prepare(payload: dict, stage_dir: Path, target: dict) -> tuple[Path, dict]:
     from vla_platform.lifecycle.training_catalog import training_model_for_recipe
 
     profile = (
-        native_profile_for_recipe(recipe) if payload["operation"] == "policy.finetune" else None
+        native_profile_for_recipe(recipe, payload.get("parameters", {}).get("training_method")) if payload["operation"] == "policy.finetune" else None
     )
     psi_training = (
         payload["operation"] == "policy.finetune"

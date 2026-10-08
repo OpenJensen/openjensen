@@ -48,6 +48,30 @@ def request(model="act", **overrides):
     }
 
 
+def test_native_smolvla_supervised_training_uses_expert_weights_without_peft():
+    from firebird_vla.native_profiles import SMOLVLA_NATIVE_PROFILE, native_profile_for_recipe
+
+    job = request()
+    job["parameters"]["training"].update(
+        model_id=SMOLVLA_NATIVE_PROFILE["model_id"],
+        model_revision=SMOLVLA_NATIVE_PROFILE["model_revision"],
+    )
+    recipe, profile = resolve_recipe(job)
+    assert recipe["method"] == "full" and recipe["policy_type"] == "smolvla"
+    args = cli_arguments(
+        recipe,
+        profile,
+        output="out",
+        dataset_root="dataset",
+        model_root="pinned-model",
+        features=job["dataset"]["features"],
+    )
+    assert "--policy.train_expert_only=true" in args
+    assert "--policy.freeze_vision_encoder=true" in args
+    assert not any("lora" in argument for argument in args)
+    assert native_profile_for_recipe(job["parameters"]["training"], "lora") is None
+
+
 def test_native_recipe_rejects_unknown_arguments_and_moving_models():
     with pytest.raises(ValueError, match="Unsupported native"):
         resolve_recipe(request(command="arbitrary command"))

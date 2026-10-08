@@ -72,6 +72,7 @@ export function isCloudArtifact(artifact: PolicyArtifact): boolean {
 
 export function quantizationIssue(artifact: PolicyArtifact | undefined): string | null {
   const architecture = artifact?.metadata?.architecture;
+  if (architecture === 'smolvla' && artifact?.metadata?.training_backend === 'lerobot') return 'GGUF export for native SmolVLA checkpoints is not available yet. Download or resume this checkpoint.';
   return typeof architecture === 'string' && architecture.toLowerCase() !== 'smolvla'
     ? 'GGUF quantization currently supports SmolVLA checkpoints.' : null;
 }

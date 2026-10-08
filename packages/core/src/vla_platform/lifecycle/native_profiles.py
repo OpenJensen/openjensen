@@ -188,8 +188,19 @@ NATIVE_PROFILES = {
 }
 
 
-def native_profile_for_recipe(recipe):
+SMOLVLA_NATIVE_PROFILE = {
+    "label": "SmolVLA", "description": "Native supervised action-expert fine-tuning",
+    "policy_type": "smolvla", "extra": "training,smolvla", "initialization": "pretrained",
+    "model_id": "lerobot/smolvla_base", "model_revision": "d9f33c94a60fb382c90dea2164c96845bd955e28",
+    "overrides": {"freeze_vision_encoder": True, "train_expert_only": True},
+    "minimum_gpu_memory_gb": 24,
+}
+
+
+def native_profile_for_recipe(recipe, method=None):
     repository = (recipe or {}).get("model_id")
+    if repository == SMOLVLA_NATIVE_PROFILE["model_id"] and (method or (recipe or {}).get("method")) == "full":
+        return SMOLVLA_NATIVE_PROFILE
     return next(
         (profile for profile in NATIVE_PROFILES.values() if profile["model_id"] == repository), None
     )
@@ -201,6 +212,7 @@ def native_requirement(profile):
 
 # These are checkpoint architecture bounds, not arbitrary UI dimension limits.
 NATIVE_DIMENSION_LIMITS = {
+    "smolvla": (32, 32),
     "eo1": (32, 32),
     "evo1": (24, 24),
     "groot": (132, 132),

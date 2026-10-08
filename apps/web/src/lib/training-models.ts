@@ -1,4 +1,5 @@
 export type TrainingModel = {
+  native_full_runtime_ids?: string[];
   id: string;
   label: string;
   description: string;
@@ -44,7 +45,7 @@ export function groupedTrainingModels(models: TrainingModel[]) {
 /** Missing or partial catalog support must never opt an older backend into accumulation. */
 export function gradientAccumulationAvailable(model: TrainingModel | undefined, runtimeId: string | undefined, method: string | undefined): boolean {
   if (!model || !runtimeId || !method || !model.methods.includes(method)) return false;
-  const supportedAdapter = model.id === 'act' ? method === 'full' : model.id === 'smolvla' && ['lora', 'qlora'].includes(method);
+  const supportedAdapter = model.id === 'act' ? method === 'full' : model.id === 'smolvla' && ['lora', 'qlora', 'full'].includes(method);
   return supportedAdapter && model.gradient_accumulation_supported === true
     && Array.isArray(model.gradient_accumulation_runtime_ids) && model.gradient_accumulation_runtime_ids.includes(runtimeId)
     && model.training_step_unit === 'optimizer_updates' && model.training_world_size === 1;

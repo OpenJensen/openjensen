@@ -93,6 +93,28 @@ def test_task_pins_reviewed_resources_and_syncs_only_worker(payload, target, tmp
         sky_runner.prepare(payload, stage, target)
 
 
+def test_native_smolvla_routes_to_native_worker_without_changing_adapter_methods(
+    payload, target, tmp_path
+):
+    from vla_platform.lifecycle.native_profiles import SMOLVLA_NATIVE_PROFILE
+
+    payload["parameters"]["training"] = {
+        "model_id": SMOLVLA_NATIVE_PROFILE["model_id"],
+        "model_revision": SMOLVLA_NATIVE_PROFILE["model_revision"],
+    }
+    for method, module in [
+        ("full", "firebird_vla.lerobot_application"),
+        ("lora", "firebird_vla.application"),
+        ("qlora", "firebird_vla.application"),
+    ]:
+        payload["parameters"]["training_method"] = method
+        path, _ = sky_runner.prepare(payload, tmp_path / method, target)
+        dispatch = json.loads((path.parent / "sky-bundle/dispatch.json").read_text())
+        assert dispatch["worker_module"] == module
+        if method == "full":
+            assert "lerobot[training,smolvla]" in json.loads(path.read_text())["setup"]
+
+
 @pytest.mark.parametrize(
     "field,value",
     [

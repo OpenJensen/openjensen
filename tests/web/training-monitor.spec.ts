@@ -1728,7 +1728,7 @@ test('accumulation predicate requires exact model method runtime and complete ca
   const smol = { ...model, id: 'smolvla', methods: ['lora', 'qlora', 'full'] };
   expect(gradientAccumulationAvailable(smol, 'worker', 'lora')).toBe(true);
   expect(gradientAccumulationAvailable(smol, 'worker', 'qlora')).toBe(true);
-  expect(gradientAccumulationAvailable(smol, 'worker', 'full')).toBe(false);
+  expect(gradientAccumulationAvailable(smol, 'worker', 'full')).toBe(true);
 });
 
 async function chooseOnlyModel(page: Page, name: string) {

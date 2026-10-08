@@ -688,6 +688,12 @@ class Lifecycle:
             await self.resume_checkpoint(project_id, request.resume_job_id)
         if request.artifact_id:
             artifact = await self.artifact(project_id, request.artifact_id)
+            if (
+                artifact.metadata.get("architecture") == "smolvla"
+                and artifact.metadata.get("training_backend") == "lerobot"
+                and request.operation in {"policy.export", "policy.quantize", "policy.workflow"}
+            ):
+                raise ValueError("GGUF export for native SmolVLA checkpoints is not available yet; download or resume this checkpoint")
             if artifact.format == "native_quantized":
                 raise ValueError(
                     "Packed ACT packages are download-only; Run and evaluation are unverified"
@@ -772,7 +778,9 @@ class Lifecycle:
                 raise ValueError("Training method is not registered")
             if not runtime.training_python or not runtime.training_root:
                 raise ValueError("This runtime has no training environment")
-            model = training_model_for_recipe(recipe)
+            model = training_model_for_recipe(recipe, request.training_method)
+            if model.id == "smolvla" and request.training_method == "full" and runtime.execution != "skypilot" and runtime.training_module != "firebird_vla.lerobot_application":
+                raise ValueError("Native SmolVLA training requires the native LeRobot worker or Google Cloud")
             if not resuming:
                 validate_temporal(recipe, model.id)
             if request.operation == "policy.workflow" and model.id == "act":
@@ -844,7 +852,7 @@ class Lifecycle:
 
                 selected_cameras = recipe.get("camera_keys") or [recipe.get("camera_key")]
                 validate_native_dataset(
-                    native_profile_for_recipe(recipe), dataset.result.features, selected_cameras
+                    native_profile_for_recipe(recipe, request.training_method), dataset.result.features, selected_cameras
                 )
             if model.backend == "lerobot" and dataset.result.format != "lerobot_v3":
                 raise ValueError("Native LeRobot training currently requires a LeRobot v3 dataset")
