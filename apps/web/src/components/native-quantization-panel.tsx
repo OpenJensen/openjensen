@@ -5,7 +5,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, artifactDownloadUrl, isActive, type Job } from '@/lib/api';
 import { storeAttempt, storedAttempt, type PolicyJobAttempt } from '@/lib/policy-job-attempt';
 import { WorkflowChoiceGrid } from './workflow-choice-grid';
-import { NativePreparation } from './native-preparation';
 import { publicPath } from '@/lib/base-path';
 import { WorkbenchDisclosure } from './workbench-disclosure';
 import { simulationOptions } from '@/lib/native-simulation';
@@ -16,7 +15,7 @@ class QuantizationJournalUnavailable extends Error {
   constructor() { super('Browser session storage is unavailable. Restore it and reload, then inspect recorded jobs before submitting again.'); }
 }
 
-export function NativeQuantizationPanel({ projectId, preferredArtifactId, preferredJobId, onJobSelected, onPrepare, onReplay, onPrepareSimulation }: { projectId: string; preferredArtifactId?: string; preferredJobId?: string; onJobSelected?: (id: string) => void; onPrepare: () => void; onReplay?: (artifactId: string) => void; onPrepareSimulation?: (source: SimulationHandoff) => void }) {
+export function NativeQuantizationPanel({ projectId, preferredArtifactId, preferredJobId, onJobSelected, onPrepare, onReplay, onPrepareSimulation, onBack, onModel }: { projectId: string; preferredArtifactId?: string; preferredJobId?: string; onJobSelected?: (id: string) => void; onPrepare: () => void; onReplay?: (artifactId: string) => void; onPrepareSimulation?: (source: SimulationHandoff) => void; onBack: () => void; onModel?: (artifactId: string) => void }) {
   const client = useQueryClient();
   const options = useQuery({ queryKey: ['policy-options'], queryFn: api.policyOptions, retry: false, refetchInterval: 10_000 });
   const jobs = useQuery({ queryKey: ['jobs', projectId], queryFn: () => api.jobs(projectId), enabled: !!projectId, retry: false, refetchInterval: 2_000 });
@@ -118,7 +117,9 @@ export function NativeQuantizationPanel({ projectId, preferredArtifactId, prefer
     } finally { busy.current = false; if (mounted.current) { setPending(null); setConfirmCancel(null); } }
   }
   return <section className="panel native-simulation native-quantization native-workflow" aria-label="Native ACT quantization">
+    <div className="workflow-view-navigation"><button type="button" className="text-link" onClick={onBack}>← Back to jobs</button></div>
     <div className="native-workflow-toolbar"><span className="native-model-badge">ACT · INT8 / INT4</span><button className="text-link" aria-label="Refresh ACT quantization jobs" disabled={!projectId || jobs.isFetching} onClick={() => void refresh()}>Refresh</button></div>
+    {jobId && !selected && <p role="status">{jobs.isPending ? 'Loading job…' : 'This quantization job is unavailable. No replacement has been selected.'}</p>}
     {selected && <article className="native-simulation-result" aria-label="ACT quantization job details" data-job-id={selected.id}>
       <div className="native-result-header"><h3>INT{nativeQuantizationOf(selected)?.bits} candidate</h3><span className={`status status-${selected.status}`}>{selected.status}</span></div>
       <p className="native-result-summary">{isActive(selected) ? selected.stage ?? selected.status : 'Recorded job'} · {selected.id}</p>
@@ -142,22 +143,19 @@ export function NativeQuantizationPanel({ projectId, preferredArtifactId, prefer
       {isActive(selected) && <><progress aria-label="ACT quantization in progress" /><button className="secondary-button" disabled={pending !== null || jobs.isError} onClick={() => setConfirmCancel(selected.id)}>Cancel selected ACT quantization</button></>}
       {confirmCancel === selected.id && isActive(selected) && <div role="group" aria-label="Confirm ACT quantization cancellation" className="warning-box"><p>Stop this job and its owned local processes?</p><button className="secondary-button" disabled={pending !== null || jobs.isError} onClick={() => void mutate('cancel')}>Confirm cancellation</button><button className="text-link" disabled={pending !== null} onClick={() => setConfirmCancel(null)}>Keep running</button></div>}
       {events.isError && <p role="alert">Activity updates are unavailable; previously received activity may be stale. {events.error.message}</p>}
+      {downloads.length > 0 && onModel && <div className="native-result-actions">{downloads.map(item => <button type="button" key={item.id} className="secondary-button" onClick={() => onModel(item.id)}>View {item.label} in My models</button>)}</div>}
       <WorkbenchDisclosure key={selected.id} title="Activity and recorded report">
         <pre className="cloud-log-tail" role="region" aria-label="ACT quantization event log" tabIndex={0}>{events.data?.length ? events.data.slice(-100).map(event => `${event.timestamp} · ${event.stage} · ${event.message}`).join('\n') : 'No recorded events yet.'}</pre>
         {reports.length > 0 && <pre className="cloud-log-tail">{JSON.stringify(reports, null, 2)}</pre>}
       </WorkbenchDisclosure>
     </article>}
-    {(saved.length > 0 || accepted || jobs.isError) && <section className="native-simulation-history" aria-label="Native ACT quantization jobs">
-      {jobs.isError && <p role="alert">Job updates are unavailable. Previously received status may be stale. {jobs.error.message}</p>}
-      {!saved.length && !accepted && <p>{jobs.isPending && projectId ? 'Loading jobs…' : 'No native ACT quantization jobs in this project yet.'}</p>}
-      {saved.length > 0 && <label>Saved ACT quantization job<select aria-label="Saved ACT quantization job" value={selected?.id ?? ''} onChange={event => showJob(event.target.value)}><option value="">Choose a recorded job</option>{saved.map(item => <option key={item.id} value={item.id}>INT{nativeQuantizationOf(item)!.bits} · {item.id.slice(0, 8)} · {item.status}</option>)}</select></label>}
-    </section>}
+    {jobs.isError && <p role="alert">Job updates are unavailable; displayed status may be stale. {jobs.error.message}</p>}
     {options.isError && <p role="alert">Native quantization options are unavailable. {options.error.message}</p>}
     {artifacts.isError && <p role="alert">Saved policies are unavailable. {artifacts.error.message}</p>}
     {error && <p role="alert" className="error-notice">{error}</p>}
     {journalReady && attempt.data?.state === 'pending' && <p role="status">{attempt.data.message}</p>}
     {attempt.data?.state === 'uncertain' && <div className="warning-box"><p>{attempt.data.message} Further submissions are paused.</p><button className="secondary-button" disabled={!reviewed || jobs.isError || pending !== null} onClick={() => { try { saveAttempt(null); setError(''); } catch { setJournalReady(false); setError('Browser session storage is unavailable.'); } }}>I checked the jobs; allow a new request</button></div>}
-    <NativePreparation key={selected ? 'another' : 'first'} title="Prepare another ACT candidate" hasResult={!!selected}>
+    {!selected && !jobId && <div className="native-preparation-content">
       {!projectId || !runtimes.length ? <div className="native-setup-empty">
         <p role="status">{!projectId ? 'Select a project to continue.' : options.isPending ? 'Loading workers…' : options.isError ? 'Worker availability is unknown.' : configured.length ? 'The configured ACT quantization worker is unavailable or disabled.' : 'No local ACT quantization worker is configured.'}</p>
         <a className="text-link" href={publicPath('/guide/#quantize')}>Set up quantization</a>
@@ -176,6 +174,6 @@ export function NativeQuantizationPanel({ projectId, preferredArtifactId, prefer
         </fieldset>
         {!inputs.length && <button className="text-link" onClick={onPrepare}>Open training and inference exports</button>}
       </>}
-    </NativePreparation>
+    </div>}
   </section>;
 }

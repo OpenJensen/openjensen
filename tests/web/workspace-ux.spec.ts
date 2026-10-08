@@ -123,6 +123,7 @@ test('the contextual guide covers every section and keeps API docs separate', as
 test('fresh workflows require explicit model and runner choices', async ({ page }, testInfo) => {
   const mutations = await workspace(page);
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('button',{name:'Start a new quantization',exact:true}).click();
   await expect(page.getByText('No saved models in this project yet')).toBeVisible();
   await page.getByRole('region', { name: 'Your quantization models', exact: true }).screenshot({ path: testInfo.outputPath('quantization-owned-models.png') });
   await expect(page.locator('.workflow-panel')).toHaveCount(0);
@@ -161,6 +162,7 @@ async function workflowFixture(page: Page) {
     if (state.gate) await state.gate;
     return state.failed ? route.fulfill({ status: 503, json: { detail: 'Generated unavailable history' } }) : route.fulfill({ json: state.jobs.filter(job => job.project_id === new URL(route.request().url()).pathname.split('/')[4]) });
   });
+  await page.route('**/api/v1/datasets**',route=>route.fulfill({json:state.jobs.filter(job=>job.kind==='dataset.inspect').map(job=>({id:`inspection:${job.id}`,job_id:job.id,project_id:job.project_id,name:job.id,source:'local',status:'ready',created_at:job.created_at,profile:job.result}))}));
   await page.reload();
   await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'ux-review');
   return { state, mutations };
@@ -196,7 +198,7 @@ test('workflow pages keep their job history without the duplicate project activi
   await expect(page.getByRole('region', { name: 'Fine-tuning jobs', exact: true }).locator('[data-job-id="training-job"]')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('clean-fine-tune.png'), fullPage: true });
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Your quantization models' }).getByRole('button', { pressed: true })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Quantization jobs',exact:true })).toBeVisible();
   await selectProject(page, 'beta');
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Fine-tuning jobs', exact: true }).getByText('No fine-tuning jobs yet.')).toBeVisible();
@@ -206,7 +208,7 @@ test('workflow pages keep their job history without the duplicate project activi
 
 test('the clean dataset page continues with the exact viewed inspection without submitting training', async ({ page }) => {
   const { mutations } = await workflowFixture(page);
-  await page.getByRole('button', { name: /^Explore dataset/ }).click();
+  await page.getByRole('button', { name: 'Open dataset dataset-first',exact:true }).click();
   await page.locator('.inspection-provenance > summary').click();
   await page.getByLabel('History', { exact: true }).selectOption('dataset-first');
   const journey = page.getByRole('region', { name: 'Workflow context', exact: true });
@@ -231,8 +233,8 @@ test('missing history stays visible in the run list and cannot enable metadata-o
   state.jobs = state.jobs.filter(job => job.id === 'dataset-first');
   state.jobs[0].result.snapshot = null;
   await page.reload();
-  await page.getByRole('button', { name: /^Explore dataset/ }).click();
-  await expect(page.getByRole('heading', { name: 'Explore dataset', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Open dataset dataset-first',exact:true }).click();
+  await expect(page.getByRole('region', { name: 'Dataset inspection', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Train on this dataset', exact: true })).toHaveCount(0);
   expect(mutations).toEqual([]);
 });

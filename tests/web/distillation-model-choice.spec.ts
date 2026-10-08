@@ -1,3 +1,4 @@
+import { chooseTransformationModel, openTransformationJob, transformationJobs } from './lifecycle-controls';
 import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
 
@@ -9,7 +10,7 @@ function savedJob(id: string, project = 'alpha', adapter = 'act-act-v1') {
   return { id, project_id: project, kind: 'policy.distill', status: 'failed', stage: 'completed', created_at: time, updated_at: time, error: 'Generated failed job', result: null,
     request: { operation: 'policy.distill', runtime_id: worker.id, artifact_id: teacher.id, dataset_job_id: inspectedDataset.id, timeout_seconds: 600, native_distillation: { adapter, student: 'act-256', steps: 100, learning_rate: .0001, seed: 1729, frame_stride: 30, splits: { train: [0, 1], validation: [2, 3], final: [4, 5] }, coordinate_attestation: 'generated_fixture', units: ['degrees', 'degrees', 'degrees', 'degrees', 'degrees', 'recorded_gripper'] } } };
 }
-const overview = (page: Page) => page.getByRole('region', { name: 'Distillation models', exact: true });
+const overview = (page: Page) => page.getByRole('region', { name: 'Distillation workspace', exact: true });
 const act = (page: Page) => page.getByRole('button', { name: 'Choose Saved ACT teacher · teacher', exact: true });
 const panel = (page: Page) => page.getByRole('region', { name: 'ACT distillation', exact: true });
 const openDistill = (page: Page) => page.getByRole('navigation', { name: 'Policy lifecycle' }).getByRole('button', { name: 'Distill', exact: true }).click();
@@ -36,6 +37,8 @@ async function fixture(page: Page, initialJobs: Record<string, any>[] = [inspect
 test('Distill has no default model even with an ACT worker and dataset, and model entry is keyboard accessible', async ({ page }, testInfo) => {
   const state = await fixture(page);
   await expect(overview(page)).toBeVisible();
+  await expect(page.getByRole('region',{name:'Distillation jobs',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Start a new distillation',exact:true}).click();
   await expect(overview(page)).toContainText('Saved ACT teacher');
   await expect(overview(page)).not.toContainText('Other model families are not supported yet.');
   await expect(act(page)).toBeEnabled();
@@ -45,29 +48,31 @@ test('Distill has no default model even with an ACT worker and dataset, and mode
   await act(page).focus(); await page.keyboard.press('Enter');
   await expect(panel(page)).toBeVisible();
   await expect(page.getByRole('group', { name: 'Teacher', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Choose another teacher', exact: true }).click();
+  await transformationJobs(page,'distillation');
   await expect(overview(page)).toBeVisible();
-  await expect(act(page)).toBeEnabled();
+  await expect(act(page)).toHaveCount(0);
+  await expect(page.getByRole('region',{name:'Distillation jobs',exact:true})).toBeVisible();
   await expect(panel(page)).toHaveCount(0);
   state.jobs.push(savedJob('arrived-later'));
-  await expect(page.getByRole('button', { name: 'Open distillation arrived-later', exact: true })).toBeVisible({ timeout: 8000 });
+  await expect(page.getByRole('region',{name:'Distillation jobs',exact:true}).locator('[data-job-id="arrived-later"]')).toBeVisible({ timeout: 8000 });
   await expect(panel(page)).toHaveCount(0);
   await page.setViewportSize({ width: 320, height: 900 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
   expect(state.mutations).toEqual([]);
 });
 
-test('explicit model choice stays with its project and survives stage navigation but not reload', async ({ page }) => {
+test('manual stage navigation and project switches return to history without a default model', async ({ page }) => {
   const state = await fixture(page);
-  await act(page).click(); await expect(panel(page)).toBeVisible();
+  await chooseTransformationModel(page,'distillation','Choose Saved ACT teacher · teacher'); await expect(panel(page)).toBeVisible();
   await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await openDistill(page);
-  await expect(panel(page)).toBeVisible();
+  await expect(panel(page)).toHaveCount(0);
+  await expect(page.getByRole('region',{name:'Distillation jobs',exact:true})).toBeVisible();
   await selectProject(page, 'beta');
   await expect(overview(page)).toBeVisible(); await expect(panel(page)).toHaveCount(0);
   await expect(act(page)).toHaveCount(0);
-  await expect(page.getByText('No saved models in this project yet')).toBeVisible();
+  await expect(page.getByText('No distillation jobs yet.')).toBeVisible();
   await selectProject(page, 'alpha');
-  await expect(panel(page)).toBeVisible();
+  await expect(panel(page)).toHaveCount(0);
   await page.reload(); await openDistill(page);
   await expect(overview(page)).toBeVisible(); await expect(panel(page)).toHaveCount(0);
   expect(state.mutations).toEqual([]);
@@ -77,14 +82,15 @@ test('supported owned history opens the exact saved job without requiring a work
   const owned = savedJob('owned-act'), foreign = savedJob('foreign-act', 'beta'), unsupported = savedJob('other-adapter', 'alpha', 'future-adapter');
   const state = await fixture(page, [owned, foreign, unsupported], []);
   await expect(overview(page)).toBeVisible(); await expect(panel(page)).toHaveCount(0);
-  await expect(act(page)).toBeEnabled();
-  await expect(page.getByRole('button', { name: `Open distillation ${owned.id}`, exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: `Open distillation ${foreign.id}`, exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: `Open distillation ${unsupported.id}`, exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: `Open distillation ${owned.id}`, exact: true }).click();
+  await expect(act(page)).toHaveCount(0);
+  await expect(page.locator(`[data-job-id="${owned.id}"]`)).toBeVisible();
+  await expect(page.locator(`[data-job-id="${foreign.id}"]`)).toHaveCount(0);
+  await expect(page.locator(`[data-job-id="${unsupported.id}"]`)).toHaveCount(0);
+  await openTransformationJob(page,'distillation',owned.id);
   await expect(page.getByRole('article', { name: 'Distillation job details', exact: true })).toHaveAttribute('data-job-id', owned.id);
-  await expect(page.getByLabel('Saved distillation job', { exact: true })).toHaveValue(owned.id);
-  await page.getByText('Prepare another student', { exact: true }).click();
+  await expect(page.getByRole('group',{name:'Distillation setup',exact:true})).toHaveCount(0);
+  await transformationJobs(page,'distillation');
+  await chooseTransformationModel(page,'distillation','Choose Saved ACT teacher · teacher');
   await expect(page.getByText('No local ACT distillation worker is configured.', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
   expect(state.mutations).toEqual([]);
@@ -106,7 +112,7 @@ for (const status of ['pending', 'uncertain'] as const) test(`${status} request 
   await page.getByRole('button', { name: 'Refresh distillation jobs', exact: true }).click();
   await expect(acknowledgment).toBeEnabled();
   expect(await page.evaluate(key => sessionStorage.getItem(key), key)).toBe(journal);
-  await page.getByRole('button', { name: 'Choose another teacher', exact: true }).click();
+  await transformationJobs(page,'distillation');
   await expect(page.getByRole('button', { name: 'Review request', exact: true })).toBeVisible();
   await selectProject(page, 'beta');
   await expect(overview(page)).toBeVisible();

@@ -694,3 +694,5 @@ input[type=file]::file-selector-button { min-height: 40px; border: 1px solid var
 /* Source choices share one centered baseline, including the radio indicator. */
 .source-option { display:flex; align-items:center; justify-content:flex-start; gap:8px; text-align:left; }
 .source-option > input { margin:0; align-self:center; flex-shrink:0; }
+
+.dataset-back-navigation { margin: 0 0 20px; }

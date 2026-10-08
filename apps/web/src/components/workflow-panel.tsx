@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CloudConnectionsPanel } from "@/components/cloud-connections";
+import { ownedModels } from "@/lib/model-library";
 import { JobHistory } from "@/components/job-history";
 import { WorkflowChoiceGrid, type WorkflowChoice } from "@/components/workflow-choice-grid";
 import { nativeQuantizationOf, nativeQuantizationOnly } from "@/lib/native-quantization";
@@ -82,7 +83,7 @@ function policyRequest(job?: Job): PolicyRequest | undefined {
   return job && "runtime_id" in job.request ? job.request as PolicyRequest : undefined;
 }
 
-function precisionName(precision: unknown): string {
+export function precisionName(precision: unknown): string {
   if (precision === "float") return "Floating point";
   if (typeof precision === "string") return precision.replace("_0", "");
   if (precision && typeof precision === "object" && "language" in precision) {
@@ -98,7 +99,7 @@ function sizeLabel(bytes: number): string {
     : `${(bytes / 1024 ** 2).toLocaleString(undefined, { maximumFractionDigits: 1 })} MiB`;
 }
 
-function currentStage(job: Job, phase = job.stage): string {
+export function currentStage(job: Job, phase = job.stage): string {
   if (job.status === "succeeded") return "Completed";
   if (job.status === "failed") return "Failed";
   if (job.status === "cancelled") return "Cancelled";
@@ -134,6 +135,8 @@ export function WorkflowPanel({
   preferredArtifactId,
   preferredJobId,
   onViewTraining,
+  onBackToJobs,
+  onModel,
 }: {
   projectId: string;
   stage: string;
@@ -143,6 +146,8 @@ export function WorkflowPanel({
   preferredArtifactId?: string;
   preferredJobId?: string;
   onViewTraining?: () => void;
+  onBackToJobs?: () => void;
+  onModel?: (artifactId: string) => void;
 }) {
   const client = useQueryClient();
   const [preferences, setPreferences] = useState(initial);
@@ -810,7 +815,7 @@ export function WorkflowPanel({
     setSelectedJobId(id);
     setView("detail");
   };
-  const backToHistory = () => { setView("history"); mutation.reset(); cancel.reset(); };
+  const backToHistory = () => { mutation.reset(); cancel.reset(); if (onBackToJobs) onBackToJobs(); else setView("history"); };
 
   if (view === "history") return (
     <JobHistory
@@ -891,6 +896,7 @@ export function WorkflowPanel({
           {engineOnly && <p className="muted">Synthetic input checks. Robot task success was not measured.</p>}
         </section>}
         <section className="workflow-job-output" aria-label="Job output">
+          {onModel && ownedModels(data?.artifacts ?? [], projectId).filter(item => item.job_id === selected.id).map(item => <button type="button" className="secondary-button" key={item.id} onClick={() => onModel(item.id)}>View {item.label} in My models</button>)}
           <h3>Output</h3>
           {data?.artifacts?.length ? <ul className="workflow-output-list">{data.artifacts.map(artifact => <li key={artifact.id}>
             <div><strong>{artifact.label}</strong><span>{artifact.format === "gguf" ? "GGUF" : artifact.format.replaceAll("_", " ")}{artifact.file_bytes > 0 ? ` · ${sizeLabel(artifact.file_bytes)}` : ""}{isCloudArtifact(artifact) ? " · Google Cloud" : ""}</span></div>

@@ -44,7 +44,7 @@ test('open an imported two-view fixture, save labels, reopen it and reach the da
   await expect(labels.getByRole('textbox',{name:'Image label'})).toHaveValue('');
   await labels.getByRole('button',{name:'Previous image',exact:true}).click();
   await expect(labels.getByRole('textbox',{name:'Image label'})).toHaveValue('Red block approaching the target');
-  await page.getByRole('button',{name:'Library',exact:true}).click();
+  await page.getByRole('button',{name:'← Back to library',exact:true}).click();
   await page.getByRole('button',{name:'Open dataset Robot labeling playground'}).click();
   await expect(page.getByRole('textbox',{name:'Image label'})).toHaveValue('Red block approaching the target');
   await expect(labels.getByRole('link',{name:'Export dataset'})).toHaveAttribute('href',/\/datasets\/[a-f0-9]{32}\/download$/);
@@ -89,9 +89,9 @@ test('native folder selection uploads files, detects records and converts for in
   await page.getByRole('button',{name:'Convert to LeRobot'}).click();
   await expect(detected.getByText(/Ready to inspect/)).toBeVisible({timeout:30_000});
   await page.getByRole('button',{name:'Inspect dataset',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'Explore dataset',exact:true})).toBeVisible();
+  await expect(page.getByRole('region',{name:'Dataset inspection',exact:true})).toBeVisible();
   await expect(page.getByRole('heading',{name:'Local dataset',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'Library',exact:true}).click();
+  await page.getByRole('button',{name:'← Back to library',exact:true}).click();
   await expect(page.getByRole('button',{name:'Open dataset source-folder'})).toBeVisible();
 });
 
@@ -199,3 +199,33 @@ for (const available of [true, false]) {
     else await expect(card.getByText('Preview unavailable',{exact:true})).toBeVisible();
   });
 }
+
+test('dashboard uses the current project library scope, and inspection is reached only through its card',async({page})=>{
+  const time='2026-10-07T00:00:00Z',project='alpha';const writes:string[]=[];const reads:string[]=[];
+  const profile={source:'huggingface',repo_id:'our/robot-data',revision:'a'.repeat(40),format:'lerobot_v3',robot_type:'test',total_episodes:4,total_frames:40,fps:10,features:{action:{dtype:'float32',shape:[2]}},license:null,metadata_sha256:'b'.repeat(64),inspected_at:time,warnings:[],inspection_scope:'metadata_only'};
+  const datasets=[0,1,2,3,4].map(index=>({id:`inspection:data-${index}`,job_id:`data-${index}`,project_id:index<3?project:'beta',name:`our/data-${index}`,source:'huggingface',status:'ready',created_at:time,profile:{...profile,repo_id:`our/data-${index}`}}));
+  await page.route('**/api/v1/**',route=>{
+    const request=route.request(),url=new URL(request.url()),path=url.pathname;
+    if(request.method()!=='GET'){writes.push(path);return route.fulfill({status:405,json:{detail:'Navigation must not create jobs'}});}
+    if(path==='/api/v1/projects')return route.fulfill({json:[{id:project,name:'Selected',created_at:time},{id:'beta',name:'Other',created_at:time}]});
+    if(path==='/api/v1/datasets'){reads.push(url.searchParams.get('project_id')??'all');return route.fulfill({json:datasets});} // Includes foreign rows to exercise the client boundary too.
+    if(path.endsWith('/jobs'))return route.fulfill({json:datasets.map(entry=>({id:entry.job_id,project_id:entry.project_id,kind:'dataset.inspect',status:'succeeded',created_at:time,updated_at:time,request:{source:'huggingface',repo_id:entry.name},result:entry.profile}))});
+    if(path.endsWith('/artifacts'))return route.fulfill({json:[]});
+    if(path.endsWith('/episodes')||path.endsWith('/cover'))return route.fulfill({status:422,json:{detail:'Preview offline in this navigation test'}});
+    return route.continue();
+  });
+  await page.goto('/');
+  await expect(page.getByRole('navigation',{name:'Dataset views'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:/Open dataset/})).toHaveCount(3);
+  await page.getByRole('button',{name:'Dashboard',exact:true}).click();
+  await expect(page.getByRole('button',{name:'My datasets',exact:true})).toContainText('3 saved datasets');
+  await expect(page.getByRole('region',{name:'Recent datasets'}).getByText('our/data-3')).toHaveCount(0);
+  await page.getByRole('button',{name:'My datasets',exact:true}).click();
+  await page.getByRole('button',{name:'Open dataset our/data-0',exact:true}).click();
+  await expect(page.getByRole('region',{name:'Dataset inspection',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Explore dataset',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'← Back to library',exact:true})).toHaveCount(1);
+  await page.getByRole('button',{name:'← Back to library',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'My datasets',exact:true})).toBeVisible();
+  expect(reads).not.toContain('all');expect(reads).toContain(project);expect(writes).toEqual([]);
+});

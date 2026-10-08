@@ -1,3 +1,4 @@
+import { chooseTransformationModel } from './lifecycle-controls';
 import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
 
@@ -380,6 +381,8 @@ test('dataset inspection auto-loads camera previews only after opening and stays
   };
   await page.route('**/api/v1/projects', route => route.fulfill({ json: [{ id: 'mixed-review', name: 'Mixed jobs', created_at: timestamp }] }));
   await page.route('**/api/v1/projects/mixed-review/jobs', route => route.fulfill({ json: [policyJob, datasetJob] }));
+  await page.route('**/api/v1/datasets**',route=>route.fulfill({json:[{id:'inspection:dataset-review',job_id:datasetJob.id,project_id:datasetJob.project_id,name:'fixture/robot',source:'huggingface',status:'ready',created_at:timestamp,profile:datasetJob.result}]}));
+  await page.route('**/api/v1/jobs/dataset-review/cover',route=>route.fulfill({status:422,json:{detail:'Cover offline'}}));
   const previews: string[] = [];
   const media: string[] = [];
   await page.route('**/api/v1/jobs/dataset-review/episodes**', route => {
@@ -407,13 +410,13 @@ test('dataset inspection auto-loads camera previews only after opening and stays
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/');
-  await expect(page.getByRole('button', { name: /^Explore dataset/ })).toBeEnabled();
-  await expect(page.getByRole('button', { name: 'Library', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('navigation',{name:'Dataset views'})).toHaveCount(0);
+  await expect(page.getByRole('button', { name:'Open dataset fixture/robot',exact:true })).toBeEnabled();
   await expect(page.getByRole('heading', { name: 'Import a dataset', exact: true })).toBeVisible();
   expect(previews).toEqual([]);
   expect(media).toEqual([]);
 
-  await page.getByRole('button', { name: /^Explore dataset/ }).click();
+  await page.getByRole('button', { name:'Open dataset fixture/robot',exact:true }).click();
   await expect(page.getByRole('heading', { name: 'fixture/robot', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Cameras', exact: true })).toBeVisible();
   await expect(page.locator('.dx-camera video')).toHaveCount(2);
@@ -434,7 +437,7 @@ test('dataset inspection auto-loads camera previews only after opening and stays
   await expect.poll(() => previews).toEqual(['index', '0', '1']);
   await expect(page.getByText('policy-review', { exact: true })).toHaveCount(0);
   await expectNoPageOverflow(page);
-  await page.getByRole('button', { name: 'Library', exact: true }).click();
+  await page.getByRole('button', { name: '← Back to library', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Import a dataset', exact: true })).toBeVisible();
   expect(previews).toEqual(['index', '0', '1']);
   expect(errors).toEqual([]);
@@ -1226,10 +1229,10 @@ test('blank dataset revision uses latest and reused inspections keep one history
   await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
   await expect(page.getByRole('heading', { name: repoId, exact: true })).toBeVisible();
   await expect.poll(() => previews).toEqual(['index', 'episode']);
-  await page.getByRole('button', { name: 'Back to library', exact: true }).click();
+  await page.getByRole('button', { name: '← Back to library', exact: true }).click();
   await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
   await expect(page.getByRole('heading', { name: repoId, exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Explore dataset/ })).toHaveText('Explore dataset');
+  await expect(page.getByRole('navigation',{name:'Dataset views'})).toHaveCount(0);
   await expect(page.getByLabel('History', { exact: true })).toHaveCount(0);
   expect(submitted).toEqual([
     { source: 'huggingface', repo_id: repoId, revision: 'main' },
@@ -1358,7 +1361,7 @@ test('quantization submits Q4 only after an explicit experimental choice', async
   });
   async function submitQuantization(count: number) {
     await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-    await page.getByRole('button', { name: 'Choose Synthetic policy · source', exact: true }).click();
+    await chooseTransformationModel(page, 'quantization', 'Choose Synthetic policy · source');
     await page.getByRole('group', { name: 'My model', exact: true }).locator('input[value="source"]').check();
     await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
     await expect.poll(() => requests.length).toBe(count);
@@ -1438,7 +1441,7 @@ test('Spatial settings require explicit task and parity choices in the submitted
   await page.getByLabel('Maximum action RMSE').fill('0');
   await page.getByLabel('Maximum absolute action error').fill('0');
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-  await page.getByRole('button', { name: 'Choose Synthetic policy · source', exact: true }).click();
+  await chooseTransformationModel(page, 'quantization', 'Choose Synthetic policy · source');
   await page.getByRole('group', { name: 'My model', exact: true }).locator('input[value="source"]').check();
   await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
@@ -1457,7 +1460,7 @@ test('Spatial settings require explicit task and parity choices in the submitted
   await expect(page.getByRole('combobox', { name: 'Protocol', exact: true })).toHaveValue('libero');
   await expect(page.getByLabel('Episode step limit')).toHaveValue('280');
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-  await page.getByRole('button', { name: 'Choose Synthetic policy · source', exact: true }).click();
+  await chooseTransformationModel(page, 'quantization', 'Choose Synthetic policy · source');
   await page.getByRole('group', { name: 'My model', exact: true }).locator('input[value="source"]').check();
   await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(2);
@@ -1487,7 +1490,7 @@ async function workflowPreferenceFixture(page: Page) {
   async function submit() {
     const count = requests.length;
     await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-    await page.getByRole('button', { name: 'Choose Synthetic policy · source', exact: true }).click();
+    await chooseTransformationModel(page, 'quantization', 'Choose Synthetic policy · source');
     await page.getByRole('group', { name: 'My model', exact: true }).locator('input[value="source"]').check();
     await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
     await expect.poll(() => requests.length).toBe(count + 1);
@@ -1613,7 +1616,7 @@ test('a project removed during refetch cannot submit with its stale selection', 
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-  await page.getByRole('button', { name: 'Choose Synthetic policy · source', exact: true }).click();
+  await chooseTransformationModel(page, 'quantization', 'Choose Synthetic policy · source');
   await page.getByRole('group', { name: 'My model', exact: true }).locator('input[value="source"]').check();
   await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toBeEnabled();
   removed = true;

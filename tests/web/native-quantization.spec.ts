@@ -1,3 +1,4 @@
+import { chooseTransformationModel, openTransformationJob, transformationJobs } from './lifecycle-controls';
 import { selectProject } from './project-controls';
 import { startNativeQuantization, cancelNativeQuantization } from '../../apps/web/src/lib/native-quantization';
 import { expect, test, type Page } from '@playwright/test';
@@ -51,7 +52,7 @@ async function fixture(page: Page) {
   });
   await page.goto('/'); await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
   await page.getByRole('button', { name: 'Quantize', exact: true }).click();
-  await page.getByRole('button', { name: 'Choose Generated act-export · act-export', exact: true }).click();
+  await chooseTransformationModel(page, 'quantization', 'Choose Generated act-export · act-export');
   await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toBeVisible();
   return state;
 }
@@ -62,7 +63,7 @@ test('capability is required and native-only workers cannot leak into the existi
   const state = await fixture(page); state.runtimes = [{ ...runtime, native_quantization: false }, engine]; await refresh(page);
   await expect(page.getByText('No local ACT quantization worker is configured.', { exact: false })).toBeVisible();
   await expect(submit(page)).toBeDisabled();
-  await page.getByRole('button', { name: 'Choose Generated smol · smol', exact: true }).click();
+  await chooseTransformationModel(page, 'quantization', 'Choose Generated smol · smol');
   await expect(page.getByRole('group', { name: 'My model', exact: true })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Compute', exact: true }).locator('input[value="act-cpu"]')).toHaveCount(0);
   await expect(page.getByRole('group', { name: 'Compute', exact: true }).locator('input[value="engine"]')).toHaveCount(1);
@@ -81,7 +82,7 @@ for (const bits of [8, 4]) test(`INT${bits} requires an owned compatible source 
   expect(state.posts).toEqual([{ operation: 'policy.quantize', runtime_id: 'act-cpu', artifact_id: 'act-export', native_quantization: { format: 'firebird_quant', bits, group_size: 64 }, timeout_seconds: 600 }]);
   await page.getByText('Activity and recorded report', { exact: true }).click();
   await expect(page.getByRole('region', { name: 'ACT quantization event log' })).toContainText('Generated activity for submitted');
-  await page.getByRole('button', { name: 'Choose Generated smol · smol', exact: true }).click();
+  await chooseTransformationModel(page, 'quantization', 'Choose Generated smol · smol');
   await expect(page.getByRole('group', { name: 'My model', exact: true }).locator('input:checked')).toHaveValue('smol');
   await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toHaveCount(0);
   expect(state.posts).toHaveLength(1);
@@ -98,13 +99,13 @@ for (const outcome of ['lost', 'bad-json', 'wrong-project', 'wrong-source', 'wro
   await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true }).getByRole('alert')).toContainText('submission outcome is unverified'); await expect(submit(page)).toBeDisabled();
   const allow = page.getByRole('button', { name: 'I checked the jobs; allow a new request' }); await expect(allow).toBeDisabled();
   await refresh(page); await expect(allow).toBeEnabled(); expect(state.posts).toHaveLength(1);
-  await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption('submitted'); await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toBeVisible();
-  await allow.click(); await page.getByText('Prepare another ACT candidate', { exact: true }).click(); await expect(submit(page)).toBeEnabled(); expect(state.posts).toHaveLength(1);
+  await openTransformationJob(page, 'quantization', 'submitted'); await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toBeVisible();
+  await refresh(page); await expect(allow).toBeEnabled(); await allow.click(); await chooseTransformationModel(page,'quantization','Choose Generated act-export · act-export'); await expect(submit(page)).toBeEnabled(); expect(state.posts).toHaveLength(1);
 });
 
 test('completed candidate shows measured storage and drift separately from exact reload with download only', async ({ page }, testInfo) => {
   const state = await fixture(page); const done = job('complete', 'succeeded'); done.result = { reports: [report()], artifacts: [{ ...artifact('packed-result', 'native_quantized'), job_id: done.id }, { ...artifact('other-project', 'native_quantized', {}, 'beta'), job_id: done.id }] }; state.jobs.push(done); state.artifacts.push(artifact('packed-result', 'native_quantized'));
-  await refresh(page); await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption(done.id);
+  await refresh(page); await openTransformationJob(page, 'quantization', done.id);
   const measured = page.getByRole('region', { name: 'Measured ACT quantization results' });
   await expect(measured).toContainText('136,991,488 bytes'); await expect(measured).toContainText('36,694,284 bytes');
   await page.getByText('Action differences', { exact: true }).focus(); await page.keyboard.press('Enter');
@@ -113,10 +114,9 @@ test('completed candidate shows measured storage and drift separately from exact
   await expect(measured).toContainText('physical units are unverified');
   await expect(page.getByRole('link', { name: 'Download INT8 package' })).toHaveCount(1);
   await expect(page.getByRole('link', { name: 'Download INT8 package' })).toHaveAttribute('href', '/api/v1/projects/alpha/artifacts/packed-result/download');
-  const resultPosition = await page.getByRole('article', { name: 'ACT quantization job details' }).boundingBox();
-  const preparationPosition = await page.getByText('Prepare another ACT candidate', { exact: true }).boundingBox();
-  expect(resultPosition!.y).toBeLessThan(preparationPosition!.y);
-  await expect(submit(page)).toBeHidden();
+  await expect(page.getByRole('group',{name:'ACT quantization setup',exact:true})).toHaveCount(0);
+  await expect(page.getByText('Prepare another ACT candidate',{exact:true})).toHaveCount(0);
+  await expect(submit(page)).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('quantization-result.png'), fullPage: true });
   await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="packed-result"]')).toHaveCount(0);
   await page.setViewportSize({ width: 320, height: 900 }); const widths = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth, offenders: [...document.querySelectorAll('body *')].filter(item => item.getBoundingClientRect().right > document.documentElement.clientWidth + 1).slice(-15).map(item => ({ tag: item.tagName, cls: item.className, right: item.getBoundingClientRect().right })) })); expect(widths.scroll, JSON.stringify(widths)).toBeLessThanOrEqual(widths.width + 1);
@@ -126,33 +126,37 @@ test('completed candidate shows measured storage and drift separately from exact
 
 test('missing or incomplete report never displays inferred reload or numeric acceptance', async ({ page }) => {
   const state = await fixture(page); const done = job('incomplete', 'succeeded'); done.result = { reports: [{ ...report(), drift_from_fp32: [] }], artifacts: [] }; state.jobs.push(done);
-  await refresh(page); await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption(done.id);
+  await refresh(page); await openTransformationJob(page, 'quantization', done.id);
   await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true }).getByRole('alert')).toContainText('complete measured quantization report is unavailable');
   await expect(page.getByRole('region', { name: 'Measured ACT quantization results' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Download INT8 package' })).toHaveCount(0);
 });
 
 test('cancellation requires confirmation bound to the freshly read selected job', async ({ page }) => {
-  const state = await fixture(page); state.jobs.push(job('one'), job('two')); await refresh(page); await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption('one');
+  const state = await fixture(page); state.jobs.push(job('one'), job('two')); await refresh(page); await openTransformationJob(page, 'quantization', 'one');
   await page.getByRole('button', { name: 'Cancel selected ACT quantization' }).click(); expect(state.cancels).toEqual([]);
-  await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption('two'); await expect(page.getByRole('group', { name: 'Confirm ACT quantization cancellation' })).toHaveCount(0);
+  await openTransformationJob(page, 'quantization', 'two'); await expect(page.getByRole('group', { name: 'Confirm ACT quantization cancellation' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Cancel selected ACT quantization' }).click(); await page.getByRole('button', { name: 'Confirm cancellation', exact: true }).click();
   await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toContainText('cancelled'); expect(state.gets).toContain('two'); expect(state.cancels).toEqual(['two']);
 });
 
 test('selection changing during cancellation preflight does not cancel the previous job', async ({ page }) => {
-  const state = await fixture(page); state.jobs.push(job('one'), job('two')); await refresh(page); await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption('one');
+  const state = await fixture(page); state.jobs.push(job('one'), job('two')); await refresh(page); await openTransformationJob(page, 'quantization', 'one');
   let entered!: () => void, release!: () => void; const enteredPromise = new Promise<void>(resolve => { entered = resolve; }); const barrier = new Promise<void>(resolve => { release = resolve; });
   await page.route('**/api/v1/jobs/one', async route => { entered(); await barrier; await route.fulfill({ json: state.jobs.find(item => item.id === 'one') }); });
   await page.getByRole('button', { name: 'Cancel selected ACT quantization' }).click(); await page.getByRole('button', { name: 'Confirm cancellation', exact: true }).click(); await enteredPromise;
-  await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption('two'); release();
-  await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true }).getByRole('alert')).toContainText('Selection changed; cancellation was not submitted'); expect(state.cancels).toEqual([]);
+  await openTransformationJob(page, 'quantization', 'two');
+  const response = page.waitForResponse('**/api/v1/jobs/one'); release(); await response;
+  await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toHaveAttribute('data-job-id', 'two');
+  await expect(page.getByRole('button', { name: 'Cancel selected ACT quantization' })).toBeEnabled();
+  expect(state.cancels).toEqual([]);
 });
 
 test('project switching resets precision/source and failed history blocks mutation', async ({ page }) => {
   const state = await fixture(page); await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="act-export"]').check(); await page.getByRole('group', { name: 'Compression', exact: true }).locator('input[value="4"]').check();
   state.jobsError = true; await refresh(page); await expect(page.getByText(/Job updates are unavailable/)).toBeVisible(); await expect(submit(page)).toBeDisabled();
   state.jobsError = false; await selectProject(page, 'beta');
+  await page.getByRole('button', { name: 'Start a new quantization', exact: true }).click();
   await expect(page.getByText('No saved models in this project yet')).toBeVisible();
   await expect(page.getByRole('group', { name: 'Policy', exact: true })).toHaveCount(0);
   await expect(submit(page)).toHaveCount(0); expect(state.posts).toEqual([]);
@@ -177,7 +181,7 @@ test('a fast terminal transition refetches the final events after an empty activ
     if (armed) { await empty; terminal = true; quick.status = 'succeeded'; }
     await route.fulfill({ json: state.jobs });
   });
-  await refresh(page); await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption('quick');
+  await refresh(page); await openTransformationJob(page, 'quantization', 'quick');
   await page.getByText('Activity and recorded report', { exact: true }).click();
   await expect(page.getByRole('region', { name: 'ACT quantization event log' })).toHaveText('No recorded events yet.'); armed = true;
   await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toContainText('succeeded', { timeout: 7000 });
@@ -186,7 +190,7 @@ test('a fast terminal transition refetches the final events after an empty activ
 
 test('failed worker output never becomes a successful download or rerun', async ({ page }) => {
   const state = await fixture(page); const failed = job('failed', 'failed'); failed.error = 'Generated fresh reload mismatch'; failed.result = { reports: [report()], artifacts: [{ ...artifact('partial', 'native_quantized'), job_id: failed.id }] }; state.jobs.push(failed);
-  await refresh(page); await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption(failed.id);
+  await refresh(page); await openTransformationJob(page, 'quantization', failed.id);
   await expect(page.getByRole('article', { name: 'ACT quantization job details' }).getByRole('alert')).toHaveText('Generated fresh reload mismatch');
   await expect(page.getByRole('region', { name: 'Measured ACT quantization results' })).toHaveCount(0); await expect(page.getByRole('link', { name: 'Download INT8 package' })).toHaveCount(0); expect(state.posts).toEqual([]);
 });
@@ -197,7 +201,7 @@ for (const invalid of ['model-id', 'duplicate-seeds', 'reversed-seeds']) test(`i
   else if (invalid === 'duplicate-seeds') value.drift_from_fp32[1].seed = value.drift_from_fp32[0].seed;
   else value.drift_from_fp32.reverse();
   done.result = { reports: [value], artifacts: [] }; state.jobs.push(done); await refresh(page);
-  await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption(done.id);
+  await openTransformationJob(page, 'quantization', done.id);
   await expect(page.getByRole('region', { name: 'Measured ACT quantization results' })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true }).getByRole('alert')).toContainText('complete measured quantization report is unavailable');
 });
@@ -214,11 +218,11 @@ test('a completed earlier history refresh cannot authorize an ambiguous quantiza
 
 test('a delayed cancel response keeps the newly selected quantization job', async ({ page }) => {
   const state = await fixture(page); state.jobs.push(job('one'), job('two')); await refresh(page);
-  await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption('one');
+  await openTransformationJob(page, 'quantization', 'one');
   let release!: () => void; state.cancelGate = new Promise<void>(resolve => { release = resolve; });
   await page.getByRole('button', { name: 'Cancel selected ACT quantization' }).click(); await page.getByRole('button', { name: 'Confirm cancellation', exact: true }).click();
   await expect.poll(() => state.cancels.length).toBe(1);
-  await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption('two'); release();
+  await openTransformationJob(page, 'quantization', 'two'); release();
   await expect(page.getByRole('button', { name: 'Cancel selected ACT quantization' })).toBeEnabled();
   await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toHaveAttribute('data-job-id', 'two'); expect(state.cancels).toEqual(['one']);
 });
@@ -227,8 +231,9 @@ test('uncertain quantization survives stage navigation and reload until fresh hi
   const state = await fixture(page); state.submit = 'lost'; await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="act-export"]').check(); await submit(page).click();
   await expect(page.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toBeVisible();
   await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('button', { name: 'Review request', exact: true }).click();
   await expect(submit(page)).toBeDisabled();
-  await page.reload(); await page.getByRole('button', { name: 'Quantize', exact: true }).click(); await page.getByRole('button', { name: 'Choose Generated act-export · act-export', exact: true }).click();
+  await page.reload(); await page.getByRole('button', { name: 'Quantize', exact: true }).click(); await chooseTransformationModel(page, 'quantization', 'Choose Generated act-export · act-export');
   const allow = page.getByRole('button', { name: 'I checked the jobs; allow a new request' }); await expect(allow).toBeDisabled();
   state.jobsError = true; await refresh(page); await expect(allow).toBeDisabled();
   state.jobsError = false; await refresh(page); await expect(allow).toBeEnabled(); expect(state.posts).toHaveLength(1);
@@ -240,9 +245,7 @@ async function fromStudent(page: Page, state: Awaited<ReturnType<typeof fixture>
   state.jobs.push({ id: 'distilled', project_id: 'alpha', kind: 'policy.distill', status: 'succeeded', stage: 'completed', created_at: timestamp, updated_at: timestamp,
     request: { operation: 'policy.distill', runtime_id: 'student', artifact_id: 'teacher', dataset_job_id: 'data', timeout_seconds: 600, native_distillation: { adapter: 'act-act-v1', coordinate_attestation: 'generated_fixture', steps: 1 } }, result: { reports: [], artifacts: [output] } });
   await page.getByRole('button', { name: 'Distill', exact: true }).click();
-  await page.getByRole('button', { name: 'Choose Generated act-export · act-export', exact: true }).click();
-  await page.getByRole('button', { name: 'Refresh distillation jobs', exact: true }).click();
-  await page.getByLabel('Saved distillation job', { exact: true }).selectOption('distilled');
+  await openTransformationJob(page, 'distillation', 'distilled');
   await page.getByRole('button', { name: 'Open ACT quantization', exact: true }).click();
 }
 
@@ -273,7 +276,7 @@ test('unavailable session storage blocks a request instead of dropping its recov
 });
 
 test('activity refresh failure remains visible outside collapsed details', async ({ page }) => {
-  const state = await fixture(page); state.jobs.push(job('watched')); await refresh(page); await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption('watched');
+  const state = await fixture(page); state.jobs.push(job('watched')); await refresh(page); await openTransformationJob(page, 'quantization', 'watched');
   await page.route('**/api/v1/jobs/watched/events', route => route.fulfill({ status: 503, json: { detail: 'Generated events outage' } }));
   await refresh(page); await expect(page.getByRole('article', { name: 'ACT quantization job details' }).getByRole('alert')).toContainText('previously received activity may be stale');
   await expect(page.getByRole('region', { name: 'ACT quantization event log' })).toBeHidden(); expect(state.posts).toHaveLength(0);
@@ -302,8 +305,8 @@ test('an acknowledged job remains visible when clearing its recovery journal fai
   await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true }).getByRole('alert')).toContainText('Browser session storage is unavailable');
   await expect(page.getByText('Submitting one local quantization job…', { exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => (window as unknown as { journalRemovals: number }).journalRemovals)).toBe(1);
-  await page.getByText('Prepare another ACT candidate', { exact: true }).click(); await expect(submit(page)).toBeDisabled(); expect(state.posts).toHaveLength(1);
-  await page.reload(); await page.getByRole('button', { name: 'Quantize', exact: true }).click(); await page.getByRole('button', { name: 'Choose Generated act-export · act-export', exact: true }).click();
+  await chooseTransformationModel(page,'quantization','Choose Generated act-export · act-export'); await expect(submit(page)).toBeDisabled(); expect(state.posts).toHaveLength(1);
+  await page.reload(); await page.getByRole('button', { name: 'Quantize', exact: true }).click(); await chooseTransformationModel(page, 'quantization', 'Choose Generated act-export · act-export');
   await expect(page.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toBeDisabled(); expect(state.posts).toHaveLength(1);
 });
 
@@ -314,11 +317,12 @@ test('journal cleanup after navigation exposes recovery instead of a permanent p
   let release!: () => void; state.postGate = new Promise<void>(resolve => { release = resolve; });
   await submit(page).click(); await expect.poll(() => state.posts.length).toBe(1);
   await page.getByRole('button', { name: 'Dataset', exact: true }).click(); await page.getByRole('button', { name: 'Quantize', exact: true }).click();
+  await page.getByRole('button', { name: 'Review request', exact: true }).click();
   await expect(page.getByText('Submitting one local quantization job…', { exact: true })).toBeVisible(); release();
   await expect(page.getByText(/Browser session storage is unavailable/)).toBeVisible();
   await expect(page.getByText('Submitting one local quantization job…', { exact: true })).toHaveCount(0);
   const allow = page.getByRole('button', { name: 'I checked the jobs; allow a new request' }); await expect(allow).toBeDisabled();
-  await refresh(page); await expect(allow).toBeEnabled(); await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption('submitted');
+  await refresh(page); await expect(allow).toBeEnabled(); await openTransformationJob(page, 'quantization', 'submitted');
   await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toHaveAttribute('data-job-id', 'submitted'); expect(state.posts).toHaveLength(1);
 });
 
@@ -410,7 +414,7 @@ test('8-step packed report displays its full prediction dimensions without quali
   const measured = { ...report(), prediction_horizon: 8, execution_horizon: 3, temporal_contract_sha256: 'e'.repeat(64) };
   for (const row of measured.drift_from_fp32) { row.raw.coordinates = 48; row.postprocessed.coordinates = 48; }
   done.result = { reports: [measured], artifacts: [] }; state.jobs.push(done); await refresh(page);
-  await page.getByLabel('Saved ACT quantization job', { exact: true }).selectOption(done.id);
+  await openTransformationJob(page, 'quantization', done.id);
   await expect(page.getByRole('region', { name: 'Measured ACT quantization results' })).toBeVisible();
   await page.getByText('Action differences', { exact: true }).click();
   await expect(page.getByRole('table')).toHaveAccessibleName('Difference from FP32 across each full 8 × 6 action chunk');
