@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { expect, test, type Page } from '@playwright/test';
 import { waitForJob } from './job-waiter';
-import { chooseTransformationModel } from './lifecycle-controls';
+import { chooseTransformationModel, selectedQuantizationModel } from './lifecycle-controls';
 
 const execute = promisify(execFile);
 const python = process.platform === 'win32' ? '.venv/Scripts/python.exe' : '.venv/bin/python';
@@ -49,8 +49,17 @@ class WorkflowPage {
     }
     await this.page.getByRole('link', { name: 'Quantize', exact: true }).click();
     await chooseTransformationModel(this.page, 'quantization', `Choose float · ${this.modelId}`);
-    await this.page.getByRole('group', { name: 'Compute', exact: true }).locator(`input[value="${runtime}"]`).check();
-    await this.page.getByRole('group', { name: 'My model', exact: true }).locator(`input[value="${this.modelId}"]`).check();
+    const runtimeLabels: Record<string, string> = {
+      'browser-success': 'Synthetic CPU fixture — not model evidence',
+      'browser-delayed-success': 'Delayed synthetic fixture — not model evidence',
+      'browser-slow': 'slow fixture',
+      'browser-failure': 'Synthetic failure fixture',
+    };
+    const compute = this.page.getByRole('combobox', { name: 'Compute', exact: true });
+    await compute.click();
+    await this.page.getByRole('option', { name: runtimeLabels[runtime], exact: true }).click();
+    await expect(compute).toHaveAttribute('value', runtime);
+    await expect(selectedQuantizationModel(this.page)).toHaveValue(this.modelId);
     const created = this.page.waitForResponse(response => response.url().endsWith('/policy-jobs') && response.request().method() === 'POST');
     await this.page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
     const response = await created;
@@ -106,7 +115,10 @@ test('browser workflow persists real subprocess results and downloads the same a
   expect(job.result.artifacts.every((artifact: { metadata: { fixture_only: boolean } }) => artifact.metadata.fixture_only)).toBeTruthy();
   expect(await cli('jobs', 'show', submitted.id)).toEqual(job);
   const allArtifacts = await cli('policy', 'artifacts', project.id);
-  expect(allArtifacts).toEqual(expect.arrayContaining(job.result.artifacts));
+  for (const artifact of job.result.artifacts) {
+    expect(allArtifacts.find((item: { id: string }) => item.id === artifact.id))
+      .toEqual({ ...artifact, run_name: expect.any(String) });
+  }
   expect(allArtifacts.some((artifact: { id: string }) => artifact.id === workflow.modelId)).toBeTruthy();
   const events = await cli('jobs', 'events', submitted.id);
   expect(events.some((event: { message: string }) => event.message === 'Optimizer step 1')).toBeTruthy();
