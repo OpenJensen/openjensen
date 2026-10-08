@@ -36,7 +36,7 @@ async function openGpuPicker(page: Page, local = false) {
       '/api/v1/projects/picker/artifacts': [],
       '/api/v1/policy-options': {
         runtimes: local ? [...runtimes, localRuntime] : runtimes,
-        sources: [], training_models: [{ id: 'pi05', label: 'π₀.₅', model_id: 'lerobot/pi05_base', model_revision: 'a'.repeat(40), description: 'Generalist policy', backend: 'lerobot', methods: ['full'], minimum_gpu_memory_gb: 40, runtime_ids: runtimes.map(item => item.id) }],
+        sources: [], training_models: [{ id: 'pi05', label: 'π₀.₅', model_id: 'lerobot/pi05_base', model_revision: 'a'.repeat(40), description: 'Generalist policy', backend: 'lerobot', methods: ['full'], minimum_gpu_memory_gb: 40, available: true, status: 'ready', runtime_ids: runtimes.map(item => item.id) }],
         training_methods: [{ id: 'lora', label: 'LoRA', description: 'Train adapters.' }, { id: 'full', label: 'Full training', description: 'Train policy weights.' }],
         default_training_method: 'lora',
         compute: { local: { enabled: local, label: 'Robotics lab' }, gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 } },
@@ -216,7 +216,8 @@ async function trainingAdmission(page: Page, { format = 'lerobot_v3', dimensions
         training_models: [...profiles.map((model, index) => ({ ...model, model_revision: 'c'.repeat(40), description: 'Fixture profile', backend: 'lerobot', methods: ['full'], runtime_ids: cloudConnected ? [runtime.id] : [],
           // Include a stale ready record with no matching runtime: the client must
           // retain its own compute gate while accurately labeling the API state.
-          ...(!cloudConnected ? { status: ['connect_account', 'setup_required', 'ready'][index] } : {}),
+          available: cloudConnected,
+          status: cloudConnected ? 'ready' : ['connect_account', 'setup_required', 'ready'][index],
         })), ...(!cloudConnected ? [{ id: 'smolvla', label: 'SmolVLA', model_id: 'lerobot/smolvla_base', model_revision: 'a'.repeat(40), description: 'Fixture preflight-selectable adapter', backend: 'smolvla', methods: ['lora'], runtime_ids: [], status: 'connect_account' }] : [])],
         training_methods: [{ id: 'lora', label: 'LoRA', description: 'Adapter training' }, { id: 'full', label: 'Full training', description: 'Native policy training' }], default_training_method: 'lora',
         compute: { local: { enabled: false, label: 'Local' }, gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 } },
