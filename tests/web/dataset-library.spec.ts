@@ -44,7 +44,7 @@ test('open an imported two-view fixture, save labels, reopen it and reach the da
   await expect(labels.getByRole('textbox',{name:'Image label'})).toHaveValue('');
   await labels.getByRole('button',{name:'Previous image',exact:true}).click();
   await expect(labels.getByRole('textbox',{name:'Image label'})).toHaveValue('Red block approaching the target');
-  await page.getByRole('button',{name:'My datasets',exact:true}).click();
+  await page.getByRole('button',{name:'Library',exact:true}).click();
   await page.getByRole('button',{name:'Open dataset Robot labeling playground'}).click();
   await expect(page.getByRole('textbox',{name:'Image label'})).toHaveValue('Red block approaching the target');
   await expect(labels.getByRole('link',{name:'Export dataset'})).toHaveAttribute('href',/\/datasets\/[a-f0-9]{32}\/download$/);
@@ -89,9 +89,9 @@ test('native folder selection uploads files, detects records and converts for in
   await page.getByRole('button',{name:'Convert to LeRobot'}).click();
   await expect(detected.getByText(/Ready to inspect/)).toBeVisible({timeout:30_000});
   await page.getByRole('button',{name:'Inspect dataset',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'Dataset inspection',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Explore dataset',exact:true})).toBeVisible();
   await expect(page.getByRole('heading',{name:'Local dataset',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'My datasets',exact:true}).click();
+  await page.getByRole('button',{name:'Library',exact:true}).click();
   await expect(page.getByRole('button',{name:'Open dataset source-folder'})).toBeVisible();
 });
 
@@ -157,11 +157,10 @@ for (const available of [true, false]) {
       if(path==='/api/v1/projects')return route.fulfill({json:[{id:project,name:'Preview library',created_at:time}]});
       if(path.endsWith('/jobs'))return route.fulfill({json:[]});
       if(path==='/api/v1/datasets')return route.fulfill({json:[{id:`inspection:${job}`,job_id:job,project_id:project,name:profile.repo_id,source:'huggingface',status:'ready',created_at:time,profile}]});
-      if(path.endsWith('/episodes')) {
+      if(path.endsWith('/cover')) {
         requests.push(route.request().url());
-        return available ? route.fulfill({json:{repo_id:profile.repo_id,revision:profile.revision,total_episodes:8,offset:0,limit:1,episodes:[episode],warnings:[]}}) : route.fulfill({status:422,json:{detail:'Preview unavailable'}});
+        return available ? route.fulfill({json:{...episode,repo_id:profile.repo_id,revision:profile.revision,cameras:[{key:'observation.images.front',url:'/api/v1/fixture-preview.mp4',start_seconds:1,end_seconds:2,width:64,height:64,fps:5}],samples:[],warnings:[],action_names:[],state_names:[]}}) : route.fulfill({status:422,json:{detail:'Preview unavailable'}});
       }
-      if(path.endsWith('/episodes/7'))return route.fulfill({json:{...episode,repo_id:profile.repo_id,revision:profile.revision,cameras:[{key:'observation.images.front',url:'/api/v1/fixture-preview.mp4',start_seconds:1,end_seconds:2,width:64,height:64,fps:5}],samples:[],warnings:[],action_names:[],state_names:[]}});
       return route.continue();
     });
     await page.goto('/');
@@ -174,7 +173,16 @@ for (const available of [true, false]) {
       await expect(card.getByText('Preview unavailable',{exact:true})).toHaveCount(0);
     } else await expect(card.getByText('Preview unavailable',{exact:true})).toBeVisible();
     expect(requests).toHaveLength(1);
-    expect(new URL(requests[0]).searchParams.get('limit')).toBe('1');
+    expect(new URL(requests[0]).pathname).toContain('/cover');
+    if (available && testInfo.project.name === 'desktop') {
+      const video = card.locator('video');
+      await card.hover();
+      await expect.poll(() => video.evaluate(node => (node as HTMLVideoElement).paused)).toBe(false);
+      await page.waitForTimeout(1200); // Exercise the exclusive end boundary across a full loop.
+      expect(await video.evaluate(node => (node as HTMLVideoElement).currentTime)).toBeLessThan(2);
+      await page.getByRole('heading', { name: 'Dataset', exact: true }).hover();
+      await expect.poll(() => video.evaluate(node => (node as HTMLVideoElement).paused)).toBe(true);
+    }
     await page.getByRole('button',{name:'Fine-tune',exact:true}).click();
     await page.getByRole('button',{name:'Dataset',exact:true}).click();
     if (available) {

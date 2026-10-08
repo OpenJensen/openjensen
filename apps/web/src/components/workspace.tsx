@@ -1,7 +1,7 @@
 'use client';
 
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { isAugmentationSource } from '@/lib/augmentation-source';
 import { api, isActive, isDatasetJob, type DatasetJob, type DatasetProfile, type Job, type PolicyArtifact, type Project } from '@/lib/api';
 import { quantizeModeFor, type ModelAction } from '@/lib/model-library';
@@ -29,7 +29,7 @@ import { AugmentationPanel } from '@/components/augmentation-panel';
 import { Icon } from '@/components/icon';
 import { WorkspaceShell } from '@/components/workspace-shell';
 import { ProjectMenu } from '@/components/project-menu';
-import { DatasetExplorer } from '@/components/dataset-explorer';
+import { DatasetExplorer, FeatureChips } from '@/components/dataset-explorer';
 import { DatasetLibrary, DatasetLabeling, LocalDatasetImport } from '@/components/dataset-library';
 import { WorkspaceDashboard } from '@/components/workspace-dashboard';
 import { type LibraryDataset } from '@/lib/dataset-library';
@@ -88,21 +88,22 @@ function displayDate(value: string) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
-function DatasetResult({ profile }: { profile: DatasetProfile }) {
+function DatasetResult({ profile, history }: { profile: DatasetProfile; history?: ReactNode }) {
   return <section className="result inspection-overview" aria-labelledby="result-title">
     {profile.snapshot && <p role="status">Training copy verified · {profile.snapshot.file_count} files · {profile.snapshot.lineage_validated ? 'Recorded lineage retained' : 'Ancestry unknown; not independent evaluation evidence'}</p>}
     <div className="result-heading">
       <div><h3 id="result-title">{profile.repo_id || 'Local dataset'}</h3></div>
       <span className="metadata-badge"><Icon name="check" size={14} /> {profile.format.replace('_', ' ')}</span>
     </div>
+    <details className="provenance inspection-provenance"><summary>Advanced</summary>
+    {history}
     <dl className="dataset-facts">
       <div><dt>episodes</dt><dd>{formatNumber(profile.total_episodes)}</dd></div>
       <div><dt>frames</dt><dd>{formatNumber(profile.total_frames)}</dd></div>
       <div><dt>fps</dt><dd>{profile.fps}</dd></div>
       <div><dt className="visually-hidden">Robot type</dt><dd>{profile.robot_type || 'Unknown robot'}</dd></div>
     </dl>
-    <details className="provenance inspection-provenance">
-      <summary>Source details</summary>
+      <FeatureChips features={profile.features} /><h4>Source details</h4>
       {profile.warnings.length > 0 && <div className="warning-box"><h4>Inspection notes</h4><ul>{profile.warnings.map((warning, index) => <li key={`${index}-${warning}`}>{warning}</li>)}</ul></div>}
       <dl>
         <div><dt>Source</dt><dd>{profile.repo_id || 'Local metadata snapshot'}</dd></div>
@@ -198,7 +199,7 @@ function IntakeForm({ project, readinessMessage, localAvailable, onCreated, navi
   </section>;
 }
 
-function JobDetail({ job, projectId }: { job: DatasetJob; projectId: string }) {
+function JobDetail({ job, projectId, history }: { job: DatasetJob; projectId: string; history?: ReactNode }) {
   const queryClient = useQueryClient();
   const cancel = useMutation({
     mutationFn: () => api.cancel(job.id),
@@ -210,7 +211,7 @@ function JobDetail({ job, projectId }: { job: DatasetJob; projectId: string }) {
     <ErrorNotice error={cancel.error} />
     {job.error && <p className="error-notice" role="alert">{job.error}</p>}
     {(job.status === 'cancelled' || job.status === 'interrupted') && <p className="muted">Inspection did not complete.</p>}
-    {job.result && 'inspection_scope' in job.result && <DatasetResult profile={job.result} />}
+    {job.result && 'inspection_scope' in job.result && <DatasetResult profile={job.result} history={history} />}
   </>;
 }
 
@@ -429,7 +430,7 @@ function Workbench() {
         {!connected && !health.isPending && <div className="connection-notice"><ErrorNotice error={health.error} /><button className="text-button" onClick={() => { void health.refetch(); void projects.refetch(); void capabilities.refetch(); }}>Retry connection</button></div>}
         {capabilities.error && connected && <div className="connection-notice"><ErrorNotice error={capabilities.error} /><button className="text-button" onClick={() => void capabilities.refetch()} disabled={capabilities.isFetching}>Retry capabilities</button></div>}
         <div className="dataset-view" hidden={activeStage !== 0}>
-          <div className="section-tabs"><nav className="dataset-tab-buttons" aria-label="Dataset views"><button type="button" className={`section-tab${datasetView === 'sources' ? ' active' : ''}`} aria-pressed={datasetView === 'sources'} onClick={() => setDatasetView('sources')}>My datasets</button><button type="button" className={`section-tab${datasetView === 'inspection' ? ' active' : ''}`} aria-pressed={datasetView === 'inspection'} disabled={!selectedJob} onClick={() => setDatasetView('inspection')}>Inspection{sortedJobs.length > 0 && <span className="tab-count">{sortedJobs.length}</span>}</button></nav></div>
+          <div className="section-tabs"><nav className="dataset-tab-buttons" aria-label="Dataset views"><button type="button" className={`section-tab${datasetView === 'sources' ? ' active' : ''}`} aria-pressed={datasetView === 'sources'} onClick={() => setDatasetView('sources')}>Library</button><button type="button" className={`section-tab${datasetView === 'inspection' ? ' active' : ''}`} aria-pressed={datasetView === 'inspection'} disabled={!selectedJob} onClick={() => setDatasetView('inspection')}>Explore dataset</button></nav></div>
           <div className="dataset-sources" hidden={datasetView !== 'sources'}>
             <div className="intake-column"><IntakeForm key={`${projectId}-${intakeSelection}`} navigationToken={`${workflowNavigation}:${activeStage}:${datasetView}:${selectedJobId}`} project={workflowProjectId ? project : undefined} readinessMessage={projects.isPending ? 'Loading projects before importing a dataset.' : projects.isError ? 'Project list unavailable. Retry projects to continue.' : 'Create or select a project to import a dataset.'} initialLibrary={importLibrary} localAvailable={capabilities.data?.some(item => item.operation === 'dataset.inspect.local' && (item.status === 'available' || item.status === 'untested')) ?? false} onCreated={job => { setSelectedJobId(job.id); setDatasetView('inspection'); }} /></div>
             <div className="dataset-choice-divider"><span>or</span></div>
@@ -438,13 +439,12 @@ function Workbench() {
           {datasetView === 'labels' && selectedLibrary?.project_id === workflowProjectId && <DatasetLabeling key={selectedLibrary.id} entry={selectedLibrary} onInspect={() => { setImportLibrary(selectedLibrary); setIntakeSelection(value=>value+1); setDatasetView('sources'); }} />}
           <div className="inspection-view" hidden={datasetView !== 'inspection'}>
             <section className="inspection-record" aria-labelledby="activity-title">
-              <div className="activity-heading"><div><h2 id="activity-title">Dataset inspection</h2></div><button type="button" className="secondary-button" onClick={() => setDatasetView('sources')}>Change source</button></div>
+              <div className="activity-heading"><div><h2 id="activity-title">Explore dataset</h2></div><button type="button" className="secondary-button" onClick={() => setDatasetView('sources')}>Back to library</button></div>
               <ErrorNotice error={jobs.error} />
               {jobs.isPending && projectId && <p className="loading-note" role="status">Loading inspections…</p>}
               {selectedJobId && !selectedJob && !jobs.isPending && <p className="warning-box" role="alert">Selected inspection {selectedJobId} is unavailable in this project. Another dataset has not been substituted. Refresh or choose a source explicitly.</p>}
               {selectedJob && <>
-                {sortedJobs.length > 1 && <div className="history-control"><label htmlFor="inspection-history">History</label><select id="inspection-history" value={selectedJob.id} onChange={event => setSelectedJobId(event.target.value)}>{sortedJobs.map(job => <option key={job.id} value={job.id}>{job.request.repo_id || 'Local dataset'} · {displayDate(job.created_at)} · {job.status}</option>)}</select></div>}
-                <JobDetail key={selectedJob.id} job={selectedJob} projectId={projectId} />
+                <JobDetail key={selectedJob.id} job={selectedJob} projectId={projectId} history={sortedJobs.length > 1 && <div className="history-control"><label htmlFor="inspection-history">History</label><select id="inspection-history" value={selectedJob.id} onChange={event => setSelectedJobId(event.target.value)}>{sortedJobs.map(job => <option key={job.id} value={job.id}>{job.request.repo_id || 'Local dataset'} · {displayDate(job.created_at)} · {job.status}</option>)}</select></div>} />
                 {selectedJob.result && !selectedJob.request.library_id && <DatasetExplorer key={`explorer-${selectedJob.id}`} job={selectedJob} active={activeStage === 0 && datasetView === 'inspection'} />}
                 {selectedJob.status === 'succeeded' && (selectedJob.result?.source === 'huggingface' || selectedJob.result?.snapshot) && <div className="dataset-train-action">{isAugmentationSource(selectedJob) && <button className="secondary-button" onClick={() => navigateStage(8)}><Icon name="spark" size={16} />Augment this dataset</button>}<button className="primary-button" onClick={() => startTrainingOnDataset(selectedJob.id)}>Train on this dataset <Icon name="arrow" size={16} /></button></div>}
               </>}

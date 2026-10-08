@@ -140,9 +140,9 @@ test('fresh workflows require explicit model and runner choices', async ({ page 
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
   await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Model', exact: true }).click();
   const models = page.getByRole('group', { name: 'Base model', exact: true });
-  await expect(models.getByRole('radio', { checked: true })).toHaveCount(0);
-  await page.getByRole('radio', { name: 'SmolVLA', exact: true }).locator('..').click();
-  await expect(page.getByRole('radio', { name: 'SmolVLA', exact: true })).toBeChecked();
+  await expect(models.getByRole('checkbox', { checked: true })).toHaveCount(0);
+  await page.getByRole('checkbox', { name: 'SmolVLA', exact: true }).locator('..').click();
+  await expect(page.getByRole('checkbox', { name: 'SmolVLA', exact: true })).toBeChecked();
   expect(mutations).toEqual([]);
 });
 
@@ -206,7 +206,8 @@ test('workflow pages keep their job history without the duplicate project activi
 
 test('the clean dataset page continues with the exact viewed inspection without submitting training', async ({ page }) => {
   const { mutations } = await workflowFixture(page);
-  await page.getByRole('button', { name: /^Inspection/ }).click();
+  await page.getByRole('button', { name: /^Explore dataset/ }).click();
+  await page.locator('.inspection-provenance > summary').click();
   await page.getByLabel('History', { exact: true }).selectOption('dataset-first');
   const journey = page.getByRole('region', { name: 'Workflow context', exact: true });
   await expect(journey).toHaveCount(0);
@@ -230,8 +231,8 @@ test('missing history stays visible in the run list and cannot enable metadata-o
   state.jobs = state.jobs.filter(job => job.id === 'dataset-first');
   state.jobs[0].result.snapshot = null;
   await page.reload();
-  await page.getByRole('button', { name: /^Inspection/ }).click();
-  await expect(page.getByRole('heading', { name: 'Dataset inspection', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /^Explore dataset/ }).click();
+  await expect(page.getByRole('heading', { name: 'Explore dataset', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Train on this dataset', exact: true })).toHaveCount(0);
   expect(mutations).toEqual([]);
 });

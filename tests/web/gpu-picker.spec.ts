@@ -1,5 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
 
+async function chooseOnlyModel(page: Page, name: string) {
+  const choices = page.getByRole('group', { name: 'Base model', exact: true });
+  for (const choice of await choices.locator('input:checked').all()) await choice.uncheck();
+  await choices.getByRole('checkbox', { name, exact: true }).check();
+}
+
 async function openGpuPicker(page: Page, local = false) {
   const timestamp = '2026-09-26T12:00:00Z';
   const writes: string[] = [];
@@ -47,7 +53,7 @@ async function openGpuPicker(page: Page, local = false) {
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
   await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Model', exact: true }).click();
-  await page.getByRole('radio', { name: 'SmolVLA', exact: true }).locator('..').click();
+  await chooseOnlyModel(page, 'SmolVLA');
   await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Compute', exact: true }).click();
   const picker = page.getByRole('combobox', { name: 'GPU', exact: true });
   await expect(picker).toBeVisible();
@@ -92,8 +98,8 @@ test('changing to a large model removes undersized GPUs and clears the previous 
   await page.getByRole('option', { name: 'T4', exact: true }).click();
   const setup = page.getByRole('navigation', { name: 'Training setup' });
   await setup.getByRole('button', { name: 'Model', exact: true }).click();
-  await page.getByRole('radio', { name: 'π₀.₅', exact: true }).locator('..').click();
-  await expect(page.getByRole('radio', { name: 'π₀.₅', exact: true }).locator('..').locator('.training-model-memory strong')).toHaveText('40 GB+');
+  await chooseOnlyModel(page, 'π₀.₅');
+  await expect(page.getByRole('checkbox', { name: 'π₀.₅', exact: true }).locator('..').locator('.training-model-memory strong')).toHaveText('40 GB+');
   await setup.getByRole('button', { name: 'Compute', exact: true }).click();
   await expect(picker).toHaveAttribute('value', 'A100');
   await picker.click();
@@ -101,18 +107,18 @@ test('changing to a large model removes undersized GPUs and clears the previous 
   await expect(menu.getByRole('option')).toHaveCount(1);
   await expect(menu.getByRole('option', { name: 'A100', exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
-  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
   await expect(page.getByRole('spinbutton', { name: 'Batch size', exact: true })).toHaveValue('4');
   await page.getByRole('spinbutton', { name: 'Batch size', exact: true }).fill('3');
   await setup.getByRole('button', { name: 'Model', exact: true }).click();
-  await page.getByRole('radio', { name: 'SmolVLA', exact: true }).locator('..').click();
+  await chooseOnlyModel(page, 'SmolVLA');
   await setup.getByRole('button', { name: 'Compute', exact: true }).click();
-  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
   await expect(page.getByRole('spinbutton', { name: 'Batch size', exact: true })).toHaveValue('64');
   await setup.getByRole('button', { name: 'Model', exact: true }).click();
-  await page.getByRole('radio', { name: 'π₀.₅', exact: true }).locator('..').click();
+  await chooseOnlyModel(page, 'π₀.₅');
   await setup.getByRole('button', { name: 'Compute', exact: true }).click();
-  await page.locator('summary').filter({ hasText: /^Training settings/ }).click();
+  await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
   await expect(page.getByRole('spinbutton', { name: 'Batch size', exact: true })).toHaveValue('3');
   expect(writes).toEqual([]);
   expect(unexpected).toEqual([]);
@@ -223,11 +229,11 @@ async function trainingAdmission(page: Page, { format = 'lerobot_v3', dimensions
   await page.goto('/');
   await page.getByRole('button', { name: 'Fine-tune', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
-  await expect(page.getByRole('radio', { name: 'fixture/admission', exact: true })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'fixture/admission', exact: true })).toBeVisible();
   const setup = page.getByRole('navigation', { name: 'Training setup' });
   async function chooseModel(label: string) {
     await setup.getByRole('button', { name: 'Model', exact: true }).click();
-    await page.getByRole('radio', { name: label, exact: true }).locator('..').click();
+    await chooseOnlyModel(page, label);
     await setup.getByRole('button', { name: 'Compute', exact: true }).click();
   }
   return { state, setup, chooseModel, start: page.getByRole('button', { name: 'Start fine-tuning', exact: true }) };
@@ -248,7 +254,7 @@ test('native training explains the v3 requirement before submission while SmolVL
 
 test('native model dimension bounds allow GR00T vectors above 36 and reject narrower architectures', async ({ page }) => {
   const fixture = await trainingAdmission(page, { dimensions: 100 });
-  await expect(page.getByRole('radio', { name: 'fixture/admission', exact: true })).toBeEnabled();
+  await expect(page.getByRole('checkbox', { name: 'fixture/admission', exact: true })).toBeEnabled();
   await fixture.chooseModel('GR00T N1.7');
   await expect(fixture.start).toBeEnabled();
   await fixture.start.click();
@@ -301,15 +307,15 @@ test('disconnected cloud labels implemented trainers separately from planned ada
     ['EVO-1', 'Compute unavailable'],
     ['OpenVLA', 'Coming soon'],
   ]) {
-    const radio = page.getByRole('radio', { name: model, exact: true });
+    const radio = page.getByRole('checkbox', { name: model, exact: true });
     await expect(radio).toBeDisabled();
     await expect(radio.locator('..').locator('.training-model-status')).toHaveText(label);
   }
   // SmolVLA can still be selected before cloud preparation, but this cannot launch.
-  const smol = page.getByRole('radio', { name: 'SmolVLA', exact: true });
+  const smol = page.getByRole('checkbox', { name: 'SmolVLA', exact: true });
   await expect(smol).toBeEnabled();
   await expect(smol.locator('..').locator('.training-model-status')).toHaveText('Connect Google Cloud');
-  await smol.locator('..').click();
+  await chooseOnlyModel(page, 'SmolVLA');
   await fixture.setup.getByRole('button', { name: 'Compute', exact: true }).click();
   await expect(fixture.start).toBeDisabled();
   expect(fixture.state.submitted).toEqual([]);

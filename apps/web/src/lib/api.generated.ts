@@ -539,6 +539,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/jobs/{job_id}/cover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Dataset Cover */
+        get: operations["dataset_cover_api_v1_jobs__job_id__cover_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/jobs/{job_id}/episodes": {
         parameters: {
             query?: never;
@@ -1036,6 +1053,26 @@ export interface paths {
         put?: never;
         /** Stop */
         post: operations["stop_api_v1_projects__project_id__teaching_sessions__job_id__stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/training-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Training Plan
+         * @description Validate all independent recipes without accepting jobs or allocating GPUs.
+         */
+        post: operations["training_plan_api_v1_projects__project_id__training_plan_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2674,8 +2711,16 @@ export interface components {
             artifact_id?: string | null;
             /** Candidates */
             candidates?: components["schemas"]["Precision"][];
+            /** Dataset Camera Mappings */
+            dataset_camera_mappings?: {
+                [key: string]: {
+                    [key: string]: string;
+                };
+            } | null;
             /** Dataset Job Id */
             dataset_job_id?: string | null;
+            /** Dataset Job Ids */
+            dataset_job_ids?: string[] | null;
             evaluation?: components["schemas"]["Evaluation"];
             limits?: components["schemas"]["Limits"] | null;
             native_distillation?: components["schemas"]["NativeDistillation"] | null;
@@ -4408,6 +4453,37 @@ export interface operations {
             };
         };
     };
+    dataset_cover_api_v1_jobs__job_id__cover_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EpisodePreview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_episodes_api_v1_jobs__job_id__episodes_get: {
         parameters: {
             query?: {
@@ -5420,6 +5496,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    training_plan_api_v1_projects__project_id__training_plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PolicyRequest"][];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

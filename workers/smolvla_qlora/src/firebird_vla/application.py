@@ -55,12 +55,26 @@ def main():
                 raise ValueError("Training needs an immutable Hub dataset intake")
             recipe = parameters.get("training") or {}
             if any(
-                key in recipe for key in ("method", "output_dir", "dataset_id", "dataset_revision")
+                key in recipe
+                for key in (
+                    "method",
+                    "output_dir",
+                    "dataset_id",
+                    "dataset_revision",
+                    "dataset_sources",
+                )
             ):
                 raise ValueError("Method, output and dataset lineage are owned by the application")
+            from .dataset_mixture import bind_sources
+
+            sources = bind_sources(
+                job,
+                recipe.get("camera_keys") or [recipe.get("camera_key", "observation.images.front")],
+            )
             cfg = TrainConfig.from_dict(
                 {
                     **recipe,
+                    **({"dataset_sources": sources} if sources else {}),
                     "method": method,
                     "dataset_id": data["repo_id"],
                     "dataset_revision": data["revision"],
@@ -93,6 +107,10 @@ def main():
                     cfg.temporal[key] != previous.temporal[key] for key in previous.temporal
                 ):
                     raise ValueError("Resume must preserve the checkpoint temporal configuration")
+                if previous.dataset_sources != sources:
+                    raise ValueError(
+                        "Resume must preserve every combined dataset and camera mapping"
+                    )
                 cfg = replace(previous, output_dir=str(output / "training"))
             from .model import require_runtime
 

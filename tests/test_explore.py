@@ -27,6 +27,29 @@ SHA = "a" * 40
 CAMERA = "observation.images.wrist"
 
 
+def test_cover_avoids_frames_and_video_probes_and_survives_restart(dataset, tmp_path):
+    async def check():
+        job, _, calls, respond, _, _ = dataset
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            explorer = DatasetExplorer(client, cover_cache=tmp_path)
+            cover = await explorer.cover(job)
+            assert len(cover.cameras) == 1 and not cover.samples
+            assert not any(
+                method == "HEAD" or "/data/" in url or url.endswith("mp4") for method, url in calls
+            )
+            before = len(calls)
+            assert await explorer.cover(job) == cover
+            restarted = DatasetExplorer(client, cover_cache=tmp_path)
+            assert await restarted.cover(job) == cover
+            assert len(calls) == before
+            cache = next(tmp_path.glob("*.json"))
+            cache.write_text('{"repo_id":"wrong"}')
+            assert await DatasetExplorer(client, cover_cache=tmp_path).cover(job) == cover
+            assert len(calls) > before
+
+    asyncio.run(check())
+
+
 def parquet(rows, *, row_group_size=None, repeat_column=None):
     # Only trusted fixture construction runs as code; production sends bytes to
     # a fixed reader. The core test environment never needs native dependencies.
@@ -353,12 +376,14 @@ def test_preview_routes_validate_state_bounds_and_serialize_contract(
     monkeypatch.setattr(
         api,
         "DatasetExplorer",
-        lambda: DatasetExplorer(httpx.AsyncClient(transport=httpx.MockTransport(respond))),
+        lambda **kwargs: DatasetExplorer(
+            httpx.AsyncClient(transport=httpx.MockTransport(respond)), **kwargs
+        ),
     )
     with TestClient(api.create_app(Settings(data_dir=tmp_path))) as client:
         base = "/api/v1/jobs"
         assert client.get(f"{base}/missing/episodes").status_code == 404
-        for suffix in ("episodes", "episodes/0"):
+        for suffix in ("episodes", "episodes/0", "cover"):
             rejected = client.get(f"{base}/policy/{suffix}")
             assert rejected.status_code == 422
             assert "dataset inspection" in rejected.json()["detail"]
@@ -368,6 +393,8 @@ def test_preview_routes_validate_state_bounds_and_serialize_contract(
         assert client.get(f"{base}/done/episodes?limit=25").status_code == 422
         assert client.get(f"{base}/done/episodes/2").status_code == 404
         assert client.get(f"{base}/done/episodes/-1").status_code == 404
+        cover = client.get(f"{base}/done/cover")
+        assert cover.status_code == 200 and cover.json()["samples"] == []
         page = client.get(f"{base}/done/episodes?offset=1&limit=1")
         assert page.status_code == 200, page.text
         assert page.json()["episodes"][0]["episode_index"] == 1

@@ -22,7 +22,7 @@ smolvla = [
   "huggingface-hub==0.35.3",
   "safetensors==0.6.2",
 ]
-dev = ["pytest==8.4.2", "ruff==0.13.2"]
+dev = ["pytest==8.4.2", "ruff==0.13.2", "datasets==4.8.5", "numpy==2.2.6"]
 
 [project.scripts]
 firebird-finetune = "firebird_vla.train:main"

@@ -3,6 +3,8 @@
 @media(max-width:640px){.dataset-library-grid{grid-template-columns:1fr}.dataset-labeling>.library-heading{flex-wrap:wrap}.sample-navigation button{padding:10px 8px}.dataset-label-fields input,.dataset-label-fields textarea,.library-search,.conversion-form input{font-size:16px}}
 
 .dataset-label-fields input{width:100%;min-width:0}.dataset-labeling h2:focus{outline:none}
+.dataset-library-cover > .dataset-hover-hint { left: auto; right: 12px; display: flex; align-items: center; gap: 5px; }
+@media (hover: none) { .dataset-library-cover > .dataset-hover-hint { display: none; } }
 
 .dataset-labeling a[aria-disabled="true"]{opacity:.5;cursor:not-allowed}
 

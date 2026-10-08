@@ -23,22 +23,62 @@ function DatasetCover({ entry, active }: { entry: LibraryDataset; active: boolea
   const local = !entry.id.startsWith('inspection:') && entry.status === 'ready';
   const hub = entry.source === 'huggingface' && !!entry.job_id && entry.status === 'ready';
   const samples = useQuery({ queryKey: ['dataset-samples', entry.id], queryFn: () => datasetLibrary.samples(entry.id), enabled: active && local, retry: false });
-  const episodes = useQuery({ queryKey: ['dataset-episodes', entry.job_id, 0, 1], queryFn: () => api.episodes(entry.job_id!, 0, 1), enabled: active && hub, staleTime: Infinity, retry: false });
-  const index = episodes.data?.episodes[0]?.episode_index;
-  const preview = useQuery({ queryKey: ['dataset-episode', entry.job_id, index], queryFn: () => api.episode(entry.job_id!, index!), enabled: active && hub && index !== undefined, staleTime: Infinity, retry: false });
+  const preview = useQuery({ queryKey: ['dataset-cover', entry.job_id], queryFn: () => api.datasetCover(entry.job_id!), enabled: active && hub, staleTime: Infinity, retry: false });
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
+  const video = useRef<HTMLVideoElement>(null);
+  const wantsPlayback = useRef(false);
+  const [hovered, setHovered] = useState(false);
   const sample = samples.data?.[0];
   const camera = preview.data?.cameras[0];
-  const loading = !failed && ((local && samples.isPending) || (hub && episodes.isPending) || (hub && index !== undefined && preview.isPending) || (!!(sample || camera) && !loaded));
-  return <div className="dataset-library-cover">
+  function stopPreview() {
+    wantsPlayback.current = false;
+    setHovered(false);
+    video.current?.pause();
+    if (video.current && camera && loaded) video.current.currentTime = camera.start_seconds;
+  }
+  function playPreview() {
+    if (!active || failed) return;
+    wantsPlayback.current = true;
+    setHovered(true);
+    const element = video.current;
+    if (!element || !camera || !loaded) return;
+    if (element.currentTime >= camera.end_seconds - 1 / camera.fps || element.currentTime < camera.start_seconds)
+      element.currentTime = camera.start_seconds;
+    void element.play().then(() => { if (!wantsPlayback.current || !active) element.pause(); }).catch(() => {});
+  }
+  useEffect(() => { if (!active) stopPreview(); }, [active]);
+  useEffect(() => {
+    if (!hovered || !camera || !loaded || !active) return;
+    playPreview();
+    let frame = 0;
+    const advance = () => {
+      const element = video.current;
+      if (!element || !wantsPlayback.current) return;
+      // Chunked LeRobot videos may contain the next episode immediately after
+      // this interval. Loop one frame before its exclusive end boundary.
+      const end = Math.min(camera.end_seconds, Number.isFinite(element.duration) ? element.duration : Infinity) - 1 / camera.fps;
+      if (element.currentTime >= Math.max(camera.start_seconds, end)) element.currentTime = camera.start_seconds;
+      frame = requestAnimationFrame(advance);
+    };
+    frame = requestAnimationFrame(advance);
+    return () => { cancelAnimationFrame(frame); video.current?.pause(); };
+  }, [hovered, camera, loaded, active]);
+  useEffect(() => {
+    const pause = () => { if (document.hidden) stopPreview(); };
+    document.addEventListener('visibilitychange', pause);
+    return () => { document.removeEventListener('visibilitychange', pause); video.current?.pause(); };
+  }, []);
+  const loading = !failed && ((local && samples.isPending) || (hub && preview.isPending) || (!!(sample || camera) && !loaded));
+  return <div className="dataset-library-cover" onPointerEnter={event => { if (event.pointerType === 'mouse') playPreview(); }} onPointerLeave={stopPreview}>
     {sample && !failed && <img src={sampleImage(entry.id, sample.path)} alt={`${entry.name} · ${sample.camera}`} onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />}
-    {camera && !failed && <video src={`${apiMediaUrl(camera.url)}#t=${camera.start_seconds}`} preload="metadata" muted playsInline aria-label={`${entry.name} preview`} className={loaded ? 'loaded' : ''}
+    {camera && !failed && <video ref={video} src={`${apiMediaUrl(camera.url)}#t=${camera.start_seconds}`} preload="metadata" muted playsInline aria-label={`${entry.name} preview`} className={loaded ? 'loaded' : ''}
       onLoadedMetadata={event => { event.currentTarget.currentTime = camera.start_seconds; }}
       onLoadedData={() => { if (camera.start_seconds === 0) setLoaded(true); }}
       onSeeked={event => { if (Math.abs(event.currentTarget.currentTime - camera.start_seconds) < .05) setLoaded(true); }} onError={() => setFailed(true)} />}
     {!loaded || failed ? <div className="dataset-cover-placeholder"><Icon name="database" size={32}/><small>{loading ? 'Loading preview…' : 'Preview unavailable'}</small></div> : null}
     <span>{entry.example ? 'Synthetic example' : entry.source === 'huggingface' ? 'Hugging Face' : 'Local import'}</span>
+    {camera && loaded && !failed && <span className="dataset-hover-hint"><Icon name="play" size={12}/>{hovered ? 'Playing preview' : 'Hover to preview'}</span>}
   </div>;
 }
 

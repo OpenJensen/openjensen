@@ -114,7 +114,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise RuntimeError("Another application already owns this workspace") from exc
         storage = Storage(settings.data_dir)
         execution = Execution(storage, settings)
-        explorer = DatasetExplorer()
+        explorer = DatasetExplorer(cover_cache=settings.data_dir / "dataset-cover-cache")
         initialized = False
         try:
             await storage.initialize()
@@ -224,6 +224,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def explore(request: Request, job: Job, **kwargs):
         explorer = request.app.state.explorer
         try:
+            if kwargs.pop("cover", False):
+                return await explorer.cover(job)
             if "episode_index" in kwargs:
                 return await explorer.preview(job, **kwargs)
             return await explorer.page(job, **kwargs)
@@ -563,6 +565,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(422, "Verified simulation video is unavailable") from exc
         return FileResponse(path, media_type="video/mp4")
 
+    @app.post("/api/v1/projects/{project_id}/training-plan")
+    async def training_plan(
+        project_id: str,
+        payload: list[PolicyRequest],
+        projects: ProjectsDep,
+        execution: ExecutionDep,
+    ):
+        """Validate all independent recipes without accepting jobs or allocating GPUs."""
+        if await projects.get(project_id) is None:
+            raise HTTPException(404, "Project not found")
+        if not 2 <= len(payload) <= 16 or any(
+            item.operation != "policy.finetune" or item.resume_job_id or item.artifact_id
+            for item in payload
+        ):
+            raise HTTPException(422, "Choose two to sixteen new training recipes")
+        identities = [item.training.get("model_id") if item.training else None for item in payload]
+        if None in identities or len(set(identities)) != len(identities):
+            raise HTTPException(422, "Each selected model needs one distinct recipe")
+        try:
+            for item in payload:
+                runtime = execution.lifecycle.runtime(item.runtime_id)
+                if not runtime or runtime.execution != "skypilot":
+                    raise ValueError("Parallel model jobs require separate cloud GPU instances")
+                await execution.lifecycle.validate(project_id, item)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return {"valid": True, "jobs": len(payload), "gpus_per_job": 1}
+
     @app.post(
         "/api/v1/projects/{project_id}/policy-jobs",
         response_model=Job,
@@ -713,6 +743,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> EpisodePage:
         job = await get_job(job_id, execution)
         return await explore(request, job, offset=offset, limit=limit)
+
+    @app.get("/api/v1/jobs/{job_id}/cover", response_model=EpisodePreview)
+    async def dataset_cover(
+        job_id: str, request: Request, execution: ExecutionDep
+    ) -> EpisodePreview:
+        job = await get_job(job_id, execution)
+        return await explore(request, job, cover=True)
 
     @app.get("/api/v1/jobs/{job_id}/episodes/{episode_index}", response_model=EpisodePreview)
     async def get_episode(

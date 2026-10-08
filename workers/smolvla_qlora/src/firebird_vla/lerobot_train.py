@@ -272,7 +272,12 @@ def install_training_hooks(
     original_data = trainer.make_train_eval_datasets
 
     def make_data(cfg):
-        datasets = make_local_datasets(cfg, recipe) if local_root else original_data(cfg)
+        if recipe.get("dataset_sources"):
+            from .dataset_mixture import native_mixture
+
+            datasets = native_mixture(cfg, recipe)
+        else:
+            datasets = make_local_datasets(cfg, recipe) if local_root else original_data(cfg)
         temporal = resolved_temporal(
             cfg.policy,
             datasets[0].meta.fps,
@@ -306,6 +311,9 @@ def install_training_hooks(
             if any(splits[key] != expected[key] for key in ("train", "validation")):
                 raise ValueError("Native dataset selection differs from the saved lineage split")
             splits.update({key: value for key, value in expected.items() if key not in splits})
+        if resume and (resume / "splits.json").exists() and recipe.get("dataset_sources"):
+            if json.loads((resume / "splits.json").read_text()) != splits:
+                raise ValueError("Resume split differs from the combined pinned recipe")
         write_json(training / "splits.json", splits)
         emit(
             "preparing",
