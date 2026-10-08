@@ -14,7 +14,7 @@ function accumulationCapabilities(mode: AccumulationCatalog) {
     training_step_unit: mode === 'wrong-unit' ? 'microbatches' : 'optimizer_updates', training_world_size: mode === 'world-size' ? 2 : 1 };
 }
 
-async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 'stale' | 'unavailable' | 'legacy' | 'validating' | 'history' | 'empty' | 'local-snapshot' | 'local-unprepared' = 'running', openDetails = true, exportMode?: 'local' | 'remote' | 'remote-complete' | 'unconfigured' | 'failed' | 'local-dataset', accumulationCatalog: AccumulationCatalog = 'supported') {
+async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 'stale' | 'unavailable' | 'legacy' | 'validating' | 'history' | 'empty' | 'local-snapshot' | 'local-unprepared' = 'running', openDetails = true, exportMode?: 'local' | 'remote' | 'remote-complete' | 'unconfigured' | 'failed' | 'local-dataset', accumulationCatalog: AccumulationCatalog = 'supported', nativeSmol = false) {
   const submitted: Record<string, any>[] = [];
   const unexpected: string[] = [];
   const cancelled: string[] = [];
@@ -87,7 +87,7 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
     dataset: { source: exportMode === 'local-dataset' ? 'local' : 'huggingface' },
     ...(exportMode?.startsWith('remote') ? { storage: 'gcs', reload_verified: exportMode === 'remote-complete', step: 20 } : {}) };
   const artifacts: Record<string, any>[] = [artifact];
-  const extraRuntimes: Record<string, any>[] = [];
+  const extraRuntimes: Record<string, any>[] = nativeSmol ? [{id:'skypilot-gcp-A100-80GB',label:'A100 80 GB',accelerator:'A100-80GB',gpu_memory_mib:81920,execution:'skypilot',provider:'gcp',device:'cuda',enabled:true,training:true,training_model_ids:['smolvla']}] : [];
   if (exportMode === 'remote-complete') {
     job.status = 'succeeded';
     telemetry.status = 'succeeded';
@@ -147,7 +147,7 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
           runtimes: [...extraRuntimes, ...(exportMode && exportMode !== 'unconfigured' ? [{ id: 'act-cpu', label: 'Local CPU export', provider: 'local', execution: 'native', device: 'cpu', enabled: true, training: false, act_export: true, export_only: true, engine_evaluation: false, run: false, simulation: false }] : []), { id: 'skypilot-gcp-A100', label: 'A100', accelerator: 'A100', execution: 'skypilot', provider: 'gcp', device: 'cuda', enabled: true, training: true, simulation: false, training_model_ids: localDataset ? ['smolvla', 'act'] : ['smolvla'] }],
           compute: { local: { enabled: false, label: 'Local' }, gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 } },
           training_models: [
-            { id: 'smolvla', label: 'SmolVLA', description: 'Compact policy', model_id: 'lerobot/smolvla_base', model_revision: revision, methods: ['lora', 'qlora'], suggested_gpu_memory_gb: 16, ...accumulationCapabilities(accumulationCatalog) },
+            { id: 'smolvla', label: 'SmolVLA', description: 'Compact policy', model_id: 'lerobot/smolvla_base', model_revision: revision, methods: nativeSmol ? ['lora','qlora','full'] : ['lora','qlora'], native_full_runtime_ids: nativeSmol ? ['skypilot-gcp-A100','skypilot-gcp-A100-80GB'] : [], suggested_gpu_memory_gb: 16, ...accumulationCapabilities(accumulationCatalog) },
             { id: 'pi05', label: 'π₀.₅', description: 'Flow policy', model_id: 'lerobot/pi05_base', model_revision: revision, methods: ['full'], minimum_gpu_memory_gb: 40, runtime_ids: ['all-models-a100'] },
             ...(localDataset ? [{ id: 'act', label: 'ACT', description: 'Native policy', model_id: 'code://lerobot/act', model_revision: revision, methods: ['full'], backend: 'lerobot', minimum_gpu_memory_gb: 16, ...accumulationCapabilities(accumulationCatalog) }] : []),
           ], sources: [], training_methods: [{ id: 'lora', label: 'LoRA', description: 'Train adapters.' }, { id: 'qlora', label: 'QLoRA', description: 'Train quantized adapters.' }, { id: 'full', label: 'Full training', description: 'Train policy.' }], default_training_method: 'lora',
@@ -1860,4 +1860,48 @@ test('name-first model cards preserve multiple selection, family counts, and dis
   await noOverflow(page);
   await page.screenshot({ path: testInfo.outputPath('name-first-models-dark.png'), fullPage: true });
   expect(state.submitted).toEqual([]);
+});
+
+test('native SmolVLA selects the 80 GB target with grouped settings and centered help', async ({page},testInfo)=>{
+ const {submitted,unexpected}=await workspace(page,'empty',false,undefined,'supported',true);
+ await page.getByRole('button',{name:'Start a new fine-tuning',exact:true}).click();
+ const setup=page.getByRole('navigation',{name:'Training setup',exact:true});
+ await setup.getByRole('button',{name:'Model',exact:true}).click();
+ await chooseOnlyModel(page,'SmolVLA');
+ await page.getByRole('group',{name:'Training method',exact:true}).locator('input[value="full"]').check();
+ await setup.getByRole('button',{name:'Compute',exact:true}).click();
+ const gpu=page.getByRole('combobox',{name:'GPU',exact:true}); await gpu.click();
+ await expect(page.getByRole('option',{name:/T4/})).toHaveCount(0);
+ await page.getByRole('option',{name:'A100',exact:true}).filter({hasText:'80 GB'}).click();
+ await expect(gpu).toContainText('80 GB');
+ await page.locator('summary').filter({hasText:/^Advanced settings/}).click();
+ await expect(page.getByRole('group',{name:'Learning settings',exact:true})).toBeVisible();
+ const timing=page.getByRole('group',{name:'Action timing',exact:true});
+ expect(await timing.evaluate(element=>getComputedStyle(element).borderTopWidth)).toBe('0px');
+ const help=page.getByRole('button',{name:'Help for Steps',exact:true});
+ await expect(help.locator('svg')).toBeVisible();
+ await help.focus(); await expect(page.getByRole('tooltip')).toBeVisible();
+ const bounds=await help.evaluate(element=>{const button=element.getBoundingClientRect(),icon=element.querySelector('svg')!.getBoundingClientRect();return {x:(button.left+button.right-icon.left-icon.right)/2,y:(button.top+button.bottom-icon.top-icon.bottom)/2};});
+ expect(Math.abs(bounds.x)).toBeLessThan(1);expect(Math.abs(bounds.y)).toBeLessThan(1);
+ await page.getByLabel('Steps',{exact:true}).fill('100');
+ await page.screenshot({path:testInfo.outputPath('native-smol-80gb-settings.png'),fullPage:true});
+ await page.getByRole('button',{name:'Start fine-tuning',exact:true}).click();
+ await expect.poll(()=>submitted.length).toBe(1);
+ expect(submitted[0].training_method).toBe('full');
+ expect(submitted[0].runtime_id).toBe('skypilot-gcp-A100-80GB');
+ expect(unexpected).toEqual([]);
+});
+
+test('training timeline follows observed allocation environment downloads and final readiness',async({page},testInfo)=>{
+ const {monitor,telemetry,job}=await workspace(page,'preparing');
+ const timeline=monitor.getByRole('list',{name:'Training progress timeline',exact:true});
+ for(const [message,label] of [['Provisioning A100:1','Allocating compute'],['Installing worker dependencies','Preparing environment'],['Downloading the pinned model from Hugging Face','Loading data and model']]){
+  telemetry.current_action=message;telemetry.events.push({sequence:telemetry.events.length+1,stage:'preparing',message,timestamp:timestamp(),data:{}});
+  await expect(timeline.locator('[aria-current="step"]')).toContainText(label);
+  await expect(timeline.locator('.timeline-pending').last()).toContainText('Ready');
+ }
+ await page.screenshot({path:testInfo.outputPath('training-delivery-timeline.png'),fullPage:true});
+ job.status='succeeded';telemetry.status='succeeded';telemetry.phase='completed';
+ await expect(timeline.locator('.timeline-complete')).toHaveCount(7);
+ await noOverflow(page);
 });
