@@ -414,7 +414,7 @@ export function TrainingPanel({
     } as TrainingModel);
   const models = [...mergedModels.values()];
   const runtimes = options.data?.runtimes ?? [];
-  const cloudGpuMemory: Record<string, number> = { L4: 24, T4: 16, A100: 40 };
+  const cloudGpuMemory: Record<string, number> = { L4: 24, T4: 16, A100: 40, "A100-80GB": 80 };
   const runtimeMemory = (item: (typeof runtimes)[number]) =>
     item.gpu_memory_mib ? item.gpu_memory_mib / 1024 : cloudGpuMemory[item.accelerator ?? ""] ?? 0;
   const hasAdapter = (runtime: (typeof runtimes)[number], item: TrainingModel) =>
@@ -476,7 +476,7 @@ export function TrainingPanel({
   const supportsModel = (item: (typeof runtimes)[number]) =>
     item.enabled !== false &&
     selectedModels.length > 0 && selectedModels.every(model => hasAdapter(item, model));
-  const gpuChoices = ["L4", "T4", "A100"].filter(gpu => selectedModels.every(item => !item.minimum_gpu_memory_gb || cloudGpuMemory[gpu] >= item.minimum_gpu_memory_gb));
+  const gpuChoices = ["L4", "T4", "A100", "A100-80GB"].filter(gpu => selectedModels.every(item => !item.minimum_gpu_memory_gb || cloudGpuMemory[gpu] >= item.minimum_gpu_memory_gb));
   const defaultGpu = options.data?.compute?.gcp?.default_gpu ?? "A100";
   const localRuntimes = selectedModels.length <= 1 && options.data?.compute?.local.enabled
     ? runtimes.filter((item) => (item.provider ?? "local") === "local" && item.training && item.device === "cuda" && item.enabled !== false &&
@@ -1152,7 +1152,7 @@ export function TrainingPanel({
               onChange={setRuntimeId}
               disabled={busy}
               choices={[
-                ...gpuChoices.map((gpu) => ({ id: gpu, label: gpu, memory: ({ L4: "24 GB", T4: "16 GB", A100: "40 GB" } as Record<string, string>)[gpu] })),
+                ...gpuChoices.map((gpu) => ({ id: gpu, label: gpu === "A100-80GB" ? "A100" : gpu, memory: `${cloudGpuMemory[gpu]} GB` })),
                 ...localRuntimes.map((item) => ({ id: item.id, label: item.label,
                   memory: item.gpu_memory_mib ? `${number(item.gpu_memory_mib / 1024)} GB` : undefined })),
               ]}

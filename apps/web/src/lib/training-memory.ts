@@ -21,6 +21,6 @@ export function trainingMemory(model: TrainingModel, method: string, batch: numb
     return sum + (shape?.length === 3 && shape.every(value => Number.isFinite(value) && value > 0) ? shape.reduce((a, b) => a * b, 1) * 4 : 512 * 512 * 3 * 4);
   }, 0) * batch;
   const gb = Math.round(Math.max(model.minimum_gpu_memory_gb ?? 0, resident + activation + imageBytes / 1024 ** 3) * 2) / 2;
-  const recommended = ([['T4', 16], ['L4', 24], ['A100', 40]] as const).find(([, memory]) => memory >= Math.max(gb, model.minimum_gpu_memory_gb ?? 0))?.[0] ?? null;
+  const recommended = ([['T4', 16], ['L4', 24], ['A100', 40], ['A100-80GB', 80]] as const).find(([, memory]) => memory >= Math.max(gb, model.minimum_gpu_memory_gb ?? 0))?.[0] ?? null;
   return { gb, recommended, source: 'Catalog model budget at the reference batch (64 for SmolVLA, 4 otherwise), two 512px views unless the model requires another camera count, plus microbatch and image-tensor adjustments. Rounded to 0.5 GB. Includes optimizer storage in the catalog budget. Camera count, image dimensions and action horizon change the estimate; episode count and gradient accumulation do not multiply simultaneous GPU memory. Actual peaks depend on the worker and precision.' };
 }
