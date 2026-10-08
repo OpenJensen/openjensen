@@ -25,7 +25,8 @@ export function QuantizationPanel({ projectId, preferredArtifactId, preferredMod
   const artifacts = useQuery({queryKey:['artifacts',projectId],queryFn:()=>api.artifacts(projectId),enabled:!!projectId,retry:false,refetchInterval:3000});
   const cached = useQuery<PolicyJobAttempt>({queryKey:['native-quantization-attempt',projectId],queryFn:async()=>null,enabled:false,initialData:null,gcTime:Infinity});
   const [recovery,setRecovery] = useState({pending:false,unreadable:false});
-  const [entry,setEntry] = useState<{mode:QuantizeMode;artifactId?:string;jobId?:string;modelRunId?:string} | null>(preferredArtifactId && preferredMode ? {mode:preferredMode,artifactId:preferredArtifactId} : null);
+  const initialArtifact = artifacts.data?.find(artifact => artifact.id === preferredArtifactId && artifact.project_id === projectId);
+  const [entry,setEntry] = useState<{mode:QuantizeMode;artifactId?:string;jobId?:string;modelRunId?:string} | null>(preferredArtifactId && preferredMode ? {mode:preferredMode,artifactId:preferredArtifactId,modelRunId:initialArtifact?.job_id} : null);
   const [view,setView] = useState<'jobs'|'new'>(preferredArtifactId ? 'new' : 'jobs');
   const [handoffConsumed,setHandoffConsumed] = useState(!!(preferredArtifactId && preferredMode));
   useEffect(()=>{
@@ -40,7 +41,7 @@ export function QuantizationPanel({ projectId, preferredArtifactId, preferredMod
     if(preferredArtifactId && artifacts.isSuccess && !artifacts.isError) {
       const artifact=artifacts.data.find(item=>item.id===preferredArtifactId && item.project_id===projectId);
       const mode=artifact && quantizeModeFor(artifact);
-      if(mode) {setEntry({mode,artifactId:artifact.id});setHandoffConsumed(true);}
+      if(mode) {setEntry({mode,artifactId:artifact.id,modelRunId:artifact.job_id});setHandoffConsumed(true);}
     } else if(preferredJobId && jobs.isSuccess && !jobs.isError) {
       const job=jobs.data.find(item=>item.id===preferredJobId);
       const mode=job && quantizeJobMode(job,projectId);
@@ -49,7 +50,7 @@ export function QuantizationPanel({ projectId, preferredArtifactId, preferredMod
   },[preferredArtifactId,preferredJobId,artifacts.data,artifacts.isSuccess,artifacts.isError,jobs.data,jobs.isSuccess,jobs.isError,projectId,handoffConsumed]);
   function back(){setEntry(null);setView('jobs');setHandoffConsumed(true);}
   function backToModels(){setEntry(null);setView('new');setHandoffConsumed(true);}
-  const modelRunId=entry?.modelRunId ?? ownArtifacts.find(artifact=>artifact.id===entry?.artifactId)?.job_id;
+  const modelRunId=entry?.modelRunId;
   if(entry?.mode==='native') return <NativeQuantizationPanel projectId={projectId} preferredArtifactId={entry.artifactId} preferredJobId={entry.jobId} modelRunId={modelRunId} onBackToModels={backToModels} onBack={back} onPrepare={onPrepare} onReplay={onReplay} onPrepareSimulation={onPrepareSimulation} onModel={onModel}/>;
   if(entry?.mode==='gguf') return <WorkflowPanel projectId={projectId} stage="Quantize" tab="compute" onTabChange={()=>{}} onOpenQuantize={back} preferredArtifactId={entry.artifactId} preferredJobId={entry.jobId} onViewTraining={onPrepare} onBackToJobs={back} modelRunId={modelRunId} onBackToModels={backToModels} onModel={onModel}/>;
   return <section aria-label="Quantization workspace">
