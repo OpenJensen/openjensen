@@ -12,7 +12,7 @@ import {
   type PolicyRequest,
 } from "@/lib/api";
 import { datasetStarters } from "@/lib/dataset-starters";
-import { gradientAccumulationAvailable, trainingModels, type TrainingModel } from "@/lib/training-models";
+import { gradientAccumulationAvailable, groupedTrainingModels, trainingModels, type TrainingModel } from "@/lib/training-models";
 import { checkpointStep, trainingRunModelLabel } from "@/lib/checkpoints";
 import { CameraPlayer } from "@/components/dataset-explorer";
 import { Icon } from "@/components/icon";
@@ -418,14 +418,14 @@ export function TrainingPanel({
   const runtimeMemory = (item: (typeof runtimes)[number]) =>
     item.gpu_memory_mib ? item.gpu_memory_mib / 1024 : cloudGpuMemory[item.accelerator ?? ""] ?? 0;
   const hasAdapter = (runtime: (typeof runtimes)[number], item: TrainingModel) =>
-    !!item.model_revision && runtime.training && runtime.device === "cuda" &&
+    item.status !== "coming_soon" && !!item.model_revision && runtime.training && runtime.device === "cuda" &&
     (!item.minimum_gpu_memory_gb || runtimeMemory(runtime) >= item.minimum_gpu_memory_gb) &&
     (runtime.training_model_ids ?? ["smolvla"]).includes(item.id) &&
     // The bundled on-demand SmolVLA adapter remains usable before preflight.
     // Older API catalogs describe that state with an empty runtime_ids list.
     (item.id === "smolvla" || !item.runtime_ids || item.runtime_ids.includes(runtime.id));
-  const modelSupported = (item: TrainingModel) =>
-    (item.id === "smolvla" && !!item.model_revision) || runtimes.some(runtime => hasAdapter(runtime, item));
+  const modelSupported = (item: TrainingModel) => item.status !== "coming_soon" &&
+    ((item.id === "smolvla" && !!item.model_revision) || runtimes.some(runtime => hasAdapter(runtime, item)));
   let originalTraining = priorRequest?.training;
   let ancestorRequest = priorRequest;
   const visitedRuns = new Set<string>();
@@ -562,6 +562,8 @@ export function TrainingPanel({
       ? "Inspect the earlier training request before submitting another job."
     : !batch.hydrated || !batch.available || batch.journal
       ? "Resolve the saved multi-model plan before starting another job."
+    : !resumeId && selectedModels.some(item => item.status === "coming_soon")
+      ? "A selected model is coming soon. Choose an available model before training."
     : !resumeId && modelIds.some(id => !models.some(item => item.id === id))
       ? "A selected model is unavailable. Select your models again."
     : !loaded || options.isPending || jobs.isPending
@@ -1025,15 +1027,18 @@ export function TrainingPanel({
                 Model
               </h2>
             </div>
-            <fieldset className="training-model-grid">
+            <fieldset className="training-model-groups">
               <legend className="visually-hidden">Base model</legend>
-              {models.map((item) => {
+              {groupedTrainingModels(models).map(group => <section className="training-model-group" key={group.id} aria-labelledby={`training-family-${group.id}`}>
+                <h3 id={`training-family-${group.id}`}>{group.label}</h3>
+                <div className="training-model-grid">
+              {group.models.map((item) => {
                 const statusLabel = modelStatusLabel(item, modelSupported(item));
                 const memory = item.minimum_gpu_memory_gb ?? item.suggested_gpu_memory_gb;
                 return (
                 <label
                   key={item.id}
-                  className={`training-model-tile model-${item.id}`}
+                  className={`training-model-tile model-${item.id}${!modelSupported(item) ? " unavailable" : ""}`}
                   title={`${item.model_id} · ${item.description}`}
                 >
                   <input
@@ -1084,6 +1089,8 @@ export function TrainingPanel({
                 </label>
                 );
               })}
+                </div>
+              </section>)}
             </fieldset>
             {selectedModels.length > 1 && <p className="training-selection-note">{selectedModels.length} independent jobs · one cloud GPU per model</p>}
             {model && <div className="training-method-choices"><div className="training-edit-model">{selectedModels.length > 1 && selectedModels.map(item => <button type="button" key={item.id} aria-pressed={model.id === item.id} className="secondary-button" disabled={busy} onClick={() => { setModelBatchSizes(previous => ({ ...previous, [model.id]: recipe.batchSize })); setModelId(item.id); setRecipe(previous => ({ ...previous, batchSize: batchFor(item) })); }}>Settings for {item.label}</button>)}</div>

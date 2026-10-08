@@ -222,3 +222,10 @@
 .training-dataset.unavailable:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 .training-dataset-reason { display: none; position: absolute; z-index: 20; left: 0; bottom: calc(100% + 8px); width: min(320px, calc(100vw - 64px)); padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); box-shadow: 0 6px 20px #10294420; color: var(--ink); font-size: 12px; line-height: 1.6; }
 .training-dataset.unavailable:hover .training-dataset-reason, .training-dataset.unavailable:focus .training-dataset-reason { display: block; }
+
+.training-model-groups { display: grid; gap: 16px; }
+.training-model-group { min-width: 0; border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: var(--subtle); }
+.training-model-group > h3 { margin: 0 0 12px; font-size: 13px; font-weight: 600; }
+.training-model-tile.unavailable { background: var(--subtle); border-style: dashed; }
+.training-model-tile.unavailable > span, .training-model-tile.unavailable > input { opacity: .5; }
+@media (max-width: 700px) { .training-model-group { padding: 12px; } }

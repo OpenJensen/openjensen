@@ -1824,3 +1824,18 @@ test('dataset choices explain incompatibility before selection and update when t
   await expect(page.getByRole('checkbox', { name: 'fixture/robot', exact: true })).toBeDisabled();
   expect(state.submitted).toEqual([]);
 });
+
+test('model families use separate panels and coming-soon adapters remain disabled at the bottom', async ({ page }, testInfo) => {
+  const state = await temporalTraining(page, 'ACT');
+  await state.setup.getByRole('button', { name: 'Model', exact: true }).click();
+  const models = page.getByRole('group', { name: 'Base model', exact: true });
+  await expect(models.getByRole('region', { name: 'Vision-language-action models', exact: true })).toContainText('SmolVLA');
+  await expect(models.getByRole('region', { name: 'Action sequence policies', exact: true })).toContainText('ACT');
+  const comingSoon = models.getByRole('region', { name: 'Coming soon', exact: true });
+  await expect(comingSoon.getByRole('checkbox', { name: 'OpenVLA', exact: true })).toBeDisabled();
+  await expect(comingSoon.getByRole('checkbox', { name: 'OpenVLA', exact: true }).locator('..')).toHaveClass(/unavailable/);
+  await expect(models.locator('.training-model-group').last()).toHaveAccessibleName('Coming soon');
+  await noOverflow(page);
+  await page.screenshot({ path: testInfo.outputPath('model-families.png'), fullPage: true });
+  expect(state.submitted).toEqual([]);
+});
