@@ -48,7 +48,11 @@ export async function chooseTransformationModel(page:Page,operation:'distillatio
   if(operation === 'quantization') {
     const id=name.split(' · ').at(-1)!;
     const checkpoint=page.getByLabel('Checkpoint',{exact:true});
-    if(await checkpoint.count() && await checkpoint.locator(`option[value="${id}"]`).count()) {await checkpoint.selectOption(id);return;}
+    async function selectCheckpoint() {
+      if (await checkpoint.inputValue() !== id) await checkpoint.selectOption(id);
+      await expect(checkpoint).toHaveValue(id);
+    }
+    if(await checkpoint.count() && await checkpoint.locator(`option[value="${id}"]`).count()) {await selectCheckpoint();return;}
     const card=page.locator(runId ? `.model-overview-card[data-model-run="${runId}"]` : `.model-overview-card[data-artifact-id="${id}"]`);
     if(!await card.isVisible()) {
       const modelsBack=page.getByRole('button',{name:'← Back to models',exact:true});
@@ -57,8 +61,7 @@ export async function chooseTransformationModel(page:Page,operation:'distillatio
     }
     await card.click();
     await expect(checkpoint).toBeVisible();
-    await checkpoint.selectOption(id);
-    await expect(checkpoint).toHaveValue(id);
+    await selectCheckpoint();
     return;
   }
   const choice=page.getByRole('button',{name,exact:true,includeHidden:true});

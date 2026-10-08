@@ -1,4 +1,4 @@
-import { chooseTransformationModel, openTransformationJob, transformationJobs } from './lifecycle-controls';
+import { chooseTransformationModel, openTransformationJob, transformationJobs, quantizationModelOption } from './lifecycle-controls';
 import { selectProject } from './project-controls';
 import { startNativeQuantization, cancelNativeQuantization } from '../../apps/web/src/lib/native-quantization';
 import { expect, test, type Page } from '@playwright/test';
@@ -283,7 +283,7 @@ test('a delayed preferred policy does not replace a user choice made while it wa
   const state = await fixture(page); await fromStudent(page, state, 'late-student');
   const picker = page.getByRole('group', { name: 'Policy', exact: true }); await expect(picker.locator('input:checked')).toHaveCount(0);
   await choosePolicy(page, 'act-export'); state.artifacts.push(artifact('late-student', 'native_checkpoint'));
-  await refresh(page); await expect(page.getByLabel('Checkpoint').locator('option[value="late-student"]')).toHaveCount(1); await expectPolicy(page, 'act-export'); expect(state.posts).toHaveLength(0);
+  await refresh(page); await expect(quantizationModelOption(page, 'late-student')).toHaveCount(1); await expectPolicy(page, 'act-export'); expect(state.posts).toHaveLength(0);
 });
 
 test('unavailable session storage blocks a request instead of dropping its recovery journal', async ({ page }) => {
