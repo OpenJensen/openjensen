@@ -88,14 +88,20 @@ def install_fake_converters(monkeypatch, pipeline, observed):
 
     monkeypatch.setattr(pipeline.application, "import_policy", import_policy)
     monkeypatch.setattr(pipeline.application, "quantize_policy", quantize_policy)
-    monkeypatch.setattr(
-        pipeline,
-        "verify_cpu_inference",
-        lambda model, executable, output, **kwargs: {
-            "scope": "synthetic_input_native_inference",
-            "finite_action_values": 128,
-        },
-    )
+    def inference(model, executable, output, **kwargs):
+        observed.setdefault("inference_models", []).append(model.read_bytes())
+        output.mkdir(parents=True, exist_ok=True)
+        actions = output / "cpu-inference-smoke-actions.json"
+        pipeline.atomic_json(actions, {"values": [.125 if model.read_bytes() == b"packed" else .25] * 128})
+        report = {"scope": "synthetic_input_native_inference", "finite_action_values": 128,
+                  "backend": "cpu", "calls": 1, "synthetic_image_count": kwargs["cameras"],
+                  "image_size": 512, "action_chunk_size": 4, "max_action_dim": 32, "real_action_dim": 6,
+                  "input_sha256": "a" * 64, "executable_sha256": "b" * 64,
+                  "model_sha256": pipeline.sha256(model), "actions_sha256": pipeline.sha256(actions)}
+        pipeline.atomic_json(output / "cpu-inference-smoke.json", report)
+        return report
+
+    monkeypatch.setattr(pipeline, "verify_cpu_inference", inference)
 
 
 def test_selected_checkpoint_exports_quantizes_and_keeps_small_provenance(
@@ -116,6 +122,15 @@ def test_selected_checkpoint_exports_quantizes_and_keeps_small_provenance(
     assert not list(bundle.rglob("model.safetensors"))
     assert manifest["metadata"]["native_inference_verified"] is True
     assert response["report"]["inference"]["finite_action_values"] == 128
+    assert observed["inference_models"] == [b"float gguf", b"packed"]
+    comparison = response["report"]["comparison"]
+    assert comparison["action_rmse"] == comparison["action_max_abs_difference"] == .125
+    assert comparison["coordinates"] == 24
+    assert comparison["source_file_bytes"] == len(b"float gguf")
+    assert comparison["quantized_file_bytes"] == len(b"packed")
+    assert comparison["validation_loss"] is comparison["task_success"] is None
+    assert "quantization-comparison.json" in manifest["files"]
+    assert "reference-check/cpu-inference-smoke-actions.json" in manifest["files"]
     lineage = json.loads((bundle / "checkpoint-lineage.json").read_text())
     assert lineage["source_artifact_id"] == "training-job:checkpoint-000012"
     assert lineage["checkpoint_step"] == response["report"]["checkpoint_step"] == 12
@@ -150,6 +165,19 @@ def test_quantization_refuses_other_architectures_before_loading(tmp_path, pipel
     job = checkpoint_job(tmp_path, pipeline, architecture="act")
     with pytest.raises(ValueError, match="supports SmolVLA"):
         pipeline.quantize_checkpoint(job)
+
+
+def test_failed_reference_never_publishes_comparison_and_retires_intermediates(tmp_path, monkeypatch, pipeline):
+    install_fake_converters(monkeypatch, pipeline, {})
+    job = checkpoint_job(tmp_path, pipeline)
+    def fail(*args, **kwargs):
+        raise ValueError("Original prediction is non-finite")
+    monkeypatch.setattr(pipeline, "verify_cpu_inference", fail)
+    with pytest.raises(ValueError, match="Original prediction"):
+        pipeline.quantize_checkpoint(job)
+    assert not list(Path(job["output_dir"]).glob(".floating-*"))
+    assert not (Path(job["output_dir"]) / "conversion").exists()
+    pipeline.application.verify(Path(job["artifact"]["path"]))
 
 
 def test_cloud_setup_contains_only_sources_and_pins_converter(tmp_path):

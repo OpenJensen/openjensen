@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import math
+import hashlib
+import json
 import os
 import re
 import subprocess
@@ -79,7 +81,8 @@ def verify_cpu_inference(model: Path, executable: Path, output: Path, *, cameras
                 stderr=subprocess.STDOUT,
                 timeout=300,
                 env={
-                    **os.environ,
+                    **{key: value for key, value in os.environ.items()
+                       if key not in {"VLA_EXTRA_TOKEN", "VLA_EXTRA_COUNT"}},
                     "VLA_N_THREADS": "2",
                     "OMP_NUM_THREADS": "2",
                     "VLA_IMG_SIZE": str(contract["image_size"]),
@@ -100,6 +103,19 @@ def verify_cpu_inference(model: Path, executable: Path, output: Path, *, cameras
     values = parse_prediction(log.read_text(), contract)
     if sha256(model) != model_sha:
         raise ValueError("Quantized model changed during native smoke inference")
+    executable_sha = sha256(executable)
+    inputs = {
+        "fixture": "vla_predict_check_fixed_inputs_v1",
+        "executable_sha256": executable_sha,
+        "synthetic_image_count": cameras,
+        "image_size": contract["image_size"],
+        "action_chunk_size": contract["chunk_size"],
+        "max_action_dim": contract["max_action_dim"],
+        "real_action_dim": contract["real_action_dim"],
+        "extra_tokens": False,
+    }
+    actions = output / "cpu-inference-smoke-actions.json"
+    atomic_json(actions, {"values": values})
     report = {
         "scope": "synthetic_input_native_inference",
         "backend": "cpu",
@@ -116,10 +132,62 @@ def verify_cpu_inference(model: Path, executable: Path, output: Path, *, cameras
         "packed_vision_tensors": contract["packed_vision_tensors"],
         "wall_seconds": time.monotonic() - started,
         "model_sha256": model_sha,
-        "executable_sha256": sha256(executable),
+        "executable_sha256": executable_sha,
+        "input_sha256": hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest(),
+        "actions_sha256": sha256(actions),
         "task_success": None,
         "deployment_verified": False,
     }
-    atomic_json(output / "cpu-inference-smoke-actions.json", {"values": values})
     atomic_json(output / "cpu-inference-smoke.json", report)
     return report
+
+
+def compare_cpu_predictions(reference, candidate, reference_output: Path, candidate_output: Path):
+    """Compare paired native outputs, excluding padding; never claim held-out loss."""
+    keys = ("input_sha256", "executable_sha256", "synthetic_image_count", "image_size",
+            "action_chunk_size", "max_action_dim", "real_action_dim")
+    if any(reference.get(key) is None or reference[key] != candidate.get(key) for key in keys):
+        raise ValueError("Quantization comparison requires identical inputs, dimensions and verifier")
+    if any(report.get("backend") != "cpu" or report.get("calls") != 1
+           for report in (reference, candidate)):
+        raise ValueError("Quantization comparison requires paired CPU predictions")
+    chunk, width, real = (reference[key] for key in
+                          ("action_chunk_size", "max_action_dim", "real_action_dim"))
+    if any(type(value) is not int or not 1 <= value <= 1000 for value in (chunk, width, real)) or real > width:
+        raise ValueError("Invalid quantization comparison dimensions")
+    values = []
+    for report, directory in ((reference, reference_output), (candidate, candidate_output)):
+        path = directory / "cpu-inference-smoke-actions.json"
+        if sha256(path) != report.get("actions_sha256"):
+            raise ValueError("Quantization comparison action evidence changed")
+        vector = json.loads(path.read_text())["values"]
+        if not isinstance(vector, list) or len(vector) != chunk * width or any(
+            type(value) not in (int, float) or not math.isfinite(value) for value in vector
+        ):
+            raise ValueError("Quantization comparison requires complete finite action chunks")
+        values.append([vector[step * width + channel]
+                       for step in range(chunk) for channel in range(real)])
+    errors = [abs(left - right) for left, right in zip(*values)]
+    mse = math.fsum(error * error for error in errors) / len(errors)
+    metrics = {"action_rmse": math.sqrt(mse), "action_mse": mse,
+               "action_mae": math.fsum(errors) / len(errors),
+               "action_max_abs_difference": max(errors)}
+    if not all(map(math.isfinite, metrics.values())):
+        raise ValueError("Quantization comparison differences are non-finite")
+    return {
+        "schema_version": 1,
+        "scope": "paired_synthetic_native_actions",
+        "reference": "floating_gguf_before_quantization",
+        "backend": "cpu",
+        "samples": 1,
+        "coordinates": len(errors),
+        "action_chunk_size": chunk,
+        "real_action_dim": real,
+        "input_sha256": reference["input_sha256"],
+        "executable_sha256": reference["executable_sha256"],
+        "source_model_sha256": reference["model_sha256"],
+        "quantized_model_sha256": candidate["model_sha256"],
+        "validation_loss": None,
+        "task_success": None,
+        **metrics,
+    }
