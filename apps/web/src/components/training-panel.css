@@ -160,7 +160,7 @@
 .training-recipe-review dt { color: var(--muted); font-size: 10px; margin-bottom: 5px; }
 .training-recipe-review dd { margin: 0; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .training-recipe-review > p { margin-top: 18px; color: var(--muted); font-size: 11px; line-height: 1.65; }
-.training-workspace .training-temporal { border-top: 1px solid var(--line); margin-top: 22px; padding-top: 18px; }
+.training-workspace .training-temporal { margin-top: 22px; padding-top: 18px; }
 .training-temporal legend { font-size: 12px; font-weight: 600; padding-top: 18px; }
 .training-temporal > p, .training-native-timing, .training-saved-recipe p { margin-top: 10px; color: var(--muted); font-size: 11px; line-height: 1.7; max-width: 680px; }
 .training-temporal-toggle { display: flex; align-items: center; gap: 9px; margin: 16px 0; font-size: 12px; cursor: pointer; }
