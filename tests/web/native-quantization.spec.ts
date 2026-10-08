@@ -9,7 +9,7 @@ const timestamp = '2026-09-27T12:00:00Z';
 const runtime = { id: 'act-cpu', label: 'Generated CPU quantizer', device: 'cpu', provider: 'local', execution: 'native', enabled: true, launchable: true, native_quantization: true, native_quantization_only: true, training: false, simulation: false, engine_evaluation: false, run: false };
 const engine = { id: 'engine', label: 'Existing Smol engine', device: 'cpu', provider: 'local', execution: 'native', enabled: true, training: false, simulation: false, engine_evaluation: true, run: true };
 function artifact(id: string, format = 'inference_export', metadata: Record<string, unknown> = {}, project = 'alpha') {
-  return { id, project_id: project, job_id: 'source', label: `Generated ${id}`, format, path: 'fixture', manifest_sha256: 'a'.repeat(64), file_bytes: 4096, parent_ids: [], metadata: { architecture: 'act', inference_only: true, ...metadata } };
+  return { id, project_id: project, job_id: metadata.architecture === 'smolvla' ? 'smol-source' : 'source', label: `Generated ${id}`, format, path: 'fixture', manifest_sha256: 'a'.repeat(64), file_bytes: 4096, parent_ids: [], metadata: { architecture: 'act', inference_only: true, ...metadata } };
 }
 function job(id: string, status = 'running', bits = 8, source = 'act-export') {
   return { id, project_id: 'alpha', kind: 'policy.quantize', status, stage: 'quantizing', created_at: timestamp, updated_at: timestamp, error: null as string | null, result: null as Record<string, unknown> | null,
@@ -56,6 +56,19 @@ async function fixture(page: Page) {
   await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true })).toBeVisible();
   return state;
 }
+async function choosePolicy(page: Page, id: string) {
+  const checkpoint = page.getByLabel('Checkpoint', { exact: true });
+  if (await checkpoint.count()) await checkpoint.selectOption(id);
+  else await page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${id}"]`).check();
+}
+async function expectPolicy(page: Page, id: string) {
+  await expect.poll(async () => {
+    const checkpoint = page.getByLabel('Checkpoint', { exact: true });
+    if (await checkpoint.count()) return await checkpoint.inputValue();
+    const checked = page.getByRole('group', { name: 'Policy', exact: true }).locator('input:checked');
+    return await checked.count() ? await checked.inputValue() : '';
+  }).toBe(id);
+}
 const submit = (page: Page) => page.getByRole('button', { name: 'Create ACT quantized package', exact: true });
 const refresh = (page: Page) => page.getByRole('button', { name: 'Refresh ACT quantization jobs', exact: true }).click();
 
@@ -72,30 +85,30 @@ test('capability is required and native-only workers cannot leak into the existi
 
 for (const bits of [8, 4]) test(`INT${bits} requires an owned compatible source and submits exact bounded payload only once`, async ({ page }) => {
   const state = await fixture(page); const picker = page.getByRole('group', { name: 'Policy', exact: true });
-  await expect(picker.getByRole('radio')).toHaveCount(2);
-  await expect(picker.getByRole('radio', { name: 'Generated act-export', exact: true })).toBeVisible();
-  await expect(picker.getByRole('radio', { name: 'Generated act-native', exact: true })).toBeVisible();
+  await expect(picker.getByRole('radio')).toHaveCount(0);
+  await expect(picker.getByLabel('Checkpoint').locator('option:enabled')).toHaveCount(2);
+  await expect(picker.getByLabel('Checkpoint').locator('option[value="smol"]')).toHaveCount(0);
   await expect(page.getByRole('group', { name: 'Compression', exact: true }).locator('input:checked')).toHaveValue('8'); await expect(submit(page)).toBeEnabled();
-  await picker.locator('input[value="act-export"]').check(); if (bits === 4) await page.getByRole('group', { name: 'Compression', exact: true }).locator('input[value="4"]').check();
+  await choosePolicy(page, 'act-export'); if (bits === 4) await page.getByRole('group', { name: 'Compression', exact: true }).locator('input[value="4"]').check();
   await submit(page).dblclick();
   await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toHaveAttribute('data-job-id', 'submitted');
   expect(state.posts).toEqual([{ operation: 'policy.quantize', runtime_id: 'act-cpu', artifact_id: 'act-export', native_quantization: { format: 'firebird_quant', bits, group_size: 64 }, timeout_seconds: 600 }]);
   await page.getByText('Activity and recorded report', { exact: true }).click();
   await expect(page.getByRole('region', { name: 'ACT quantization event log' })).toContainText('Generated activity for submitted');
   await chooseTransformationModel(page, 'quantization', 'Choose Generated smol · smol');
-  await expect(page.getByRole('group', { name: 'My model', exact: true }).locator('input:checked')).toHaveValue('smol');
+  await expect(page.getByLabel('Checkpoint',{exact:true})).toHaveValue('smol');
   await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toHaveCount(0);
   expect(state.posts).toHaveLength(1);
 });
 
 test('admission rejection remains visible and does not retry or imply conversion', async ({ page }) => {
-  const state = await fixture(page); state.submit = 'reject'; await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="act-export"]').check(); await submit(page).click();
+  const state = await fixture(page); state.submit = 'reject'; await choosePolicy(page, 'act-export'); await submit(page).click();
   await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true }).getByRole('alert')).toContainText('create an inference export first'); await expect(submit(page)).toBeEnabled();
   await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toHaveCount(0); expect(state.posts).toHaveLength(1);
 });
 
 for (const outcome of ['lost', 'bad-json', 'wrong-project', 'wrong-source', 'wrong-bits']) test(`${outcome} response pauses further submissions until an explicit history review`, async ({ page }) => {
-  const state = await fixture(page); state.submit = outcome; await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="act-export"]').check(); await submit(page).click();
+  const state = await fixture(page); state.submit = outcome; await choosePolicy(page, 'act-export'); await submit(page).click();
   await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true }).getByRole('alert')).toContainText('submission outcome is unverified'); await expect(submit(page)).toBeDisabled();
   const allow = page.getByRole('button', { name: 'I checked the jobs; allow a new request' }); await expect(allow).toBeDisabled();
   await refresh(page); await expect(allow).toBeEnabled(); expect(state.posts).toHaveLength(1);
@@ -153,7 +166,7 @@ test('selection changing during cancellation preflight does not cancel the previ
 });
 
 test('project switching resets precision/source and failed history blocks mutation', async ({ page }) => {
-  const state = await fixture(page); await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="act-export"]').check(); await page.getByRole('group', { name: 'Compression', exact: true }).locator('input[value="4"]').check();
+  const state = await fixture(page); await choosePolicy(page, 'act-export'); await page.getByRole('group', { name: 'Compression', exact: true }).locator('input[value="4"]').check();
   state.jobsError = true; await refresh(page); await expect(page.getByText(/Job updates are unavailable/)).toBeVisible(); await expect(submit(page)).toBeDisabled();
   state.jobsError = false; await selectProject(page, 'beta');
   await page.getByRole('button', { name: 'Start a new quantization', exact: true }).click();
@@ -163,7 +176,7 @@ test('project switching resets precision/source and failed history blocks mutati
 });
 
 test('disabled runtime and timeout bounds block submission without changing precision or source', async ({ page }) => {
-  const state = await fixture(page); await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="act-export"]').check();
+  const state = await fixture(page); await choosePolicy(page, 'act-export');
   for (const seconds of ['29', '601', '30.5', '']) { await page.getByLabel('Quantization timeout (seconds)', { exact: true }).fill(seconds); await expect(submit(page)).toBeDisabled(); }
   await page.getByLabel('Quantization timeout (seconds)', { exact: true }).fill('30'); await expect(submit(page)).toBeEnabled();
   state.runtimes = [{ ...runtime, enabled: false }, engine]; await refresh(page); await expect(page.getByText(/configured ACT quantization worker is unavailable/)).toBeVisible(); await expect(submit(page)).toBeDisabled(); expect(state.posts).toEqual([]);
@@ -208,7 +221,7 @@ for (const invalid of ['model-id', 'duplicate-seeds', 'reversed-seeds']) test(`i
 
 
 test('a completed earlier history refresh cannot authorize an ambiguous quantization retry', async ({ page }) => {
-  const state = await fixture(page); await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="act-export"]').check();
+  const state = await fixture(page); await choosePolicy(page, 'act-export');
   let release!: () => void; state.postGate = new Promise<void>(resolve => { release = resolve; }); state.submit = 'lost';
   await submit(page).click(); await expect.poll(() => state.posts.length).toBe(1);
   await refresh(page); await expect(page.getByRole('button', { name: 'Refresh ACT quantization jobs', exact: true })).toBeEnabled(); release();
@@ -228,7 +241,7 @@ test('a delayed cancel response keeps the newly selected quantization job', asyn
 });
 
 test('uncertain quantization survives stage navigation and reload until fresh history review', async ({ page }) => {
-  const state = await fixture(page); state.submit = 'lost'; await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="act-export"]').check(); await submit(page).click();
+  const state = await fixture(page); state.submit = 'lost'; await choosePolicy(page, 'act-export'); await submit(page).click();
   await expect(page.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toBeVisible();
   await page.getByRole('link', { name: 'Dataset', exact: true }).click(); await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await page.getByRole('button', { name: 'Review request', exact: true }).click();
@@ -251,9 +264,9 @@ async function fromStudent(page: Page, state: Awaited<ReturnType<typeof fixture>
 
 test('preferred distilled policy is selected once and polling preserves a later explicit choice', async ({ page }) => {
   const state = await fixture(page); await fromStudent(page, state, 'act-native');
-  const picker = page.getByRole('group', { name: 'Policy', exact: true }); await expect(picker.locator('input:checked')).toHaveValue('act-native');
-  await picker.locator('input[value="act-export"]').check(); await refresh(page); await expect(page.getByRole('button', { name: 'Refresh ACT quantization jobs', exact: true })).toBeEnabled();
-  await expect(picker.locator('input:checked')).toHaveValue('act-export'); await submit(page).click();
+  const picker = page.getByRole('group', { name: 'Policy', exact: true }); await expectPolicy(page, 'act-native');
+  await choosePolicy(page, 'act-export'); await refresh(page); await expect(page.getByRole('button', { name: 'Refresh ACT quantization jobs', exact: true })).toBeEnabled();
+  await expectPolicy(page, 'act-export'); await submit(page).click();
   await expect.poll(() => state.posts.length).toBe(1); expect(state.posts[0].artifact_id).toBe('act-export');
 });
 
@@ -265,13 +278,13 @@ test('preferred policy from another project is never selected and never enables 
 test('a delayed preferred policy does not replace a user choice made while it was absent', async ({ page }) => {
   const state = await fixture(page); await fromStudent(page, state, 'late-student');
   const picker = page.getByRole('group', { name: 'Policy', exact: true }); await expect(picker.locator('input:checked')).toHaveCount(0);
-  await picker.locator('input[value="act-export"]').check(); state.artifacts.push(artifact('late-student', 'native_checkpoint'));
-  await refresh(page); await expect(picker.locator('input[value="late-student"]')).toHaveCount(1); await expect(picker.locator('input:checked')).toHaveValue('act-export'); expect(state.posts).toHaveLength(0);
+  await choosePolicy(page, 'act-export'); state.artifacts.push(artifact('late-student', 'native_checkpoint'));
+  await refresh(page); await expect(page.getByLabel('Checkpoint').locator('option[value="late-student"]')).toHaveCount(1); await expectPolicy(page, 'act-export'); expect(state.posts).toHaveLength(0);
 });
 
 test('unavailable session storage blocks a request instead of dropping its recovery journal', async ({ page }) => {
   await page.addInitScript(() => { const original = Storage.prototype.setItem; Storage.prototype.setItem = function(key, value) { if (key.startsWith('firebird:job-attempt:')) throw new DOMException('Storage unavailable', 'SecurityError'); return original.call(this, key, value); }; });
-  const state = await fixture(page); await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="act-export"]').check(); await submit(page).click();
+  const state = await fixture(page); await choosePolicy(page, 'act-export'); await submit(page).click();
   await expect(submit(page)).toBeDisabled(); expect(state.posts).toHaveLength(0);
 });
 
@@ -287,7 +300,7 @@ test('a preferred policy waits for its compatible owned artifact to arrive', asy
   const state = await fixture(page); await fromStudent(page, state, 'arriving-student');
   const picker = page.getByRole('group', { name: 'Policy', exact: true }); await expect(picker.locator('input:checked')).toHaveCount(0);
   state.artifacts.push(artifact('arriving-student', 'native_checkpoint')); await refresh(page);
-  await expect(picker.locator('input:checked')).toHaveValue('arriving-student'); await expect(submit(page)).toBeEnabled(); expect(state.posts).toHaveLength(0);
+  await expectPolicy(page, 'arriving-student'); await expect(submit(page)).toBeEnabled(); expect(state.posts).toHaveLength(0);
 });
 
 
@@ -300,7 +313,7 @@ test('an acknowledged job remains visible when clearing its recovery journal fai
       return original.call(this, key);
     };
   });
-  const state = await fixture(page); await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="act-export"]').check(); await submit(page).click();
+  const state = await fixture(page); await choosePolicy(page, 'act-export'); await submit(page).click();
   await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toHaveAttribute('data-job-id', 'submitted');
   await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true }).getByRole('alert')).toContainText('Browser session storage is unavailable');
   await expect(page.getByText('Submitting one local quantization job…', { exact: true })).toHaveCount(0);
@@ -313,7 +326,7 @@ test('an acknowledged job remains visible when clearing its recovery journal fai
 
 test('journal cleanup after navigation exposes recovery instead of a permanent pending state', async ({ page }) => {
   await page.addInitScript(() => { const original = Storage.prototype.removeItem; Storage.prototype.removeItem = function(key) { if (key.startsWith('firebird:job-attempt:')) throw new DOMException('Storage unavailable', 'SecurityError'); return original.call(this, key); }; });
-  const state = await fixture(page); await page.getByRole('group', { name: 'Policy', exact: true }).locator('input[value="act-export"]').check();
+  const state = await fixture(page); await choosePolicy(page, 'act-export');
   let release!: () => void; state.postGate = new Promise<void>(resolve => { release = resolve; });
   await submit(page).click(); await expect.poll(() => state.posts.length).toBe(1);
   await page.getByRole('link', { name: 'Dataset', exact: true }).click(); await page.getByRole('link', { name: 'Quantize', exact: true }).click();
@@ -385,7 +398,7 @@ test('quantization mutation ACK status contract accepts only six exact strings',
 });
 
 for (const phase of ['submit', 'cancel-preflight', 'cancel-receipt'] as const) test(`quantization malformed ${phase} status never clears request recovery`, async ({ page }) => {
-  const state = await fixture(page); await page.getByRole('radio', { name: 'Generated act-export', exact: true }).check();
+  const state = await fixture(page); await choosePolicy(page, 'act-export');
   if (phase === 'submit') {
     await page.route('**/api/v1/projects/alpha/policy-jobs', route => {
       const request = route.request().postDataJSON(); state.posts.push(request);

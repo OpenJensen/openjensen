@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CloudConnectionsPanel } from "@/components/cloud-connections";
+import { ModelVersionPicker } from "@/components/model-version-picker";
 import { ownedModels } from "@/lib/model-library";
 import { JobHistory } from "@/components/job-history";
 import { WorkflowChoiceGrid, type WorkflowChoice } from "@/components/workflow-choice-grid";
@@ -136,6 +137,8 @@ export function WorkflowPanel({
   preferredJobId,
   onViewTraining,
   onBackToJobs,
+  onBackToModels,
+  modelRunId,
   onModel,
 }: {
   projectId: string;
@@ -147,6 +150,8 @@ export function WorkflowPanel({
   preferredJobId?: string;
   onViewTraining?: () => void;
   onBackToJobs?: () => void;
+  onBackToModels?: () => void;
+  modelRunId?: string;
   onModel?: (artifactId: string) => void;
 }) {
   const client = useQueryClient();
@@ -815,7 +820,7 @@ export function WorkflowPanel({
     setSelectedJobId(id);
     setView("detail");
   };
-  const backToHistory = () => { mutation.reset(); cancel.reset(); if (onBackToJobs) onBackToJobs(); else setView("history"); };
+  const backToHistory = () => { mutation.reset(); cancel.reset(); if(view === "new" && modelRunId && onBackToModels) onBackToModels(); else if (onBackToJobs) onBackToJobs(); else setView("history"); };
 
   if (view === "history") return (
     <JobHistory
@@ -936,7 +941,7 @@ export function WorkflowPanel({
   const formIssue = selectionIssue ?? inputIssue ?? executionIssue;
   return (
     <section className="panel workflow-panel workflow-new-job">
-      <div className="workflow-view-navigation"><button className="text-link" type="button" disabled={mutation.isPending} onClick={backToHistory}>← All {historyTitle.toLowerCase()}</button></div>
+      <div className="workflow-view-navigation"><button className="text-link" type="button" disabled={mutation.isPending} onClick={backToHistory}>{modelRunId ? "← Back to models" : `← All ${historyTitle.toLowerCase()}`}</button></div>
       {preferencesBlocker && <p className="warning-box" role="status">{preferencesBlocker}</p>}
       {options.data && !runtimes.length && <div className="workflow-storage-note" role="status">
         <p>{stage === "Evaluate" ? "No evaluation target is available." : stage === "Run" ? "No policy runner is available." : "Connect a worker to start quantization."}</p>
@@ -950,9 +955,9 @@ export function WorkflowPanel({
             <label>Inspected dataset<select value={datasetId || datasets[0]?.id || ""} onChange={event => setDatasetId(event.target.value)}><option value="" disabled>Select an inspection</option>{datasets.map(job => <option key={job.id} value={job.id}>{"repo_id" in job.request ? job.request.repo_id : job.id}</option>)}</select></label>
             <label>Resume checkpoint<select value={resumeId} onChange={event => setResumeId(event.target.value)}><option value="">Start a new training run</option>{checkpoints.map(artifact => <option key={artifact.id} value={artifact.id}>{checkpointLabel(artifact, policyJobs, options.data?.training_models)}</option>)}{policyJobs.filter(job => job.kind === "policy.finetune" && ["failed", "interrupted", "cancelled"].includes(job.status)).map(job => <option key={job.id} value={`job:${job.id}`}>Last saved checkpoint · {job.id.slice(0, 8)}</option>)}</select></label>
           </> : <>
-            <WorkflowChoiceGrid name="input-policy" label="My model" value={selectedInput}
+            {stage === "Quantize" && modelRunId ? <ModelVersionPicker runId={modelRunId} projectId={projectId} artifacts={artifacts.data ?? []} jobs={policyJobs} value={selectedInput} onChange={value=>{setInput(value);mutation.reset();}} /> : <WorkflowChoiceGrid name="input-policy" label="My model" value={selectedInput}
               options={policyChoices} onChange={value => { setInput(value); mutation.reset(); }}
-              emptyMessage={artifacts.isPending ? "Loading policies…" : "Your saved policies will appear here."} />
+              emptyMessage={artifacts.isPending ? "Loading policies…" : "Your saved policies will appear here."} />}
             {(stage === "Evaluate" || stage === "Run") && !artifacts.isPending && !artifacts.isError && !inputs.length && <div className="workflow-storage-note" role="status">
               <p>Quantize a SmolVLA checkpoint first.</p>
               <button type="button" className="text-link" onClick={onOpenQuantize}>Go to quantization</button>

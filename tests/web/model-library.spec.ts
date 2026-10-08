@@ -73,10 +73,10 @@ test('cross-project continuation selects the model owner and exact model', async
 test('quantization selects the exact saved SmolVLA model and omits abstract sources', async ({ page }) => {
   const state = await fixture(page, ['smol', 'smol-second'].map(id => artifact(id, 'alpha', { format: 'training_checkpoint', metadata: { architecture: 'smolvla' } })));
   await page.getByRole('link', { name: 'Quantize', exact: true }).click(); await chooseTransformationModel(page, 'quantization', 'Choose Saved smol · smol');
-  await expect(page.getByRole('group', { name: 'My model', exact: true }).locator('input:checked')).toHaveValue('smol');
+  await expect(page.getByLabel('Checkpoint',{exact:true})).toHaveValue('smol');
   await expect(page.getByText('Abstract base', { exact: true })).toHaveCount(0); expect(state.mutations).toEqual([]);
   await chooseTransformationModel(page, 'quantization', 'Choose Saved smol-second · smol-second');
-  await expect(page.getByRole('group', { name: 'My model', exact: true }).locator('input:checked')).toHaveValue('smol-second');
+  await expect(page.getByLabel('Checkpoint',{exact:true})).toHaveValue('smol-second');
 });
 test('failed refresh keeps history visible and blocks actions until refreshed', async ({ page }) => {
   const state = await fixture(page); await openLibrary(page); await page.getByRole('button', { name: 'Open model Saved teacher · teacher' }).click();
@@ -140,25 +140,35 @@ test('distilled and quantized models share the model collection and reopen their
   expect(state.mutations).toEqual([]);
 });
 
-test('quantization groups checkpoints by named run and renames all its versions without choosing another checkpoint', async ({page},testInfo)=>{
-  const earlier=artifact('step20','alpha',{job_id:'run-first',label:'SmolVLA · step 20',format:'training_checkpoint',run_name:'Amber Crane',metadata:{architecture:'smolvla',step:20}});
-  const later=artifact('step100','alpha',{job_id:'run-first',label:'SmolVLA · step 100',format:'training_checkpoint',run_name:'Amber Crane',metadata:{architecture:'smolvla',step:100}});
-  const other=artifact('second','alpha',{job_id:'run-second',format:'training_checkpoint',run_name:'Silver Finch',metadata:{architecture:'smolvla'}});
+test('quantization opens one latest model per run and selects older checkpoints only inside', async ({page},testInfo)=>{
+  const earlier=artifact('step20','alpha',{job_id:'run-first',label:'SmolVLA · step 20',format:'training_checkpoint',metadata:{architecture:'smolvla',step:20,method:'lora'}});
+  const later=artifact('step100','alpha',{job_id:'run-first',label:'SmolVLA · step 100',format:'training_checkpoint',metadata:{architecture:'smolvla',step:100,method:'lora'}});
+  const other=artifact('second','alpha',{job_id:'run-second',format:'training_checkpoint',metadata:{architecture:'smolvla',step:50,precision:'Q4_0'}});
   const state=await fixture(page,[earlier,later,other]);
   await page.getByRole('link',{name:'Quantize',exact:true}).click();
   await page.getByRole('button',{name:'Start a new quantization',exact:true}).click();
-  const group=page.locator('details.model-run-group').filter({has:page.getByRole('button',{name:'Choose SmolVLA · step 20 · step20',exact:true,includeHidden:true})});
-  await expect(group).not.toHaveAttribute('open');
-  await group.locator('summary').click();
-  await expect(group.getByRole('button',{name:'Choose SmolVLA · step 20 · step20',exact:true})).toBeVisible();
-  await group.getByRole('button',{name:'Rename Amber Crane',exact:true}).click();
+  await expect(page.locator('.model-overview-card')).toHaveCount(2);
+  await expect(page.locator('details.model-run-group')).toHaveCount(0);
+  await expect(page.getByRole('combobox',{name:'Checkpoint',exact:true})).toHaveCount(0);
+  const card=page.locator('.model-overview-card[data-model-run="run-first"]');
+  await expect(card).toContainText('smolvla-100-lora');
+  await expect(card).not.toContainText('Step 20');
+  await page.screenshot({path:testInfo.outputPath('latest-model-overview.png'),fullPage:true});
+  await card.click();
+  const checkpoints=page.getByLabel('Checkpoint',{exact:true});
+  await expect(checkpoints).toHaveValue('step100');
+  await expect(checkpoints.locator('option[value="second"]')).toHaveCount(0);
+  await checkpoints.selectOption('step20');await expect(checkpoints).toHaveValue('step20');
+  await page.screenshot({path:testInfo.outputPath('checkpoint-selection-inside.png'),fullPage:true});
+  expect(state.mutations).toEqual([]);
+  await page.getByRole('button',{name:'← Back to models',exact:true}).click();
+  await expect(card).toContainText('smolvla-100-lora');
+  await card.click();await expect(checkpoints).toHaveValue('step100');
+  await openLibrary(page);
+  const group=page.getByRole('region',{name:'smolvla-100-lora · Run run-firs',exact:true});
+  await group.getByRole('button',{name:'Rename smolvla-100-lora',exact:true}).click();
   await group.getByLabel('Model name',{exact:true}).fill('Battery pickup');
   await group.getByRole('button',{name:'Save name',exact:true}).click();
-  await expect(group.locator('summary')).toContainText('Battery pickup');
-  await page.screenshot({path:testInfo.outputPath('named-checkpoint-groups.png'),fullPage:true});
-  await group.getByRole('button',{name:'Choose SmolVLA · step 20 · step20',exact:true}).click();
-  await expect(page.getByRole('group',{name:'My model',exact:true}).locator('input:checked')).toHaveValue('step20');
+  await expect(page.getByRole('region',{name:'Battery pickup · Run run-firs',exact:true})).toBeVisible();
   expect(state.mutations).toEqual([{name:'Battery pickup'}]);
-  expect(state.models.filter(model=>model.job_id==='run-first').every(model=>model.run_name==='Battery pickup')).toBe(true);
-  expect(other.run_name).toBe('Silver Finch');
 });

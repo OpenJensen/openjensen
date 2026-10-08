@@ -25,7 +25,7 @@ export function QuantizationPanel({ projectId, preferredArtifactId, preferredMod
   const artifacts = useQuery({queryKey:['artifacts',projectId],queryFn:()=>api.artifacts(projectId),enabled:!!projectId,retry:false,refetchInterval:3000});
   const cached = useQuery<PolicyJobAttempt>({queryKey:['native-quantization-attempt',projectId],queryFn:async()=>null,enabled:false,initialData:null,gcTime:Infinity});
   const [recovery,setRecovery] = useState({pending:false,unreadable:false});
-  const [entry,setEntry] = useState<{mode:QuantizeMode;artifactId?:string;jobId?:string} | null>(preferredArtifactId && preferredMode ? {mode:preferredMode,artifactId:preferredArtifactId} : null);
+  const [entry,setEntry] = useState<{mode:QuantizeMode;artifactId?:string;jobId?:string;modelRunId?:string} | null>(preferredArtifactId && preferredMode ? {mode:preferredMode,artifactId:preferredArtifactId} : null);
   const [view,setView] = useState<'jobs'|'new'>(preferredArtifactId ? 'new' : 'jobs');
   const [handoffConsumed,setHandoffConsumed] = useState(!!(preferredArtifactId && preferredMode));
   useEffect(()=>{
@@ -48,8 +48,10 @@ export function QuantizationPanel({ projectId, preferredArtifactId, preferredMod
     }
   },[preferredArtifactId,preferredJobId,artifacts.data,artifacts.isSuccess,artifacts.isError,jobs.data,jobs.isSuccess,jobs.isError,projectId,handoffConsumed]);
   function back(){setEntry(null);setView('jobs');setHandoffConsumed(true);}
-  if(entry?.mode==='native') return <NativeQuantizationPanel projectId={projectId} preferredArtifactId={entry.artifactId} preferredJobId={entry.jobId} onBack={back} onPrepare={onPrepare} onReplay={onReplay} onPrepareSimulation={onPrepareSimulation} onModel={onModel}/>;
-  if(entry?.mode==='gguf') return <WorkflowPanel projectId={projectId} stage="Quantize" tab="compute" onTabChange={()=>{}} onOpenQuantize={back} preferredArtifactId={entry.artifactId} preferredJobId={entry.jobId} onViewTraining={onPrepare} onBackToJobs={back} onModel={onModel}/>;
+  function backToModels(){setEntry(null);setView('new');setHandoffConsumed(true);}
+  const modelRunId=entry?.modelRunId ?? ownArtifacts.find(artifact=>artifact.id===entry?.artifactId)?.job_id;
+  if(entry?.mode==='native') return <NativeQuantizationPanel projectId={projectId} preferredArtifactId={entry.artifactId} preferredJobId={entry.jobId} modelRunId={modelRunId} onBackToModels={backToModels} onBack={back} onPrepare={onPrepare} onReplay={onReplay} onPrepareSimulation={onPrepareSimulation} onModel={onModel}/>;
+  if(entry?.mode==='gguf') return <WorkflowPanel projectId={projectId} stage="Quantize" tab="compute" onTabChange={()=>{}} onOpenQuantize={back} preferredArtifactId={entry.artifactId} preferredJobId={entry.jobId} onViewTraining={onPrepare} onBackToJobs={back} modelRunId={modelRunId} onBackToModels={backToModels} onModel={onModel}/>;
   return <section aria-label="Quantization workspace">
     {(preferredArtifactId || preferredJobId) && !handoffConsumed && <p role={artifacts.isError || jobs.isError ? 'alert' : 'status'}>{artifacts.isPending || jobs.isPending ? 'Loading the selected model or job…' : 'The selected model or job is unavailable or unsupported. No replacement has been selected.'}<button className="text-link" onClick={back}>Back to jobs</button></p>}
     {view==='jobs' ? <JobHistory title="Quantization jobs" newLabel="Start a new quantization"
@@ -62,7 +64,7 @@ export function QuantizationPanel({ projectId, preferredArtifactId, preferredMod
       })}
       onNew={()=>{setHandoffConsumed(true);setView('new');}} onSelect={id=>{const job=history.find(item=>item.id===id)!;setHandoffConsumed(true);setEntry({mode:quantizeJobMode(job,projectId)!,jobId:id});}}
       loading={jobs.isPending && !!projectId} error={jobs.error} disabled={!projectId} emptyMessage={projectId?'No quantization jobs yet.':'Select a project to see its jobs.'}/>
-      : <><div className="workflow-view-navigation"><button type="button" className="text-link" onClick={back}>← Back to jobs</button></div><ModelWorkflowPicker projectId={projectId} action="quantize" onLibrary={onLibrary} onSelect={artifact=>{const mode=quantizeModeFor(artifact);if(mode){setHandoffConsumed(true);setEntry({mode,artifactId:artifact.id});}}}/></>}
+      : <><div className="workflow-view-navigation"><button type="button" className="text-link" onClick={back}>← Back to jobs</button></div><ModelWorkflowPicker projectId={projectId} action="quantize" onLibrary={onLibrary} onSelect={artifact=>{const mode=quantizeModeFor(artifact) ?? ownArtifacts.filter(item=>item.job_id===artifact.job_id).map(quantizeModeFor).find(Boolean);if(mode){setHandoffConsumed(true);setEntry({mode,artifactId:artifact.id,modelRunId:artifact.job_id});}}}/></>}
     {(cached.data || recovery.pending || recovery.unreadable) && <div className="warning-box" role={recovery.unreadable?'alert':'status'}><p>{recovery.unreadable?'Saved request status could not be read.':'A quantization request needs review.'}</p><button type="button" className="secondary-button" onClick={()=>{setHandoffConsumed(true);setEntry({mode:'native'});}}>Review request</button></div>}
   </section>;
 }

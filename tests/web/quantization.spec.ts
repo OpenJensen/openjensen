@@ -7,6 +7,19 @@ function choice(page: Page, group: string, value: string) {
   return page.getByRole('group', { name: group, exact: true }).locator(`input[value="${value}"]`);
 }
 
+async function expectSelectedPolicy(page:Page,id:string,selected=true) {
+ await expect.poll(async()=>{
+  const checkpoint=page.getByLabel('Checkpoint',{exact:true});
+  if (await checkpoint.count()) return await checkpoint.inputValue() === id;
+  const radio=choice(page,'My model',id);
+  return await radio.count() ? await radio.isChecked() : false;
+ }).toBe(selected);
+}
+async function choosePolicy(page:Page,id:string) {
+ const checkpoint=page.getByLabel('Checkpoint',{exact:true});
+ if(await checkpoint.count()) await checkpoint.selectOption(id);else await choice(page,'My model',id).check();
+}
+
 
 async function workspace(page: Page, cloudOnly = false, cloudChecks = false,
   initialize?: (data: { jobs: Record<string, any>[]; artifacts: Record<string, any>[] }) => void) {
@@ -75,11 +88,12 @@ test('explicitly selects a cloud checkpoint and quantizes it with visible precis
   await chooseTransformationModel(page, 'quantization', 'Choose LoRA checkpoint · recent-100');
   await expect(page.getByRole('group', { name: 'My model', exact: true })).toBeVisible();
   const picker = page.getByRole('group', { name: 'My model', exact: true });
-  await expect(choice(page, 'My model', 'recent-100')).toBeChecked();
-  await expect(picker.getByText('Latest checkpoint', { exact: false })).toBeVisible();
-  await expect(picker.getByRole('radio')).toHaveCount(3);
+  await expectSelectedPolicy(page,'recent-100');
+  await expect(picker.getByLabel('Checkpoint',{exact:true}).locator('option:checked')).toContainText('Latest checkpoint');
+  await expect(picker.getByRole('radio')).toHaveCount(0);
+  await expect(picker.getByLabel('Checkpoint',{exact:true}).locator('option[value="old-900"]')).toHaveCount(0);
   await expect(choice(page, 'Compute', 'gcp')).toBeChecked();
-  await expect(choice(page, 'My model', 'recent-100').locator('..')).toContainText('Cloud storage');
+  await expect(page.getByRole('group',{name:'My model',exact:true})).toContainText('Cloud storage');
   await choice(page, 'Compression', 'recommended').focus();
   await page.keyboard.press('ArrowRight');
   await expect(choice(page, 'Compression', 'Q8_0')).toBeChecked();
@@ -108,7 +122,7 @@ test('preserves an earlier checkpoint selected from a training run through quant
   await expect(checkpointActions).toBeVisible();
   await checkpointActions.getByLabel('Checkpoint', { exact: true }).selectOption('recent-20');
   await checkpointActions.getByRole('button', { name: 'Quantize checkpoint' }).click();
-  await expect(choice(page, 'My model', 'recent-20')).toBeChecked();
+  await expectSelectedPolicy(page,'recent-20');
   await page.getByRole('button', { name: 'Start quantization', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0]).toMatchObject({ artifact_id: 'recent-20', precision: { language: 'Q8_0', vision: null } });
@@ -145,13 +159,12 @@ test('keeps unsupported checkpoints visible and explains the SmolVLA quantizatio
   Object.assign(artifacts.find(item => item.id === 'recent-100')!.metadata, { architecture: 'psi0' });
   await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new quantization', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Choose LoRA checkpoint · recent-100', exact: true })).toBeDisabled();
-  await chooseTransformationModel(page, 'quantization', 'Choose LoRA checkpoint · recent-20');
-  await choice(page, 'My model', 'recent-100').check();
-  await expect(choice(page, 'My model', 'recent-100')).toBeChecked();
+  await expect(page.locator('.model-overview-card[data-artifact-id="recent-100"]')).toBeEnabled();
+  await chooseTransformationModel(page, 'quantization', 'Choose LoRA checkpoint · recent-100');
+  await expect(page.getByLabel('Checkpoint',{exact:true}).locator('option[value="recent-100"]')).toHaveJSProperty('disabled',true);
   await expect(page.getByText(/GGUF quantization currently supports SmolVLA checkpoints/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start quantization', exact: true })).toBeDisabled();
-  await choice(page, 'My model', 'recent-20').check();
+  await choosePolicy(page,'recent-20');
   await expect(page.getByRole('button', { name: 'Start quantization', exact: true })).toBeEnabled();
   expect(submitted).toEqual([]);
   expect(unexpected).toEqual([]);
@@ -182,7 +195,7 @@ test('native evaluation targets remain usable while cloud training targets are e
   await page.getByRole('button', { name: 'New evaluation', exact: true }).click();
   await expect(choice(page, 'Compute', 'xbox')).toBeChecked();
   await expect(choice(page, 'Compute', 'gcp')).toHaveCount(0);
-  await choice(page, 'My model', 'packed-policy').check();
+  await choosePolicy(page,'packed-policy');
   await expect(page.getByRole('button', { name: 'Start evaluation', exact: true })).toBeEnabled();
   expect(unexpected).toEqual([]);
 });
@@ -199,10 +212,10 @@ test('model names distinguish checkpoint choices and training runs while legacy 
   await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await chooseTransformationModel(page, 'quantization', 'Choose LoRA checkpoint · recent-100');
   const picker = page.getByRole('group', { name: 'My model', exact: true });
-  await expect(picker.getByRole('radio', { name: 'SmolVLA · Step 100', exact: true })).toBeVisible();
-  await expect(choice(page, 'My model', 'recent-100').locator('..')).toContainText('Run recent-r');
-  await expect(picker.getByRole('radio', { name: 'ACT · Step 900', exact: true })).toBeVisible();
-  await expect(picker.getByRole('radio', { name: 'Psi-Zero · Step 30', exact: true })).toBeVisible();
+  await expect(picker.getByLabel('Checkpoint',{exact:true})).toHaveValue('recent-100');
+  await expect(page.getByRole('group',{name:'My model',exact:true})).toContainText('Run recent-r');
+  await expect(picker.getByLabel('Checkpoint',{exact:true}).locator('option[value="old-900"]')).toHaveCount(0);
+  await expect(picker.getByLabel('Checkpoint',{exact:true}).locator('option[value="psi-checkpoint"]')).toHaveCount(0);
   await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   const runs = page.locator('.job-history-entry');
   await expect(runs.filter({ hasText: /SmolVLA · LORA/ })).toHaveCount(1);
@@ -248,7 +261,7 @@ test('opens a previous quantization job from history without mixing its details 
   await detail.getByText('Details and logs', { exact: true }).click();
   await expect(detail.getByText('prior-quantization', { exact: true })).toBeVisible();
   await detail.getByRole('button', { name: 'New quantization', exact: true }).click();
-  await expect(choice(page, 'My model', 'recent-100')).not.toBeChecked();
+  await expectSelectedPolicy(page,'recent-100',false);
   await expect(page.getByRole('article', { name: 'Quantize job details' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: /^Download / })).toHaveCount(0);
   await page.getByRole('button', { name: '← All quantization jobs', exact: true }).click();
@@ -272,8 +285,8 @@ for (const stage of ['Evaluate', 'Run']) {
     await expect(page.getByRole('group', { name: 'My model', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: stage === 'Evaluate' ? 'New evaluation' : 'New run', exact: true }).click();
     await expect(choice(page, 'Compute', 'gcp')).toBeChecked();
-    await expect(choice(page, 'My model', 'cloud-q8')).not.toBeChecked();
-    await choice(page, 'My model', 'cloud-q8').check();
+    await expectSelectedPolicy(page,'cloud-q8',false);
+    await choosePolicy(page,'cloud-q8');
     await expect(page.getByText('Synthetic inputs · no task success score')).toBeVisible();
     await page.getByRole('button', { name: stage === 'Evaluate' ? 'Start evaluation' : 'Reload and run', exact: true }).click();
     await expect.poll(() => submitted.length).toBe(1);
@@ -325,7 +338,7 @@ for (const stage of ['Evaluate', 'Run']) {
     await page.getByRole('button', { name: 'Go to quantization', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Quantization jobs', exact: true })).toBeVisible();
     await chooseTransformationModel(page, 'quantization', 'Choose LoRA checkpoint · recent-100');
-    await expect(choice(page, 'My model', 'recent-100')).toBeChecked();
+    await expectSelectedPolicy(page,'recent-100');
     await expect(page.getByRole('button', { name: 'Start quantization', exact: true })).toBeEnabled();
     expect(submitted).toEqual([]);
     expect(unexpected).toEqual([]);

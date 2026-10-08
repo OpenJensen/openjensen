@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, artifactDownloadUrl, isActive, type Job } from '@/lib/api';
 import { storeAttempt, storedAttempt, type PolicyJobAttempt } from '@/lib/policy-job-attempt';
+import { ModelVersionPicker } from './model-version-picker';
 import { WorkflowChoiceGrid } from './workflow-choice-grid';
 import { publicPath } from '@/lib/base-path';
 import { WorkbenchDisclosure } from './workbench-disclosure';
@@ -15,7 +16,7 @@ class QuantizationJournalUnavailable extends Error {
   constructor() { super('Browser session storage is unavailable. Restore it and reload, then inspect recorded jobs before submitting again.'); }
 }
 
-export function NativeQuantizationPanel({ projectId, preferredArtifactId, preferredJobId, onJobSelected, onPrepare, onReplay, onPrepareSimulation, onBack, onModel }: { projectId: string; preferredArtifactId?: string; preferredJobId?: string; onJobSelected?: (id: string) => void; onPrepare: () => void; onReplay?: (artifactId: string) => void; onPrepareSimulation?: (source: SimulationHandoff) => void; onBack: () => void; onModel?: (artifactId: string) => void }) {
+export function NativeQuantizationPanel({ projectId, preferredArtifactId, preferredJobId, onJobSelected, onPrepare, onReplay, onPrepareSimulation, onBack, onBackToModels, modelRunId, onModel }: { projectId: string; preferredArtifactId?: string; preferredJobId?: string; onJobSelected?: (id: string) => void; onPrepare: () => void; onReplay?: (artifactId: string) => void; onPrepareSimulation?: (source: SimulationHandoff) => void; onBack: () => void; onBackToModels?: () => void; modelRunId?: string; onModel?: (artifactId: string) => void }) {
   const client = useQueryClient();
   const options = useQuery({ queryKey: ['policy-options'], queryFn: api.policyOptions, retry: false, refetchInterval: 10_000 });
   const jobs = useQuery({ queryKey: ['jobs', projectId], queryFn: () => api.jobs(projectId), enabled: !!projectId, retry: false, refetchInterval: 2_000 });
@@ -117,7 +118,7 @@ export function NativeQuantizationPanel({ projectId, preferredArtifactId, prefer
     } finally { busy.current = false; if (mounted.current) { setPending(null); setConfirmCancel(null); } }
   }
   return <section className="panel native-simulation native-quantization native-workflow" aria-label="Native ACT quantization">
-    <div className="workflow-view-navigation"><button type="button" className="text-link" onClick={onBack}>← Back to jobs</button></div>
+    <div className="workflow-view-navigation"><button type="button" className="text-link" onClick={!jobId && modelRunId && onBackToModels ? onBackToModels : onBack}>{!jobId && modelRunId ? '← Back to models' : '← Back to jobs'}</button></div>
     <div className="native-workflow-toolbar"><span className="native-model-badge">ACT · INT8 / INT4</span><button className="text-link" aria-label="Refresh ACT quantization jobs" disabled={!projectId || jobs.isFetching} onClick={() => void refresh()}>Refresh</button></div>
     {jobId && !selected && <p role="status">{jobs.isPending ? 'Loading job…' : 'This quantization job is unavailable. No replacement has been selected.'}</p>}
     {selected && <article className="native-simulation-result" aria-label="ACT quantization job details" data-job-id={selected.id}>
@@ -162,7 +163,7 @@ export function NativeQuantizationPanel({ projectId, preferredArtifactId, prefer
         <button className="primary-button" disabled>Create ACT quantized package</button>
       </div> : <>
         <fieldset disabled={!editable} className="native-simulation-form"><legend className="visually-hidden">ACT quantization setup</legend>
-          <WorkflowChoiceGrid name="act-policy" label="Policy" value={input?.id ?? ''} onChange={chooseArtifact} options={inputs.map(item => ({ value: item.id, label: item.label, meta: item.id.slice(0, 8), icon: 'layers' }))} emptyMessage="No ACT inference policies. Import or export a complete policy first." />
+          {modelRunId ? <ModelVersionPicker runId={modelRunId} projectId={projectId} artifacts={artifacts.data ?? []} jobs={jobs.data ?? []} value={artifactId} onChange={chooseArtifact} label="Policy" /> : <WorkflowChoiceGrid name="act-policy" label="Policy" value={input?.id ?? ''} onChange={chooseArtifact} options={inputs.map(item => ({ value: item.id, label: item.label, meta: item.id.slice(0, 8), icon: 'layers' }))} emptyMessage="No ACT inference policies. Import or export a complete policy first." />}
           {excludedInputs && <p role="status">Some ACT packages are excluded because their model format, timing or simulator details are incomplete or unsupported. Refresh or export a complete inference package.</p>}
           {inputSemantics && <p className="field-help">Inherited action timing: plans {inputSemantics.prediction_horizon} actions and applies {inputSemantics.execution_horizon} per update. Packing keeps the saved timing; the server checks the policy before starting.</p>}
           {inputSemantics?.control_contract && <p role="status">This package carries a simulator control contract. Packing must preserve it. A compatible Run profile and separate rollout consent are still required; calibration and task success remain unverified.</p>}
