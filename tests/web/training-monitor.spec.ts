@@ -213,7 +213,7 @@ test('Fine-tune opens newest jobs first and opens details only after choosing a 
   expect(unexpected).toEqual([]);
 });
 
-test('new fine-tuning is a separate view with bold catalog memory budgets and a preserved draft', async ({ page }) => {
+test('new fine-tuning preserves its draft and shows muted catalog memory budgets below model names', async ({ page }) => {
   const { submitted, unexpected } = await workspace(page, 'history', false);
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Fine-tuning jobs', exact: true })).toHaveCount(0);
@@ -224,7 +224,11 @@ test('new fine-tuning is a separate view with bold catalog memory budgets and a 
   await expect(budget('SmolVLA')).toHaveText('16 GB+');
   await expect(budget('π₀.₅')).toHaveText('40 GB+');
   await expect(budget('OpenVLA')).toHaveText('GPU budget not verified');
-  expect(await budget('SmolVLA').evaluate(element => Number(getComputedStyle(element).fontWeight))).toBeGreaterThanOrEqual(700);
+  const card = page.getByRole('checkbox', { name: 'SmolVLA', exact: true }).locator('..');
+  const name = card.locator('.training-model-copy > span:first-child strong');
+  const budgetSize = await budget('SmolVLA').evaluate(element => Number.parseFloat(getComputedStyle(element).fontSize));
+  expect(await name.evaluate(element => Number.parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThan(budgetSize);
+  expect(await budget('SmolVLA').evaluate(element => Number(getComputedStyle(element).fontWeight))).toBeLessThan(600);
   await chooseOnlyModel(page, 'SmolVLA');
   await setup.getByRole('button', { name: 'Compute', exact: true }).click();
   await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
@@ -1825,17 +1829,35 @@ test('dataset choices explain incompatibility before selection and update when t
   expect(state.submitted).toEqual([]);
 });
 
-test('model families use separate panels and coming-soon adapters remain disabled at the bottom', async ({ page }, testInfo) => {
+test('name-first model cards preserve multiple selection, family counts, and disabled coming-soon adapters', async ({ page }, testInfo) => {
   const state = await temporalTraining(page, 'ACT');
   await state.setup.getByRole('button', { name: 'Model', exact: true }).click();
   const models = page.getByRole('group', { name: 'Base model', exact: true });
+  await expect(page.getByRole('heading', { name: 'Base model', exact: true })).toBeVisible();
+  const selectionCount = page.locator('.training-model-selection-count');
+  await expect(selectionCount).toHaveText('1 model selected');
+  await models.getByRole('checkbox', { name: 'SmolVLA', exact: true }).check();
+  await expect(models.getByRole('checkbox', { name: 'ACT', exact: true })).toBeChecked();
+  await expect(selectionCount).toHaveText('2 models selected');
+  await models.getByRole('checkbox', { name: 'ACT', exact: true }).uncheck();
+  await expect(selectionCount).toHaveText('1 model selected');
+  await models.getByRole('checkbox', { name: 'SmolVLA', exact: true }).uncheck();
+  await expect(selectionCount).toHaveText('0 models selected');
+  await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeDisabled();
+  await models.getByRole('checkbox', { name: 'ACT', exact: true }).check();
   await expect(models.getByRole('region', { name: 'Vision-language-action models', exact: true })).toContainText('SmolVLA');
   await expect(models.getByRole('region', { name: 'Action sequence policies', exact: true })).toContainText('ACT');
   const comingSoon = models.getByRole('region', { name: 'Coming soon', exact: true });
   await expect(comingSoon.getByRole('checkbox', { name: 'OpenVLA', exact: true })).toBeDisabled();
   await expect(comingSoon.getByRole('checkbox', { name: 'OpenVLA', exact: true }).locator('..')).toHaveClass(/unavailable/);
   await expect(models.locator('.training-model-group').last()).toHaveAccessibleName('Coming soon');
+  for (const family of await models.locator('.training-model-group').all()) {
+    await expect(family.locator('.training-model-family-count')).toHaveText(String(await family.getByRole('checkbox').count()));
+  }
   await noOverflow(page);
-  await page.screenshot({ path: testInfo.outputPath('model-families.png'), fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath('name-first-models.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Dark', exact: true }).click();
+  await noOverflow(page);
+  await page.screenshot({ path: testInfo.outputPath('name-first-models-dark.png'), fullPage: true });
   expect(state.submitted).toEqual([]);
 });
