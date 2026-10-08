@@ -362,6 +362,38 @@ for (const stage of ['Evaluate', 'Run']) {
 }
 
 
+test('quantization uses one compute picker and preserves compression and checkpoint choices across targets',async({page},testInfo)=>{
+ const {artifacts,submitted,unexpected}=await workspace(page,false,false,({artifacts})=>{
+  for(const artifact of artifacts) artifact.metadata.base_model={repository:'lerobot/smolvla_base'};
+ });
+ await page.route('**/api/v1/policy-options',route=>route.fulfill({json:{runtimes:[
+  {id:'gcp-l4',label:'L4',accelerator:'L4',device:'cuda',provider:'gcp',execution:'skypilot',enabled:true,gpu_memory_mib:24576},
+  {id:'gcp-a100-80',label:'A100',accelerator:'A100-80GB',device:'cuda',provider:'gcp',execution:'skypilot',enabled:true,gpu_memory_mib:81920},
+  {id:'local-gpu',label:'Local RTX 3070',device:'cuda',provider:'local',execution:'native',enabled:true,gpu_memory_mib:8192},
+  {id:'local-cpu',label:'Local CPU',device:'cpu',provider:'local',execution:'native',enabled:true},
+  {id:'unavailable',label:'Unavailable GPU',device:'cuda',provider:'local',execution:'native',enabled:false}],sources:[],training_models:[],training_methods:[],default_training_method:'lora',quantization_defaults:{cuda:{language:'Q8_0',vision:null},cpu:{language:'Q8_0',vision:null},note:''}}}));
+ await page.getByRole('link',{name:'Quantize',exact:true}).click();
+ await chooseTransformationModel(page,'quantization','Choose LoRA checkpoint · recent-100');
+ await expect(page.getByRole('combobox',{name:'Compute',exact:true})).toBeVisible();
+ await expect(page.getByRole('group',{name:'Compute',exact:true})).toHaveCount(0);
+ const memory=page.getByRole('region',{name:'Estimated quantization memory',exact:true});
+ await expect(memory).toContainText('≈ 4 GiB');await expect(memory).toContainText('≈ 9 GiB');
+ await page.getByRole('button',{name:'Help for Quantization memory estimate',exact:true}).focus();
+ await expect(page.getByRole('tooltip').filter({hasText:'450M-parameter'})).toBeVisible();
+ await choosePolicy(page,'recent-20');await choice(page,'Language compression','Q4_0').check();await choice(page,'Vision compression','Q8_0').check();
+ await selectCompute(page,'Local RTX 3070');await expectCompute(page,'local-gpu');
+ await expect(page.getByRole('button',{name:'Run quantization workflow',exact:true})).toBeDisabled();
+ await expect(page.getByText('This policy is stored on Google Cloud. Choose a cloud target.',{exact:true})).toBeVisible();
+ await page.getByRole('combobox',{name:'Compute',exact:true}).click();
+ const menu=page.getByRole('listbox',{name:'Compute',exact:true});await expect(menu.getByRole('option')).toHaveCount(4);await expect(menu.getByRole('option',{name:'Local CPU',exact:true})).toBeVisible();
+ await expect(menu.getByRole('option',{name:'A100',exact:true})).toContainText('80 GB');await menu.getByRole('option',{name:'A100',exact:true}).click();
+ await expectSelectedPolicy(page,'recent-20');await expect(choice(page,'Language compression','Q4_0')).toBeChecked();await expect(choice(page,'Vision compression','Q8_0')).toBeChecked();
+ await page.screenshot({path:testInfo.outputPath('quantization-components-compute.png'),fullPage:true});
+ await page.getByRole('button',{name:'Start quantization',exact:true}).click();await expect.poll(()=>submitted.length).toBe(1);
+ expect(submitted[0]).toMatchObject({operation:'policy.quantize',runtime_id:'gcp-a100-80',artifact_id:'recent-20',precision:{language:'Q4_0',vision:'Q8_0'}});
+ expect(unexpected).toEqual([]);
+});
+
 test('old recommended preference resolves to the single explicit 8-bit language choice',async({page})=>{
  await page.addInitScript(id=>localStorage.setItem(`firebird.workflow.${id}`,JSON.stringify({precision:'recommended',vision:false})),projectId);
  const {submitted}=await workspace(page);await page.getByRole('link',{name:'Quantize',exact:true}).click();

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CloudConnectionsPanel } from "@/components/cloud-connections";
-import { QuantizationCompression } from "@/components/quantization-settings";
+import { QuantizationCompression, QuantizationCompute } from "@/components/quantization-settings";
 import { ModelVersionPicker } from "@/components/model-version-picker";
 import { ownedModels } from "@/lib/model-library";
 import { JobHistory } from "@/components/job-history";
@@ -965,11 +965,11 @@ export function WorkflowPanel({
               {nativeQuantization && <details className="workflow-advanced"><summary>Compare language formats</summary><label className="workflow-check"><input type="checkbox" checked={preferences.compareQ4} onChange={event=>update("compareQ4",event.target.checked)} />Compare Q8 and Q4 (experimental)</label></details>}
             </>}
           </>}
-          <WorkflowChoiceGrid name="execution-target" label="Compute" value={runtime?.id ?? ""}
+          {stage === "Quantize" ? <QuantizationCompute artifact={inputArtifact} runtime={runtime} runtimes={runtimes} disabled={!ready || mutation.isPending} onChange={setRuntimeId} localGpuInference={nativeQuantization && runtime?.device === "cuda"} /> : <WorkflowChoiceGrid name="execution-target" label="Compute" value={runtime?.id ?? ""}
             disabled={!runtimes.length}
             options={runtimes.map(target => ({ value: target.id, label: target.label,
               meta: `${target.execution === "skypilot" ? "Cloud" : "Local"} · ${target.device === "cuda" ? "GPU" : "CPU"}`, icon: "layers" }))}
-            onChange={setRuntimeId} emptyMessage="Connect a compatible worker in Compute settings." />
+            onChange={setRuntimeId} emptyMessage="Connect a compatible worker in Compute settings." />}
           {(stage === "Evaluate" || stage === "Run") && <>
             {cloudEngine ? <p className="workflow-input-help">Synthetic inputs · no task success score</p> : <WorkflowChoiceGrid
               name="evaluation-method" label="Check type" value={preferences.mode} disabled={preferences.suite === "libero_spatial"}
