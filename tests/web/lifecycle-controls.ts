@@ -34,6 +34,7 @@ export async function chooseTransformationModel(page:Page,operation:'distillatio
     const history=await transformationJobs(page,operation);
     await history.getByRole('button',{name:`Start a new ${operation}`,exact:true}).click();
   }
+  await choice.waitFor({ state: 'attached' });
   const group = choice.locator('xpath=ancestor::details[contains(@class,"model-run-group")]');
   if(await group.count() && !await choice.isVisible()) await group.locator('summary').click();
   await choice.click();
