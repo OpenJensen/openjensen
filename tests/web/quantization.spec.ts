@@ -145,7 +145,12 @@ test('keeps unsupported checkpoints visible and explains the SmolVLA quantizatio
   Object.assign(artifacts.find(item => item.id === 'recent-100')!.metadata, { architecture: 'psi0' });
   await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new quantization', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Choose LoRA checkpoint · recent-100', exact: true })).toBeDisabled();
+  const unsupported = page.getByRole('button', { name: 'Choose LoRA checkpoint · recent-100', exact: true, includeHidden: true });
+  await unsupported.waitFor({ state: 'attached' });
+  const group = unsupported.locator('xpath=ancestor::details[contains(@class,"model-run-group")]');
+  if (!await unsupported.isVisible()) await group.locator('summary').click();
+  await expect(unsupported).toBeVisible();
+  await expect(unsupported).toBeDisabled();
   await chooseTransformationModel(page, 'quantization', 'Choose LoRA checkpoint · recent-20');
   await choice(page, 'My model', 'recent-100').check();
   await expect(choice(page, 'My model', 'recent-100')).toBeChecked();

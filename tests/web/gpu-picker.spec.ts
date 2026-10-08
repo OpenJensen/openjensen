@@ -10,7 +10,7 @@ async function openGpuPicker(page: Page, local = false) {
   const timestamp = '2026-09-26T12:00:00Z';
   const writes: string[] = [];
   const unexpected: string[] = [];
-  const runtimes = ['L4', 'T4', 'A100'].map(accelerator => ({
+  const runtimes = ['L4', 'T4', 'A100', 'A100-80GB'].map(accelerator => ({
     id: `skypilot-gcp-${accelerator}`, accelerator, label: accelerator,
     execution: 'skypilot', provider: 'gcp', region: 'us-central1',
     enabled: true, device: 'cuda', training: true, simulation: false,
@@ -66,8 +66,8 @@ test('GPU picker supports keyboard navigation, explicit selection and Escape wit
   await page.keyboard.press('ArrowDown');
   const menu = page.getByRole('listbox', { name: 'GPU', exact: true });
   await expect(menu).toBeVisible();
-  await expect(menu.getByRole('option')).toHaveCount(3);
-  await expect(menu.getByRole('option', { name: 'A100', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(menu.getByRole('option')).toHaveCount(4);
+  await expect(menu.getByRole('option', { name: 'A100', exact: true }).filter({hasText:'40 GB'})).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('Home');
   await expect(picker).toHaveAttribute('aria-activedescendant', (await menu.getByRole('option', { name: 'L4', exact: true }).getAttribute('id'))!);
   await expect(picker).toHaveAttribute('value', 'A100');
@@ -75,7 +75,7 @@ test('GPU picker supports keyboard navigation, explicit selection and Escape wit
   await expect(picker).toHaveAttribute('aria-activedescendant', (await menu.getByRole('option', { name: 'T4', exact: true }).getAttribute('id'))!);
   await page.keyboard.press('ArrowUp');
   await page.keyboard.press('End');
-  await expect(picker).toHaveAttribute('aria-activedescendant', (await menu.getByRole('option', { name: 'A100', exact: true }).getAttribute('id'))!);
+  await expect(picker).toHaveAttribute('aria-activedescendant', (await menu.getByRole('option', { name: 'A100', exact: true }).filter({hasText:'80 GB'}).getAttribute('id'))!);
   await page.keyboard.press('Home');
   await page.keyboard.press('Enter');
   await expect(menu).toHaveCount(0);
@@ -103,8 +103,8 @@ test('changing to a large model removes undersized GPUs and clears the previous 
   await expect(picker).toHaveAttribute('value', 'A100');
   await picker.click();
   const menu = page.getByRole('listbox', { name: 'GPU', exact: true });
-  await expect(menu.getByRole('option')).toHaveCount(1);
-  await expect(menu.getByRole('option', { name: 'A100', exact: true })).toBeVisible();
+  await expect(menu.getByRole('option')).toHaveCount(2);
+  await expect(menu.getByRole('option', { name: 'A100', exact: true }).filter({hasText:'40 GB'})).toBeVisible();
   await page.keyboard.press('Escape');
   await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
   await expect(page.getByRole('spinbutton', { name: 'Batch size', exact: true })).toHaveValue('4');
@@ -154,9 +154,9 @@ for (const theme of ['Light', 'Dark']) {
     await page.getByRole('button', { name: theme, exact: true }).click();
     await picker.click();
     const menu = page.getByRole('listbox', { name: 'GPU', exact: true });
-    await expect(menu.getByRole('option')).toHaveCount(4);
+    await expect(menu.getByRole('option')).toHaveCount(5);
     for (const [gpu, memory] of [['L4', '24 GB'], ['T4', '16 GB'], ['A100', '40 GB']]) {
-      await expect(menu.getByRole('option', { name: gpu, exact: true }).locator('.gpu-picker-memory')).toHaveText(memory);
+      await expect(menu.getByRole('option', { name: gpu, exact: true }).filter({hasText:memory}).locator('.gpu-picker-memory')).toHaveText(memory);
     }
     const bounds = await menu.boundingBox();
     expect(bounds).not.toBeNull();

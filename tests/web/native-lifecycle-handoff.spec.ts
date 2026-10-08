@@ -10,15 +10,11 @@ import { hasSimulatorControlContract, nativeQuantizationInput } from '../../apps
 const time = '2026-09-27T12:00:00Z', model = `sha256:${'f'.repeat(64)}`;
 const policyChoices = (page: Page, label: string) => page.getByRole(label === 'ACT inference policy' ? 'group' : 'radiogroup', { name: label === 'ACT inference policy' ? 'Policy' : label, exact: true });
 async function openSavedAct(page: Page) {
-  const choice = page.getByRole('button', { name: 'Choose Generated teacher · teacher', exact: true });
-  const lane = page.getByRole('region', { name: 'ACT distillation', exact: true }).or(page.getByRole('region', { name: 'Native ACT quantization', exact: true }));
-  const newJob=page.getByRole('button',{name:/^Start a new (distillation|quantization)$/});
-  await expect.poll(async()=>await newJob.isVisible() || await lane.isVisible() || await choice.isVisible()).toBe(true);
-  if(await newJob.isVisible()) await newJob.click();
-  await expect(lane.or(choice).first()).toBeVisible();
-  if (await lane.isVisible()) return;
-  await choice.click();
+  await expect(page).toHaveURL(/\/(distillation|quantization)\//);
+  const operation = page.url().includes('/distillation/') ? 'distillation' : 'quantization';
+  await chooseTransformationModel(page, operation, 'Choose Generated teacher · teacher');
 }
+
 const units = ['degrees', 'degrees', 'degrees', 'degrees', 'degrees', 'recorded_gripper'];
 const runtime = (id: string, capability: string) => ({ id, label: `Generated ${id}`, execution: 'native', provider: 'local', device: 'cpu', enabled: true, launchable: true, [capability]: true, [`${capability}_only`]: true, training: false, simulation: false, run: false, engine_evaluation: false });
 const runtimes = [runtime('student-cpu', 'native_distillation'), runtime('quant-cpu', 'native_quantization'), runtime('replay-cpu', 'native_replay')];
