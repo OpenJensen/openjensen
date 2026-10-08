@@ -1,4 +1,4 @@
-import { chooseTransformationModel, transformationJobs } from './lifecycle-controls';
+import { chooseTransformationModel, transformationJobs, selectedQuantizationModel, quantizationModelOption, selectQuantizationModel } from './lifecycle-controls';
 import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -148,7 +148,7 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
           compute: { local: { enabled: false, label: 'Local' }, gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 } },
           training_models: [
             { id: 'smolvla', label: 'SmolVLA', description: 'Compact policy', model_id: 'lerobot/smolvla_base', model_revision: revision, methods: nativeSmol ? ['lora','qlora','full'] : ['lora','qlora'], native_full_runtime_ids: nativeSmol ? ['skypilot-gcp-A100','skypilot-gcp-A100-80GB'] : [], suggested_gpu_memory_gb: 16, ...accumulationCapabilities(accumulationCatalog) },
-            { id: 'pi05', label: 'π₀.₅', description: 'Flow policy', model_id: 'lerobot/pi05_base', model_revision: revision, methods: ['full'], minimum_gpu_memory_gb: 40, runtime_ids: ['all-models-a100'] },
+            { id: 'pi05', label: 'π₀.₅', description: 'Flow policy', model_id: 'lerobot/pi05_base', model_revision: revision, methods: ['full'], minimum_gpu_memory_gb: 40, available: true, status: 'ready', runtime_ids: ['all-models-a100'] },
             ...(localDataset ? [{ id: 'act', label: 'ACT', description: 'Native policy', model_id: 'code://lerobot/act', model_revision: revision, methods: ['full'], backend: 'lerobot', minimum_gpu_memory_gb: 16, ...accumulationCapabilities(accumulationCatalog) }] : []),
           ], sources: [], training_methods: [{ id: 'lora', label: 'LoRA', description: 'Train adapters.' }, { id: 'qlora', label: 'QLoRA', description: 'Train quantized adapters.' }, { id: 'full', label: 'Full training', description: 'Train policy.' }], default_training_method: 'lora',
           quantization_defaults: { cuda: { language: 'Q8_0', vision: null }, cpu: { language: 'Q8_0', vision: null }, note: '' },
@@ -282,14 +282,20 @@ test('local training copies open the jobs-first wizard and retain native model a
   expect(unexpected).toEqual([]);
 });
 
-test('metadata-only local inspections cannot enter the training creation flow', async ({ page }) => {
+test('metadata-only local inspections stay removable but cannot be added or submitted', async ({ page }) => {
   const { submitted, unexpected } = await workspace(page, 'local-unprepared', false);
   await page.getByRole('link', { name: 'Dataset', exact: true }).click();
   await page.getByRole('button', { name: 'Open dataset Local dataset', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Train on this dataset', exact: true })).toHaveCount(0);
   await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
-  await expect(page.getByRole('checkbox', { name: 'Local dataset', exact: true })).toBeDisabled();
+  const dataset = page.getByRole('checkbox', { name: 'Local dataset', exact: true });
+  await expect(dataset).toBeChecked();
+  await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeDisabled();
+  await dataset.uncheck();
+  await expect(dataset).not.toBeChecked();
+  await expect(dataset).toBeDisabled();
+  await dataset.locator('..').focus();
   await expect(page.getByText('Prepare an immutable training copy when importing this local dataset.')).toBeVisible();
   expect(submitted).toEqual([]);
   expect(unexpected).toEqual([]);
@@ -580,7 +586,7 @@ test('ACT export-only computer never appears as an engine execution target', asy
     if (stage === 'Run') await page.getByRole('button', { name: 'Check inference', exact: true }).click();
     if (stage === 'Quantize') {
       await page.getByRole('button', { name: 'Start a new quantization', exact: true }).click();
-      await expect(page.getByRole('button', { name: 'Choose Checkpoint step 20 · checkpoint-artifact', exact: true })).toBeDisabled();
+      await expect(page.locator('.model-overview-card[data-artifact-id="checkpoint-artifact"]')).toBeDisabled();
       await expect(page.getByRole('button', { name: 'ACT', exact: true })).toHaveCount(0);
       continue;
     }
@@ -1107,7 +1113,7 @@ test('ACT exported packages show distinct identities and hand the exact second p
   await page.getByRole('button', { name: 'Light', exact: true }).click();
   await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
   await expect(page.getByRole('region',{name:'Native ACT quantization',exact:true})).toBeVisible();
-  await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toBeChecked();
+  await expect(selectedQuantizationModel(page)).toHaveValue(state.packages[1].id);
   expect(state.submitted).toEqual([]);
   await noOverflow(page);
   await page.screenshot({ path: testInfo.outputPath('act-export-quantization-handoff.png'), fullPage: true });
@@ -1124,12 +1130,11 @@ test('ACT exported packages show distinct identities and hand the exact second p
 test('ACT export handoff keeps a later manual source choice through a refresh', async ({ page }) => {
   const state = await exportedPackageFixture(page);
   await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
-  const policies = page.getByRole('group', { name: 'Policy', exact: true });
-  await expect(policies.locator(`input[value="${state.packages[1].id}"]`)).toBeChecked();
-  await policies.locator(`input[value="${state.packages[0].id}"]`).check();
+  await expect(selectedQuantizationModel(page)).toHaveValue(state.packages[1].id);
+  await chooseTransformationModel(page, 'quantization', `Choose ACT inference export · ${state.packages[0].id}`);
   state.artifacts.reverse();
   await page.getByRole('button', { name: 'Refresh ACT quantization jobs', exact: true }).click();
-  await expect(policies.locator(`input[value="${state.packages[0].id}"]`)).toBeChecked();
+  await expect(selectedQuantizationModel(page)).toHaveValue(state.packages[0].id);
   expect(state.submitted).toEqual([]); expect(state.unexpected).toEqual([]);
 });
 
@@ -1178,12 +1183,12 @@ test('ACT export preferred package stays within its owning project', async ({ pa
   await page.route('**/api/v1/projects/other-project/*', route => route.fulfill({ json: [] }));
   await page.reload(); await reopenExport(page);
   await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
-  await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toBeChecked();
+  await expect(selectedQuantizationModel(page)).toHaveValue(state.packages[1].id);
   await selectProject(page, 'other-project');
   await page.getByRole('button',{name:'Start a new quantization',exact:true}).click();
   await expect(page.getByText('No saved models in this project yet')).toBeVisible();
-  await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator('input:checked')).toHaveCount(0);
-  await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toHaveCount(0);
+  await expect(selectedQuantizationModel(page)).toHaveCount(0);
+  await expect(quantizationModelOption(page, state.packages[1].id)).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Create ACT quantized package', exact: true })).toHaveCount(0);
   expect(state.submitted).toEqual([]);
 });
@@ -1195,7 +1200,7 @@ test('ACT export handoff preserves an unresolved quantization request without re
   const stored = JSON.stringify({ state: 'uncertain', message: 'Earlier ACT request has an unverified outcome.' });
   await page.evaluate(({ key, stored }) => sessionStorage.setItem(key, stored), { key, stored });
   await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
-  await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toBeChecked();
+  await expect(selectedQuantizationModel(page)).toHaveValue(state.packages[1].id);
   await expect(page.getByText('Earlier ACT request has an unverified outcome. Further submissions are paused.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Create ACT quantized package', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toBeDisabled();
@@ -1322,11 +1327,10 @@ for (const location of ['metadata', 'checkpoint'] as const) for (const field of 
   await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
   await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await chooseTransformationModel(page,'quantization',`Choose ACT inference export · ${state.packages[0].id}`);
-  const policies = page.getByRole('group', { name: 'Policy', exact: true });
-  await expect(policies.locator(`input[value="${guarded.id}"]`)).toHaveCount(0);
+  await expect(quantizationModelOption(page, guarded.id)).toHaveCount(0);
   await expect(page.getByText('Some ACT packages are excluded because their model format, timing or simulator details are incomplete or unsupported. Refresh or export a complete inference package.', { exact: true })).toBeVisible();
-  await expect(policies.locator(`input[value="${legacy.id}"]`)).toHaveCount(1);
-  await expect(policies.locator('input:checked')).toHaveValue(legacy.id);
+  await expect(quantizationModelOption(page, legacy.id)).toHaveCount(1);
+  await expect(selectedQuantizationModel(page)).toHaveValue(legacy.id);
   await expect(page.getByRole('button', { name: 'Create ACT quantized package', exact: true })).toBeEnabled();
   expect(state.submitted).toEqual([]);
 });
@@ -1351,7 +1355,7 @@ test('complete simulator-bound export keeps exact Distill and Quantize handoffs 
   await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
   await page.reload(); await reopenExport(page);
   await exportedPackage(page, item.id).getByRole('button', { name: 'Quantize this package' }).click();
-  await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator('input:checked')).toHaveValue(item.id);
+  await expect(selectedQuantizationModel(page)).toHaveValue(item.id);
   await expect(page.getByText('Inherited action timing: plans 32 actions and applies 8 per update.', { exact: false })).toBeVisible();
   await expect(page.getByText(/A compatible Run profile and separate rollout consent are still required/)).toBeVisible();
   expect(item.metadata).toEqual(original);

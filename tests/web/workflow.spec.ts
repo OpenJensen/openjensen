@@ -106,7 +106,10 @@ test('browser workflow persists real subprocess results and downloads the same a
   expect(job.result.artifacts.every((artifact: { metadata: { fixture_only: boolean } }) => artifact.metadata.fixture_only)).toBeTruthy();
   expect(await cli('jobs', 'show', submitted.id)).toEqual(job);
   const allArtifacts = await cli('policy', 'artifacts', project.id);
-  expect(allArtifacts).toEqual(expect.arrayContaining(job.result.artifacts));
+  for (const artifact of job.result.artifacts) {
+    expect(allArtifacts.find((item: { id: string }) => item.id === artifact.id))
+      .toEqual({ ...artifact, run_name: expect.any(String) });
+  }
   expect(allArtifacts.some((artifact: { id: string }) => artifact.id === workflow.modelId)).toBeTruthy();
   const events = await cli('jobs', 'events', submitted.id);
   expect(events.some((event: { message: string }) => event.message === 'Optimizer step 1')).toBeTruthy();

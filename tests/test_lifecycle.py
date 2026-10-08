@@ -925,17 +925,33 @@ def test_model_run_names_survive_restart_without_changing_checkpoint_or_job_reco
         assert original_job["status"] == "succeeded", original_job
         artifacts = client.get(f"/api/v1/projects/{pid}/artifacts").json()
         assert artifacts and artifacts[0]["run_name"] == "policy-float"
-        original_manifest = (configured.data_dir / artifacts[0]["path"] / "manifest.json").read_bytes()
+        original_manifest = (
+            configured.data_dir / artifacts[0]["path"] / "manifest.json"
+        ).read_bytes()
         endpoint = f"/api/v1/projects/{pid}/model-runs/{jid}/name"
-        assert client.put(endpoint, json={"name":"  Battery robot  "}).json() == {"name":"Battery robot"}
+        assert client.put(endpoint, json={"name": "  Battery robot  "}).json() == {
+            "name": "Battery robot"
+        }
         assert client.get(f"/api/v1/jobs/{jid}").json() == original_job
         foreign = project(client)
-        assert client.put(f"/api/v1/projects/{foreign}/model-runs/{jid}/name", json={"name":"Wrong owner"}).status_code == 404
+        assert (
+            client.put(
+                f"/api/v1/projects/{foreign}/model-runs/{jid}/name", json={"name": "Wrong owner"}
+            ).status_code
+            == 404
+        )
         assert client.put(endpoint, json={"name":"line\nbreak"}).status_code == 422
         assert client.put(endpoint, json={"name":" "}).status_code == 422
         assert client.put(endpoint, json={"name":"x" * 81}).status_code == 422
-        assert client.put(f"/api/v1/projects/{pid}/model-runs/missing/name", json={"name":"No model"}).status_code == 404
-        assert (configured.data_dir / artifacts[0]["path"] / "manifest.json").read_bytes() == original_manifest
+        assert (
+            client.put(
+                f"/api/v1/projects/{pid}/model-runs/missing/name", json={"name": "No model"}
+            ).status_code
+            == 404
+        )
+        assert (
+            configured.data_dir / artifacts[0]["path"] / "manifest.json"
+        ).read_bytes() == original_manifest
     with TestClient(create_app(configured)) as restarted:
         renamed = restarted.get(f"/api/v1/projects/{pid}/artifacts").json()
         assert all(artifact["run_name"] == "Battery robot" for artifact in renamed)

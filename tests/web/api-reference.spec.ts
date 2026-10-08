@@ -462,10 +462,17 @@ const trainingRuntimes: Record<string, any>[] = [
   })),
 ];
 
+function gpuOption(page: Page, value: string, label = value) {
+  const option = page.getByRole('listbox', { name: 'GPU', exact: true })
+    .getByRole('option', { name: value === 'A100-80GB' ? 'A100' : label, exact: true });
+  return value === 'A100' || value === 'A100-80GB'
+    ? option.filter({ hasText: value === 'A100' ? '40 GB' : '80 GB' }) : option;
+}
+
 async function chooseGpu(page: Page, value: string, label = value) {
   const picker = page.getByRole('combobox', { name: 'GPU', exact: true });
   await picker.click();
-  await page.getByRole('listbox', { name: 'GPU', exact: true }).getByRole('option', { name: label, exact: true }).click();
+  await gpuOption(page, value, label).click();
   await expect(picker).toHaveAttribute('value', value);
 }
 
@@ -473,7 +480,7 @@ async function expectGpuChoices(page: Page, labels: string[]) {
   await page.getByRole('combobox', { name: 'GPU', exact: true }).click();
   const list = page.getByRole('listbox', { name: 'GPU', exact: true });
   await expect(list.getByRole('option')).toHaveCount(labels.length);
-  for (const label of labels) await expect(list.getByRole('option', { name: label, exact: true })).toBeVisible();
+  for (const label of labels) await expect(gpuOption(page, label)).toBeVisible();
   await page.keyboard.press('Escape');
 }
 
@@ -750,7 +757,7 @@ test('training choices submit both selected cameras, pinned model, method and GP
   await page.getByRole('radio', { name: 'QLoRA', exact: true }).locator('..').click();
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   const compute = page.getByRole('combobox', { name: 'GPU', exact: true });
-  await expectGpuChoices(page, ['L4', 'T4', 'A100']);
+  await expectGpuChoices(page, ['L4', 'T4', 'A100', 'A100-80GB']);
   await chooseGpu(page, 'L4');
   await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
   await expect(page.getByRole('spinbutton', { name: 'Learning rate', exact: true })).toHaveValue('0.0001');
@@ -794,7 +801,7 @@ test('Psi-Zero requires one camera and submits its frozen-backbone action-expert
   await setup.getByRole('button', { name: 'Dataset', exact: true }).click();
   await page.getByRole('checkbox', { name: 'observation.images.wrist', exact: true }).uncheck();
   await setup.getByRole('button', { name: 'Compute', exact: true }).click();
-  await expectGpuChoices(page, ['A100']);
+  await expectGpuChoices(page, ['A100', 'A100-80GB']);
   await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0]).toMatchObject({ runtime_id: 'skypilot-gcp-A100', training_method: 'full', training: {
@@ -892,7 +899,7 @@ test('training cannot start when no CUDA training runtime is configured', async 
   const { submitted, unexpectedRequests } = await mockTrainingWorkspace(page, { runtimes: trainingRuntimes.slice(0, 2) });
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await page.getByRole('button', { name: 'Next', exact: true }).click();
-  await expectGpuChoices(page, ['L4', 'T4', 'A100']);
+  await expectGpuChoices(page, ['L4', 'T4', 'A100', 'A100-80GB']);
   await chooseGpu(page, 'T4');
   await expect(page.getByRole('combobox', { name: 'GPU', exact: true })).toHaveAttribute('value', 'T4');
   await expect(page.getByRole('button', { name: 'Start fine-tuning', exact: true })).toBeDisabled();
@@ -914,7 +921,7 @@ test('training cards and step navigation work from the keyboard at 320px', async
   const steps = page.getByRole('navigation', { name: 'Training setup' });
   await steps.getByRole('button', { name: 'Model', exact: true }).focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('heading', { name: 'Model', level: 2, exact: true })).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'Base model', level: 2, exact: true })).toBeFocused();
   const method = page.getByRole('radio', { name: 'QLoRA', exact: true });
   await method.focus();
   await page.keyboard.press('Space');
@@ -975,7 +982,7 @@ for (const gpu of ['L4', 'T4', 'A100']) {
     await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Compute', exact: true }).click();
     const form = page.locator('.training-workspace');
     const select = form.getByRole('combobox', { name: 'GPU', exact: true });
-    await expectGpuChoices(page, ['L4', 'T4', 'A100']);
+    await expectGpuChoices(page, ['L4', 'T4', 'A100', 'A100-80GB']);
     await chooseGpu(page, gpu);
     await expect(select).toHaveAttribute('value', gpu);
     await expect(form.getByRole('radio', { name: /Google Cloud|Local machine/ })).toHaveCount(0);
@@ -1065,7 +1072,7 @@ test('local GPUs stay out of the dropdown until local runs are explicitly enable
   const { submitted, unexpectedRequests } = await mockTrainingWorkspace(page);
   await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Compute', exact: true }).click();
   const gpu = page.getByRole('combobox', { name: 'GPU', exact: true });
-  await expectGpuChoices(page, ['L4', 'T4', 'A100']);
+  await expectGpuChoices(page, ['L4', 'T4', 'A100', 'A100-80GB']);
   await gpu.click();
   await expect(page.getByRole('listbox').getByRole('option', { name: /RTX/ })).toHaveCount(0);
   await page.keyboard.press('Escape');
@@ -1078,7 +1085,7 @@ test('an explicitly enabled local GPU can be selected without adding provider co
   const { submitted, unexpectedRequests } = await mockTrainingWorkspace(page, { local: { enabled: true, label: 'Robotics lab' } });
   await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Compute', exact: true }).click();
   const gpu = page.getByRole('combobox', { name: 'GPU', exact: true });
-  await expectGpuChoices(page, ['L4', 'T4', 'A100', 'RTX 3070 workstation', 'RTX 4090 workstation']);
+  await expectGpuChoices(page, ['L4', 'T4', 'A100', 'A100-80GB', 'RTX 3070 workstation', 'RTX 4090 workstation']);
   await chooseGpu(page, 'gpu-4090', 'RTX 4090 workstation');
   await expect(gpu).toHaveAttribute('value', 'gpu-4090');
   await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
