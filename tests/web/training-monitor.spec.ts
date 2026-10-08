@@ -1794,3 +1794,33 @@ test('an interrupted multi-model plan reloads without POST and retries its saved
  expect(sent[2].key).not.toBe(sent[0].key);
  await expect(recovery).toHaveCount(0);
 });
+
+test('dataset choices explain incompatibility before selection and update when the primary is removed', async ({ page }, testInfo) => {
+  const state = await temporalTraining(page, 'ACT');
+  const dataset = state.jobs.find(item => item.id === 'dataset')!;
+  const compatible = { ...dataset, id: 'compatible', result: { ...structuredClone(dataset.result), repo_id: 'fixture/compatible', revision: 'c'.repeat(40) } };
+  const different = { ...dataset, id: 'different-fps', result: { ...structuredClone(dataset.result), repo_id: 'fixture/different-fps', revision: 'd'.repeat(40), fps: 10 } };
+  await page.route(`**/api/v1/projects/${projectId}/jobs`, route => route.fulfill({ json: [dataset, compatible, different] }));
+  await state.setup.getByRole('button', { name: 'Dataset', exact: true }).click();
+  const unavailable = page.getByRole('checkbox', { name: 'fixture/different-fps', exact: true });
+  await expect(unavailable).toBeDisabled();
+  const tile = unavailable.locator('..');
+  await expect(tile.getByRole('tooltip')).toBeHidden();
+  if (testInfo.project.name === 'desktop') await tile.hover();
+  else await tile.focus();
+  await expect(tile.getByRole('tooltip')).toContainText('Frame rates differ: 10 FPS');
+  await expect(tile).toHaveClass(/unavailable/);
+  await expect(page.getByRole('checkbox', { name: 'fixture/compatible', exact: true })).toBeEnabled();
+  await page.getByRole('checkbox', { name: 'fixture/compatible', exact: true }).check();
+  await expect(page.getByRole('checkbox', { name: 'fixture/robot', exact: true })).toBeChecked();
+  await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeEnabled();
+  await tile.focus();
+  await page.screenshot({ path: testInfo.outputPath('dataset-compatibility.png'), fullPage: true });
+  await page.getByRole('checkbox', { name: 'fixture/robot', exact: true }).uncheck();
+  await expect(unavailable).toBeDisabled();
+  await page.getByRole('checkbox', { name: 'fixture/compatible', exact: true }).uncheck();
+  await expect(unavailable).toBeEnabled();
+  await unavailable.check();
+  await expect(page.getByRole('checkbox', { name: 'fixture/robot', exact: true })).toBeDisabled();
+  expect(state.submitted).toEqual([]);
+});

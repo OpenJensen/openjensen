@@ -25,6 +25,7 @@ import { submissionOf, useDurableSubmission } from "@/lib/durable-submission";
 import { type PolicyJobAttempt } from "@/lib/policy-job-attempt";
 import { checkpointTiming, defaultTemporal, restoreTemporal, temporalFamily, temporalIssue, temporalRecipe, type TemporalDrafts } from "@/lib/training-temporal";
 import { useTrainingBatch } from "@/lib/training-batch";
+import { combinationCameraMapping, datasetCombinationIssue } from "@/lib/dataset-combination";
 import { trainingMemory } from "@/lib/training-memory";
 import { TrainingHelp } from "./training-help";
 import "./training-panel.css";
@@ -397,8 +398,13 @@ export function TrainingPanel({
     }));
   }
   const selectedDatasets = dataset ? [dataset, ...extraDatasetIds.map(id => datasets.find(item => item.id === id)).filter((item): item is InspectedDataset => !!item && item.id !== dataset.id)] : [];
-  const mappings = Object.fromEntries(selectedDatasets.map((item, index) => [item.id, Object.fromEntries(selectedCameras.map(key => [key, index === 0 ? key : cameraMappings[item.id]?.[key] ?? (cameras(item.result).includes(key) ? key : "")]))]));
-  const mixtureIssue = resumeId ? null : extraDatasetIds.some(id => !datasets.some(item => item.id === id)) ? "A selected dataset is unavailable. Refresh or select it again explicitly." : selectedDatasets.length > 8 ? "Select up to eight datasets." : selectedDatasets.length > 1 ? selectedDatasets.some(item => item.result.source !== "huggingface" || item.result.format !== "lerobot_v3") ? "Combined training currently requires LeRobot v3 Hub datasets. Train local snapshots separately." : selectedDatasets.some(item => item.result.fps !== dataset?.result.fps || ["action", "observation.state"].some(key => ["shape", "dtype", "names"].some(field => JSON.stringify((item.result.features[key] as Record<string, unknown>)?.[field]) !== JSON.stringify((dataset?.result.features[key] as Record<string, unknown>)?.[field]))) || selectedCameras.some(key => { const mapped = mappings[item.id][key]; return !mapped || JSON.stringify((item.result.features[mapped] as { shape?: number[] })?.shape) !== JSON.stringify((dataset?.result.features[key] as { shape?: number[] })?.shape); }) || new Set(Object.values(mappings[item.id])).size !== selectedCameras.length) ? "Combined datasets need matching state/action definitions, frame rates and mapped camera dimensions." : null : null;
+  const mappings = Object.fromEntries(selectedDatasets.map((item, index) => [item.id, index === 0
+    ? Object.fromEntries(selectedCameras.map(key => [key, key]))
+    : Object.fromEntries(selectedCameras.map(key => [key, cameraMappings[item.id]?.[key] ?? combinationCameraMapping(dataset!.result, item.result, selectedCameras)[key] ?? ""]))]));
+  const mixtureIssue = resumeId ? null
+    : extraDatasetIds.some(id => !datasets.some(item => item.id === id)) ? "A selected dataset is unavailable. Refresh or select it again explicitly."
+    : selectedDatasets.length > 8 ? "Select up to eight datasets."
+    : selectedDatasets.slice(1).map(item => datasetCombinationIssue(dataset!.result, item.result, selectedCameras, mappings[item.id])).find(Boolean) ?? null;
   const mergedModels = new Map(trainingModels.map((item) => [item.id, item]));
   for (const item of options.data?.training_models ?? [])
     mergedModels.set(item.id, {
@@ -788,7 +794,7 @@ export function TrainingPanel({
                 <Icon name="plus" size={14} /> Import
               </button>
             </div>
-            {!resumeId && datasetId && !dataset && !jobs.isPending && <p className="warning-box" role="alert">Selected dataset {datasetId} is unavailable in this project. Another dataset has not been substituted. Refresh or select a dataset explicitly.</p>}
+            {!resumeId && datasetId && datasetId !== "__none__" && !dataset && !jobs.isPending && <p className="warning-box" role="alert">Selected dataset {datasetId} is unavailable in this project. Another dataset has not been substituted. Refresh or select a dataset explicitly.</p>}
             {jobs.isPending && projectId ? (
               <p role="status">Loading datasets…</p>
             ) : datasets.length ? (
@@ -801,26 +807,38 @@ export function TrainingPanel({
                       item.repoId === profile.repo_id &&
                       item.revision === profile.revision,
                   );
-                  const issue = datasetIssue(profile);
+                  const selected = resumeId ? activeDataset?.id === job.id : selectedDatasets.some(item => item.id === job.id);
+                  const issue = datasetIssue(profile) ?? (!selected && dataset
+                    ? selectedDatasets.length >= 8 ? "Select up to eight datasets per training job."
+                      : datasetCombinationIssue(dataset.result, profile, selectedCameras)
+                    : null);
+                  const unavailable = !!issue && !selected;
+                  const reasonId = `training-dataset-reason-${job.id}`;
                   return (
                     <label
-                      className="training-dataset"
+                      className={`training-dataset${unavailable ? " unavailable" : ""}`}
                       key={job.id}
-                      title={issue ?? profile.repo_id ?? "Local dataset"}
+                      title={unavailable ? undefined : profile.repo_id ?? "Local dataset"}
+                      tabIndex={unavailable ? 0 : undefined}
+                      aria-describedby={unavailable ? reasonId : undefined}
                     >
                       <input
                         type="checkbox"
                         name="training-dataset"
                         value={job.id}
                         aria-label={profile.repo_id ?? "Local dataset"}
-                        checked={resumeId ? activeDataset?.id === job.id : selectedDatasets.some(item => item.id === job.id)}
-                        disabled={!!issue || !!resumeId || busy}
+                        checked={selected}
+                        aria-describedby={unavailable ? reasonId : undefined}
+                        disabled={unavailable || !!resumeId || busy}
                         onChange={() => {
                           if (selectedDatasets.some(item => item.id === job.id)) {
                             if (dataset?.id === job.id) { setDatasetId(extraDatasetIds[0] ?? "__none__"); setExtraDatasetIds(extraDatasetIds.slice(1)); }
                             else setExtraDatasetIds(previous => previous.filter(id => id !== job.id));
                           } else if (!dataset) setDatasetId(job.id);
-                          else setExtraDatasetIds(previous => [...previous, job.id]);
+                          else {
+                            setCameraMappings(previous => ({ ...previous, [job.id]: combinationCameraMapping(dataset.result, profile, selectedCameras) }));
+                            setExtraDatasetIds(previous => [...previous, job.id]);
+                          }
                           mutation.reset();
                         }}
                       />
@@ -831,17 +849,17 @@ export function TrainingPanel({
                           <Icon name="database" size={18} />
                         </span>
                       )}
-                      <span>
+                      <span className="training-dataset-copy">
                         <strong>
                           {starter?.title ??
                             profile.repo_id?.split("/").at(-1) ??
                             "Local dataset"}
                         </strong>
                         <small>
-                          {issue ??
-                            `${profile.total_episodes} episodes · ${cameras(profile).length} ${cameras(profile).length === 1 ? "camera" : "cameras"}`}
+                          {`${profile.total_episodes} episodes · ${cameras(profile).length} ${cameras(profile).length === 1 ? "camera" : "cameras"}`}
                         </small>
                       </span>
+                      {unavailable && <span className="training-dataset-reason" id={reasonId} role="tooltip">{issue}</span>}
                     </label>
                   );
                 })}

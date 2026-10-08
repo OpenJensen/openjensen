@@ -17,7 +17,7 @@
 .training-dataset { position: relative; display: flex; align-items: center; gap: 12px; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
 .training-dataset img, .training-dataset-icon { width: 58px; height: 46px; object-fit: cover; border-radius: 4px; flex-shrink: 0; }
 .training-dataset-icon { display: grid; place-items: center; background: var(--subtle); color: var(--muted); }
-.training-dataset > span:last-child { display: grid; min-width: 0; gap: 4px; }
+.training-dataset > .training-dataset-copy { display: grid; min-width: 0; gap: 4px; }
 .training-dataset strong { font-size: 12px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .training-dataset small { font-size: 10px; color: var(--muted); overflow-wrap: anywhere; }
 .training-dataset > input, .training-model-tile > input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); margin: -1px; }
@@ -220,3 +220,9 @@
 .training-model-tile input, .training-dataset input { left: auto; right: 8px; top: 8px; width: 14px; height: 14px; opacity: 1; clip: auto; clip-path: none; appearance: none; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--surface); margin: 0; cursor: pointer; }
 .training-model-tile input:checked, .training-dataset input:checked { background: var(--accent); border-color: var(--accent); }
 .training-model-tile input:checked::after, .training-dataset input:checked::after { content: ''; position: absolute; width: 3px; height: 6px; border: solid white; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); left: 4px; top: 1px; }
+
+.training-dataset.unavailable { cursor: not-allowed; background: var(--subtle); border-style: dashed; }
+.training-dataset.unavailable > input, .training-dataset.unavailable > img, .training-dataset.unavailable > span:not(.training-dataset-reason) { opacity: .5; }
+.training-dataset.unavailable:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.training-dataset-reason { display: none; position: absolute; z-index: 20; left: 0; bottom: calc(100% + 8px); width: min(320px, calc(100vw - 64px)); padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); box-shadow: 0 6px 20px #10294420; color: var(--ink); font-size: 12px; line-height: 1.6; }
+.training-dataset.unavailable:hover .training-dataset-reason, .training-dataset.unavailable:focus .training-dataset-reason { display: block; }
