@@ -264,3 +264,28 @@ test('dashboard resource checks stay in the same position on a fresh visit and a
   expect(Math.abs(revisited.y - before.y)).toBeLessThan(1);
   await page.screenshot({ path: testInfo.outputPath('stable-resource-check.png'), fullPage: true });
 });
+
+test('immutable training copy keeps its checkbox aligned and explains storage and complete episodes on demand', async ({ page }, testInfo) => {
+  await ownProject(page, `Training copy help ${testInfo.project.name}`);
+  await page.getByRole('radio', { name: 'Local files', exact: true }).check();
+  const option = page.getByRole('checkbox', { name: 'Prepare immutable training copy', exact: true });
+  const help = page.getByRole('button', { name: 'Help for immutable training copy', exact: true });
+  const tooltip = page.getByRole('tooltip');
+  await expect(tooltip).toBeHidden();
+  await expect(option).not.toBeChecked();
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+  await help.focus();
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toContainText('app host’s data directory, inside dataset-snapshots/');
+  await expect(tooltip).toContainText('all declared frames, robot states, actions and camera videos');
+  await expect(tooltip).toContainText('different whole demonstrations for training and validation');
+  await expect(option).not.toBeChecked();
+  const input = (await option.boundingBox())!, label = (await option.locator('..').boundingBox())!;
+  expect(Math.abs(input.y + input.height / 2 - label.y - label.height / 2)).toBeLessThan(1);
+  const bounds = (await tooltip.boundingBox())!;
+  expect(bounds.x).toBeGreaterThanOrEqual(0);
+  expect(bounds.x + bounds.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+  await page.screenshot({ path: testInfo.outputPath('training-copy-help.png'), fullPage: true });
+  await page.getByRole('heading', { name: 'Dataset', exact: true }).click();
+  await expect(tooltip).toBeHidden();
+});
