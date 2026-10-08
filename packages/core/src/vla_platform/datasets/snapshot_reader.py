@@ -412,7 +412,7 @@ def validate(root, limits):
                 "-select_streams",
                 "v:0",
                 "-show_entries",
-                "frame=best_effort_timestamp_time:frame_side_data=",
+                "frame=best_effort_timestamp_time",
                 "-of",
                 "json=compact=1",
                 *VIDEO_INPUT,

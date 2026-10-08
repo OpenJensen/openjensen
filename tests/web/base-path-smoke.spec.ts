@@ -18,7 +18,8 @@ test('prefixed export loads bundles, library media, API and docs without escapin
   await page.goto(`${prefix}/`);
   await expect(page.getByRole('link', { name: 'Open Jensen workspace home' })).toHaveAttribute('href', `${prefix}/`);
   await expect(page.getByRole('button', { name: 'Fine-tune', exact: true })).toBeVisible();
-  await page.getByRole('button', {name:'Create example',exact:true}).click();
+  expect((await page.request.post(`${origin}${prefix}/api/v1/projects/${project.id}/datasets/example`)).status()).toBe(202);
+  await page.getByRole('button', {name:'Open dataset Robot labeling playground',exact:true}).click();
   const poster = page.getByRole('region',{name:'Dataset labeling'}).getByRole('img');
   await expect(poster).toBeVisible();
   await expect(poster).toHaveAttribute('src',new RegExp(`^${prefix}/api/v1/datasets/`));

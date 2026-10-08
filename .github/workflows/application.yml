@@ -82,9 +82,18 @@ jobs:
             pyproject.toml
             packages/core/pyproject.toml
       - run: uv sync --frozen --all-packages --extra tui
+      - name: Prepare hosted package mirrors
+        if: runner.environment != 'self-hosted' && runner.os == 'Linux'
+        run: sudo bash .github/scripts/prepare_hosted_runner.sh
       - name: Install video validation tools (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+        run: |
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
+          ffmpeg -version
+          ffprobe -version
       - name: Install isolated CPU preview reader (POSIX)
         if: runner.os != 'Windows'
         run: |
@@ -160,9 +169,18 @@ jobs:
           restore-keys: |
             pnpm-store-${{ runner.os }}-
       - run: uv sync --frozen --all-packages --extra tui
+      - name: Prepare hosted package mirrors
+        if: runner.environment != 'self-hosted' && runner.os == 'Linux'
+        run: sudo bash .github/scripts/prepare_hosted_runner.sh
       - name: Install video validation tools (Linux)
         if: runner.os == 'Linux' && runner.environment != 'self-hosted'
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+        run: |
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
+          ffmpeg -version
+          ffprobe -version
       - name: Install isolated CPU preview reader (POSIX)
         if: runner.os != 'Windows'
         run: |
@@ -422,7 +440,17 @@ jobs:
           enable-cache: true
           cache-suffix: teaching
           cache-dependency-glob: workers/teaching/requirements-*.txt
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Prepare hosted package mirrors
+        if: runner.environment != 'self-hosted' && runner.os == 'Linux'
+        run: sudo bash .github/scripts/prepare_hosted_runner.sh
+      - name: Install video validation tools
+        run: |
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
+          ffmpeg -version
+          ffprobe -version
       - name: Install isolated CPU dataset writer
         run: |
           uv venv --python 3.12.14 workers/teaching/.venv-dataset

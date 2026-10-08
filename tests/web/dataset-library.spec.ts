@@ -1,7 +1,8 @@
+import { waitForJob } from './job-waiter';
 import { expect, test, type Page } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 
 test.describe.configure({timeout:60000});
 async function ownProject(page:Page,name:string) {
@@ -14,17 +15,23 @@ async function ownProject(page:Page,name:string) {
   return project;
 }
 
-test('create a real two-view example, save labels, reopen it and reach the dashboard',async({page},testInfo)=>{
-  await ownProject(page,`Label playground ${testInfo.project.name}`);
+test('open an imported two-view fixture, save labels, reopen it and reach the dashboard',async({page},testInfo)=>{
+  // Conversion and immutable-copy validation run real CPU subprocesses.
+  test.setTimeout(120_000);
+  const project=await ownProject(page,`Label fixture ${testInfo.project.name}`);
   await expect(page.getByRole('heading',{name:'My datasets',exact:true})).toBeVisible();
   await expect(page.getByText('Example datasets',{exact:true})).toHaveCount(0);
   await expect(page.getByRole('status',{name:'Application API connection'})).toHaveCount(0);
   await expect(page.getByText('LeRobot v2 / v3',{exact:true})).toHaveCount(0);
-  await page.getByRole('button',{name:'Create example',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Create example',exact:true})).toHaveCount(0);
+  await expect(page.getByText('Try the labeling playground',{exact:true})).toHaveCount(0);
+  // The legacy API supplies an isolated test fixture; it has no product promotion.
+  expect((await page.request.post(`/api/v1/projects/${project.id}/datasets/example`)).status()).toBe(202);
+  await page.getByRole('button',{name:'Open dataset Robot labeling playground'}).click();
   const labels=page.getByRole('region',{name:'Dataset labeling'});
   await expect(labels.getByRole('heading',{name:'Robot labeling playground'})).toBeVisible();
   const image=labels.getByRole('img');
-  await expect(image).toBeVisible();
+  await expect(image).toBeVisible({timeout:30_000});
   await expect.poll(()=>image.evaluate(node=>(node as HTMLImageElement).complete&&(node as HTMLImageElement).naturalWidth>0)).toBe(true);
   const views=labels.locator('input[aria-label^="View name"]');
   await expect(views).toHaveCount(2);
@@ -44,7 +51,18 @@ test('create a real two-view example, save labels, reopen it and reach the dashb
   await page.screenshot({path:testInfo.outputPath('dataset-labeling.png'),fullPage:true});
   await labels.getByRole('button',{name:'Inspect for training'}).click();
   await expect(page.getByRole('checkbox',{name:'Prepare immutable training copy'})).toBeChecked();
+  const submitted=page.waitForResponse(response=>response.url().endsWith(`/projects/${project.id}/intakes`)&&response.request().method()==='POST');
   await page.getByRole('button',{name:'Inspect dataset',exact:true}).click();
+  const response=await submitted;
+  expect(response.status()).toBe(202);
+  const history=await page.request.get(`/api/v1/projects/${project.id}/jobs`);
+  expect(history.status()).toBe(200);
+  const recorded=await history.json();
+  expect(recorded).toHaveLength(1);
+  expect(recorded[0].request).toMatchObject({library_id:response.request().postDataJSON().library_id,snapshot_for_training:true});
+  const completed=await waitForJob(page.request,recorded[0].id,'succeeded');
+  expect(completed.project_id).toBe(project.id);
+  expect(completed.result.inspection_scope).toBe('complete_snapshot');
   await expect(page.getByText(/Training copy verified/)).toBeVisible();
   await expect(page.getByRole('button',{name:'Train on this dataset'})).toBeEnabled();
   await page.getByRole('button',{name:'Dashboard',exact:true}).click();
@@ -69,7 +87,7 @@ test('native folder selection uploads files, detects records and converts for in
   await page.getByLabel('Frame rate (FPS)',{exact:true}).fill('6');
   await page.getByLabel('Task description',{exact:true}).fill('Move the block');
   await page.getByRole('button',{name:'Convert to LeRobot'}).click();
-  await expect(detected.getByText(/Ready to inspect/)).toBeVisible();
+  await expect(detected.getByText(/Ready to inspect/)).toBeVisible({timeout:30_000});
   await page.getByRole('button',{name:'Inspect dataset',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Dataset inspection',exact:true})).toBeVisible();
   await expect(page.getByRole('heading',{name:'Local dataset',exact:true})).toBeVisible();
@@ -113,3 +131,63 @@ test('dashboard reports a failed local probe instead of successful resource chec
   await expect(page.getByRole('region',{name:'Resources & connections'}).getByRole('alert')).toContainText('Local GPU probe failed');
   await expect(page.getByText('Resource checks completed.',{exact:false})).toHaveCount(0);
 });
+
+for (const available of [true, false]) {
+  test(`saved Hub cards ${available ? 'show a paused frame at the inspected episode boundary' : 'explain unavailable previews'}`, async ({page}, testInfo) => {
+    const project='preview-project', time='2026-10-06T08:00:00Z', job='preview-inspection';
+    const profile={source:'huggingface',repo_id:'our/camera-data',revision:'a'.repeat(40),format:'lerobot_v3',total_episodes:8,total_frames:80,fps:5,features:{'observation.images.front':{dtype:'video',shape:[64,64,3]}},warnings:[],inspection_scope:'metadata_only'};
+    const media=resolve(testInfo.outputPath('preview.mp4'));
+    if (available) {
+      await mkdir(resolve(testInfo.outputPath('.')),{recursive:true});
+      const result=spawnSync('ffmpeg',['-v','error','-f','lavfi','-i','color=c=blue:s=64x64:r=5:d=3','-c:v','libx264','-pix_fmt','yuv420p','-movflags','+faststart',media],{encoding:'utf8'});
+      expect(result.status,result.stderr).toBe(0);
+      const bytes=await readFile(media);
+      await page.route('**/api/v1/fixture-preview.mp4', async route=>{
+        const range=/^bytes=(\d+)-(\d*)$/.exec(route.request().headers()['range']??'');
+        const start=range ? Number(range[1]) : 0;
+        const end=range?.[2] ? Math.min(Number(range[2]),bytes.length-1) : bytes.length-1;
+        await route.fulfill({status:range ? 206 : 200,contentType:'video/mp4',body:bytes.subarray(start,end+1),headers:{'Accept-Ranges':'bytes','Content-Length':String(end-start+1),...(range ? {'Content-Range':`bytes ${start}-${end}/${bytes.length}`} : {})}});
+      });
+    }
+    const episode={episode_index:7,frame_count:5,duration_seconds:1,tasks:['Pick up']};
+    const requests:string[]=[];
+    await page.route('**/api/v1/**', route=>{
+      const path=new URL(route.request().url()).pathname;
+      if(path==='/api/v1/fixture-preview.mp4')return route.fallback();
+      if(path==='/api/v1/projects')return route.fulfill({json:[{id:project,name:'Preview library',created_at:time}]});
+      if(path.endsWith('/jobs'))return route.fulfill({json:[]});
+      if(path==='/api/v1/datasets')return route.fulfill({json:[{id:`inspection:${job}`,job_id:job,project_id:project,name:profile.repo_id,source:'huggingface',status:'ready',created_at:time,profile}]});
+      if(path.endsWith('/episodes')) {
+        requests.push(route.request().url());
+        return available ? route.fulfill({json:{repo_id:profile.repo_id,revision:profile.revision,total_episodes:8,offset:0,limit:1,episodes:[episode],warnings:[]}}) : route.fulfill({status:422,json:{detail:'Preview unavailable'}});
+      }
+      if(path.endsWith('/episodes/7'))return route.fulfill({json:{...episode,repo_id:profile.repo_id,revision:profile.revision,cameras:[{key:'observation.images.front',url:'/api/v1/fixture-preview.mp4',start_seconds:1,end_seconds:2,width:64,height:64,fps:5}],samples:[],warnings:[],action_names:[],state_names:[]}});
+      return route.continue();
+    });
+    await page.goto('/');
+    const card=page.getByRole('button',{name:'Open dataset our/camera-data'});
+    if (available) {
+      const video=card.locator('video');
+      await expect(video).toHaveClass('loaded');
+      await expect.poll(()=>video.evaluate(node=>(node as HTMLVideoElement).currentTime)).toBeCloseTo(1,1);
+      expect(await video.evaluate(node=>(node as HTMLVideoElement).paused)).toBe(true);
+      await expect(card.getByText('Preview unavailable',{exact:true})).toHaveCount(0);
+    } else await expect(card.getByText('Preview unavailable',{exact:true})).toBeVisible();
+    expect(requests).toHaveLength(1);
+    expect(new URL(requests[0]).searchParams.get('limit')).toBe('1');
+    await page.getByRole('button',{name:'Fine-tune',exact:true}).click();
+    await page.getByRole('button',{name:'Dataset',exact:true}).click();
+    if (available) {
+      expect(requests).toHaveLength(1);
+      await expect(card.locator('video')).toHaveClass('loaded');
+      await expect.poll(()=>card.locator('video').evaluate(node=>(node as HTMLVideoElement).currentTime)).toBeCloseTo(1,1);
+      await page.getByRole('searchbox',{name:'Search my datasets',exact:true}).fill('no matching dataset');
+      await expect(page.getByText('No matching datasets',{exact:true})).toBeVisible();
+      await page.getByRole('searchbox',{name:'Search my datasets',exact:true}).fill('');
+      await expect(card.locator('video')).toHaveClass('loaded');
+      await expect.poll(()=>card.locator('video').evaluate(node=>(node as HTMLVideoElement).currentTime)).toBeCloseTo(1,1);
+      expect(requests).toHaveLength(1);
+    }
+    else await expect(card.getByText('Preview unavailable',{exact:true})).toBeVisible();
+  });
+}

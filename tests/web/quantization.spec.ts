@@ -38,7 +38,7 @@ async function workspace(page: Page, cloudOnly = false, cloudChecks = false,
     }
     if (request.method() === 'GET') {
       const replies: Record<string, unknown> = {
-        '/api/v1/health': { status: 'ok', version: 'fixture' }, '/api/v1/capabilities': [],
+        '/api/v1/health': { status: 'ok', version: 'fixture' }, '/api/v1/capabilities': [], '/api/v1/datasets': [],
         '/api/v1/simulation-options': { profiles: [], scored_evaluation: false, max_archive_bytes: 4294967296 },
         '/api/v1/projects': [{ id: projectId, name: 'Cloud checkpoints', created_at: new Date().toISOString() }],
         [`/api/v1/projects/${projectId}/jobs`]: jobs,
