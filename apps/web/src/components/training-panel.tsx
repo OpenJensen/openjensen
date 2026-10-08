@@ -1166,6 +1166,8 @@ export function TrainingPanel({
               ) : (
                 <>
                 <div className="training-settings-actions"><button type="button" className="text-button" disabled={busy} onClick={() => { setRecipe({ ...defaults, batchSize: model?.id === "smolvla" ? defaults.batchSize : model?.id === "psi0" ? 2 : 4 }); setModelBatchSizes({}); setTemporalDrafts({}); }}>Reset settings</button></div>
+                <fieldset className="training-hyperparameters">
+                  <legend>Learning settings</legend>
                 <div className="training-fields">
                   <label>
                     <span className="training-field-name">Steps<TrainingHelp label="Steps">Completed optimizer updates when supported; learning-rate schedules and save/validation intervals use the same step count.</TrainingHelp></span>
@@ -1230,6 +1232,7 @@ export function TrainingPanel({
 
                   </label>
                 </div>
+                </fieldset>
                 {timing && <fieldset className="training-temporal" aria-label="Action timing" aria-describedby="training-timing-help">
                   <legend><span className="training-field-name">Action timing<TrainingHelp label="Action timing" id="training-timing-help">Prediction is how many future actions the model learns together. Execution is how many are used before the next observation. One observation at a time, using consecutive frames; existing checkpoints are not reshaped. This does not establish a safe robot control rate.</TrainingHelp></span></legend>
                   <div className="training-temporal-fields">
