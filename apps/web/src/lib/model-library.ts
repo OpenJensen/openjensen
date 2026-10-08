@@ -18,6 +18,20 @@ export function ownedModels(artifacts: PolicyArtifact[], project: string): Polic
     seen.add(item.id); return true;
   });
 }
+export function modelRunName(artifact: PolicyArtifact): string {
+  return textValue(artifact.run_name) ?? `Run ${artifact.job_id.slice(0, 8)}`;
+}
+export function modelRunGroups(artifacts: PolicyArtifact[]): { key: string; name: string; models: PolicyArtifact[] }[] {
+  const groups = new Map<string, { key: string; name: string; models: PolicyArtifact[] }>();
+  for (const artifact of artifacts) {
+    const key = JSON.stringify([artifact.project_id, artifact.job_id]);
+    const group = groups.get(key) ?? { key, name: modelRunName(artifact), models: [] };
+    group.models.push(artifact);
+    groups.set(key, group);
+  }
+  for (const group of groups.values()) group.models.sort((a, b) => (checkpointStep(b) ?? -1) - (checkpointStep(a) ?? -1) || a.label.localeCompare(b.label));
+  return [...groups.values()];
+}
 export function modelFamily(artifact: PolicyArtifact, jobs: Job[], artifacts: PolicyArtifact[] = []): string {
   const job = jobs.find(item => item.project_id === artifact.project_id && item.id === artifact.job_id);
   return (job ? trainingRunModelLabel(job, [], [artifact, ...artifacts], jobs) : null)

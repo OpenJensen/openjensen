@@ -290,6 +290,9 @@ class Lifecycle:
         self.compute = ComputeSettings(self.settings.data_dir)
         self.event_lock = threading.Lock()
         self.export_lock = threading.Lock()
+        from .model_names import ModelNames
+
+        self.model_names = ModelNames(self.settings.data_dir)
 
     @property
     def catalog(self) -> RuntimeCatalog:
@@ -352,7 +355,15 @@ class Lifecycle:
                     )
                 except (OSError, ValueError, KeyError, TypeError) as exc:
                     logger.warning("Skipping unavailable checkpoint in %s: %s", index_path, exc)
-        return artifacts
+        return [self.model_names.decorate(artifact) for artifact in artifacts]
+
+    async def rename_model_run(self, project_id: str, job_id: str, name: str):
+        job = await self.execution.get(job_id)
+        if not job or job.project_id != project_id or not any(
+            artifact.job_id == job_id for artifact in await self.artifacts(project_id)
+        ):
+            raise ValueError("Model run does not exist in this project")
+        return self.model_names.rename(project_id, job_id, name)
 
     async def artifact(self, project_id: str, artifact_id: str):
         value = next((x for x in await self.artifacts(project_id) if x.id == artifact_id), None)
@@ -369,7 +380,7 @@ class Lifecycle:
                 and job.kind in {"policy.finetune", "policy.workflow"}
             ):
                 try:
-                    return self._cloud_checkpoint_artifact(job, name)
+                    return self.model_names.decorate(self._cloud_checkpoint_artifact(job, name))
                 except (OSError, ValueError, KeyError, TypeError) as exc:
                     raise ValueError("Selected checkpoint is unavailable or corrupt") from exc
         raise ValueError("Artifact does not exist in this project")

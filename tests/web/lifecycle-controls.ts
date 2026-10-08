@@ -14,10 +14,14 @@ export async function openTransformationJob(page:Page,operation:'distillation'|'
   await history.locator(`[data-job-id="${id}"]`).click();
 }
 export async function chooseTransformationModel(page:Page,operation:'distillation'|'quantization',name:string) {
-  const choice=page.getByRole('button',{name,exact:true});
+  const choice=page.getByRole('button',{name,exact:true,includeHidden:true});
+  const existingGroup=choice.locator('xpath=ancestor::details[contains(@class,"model-run-group")]');
+  if(await existingGroup.count() && !await choice.isVisible()) await existingGroup.locator('summary').click();
   if(!await choice.isVisible()) {
     const history=await transformationJobs(page,operation);
     await history.getByRole('button',{name:`Start a new ${operation}`,exact:true}).click();
   }
+  const group = choice.locator('xpath=ancestor::details[contains(@class,"model-run-group")]');
+  if(await group.count() && !await choice.isVisible()) await group.locator('summary').click();
   await choice.click();
 }

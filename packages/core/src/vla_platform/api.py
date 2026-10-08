@@ -47,6 +47,7 @@ from vla_platform.lifecycle.contracts import (
     PolicyRequest,
     TrainingTelemetry,
 )
+from vla_platform.lifecycle.model_names import ModelRunName
 from vla_platform.lifecycle.training_catalog import public_training_models
 from vla_platform.projects import Projects
 from vla_platform.recordings_api import router as recordings_router
@@ -655,6 +656,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if await projects.get(project_id) is None:
             raise HTTPException(404, "Project not found")
         return await execution.lifecycle.artifacts(project_id)
+
+    @app.put("/api/v1/projects/{project_id}/model-runs/{job_id}/name", response_model=ModelRunName)
+    async def rename_model_run(
+        project_id: str, job_id: str, body: ModelRunName,
+        projects: ProjectsDep, execution: ExecutionDep,
+    ):
+        if await projects.get(project_id) is None:
+            raise HTTPException(404, "Project not found")
+        try:
+            return await execution.lifecycle.rename_model_run(project_id, job_id, body.name)
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
 
     @app.get("/api/v1/projects/{project_id}/artifacts/{artifact_id}/replay")
     async def replay_record(

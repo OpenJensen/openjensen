@@ -852,6 +852,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/model-runs/{job_id}/name": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Rename Model Run */
+        put: operations["rename_model_run_api_v1_projects__project_id__model_runs__job_id__name_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/policy-jobs": {
         parameters: {
             query?: never;
@@ -2574,6 +2591,11 @@ export interface components {
             /** Platform */
             platform: string;
         };
+        /** ModelRunName */
+        ModelRunName: {
+            /** Name */
+            name: string;
+        };
         /**
          * NativeDistillation
          * @description Recorded-data selection and a fixed ACT teacher/student recipe; no paths.
@@ -2704,6 +2726,8 @@ export interface components {
             path: string;
             /** Project Id */
             project_id: string;
+            /** Run Name */
+            run_name?: string | null;
         };
         /** PolicyRequest */
         PolicyRequest: {
@@ -5069,6 +5093,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Job"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_model_run_api_v1_projects__project_id__model_runs__job_id__name_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelRunName"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelRunName"];
                 };
             };
             /** @description Validation Error */

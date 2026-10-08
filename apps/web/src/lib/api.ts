@@ -186,6 +186,7 @@ export const api = {
   cloudRuns: () => request<components['schemas']['CloudRunsFeed']>('/cloud-runs'),
   policyOptions: () => request<PolicyOptions>('/policy-options'),
   artifacts: (id: string) => request<PolicyArtifact[]>(`/projects/${encodeURIComponent(id)}/artifacts`),
+  renameModelRun: (projectId: string, jobId: string, name: string) => request<{ name: string }>(`/projects/${encodeURIComponent(projectId)}/model-runs/${encodeURIComponent(jobId)}/name`, { method: 'PUT', body: JSON.stringify({ name }) }),
   trainingTelemetry: (id: string) => request<TrainingTelemetry>(`/jobs/${encodeURIComponent(id)}/training`),
   events: (id: string) => request<JobEvent[]>(`/jobs/${encodeURIComponent(id)}/events`),
   policyJob: (id: string, body: PolicyRequest) => request<Job>(`/projects/${encodeURIComponent(id)}/policy-jobs`, {
