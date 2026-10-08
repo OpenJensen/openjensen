@@ -121,29 +121,47 @@ def paired_predictions(smoke, tmp_path):
     # Two real coordinates per timestep; padding contains deliberately huge differences.
     original, packed = tmp_path / "original", tmp_path / "packed"
     reports = []
-    for directory, values in [(original, [1, 2, 999, 4, 5, 999]), (packed, [2, 4, -999, 7, 9, -999])]:
+    for directory, values in [
+        (original, [1, 2, 999, 4, 5, 999]),
+        (packed, [2, 4, -999, 7, 9, -999]),
+    ]:
         directory.mkdir()
         path = directory / "cpu-inference-smoke-actions.json"
         smoke.atomic_json(path, {"values": values})
-        reports.append({"input_sha256": "a" * 64, "executable_sha256": "b" * 64,
-                        "synthetic_image_count": 1, "image_size": 512, "action_chunk_size": 2,
-                        "max_action_dim": 3, "real_action_dim": 2, "backend": "cpu", "calls": 1,
-                        "actions_sha256": smoke.sha256(path), "model_sha256": ("c" if directory == original else "d") * 64})
+        reports.append(
+            {
+                "input_sha256": "a" * 64,
+                "executable_sha256": "b" * 64,
+                "synthetic_image_count": 1,
+                "image_size": 512,
+                "action_chunk_size": 2,
+                "max_action_dim": 3,
+                "real_action_dim": 2,
+                "backend": "cpu",
+                "calls": 1,
+                "actions_sha256": smoke.sha256(path),
+                "model_sha256": ("c" if directory == original else "d") * 64,
+            }
+        )
     return reports, original, packed
 
 
-def test_comparison_pairs_active_action_channels_and_does_not_invent_validation_loss(smoke, tmp_path):
+def test_comparison_pairs_active_action_channels_and_does_not_invent_validation_loss(
+    smoke, tmp_path
+):
     reports, original, packed = paired_predictions(smoke, tmp_path)
     result = smoke.compare_cpu_predictions(*reports, original, packed)
     assert result["action_mse"] == 7.5
-    assert result["action_rmse"] == pytest.approx(7.5 ** .5)
+    assert result["action_rmse"] == pytest.approx(7.5**0.5)
     assert result["action_mae"] == 2.5
     assert result["action_max_abs_difference"] == 4
     assert result["coordinates"] == 4
     assert result["validation_loss"] is result["task_success"] is None
 
 
-@pytest.mark.parametrize("changed", ["input_sha256", "executable_sha256", "real_action_dim", "synthetic_image_count"])
+@pytest.mark.parametrize(
+    "changed", ["input_sha256", "executable_sha256", "real_action_dim", "synthetic_image_count"]
+)
 def test_comparison_refuses_unpaired_inputs_or_contracts(smoke, tmp_path, changed):
     reports, original, packed = paired_predictions(smoke, tmp_path)
     reports[1][changed] = "e" * 64 if changed.endswith("sha256") else 3
