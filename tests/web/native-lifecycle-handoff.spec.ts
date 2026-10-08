@@ -14,6 +14,7 @@ async function openSavedAct(page: Page) {
   const operation = page.url().includes('/distillation/') ? 'distillation' : 'quantization';
   await chooseTransformationModel(page, operation, 'Choose Generated teacher · teacher', 'source');
 }
+
 const units = ['degrees', 'degrees', 'degrees', 'degrees', 'degrees', 'recorded_gripper'];
 const runtime = (id: string, capability: string) => ({ id, label: `Generated ${id}`, execution: 'native', provider: 'local', device: 'cpu', enabled: true, launchable: true, [capability]: true, [`${capability}_only`]: true, training: false, simulation: false, run: false, engine_evaluation: false });
 const runtimes = [runtime('student-cpu', 'native_distillation'), runtime('quant-cpu', 'native_quantization'), runtime('replay-cpu', 'native_replay')];

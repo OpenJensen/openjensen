@@ -940,9 +940,9 @@ def test_model_run_names_survive_restart_without_changing_checkpoint_or_job_reco
             ).status_code
             == 404
         )
-        assert client.put(endpoint, json={"name":"line\nbreak"}).status_code == 422
-        assert client.put(endpoint, json={"name":" "}).status_code == 422
-        assert client.put(endpoint, json={"name":"x" * 81}).status_code == 422
+        assert client.put(endpoint, json={"name": "line\nbreak"}).status_code == 422
+        assert client.put(endpoint, json={"name": " "}).status_code == 422
+        assert client.put(endpoint, json={"name": "x" * 81}).status_code == 422
         assert (
             client.put(
                 f"/api/v1/projects/{pid}/model-runs/missing/name", json={"name": "No model"}
