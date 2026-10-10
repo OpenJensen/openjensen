@@ -414,7 +414,7 @@ export function TrainingPanel({
     } as TrainingModel);
   const models = [...mergedModels.values()];
   const runtimes = options.data?.runtimes ?? [];
-  const cloudGpuMemory: Record<string, number> = { L4: 24, T4: 16, A100: 40 };
+  const cloudGpuMemory: Record<string, number> = { L4: 24, T4: 16, A100: 40, "A100-80GB": 80 };
   const runtimeMemory = (item: (typeof runtimes)[number]) =>
     item.gpu_memory_mib ? item.gpu_memory_mib / 1024 : cloudGpuMemory[item.accelerator ?? ""] ?? 0;
   const hasAdapter = (runtime: (typeof runtimes)[number], item: TrainingModel) =>
@@ -474,9 +474,10 @@ export function TrainingPanel({
     )?.id ??
     availableMethods[0]?.id;
   const supportsModel = (item: (typeof runtimes)[number]) =>
+    selectedModels.every(model => model.id !== "smolvla" || methodFor(model) !== "full" || (model.native_full_runtime_ids ?? []).includes(item.id)) &&
     item.enabled !== false &&
     selectedModels.length > 0 && selectedModels.every(model => hasAdapter(item, model));
-  const gpuChoices = ["L4", "T4", "A100"].filter(gpu => selectedModels.every(item => !item.minimum_gpu_memory_gb || cloudGpuMemory[gpu] >= item.minimum_gpu_memory_gb));
+  const gpuChoices = ["L4", "T4", "A100", "A100-80GB"].filter(gpu => selectedModels.every(item => cloudGpuMemory[gpu] >= (item.id === "smolvla" && methodFor(item) === "full" ? 24 : item.minimum_gpu_memory_gb ?? 0)));
   const defaultGpu = options.data?.compute?.gcp?.default_gpu ?? "A100";
   const localRuntimes = selectedModels.length <= 1 && options.data?.compute?.local.enabled
     ? runtimes.filter((item) => (item.provider ?? "local") === "local" && item.training && item.device === "cuda" && item.enabled !== false &&
@@ -514,7 +515,7 @@ export function TrainingPanel({
         )
       : [String(originalTraining?.camera_key ?? "observation.images.front")]
     : selectedCameras;
-  const modelIssue = !resumeId ? selectedModels.map(item => modelDatasetIssue(item, activeDataset?.result, activeCameraKeys) || (selectedDatasets.length > 1 && item.backend === "psi0" ? "Psi-Zero does not support combined datasets." : null)).find(Boolean) ?? null : null;
+  const modelIssue = !resumeId ? selectedModels.map(item => modelDatasetIssue(item.id === "smolvla" && methodFor(item) === "full" ? {...item, backend: "lerobot"} : item, activeDataset?.result, activeCameraKeys) || (selectedDatasets.length > 1 && item.backend === "psi0" ? "Psi-Zero does not support combined datasets." : null)).find(Boolean) ?? null : null;
   const batchIssue = selectedModels.length > 1 && selectedModels.some(item => recipe.gradientAccumulation !== 1 && !gradientAccumulationAvailable(item, runtime?.id, methodFor(item))) ? "At least one selected model requires gradient accumulation 1." : null;
   const episodes = useQuery({
     queryKey: ["training-episodes", activeDataset?.id],
@@ -1152,7 +1153,7 @@ export function TrainingPanel({
               onChange={setRuntimeId}
               disabled={busy}
               choices={[
-                ...gpuChoices.map((gpu) => ({ id: gpu, label: gpu, memory: ({ L4: "24 GB", T4: "16 GB", A100: "40 GB" } as Record<string, string>)[gpu] })),
+                ...gpuChoices.map((gpu) => ({ id: gpu, label: gpu === "A100-80GB" ? "A100" : gpu, memory: `${cloudGpuMemory[gpu]} GB` })),
                 ...localRuntimes.map((item) => ({ id: item.id, label: item.label,
                   memory: item.gpu_memory_mib ? `${number(item.gpu_memory_mib / 1024)} GB` : undefined })),
               ]}
@@ -1166,6 +1167,8 @@ export function TrainingPanel({
               ) : (
                 <>
                 <div className="training-settings-actions"><button type="button" className="text-button" disabled={busy} onClick={() => { setRecipe({ ...defaults, batchSize: model?.id === "smolvla" ? defaults.batchSize : model?.id === "psi0" ? 2 : 4 }); setModelBatchSizes({}); setTemporalDrafts({}); }}>Reset settings</button></div>
+                <fieldset className="training-hyperparameters">
+                  <legend>Learning settings</legend>
                 <div className="training-fields">
                   <label>
                     <span className="training-field-name">Steps<TrainingHelp label="Steps">Completed optimizer updates when supported; learning-rate schedules and save/validation intervals use the same step count.</TrainingHelp></span>
@@ -1230,6 +1233,7 @@ export function TrainingPanel({
 
                   </label>
                 </div>
+                </fieldset>
                 {timing && <fieldset className="training-temporal" aria-label="Action timing" aria-describedby="training-timing-help">
                   <legend><span className="training-field-name">Action timing<TrainingHelp label="Action timing" id="training-timing-help">Prediction is how many future actions the model learns together. Execution is how many are used before the next observation. One observation at a time, using consecutive frames; existing checkpoints are not reshaped. This does not establish a safe robot control rate.</TrainingHelp></span></legend>
                   <div className="training-temporal-fields">

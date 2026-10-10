@@ -3364,6 +3364,22 @@
         "title": "LocalWorkerHost",
         "type": "object"
       },
+      "ModelRunName": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ModelRunName",
+        "type": "object"
+      },
       "NativeDistillation": {
         "additionalProperties": false,
         "description": "Recorded-data selection and a fixed ACT teacher/student recipe; no paths.",
@@ -3665,6 +3681,18 @@
           "project_id": {
             "title": "Project Id",
             "type": "string"
+          },
+          "run_name": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Name"
           }
         },
         "required": [
@@ -7728,6 +7756,64 @@
           }
         },
         "summary": "Import Native Policy"
+      }
+    },
+    "/api/v1/projects/{project_id}/model-runs/{job_id}/name": {
+      "put": {
+        "operationId": "rename_model_run_api_v1_projects__project_id__model_runs__job_id__name_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelRunName"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelRunName"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rename Model Run"
       }
     },
     "/api/v1/projects/{project_id}/policy-jobs": {

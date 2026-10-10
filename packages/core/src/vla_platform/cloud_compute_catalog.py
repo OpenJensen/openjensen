@@ -33,6 +33,7 @@ GCP_GPUS = (
     GcpGpu("L4", "NVIDIA L4 · 24 GB", 24 * 1024, "g2-standard-4"),
     GcpGpu("T4", "NVIDIA T4 · 16 GB", 16 * 1024, "n1-highmem-4"),
     GcpGpu("A100", "NVIDIA A100 · 40 GB", 40 * 1024, "a2-highgpu-1g"),
+    GcpGpu("A100-80GB", "NVIDIA A100 · 80 GB", 80 * 1024, "a2-ultragpu-1g"),
 )
 GCP_GPU_BY_ID = {gpu.id: gpu for gpu in GCP_GPUS}
 RUNTIME_PREFIX = "skypilot-gcp-"

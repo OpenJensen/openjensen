@@ -206,7 +206,7 @@ class Runtime(StrictRecord):
         ):
             raise ValueError("The bundled training module supports only SmolVLA")
         if self.training_module == "firebird_vla.lerobot_application" and any(
-            key not in NATIVE_PROFILES for key in self.training_model_ids
+            key not in NATIVE_PROFILES and key != "smolvla" for key in self.training_model_ids
         ):
             raise ValueError("The native LeRobot module supports registered native policies only")
         if any(TRAINING_MODEL_BY_ID[key].model_revision is None for key in self.training_model_ids):

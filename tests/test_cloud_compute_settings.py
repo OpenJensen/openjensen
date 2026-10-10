@@ -132,7 +132,6 @@ def test_settings_patch_preserves_other_provider_and_persists(tmp_path, probes):
     [
         {},
         {"gcp": {"default_gpu": "RTXPRO6000"}},
-        {"gcp": {"default_gpu": "A100-80GB"}},
         {"gcp": {"default_gpu": "H100"}},
         {"gcp": {"default_gpu": "A100; shell-command"}},
         {"gcp": {"enabled": "true"}},
@@ -160,7 +159,12 @@ def test_listing_does_not_verify_credentials_or_claim_ready(tmp_path, probes):
     assert response.gcp_status.skypilot_installed is True
     assert all(runtime.enabled and runtime.launchable for runtime in response.runtimes)
     assert all(runtime.needs_preparation for runtime in response.runtimes)
-    assert [gpu.id for gpu in response.gpu_options if gpu.supported] == ["L4", "T4", "A100"]
+    assert [gpu.id for gpu in response.gpu_options if gpu.supported] == [
+        "L4",
+        "T4",
+        "A100",
+        "A100-80GB",
+    ]
     assert not any(gpu.available for gpu in response.gpu_options)
     assert probes[0] == []
     with pytest.raises(ValueError, match="prepared automatically"):
@@ -184,6 +188,7 @@ def test_user_triggered_check_exposes_verified_cloud_targets_without_provisionin
             "skypilot-gcp-L4",
             "skypilot-gcp-T4",
             "skypilot-gcp-A100",
+            "skypilot-gcp-A100-80GB",
         ]
         assert all(runtime["execution"] == "skypilot" for runtime in enabled)
         options = client.get("/api/v1/policy-options").json()
@@ -308,7 +313,7 @@ def test_reconnecting_same_cloud_project_requires_new_check(tmp_path, probes, mo
     assert compute.gcp_status().status == "unchecked"
 
 
-def test_removed_default_gpu_migrates_without_revoking_local_opt_in(tmp_path):
+def test_a100_80gb_default_is_preserved_without_revoking_local_opt_in(tmp_path):
     path = tmp_path / "compute-settings.json"
     path.write_text(
         json.dumps(
@@ -321,8 +326,11 @@ def test_removed_default_gpu_migrates_without_revoking_local_opt_in(tmp_path):
     )
     preferences = ComputeSettings(tmp_path).preferences()
     assert preferences.local.enabled is True
-    assert preferences.gcp.default_gpu == "A100"
-    assert json.loads(path.read_text())["gcp"]["default_gpu"] == "A100"
+    assert preferences.gcp.default_gpu == "A100-80GB"
+    assert json.loads(path.read_text())["gcp"]["default_gpu"] == "A100-80GB"
+    target = ComputeSettings(tmp_path).runtime("skypilot-gcp-A100-80GB")
+    assert target.gpu_memory_mib == 80 * 1024
+    assert target.accelerator == "A100-80GB"
 
 
 def test_cloud_runtime_cannot_fall_back_to_native_execution(tmp_path):

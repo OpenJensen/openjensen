@@ -321,6 +321,8 @@ def test_native_cloud_adapter_exposes_executable_profiles_and_full_method():
     assert set(ready) == {"smolvla", *NATIVE_PROFILES}
     assert ready["act"]["initialization"] == "scratch"
     assert ready["act"]["methods"] == ["full"]
+    assert ready["smolvla"]["methods"] == ["lora", "qlora", "full"]
+    assert ready["smolvla"]["native_full_runtime_ids"] == ["trainer"]
     assert ready["pi05"]["model_revision"]
     assert ready["pi05"]["model_id"].startswith("lerobot/")
 
@@ -576,3 +578,69 @@ def test_unsupported_accumulation_rejected_before_job_or_dataset_execution(
         assert response.status_code == 422
         assert "require gradient accumulation of 1" in response.json()["detail"]
         assert client.get(f"/api/v1/projects/{project}/jobs").json() == []
+
+
+@pytest.mark.parametrize(
+    "module,memory,issue",
+    [
+        ("firebird_vla.application", 81920, "native LeRobot worker"),
+        ("firebird_vla.lerobot_application", 16384, "at least 24 GB"),
+        ("firebird_vla.lerobot_application", 24576, None),
+    ],
+)
+def test_native_smolvla_admission_binds_worker_memory_and_dataset_before_execution(
+    tmp_path, module, memory, issue
+):
+    worker = runtime(training_module=module, training_model_ids=["smolvla"], gpu_memory_mib=memory)
+    models = public_training_models(RuntimeCatalog(runtimes=[worker]))
+    assert ("full" in models[0]["methods"]) == (module == "firebird_vla.lerobot_application")
+    lifecycle = Lifecycle.__new__(Lifecycle)
+    lifecycle.settings = SimpleNamespace(data_dir=tmp_path)
+    lifecycle.compute = ComputeSettings(tmp_path)
+    lifecycle.compute.update(ComputeSettingsUpdate.model_validate({"local": {"enabled": True}}))
+    lifecycle.local_workers = LocalWorkerRegistry(tmp_path, RuntimeCatalog(runtimes=[worker]))
+    dataset = SimpleNamespace(
+        project_id="project",
+        status="succeeded",
+        result=DatasetProfile(
+            source="huggingface",
+            repo_id="fixture/dataset",
+            revision="a" * 40,
+            format="lerobot_v3",
+            total_episodes=2,
+            total_frames=20,
+            fps=30,
+            features={
+                "action": {"dtype": "float32", "shape": [6]},
+                "observation.state": {"dtype": "float32", "shape": [6]},
+                "observation.images.front": {"dtype": "video", "shape": [32, 32, 3]},
+            },
+            metadata_sha256="b" * 64,
+            inspected_at=now(),
+            warnings=[],
+        ),
+    )
+    lifecycle.execution = SimpleNamespace(get=AsyncMock(return_value=dataset))
+    model = TRAINING_MODEL_BY_ID["smolvla"]
+    request = PolicyRequest(
+        operation="policy.finetune",
+        runtime_id="trainer",
+        dataset_job_id="dataset",
+        training_method="full",
+        training={
+            "model_id": model.model_id,
+            "model_revision": model.model_revision,
+            "camera_keys": ["observation.images.front"],
+            "steps": 2,
+            "warmup_steps": 0,
+        },
+    )
+    if issue:
+        with pytest.raises(ValueError, match=issue):
+            asyncio.run(lifecycle.validate("project", request))
+        lifecycle.execution.get.assert_not_awaited()
+    else:
+        asyncio.run(lifecycle.validate("project", request))
+        assert request.training_method == "full"
+        assert request.training["model_id"] == model.model_id
+        lifecycle.execution.get.assert_awaited_once_with("dataset")

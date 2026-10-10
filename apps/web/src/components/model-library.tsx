@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, artifactDownloadUrl, isDatasetJob, type Job, type PolicyArtifact, type Project } from '@/lib/api';
-import { episodePartitions, modelActionIssue, modelDataset, modelFamily, modelFormat, modelLineage, ownedModels, record, textValue, type LineageStep, type ModelAction } from '@/lib/model-library';
+import { episodePartitions, modelActionIssue, modelDataset, modelFamily, modelFormat, modelLineage, modelRunGroups, modelRunName, ownedModels, record, textValue, type LineageStep, type ModelAction } from '@/lib/model-library';
 import { isCloudArtifact } from '@/lib/checkpoints';
 import './model-library.css';
 
@@ -13,18 +13,39 @@ function size(bytes: number) { return bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3
 function description(value: unknown) { return value === undefined || value === null || value === '' ? 'Not recorded' : typeof value === 'object' ? JSON.stringify(value) : String(value); }
 const operationNames: Record<string, string> = { 'policy.import': 'Imported', 'policy.finetune': 'Trained', 'policy.distill': 'Distilled', 'policy.export': 'Exported for inference', 'policy.quantize': 'Quantized', 'policy.workflow': 'Converted and quantized', 'policy.evaluate': 'Evaluated', 'policy.run': 'Run' };
 
+function ModelRunIdentity({ artifact, compact = false }: { artifact: PolicyArtifact; compact?: boolean }) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false), [name, setName] = useState('');
+  const rename = useMutation({
+    mutationFn: () => api.renameModelRun(artifact.project_id, artifact.job_id, name.trim()),
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ['artifacts', artifact.project_id] }); setEditing(false); },
+  });
+  return <div className="model-run-identity">
+    {!compact && <div><strong>{modelRunName(artifact)}</strong><small>Run {artifact.job_id.slice(0, 8)}</small></div>}
+    {editing ? <form className="model-run-rename" onSubmit={event => { event.preventDefault(); rename.mutate(); }}>
+      <label>Model name<input aria-label="Model name" autoFocus maxLength={80} value={name} disabled={rename.isPending} onChange={event => setName(event.target.value)} /></label>
+      <button type="submit" className="secondary-button" disabled={!name.trim() || rename.isPending}>{rename.isPending ? 'Saving…' : 'Save name'}</button>
+      <button type="button" className="text-link" disabled={rename.isPending} onClick={() => setEditing(false)}>Cancel</button>
+      {rename.isError && <p role="alert">{rename.error instanceof Error ? rename.error.message : 'The model name could not be saved.'}</p>}
+    </form> : <button type="button" className="text-link" aria-label={`Rename ${modelRunName(artifact)}`} onClick={() => { setName(modelRunName(artifact)); rename.reset(); setEditing(true); }}>Rename</button>}
+  </div>;
+}
+
 export function ModelWorkflowPicker({ projectId, action, selectedId, onSelect, onLibrary }: { projectId: string; action: 'distill' | 'quantize'; selectedId?: string; onSelect: (artifact: PolicyArtifact) => void; onLibrary: () => void }) {
   const artifacts = useQuery({ queryKey: ['artifacts', projectId], queryFn: () => api.artifacts(projectId), enabled: !!projectId, retry: false, refetchInterval: 3000 });
   const jobs = useQuery({ queryKey: ['jobs', projectId], queryFn: () => api.jobs(projectId), enabled: !!projectId, retry: false, refetchInterval: 5000 });
   const models = ownedModels(artifacts.data ?? [], projectId);
   return <section className="model-workflow-picker" aria-label={action === 'distill' ? 'Your teacher models' : 'Your quantization models'}>
     <div className="model-section-heading"><div><h2>{action === 'distill' ? 'Choose a teacher from My models' : 'Choose a model to quantize'}</h2><p>{action === 'distill' ? 'The student learns from this exact saved teacher.' : 'Compression creates a new version linked to the selected model.'}</p></div><button type="button" className="text-link" onClick={onLibrary}>My models →</button></div>
-    {!projectId ? <p role="status">Select a project to see its models.</p> : artifacts.isError || jobs.isError ? <div role="alert"><p>Models or their history could not be refreshed.</p><button type="button" className="secondary-button" onClick={() => { void artifacts.refetch(); void jobs.refetch(); }}>Retry models</button></div> : artifacts.isPending || jobs.isPending ? <p role="status">Loading your models…</p> : !models.length ? <div className="model-empty"><h3>No saved models in this project yet</h3><p>Train or import a model first. Its checkpoints and derived versions will appear in My models.</p><button type="button" className="secondary-button" onClick={onLibrary}>Open My models</button></div> : <div className="model-choice-list">{models.map(artifact => {
-      const issue = modelActionIssue(artifact, action);
-      return <button type="button" className={`model-choice${artifact.id === selectedId ? ' selected' : ''}`} key={artifact.id} disabled={!!issue} aria-pressed={artifact.id === selectedId} aria-label={`Choose ${artifact.label} · ${artifact.id}`} onClick={() => onSelect(artifact)}>
-        <span><strong>{artifact.label}</strong><small>{modelFamily(artifact, jobs.data ?? [], models)} · {modelFormat(artifact)}</small><small>{modelDataset(artifact, models, jobs.data ?? [])} · Model {artifact.id}</small></span><span className="model-choice-status">{issue ?? (artifact.id === selectedId ? 'Selected' : 'Select model')}</span>
-      </button>;
-    })}</div>}
+    {!projectId ? <p role="status">Select a project to see its models.</p> : artifacts.isError || jobs.isError ? <div role="alert"><p>Models or their history could not be refreshed.</p><button type="button" className="secondary-button" onClick={() => { void artifacts.refetch(); void jobs.refetch(); }}>Retry models</button></div> : artifacts.isPending || jobs.isPending ? <p role="status">Loading your models…</p> : !models.length ? <div className="model-empty"><h3>No saved models in this project yet</h3><p>Train or import a model first. Its checkpoints and derived versions will appear in My models.</p><button type="button" className="secondary-button" onClick={onLibrary}>Open My models</button></div> : <div className="model-run-list">{modelRunGroups(models).map(group => <details className="model-run-group" key={group.key} open={group.models.length === 1 || group.models.some(artifact => artifact.id === selectedId)}>
+      <summary><span><strong>{group.name}</strong><small>{modelFamily(group.models[0], jobs.data ?? [], models)} · Run {group.models[0].job_id.slice(0, 8)}</small></span><span>{group.models.length} saved {group.models.length === 1 ? 'version' : 'versions'}</span></summary>
+      <div className="model-run-content"><ModelRunIdentity artifact={group.models[0]} compact /><div className="model-choice-list">{group.models.map(artifact => {
+        const issue = modelActionIssue(artifact, action);
+        return <button type="button" className={`model-choice${artifact.id === selectedId ? ' selected' : ''}`} key={artifact.id} disabled={!!issue} aria-pressed={artifact.id === selectedId} aria-label={`Choose ${artifact.label} · ${artifact.id}`} onClick={() => onSelect(artifact)}>
+          <span><strong>{artifact.label}</strong><small>{modelFormat(artifact)}</small><small>{modelDataset(artifact, models, jobs.data ?? [])}</small></span><span className="model-choice-status">{issue ?? (artifact.id === selectedId ? 'Selected' : 'Select version')}</span>
+        </button>;
+      })}</div></div>
+    </details>)}</div>}
   </section>;
 }
 
@@ -73,7 +94,7 @@ export function ModelLibrary({ projects, currentProjectId, onAction, onTrain, on
     return artifacts.map(artifact => ({ project, artifact, artifacts, jobs, fresh: artifactQueries[index].isSuccess && !artifactQueries[index].isError && jobQueries[index].isSuccess && !jobQueries[index].isError }));
   }).sort((a, b) => (b.jobs.find(job => job.id === b.artifact.job_id)?.created_at ?? '').localeCompare(a.jobs.find(job => job.id === a.artifact.job_id)?.created_at ?? '') || a.artifact.label.localeCompare(b.artifact.label));
   const chosen = selected ? rows.find(row => row.project.id === selected.project && row.artifact.id === selected.artifact) : undefined;
-  const filtered = rows.filter(row => [row.artifact.label, row.artifact.id, row.project.name, modelFamily(row.artifact, row.jobs, row.artifacts), modelDataset(row.artifact, row.artifacts, row.jobs)].join(' ').toLowerCase().includes(search.toLowerCase().trim()));
+  const filtered = rows.filter(row => [modelRunName(row.artifact), row.artifact.job_id, row.artifact.label, row.artifact.id, row.project.name, modelFamily(row.artifact, row.jobs, row.artifacts), modelDataset(row.artifact, row.artifacts, row.jobs)].join(' ').toLowerCase().includes(search.toLowerCase().trim()));
   const pending = [...artifactQueries, ...jobQueries].some(query => query.isPending), failed = [...artifactQueries, ...jobQueries].some(query => query.isError);
   function refresh() { for (const query of [...artifactQueries, ...jobQueries]) void query.refetch(); }
   if (chosen) {
@@ -84,6 +105,7 @@ export function ModelLibrary({ projects, currentProjectId, onAction, onTrain, on
     return <article className="model-detail" aria-label="Model details" data-model-id={artifact.id}>
       <button type="button" className="text-link" onClick={() => setSelected(null)}>← All my models</button>
       <header className="model-detail-heading"><div><p className="model-eyebrow">{project.name} · {modelFamily(artifact, jobs, artifacts)}</p><h2>{artifact.label}</h2><p>{modelFormat(artifact)} · {size(artifact.file_bytes)} · {isCloudArtifact(artifact) ? 'Cloud storage' : 'Local storage'}</p><p>Model {artifact.id}</p></div><a className="secondary-button" href={artifactDownloadUrl(project.id, artifact.id)}>Download model</a></header>
+      <ModelRunIdentity artifact={artifact} />
       {!chosen.fresh && <p className="warning-box" role="alert">This model’s records could not be refreshed. Refresh before continuing with it.<button type="button" className="text-link" onClick={refresh}>Refresh records</button></p>}
       <section className="model-next-actions" aria-label="Continue with this model"><h3>Continue with this model</h3><div className="model-actions">{(Object.keys(actionNames) as ModelAction[]).map(action => {
         const issue = modelActionIssue(artifact, action);
@@ -102,8 +124,17 @@ export function ModelLibrary({ projects, currentProjectId, onAction, onTrain, on
     {!projects.length && <p role="status">Create a project to train or import your first model.</p>}
     {!pending && !failed && projects.length > 0 && !rows.length && <div className="model-empty"><h3>Your models will live here</h3><p>Train a model on your dataset, or import an existing policy. Every saved checkpoint, distilled student and quantized version will keep a link to its source model and run.</p></div>}
     {!!rows.length && !filtered.length && <p role="status">No models match this search.</p>}
-    <div className="model-library-grid">{filtered.map(row => <button type="button" className="model-library-card" key={`${row.project.id}:${row.artifact.id}`} aria-label={`Open model ${row.artifact.label} · ${row.artifact.id}`} onClick={() => setSelected({ project: row.project.id, artifact: row.artifact.id })}>
-      <span className="model-card-project">{row.project.name} · {modelFamily(row.artifact, row.jobs, row.artifacts)}</span><strong>{row.artifact.label}</strong><span>{modelFormat(row.artifact)}</span><span>{modelDataset(row.artifact, row.artifacts, row.jobs)}</span><span className="model-card-footer">{size(row.artifact.file_bytes)} · {modelLineage(row.artifact, row.artifacts, row.jobs).length > 1 ? 'Derived model' : 'Saved version'}<span>View history →</span></span><small>Model {row.artifact.id}</small>
-    </button>)}</div>
+    <div className="model-run-list">{modelRunGroups(filtered.map(row => row.artifact)).map(group => {
+      const first = filtered.find(row => row.artifact.id === group.models[0].id && row.project.id === group.models[0].project_id)!;
+      return <section className="model-run-group model-library-run" key={group.key} aria-label={`${group.name} · Run ${first.artifact.job_id.slice(0, 8)}`}>
+        <ModelRunIdentity artifact={first.artifact} /><p className="model-run-description">{first.project.name} · {modelFamily(first.artifact, first.jobs, first.artifacts)} · {group.models.length} saved {group.models.length === 1 ? 'version' : 'versions'}</p>
+        <div className="model-library-grid">{group.models.map(artifact => {
+          const row = filtered.find(item => item.project.id === artifact.project_id && item.artifact.id === artifact.id)!;
+          return <button type="button" className="model-library-card" key={artifact.id} aria-label={`Open model ${artifact.label} · ${artifact.id}`} onClick={() => setSelected({ project: row.project.id, artifact: artifact.id })}>
+            <strong>{artifact.label}</strong><span>{modelFormat(artifact)}</span><span>{modelDataset(artifact, row.artifacts, row.jobs)}</span><span className="model-card-footer">{size(artifact.file_bytes)} · {modelLineage(artifact, row.artifacts, row.jobs).length > 1 ? 'Derived model' : 'Saved version'}<span>View history →</span></span><small>Model {artifact.id}</small>
+          </button>;
+        })}</div>
+      </section>;
+    })}</div>
   </section>;
 }

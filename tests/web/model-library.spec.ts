@@ -12,6 +12,12 @@ async function fixture(page: Page, models = [artifact('teacher'), artifact('stud
   Object.assign(jobs[0], { result: { source: 'huggingface', repo_id: 'our/pickup', revision: 'b'.repeat(40), metadata_sha256: hash, inspection_scope: 'metadata_only', format: 'lerobot_v3', total_episodes: 6, total_frames: 24, fps: 30, robot_type: 'synthetic_fixture', inspected_at: time, warnings: [], features: {} } });
   await page.route('**/api/v1/**', async route => {
     const request = route.request(), path = new URL(request.url()).pathname;
+    if (request.method() === 'PUT' && path.includes('/model-runs/')) {
+      const body = request.postDataJSON(); state.mutations.push(body);
+      const jobId = decodeURIComponent(path.split('/').at(-2)!);
+      state.models.filter(model=>model.job_id===jobId).forEach(model=>{model.run_name=body.name;});
+      return route.fulfill({json:body});
+    }
     if (request.method() !== 'GET') { state.mutations.push(request.postDataJSON()); return route.fulfill({ status: 405, json: { detail: 'No jobs during navigation.' } }); }
     if (path === '/api/v1/projects') return route.fulfill({ json: [{ id: 'alpha', name: 'Pickup robot', created_at: time }, { id: 'beta', name: 'Second robot', created_at: time }] });
     if (path.endsWith('/artifacts')) return route.fulfill(state.fail ? { status: 503, json: { detail: 'Model read failed' } } : { json: state.models });
@@ -132,4 +138,27 @@ test('distilled and quantized models share the model collection and reopen their
   await page.getByRole('button',{name:'Open this model’s quantization job →',exact:true}).click();
   await expect(page.getByRole('article',{name:'ACT quantization job details',exact:true})).toHaveAttribute('data-job-id','run-packed');
   expect(state.mutations).toEqual([]);
+});
+
+test('quantization groups checkpoints by named run and renames all its versions without choosing another checkpoint', async ({page},testInfo)=>{
+  const earlier=artifact('step20','alpha',{job_id:'run-first',label:'SmolVLA · step 20',format:'training_checkpoint',run_name:'Amber Crane',metadata:{architecture:'smolvla',step:20}});
+  const later=artifact('step100','alpha',{job_id:'run-first',label:'SmolVLA · step 100',format:'training_checkpoint',run_name:'Amber Crane',metadata:{architecture:'smolvla',step:100}});
+  const other=artifact('second','alpha',{job_id:'run-second',format:'training_checkpoint',run_name:'Silver Finch',metadata:{architecture:'smolvla'}});
+  const state=await fixture(page,[earlier,later,other]);
+  await page.getByRole('link',{name:'Quantize',exact:true}).click();
+  await page.getByRole('button',{name:'Start a new quantization',exact:true}).click();
+  const group=page.locator('details.model-run-group').filter({has:page.getByRole('button',{name:'Choose SmolVLA · step 20 · step20',exact:true,includeHidden:true})});
+  await expect(group).not.toHaveAttribute('open');
+  await group.locator('summary').click();
+  await expect(group.getByRole('button',{name:'Choose SmolVLA · step 20 · step20',exact:true})).toBeVisible();
+  await group.getByRole('button',{name:'Rename Amber Crane',exact:true}).click();
+  await group.getByLabel('Model name',{exact:true}).fill('Battery pickup');
+  await group.getByRole('button',{name:'Save name',exact:true}).click();
+  await expect(group.locator('summary')).toContainText('Battery pickup');
+  await page.screenshot({path:testInfo.outputPath('named-checkpoint-groups.png'),fullPage:true});
+  await group.getByRole('button',{name:'Choose SmolVLA · step 20 · step20',exact:true}).click();
+  await expect(page.getByRole('group',{name:'My model',exact:true}).locator('input:checked')).toHaveValue('step20');
+  expect(state.mutations).toEqual([{name:'Battery pickup'}]);
+  expect(state.models.filter(model=>model.job_id==='run-first').every(model=>model.run_name==='Battery pickup')).toBe(true);
+  expect(other.run_name).toBe('Silver Finch');
 });

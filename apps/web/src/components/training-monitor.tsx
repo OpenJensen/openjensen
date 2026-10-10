@@ -11,6 +11,8 @@ import "./training-monitor.css";
 import { checkpointLabel, isCloudArtifact, quantizationIssue, sortCheckpoints } from "@/lib/checkpoints";
 import { ActExportControl } from "./act-export-control";
 import type { TrainingModel } from "@/lib/training-models";
+import { trainingProgress } from "@/lib/training-progress";
+import { Icon } from "./icon";
 
 function finite(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
@@ -190,7 +192,13 @@ export function TrainingMonitor({ run, projectId, active, artifacts, preferredCh
           {!running && onResume && <button type="button" className="secondary-button" disabled={checkpointId !== 'latest' && !chosenCheckpoint} onClick={() => onResume(chosenCheckpoint?.id)}>Resume from checkpoint</button>}
         </div>
       </header>
-      <p className="training-current-action" role="status">{runSummary(run, phase, status)}</p>
+      <p className="training-current-action" role="status">{running && data?.current_action ? data.current_action : runSummary(run, phase, status)}</p>
+      <ol className="training-timeline" aria-label="Training progress timeline">
+        {trainingProgress(status, phase, data?.current_action, events).map((stage, index) => <li key={stage.id} className={`timeline-${stage.state}`} aria-current={stage.state === 'active' || stage.state === 'stopped' ? 'step' : undefined}>
+          <span className="training-timeline-marker" aria-hidden="true">{stage.state === 'complete' ? <Icon name="check" size={14} /> : stage.state === 'stopped' ? '!' : index + 1}</span>
+          <div><strong>{stage.label}</strong><small>{stage.state === 'pending' ? 'Waiting' : stage.state === 'stopped' ? `${status} · ${stage.message ?? 'Open activity for details'}` : stage.message ?? (stage.state === 'complete' ? 'Complete' : 'Waiting for worker activity')}</small>{stage.timestamp && <time dateTime={stage.timestamp}>{time(stage.timestamp)}</time>}</div>
+        </li>)}
+      </ol>
       {telemetry.isPending && <p className="training-monitor-note" role="status">Loading run telemetry…</p>}
       {legacy && <p className="training-stale-notice" role="status">Showing saved activity from the running application. Detailed telemetry becomes available after the application is restarted once active runs finish.</p>}
       {legacyEvents.error && legacy && <p className="error-notice" role="alert">Saved activity is unavailable: {legacyEvents.error.message}</p>}

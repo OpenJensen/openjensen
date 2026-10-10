@@ -44,7 +44,7 @@ export function GpuPicker({ value, onChange, choices, disabled = false, label = 
   const selected = choices[selectedIndex];
   const expanded = open && !disabled && choices.length > 0;
   const active = Math.min(Math.max(activeIndex, 0), choices.length - 1);
-  const tone = (choice?: GpuChoice) => ["L4", "T4", "A100"].includes(choice?.id ?? "") ? choice!.id.toLowerCase() : "local";
+  const tone = (choice?: GpuChoice) => choice?.id === "A100-80GB" ? "a100" : ["L4", "T4", "A100"].includes(choice?.id ?? "") ? choice!.id.toLowerCase() : "local";
 
   function show(index = selectedIndex >= 0 ? selectedIndex : 0) {
     if (disabled || !choices.length) return;

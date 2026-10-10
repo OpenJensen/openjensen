@@ -2,6 +2,7 @@
 
 import { useId, useRef, type ReactNode } from 'react';
 import './training-help.css';
+import { Icon } from './icon';
 
 export function TrainingHelp({ label, children, id, wide = false }: { label: string; children: ReactNode; id?: string; wide?: boolean }) {
   const generated = useId();
@@ -19,7 +20,7 @@ export function TrainingHelp({ label, children, id, wide = false }: { label: str
   }
   const description = id ?? `training-help-${generated}`;
   return <span className={`training-help${wide ? " wide" : ""}`} ref={anchor} onMouseEnter={position} onFocusCapture={position}>
-    <button type="button" aria-label={`Help for ${label}`} aria-describedby={description}>?</button>
+    <button type="button" aria-label={`Help for ${label}`} aria-describedby={description}><Icon name="help" size={20} /></button>
     <span id={description} role="tooltip" ref={tooltip}>{children}</span>
   </span>;
 }
