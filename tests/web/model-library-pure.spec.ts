@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Job, PolicyArtifact } from '../../apps/web/src/lib/api';
-import { episodePartitions, modelActionIssue, modelLineage, ownedModels } from '../../apps/web/src/lib/model-library';
+import { episodePartitions, modelActionIssue, modelLineage, modelRunGroups, modelRunName, ownedModels } from '../../apps/web/src/lib/model-library';
 
 const model = (id: string, parents: string[] = [], extra: Partial<PolicyArtifact> = {}) => ({ id, project_id: 'alpha', job_id: `run-${id}`, label: id, format: 'native_checkpoint', parent_ids: parents, metadata: { architecture: 'act' }, ...extra }) as PolicyArtifact;
 const job = (id: string, request: Record<string, unknown>) => ({ id, project_id: 'alpha', kind: 'policy.finetune', request }) as Job;
@@ -32,4 +32,25 @@ test('actions depend on the concrete format and provenance of a saved model', ()
   expect(modelActionIssue(model('training', [], { format: 'training_checkpoint' }), 'distill')).toContain('Export');
   expect(modelActionIssue(model('remote', [], { metadata: { architecture: 'act', storage: 'gcs' } }), 'distill')).not.toBeNull();
   expect(modelActionIssue(model('other', [], { metadata: { architecture: 'pi0' } }), 'quantize')).not.toBeNull();
+});
+
+test('checkpoints group by both project and producing run while retaining every exact version', () => {
+  const earlier = model('earlier', [], {job_id:'shared', run_name:'Amber Crane',metadata:{architecture:'smolvla',step:20}});
+  const later = model('later', [], {job_id:'shared', run_name:'Amber Crane',metadata:{architecture:'smolvla',step:100}});
+  const foreign = model('foreign', [], {project_id:'beta',job_id:'shared'});
+  const groups = modelRunGroups([earlier,later,foreign]);
+  expect(groups).toHaveLength(2);
+  expect(groups[0].name).toBe('Amber Crane');
+  expect(groups[0].models.map(item=>item.id)).toEqual(['later','earlier']);
+  expect(groups[1].models.map(item=>item.id)).toEqual(['foreign']);
+  expect(modelActionIssue(model('sft', [], {format:'training_checkpoint',metadata:{architecture:'smolvla',training_backend:'lerobot',method:'full'}}),'quantize')).toContain('not available yet');
+});
+
+test('descriptive fallback names include architecture step and compression and groups prefer the latest verified checkpoint',()=>{
+  const earlier=model('earlier',[],{job_id:'one',metadata:{architecture:'smolvla',step:20,method:'lora'}});
+  const later=model('later',[],{job_id:'one',metadata:{architecture:'smolvla',step:100,precision:'Q4_0',reload_verified:true}});
+  expect(modelRunName(later)).toBe('smolvla-100-q4');
+  expect(modelRunGroups([earlier,later])[0].name).toBe('smolvla-100-q4');
+  expect(modelRunGroups([earlier,later])[0].models[0].id).toBe('later');
+  expect(modelRunName({...later,run_name:'Battery pickup'})).toBe('Battery pickup');
 });

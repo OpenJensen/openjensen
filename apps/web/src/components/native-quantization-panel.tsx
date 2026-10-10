@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, artifactDownloadUrl, isActive, type Job } from '@/lib/api';
 import { storeAttempt, storedAttempt, type PolicyJobAttempt } from '@/lib/policy-job-attempt';
+import { ModelVersionPicker } from './model-version-picker';
 import { WorkflowChoiceGrid } from './workflow-choice-grid';
 import { publicPath } from '@/lib/base-path';
 import { WorkbenchDisclosure } from './workbench-disclosure';
+import { QuantizationComparison } from './quantization-comparison';
 import { simulationOptions } from '@/lib/native-simulation';
 import { quantizedSimulationHandoff, simulationHandoffProfiles, type SimulationHandoff } from '@/lib/native-simulation-handoff';
 import { availableNativeQuantizer, nativeTransformIssue, nativeTransformMetadata, cancelNativeQuantization, nativeQuantizationInput, nativeQuantizationOf, measuredNativeReport, replayableNativeOutput, object, startNativeQuantization, UncertainQuantization, type NativeQuantizationRuntime, type PackedArtifact } from '@/lib/native-quantization';
@@ -15,7 +17,7 @@ class QuantizationJournalUnavailable extends Error {
   constructor() { super('Browser session storage is unavailable. Restore it and reload, then inspect recorded jobs before submitting again.'); }
 }
 
-export function NativeQuantizationPanel({ projectId, preferredArtifactId, preferredJobId, onJobSelected, onPrepare, onReplay, onPrepareSimulation, onBack, onModel }: { projectId: string; preferredArtifactId?: string; preferredJobId?: string; onJobSelected?: (id: string) => void; onPrepare: () => void; onReplay?: (artifactId: string) => void; onPrepareSimulation?: (source: SimulationHandoff) => void; onBack: () => void; onModel?: (artifactId: string) => void }) {
+export function NativeQuantizationPanel({ projectId, preferredArtifactId, preferredJobId, onJobSelected, onPrepare, onReplay, onPrepareSimulation, onBack, onBackToModels, modelRunId, onModel }: { projectId: string; preferredArtifactId?: string; preferredJobId?: string; onJobSelected?: (id: string) => void; onPrepare: () => void; onReplay?: (artifactId: string) => void; onPrepareSimulation?: (source: SimulationHandoff) => void; onBack: () => void; onBackToModels?: () => void; modelRunId?: string; onModel?: (artifactId: string) => void }) {
   const client = useQueryClient();
   const options = useQuery({ queryKey: ['policy-options'], queryFn: api.policyOptions, retry: false, refetchInterval: 10_000 });
   const jobs = useQuery({ queryKey: ['jobs', projectId], queryFn: () => api.jobs(projectId), enabled: !!projectId, retry: false, refetchInterval: 2_000 });
@@ -117,7 +119,7 @@ export function NativeQuantizationPanel({ projectId, preferredArtifactId, prefer
     } finally { busy.current = false; if (mounted.current) { setPending(null); setConfirmCancel(null); } }
   }
   return <section className="panel native-simulation native-quantization native-workflow" aria-label="Native ACT quantization">
-    <div className="workflow-view-navigation"><button type="button" className="text-link" onClick={onBack}>← Back to jobs</button></div>
+    <div className="workflow-view-navigation"><button type="button" className="text-link" onClick={!jobId && modelRunId && onBackToModels ? onBackToModels : onBack}>{!jobId && modelRunId ? '← Back to models' : '← Back to jobs'}</button></div>
     <div className="native-workflow-toolbar"><span className="native-model-badge">ACT · INT8 / INT4</span><button className="text-link" aria-label="Refresh ACT quantization jobs" disabled={!projectId || jobs.isFetching} onClick={() => void refresh()}>Refresh</button></div>
     {jobId && !selected && <p role="status">{jobs.isPending ? 'Loading job…' : 'This quantization job is unavailable. No replacement has been selected.'}</p>}
     {selected && <article className="native-simulation-result" aria-label="ACT quantization job details" data-job-id={selected.id}>
@@ -127,6 +129,7 @@ export function NativeQuantizationPanel({ projectId, preferredArtifactId, prefer
         {selected.status === 'succeeded' && (measured ? <section aria-label="Measured ACT quantization results">
           <h4>Stored bytes and action drift</h4>
           <dl className="cloud-run-facts"><div><dt>Source FP32 weights</dt><dd>{measured.source_weight_bytes.toLocaleString()} bytes</dd></div><div><dt>Packed weights</dt><dd>{measured.packed_weight_bytes.toLocaleString()} bytes</dd></div><div><dt>Inference payload</dt><dd>{measured.policy_package_bytes.toLocaleString()} bytes</dd></div><div><dt>Fresh packed CPU reload</dt><dd>Exact agreement with the packed candidate</dd></div></dl>
+          <QuantizationComparison job={selected} reports={reports} />
           <p>Generated observations only. Exact reload does not mean unchanged FP32 actions.</p>
           <WorkbenchDisclosure title="Action differences"><p>Payload size excludes the outer download envelope. These observations are not held-out robotics evaluation.</p><div className="native-quantization-drift" role="region" aria-label="FP32 action differences" tabIndex={0}><table><caption>Difference from FP32 across each full {measured.prediction_horizon} × 6 action chunk</caption><thead><tr><th>Fixture seed</th><th>Raw RMSE</th><th>Raw maximum</th><th>Postprocessed RMSE</th><th>Postprocessed maximum</th></tr></thead><tbody>{measured.drift_from_fp32.map((row, index) => <tr key={`${row.input_sha256}-${index}`}><th scope="row">{row.seed}</th><td>{row.raw.rmse.toPrecision(6)}</td><td>{row.raw.maximum_absolute_difference.toPrecision(6)}</td><td>{row.postprocessed.rmse.toPrecision(6)}</td><td>{row.postprocessed.maximum_absolute_difference.toPrecision(6)}</td></tr>)}</tbody></table></div>
           <p>Postprocessed differences use saved processor output coordinates; physical units are unverified. No accepted quality threshold or GPU memory/latency improvement is established.</p></WorkbenchDisclosure>
@@ -162,7 +165,7 @@ export function NativeQuantizationPanel({ projectId, preferredArtifactId, prefer
         <button className="primary-button" disabled>Create ACT quantized package</button>
       </div> : <>
         <fieldset disabled={!editable} className="native-simulation-form"><legend className="visually-hidden">ACT quantization setup</legend>
-          <WorkflowChoiceGrid name="act-policy" label="Policy" value={input?.id ?? ''} onChange={chooseArtifact} options={inputs.map(item => ({ value: item.id, label: item.label, meta: item.id.slice(0, 8), icon: 'layers' }))} emptyMessage="No ACT inference policies. Import or export a complete policy first." />
+          {modelRunId ? <ModelVersionPicker runId={modelRunId} projectId={projectId} artifacts={artifacts.data ?? []} jobs={jobs.data ?? []} value={artifactId} onChange={chooseArtifact} label="Policy" /> : <WorkflowChoiceGrid name="act-policy" label="Policy" value={input?.id ?? ''} onChange={chooseArtifact} options={inputs.map(item => ({ value: item.id, label: item.label, meta: item.id.slice(0, 8), icon: 'layers' }))} emptyMessage="No ACT inference policies. Import or export a complete policy first." />}
           {excludedInputs && <p role="status">Some ACT packages are excluded because their model format, timing or simulator details are incomplete or unsupported. Refresh or export a complete inference package.</p>}
           {inputSemantics && <p className="field-help">Inherited action timing: plans {inputSemantics.prediction_horizon} actions and applies {inputSemantics.execution_horizon} per update. Packing keeps the saved timing; the server checks the policy before starting.</p>}
           {inputSemantics?.control_contract && <p role="status">This package carries a simulator control contract. Packing must preserve it. A compatible Run profile and separate rollout consent are still required; calibration and task success remain unverified.</p>}

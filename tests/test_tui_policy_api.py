@@ -68,6 +68,8 @@ def test_terminal_engine_contract_executes_same_saved_policy_through_actual_api(
         imported = wait(client, submit(client, pid, operation="policy.import"))
         assert imported["status"] == "succeeded"
         source = imported["result"]["artifacts"][0]
+        listed = client.get(f"/api/v1/projects/{pid}/artifacts").json()
+        saved_source = next(item for item in listed if item["id"] == source["id"])
         payload = {
             "operation": operation,
             "runtime_id": "fixture",
@@ -89,7 +91,8 @@ def test_terminal_engine_contract_executes_same_saved_policy_through_actual_api(
         assert completed["request"]["artifact_id"] == source["id"]
         assert completed["result"]["decision"] != "validated"
         artifacts = client.get(f"/api/v1/projects/{pid}/artifacts").json()
-        assert next(item for item in artifacts if item["id"] == source["id"]) == source
+        assert next(item for item in artifacts if item["id"] == source["id"]) == saved_source
+        assert client.get(f"/api/v1/jobs/{imported['id']}").json() == imported
         for item in completed["result"]["artifacts"]:
             assert item["parent_ids"] == [source["id"]]
             assert item["metadata"]["fixture_only"] is True

@@ -385,6 +385,7 @@ class PolicyRequest(StrictRecord):
 
 
 class PolicyArtifact(StrictRecord):
+    run_name: str | None = Field(default=None, max_length=80)
     id: str
     project_id: str
     job_id: str

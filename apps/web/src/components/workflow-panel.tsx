@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { CloudConnectionsPanel } from "@/components/cloud-connections";
+import { QuantizationCompression, QuantizationCompute } from "@/components/quantization-settings";
+import { QuantizationComparison } from "@/components/quantization-comparison";
+import { ModelVersionPicker } from "@/components/model-version-picker";
 import { ownedModels } from "@/lib/model-library";
 import { JobHistory } from "@/components/job-history";
 import { WorkflowChoiceGrid, type WorkflowChoice } from "@/components/workflow-choice-grid";
@@ -65,7 +68,7 @@ const initial: Preferences = {
   minSuccess: 100,
   maxLatency: 1000,
   maxMemory: 8192,
-  precision: "recommended",
+  precision: "Q8_0",
   vision: false,
   compareQ4: false,
 };
@@ -136,6 +139,8 @@ export function WorkflowPanel({
   preferredJobId,
   onViewTraining,
   onBackToJobs,
+  onBackToModels,
+  modelRunId,
   onModel,
 }: {
   projectId: string;
@@ -147,6 +152,8 @@ export function WorkflowPanel({
   preferredJobId?: string;
   onViewTraining?: () => void;
   onBackToJobs?: () => void;
+  onBackToModels?: () => void;
+  modelRunId?: string;
   onModel?: (artifactId: string) => void;
 }) {
   const client = useQueryClient();
@@ -428,7 +435,7 @@ export function WorkflowPanel({
             <label>
               Quantization recipe
               <select
-                value={preferences.precision}
+                value={language}
                 onChange={(e) =>
                   update(
                     "precision",
@@ -436,9 +443,6 @@ export function WorkflowPanel({
                   )
                 }
               >
-                <option value="recommended">
-                  Recommended · Q8
-                </option>
                 <option value="Q4_0">LM Q4 (experimental)</option>
                 <option value="Q8_0">LM Q8</option>
               </select>
@@ -815,7 +819,7 @@ export function WorkflowPanel({
     setSelectedJobId(id);
     setView("detail");
   };
-  const backToHistory = () => { mutation.reset(); cancel.reset(); if (onBackToJobs) onBackToJobs(); else setView("history"); };
+  const backToHistory = () => { mutation.reset(); cancel.reset(); if(view === "new" && modelRunId && onBackToModels) onBackToModels(); else if (onBackToJobs) onBackToJobs(); else setView("history"); };
 
   if (view === "history") return (
     <JobHistory
@@ -881,6 +885,7 @@ export function WorkflowPanel({
         {isActive(selected) && <button className="secondary-button" disabled={cancel.isPending} onClick={() => cancel.mutate()}>{cancel.isPending ? "Cancelling…" : "Cancel run"}</button>}
         {cancel.error && <p className="error-notice" role="alert">{cancel.error.message}</p>}
         {events.error && <p className="error-notice" role="alert">Activity is unavailable: {events.error.message}</p>}
+        {stage === "Quantize" && selected.kind === "policy.quantize" && <QuantizationComparison job={selected} reports={data?.reports} />}
         {(engineReport || inference) && <section className="workflow-measurements" aria-label="Measured results">
           <h3>Results</h3>
           <dl className="workflow-job-facts">
@@ -936,7 +941,7 @@ export function WorkflowPanel({
   const formIssue = selectionIssue ?? inputIssue ?? executionIssue;
   return (
     <section className="panel workflow-panel workflow-new-job">
-      <div className="workflow-view-navigation"><button className="text-link" type="button" disabled={mutation.isPending} onClick={backToHistory}>← All {historyTitle.toLowerCase()}</button></div>
+      <div className="workflow-view-navigation"><button className="text-link" type="button" disabled={mutation.isPending} onClick={backToHistory}>{modelRunId ? "← Back to models" : `← All ${historyTitle.toLowerCase()}`}</button></div>
       {preferencesBlocker && <p className="warning-box" role="status">{preferencesBlocker}</p>}
       {options.data && !runtimes.length && <div className="workflow-storage-note" role="status">
         <p>{stage === "Evaluate" ? "No evaluation target is available." : stage === "Run" ? "No policy runner is available." : "Connect a worker to start quantization."}</p>
@@ -950,28 +955,23 @@ export function WorkflowPanel({
             <label>Inspected dataset<select value={datasetId || datasets[0]?.id || ""} onChange={event => setDatasetId(event.target.value)}><option value="" disabled>Select an inspection</option>{datasets.map(job => <option key={job.id} value={job.id}>{"repo_id" in job.request ? job.request.repo_id : job.id}</option>)}</select></label>
             <label>Resume checkpoint<select value={resumeId} onChange={event => setResumeId(event.target.value)}><option value="">Start a new training run</option>{checkpoints.map(artifact => <option key={artifact.id} value={artifact.id}>{checkpointLabel(artifact, policyJobs, options.data?.training_models)}</option>)}{policyJobs.filter(job => job.kind === "policy.finetune" && ["failed", "interrupted", "cancelled"].includes(job.status)).map(job => <option key={job.id} value={`job:${job.id}`}>Last saved checkpoint · {job.id.slice(0, 8)}</option>)}</select></label>
           </> : <>
-            <WorkflowChoiceGrid name="input-policy" label="My model" value={selectedInput}
+            {stage === "Quantize" && modelRunId ? <ModelVersionPicker runId={modelRunId} projectId={projectId} artifacts={artifacts.data ?? []} jobs={policyJobs} value={selectedInput} onChange={value=>{setInput(value);mutation.reset();}} /> : <WorkflowChoiceGrid name="input-policy" label="My model" value={selectedInput}
               options={policyChoices} onChange={value => { setInput(value); mutation.reset(); }}
-              emptyMessage={artifacts.isPending ? "Loading policies…" : "Your saved policies will appear here."} />
+              emptyMessage={artifacts.isPending ? "Loading policies…" : "Your saved policies will appear here."} />}
             {(stage === "Evaluate" || stage === "Run") && !artifacts.isPending && !artifacts.isError && !inputs.length && <div className="workflow-storage-note" role="status">
               <p>Quantize a SmolVLA checkpoint first.</p>
               <button type="button" className="text-link" onClick={onOpenQuantize}>Go to quantization</button>
             </div>}
             {stage === "Quantize" && <>
-              <WorkflowChoiceGrid name="quantization-precision" label="Compression" value={preferences.precision}
-                options={[
-                  { value: "recommended", label: "Recommended", meta: "Q8 · 8-bit", icon: "spark" },
-                  { value: "Q8_0", label: "8-bit", meta: "Q8", icon: "layers" },
-                  { value: "Q4_0", label: "4-bit", meta: "Q4 · Experimental", icon: "compress" },
-                ]} onChange={value => update("precision", value as Preferences["precision"])} />
-              <details className="workflow-advanced"><summary>Advanced quantization</summary><label className="workflow-check"><input type="checkbox" checked={preferences.vision} onChange={event => update("vision", event.target.checked)} />Also quantize vision to Q8 (experimental)</label>{nativeQuantization && <label className="workflow-check"><input type="checkbox" checked={preferences.compareQ4} onChange={event => update("compareQ4", event.target.checked)} />Compare Q8 and Q4 (experimental)</label>}</details>
+              <QuantizationCompression language={language} vision={preferences.vision} onLanguage={value=>update("precision",value)} onVision={value=>update("vision",value)} />
+              {nativeQuantization && <details className="workflow-advanced"><summary>Compare language formats</summary><label className="workflow-check"><input type="checkbox" checked={preferences.compareQ4} onChange={event=>update("compareQ4",event.target.checked)} />Compare Q8 and Q4 (experimental)</label></details>}
             </>}
           </>}
-          <WorkflowChoiceGrid name="execution-target" label="Compute" value={runtime?.id ?? ""}
+          {stage === "Quantize" ? <QuantizationCompute artifact={inputArtifact} runtime={runtime} runtimes={runtimes} disabled={!ready || mutation.isPending} onChange={setRuntimeId} localGpuInference={nativeQuantization && runtime?.device === "cuda"} /> : <WorkflowChoiceGrid name="execution-target" label="Compute" value={runtime?.id ?? ""}
             disabled={!runtimes.length}
             options={runtimes.map(target => ({ value: target.id, label: target.label,
               meta: `${target.execution === "skypilot" ? "Cloud" : "Local"} · ${target.device === "cuda" ? "GPU" : "CPU"}`, icon: "layers" }))}
-            onChange={setRuntimeId} emptyMessage="Connect a compatible worker in Compute settings." />
+            onChange={setRuntimeId} emptyMessage="Connect a compatible worker in Compute settings." />}
           {(stage === "Evaluate" || stage === "Run") && <>
             {cloudEngine ? <p className="workflow-input-help">Synthetic inputs · no task success score</p> : <WorkflowChoiceGrid
               name="evaluation-method" label="Check type" value={preferences.mode} disabled={preferences.suite === "libero_spatial"}

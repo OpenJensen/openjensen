@@ -1,0 +1,4 @@
+.training-copy-option { display: flex; align-items: center; gap: 8px; margin: 16px 0 4px; }
+.training-copy-option label { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; line-height: 1.5; cursor: pointer; }
+.training-copy-option input[type=checkbox] { flex-shrink: 0; width: 16px; height: 16px; padding: 0; margin: 0; accent-color: var(--accent); }
+.training-copy-option > .training-help { flex-shrink: 0; }

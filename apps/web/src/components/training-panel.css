@@ -17,7 +17,7 @@
 .training-dataset { position: relative; display: flex; align-items: center; gap: 12px; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
 .training-dataset img, .training-dataset-icon { width: 58px; height: 46px; object-fit: cover; border-radius: 4px; flex-shrink: 0; }
 .training-dataset-icon { display: grid; place-items: center; background: var(--subtle); color: var(--muted); }
-.training-dataset > span:last-child { display: grid; min-width: 0; gap: 4px; }
+.training-dataset > .training-dataset-copy { display: grid; min-width: 0; gap: 4px; }
 .training-dataset strong { font-size: 12px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .training-dataset small { font-size: 10px; color: var(--muted); overflow-wrap: anywhere; }
 .training-dataset > input, .training-model-tile > input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); margin: -1px; }
@@ -48,19 +48,13 @@
 .training-extra-camera { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 0; font-size: 11px; overflow-wrap: anywhere; }
 .training-extra-camera small { margin-left: auto; color: var(--muted); }
 .training-model-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; margin-block: 0; }
-.training-model-tile { position: relative; display: flex; align-items: center; gap: 12px; min-width: 0; min-height: 78px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: pointer; }
+.training-model-tile { position: relative; display: flex; align-items: center; min-width: 0; min-height: 94px; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: pointer; }
 .training-model-tile:hover, .training-dataset:hover { border-color: var(--line-strong); }
-.training-model-mark { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; border-radius: 9px; background: linear-gradient(145deg,#6e7787,#3d4350); color: #fff; font-family: ui-monospace,monospace; font-size: 11px; font-weight: 650; }
-.model-smolvla .training-model-mark { background: linear-gradient(135deg,#b4cf65,#48a98d); }
-.model-pi0 .training-model-mark, .model-pi05 .training-model-mark { background: linear-gradient(135deg,#9267c9,#d25c9a); font-size: 21px; }
-.model-pi05 .training-model-mark { font-size: 17px; }
-.model-openvla .training-model-mark { background: linear-gradient(135deg,#58a8af,#5b78b3); }
-.model-openvla_oft .training-model-mark { background: linear-gradient(135deg,#c58f54,#ba6373); }
-.training-model-copy { min-width: 0; flex: 1; display: grid; gap: 5px; }
+.training-model-copy { min-width: 0; flex: 1; display: grid; gap: 10px; }
 .training-model-copy > span { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-.training-model-copy strong { min-width: 0; font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
-.training-model-copy > .training-model-memory { margin-top: 4px; color: var(--muted); font-size: 11px; gap: 5px; }
-.training-model-memory strong { color: var(--ink); font-size: 13px; font-weight: 750; }
+.training-model-copy strong { min-width: 0; font-size: 18px; font-weight: 600; line-height: 1.3; letter-spacing: -.3px; overflow-wrap: anywhere; }
+.training-model-copy > .training-model-memory { color: var(--muted); font-size: 11px; gap: 4px; }
+.training-model-memory strong { color: inherit; font-size: inherit; font-weight: 400; letter-spacing: normal; }
 .training-model-status { font-size: 9px; color: var(--muted); border: 1px solid var(--line); padding: 1px 4px; border-radius: 4px; white-space: nowrap; }
 .training-methods { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 24px; }
 .training-methods legend { margin-bottom: 10px; font-size: 12px; font-weight: 500; }
@@ -113,7 +107,6 @@
   .training-workspace .dx-camera-grid, .training-workspace .dx-camera-grid:not(:has(> :nth-child(3))) { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .training-datasets { grid-template-columns: 1fr; }
   .training-model-grid, .training-compute-grid { grid-template-columns: 1fr; gap: 8px; }
-  .training-model-tile { min-height: 68px; padding: 10px 12px; }
   .training-fields { grid-template-columns: 1fr; }
   .training-camera-fallback { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .training-footer { align-items: flex-end; }
@@ -155,10 +148,7 @@
 .training-recovery-actions > button { white-space: normal; }
 
 .training-method-choices { margin-top: 28px; }
-.training-model-tile { align-items: flex-start; }
 .training-model-grid { align-items: stretch; }
-
-.training-model-tile { min-height: 76px; align-items: center; }
 
 /* Recipe context stays readable before the advanced controls are opened. */
 .training-recipe-review { margin-bottom: 22px; padding: 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
@@ -170,8 +160,9 @@
 .training-recipe-review dt { color: var(--muted); font-size: 10px; margin-bottom: 5px; }
 .training-recipe-review dd { margin: 0; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .training-recipe-review > p { margin-top: 18px; color: var(--muted); font-size: 11px; line-height: 1.65; }
-.training-workspace .training-temporal { border-top: 1px solid var(--line); margin-top: 22px; padding-top: 18px; }
+.training-workspace .training-temporal { margin-top: 22px; padding-top: 18px; }
 .training-temporal legend { font-size: 12px; font-weight: 600; padding-top: 18px; }
+.training-hyperparameters legend { font-size: 12px; font-weight: 600; margin-bottom: 14px; }
 .training-temporal > p, .training-native-timing, .training-saved-recipe p { margin-top: 10px; color: var(--muted); font-size: 11px; line-height: 1.7; max-width: 680px; }
 .training-temporal-toggle { display: flex; align-items: center; gap: 9px; margin: 16px 0; font-size: 12px; cursor: pointer; }
 .training-temporal-toggle input { width: 16px; height: 16px; accent-color: var(--ink); }
@@ -194,10 +185,6 @@
 .training-settings-actions { display: flex; justify-content: flex-end; margin: 4px 0 14px; }
 
 .training-field-name { display: flex; align-items: center; gap: 8px; }
-.training-help { position: relative; display: inline-flex; align-items: center; }
-.training-help > button { display: grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--muted); background: var(--surface); font-size: 11px; line-height: 1; cursor: help; }
-.training-help > [role=tooltip] { display: none; position: absolute; z-index: 20; bottom: calc(100% + 8px); left: -20px; width: min(260px, 65vw); padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--ink); box-shadow: 0 6px 20px #10294420; font-size: 12px; font-weight: 400; line-height: 1.6; }
-.training-help:hover > [role=tooltip], .training-help:focus-within > [role=tooltip] { display: block; }
 
 .training-edit-model { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
 .training-edit-model button { padding: 8px 12px; font-size: 12px; }
@@ -220,3 +207,20 @@
 .training-model-tile input, .training-dataset input { left: auto; right: 8px; top: 8px; width: 14px; height: 14px; opacity: 1; clip: auto; clip-path: none; appearance: none; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--surface); margin: 0; cursor: pointer; }
 .training-model-tile input:checked, .training-dataset input:checked { background: var(--accent); border-color: var(--accent); }
 .training-model-tile input:checked::after, .training-dataset input:checked::after { content: ''; position: absolute; width: 3px; height: 6px; border: solid white; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); left: 4px; top: 1px; }
+
+.training-dataset.unavailable { cursor: not-allowed; background: var(--subtle); border-style: dashed; }
+.training-dataset.unavailable > input, .training-dataset.unavailable > img, .training-dataset.unavailable > span:not(.training-dataset-reason) { opacity: .5; }
+.training-dataset.unavailable:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.training-dataset-reason { display: none; position: absolute; z-index: 20; left: 0; bottom: calc(100% + 8px); width: min(320px, calc(100vw - 64px)); padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); box-shadow: 0 6px 20px #10294420; color: var(--ink); font-size: 12px; line-height: 1.6; }
+.training-dataset.unavailable:hover .training-dataset-reason, .training-dataset.unavailable:focus .training-dataset-reason { display: block; }
+
+.training-model-selection-count { color: var(--muted); font-size: 12px; }
+.training-model-groups { display: grid; gap: 28px; margin-block: 28px 0; }
+.training-model-group { min-width: 0; }
+.training-model-group > h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; color: var(--muted); font-size: 12px; font-weight: 550; }
+.training-model-group > h3::after { content: ''; min-width: 16px; flex: 1; height: 1px; background: var(--line); }
+.training-model-family-count { font-size: 10px; font-weight: 400; }
+.training-model-tile { padding-right: 40px; }
+.training-model-tile input { top: 18px; right: 16px; }
+.training-model-tile.unavailable { background: var(--subtle); border-style: dashed; }
+.training-model-tile.unavailable > span, .training-model-tile.unavailable > input { opacity: .5; }

@@ -1,4 +1,4 @@
-import { chooseTransformationModel, transformationJobs } from './lifecycle-controls';
+import { chooseTransformationModel, transformationJobs, selectedQuantizationModel, quantizationModelOption, selectQuantizationModel } from './lifecycle-controls';
 import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -14,7 +14,7 @@ function accumulationCapabilities(mode: AccumulationCatalog) {
     training_step_unit: mode === 'wrong-unit' ? 'microbatches' : 'optimizer_updates', training_world_size: mode === 'world-size' ? 2 : 1 };
 }
 
-async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 'stale' | 'unavailable' | 'legacy' | 'validating' | 'history' | 'empty' | 'local-snapshot' | 'local-unprepared' = 'running', openDetails = true, exportMode?: 'local' | 'remote' | 'remote-complete' | 'unconfigured' | 'failed' | 'local-dataset', accumulationCatalog: AccumulationCatalog = 'supported') {
+async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 'stale' | 'unavailable' | 'legacy' | 'validating' | 'history' | 'empty' | 'local-snapshot' | 'local-unprepared' = 'running', openDetails = true, exportMode?: 'local' | 'remote' | 'remote-complete' | 'unconfigured' | 'failed' | 'local-dataset', accumulationCatalog: AccumulationCatalog = 'supported', nativeSmol = false) {
   const submitted: Record<string, any>[] = [];
   const unexpected: string[] = [];
   const cancelled: string[] = [];
@@ -87,7 +87,7 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
     dataset: { source: exportMode === 'local-dataset' ? 'local' : 'huggingface' },
     ...(exportMode?.startsWith('remote') ? { storage: 'gcs', reload_verified: exportMode === 'remote-complete', step: 20 } : {}) };
   const artifacts: Record<string, any>[] = [artifact];
-  const extraRuntimes: Record<string, any>[] = [];
+  const extraRuntimes: Record<string, any>[] = nativeSmol ? [{id:'skypilot-gcp-A100-80GB',label:'A100 80 GB',accelerator:'A100-80GB',gpu_memory_mib:81920,execution:'skypilot',provider:'gcp',device:'cuda',enabled:true,training:true,training_model_ids:['smolvla']}] : [];
   if (exportMode === 'remote-complete') {
     job.status = 'succeeded';
     telemetry.status = 'succeeded';
@@ -147,8 +147,8 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
           runtimes: [...extraRuntimes, ...(exportMode && exportMode !== 'unconfigured' ? [{ id: 'act-cpu', label: 'Local CPU export', provider: 'local', execution: 'native', device: 'cpu', enabled: true, training: false, act_export: true, export_only: true, engine_evaluation: false, run: false, simulation: false }] : []), { id: 'skypilot-gcp-A100', label: 'A100', accelerator: 'A100', execution: 'skypilot', provider: 'gcp', device: 'cuda', enabled: true, training: true, simulation: false, training_model_ids: localDataset ? ['smolvla', 'act'] : ['smolvla'] }],
           compute: { local: { enabled: false, label: 'Local' }, gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 } },
           training_models: [
-            { id: 'smolvla', label: 'SmolVLA', description: 'Compact policy', model_id: 'lerobot/smolvla_base', model_revision: revision, methods: ['lora', 'qlora'], suggested_gpu_memory_gb: 16, ...accumulationCapabilities(accumulationCatalog) },
-            { id: 'pi05', label: 'π₀.₅', description: 'Flow policy', model_id: 'lerobot/pi05_base', model_revision: revision, methods: ['full'], minimum_gpu_memory_gb: 40, runtime_ids: ['all-models-a100'] },
+            { id: 'smolvla', label: 'SmolVLA', description: 'Compact policy', model_id: 'lerobot/smolvla_base', model_revision: revision, methods: nativeSmol ? ['lora','qlora','full'] : ['lora','qlora'], native_full_runtime_ids: nativeSmol ? ['skypilot-gcp-A100','skypilot-gcp-A100-80GB'] : [], suggested_gpu_memory_gb: 16, ...accumulationCapabilities(accumulationCatalog) },
+            { id: 'pi05', label: 'π₀.₅', description: 'Flow policy', model_id: 'lerobot/pi05_base', model_revision: revision, methods: ['full'], minimum_gpu_memory_gb: 40, available: true, status: 'ready', runtime_ids: ['all-models-a100'] },
             ...(localDataset ? [{ id: 'act', label: 'ACT', description: 'Native policy', model_id: 'code://lerobot/act', model_revision: revision, methods: ['full'], backend: 'lerobot', minimum_gpu_memory_gb: 16, ...accumulationCapabilities(accumulationCatalog) }] : []),
           ], sources: [], training_methods: [{ id: 'lora', label: 'LoRA', description: 'Train adapters.' }, { id: 'qlora', label: 'QLoRA', description: 'Train quantized adapters.' }, { id: 'full', label: 'Full training', description: 'Train policy.' }], default_training_method: 'lora',
           quantization_defaults: { cuda: { language: 'Q8_0', vision: null }, cpu: { language: 'Q8_0', vision: null }, note: '' },
@@ -213,7 +213,7 @@ test('Fine-tune opens newest jobs first and opens details only after choosing a 
   expect(unexpected).toEqual([]);
 });
 
-test('new fine-tuning is a separate view with bold catalog memory budgets and a preserved draft', async ({ page }) => {
+test('new fine-tuning preserves its draft and shows muted catalog memory budgets below model names', async ({ page }) => {
   const { submitted, unexpected } = await workspace(page, 'history', false);
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Fine-tuning jobs', exact: true })).toHaveCount(0);
@@ -224,7 +224,11 @@ test('new fine-tuning is a separate view with bold catalog memory budgets and a 
   await expect(budget('SmolVLA')).toHaveText('16 GB+');
   await expect(budget('π₀.₅')).toHaveText('40 GB+');
   await expect(budget('OpenVLA')).toHaveText('GPU budget not verified');
-  expect(await budget('SmolVLA').evaluate(element => Number(getComputedStyle(element).fontWeight))).toBeGreaterThanOrEqual(700);
+  const card = page.getByRole('checkbox', { name: 'SmolVLA', exact: true }).locator('..');
+  const name = card.locator('.training-model-copy > span:first-child strong');
+  const budgetSize = await budget('SmolVLA').evaluate(element => Number.parseFloat(getComputedStyle(element).fontSize));
+  expect(await name.evaluate(element => Number.parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThan(budgetSize);
+  expect(await budget('SmolVLA').evaluate(element => Number(getComputedStyle(element).fontWeight))).toBeLessThan(600);
   await chooseOnlyModel(page, 'SmolVLA');
   await setup.getByRole('button', { name: 'Compute', exact: true }).click();
   await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
@@ -278,14 +282,20 @@ test('local training copies open the jobs-first wizard and retain native model a
   expect(unexpected).toEqual([]);
 });
 
-test('metadata-only local inspections cannot enter the training creation flow', async ({ page }) => {
+test('metadata-only local inspections stay removable but cannot be added or submitted', async ({ page }) => {
   const { submitted, unexpected } = await workspace(page, 'local-unprepared', false);
   await page.getByRole('link', { name: 'Dataset', exact: true }).click();
   await page.getByRole('button', { name: 'Open dataset Local dataset', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Train on this dataset', exact: true })).toHaveCount(0);
   await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
-  await expect(page.getByRole('checkbox', { name: 'Local dataset', exact: true })).toBeDisabled();
+  const dataset = page.getByRole('checkbox', { name: 'Local dataset', exact: true });
+  await expect(dataset).toBeChecked();
+  await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeDisabled();
+  await dataset.uncheck();
+  await expect(dataset).not.toBeChecked();
+  await expect(dataset).toBeDisabled();
+  await dataset.locator('..').focus();
   await expect(page.getByText('Prepare an immutable training copy when importing this local dataset.')).toBeVisible();
   expect(submitted).toEqual([]);
   expect(unexpected).toEqual([]);
@@ -576,7 +586,7 @@ test('ACT export-only computer never appears as an engine execution target', asy
     if (stage === 'Run') await page.getByRole('button', { name: 'Check inference', exact: true }).click();
     if (stage === 'Quantize') {
       await page.getByRole('button', { name: 'Start a new quantization', exact: true }).click();
-      await expect(page.getByRole('button', { name: 'Choose Checkpoint step 20 · checkpoint-artifact', exact: true })).toBeDisabled();
+      await expect(page.locator('.model-overview-card[data-artifact-id="checkpoint-artifact"]')).toBeDisabled();
       await expect(page.getByRole('button', { name: 'ACT', exact: true })).toHaveCount(0);
       continue;
     }
@@ -1103,7 +1113,7 @@ test('ACT exported packages show distinct identities and hand the exact second p
   await page.getByRole('button', { name: 'Light', exact: true }).click();
   await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
   await expect(page.getByRole('region',{name:'Native ACT quantization',exact:true})).toBeVisible();
-  await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toBeChecked();
+  await expect(selectedQuantizationModel(page)).toHaveValue(state.packages[1].id);
   expect(state.submitted).toEqual([]);
   await noOverflow(page);
   await page.screenshot({ path: testInfo.outputPath('act-export-quantization-handoff.png'), fullPage: true });
@@ -1120,12 +1130,11 @@ test('ACT exported packages show distinct identities and hand the exact second p
 test('ACT export handoff keeps a later manual source choice through a refresh', async ({ page }) => {
   const state = await exportedPackageFixture(page);
   await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
-  const policies = page.getByRole('group', { name: 'Policy', exact: true });
-  await expect(policies.locator(`input[value="${state.packages[1].id}"]`)).toBeChecked();
-  await policies.locator(`input[value="${state.packages[0].id}"]`).check();
+  await expect(selectedQuantizationModel(page)).toHaveValue(state.packages[1].id);
+  await chooseTransformationModel(page, 'quantization', `Choose ACT inference export · ${state.packages[0].id}`);
   state.artifacts.reverse();
   await page.getByRole('button', { name: 'Refresh ACT quantization jobs', exact: true }).click();
-  await expect(policies.locator(`input[value="${state.packages[0].id}"]`)).toBeChecked();
+  await expect(selectedQuantizationModel(page)).toHaveValue(state.packages[0].id);
   expect(state.submitted).toEqual([]); expect(state.unexpected).toEqual([]);
 });
 
@@ -1174,12 +1183,12 @@ test('ACT export preferred package stays within its owning project', async ({ pa
   await page.route('**/api/v1/projects/other-project/*', route => route.fulfill({ json: [] }));
   await page.reload(); await reopenExport(page);
   await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
-  await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toBeChecked();
+  await expect(selectedQuantizationModel(page)).toHaveValue(state.packages[1].id);
   await selectProject(page, 'other-project');
   await page.getByRole('button',{name:'Start a new quantization',exact:true}).click();
   await expect(page.getByText('No saved models in this project yet')).toBeVisible();
-  await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator('input:checked')).toHaveCount(0);
-  await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toHaveCount(0);
+  await expect(selectedQuantizationModel(page)).toHaveCount(0);
+  await expect(quantizationModelOption(page, state.packages[1].id)).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Create ACT quantized package', exact: true })).toHaveCount(0);
   expect(state.submitted).toEqual([]);
 });
@@ -1191,7 +1200,7 @@ test('ACT export handoff preserves an unresolved quantization request without re
   const stored = JSON.stringify({ state: 'uncertain', message: 'Earlier ACT request has an unverified outcome.' });
   await page.evaluate(({ key, stored }) => sessionStorage.setItem(key, stored), { key, stored });
   await exportedPackage(page, state.packages[1].id).getByRole('button', { name: 'Quantize this package' }).click();
-  await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator(`input[value="${state.packages[1].id}"]`)).toBeChecked();
+  await expect(selectedQuantizationModel(page)).toHaveValue(state.packages[1].id);
   await expect(page.getByText('Earlier ACT request has an unverified outcome. Further submissions are paused.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Create ACT quantized package', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toBeDisabled();
@@ -1318,11 +1327,10 @@ for (const location of ['metadata', 'checkpoint'] as const) for (const field of 
   await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
   await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await chooseTransformationModel(page,'quantization',`Choose ACT inference export · ${state.packages[0].id}`);
-  const policies = page.getByRole('group', { name: 'Policy', exact: true });
-  await expect(policies.locator(`input[value="${guarded.id}"]`)).toHaveCount(0);
+  await expect(quantizationModelOption(page, guarded.id)).toHaveCount(0);
   await expect(page.getByText('Some ACT packages are excluded because their model format, timing or simulator details are incomplete or unsupported. Refresh or export a complete inference package.', { exact: true })).toBeVisible();
-  await expect(policies.locator(`input[value="${legacy.id}"]`)).toHaveCount(1);
-  await expect(policies.locator('input:checked')).toHaveValue(legacy.id);
+  await expect(quantizationModelOption(page, legacy.id)).toHaveCount(1);
+  await expect(selectedQuantizationModel(page)).toHaveValue(legacy.id);
   await expect(page.getByRole('button', { name: 'Create ACT quantized package', exact: true })).toBeEnabled();
   expect(state.submitted).toEqual([]);
 });
@@ -1347,7 +1355,7 @@ test('complete simulator-bound export keeps exact Distill and Quantize handoffs 
   await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
   await page.reload(); await reopenExport(page);
   await exportedPackage(page, item.id).getByRole('button', { name: 'Quantize this package' }).click();
-  await expect(page.getByRole('group', { name: 'Policy', exact: true }).locator('input:checked')).toHaveValue(item.id);
+  await expect(selectedQuantizationModel(page)).toHaveValue(item.id);
   await expect(page.getByText('Inherited action timing: plans 32 actions and applies 8 per update.', { exact: false })).toBeVisible();
   await expect(page.getByText(/A compatible Run profile and separate rollout consent are still required/)).toBeVisible();
   expect(item.metadata).toEqual(original);
@@ -1724,7 +1732,7 @@ test('accumulation predicate requires exact model method runtime and complete ca
   const smol = { ...model, id: 'smolvla', methods: ['lora', 'qlora', 'full'] };
   expect(gradientAccumulationAvailable(smol, 'worker', 'lora')).toBe(true);
   expect(gradientAccumulationAvailable(smol, 'worker', 'qlora')).toBe(true);
-  expect(gradientAccumulationAvailable(smol, 'worker', 'full')).toBe(false);
+  expect(gradientAccumulationAvailable(smol, 'worker', 'full')).toBe(true);
 });
 
 async function chooseOnlyModel(page: Page, name: string) {
@@ -1793,4 +1801,111 @@ test('an interrupted multi-model plan reloads without POST and retries its saved
  expect(sent[1]).toEqual(sent[0]);
  expect(sent[2].key).not.toBe(sent[0].key);
  await expect(recovery).toHaveCount(0);
+});
+
+test('dataset choices explain incompatibility before selection and update when the primary is removed', async ({ page }, testInfo) => {
+  const state = await temporalTraining(page, 'ACT');
+  const dataset = state.jobs.find(item => item.id === 'dataset')!;
+  const compatible = { ...dataset, id: 'compatible', result: { ...structuredClone(dataset.result), repo_id: 'fixture/compatible', revision: 'c'.repeat(40) } };
+  const different = { ...dataset, id: 'different-fps', result: { ...structuredClone(dataset.result), repo_id: 'fixture/different-fps', revision: 'd'.repeat(40), fps: 10 } };
+  await page.route(`**/api/v1/projects/${projectId}/jobs`, route => route.fulfill({ json: [dataset, compatible, different] }));
+  await state.setup.getByRole('button', { name: 'Dataset', exact: true }).click();
+  const unavailable = page.getByRole('checkbox', { name: 'fixture/different-fps', exact: true });
+  await expect(unavailable).toBeDisabled();
+  const tile = unavailable.locator('..');
+  await expect(tile.getByRole('tooltip')).toBeHidden();
+  if (testInfo.project.name === 'desktop') await tile.hover();
+  else await tile.focus();
+  await expect(tile.getByRole('tooltip')).toContainText('Frame rates differ: 10 FPS');
+  await expect(tile).toHaveClass(/unavailable/);
+  await expect(page.getByRole('checkbox', { name: 'fixture/compatible', exact: true })).toBeEnabled();
+  await page.getByRole('checkbox', { name: 'fixture/compatible', exact: true }).check();
+  await expect(page.getByRole('checkbox', { name: 'fixture/robot', exact: true })).toBeChecked();
+  await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeEnabled();
+  await tile.focus();
+  await page.screenshot({ path: testInfo.outputPath('dataset-compatibility.png'), fullPage: true });
+  await page.getByRole('checkbox', { name: 'fixture/robot', exact: true }).uncheck();
+  await expect(unavailable).toBeDisabled();
+  await page.getByRole('checkbox', { name: 'fixture/compatible', exact: true }).uncheck();
+  await expect(unavailable).toBeEnabled();
+  await unavailable.check();
+  await expect(page.getByRole('checkbox', { name: 'fixture/robot', exact: true })).toBeDisabled();
+  expect(state.submitted).toEqual([]);
+});
+
+test('name-first model cards preserve multiple selection, family counts, and disabled coming-soon adapters', async ({ page }, testInfo) => {
+  const state = await temporalTraining(page, 'ACT');
+  await state.setup.getByRole('button', { name: 'Model', exact: true }).click();
+  const models = page.getByRole('group', { name: 'Base model', exact: true });
+  await expect(page.getByRole('heading', { name: 'Base model', exact: true })).toBeVisible();
+  const selectionCount = page.locator('.training-model-selection-count');
+  await expect(selectionCount).toHaveText('1 model selected');
+  await models.getByRole('checkbox', { name: 'SmolVLA', exact: true }).check();
+  await expect(models.getByRole('checkbox', { name: 'ACT', exact: true })).toBeChecked();
+  await expect(selectionCount).toHaveText('2 models selected');
+  await models.getByRole('checkbox', { name: 'ACT', exact: true }).uncheck();
+  await expect(selectionCount).toHaveText('1 model selected');
+  await models.getByRole('checkbox', { name: 'SmolVLA', exact: true }).uncheck();
+  await expect(selectionCount).toHaveText('0 models selected');
+  await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeDisabled();
+  await models.getByRole('checkbox', { name: 'ACT', exact: true }).check();
+  await expect(models.getByRole('region', { name: 'Vision-language-action models', exact: true })).toContainText('SmolVLA');
+  await expect(models.getByRole('region', { name: 'Action sequence policies', exact: true })).toContainText('ACT');
+  const comingSoon = models.getByRole('region', { name: 'Coming soon', exact: true });
+  await expect(comingSoon.getByRole('checkbox', { name: 'OpenVLA', exact: true })).toBeDisabled();
+  await expect(comingSoon.getByRole('checkbox', { name: 'OpenVLA', exact: true }).locator('..')).toHaveClass(/unavailable/);
+  await expect(models.locator('.training-model-group').last()).toHaveAccessibleName('Coming soon');
+  for (const family of await models.locator('.training-model-group').all()) {
+    await expect(family.locator('.training-model-family-count')).toHaveText(String(await family.getByRole('checkbox').count()));
+  }
+  await noOverflow(page);
+  await page.screenshot({ path: testInfo.outputPath('name-first-models.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Dark', exact: true }).click();
+  await noOverflow(page);
+  await page.screenshot({ path: testInfo.outputPath('name-first-models-dark.png'), fullPage: true });
+  expect(state.submitted).toEqual([]);
+});
+
+test('native SmolVLA selects the 80 GB target with grouped settings and centered help', async ({page},testInfo)=>{
+ const {submitted,unexpected}=await workspace(page,'empty',false,undefined,'supported',true);
+ await page.getByRole('button',{name:'Start a new fine-tuning',exact:true}).click();
+ const setup=page.getByRole('navigation',{name:'Training setup',exact:true});
+ await setup.getByRole('button',{name:'Model',exact:true}).click();
+ await chooseOnlyModel(page,'SmolVLA');
+ await page.getByRole('group',{name:'Training method',exact:true}).locator('input[value="full"]').check();
+ await setup.getByRole('button',{name:'Compute',exact:true}).click();
+ const gpu=page.getByRole('combobox',{name:'GPU',exact:true}); await gpu.click();
+ await expect(page.getByRole('option',{name:/T4/})).toHaveCount(0);
+ await page.getByRole('option',{name:'A100',exact:true}).filter({hasText:'80 GB'}).click();
+ await expect(gpu).toContainText('80 GB');
+ await page.locator('summary').filter({hasText:/^Advanced settings/}).click();
+ await expect(page.getByRole('group',{name:'Learning settings',exact:true})).toBeVisible();
+ const timing=page.getByRole('group',{name:'Action timing',exact:true});
+ expect(await timing.evaluate(element=>getComputedStyle(element).borderTopWidth)).toBe('0px');
+ const help=page.getByRole('button',{name:'Help for Steps',exact:true});
+ await expect(help.locator('svg')).toBeVisible();
+ await help.focus(); await expect(page.getByRole('tooltip')).toBeVisible();
+ const bounds=await help.evaluate(element=>{const button=element.getBoundingClientRect(),icon=element.querySelector('svg')!.getBoundingClientRect();return {x:(button.left+button.right-icon.left-icon.right)/2,y:(button.top+button.bottom-icon.top-icon.bottom)/2};});
+ expect(Math.abs(bounds.x)).toBeLessThan(1);expect(Math.abs(bounds.y)).toBeLessThan(1);
+ await page.getByLabel('Steps',{exact:true}).fill('100');
+ await page.screenshot({path:testInfo.outputPath('native-smol-80gb-settings.png'),fullPage:true});
+ await page.getByRole('button',{name:'Start fine-tuning',exact:true}).click();
+ await expect.poll(()=>submitted.length).toBe(1);
+ expect(submitted[0].training_method).toBe('full');
+ expect(submitted[0].runtime_id).toBe('skypilot-gcp-A100-80GB');
+ expect(unexpected).toEqual([]);
+});
+
+test('training timeline follows observed allocation environment downloads and final readiness',async({page},testInfo)=>{
+ const {monitor,telemetry,job}=await workspace(page,'preparing');
+ const timeline=monitor.getByRole('list',{name:'Training progress timeline',exact:true});
+ for(const [message,label] of [['Provisioning A100:1','Allocating compute'],['Installing worker dependencies','Preparing environment'],['Downloading the pinned model from Hugging Face','Loading data and model']]){
+  telemetry.current_action=message;telemetry.events.push({sequence:telemetry.events.length+1,stage:'preparing',message,timestamp:timestamp(),data:{}});
+  await expect(timeline.locator('[aria-current="step"]')).toContainText(label);
+  await expect(timeline.locator('.timeline-pending').last()).toContainText('Ready');
+ }
+ await page.screenshot({path:testInfo.outputPath('training-delivery-timeline.png'),fullPage:true});
+ job.status='succeeded';telemetry.status='succeeded';telemetry.phase='completed';
+ await expect(timeline.locator('.timeline-complete')).toHaveCount(7);
+ await noOverflow(page);
 });

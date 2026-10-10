@@ -1,0 +1,33 @@
+.quantization-comparison { margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--line); }
+.quantization-comparison h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.quantization-comparison > header { display: flex; align-items: center; gap: 8px; }
+.quantization-comparison-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; margin: 24px 0; }
+.quantization-comparison-facts dt, .quantization-comparison-facts span { font-size: 11px; color: var(--muted); }
+.quantization-comparison-facts dd { margin: 8px 0; font-size: 20px; font-weight: 600; overflow-wrap: anywhere; }
+.quantization-comparison-facts > div { min-width: 0; }
+.quantization-action-chart { margin: 0; }
+.quantization-action-chart svg { width: 100%; display: block; overflow: visible; }
+.quantization-action-chart text { font-size: 10px; fill: var(--muted); }
+.quantization-chart-grid { stroke: var(--line); stroke-width: 1; }
+.quantization-chart-original { fill: var(--success); }
+.quantization-chart-packed { fill: #9782da; }
+.quantization-action-chart figcaption { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 20px; color: var(--muted); font-size: 10px; }
+.quantization-action-chart figcaption span::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; background: var(--success); }
+.quantization-action-chart figcaption .quantization-legend-packed::before { background: #9782da; }
+.quantization-comparison-scope, .quantization-comparison-empty { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 16px 0; }
+.quantization-comparison-empty { border: 1px dashed var(--line); border-radius: 6px; padding: 20px; }
+.quantization-size-chart { margin: 24px 0 0; }
+.quantization-size-chart > div { display: grid; grid-template-columns: 160px minmax(0, 1fr) 100px; align-items: center; gap: 16px; margin: 12px 0; font-size: 11px; }
+.quantization-size-chart strong { text-align: right; font-weight: 550; }
+.quantization-size-track { height: 8px; background: var(--subtle); border-radius: 4px; overflow: hidden; }
+.quantization-size-track > span { display: block; height: 100%; border-radius: 4px; }
+.quantization-size-original { background: var(--success); }
+.quantization-size-packed { background: #9782da; }
+.quantization-size-chart figcaption { margin-top: 14px; color: var(--muted); font-size: 11px; }
+@media (max-width: 700px) {
+  .quantization-comparison-facts { gap: 16px; }
+  .quantization-comparison-facts dd { font-size: 17px; }
+  .quantization-size-chart > div { grid-template-columns: minmax(0, 1fr) 90px; gap: 8px 12px; }
+  .quantization-size-chart > div > span:first-child { grid-column: 1 / -1; }
+}
+@media (max-width: 380px) { .quantization-comparison-facts { grid-template-columns: 1fr; } }

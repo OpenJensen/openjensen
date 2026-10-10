@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, type ComponentProps } from "react";
+import { useId, type ComponentProps, type ReactNode } from "react";
 import { Icon } from "@/components/icon";
 import "./workflow-choice-grid.css";
 
@@ -13,7 +13,7 @@ export type WorkflowChoice = {
   disabled?: boolean;
 };
 
-export function WorkflowChoiceGrid({ name, label, value, options, onChange, disabled = false, description, emptyMessage }: {
+export function WorkflowChoiceGrid({ name, label, value, options, onChange, disabled = false, description, emptyMessage, help }: {
   name: string;
   label: string;
   value: string;
@@ -22,10 +22,11 @@ export function WorkflowChoiceGrid({ name, label, value, options, onChange, disa
   disabled?: boolean;
   description?: string;
   emptyMessage?: string;
+  help?: ReactNode;
 }) {
   const id = useId();
-  return <fieldset className="workflow-choice-grid" disabled={disabled} aria-describedby={description ? `${id}-help` : undefined}>
-    <legend>{label}</legend>
+  return <fieldset className="workflow-choice-grid" disabled={disabled} aria-label={help ? label : undefined} aria-describedby={description ? `${id}-help` : undefined}>
+    <legend>{label}{help}</legend>
     {description && <p id={`${id}-help`} className="workflow-choice-help">{description}</p>}
     <div className="workflow-choice-options">
       {options.map((option, index) => <label className="workflow-choice-card" key={option.value}>

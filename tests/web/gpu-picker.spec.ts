@@ -10,7 +10,7 @@ async function openGpuPicker(page: Page, local = false) {
   const timestamp = '2026-09-26T12:00:00Z';
   const writes: string[] = [];
   const unexpected: string[] = [];
-  const runtimes = ['L4', 'T4', 'A100'].map(accelerator => ({
+  const runtimes = ['L4', 'T4', 'A100', 'A100-80GB'].map(accelerator => ({
     id: `skypilot-gcp-${accelerator}`, accelerator, label: accelerator,
     execution: 'skypilot', provider: 'gcp', region: 'us-central1',
     enabled: true, device: 'cuda', training: true, simulation: false,
@@ -36,7 +36,7 @@ async function openGpuPicker(page: Page, local = false) {
       '/api/v1/projects/picker/artifacts': [],
       '/api/v1/policy-options': {
         runtimes: local ? [...runtimes, localRuntime] : runtimes,
-        sources: [], training_models: [{ id: 'pi05', label: 'π₀.₅', model_id: 'lerobot/pi05_base', model_revision: 'a'.repeat(40), description: 'Generalist policy', backend: 'lerobot', methods: ['full'], minimum_gpu_memory_gb: 40, runtime_ids: runtimes.map(item => item.id) }],
+        sources: [], training_models: [{ id: 'pi05', label: 'π₀.₅', model_id: 'lerobot/pi05_base', model_revision: 'a'.repeat(40), description: 'Generalist policy', backend: 'lerobot', methods: ['full'], minimum_gpu_memory_gb: 40, available: true, status: 'ready', runtime_ids: runtimes.map(item => item.id) }],
         training_methods: [{ id: 'lora', label: 'LoRA', description: 'Train adapters.' }, { id: 'full', label: 'Full training', description: 'Train policy weights.' }],
         default_training_method: 'lora',
         compute: { local: { enabled: local, label: 'Robotics lab' }, gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 } },
@@ -66,8 +66,8 @@ test('GPU picker supports keyboard navigation, explicit selection and Escape wit
   await page.keyboard.press('ArrowDown');
   const menu = page.getByRole('listbox', { name: 'GPU', exact: true });
   await expect(menu).toBeVisible();
-  await expect(menu.getByRole('option')).toHaveCount(3);
-  await expect(menu.getByRole('option', { name: 'A100', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(menu.getByRole('option')).toHaveCount(4);
+  await expect(menu.getByRole('option', { name: 'A100', exact: true }).filter({hasText:'40 GB'})).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('Home');
   await expect(picker).toHaveAttribute('aria-activedescendant', (await menu.getByRole('option', { name: 'L4', exact: true }).getAttribute('id'))!);
   await expect(picker).toHaveAttribute('value', 'A100');
@@ -75,7 +75,7 @@ test('GPU picker supports keyboard navigation, explicit selection and Escape wit
   await expect(picker).toHaveAttribute('aria-activedescendant', (await menu.getByRole('option', { name: 'T4', exact: true }).getAttribute('id'))!);
   await page.keyboard.press('ArrowUp');
   await page.keyboard.press('End');
-  await expect(picker).toHaveAttribute('aria-activedescendant', (await menu.getByRole('option', { name: 'A100', exact: true }).getAttribute('id'))!);
+  await expect(picker).toHaveAttribute('aria-activedescendant', (await menu.getByRole('option', { name: 'A100', exact: true }).filter({hasText:'80 GB'}).getAttribute('id'))!);
   await page.keyboard.press('Home');
   await page.keyboard.press('Enter');
   await expect(menu).toHaveCount(0);
@@ -103,8 +103,8 @@ test('changing to a large model removes undersized GPUs and clears the previous 
   await expect(picker).toHaveAttribute('value', 'A100');
   await picker.click();
   const menu = page.getByRole('listbox', { name: 'GPU', exact: true });
-  await expect(menu.getByRole('option')).toHaveCount(1);
-  await expect(menu.getByRole('option', { name: 'A100', exact: true })).toBeVisible();
+  await expect(menu.getByRole('option')).toHaveCount(2);
+  await expect(menu.getByRole('option', { name: 'A100', exact: true }).filter({hasText:'40 GB'})).toBeVisible();
   await page.keyboard.press('Escape');
   await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
   await expect(page.getByRole('spinbutton', { name: 'Batch size', exact: true })).toHaveValue('4');
@@ -154,9 +154,9 @@ for (const theme of ['Light', 'Dark']) {
     await page.getByRole('button', { name: theme, exact: true }).click();
     await picker.click();
     const menu = page.getByRole('listbox', { name: 'GPU', exact: true });
-    await expect(menu.getByRole('option')).toHaveCount(4);
+    await expect(menu.getByRole('option')).toHaveCount(5);
     for (const [gpu, memory] of [['L4', '24 GB'], ['T4', '16 GB'], ['A100', '40 GB']]) {
-      await expect(menu.getByRole('option', { name: gpu, exact: true }).locator('.gpu-picker-memory')).toHaveText(memory);
+      await expect(menu.getByRole('option', { name: gpu, exact: true }).filter({hasText:memory}).locator('.gpu-picker-memory')).toHaveText(memory);
     }
     const bounds = await menu.boundingBox();
     expect(bounds).not.toBeNull();
@@ -213,10 +213,11 @@ async function trainingAdmission(page: Page, { format = 'lerobot_v3', dimensions
       '/api/v1/projects/admission/jobs': [dataset], '/api/v1/projects/admission/artifacts': [],
       '/api/v1/jobs/admission-dataset/episodes': { episodes: [], total: 10, offset: 0, limit: 6 },
       '/api/v1/policy-options': { runtimes: cloudConnected ? [runtime] : [], sources: [],
-        training_models: [...profiles.map((model, index) => ({ ...model, model_revision: 'c'.repeat(40), description: 'Fixture profile', backend: 'lerobot', methods: ['full'], runtime_ids: cloudConnected ? [runtime.id] : [],
+        training_models: [...profiles.map((model, index) => ({ ...model, model_revision: 'c'.repeat(40), description: 'Fixture profile', backend: 'lerobot', available:true, status:'ready', methods: ['full'], runtime_ids: cloudConnected ? [runtime.id] : [],
           // Include a stale ready record with no matching runtime: the client must
           // retain its own compute gate while accurately labeling the API state.
-          ...(!cloudConnected ? { status: ['connect_account', 'setup_required', 'ready'][index] } : {}),
+          available: cloudConnected,
+          status: cloudConnected ? 'ready' : ['connect_account', 'setup_required', 'ready'][index],
         })), ...(!cloudConnected ? [{ id: 'smolvla', label: 'SmolVLA', model_id: 'lerobot/smolvla_base', model_revision: 'a'.repeat(40), description: 'Fixture preflight-selectable adapter', backend: 'smolvla', methods: ['lora'], runtime_ids: [], status: 'connect_account' }] : [])],
         training_methods: [{ id: 'lora', label: 'LoRA', description: 'Adapter training' }, { id: 'full', label: 'Full training', description: 'Native policy training' }], default_training_method: 'lora',
         compute: { local: { enabled: false, label: 'Local' }, gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 } },

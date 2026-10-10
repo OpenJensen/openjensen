@@ -163,6 +163,9 @@ def train(cfg, resume=None):
             features=train_set.features,
             policy_config_dir=resume_path / "policy" if resume_path else None,
             adapter_dir=resume_path / "adapter" if resume_path else None,
+            on_progress=lambda message: report(
+                output, "preparing", message, step=0, total_steps=cfg.steps
+            ),
         )
         temporal = resolved_temporal(policy_config, train_set.meta.fps, "smolvla", cfg.to_dict())
         for dataset in (train_set, validation_set):

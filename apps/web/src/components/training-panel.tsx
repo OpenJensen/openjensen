@@ -12,7 +12,7 @@ import {
   type PolicyRequest,
 } from "@/lib/api";
 import { datasetStarters } from "@/lib/dataset-starters";
-import { gradientAccumulationAvailable, trainingModels, type TrainingModel } from "@/lib/training-models";
+import { gradientAccumulationAvailable, groupedTrainingModels, trainingModels, type TrainingModel } from "@/lib/training-models";
 import { checkpointStep, trainingRunModelLabel } from "@/lib/checkpoints";
 import { CameraPlayer } from "@/components/dataset-explorer";
 import { Icon } from "@/components/icon";
@@ -25,6 +25,7 @@ import { submissionOf, useDurableSubmission } from "@/lib/durable-submission";
 import { type PolicyJobAttempt } from "@/lib/policy-job-attempt";
 import { checkpointTiming, defaultTemporal, restoreTemporal, temporalFamily, temporalIssue, temporalRecipe, type TemporalDrafts } from "@/lib/training-temporal";
 import { useTrainingBatch } from "@/lib/training-batch";
+import { combinationCameraMapping, datasetCombinationIssue } from "@/lib/dataset-combination";
 import { trainingMemory } from "@/lib/training-memory";
 import { TrainingHelp } from "./training-help";
 import "./training-panel.css";
@@ -397,8 +398,13 @@ export function TrainingPanel({
     }));
   }
   const selectedDatasets = dataset ? [dataset, ...extraDatasetIds.map(id => datasets.find(item => item.id === id)).filter((item): item is InspectedDataset => !!item && item.id !== dataset.id)] : [];
-  const mappings = Object.fromEntries(selectedDatasets.map((item, index) => [item.id, Object.fromEntries(selectedCameras.map(key => [key, index === 0 ? key : cameraMappings[item.id]?.[key] ?? (cameras(item.result).includes(key) ? key : "")]))]));
-  const mixtureIssue = resumeId ? null : extraDatasetIds.some(id => !datasets.some(item => item.id === id)) ? "A selected dataset is unavailable. Refresh or select it again explicitly." : selectedDatasets.length > 8 ? "Select up to eight datasets." : selectedDatasets.length > 1 ? selectedDatasets.some(item => item.result.source !== "huggingface" || item.result.format !== "lerobot_v3") ? "Combined training currently requires LeRobot v3 Hub datasets. Train local snapshots separately." : selectedDatasets.some(item => item.result.fps !== dataset?.result.fps || ["action", "observation.state"].some(key => ["shape", "dtype", "names"].some(field => JSON.stringify((item.result.features[key] as Record<string, unknown>)?.[field]) !== JSON.stringify((dataset?.result.features[key] as Record<string, unknown>)?.[field]))) || selectedCameras.some(key => { const mapped = mappings[item.id][key]; return !mapped || JSON.stringify((item.result.features[mapped] as { shape?: number[] })?.shape) !== JSON.stringify((dataset?.result.features[key] as { shape?: number[] })?.shape); }) || new Set(Object.values(mappings[item.id])).size !== selectedCameras.length) ? "Combined datasets need matching state/action definitions, frame rates and mapped camera dimensions." : null : null;
+  const mappings = Object.fromEntries(selectedDatasets.map((item, index) => [item.id, index === 0
+    ? Object.fromEntries(selectedCameras.map(key => [key, key]))
+    : Object.fromEntries(selectedCameras.map(key => [key, cameraMappings[item.id]?.[key] ?? combinationCameraMapping(dataset!.result, item.result, selectedCameras)[key] ?? ""]))]));
+  const mixtureIssue = resumeId ? null
+    : extraDatasetIds.some(id => !datasets.some(item => item.id === id)) ? "A selected dataset is unavailable. Refresh or select it again explicitly."
+    : selectedDatasets.length > 8 ? "Select up to eight datasets."
+    : selectedDatasets.slice(1).map(item => datasetCombinationIssue(dataset!.result, item.result, selectedCameras, mappings[item.id])).find(Boolean) ?? null;
   const mergedModels = new Map(trainingModels.map((item) => [item.id, item]));
   for (const item of options.data?.training_models ?? [])
     mergedModels.set(item.id, {
@@ -408,18 +414,18 @@ export function TrainingPanel({
     } as TrainingModel);
   const models = [...mergedModels.values()];
   const runtimes = options.data?.runtimes ?? [];
-  const cloudGpuMemory: Record<string, number> = { L4: 24, T4: 16, A100: 40 };
+  const cloudGpuMemory: Record<string, number> = { L4: 24, T4: 16, A100: 40, "A100-80GB": 80 };
   const runtimeMemory = (item: (typeof runtimes)[number]) =>
     item.gpu_memory_mib ? item.gpu_memory_mib / 1024 : cloudGpuMemory[item.accelerator ?? ""] ?? 0;
   const hasAdapter = (runtime: (typeof runtimes)[number], item: TrainingModel) =>
-    !!item.model_revision && runtime.training && runtime.device === "cuda" &&
+    item.status !== "coming_soon" && !!item.model_revision && runtime.training && runtime.device === "cuda" &&
     (!item.minimum_gpu_memory_gb || runtimeMemory(runtime) >= item.minimum_gpu_memory_gb) &&
     (runtime.training_model_ids ?? ["smolvla"]).includes(item.id) &&
     // The bundled on-demand SmolVLA adapter remains usable before preflight.
     // Older API catalogs describe that state with an empty runtime_ids list.
     (item.id === "smolvla" || !item.runtime_ids || item.runtime_ids.includes(runtime.id));
-  const modelSupported = (item: TrainingModel) =>
-    (item.id === "smolvla" && !!item.model_revision) || runtimes.some(runtime => hasAdapter(runtime, item));
+  const modelSupported = (item: TrainingModel) => item.status !== "coming_soon" &&
+    ((item.id === "smolvla" && !!item.model_revision) || runtimes.some(runtime => hasAdapter(runtime, item)));
   let originalTraining = priorRequest?.training;
   let ancestorRequest = priorRequest;
   const visitedRuns = new Set<string>();
@@ -468,9 +474,10 @@ export function TrainingPanel({
     )?.id ??
     availableMethods[0]?.id;
   const supportsModel = (item: (typeof runtimes)[number]) =>
+    selectedModels.every(model => model.id !== "smolvla" || methodFor(model) !== "full" || (model.native_full_runtime_ids ?? []).includes(item.id)) &&
     item.enabled !== false &&
     selectedModels.length > 0 && selectedModels.every(model => hasAdapter(item, model));
-  const gpuChoices = ["L4", "T4", "A100"].filter(gpu => selectedModels.every(item => !item.minimum_gpu_memory_gb || cloudGpuMemory[gpu] >= item.minimum_gpu_memory_gb));
+  const gpuChoices = ["L4", "T4", "A100", "A100-80GB"].filter(gpu => selectedModels.every(item => cloudGpuMemory[gpu] >= (item.id === "smolvla" && methodFor(item) === "full" ? 24 : item.minimum_gpu_memory_gb ?? 0)));
   const defaultGpu = options.data?.compute?.gcp?.default_gpu ?? "A100";
   const localRuntimes = selectedModels.length <= 1 && options.data?.compute?.local.enabled
     ? runtimes.filter((item) => (item.provider ?? "local") === "local" && item.training && item.device === "cuda" && item.enabled !== false &&
@@ -508,7 +515,7 @@ export function TrainingPanel({
         )
       : [String(originalTraining?.camera_key ?? "observation.images.front")]
     : selectedCameras;
-  const modelIssue = !resumeId ? selectedModels.map(item => modelDatasetIssue(item, activeDataset?.result, activeCameraKeys) || (selectedDatasets.length > 1 && item.backend === "psi0" ? "Psi-Zero does not support combined datasets." : null)).find(Boolean) ?? null : null;
+  const modelIssue = !resumeId ? selectedModels.map(item => modelDatasetIssue(item.id === "smolvla" && methodFor(item) === "full" ? {...item, backend: "lerobot"} : item, activeDataset?.result, activeCameraKeys) || (selectedDatasets.length > 1 && item.backend === "psi0" ? "Psi-Zero does not support combined datasets." : null)).find(Boolean) ?? null : null;
   const batchIssue = selectedModels.length > 1 && selectedModels.some(item => recipe.gradientAccumulation !== 1 && !gradientAccumulationAvailable(item, runtime?.id, methodFor(item))) ? "At least one selected model requires gradient accumulation 1." : null;
   const episodes = useQuery({
     queryKey: ["training-episodes", activeDataset?.id],
@@ -556,6 +563,8 @@ export function TrainingPanel({
       ? "Inspect the earlier training request before submitting another job."
     : !batch.hydrated || !batch.available || batch.journal
       ? "Resolve the saved multi-model plan before starting another job."
+    : !resumeId && selectedModels.some(item => item.status === "coming_soon")
+      ? "A selected model is coming soon. Choose an available model before training."
     : !resumeId && modelIds.some(id => !models.some(item => item.id === id))
       ? "A selected model is unavailable. Select your models again."
     : !loaded || options.isPending || jobs.isPending
@@ -788,7 +797,7 @@ export function TrainingPanel({
                 <Icon name="plus" size={14} /> Import
               </button>
             </div>
-            {!resumeId && datasetId && !dataset && !jobs.isPending && <p className="warning-box" role="alert">Selected dataset {datasetId} is unavailable in this project. Another dataset has not been substituted. Refresh or select a dataset explicitly.</p>}
+            {!resumeId && datasetId && datasetId !== "__none__" && !dataset && !jobs.isPending && <p className="warning-box" role="alert">Selected dataset {datasetId} is unavailable in this project. Another dataset has not been substituted. Refresh or select a dataset explicitly.</p>}
             {jobs.isPending && projectId ? (
               <p role="status">Loading datasets…</p>
             ) : datasets.length ? (
@@ -801,26 +810,38 @@ export function TrainingPanel({
                       item.repoId === profile.repo_id &&
                       item.revision === profile.revision,
                   );
-                  const issue = datasetIssue(profile);
+                  const selected = resumeId ? activeDataset?.id === job.id : selectedDatasets.some(item => item.id === job.id);
+                  const issue = datasetIssue(profile) ?? (!selected && dataset
+                    ? selectedDatasets.length >= 8 ? "Select up to eight datasets per training job."
+                      : datasetCombinationIssue(dataset.result, profile, selectedCameras)
+                    : null);
+                  const unavailable = !!issue && !selected;
+                  const reasonId = `training-dataset-reason-${job.id}`;
                   return (
                     <label
-                      className="training-dataset"
+                      className={`training-dataset${unavailable ? " unavailable" : ""}`}
                       key={job.id}
-                      title={issue ?? profile.repo_id ?? "Local dataset"}
+                      title={unavailable ? undefined : profile.repo_id ?? "Local dataset"}
+                      tabIndex={unavailable ? 0 : undefined}
+                      aria-describedby={unavailable ? reasonId : undefined}
                     >
                       <input
                         type="checkbox"
                         name="training-dataset"
                         value={job.id}
                         aria-label={profile.repo_id ?? "Local dataset"}
-                        checked={resumeId ? activeDataset?.id === job.id : selectedDatasets.some(item => item.id === job.id)}
-                        disabled={!!issue || !!resumeId || busy}
+                        checked={selected}
+                        aria-describedby={unavailable ? reasonId : undefined}
+                        disabled={unavailable || !!resumeId || busy}
                         onChange={() => {
                           if (selectedDatasets.some(item => item.id === job.id)) {
                             if (dataset?.id === job.id) { setDatasetId(extraDatasetIds[0] ?? "__none__"); setExtraDatasetIds(extraDatasetIds.slice(1)); }
                             else setExtraDatasetIds(previous => previous.filter(id => id !== job.id));
                           } else if (!dataset) setDatasetId(job.id);
-                          else setExtraDatasetIds(previous => [...previous, job.id]);
+                          else {
+                            setCameraMappings(previous => ({ ...previous, [job.id]: combinationCameraMapping(dataset.result, profile, selectedCameras) }));
+                            setExtraDatasetIds(previous => [...previous, job.id]);
+                          }
                           mutation.reset();
                         }}
                       />
@@ -831,17 +852,17 @@ export function TrainingPanel({
                           <Icon name="database" size={18} />
                         </span>
                       )}
-                      <span>
+                      <span className="training-dataset-copy">
                         <strong>
                           {starter?.title ??
                             profile.repo_id?.split("/").at(-1) ??
                             "Local dataset"}
                         </strong>
                         <small>
-                          {issue ??
-                            `${profile.total_episodes} episodes · ${cameras(profile).length} ${cameras(profile).length === 1 ? "camera" : "cameras"}`}
+                          {`${profile.total_episodes} episodes · ${cameras(profile).length} ${cameras(profile).length === 1 ? "camera" : "cameras"}`}
                         </small>
                       </span>
+                      {unavailable && <span className="training-dataset-reason" id={reasonId} role="tooltip">{issue}</span>}
                     </label>
                   );
                 })}
@@ -1004,18 +1025,27 @@ export function TrainingPanel({
           <section aria-labelledby="training-model-title">
             <div className="training-heading">
               <h2 id="training-model-title" ref={headingRef} tabIndex={-1}>
-                Model
+                Base model
               </h2>
+              <span className="training-model-selection-count" aria-live="polite">
+                {selectedModels.length} {selectedModels.length === 1 ? "model" : "models"} selected
+              </span>
             </div>
-            <fieldset className="training-model-grid">
+            <fieldset className="training-model-groups">
               <legend className="visually-hidden">Base model</legend>
-              {models.map((item) => {
+              {groupedTrainingModels(models).map(group => <section className="training-model-group" key={group.id} aria-labelledby={`training-family-${group.id}`}>
+                <h3 id={`training-family-${group.id}`}>
+                  {group.label}
+                  <span className="training-model-family-count" aria-hidden="true">{group.models.length}</span>
+                </h3>
+                <div className="training-model-grid">
+              {group.models.map((item) => {
                 const statusLabel = modelStatusLabel(item, modelSupported(item));
                 const memory = item.minimum_gpu_memory_gb ?? item.suggested_gpu_memory_gb;
                 return (
                 <label
                   key={item.id}
-                  className={`training-model-tile model-${item.id}`}
+                  className={`training-model-tile model-${item.id}${!modelSupported(item) ? " unavailable" : ""}`}
                   title={`${item.model_id} · ${item.description}`}
                 >
                   <input
@@ -1036,18 +1066,6 @@ export function TrainingPanel({
                       mutation.reset();
                     }}
                   />
-                  <span className="training-model-mark">
-                    {(
-                      {
-                        smolvla: "SMOL",
-                        openvla_oft: "OFT",
-                        openvla: "VLA",
-                        pi0: "π₀",
-                        pi05: "π₀.₅",
-                        gr00t_n17: "GR00T",
-                      } as Record<string, string>
-                    )[item.id] ?? item.label.slice(0, 4)}
-                  </span>
                   <span className="training-model-copy">
                     <span>
                       <strong>{item.label}</strong>
@@ -1059,13 +1077,15 @@ export function TrainingPanel({
                     </span>
                     <span className="training-model-memory">
                       {typeof memory === "number" && Number.isFinite(memory) && memory > 0
-                        ? <>GPU budget: <strong>{number(memory)} GB+</strong></>
+                        ? <>GPU budget · <strong>{number(memory)} GB+</strong></>
                         : <strong>GPU budget not verified</strong>}
                     </span>
                   </span>
                 </label>
                 );
               })}
+                </div>
+              </section>)}
             </fieldset>
             {selectedModels.length > 1 && <p className="training-selection-note">{selectedModels.length} independent jobs · one cloud GPU per model</p>}
             {model && <div className="training-method-choices"><div className="training-edit-model">{selectedModels.length > 1 && selectedModels.map(item => <button type="button" key={item.id} aria-pressed={model.id === item.id} className="secondary-button" disabled={busy} onClick={() => { setModelBatchSizes(previous => ({ ...previous, [model.id]: recipe.batchSize })); setModelId(item.id); setRecipe(previous => ({ ...previous, batchSize: batchFor(item) })); }}>Settings for {item.label}</button>)}</div>
@@ -1133,7 +1153,7 @@ export function TrainingPanel({
               onChange={setRuntimeId}
               disabled={busy}
               choices={[
-                ...gpuChoices.map((gpu) => ({ id: gpu, label: gpu, memory: ({ L4: "24 GB", T4: "16 GB", A100: "40 GB" } as Record<string, string>)[gpu] })),
+                ...gpuChoices.map((gpu) => ({ id: gpu, label: gpu === "A100-80GB" ? "A100" : gpu, memory: `${cloudGpuMemory[gpu]} GB` })),
                 ...localRuntimes.map((item) => ({ id: item.id, label: item.label,
                   memory: item.gpu_memory_mib ? `${number(item.gpu_memory_mib / 1024)} GB` : undefined })),
               ]}
@@ -1147,6 +1167,8 @@ export function TrainingPanel({
               ) : (
                 <>
                 <div className="training-settings-actions"><button type="button" className="text-button" disabled={busy} onClick={() => { setRecipe({ ...defaults, batchSize: model?.id === "smolvla" ? defaults.batchSize : model?.id === "psi0" ? 2 : 4 }); setModelBatchSizes({}); setTemporalDrafts({}); }}>Reset settings</button></div>
+                <fieldset className="training-hyperparameters">
+                  <legend>Learning settings</legend>
                 <div className="training-fields">
                   <label>
                     <span className="training-field-name">Steps<TrainingHelp label="Steps">Completed optimizer updates when supported; learning-rate schedules and save/validation intervals use the same step count.</TrainingHelp></span>
@@ -1211,6 +1233,7 @@ export function TrainingPanel({
 
                   </label>
                 </div>
+                </fieldset>
                 {timing && <fieldset className="training-temporal" aria-label="Action timing" aria-describedby="training-timing-help">
                   <legend><span className="training-field-name">Action timing<TrainingHelp label="Action timing" id="training-timing-help">Prediction is how many future actions the model learns together. Execution is how many are used before the next observation. One observation at a time, using consecutive frames; existing checkpoints are not reshaped. This does not establish a safe robot control rate.</TrainingHelp></span></legend>
                   <div className="training-temporal-fields">

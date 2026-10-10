@@ -14,7 +14,7 @@ import tempfile
 from pathlib import Path
 
 from . import application
-from .inference_smoke import verify_cpu_inference
+from .inference_smoke import compare_cpu_predictions, verify_cpu_inference
 from .worker import atomic_json, describe_runtime, sha256
 
 
@@ -70,18 +70,31 @@ def quantize_checkpoint(job):
                 {**job, "artifact": artifact, "source": None, "output_dir": str(conversion)}
             )
             artifact = {**artifact, **converted["artifact"]}
+        floating_model = Path(artifact["path"]) / "model.gguf"
+        cameras = metadata.get("camera_keys") or ["synthetic-front", "synthetic-wrist"]
+        executable = Path(job["runtime"]["smoke_build"]) / "tests/vla_predict_check"
+        reference_output = intermediate / "reference-check"
+        progress("baseline", "Measuring original model predictions on fixed inputs")
+        reference = verify_cpu_inference(floating_model, executable, reference_output,
+                                         cameras=len(cameras))
+        source_file_bytes = floating_model.stat().st_size
         progress("quantizing", "Packing language weights and preserving the action expert")
         result = application.quantize_policy({**job, "artifact": artifact})
         bundle = Path(result["artifact"]["path"])
         final_manifest = application.verify(bundle)
-        progress("verifying", "Running one native CPU prediction on fixed synthetic inputs")
-        cameras = metadata.get("camera_keys") or ["synthetic-front", "synthetic-wrist"]
+        progress("verifying", "Comparing quantized predictions with the original on identical inputs")
         smoke = verify_cpu_inference(
             bundle / "model.gguf",
-            Path(job["runtime"]["smoke_build"]) / "tests/vla_predict_check",
+            executable,
             bundle,
             cameras=len(cameras),
         )
+        comparison = compare_cpu_predictions(reference, smoke, reference_output, bundle)
+        comparison.update(source_file_bytes=source_file_bytes,
+                          quantized_file_bytes=(bundle / "model.gguf").stat().st_size)
+        # Keep bounded reference outputs/evidence after the floating weights are retired.
+        shutil.copytree(reference_output, bundle / "reference-check")
+        atomic_json(bundle / "quantization-comparison.json", comparison)
         # Bundle the exact model processors/config used for native export. The
         # GGUF embeds normalizer statistics, while these files document lineage.
         native_policy = intermediate / "native" / "policy"
@@ -130,6 +143,7 @@ def quantize_checkpoint(job):
             checkpoint_step=metadata.get("step"),
             quantized_file_bytes=(bundle / "model.gguf").stat().st_size,
             inference=smoke,
+            comparison=comparison,
         )
         progress(
             "verifying", "Verified packed tensor precision, shape, hashes and checkpoint lineage"

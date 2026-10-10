@@ -104,17 +104,8 @@ class ComputeSettings:
         if self.path.exists():
             # Do not silently re-enable a disabled machine if its settings are corrupt.
             document = json.loads(self.path.read_text())
-            migrate_gpu = (
-                isinstance(document, dict)
-                and isinstance(document.get("gcp"), dict)
-                and document["gcp"].get("default_gpu") == "A100-80GB"
-            )
-            if migrate_gpu:
-                document["gcp"]["default_gpu"] = "A100"
             saved = _SavedPreferences.model_validate(document)
             self._preferences = ComputePreferences(local=saved.local, gcp=saved.gcp)
-            if migrate_gpu:
-                self.update(self._preferences)
         self._restore_failure()
 
     def preferences(self) -> ComputePreferences:

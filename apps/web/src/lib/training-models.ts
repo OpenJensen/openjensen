@@ -1,4 +1,5 @@
 export type TrainingModel = {
+  native_full_runtime_ids?: string[];
   id: string;
   label: string;
   description: string;
@@ -20,10 +21,31 @@ export type TrainingModel = {
   training_world_size?: number;
 };
 
+// Display families follow the upstream LeRobot policy guides. VLA-JEPA is
+// still an action policy: its separate group describes its world-model component.
+// https://github.com/huggingface/lerobot/blob/main/README.md
+// https://huggingface.co/docs/lerobot/vla_jepa
+const modelFamilies = [
+  { id: 'vla', label: 'Vision-language-action models', models: ['smolvla', 'openvla', 'openvla_oft', 'pi0', 'pi05', 'pi0_fast', 'gr00t_n17', 'eo1', 'evo1', 'wall_x', 'xvla', 'psi0'] },
+  { id: 'action-sequence', label: 'Action sequence policies', models: ['act', 'vqbet'] },
+  { id: 'diffusion', label: 'Diffusion policies', models: ['diffusion', 'multi_task_dit'] },
+  { id: 'world-model', label: 'World-model-assisted VLA', models: ['vla_jepa'] },
+];
+
+export function groupedTrainingModels(models: TrainingModel[]) {
+  const available = models.filter(model => model.status !== 'coming_soon');
+  const known = new Set(modelFamilies.flatMap(family => family.models));
+  return [
+    ...modelFamilies.map(family => ({ id: family.id, label: family.label, models: available.filter(model => family.models.includes(model.id)) })),
+    { id: 'other', label: 'Other policies', models: available.filter(model => !known.has(model.id)) },
+    { id: 'coming-soon', label: 'Coming soon', models: models.filter(model => model.status === 'coming_soon') },
+  ].filter(group => group.models.length);
+}
+
 /** Missing or partial catalog support must never opt an older backend into accumulation. */
 export function gradientAccumulationAvailable(model: TrainingModel | undefined, runtimeId: string | undefined, method: string | undefined): boolean {
   if (!model || !runtimeId || !method || !model.methods.includes(method)) return false;
-  const supportedAdapter = model.id === 'act' ? method === 'full' : model.id === 'smolvla' && ['lora', 'qlora'].includes(method);
+  const supportedAdapter = model.id === 'act' ? method === 'full' : model.id === 'smolvla' && ['lora', 'qlora', 'full'].includes(method);
   return supportedAdapter && model.gradient_accumulation_supported === true
     && Array.isArray(model.gradient_accumulation_runtime_ids) && model.gradient_accumulation_runtime_ids.includes(runtimeId)
     && model.training_step_unit === 'optimizer_updates' && model.training_world_size === 1;

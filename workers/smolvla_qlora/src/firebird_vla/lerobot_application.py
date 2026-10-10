@@ -1,7 +1,7 @@
 """Firebird application protocol for isolated, pinned native LeRobot trainers.
 
-SmolVLA continues to use its dedicated PEFT worker. This bridge executes the
-upstream trainers for other policy architectures and translates their actual
+SmolVLA adapter methods use their dedicated PEFT worker. Native SmolVLA and
+other policy architectures use upstream trainers through this bridge, translating actual
 optimizer metrics and complete checkpoints into Firebird's existing protocol.
 """
 
@@ -49,7 +49,7 @@ SHARED_FIELDS = TEMPORAL_FIELDS | {
 def resolve_recipe(job):
     parameters = job["parameters"]
     recipe = dict(parameters.get("training") or {})
-    profile = native_profile_for_recipe(recipe)
+    profile = native_profile_for_recipe(recipe, parameters.get("training_method"))
     if profile is None:
         raise ValueError("No registered native training adapter for this model")
     if parameters.get("training_method") != "full":

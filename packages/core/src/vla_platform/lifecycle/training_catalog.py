@@ -6,7 +6,7 @@ make it available. SmolVLA retains its dedicated quantized worker; other native 
 a separate pinned LeRobot environment.
 """
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import TYPE_CHECKING
 
 from .native_profiles import NATIVE_PROFILES
@@ -38,6 +38,7 @@ TRAINING_MODELS = (
         "Compact vision-language-action policy",
         "lerobot/smolvla_base",
         "d9f33c94a60fb382c90dea2164c96845bd955e28",
+        methods=("lora", "qlora", "full"),
         suggested_gpu_memory_gb=16,
     ),
     TrainingModel(
@@ -144,6 +145,15 @@ def public_training_models(catalog: RuntimeCatalog) -> list[dict]:
             and model.model_revision is not None
         ]
         reason = None
+        native_smol = [
+            runtime.id
+            for runtime in catalog.runtimes
+            if runtime.id in runtime_ids
+            and (
+                runtime.execution == "skypilot"
+                or runtime.training_module == "firebird_vla.lerobot_application"
+            )
+        ]
         if not runtime_ids:
             reason = (
                 "Connect Google Cloud to train"
@@ -154,7 +164,25 @@ def public_training_models(catalog: RuntimeCatalog) -> list[dict]:
         result.append(
             {
                 **asdict(model),
-                "methods": list(model.methods),
+                "methods": [
+                    method
+                    for method in model.methods
+                    if model.id != "smolvla"
+                    or (
+                        bool(native_smol)
+                        if method == "full"
+                        else not runtime_ids
+                        or any(
+                            runtime.id in runtime_ids
+                            and (
+                                runtime.execution == "skypilot"
+                                or runtime.training_module != "firebird_vla.lerobot_application"
+                            )
+                            for runtime in catalog.runtimes
+                        )
+                    )
+                ],
+                "native_full_runtime_ids": native_smol if model.id == "smolvla" else [],
                 "available": bool(runtime_ids),
                 "status": "ready"
                 if runtime_ids
@@ -176,9 +204,11 @@ def public_training_models(catalog: RuntimeCatalog) -> list[dict]:
     return result
 
 
-def training_model_for_recipe(recipe: dict | None) -> TrainingModel:
+def training_model_for_recipe(recipe: dict | None, method: str | None = None) -> TrainingModel:
     repository = (recipe or {}).get("model_id", TRAINING_MODELS[0].model_id)
     model = next((model for model in TRAINING_MODELS if model.model_id == repository), None)
     if model is None:
         raise ValueError("Training model is not registered")
+    if model.id == "smolvla" and method == "full":
+        return replace(model, backend="lerobot", minimum_gpu_memory_gb=24)
     return model

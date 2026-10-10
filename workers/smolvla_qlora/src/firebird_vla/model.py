@@ -164,6 +164,7 @@ def build_policy(
     adapter_dir=None,
     trainable=True,
     compute_dtype=None,
+    on_progress=None,
 ):
     import torch
     from huggingface_hub import snapshot_download
@@ -174,11 +175,15 @@ def build_policy(
     from safetensors.torch import load_file
 
     compute_dtype = compute_dtype or runtime_compute_dtype()
+    if on_progress:
+        on_progress("Downloading the pinned SmolVLA model from Hugging Face")
     base = snapshot_download(
         cfg.model_id,
         revision=cfg.model_revision,
         allow_patterns=["config.json", "model.safetensors"],
     )
+    if on_progress:
+        on_progress("Downloading the pinned backbone configuration and tokenizer from Hugging Face")
     backbone = snapshot_download(
         cfg.backbone_id,
         revision=cfg.backbone_revision,

@@ -12,6 +12,12 @@ async function fixture(page: Page, models = [artifact('teacher'), artifact('stud
   Object.assign(jobs[0], { result: { source: 'huggingface', repo_id: 'our/pickup', revision: 'b'.repeat(40), metadata_sha256: hash, inspection_scope: 'metadata_only', format: 'lerobot_v3', total_episodes: 6, total_frames: 24, fps: 30, robot_type: 'synthetic_fixture', inspected_at: time, warnings: [], features: {} } });
   await page.route('**/api/v1/**', async route => {
     const request = route.request(), path = new URL(request.url()).pathname;
+    if (request.method() === 'PUT' && path.includes('/model-runs/')) {
+      const body = request.postDataJSON(); state.mutations.push(body);
+      const jobId = decodeURIComponent(path.split('/').at(-2)!);
+      state.models.filter(model=>model.job_id===jobId).forEach(model=>{model.run_name=body.name;});
+      return route.fulfill({json:body});
+    }
     if (request.method() !== 'GET') { state.mutations.push(request.postDataJSON()); return route.fulfill({ status: 405, json: { detail: 'No jobs during navigation.' } }); }
     if (path === '/api/v1/projects') return route.fulfill({ json: [{ id: 'alpha', name: 'Pickup robot', created_at: time }, { id: 'beta', name: 'Second robot', created_at: time }] });
     if (path.endsWith('/artifacts')) return route.fulfill(state.fail ? { status: 503, json: { detail: 'Model read failed' } } : { json: state.models });
@@ -67,10 +73,10 @@ test('cross-project continuation selects the model owner and exact model', async
 test('quantization selects the exact saved SmolVLA model and omits abstract sources', async ({ page }) => {
   const state = await fixture(page, ['smol', 'smol-second'].map(id => artifact(id, 'alpha', { format: 'training_checkpoint', metadata: { architecture: 'smolvla' } })));
   await page.getByRole('link', { name: 'Quantize', exact: true }).click(); await chooseTransformationModel(page, 'quantization', 'Choose Saved smol · smol');
-  await expect(page.getByRole('group', { name: 'My model', exact: true }).locator('input:checked')).toHaveValue('smol');
+  await expect(page.getByLabel('Checkpoint',{exact:true})).toHaveValue('smol');
   await expect(page.getByText('Abstract base', { exact: true })).toHaveCount(0); expect(state.mutations).toEqual([]);
   await chooseTransformationModel(page, 'quantization', 'Choose Saved smol-second · smol-second');
-  await expect(page.getByRole('group', { name: 'My model', exact: true }).locator('input:checked')).toHaveValue('smol-second');
+  await expect(page.getByLabel('Checkpoint',{exact:true})).toHaveValue('smol-second');
 });
 test('failed refresh keeps history visible and blocks actions until refreshed', async ({ page }) => {
   const state = await fixture(page); await openLibrary(page); await page.getByRole('button', { name: 'Open model Saved teacher · teacher' }).click();
@@ -132,4 +138,37 @@ test('distilled and quantized models share the model collection and reopen their
   await page.getByRole('button',{name:'Open this model’s quantization job →',exact:true}).click();
   await expect(page.getByRole('article',{name:'ACT quantization job details',exact:true})).toHaveAttribute('data-job-id','run-packed');
   expect(state.mutations).toEqual([]);
+});
+
+test('quantization opens one latest model per run and selects older checkpoints only inside', async ({page},testInfo)=>{
+  const earlier=artifact('step20','alpha',{job_id:'run-first',label:'SmolVLA · step 20',format:'training_checkpoint',metadata:{architecture:'smolvla',step:20,method:'lora'}});
+  const later=artifact('step100','alpha',{job_id:'run-first',label:'SmolVLA · step 100',format:'training_checkpoint',metadata:{architecture:'smolvla',step:100,method:'lora'}});
+  const other=artifact('second','alpha',{job_id:'run-second',format:'training_checkpoint',metadata:{architecture:'smolvla',step:50,precision:'Q4_0'}});
+  const state=await fixture(page,[earlier,later,other]);
+  await page.getByRole('link',{name:'Quantize',exact:true}).click();
+  await page.getByRole('button',{name:'Start a new quantization',exact:true}).click();
+  await expect(page.locator('.model-overview-card')).toHaveCount(2);
+  await expect(page.locator('details.model-run-group')).toHaveCount(0);
+  await expect(page.getByRole('combobox',{name:'Checkpoint',exact:true})).toHaveCount(0);
+  const card=page.locator('.model-overview-card[data-model-run="run-first"]');
+  await expect(card).toContainText('smolvla-100-lora');
+  await expect(card).not.toContainText('Step 20');
+  await page.screenshot({path:testInfo.outputPath('latest-model-overview.png'),fullPage:true});
+  await card.click();
+  const checkpoints=page.getByLabel('Checkpoint',{exact:true});
+  await expect(checkpoints).toHaveValue('step100');
+  await expect(checkpoints.locator('option[value="second"]')).toHaveCount(0);
+  await checkpoints.selectOption('step20');await expect(checkpoints).toHaveValue('step20');
+  await page.screenshot({path:testInfo.outputPath('checkpoint-selection-inside.png'),fullPage:true});
+  expect(state.mutations).toEqual([]);
+  await page.getByRole('button',{name:'← Back to models',exact:true}).click();
+  await expect(card).toContainText('smolvla-100-lora');
+  await card.click();await expect(checkpoints).toHaveValue('step100');
+  await openLibrary(page);
+  const group=page.getByRole('region',{name:'smolvla-100-lora · Run run-firs',exact:true});
+  await group.getByRole('button',{name:'Rename smolvla-100-lora',exact:true}).click();
+  await group.getByLabel('Model name',{exact:true}).fill('Battery pickup');
+  await group.getByRole('button',{name:'Save name',exact:true}).click();
+  await expect(page.getByRole('region',{name:'Battery pickup · Run run-firs',exact:true})).toBeVisible();
+  expect(state.mutations).toEqual([{name:'Battery pickup'}]);
 });
