@@ -213,7 +213,7 @@ async function trainingAdmission(page: Page, { format = 'lerobot_v3', dimensions
       '/api/v1/projects/admission/jobs': [dataset], '/api/v1/projects/admission/artifacts': [],
       '/api/v1/jobs/admission-dataset/episodes': { episodes: [], total: 10, offset: 0, limit: 6 },
       '/api/v1/policy-options': { runtimes: cloudConnected ? [runtime] : [], sources: [],
-        training_models: [...profiles.map((model, index) => ({ ...model, model_revision: 'c'.repeat(40), description: 'Fixture profile', backend: 'lerobot', methods: ['full'], runtime_ids: cloudConnected ? [runtime.id] : [],
+        training_models: [...profiles.map((model, index) => ({ ...model, model_revision: 'c'.repeat(40), description: 'Fixture profile', backend: 'lerobot', available:true, status:'ready', methods: ['full'], runtime_ids: cloudConnected ? [runtime.id] : [],
           // Include a stale ready record with no matching runtime: the client must
           // retain its own compute gate while accurately labeling the API state.
           available: cloudConnected,

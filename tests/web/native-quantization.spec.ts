@@ -78,8 +78,12 @@ test('capability is required and native-only workers cannot leak into the existi
   await expect(submit(page)).toBeDisabled();
   await chooseTransformationModel(page, 'quantization', 'Choose Generated smol · smol');
   await expect(page.getByRole('group', { name: 'My model', exact: true })).toBeVisible();
-  await expect(page.getByRole('group', { name: 'Compute', exact: true }).locator('input[value="act-cpu"]')).toHaveCount(0);
-  await expect(page.getByRole('group', { name: 'Compute', exact: true }).locator('input[value="engine"]')).toHaveCount(1);
+  const compute = page.getByRole('combobox', { name: 'Compute', exact: true });
+  await expect(compute).toHaveAttribute('value', 'engine');
+  await compute.click();
+  await expect(page.getByRole('option', { name: runtime.label, exact: true })).toHaveCount(0);
+  await expect(page.getByRole('option', { name: engine.label, exact: true })).toHaveCount(1);
+  await page.keyboard.press('Escape');
   expect(state.posts).toEqual([]);
 });
 

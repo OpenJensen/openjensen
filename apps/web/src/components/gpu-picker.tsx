@@ -8,6 +8,7 @@ export type GpuChoice = {
   label: string;
   memory?: string;
   description?: string;
+  accelerator?: string;
 };
 
 type GpuPickerProps = {
@@ -44,7 +45,10 @@ export function GpuPicker({ value, onChange, choices, disabled = false, label = 
   const selected = choices[selectedIndex];
   const expanded = open && !disabled && choices.length > 0;
   const active = Math.min(Math.max(activeIndex, 0), choices.length - 1);
-  const tone = (choice?: GpuChoice) => choice?.id === "A100-80GB" ? "a100" : ["L4", "T4", "A100"].includes(choice?.id ?? "") ? choice!.id.toLowerCase() : "local";
+  const tone = (choice?: GpuChoice) => {
+    const hardware = choice?.accelerator ?? choice?.id;
+    return hardware === "A100-80GB" ? "a100" : ["L4", "T4", "A100"].includes(hardware ?? "") ? hardware!.toLowerCase() : "local";
+  };
 
   function show(index = selectedIndex >= 0 ? selectedIndex : 0) {
     if (disabled || !choices.length) return;
@@ -172,7 +176,7 @@ export function GpuPicker({ value, onChange, choices, disabled = false, label = 
           onKeyDown={keyDown}
         >
           <span className="gpu-picker-mark"><GpuMark /></span>
-          <span className="gpu-picker-value">{selected?.label ?? (value || "Choose a GPU")}</span>
+          <span className="gpu-picker-value">{selected?.label ?? (value || (label === "Compute" ? "Choose compute" : "Choose a GPU"))}</span>
           {selected?.memory && <span className="gpu-picker-memory">{selected.memory}</span>}
           <svg className="gpu-picker-chevron" width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>

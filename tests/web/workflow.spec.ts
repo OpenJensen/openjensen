@@ -49,7 +49,16 @@ class WorkflowPage {
     }
     await this.page.getByRole('link', { name: 'Quantize', exact: true }).click();
     await chooseTransformationModel(this.page, 'quantization', `Choose float · ${this.modelId}`);
-    await this.page.getByRole('group', { name: 'Compute', exact: true }).locator(`input[value="${runtime}"]`).check();
+    const runtimeLabels: Record<string, string> = {
+      'browser-success': 'Synthetic CPU fixture — not model evidence',
+      'browser-delayed-success': 'Delayed synthetic fixture — not model evidence',
+      'browser-slow': 'slow fixture',
+      'browser-failure': 'Synthetic failure fixture',
+    };
+    const compute = this.page.getByRole('combobox', { name: 'Compute', exact: true });
+    await compute.click();
+    await this.page.getByRole('option', { name: runtimeLabels[runtime], exact: true }).click();
+    await expect(compute).toHaveAttribute('value', runtime);
     await expect(selectedQuantizationModel(this.page)).toHaveValue(this.modelId);
     const created = this.page.waitForResponse(response => response.url().endsWith('/policy-jobs') && response.request().method() === 'POST');
     await this.page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();

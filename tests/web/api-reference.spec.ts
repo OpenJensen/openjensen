@@ -340,7 +340,7 @@ test('shared workspace shell preserves training, defaults, and separate diagnost
   await expect(page.getByRole('navigation', { name: 'Training setup' })).toHaveCount(0);
   await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
   await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
-  await expect(page.getByLabel('Quantization recipe')).toHaveValue('recommended');
+  await expect(page.getByLabel('Quantization recipe')).toHaveValue('Q8_0');
   await expect(page.getByLabel('Also quantize vision to Q8 (experimental)')).not.toBeChecked();
   await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Run diagnostics' })).toBeVisible();
@@ -1604,7 +1604,7 @@ for (const storage of ['invalid JSON', 'unavailable'] as const) {
     await page.goto('/datasets/');
     await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
   await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
-    await expect(page.getByLabel('Quantization recipe')).toHaveValue('recommended');
+    await expect(page.getByLabel('Quantization recipe')).toHaveValue('Q8_0');
     await page.getByLabel('Quantization recipe').selectOption('Q4_0');
     await expect(page.getByLabel('Quantization recipe')).toHaveValue('Q4_0');
     // Unavailable storage supports the current mount; persistence is not claimed.
