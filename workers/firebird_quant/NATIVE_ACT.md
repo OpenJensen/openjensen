@@ -2,7 +2,7 @@
 
 This optional worker turns one complete, inference-ready ACT policy into a packed
 policy directory. It runs on the existing isolated ACT CPU environment; the base
-Firebird Quant library and SmolVLA GGUF paths are unchanged. It does not itself
+OPEN JENSEN Quant library and SmolVLA GGUF paths are unchanged. It does not itself
 register an application capability or make the package runnable in Isaac.
 
 The first accepted recipe is exactly the existing ACT export validator: LeRobot

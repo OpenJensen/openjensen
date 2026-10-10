@@ -1,24 +1,30 @@
 # Local and hosted verification
 
-Main pushes run the CI workflow (application and native-worker jobs) on GCP Linux runners. Simulation is manual-only. Fork PRs and optional Windows checks retain GitHub-hosted runners. An unstarted job is not a pass. Local macOS and isolated Linux results are recorded with each delivery; Windows is deliberately excluded from default hackathon runs; its optional manual execution, hosted cache behavior and cold/warm timing remain separate acceptance items.
+Run the applicable checks locally before publishing changes and record the source revision and results. Hosted GitHub Actions is currently unavailable for this project, so hosted execution is not an acceptance gate. Keep the workflow definitions: they specify the intended checks and runner configuration, but a configured or unstarted job is not a passing result.
+
+The application workflow uses self-hosted GCP Linux runners when the repository variable `CI_RUNNER` is `gcp`; otherwise it uses GitHub-hosted Ubuntu 24.04. Fork PRs always use GitHub-hosted runners. Windows checks use `windows-latest` and require the manual **windows_browser** option. Simulation has its own manual-only workflow and uses self-hosted runners unless `SIM_RUNNER` is `hosted`. Native desktop packaging requires separate verification.
 
 ## Affected checks
 
-Python checks run in the `application` job with a 20-minute budget. Web build and browser checks run in two `web` shards with separate 35-minute budgets. Both shards retain desktop/mobile coverage; diagnostics run once per selected OS. The application result gate requires Python and both browser shards to pass. All jobs share the existing three-runner GCP pool.
+Python checks in the `application` matrix have a 15-minute job budget and default to two shards. The `web` matrix has a 20-minute budget per job: one core leg runs schema, type, build, pure/API/workflow browser checks and diagnostics; separate legs shard the selected desktop and mobile browser projects. Optional repository variables `CI_PY_SHARDS`, `CI_DESKTOP_SHARDS` and `CI_MOBILE_SHARDS` choose 1–12 shards, with defaults of 2, 4 and 6. Every web leg builds its own static export; diagnostics run once per selected OS on the core leg.
 
-CI jobs inspect the local Git diff with `.github/scripts/ci_scope.py`. Main pushes always select every check. PRs use their base-to-head merge-base diff; merge groups use their explicit before/after commits. Missing history, invalid event data, unknown paths and manual dispatch select all checks. Rename detection is disabled so both the removed and added paths are considered. Scope-job failure or missing/invalid outputs also selects all downstream checks. Stable `application-verification` and `native-worker-verification` aggregate jobs reject failed, cancelled or unexpectedly skipped suites; only an explicit successful scope decision permits a skip. These are available for future branch rules, without changing account or branch settings.
+The selector `.github/scripts/ci_scope.py` reads a local Git diff. Main pushes use their before/after diff, enable application adapter checks for changed workers, and add mobile coverage whenever desktop coverage is selected. PRs use the base/head merge-base diff. Version-tag pushes and manual dispatch request every scope. Rename detection is disabled so both removed and added paths are considered.
 
-For PRs and merge groups:
+Unknown paths select Python and desktop browser checks; main pushes also add mobile coverage. If PR change detection fails, that same Python/desktop fallback applies. Failed change detection for a push or an unknown event selects every scope. A failed scope job causes downstream jobs to attempt their checks, but the aggregate gates still reject that failed scope result. Stable `application-verification` and `native-worker-verification` gates reject failed, cancelled or unexpectedly skipped suites; only an explicit successful scope decision permits a skip.
 
-- Application/core/web/test changes run application checks. Core lifecycle/worker contracts also run all native boundaries.
-- Worker changes run their matching isolated suite and application adapters. Native training changes additionally check ACT export and teaching data consumers.
-- New/unknown workers, shared CI changes and selector tests run every scope.
-- Documentation-only changes skip those application/native jobs, except `docs/workspace-guide.md`: it ships in the web app and runs application checks. Simulation runs only through manual dispatch.
-- Linux runs core, optional terminal tests, generated API checks, type checking, production build, all browser tests and diagnostics. Push, PR and merge-group application matrices contain Linux only. A manual application run defaults to Linux too; explicitly enabling **windows_browser** adds Windows core/terminal and complete web/build/browser checks. Native desktop packaging remains a separately recorded platform check.
+For affected paths:
+
+- Core, scripts, deployment and desktop changes select Python and desktop browser checks. Core lifecycle/worker contracts also select all registered native-worker suites; core dataset changes select training, ACT export and teaching consumers.
+- Web application and browser-test changes select desktop and mobile browser checks. Other application tests select Python checks.
+- Registered worker changes select their matching isolated suite. Main pushes also select application adapter checks; PRs do not add those adapter checks automatically. SmolVLA worker changes additionally select ACT export and teaching; VLA C++ changes also select the benchmark suite.
+- Shared CI changes and selector tests select every scope. Unknown worker directories use the unknown-path fallback.
+- The root README, `workers/README.md` and `docs/` pages skip application/native checks, except `docs/workspace-guide.md`, which is rendered into the web app and selects desktop browser checks. Documentation inside application or worker directories follows the enclosing directory's scope rules.
+
+Linux is the default application matrix. A manual application run also defaults to Linux; enabling **windows_browser** adds Windows Python/terminal and full web/build/browser checks. Simulation runs only through its separate manual dispatch.
 
 The teaching job checks the real CPU LeRobot recorder/readback and provider proposal contracts in one environment, and voice SDK contracts in another. A separate small decision-worker job runs contracts without installing Torch or downloading Muose; its opt-in real-model test is explicitly skipped. Actual model-scoring evidence remains a separate local receipt. It does not access voice providers, cloud credentials or GPUs. Dependencies are installed on every run; caches contain dependency downloads, not application workspaces, model weights, credentials or virtual environments.
 
-Superseded revisions of the same PR/workflow are cancelled. Each main/manual run keeps a unique concurrency group. `merge_group` support allows these checks to work if a GitHub merge queue is configured later; this does not enable a merge queue or bypass branch rules.
+Superseded revisions of the same PR/workflow are cancelled. Each main/manual run keeps a unique concurrency group. The application workflow currently handles main-branch pushes, version-tag pushes, PRs and manual dispatch; no `merge_group` event is configured.
 
 ## Run locally
 
@@ -56,4 +62,4 @@ The selector itself is exercised with real Git histories, including deletes/rena
 uv run --no-sync pytest -q tests/test_ci_scope.py
 ```
 
-If change selection is suspect, manually dispatch CI to request every scope (and explicitly enable **windows_browser** only when Windows verification is wanted). Main pushes already request every scope; do not relax tests, application admission or branch protection. Measure successful hosted runs before reporting a runtime or free-minute saving.
+For local verification, run every affected suite when change selection is uncertain. If hosted execution becomes available, manual dispatch requests every scope; enable **windows_browser** only when Windows verification is wanted. Main pushes use the affected-path selection described above. Do not relax tests, application admission or branch protection, or infer runtime and cost savings from workflow configuration alone.

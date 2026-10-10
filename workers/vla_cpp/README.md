@@ -1,8 +1,6 @@
 # Standalone SmolVLA quantization module
 
-This checkout also includes the CPU benchmark layer. Its PR is
-`feat/quantization_benchmark_cpu` → codebase `main`, with the quantization module
-PR merged first; see
+This worker includes the CPU benchmark layer; see
 [CPU reproduction and evidence](docs/cpu-benchmark.md). The module API and
 `policykit-worker` command below remain available. The added `policykit` command
 runs the historical experiment harness.
@@ -12,22 +10,17 @@ vision Q8_0, while preserving the action expert, projectors, embeddings, norms a
 other protected tensors. It includes the pinned vla.cpp packed-weight loader patch
 and a versioned subprocess worker. It has no dependency on the OPEN JENSEN core.
 
-The implementation branches target `main` in `firebird-hackathon-codebase`.
-`feat/quantization_module` provides the shared worker; CPU benchmarking and RTX 3070
-experiments depend on it. Training lives in `workers/smolvla_qlora` on
-`feat/qlora_module`. The integration branch connects these workers through `vla_platform.lifecycle`
+CPU benchmarking and RTX 3070 experiments reuse the shared conversion worker.
+Training lives in [`workers/smolvla_qlora`](../smolvla_qlora/README.md).
+The application connects these workers through `vla_platform.lifecycle`
 and shared project jobs; see the [application workflow](../../docs/policy-workflow.md)
 and [integration evidence](../../docs/workflow-validation.md). The standalone
 quantization protocol remains available for experiments.
 
-Related task: [QUANT-001 (#24)](https://github.com/sobhanb-eth/firebird-hackathon-codebase/issues/24).
-
 ## Experimental CUDA and NVIDIA quantization
 
-The `feat/quantization-rtx3070` PR targets codebase `main` and depends on the
-quantization module PR. It relates to [QUANT-001 (#24)](https://github.com/sobhanb-eth/firebird-hackathon-codebase/issues/24)
-and [EVAL-002 (#21)](https://github.com/sobhanb-eth/firebird-hackathon-codebase/issues/21). It adds isolated CUDA engine/rollout tools
-and small ModelOpt AWQ/SmoothQuant pilots. Start with the
+The optional CUDA tools provide isolated engine/rollout experiments and small
+ModelOpt AWQ/SmoothQuant pilots. Start with the
 [GPU setup](docs/gpu-setup.md), [RTX 3070 results](docs/quantization-rtx3070.md)
 and [NVIDIA research plan](docs/nvidia-quantization-plan.md).
 
@@ -51,22 +44,22 @@ paired native BF16/floating controls. Hardware acceptance remains a required run
 
 The [application workflow diagram](../../docs/policy-workflow.md#defaults-and-selection)
 shows the connected training, reference/candidate measurement, final evaluation and
-package reload path. The historical branch evidence below has its own scope; it
+package reload path. The historical verification evidence below has its own scope; it
 must not be confused with the new [integration checks](../../docs/workflow-validation.md).
 
 We validate the implementation first, then measure actual model artifacts. These
 are separate evidence stages: passing code tests does not establish model quality,
 GPU throughput or deployment readiness.
 
-### Branch tests — verified on September 26, 2026
+### Source tests — verified on September 26, 2026
 
 ```mermaid
 flowchart TB
-    commits["PR commits"] --> envs["Isolated branch environments<br/>Ubuntu / WSL2<br/>RTX 3070 host"]
+    commits["Recorded source revisions"] --> envs["Isolated test environments<br/>Ubuntu / WSL2<br/>RTX 3070 host"]
     envs --> quant["Quantization module<br/>21 CPU tests passed"]
     envs --> bench["Benchmark suite<br/>88 passed<br/>4 initially skipped"]
     bench --> native["Pinned native source + build<br/>4 follow-ups passed<br/>92 benchmark tests total"]
-    envs --> qlora["QLoRA branch<br/>63 passed<br/>Includes real CUDA test"]
+    envs --> qlora["QLoRA worker<br/>63 passed<br/>Includes real CUDA test"]
     quant --> evidence["Recorded evidence<br/>Task cards + test logs<br/>Revisions + hashes"]
     native --> evidence
     qlora --> evidence
@@ -84,8 +77,7 @@ for commands, tested commits and the corrected container library-path failure.
 
 ### Model benchmarks — recorded CPU diagnostics, then pending product gates
 
-The benchmark implementation lives on `feat/quantization_benchmark_cpu`. Blue
-nodes below describe the existing CPU experiment flow and historical evidence;
+Blue nodes below describe the CPU experiment flow and historical evidence;
 they were not rerun with full model weights during the RTX 3070 test session.
 Dashed arrows lead to pending product validation. CPU measurements use matched
 synthetic inputs, warmups, repeated runs and balanced ordering; action fidelity
@@ -119,8 +111,7 @@ The historical floating timing control drifted by **25.6%**, so those measuremen
 do not establish a reliable quantization speedup. Numerical action agreement is
 not task success. Module output remains `conversion_only` with
 `deployment_verified: false`; the legacy selector cannot certify the pending
-product gates. See the benchmark branch's
-[CPU protocol and evidence](https://github.com/sobhanb-eth/firebird-hackathon-codebase/blob/feat/quantization_benchmark_cpu/workers/vla_cpp/docs/cpu-benchmark.md).
+product gates. See the [CPU protocol and evidence](docs/cpu-benchmark.md).
 
 ## Install
 
@@ -149,7 +140,7 @@ uv run policykit-worker --describe-runtime /absolute/path/to/vla.cpp
 The returned identity contains the native commit, actual patch hash, upstream
 quantizer hash, this package's Python-source hash, and installed NumPy/GGUF versions.
 Unexpected native edits fail preparation. Resolve the identity again after changing
-worker code or dependencies; identities from another branch are not interchangeable.
+worker code or dependencies; identities from another source revision are not interchangeable.
 
 A caller writes `job.json` inside a unique output directory and invokes:
 
@@ -211,5 +202,6 @@ training, inference benchmarks and closed-loop evaluation are separate operation
 The module tests perform real packing of small synthetic GGUF tensors, verify all
 four precision recipes and protected values, and reject changed inputs/runtime
 identities without publishing a bundle. Their minimal test decoder is not evidence
-of a complete SmolVLA inference runtime. CPU model evidence belongs to the benchmark
-PR; CUDA and robot-task quality require separate validation.
+of a complete SmolVLA inference runtime. CPU model evidence is documented in the
+[benchmark record](docs/cpu-benchmark.md); CUDA and robot-task quality require
+separate validation.

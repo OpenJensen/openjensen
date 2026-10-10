@@ -1,6 +1,6 @@
 # Dataset import and labeling
 
-The browser selects files from the computer running the browser, including when the app is hosted on xbox-360. A local folder is uploaded to the workspace. ZIP and single HDF5 files are supported. Limits are 2 GiB and 4096 input files, 100,000 converted frames, 2000 episodes and eight synchronized RGB views. Conversion uses one isolated CPU reader at a time. No GPU, cloud job or model download is started.
+The browser selects files from the computer running the browser, including when the app runs on a separate application host. A local folder is uploaded to the workspace. ZIP and single HDF5 files are supported. Limits are 2 GiB and 4096 input files, 100,000 converted frames, 2000 episodes and eight synchronized RGB views. Conversion uses one isolated CPU reader at a time. No GPU, cloud job or model download is started.
 
 ## Inputs
 

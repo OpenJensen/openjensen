@@ -187,7 +187,7 @@ select **Check this machine**, then **Add worker**. Enable local runs and save
 settings separately. The app checks its host's first visible GPU and installed
 dependencies without downloads or jobs; it saves a training-only worker in
 `local-workers.json`, leaving operator configuration untouched. See
-[discovery scope and prerequisites](compute-settings.md#add-a-local-training-worker).
+[discovery scope and prerequisites](compute-settings.md#local-worker-setup).
 
 Discovery does not configure native export, quantization, evaluation or Run.
 For these operations and other local worker adapters, install the workers

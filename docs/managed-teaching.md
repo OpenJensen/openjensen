@@ -1,6 +1,6 @@
 # Managed local teaching captures
 
-This opt-in backend starts the existing `firebird_teaching.isaac` entrypoint in an explicitly configured local Linux Isaac installation. It does not provision a GPU, connect to the persistent L4 machine, start LiveKit, or change the existing manual Teaching relay. An unavailable local Isaac runtime remains unavailable; there is no generated backend fallback.
+This opt-in backend starts the existing `firebird_teaching.isaac` entrypoint in an explicitly configured local Linux Isaac installation. It does not provision a GPU, connect to remote compute, start LiveKit, or change the existing manual Teaching relay. An unavailable local Isaac runtime remains unavailable; there is no generated backend fallback.
 
 A start request creates an ordinary durable application job with operation `teaching.capture`. Use `Idempotency-Key` and the existing project-scoped submission lookup to recover the same job after a lost response. An accepted key never launches a replacement worker, including after application restart. The job stores only a configured profile identity and bounded duration; clients cannot submit a command, executable, destination, credential or URL.
 
@@ -16,7 +16,7 @@ Set `FIREBIRD_TEACHING_SESSION_CONFIG` to a new operator-owned JSON file only wh
     "label": "Local Isaac teaching",
     "project_id": "existing-project-id",
     "isaac_python": "/operator/isaac/python.sh",
-    "worker_root": "/operator/firebird/workers/teaching",
+    "worker_root": "/operator/openjensen/workers/teaching",
     "settings_path": "/operator/teaching/settings.json",
     "lease_path": "/operator/teaching/isaac-resource.lock",
     "control_port": 8878,
@@ -58,4 +58,4 @@ The existing recording catalog and durable `dataset.inspect` preparation path co
 
 ## Verification scope
 
-The new tests distinguish generated Session/Journal raw-capture fixtures and real disposable CPU process ownership from real Isaac execution. An actual configured Isaac host, rendered episode, finalized capture publication, genuine writer/readback and Training handoff are required before claiming live simulator acceptance. No such runtime activation or acceptance is implied by this source addition. LiveKit credentials, provider entitlement, Unity transport and remote capture transfer remain separate operational work.
+The tests distinguish generated Session/Journal raw-capture fixtures and real disposable CPU process ownership from real Isaac execution. An actual configured Isaac host, rendered episode, finalized capture publication, genuine writer/readback and Training handoff are required before claiming live simulator acceptance. These checks do not establish live runtime acceptance. LiveKit credentials, provider entitlement, Unity transport and remote capture transfer remain separate operational work.

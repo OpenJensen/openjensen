@@ -67,7 +67,7 @@ pattern. `remote/policy-cpu.requirements.txt` pins LeRobot 0.6.1, Torch 2.11.0+c
 torchvision 0.26.0+cpu, safetensors 0.8.0, NumPy 2.2.6 and PyYAML 6.0.3. The two
 Linux x86_64 CPU wheel URLs and SHA-256 values come from the checked-in ACT lock;
 this requirements file is not a new fully locked transitive environment. Local
-Firebird packages run directly from the fixed source mounts. Installation occurs
+OPEN JENSEN packages run directly from the fixed source mounts. Installation occurs
 only in the remote policy virtualenv during an explicitly launched job.
 
 `remote/policy_cpu_run.sh` uses `--device cpu`, hides CUDA, disables model Hub

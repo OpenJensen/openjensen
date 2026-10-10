@@ -1,6 +1,6 @@
 # Application journey validation — 2026-09-26
 
-INT-003 verifies the installed application and browser/API/CLI integration using
+This historical record describes the installed application and browser/API/CLI integration using
 local, explicitly synthetic worker fixtures. It does not establish model quality,
 GPU performance, training convergence, simulation success or hardware acceptance.
 

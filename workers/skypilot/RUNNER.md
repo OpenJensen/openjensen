@@ -22,8 +22,8 @@ bash
 chmod 700 ~/.config/isaac-act-runner
 chmod 600 ~/.config/isaac-act-runner/key.json
 
-git clone https://github.com/sobhanb-eth/firebird-hackathon-codebase.git
-cd firebird-hackathon-codebase/workers/skypilot
+git clone https://github.com/OpenJensen/openjensen.git
+cd openjensen/workers/skypilot
 export SIM_PYTHON=python3.12
 bash install.sh
 

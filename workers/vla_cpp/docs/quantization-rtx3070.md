@@ -1,7 +1,7 @@
 # RTX 3070 quantization experiment — September 26, 2026
 
 This report preserves the measured precursor experiment. See
-[branch validation](gpu-branch-validation.md) for checks of the source imported
+[source import validation](gpu-branch-validation.md) for checks of the source imported
 under `workers/vla_cpp`; those checks are separate from the hardware measurements.
 
 The RTX 3070 is a working CUDA test target for the existing SmolVLA GGUF

@@ -155,7 +155,7 @@ promote either claim.
 
 CI is configured for Torch 2.2.2 / NumPy 1.26.4 and Torch 2.11.0 / NumPy 2.2.6
 on Linux CPU and participates in the required native worker verification gate.
-The initial PR's hosted jobs did not start because of the account billing block;
+The recorded hosted jobs did not start because of the account billing block;
 workflow configuration is not a completed hosted test result.
 
 ## Optional native ACT package worker

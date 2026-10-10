@@ -1,8 +1,8 @@
-# RTX 3070 follow-up branch validation
+# RTX 3070 source import validation — September 26, 2026
 
 This is the historical prep import validation. The codebase transfer preserves
 the executable source and tests; see `RTX3070_TRANSFER_ORIGIN.json` for source
-hashes. Its PR targets codebase `main` and depends on the quantization module.
+hashes. The recorded source depended on the shared quantization module.
 
 Date: September 26, 2026. Base: `feat/quantization_module` at
 `edd9fb00d234bd350b566ad66d1a92551bf67a35`. Follow-up branch:
@@ -32,9 +32,8 @@ five 350-value action vectors matched the recorded JSON arrays. The stricter
 declared action-length check rejects malformed logs without changing these valid
 recorded results. No new timing or task-success measurement is inferred from replay.
 
-In the prep repository, checks `python3 scripts/check_docs.py` and
-`python3 scripts/task_records.py` validate documentation links/fences and the
-existing task index/dependency rules. This PR does not change task-card status.
+The original preparation repository separately checked documentation links,
+fences and task records; those checks are not worker or GPU acceptance results.
 
 ## Historical hardware evidence
 

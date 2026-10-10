@@ -6,8 +6,6 @@
 
 OPEN JENSEN brings dataset exploration, training, quantization and simulation into one self-hosted workspace. The web app, CLI and optional terminal client share the same projects, jobs and artifacts. Training and simulation run in separate worker environments, locally or on configured cloud compute.
 
-Built at the Firebird hackathon.
-
 [Get started](#run-locally) · [Workspace guide](docs/workspace-guide.md) · [Product status](#current-status) · [Documentation](#documentation) · [Development](#development)
 
 ![OPEN JENSEN dataset explorer showing recorded camera frames and episode data](docs/images/dataset-explorer.png)
@@ -66,7 +64,7 @@ See the [cloud training record](docs/cloud-training-verification.md), [native in
 
 Use the pinned toolchain: **Python 3.14.7**, **uv 0.12.19**, **Node 24.21.0** and **pnpm 12.6.0**. Node is needed to build or develop the frontend. The running application is served by Python.
 
-The product is named OPEN JENSEN. The CLI remains `firebird`, and existing `FIREBIRD_*` configuration keys and workspace paths continue to work.
+The command-line client is `firebird`. Application configuration uses `FIREBIRD_*` settings, and workspace data defaults to `.firebird/`.
 
 From the repository root:
 
@@ -97,7 +95,7 @@ these workers. Native ACT quantization also needs its
 1. Create a project and open **Dataset → Sources**.
 2. Choose the pinned **SO-101 pickup** or **SO-100 pick & place** starter and select **Inspect dataset**.
 3. Open **Load visual preview** to browse episodes, camera recordings and sampled actions.
-4. In **Settings & diagnostics → Compute**, connect Google Cloud or use **Check this machine → Add worker** for an [installed local SmolVLA worker](docs/compute-settings.md#add-a-local-training-worker). For local compute, enable local runs and save. Choose compatible compute and a recipe in **Fine-tune**. Cloud jobs use your configured account.
+4. In **Settings & diagnostics → Compute**, connect Google Cloud or use **Check this machine → Add worker** for an [installed local SmolVLA worker](docs/compute-settings.md#local-worker-setup). For local compute, enable local runs and save. Choose compatible compute and a recipe in **Fine-tune**. Cloud jobs use your configured account.
 5. Open the saved run to review progress, checkpoints and provenance. Use the supported export or quantization path for that model.
 
 ## Documentation

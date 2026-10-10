@@ -2,7 +2,7 @@
 
 Connect Google Cloud once in Settings, choose a model and GPU, and click **Start
 fine-tuning**. OPEN JENSEN accepts the job promptly and performs preparation in the
-background. The application remains on xbox-360. SkyPilot starts an isolated GCP
+background. The application remains on its host. SkyPilot starts an isolated GCP
 worker and downloads the pinned model and dataset there.
 
 The server needs SkyPilot 0.13 with GCP support, Google Cloud CLI and existing
@@ -86,7 +86,7 @@ not replace the training monitor or control OPEN JENSEN-managed jobs.
 
 In the web app, select **Evaluate** or **Run → Check inference** for this engine path. **3D simulation** and **Replay observations** have separate requirements.
 
-The application now advertises `engine_evaluation` and `run` on supported GCP
+The application advertises `engine_evaluation` and `run` on supported GCP
 runtimes. Evaluate accepts a saved SmolVLA GGUF or deployment package, retrieves
 it on the worker, and measures real CUDA inference with a fresh reload, finite
 actions, per-call latency samples and sampled GPU memory. It uses the model's
@@ -95,7 +95,7 @@ padded channels.
 
 Run executes the selected GGUF in an independent process and publishes a
 reload-verified package. Selecting an existing package executes that exact
-package again without repacking it. The app keeps its control plane on Xbox;
+package again without repacking it. The app keeps its control plane on the application host;
 model files and packages remain in GCS.
 
 These cloud actions currently support synthetic-input engine checks. They do

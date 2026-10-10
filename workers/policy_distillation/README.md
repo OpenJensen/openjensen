@@ -100,7 +100,7 @@ Teacher training overlap is unknown; these are student-held-out partitions, not
 proof that the teacher never saw those episodes.
 
 Use the existing **LeRobot0.6.2 dataset environment**, separately, to prepare a
-verified Firebird LeRobot-v3 snapshot. Expose these source packages in that reader:
+verified OPEN JENSEN LeRobot-v3 snapshot. Expose these source packages in that reader:
 `workers/policy_distillation/src`, `workers/act_optimizer/src`,
 `workers/smolvla_qlora/src`. Invoke
 `python -m firebird_distill.prepare PREPARE_REQUEST NEW_RESULT`.

@@ -1,6 +1,6 @@
-# Static web client
+# OPEN JENSEN web client
 
-This client uses the same Python application API as the CLI. It provides project creation/selection, public Hugging Face or allowed local-directory metadata intake, job history/polling/cancellation, and source-derived results. The six lifecycle scopes stay visible; only metadata intake is implemented here.
+The static web client uses the same Python application API as the CLI. It provides project and dataset management, fine-tuning, distillation, quantization, evaluation, simulation and replay, augmentation, teaching, model history, cloud runs, and compute settings. Workflows require their corresponding configured workers or provider connections; inspection and inference results retain their documented scope.
 
 From the repository root, install the workspace dependencies and generate the API client before type checking or building:
 
@@ -42,7 +42,7 @@ The `(workspace)` layout owns the shell, project selection, React Query cache an
 
 Local dataset paths refer to the computer running the API, not necessarily the browser's computer. Server-configured allowed roots govern access; the local source option is disabled until the API reports `dataset.inspect.local` as available. Inspections are metadata-only; the UI does not infer successful training, video decoding, action semantics, or simulator compatibility from metadata.
 
-Styling uses local CSS for this foundation. Tailwind and shadcn remain optional selected tools in the plan and are not installed by this client.
+Styling uses local CSS shared by the workspace, guide, and API reference.
 
 The workspace uses a neutral light theme by default. The appearance control switches between light and dark, remembers the choice in `firebird.theme`, and applies it before the page paints. The grouped sidebar links to each workspace destination. On small screens, navigation and project controls move above the workspace.
 
@@ -61,7 +61,7 @@ pnpm exec playwright install chromium  # once per browser version
 pnpm test:web
 ```
 
-Browser tests start an isolated Python API on port 8765 with a disposable workspace; they never reuse the running development application's database. They compare actual shell styles and every theme token between routes in light/dark mode and desktop/mobile layouts, verify theme persistence, exercise keyboard navigation, filters, schemas, copy behavior and error recovery, and inject a new operation to check automatic documentation updates. API tests check export routing, schema parity and access boundaries. These checks run on every push and pull request in the application CI workflow; failure traces and screenshots are uploaded for diagnosis.
+Browser tests start an isolated Python API on port 8765 with a disposable workspace; they never reuse the running development application's database. They compare actual shell styles and every theme token between routes in light/dark mode and desktop/mobile layouts, verify theme persistence, exercise keyboard navigation, filters, schemas, copy behavior and error recovery, and inject a new operation to check automatic documentation updates. API tests check export routing, schema parity and access boundaries. Run the applicable checks locally before publishing changes and retain their source commit and results. Hosted GitHub Actions is unavailable for this project; checked-in workflows document the intended checks and are not an acceptance gate.
 
 ## Visual dataset explorer
 

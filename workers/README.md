@@ -1,5 +1,9 @@
 # Native worker boundary
 
+These workers belong to OPEN JENSEN. Existing `firebird` command names,
+`firebird_*` Python packages, `FIREBIRD_*` settings and artifact identifiers remain
+unchanged for compatibility.
+
 Workers execute native operations; the Python application owns project/job
 metadata. Intake contracts live in `vla_platform.contracts`; policy job contracts
 live in `vla_platform.lifecycle.contracts`. Protocol version 1 uses fixed operation
@@ -35,7 +39,9 @@ change the application's advertised capabilities until its adapter is integrated
 `firebird_vla.application` entry points through the same job owner. Workers return
 hashed artifacts and measurement reports; only the core publishes project state.
 See [workflow setup and contracts](../docs/policy-workflow.md). Capabilities require
-an operator-configured runtime; Distill stays planned. The standalone worker CLI
+an operator-configured runtime. The supported ACT → ACT256 distillation lane uses
+its [isolated CPU worker](policy_distillation/README.md); other model families
+remain unavailable. The standalone worker CLI
 interfaces remain available for experiments. Registered operations do not establish
 end-to-end hardware acceptance; see the
 [workflow validation evidence](../docs/workflow-validation.md).
@@ -77,9 +83,10 @@ preserving retained FP32 weights and saved processors. Strict loading, required
 normalization statistics, complete action-chunk parity and a separate full-package
 reload gate publication. This is inference-only compression, not quantization.
 
-It does not yet register an application optimizer operation or verify calibration,
-pickup quality, GPU memory or inference speed. Existing GGUF recipes do not apply
-to ACT. Keep original checkpoints and generated policy packages outside Git.
+The application supports [exporting a final native ACT training checkpoint](../docs/cloud-act-export.md).
+Standalone export does not verify calibration, pickup quality, GPU memory or
+inference speed. Existing GGUF recipes do not apply to ACT. Keep original
+checkpoints and generated policy packages outside Git.
 
 ## Unified model quantization
 
@@ -88,5 +95,7 @@ for dense PyTorch models and safetensors checkpoints, without model-family or
 parameter-name allowlists. It supports portable dequantize-on-access inference,
 explicit coverage audits, tied weights and verified save/reload. CPU tests cover
 convolutional, recurrent, transformer and custom functional models. It is a
-standalone library/CLI, not a newly advertised application or robot capability;
-model-specific quality and optimized runtime deployment remain separate gates.
+standalone library/CLI. Its bounded [native ACT packing operation](firebird_quant/NATIVE_ACT.md)
+is integrated with the application; broader library support does not imply an
+application adapter. Model-specific quality and optimized runtime deployment
+remain separate gates.

@@ -25,7 +25,7 @@ configuration and are never accepted from browser requests:
   "label": "Local ACT packing",
   "native_quantization_only": true,
   "native_quantization_python": "/absolute/isolated-act-environment/bin/python",
-  "native_quantization_root": "/absolute/firebird/workers/firebird_quant"
+  "native_quantization_root": "/absolute/openjensen/workers/firebird_quant"
 }
 ```
 

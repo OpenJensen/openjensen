@@ -5,8 +5,8 @@ For a policy running on a separate H100, use the [rollout Job Group](ROLLOUT.md)
 To run ACT or SmolVLA with the shared service account, follow
 [runner setup](RUNNER.md).
 This launcher has **no integration with the repository's API or job database**.
-Related to [SKY-001 (#26)](https://github.com/sobhanb-eth/firebird-hackathon-codebase/issues/26);
-application recipe integration and acceptance remain open.
+Application recipe integration and acceptance remain separate from this launcher;
+see the [application runner contract](APP_RUNNER.md).
 
 **Known limitation:** startup and renderer warmup took about eight minutes on
 the tested L4 host. Host checks and unit tests do not establish rendering or

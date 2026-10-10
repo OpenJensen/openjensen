@@ -1,5 +1,11 @@
 # Quantization hypothesis register
 
+This historical research register records the September 26, 2026 experiments and
+their proposed admission criteria. It does not describe completed application
+capabilities. See the [current application workflow](../../../docs/policy-workflow.md)
+and [native acceptance contract](native-acceptance.md) for supported operations
+and remaining verification requirements.
+
 ## Patched-runtime follow-up: 2026-09-26
 
 The [SmolVLA patch](../patches/README.md) resolves the original runtime rejection. All four candidates now complete 20 timed CPU predictions with finite outputs. Runtime allocation confirms 224 packed LM matrices and, for vision variants, 72 packed vision matrices. BF16 produces identical fixed-input action values to the unpatched runtime at the harness's printed precision.
@@ -14,37 +20,41 @@ On the Docker CPU lane, the SmolVLA floating reference loads and produces predic
 
 ## Decision rule
 
-The product does not promise a particular bit-width. It deploys the **smallest candidate that passes** the benchmark gate for the selected VLA, dataset, simulator task, and hardware lane.
+The proposed selection rule chooses the **smallest candidate that passes** the
+benchmark gate for the selected VLA, dataset, simulator task and hardware lane.
 
-Default hackathon acceptance gate:
+Proposed experiment acceptance gate:
 
 - completes all smoke rollouts;
 - loses no more than **5 absolute percentage points** of closed-loop LIBERO success versus the same model's BF16 reference;
 - is smaller or faster than the BF16 reference; and
 - loads within the target's memory budget.
 
-The dashboard reports every rejected candidate and the reason it failed. The 5-point threshold is an editable job constraint, not a universal robotics-safety claim.
+The proposed report retains every rejected candidate and the reason it failed.
+The 5-point threshold is an experiment constraint, not a universal robotics-safety claim.
 
 ## Experiments, in order
 
-| ID | Hypothesis | Candidate | What falsifies it | Hackathon priority |
-|---|---|---|---|---|
-| H0 | The pipeline is reproducible. | BF16 GGUF baseline | Cannot create or complete fixed-seed rollouts. | Must pass |
-| H1 | LM Q8 is effectively lossless. | LM Q8_0; vision/action expert float | Success drops >5 points or no useful size/latency gain. | Must test |
-| H2 | LM Q4 is the smallest safe CPU artifact. | LM Q4_0; vision/action expert float | Fails success gate. | Must test |
-| H3 | Vision Q8 is worth its additional compression. | LM Q8_0 + vision Q8_0; action expert float | Incremental memory/latency gain does not justify success loss. | Test after H1 |
-| H4 | Aggressive full-front-end packing remains usable. | LM Q4_0 + vision Q8_0; action expert float | Fails success gate. | Test after H2/H3 |
-| H5 | QLoRA makes training feasible on constrained CUDA GPUs without reducing final deployment quality. | 4-bit LM + LoRA training, then merge → PTQ | Final policy misses BF16/LoRA quality gate. | RTX/GCloud experiment |
-| H6 | QAT recovery rescues a rejected INT4 candidate. | Short fake-quant recovery training | Does not beat the corresponding PTQ candidate. | Post-hackathon / only if H2 fails |
+| ID | Hypothesis | Candidate | What falsifies it |
+|---|---|---|---|
+| H0 | The pipeline is reproducible. | BF16 GGUF baseline | Cannot create or complete fixed-seed rollouts. |
+| H1 | LM Q8 is effectively lossless. | LM Q8_0; vision/action expert float | Success drops >5 points or no useful size/latency gain. |
+| H2 | LM Q4 is the smallest safe CPU artifact. | LM Q4_0; vision/action expert float | Fails success gate. |
+| H3 | Vision Q8 is worth its additional compression. | LM Q8_0 + vision Q8_0; action expert float | Incremental memory/latency gain does not justify success loss. |
+| H4 | Aggressive full-front-end packing remains usable. | LM Q4_0 + vision Q8_0; action expert float | Fails success gate. |
+| H5 | QLoRA makes training feasible on constrained CUDA GPUs without reducing final deployment quality. | 4-bit LM + LoRA training, then merge → PTQ | Final policy misses BF16/LoRA quality gate. |
+| H6 | QAT recovery rescues a rejected INT4 candidate. | Short fake-quant recovery training | Does not beat the corresponding PTQ candidate. |
 
-## What ships in the hackathon product
+## Historical proposed workflow
+
+The original proposal was:
 
 1. Run H0–H4 automatically for SmolVLA on one selected task and hardware lane.
 2. Choose the first passing artifact in this preference order: `lm_q4_vision_q8` → `lm_q4` → `lm_q8_vision_q8` → `lm_q8` → `bf16`.
 3. Return the selected GGUF, target runtime configuration, evidence report, videos, and an explicit fallback to BF16 if no compressed candidate passes.
 4. Expose H5 and H6 as **experimental compiler profiles**, not product claims, until they pass the same closed-loop gate on an RTX 3070 or GCloud lane.
 
-## Why this is production-minded
+## Design rationale
 
 - The action expert/output head stays FP16/BF16 in H0–H4: it is the highest-risk control component.
 - Vision packing is measured independently instead of being silently enabled.

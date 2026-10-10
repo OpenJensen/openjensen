@@ -208,7 +208,7 @@ measurement of received bytes, not comparison against an independent source. The
 CLI does not independently certify archive contents, runtime compatibility,
 calibration or task quality.
 
-All CLI JSON requests now share the terminal transport's endpoint validation,
+All CLI JSON requests share the terminal transport's endpoint validation,
 15-second total request deadline and 8 MiB response cap, and ignore proxy environment
 variables. HTTP redirects are not successful responses. A lost/invalid response or
 server error after a POST reports an unknown outcome and never automatically
@@ -232,4 +232,4 @@ and its supervised CPU protocol fixture through an in-process HTTP adapter; it
 verifies one explicit quantization submission and persisted results without real
 model inference. This is application protocol evidence, not an ML benchmark.
 
-macOS testing is recorded with this implementation. Native Windows terminal behavior and a desktop installer require their own verification; this terminal slice does not establish those claims. [Textual testing](https://textual.textualize.io/guide/testing/) and [workers](https://textual.textualize.io/guide/workers/) describe the upstream UI/test APIs used here.
+macOS testing is recorded with this implementation. Native Windows terminal behavior and a desktop installer require their own verification; terminal checks do not establish those claims. [Textual testing](https://textual.textualize.io/guide/testing/) and [workers](https://textual.textualize.io/guide/workers/) describe the upstream UI/test APIs used here.

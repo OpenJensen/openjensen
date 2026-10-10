@@ -5,11 +5,11 @@ LeRobot bridge uses a separate Python 3.12 environment and upstream revision
 `e595b7902714ba51f91e47523f66f89c5181b649` (package version 0.6.2). It does not
 replace or upgrade the tested SmolVLA environment.
 
-The cloud catalog includes every policy shown in the inspected Kite picker:
+The OPEN JENSEN cloud catalog offers these policy families:
 ACT, Diffusion Policy, EO-1, EVO-1, GR00T N1.7, Multi-Task DiT, π₀, π₀-FAST,
 π₀.₅, SmolVLA, VLA-JEPA, VQ-BeT, WALL-X (WALL-OSS), XVLA and Psi-Zero.
-Historical OpenVLA choices remain visible afterward for operator-installed
-adapters; they are not advertised as bundled trainers.
+OpenVLA choices are available for operator-installed adapters; they are not
+advertised as bundled trainers.
 
 ACT, Diffusion, Multi-Task DiT and VQ-BeT initialize a new policy using the pinned
 upstream implementation. Their `code://` model source identifies that fact.

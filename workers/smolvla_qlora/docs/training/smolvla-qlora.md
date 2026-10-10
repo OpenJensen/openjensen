@@ -1,6 +1,6 @@
 # Quantized SmolVLA fine-tuning
 
-This branch implements an isolated Python worker for **SmolVLA QLoRA** on a
+This isolated Python worker implements **SmolVLA QLoRA** on a
 single NVIDIA GPU. It uses LeRobot's pretrained policy, dataset reader,
 processors and flow-matching loss, bitsandbytes NF4 linear layers, and PEFT
 LoRA. This is a first native adapter, not a universal VLA trainer or a complete

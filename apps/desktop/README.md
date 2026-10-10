@@ -1,6 +1,6 @@
 # OPEN JENSEN desktop workbench
 
-This Tauri 2 client opens the existing Python-served static OPEN JENSEN web app. This build still requires an existing application: **Start desktop workspace is unavailable because no frozen Python payload is pinned or bundled.** The native ownership implementation and private protocol are a separate, testable foundation for DESK-002; they do not establish clean-machine installation. Attached applications and cloud jobs remain running when the desktop closes.
+This Tauri 2 client opens the existing Python-served static OPEN JENSEN web app. This build still requires an existing application: **Start desktop workspace is unavailable because no frozen Python payload is pinned or bundled.** The native ownership implementation and private protocol are implemented and independently testable; they do not establish clean-machine installation. Attached applications and cloud jobs remain running when the desktop closes.
 
 ## Run and build
 
@@ -32,7 +32,7 @@ The local bundle is `src-tauri/target/release/bundle/macos/OPEN JENSEN.app`. A l
 - Top-level navigation is restricted to the configured loopback origin and the bundled connection page. New windows and off-origin links are blocked. Use the ordinary browser for external documentation. No shell, filesystem, process, HTTP plugin or arbitrary execution bridge is exposed to web content.
 - macOS microphone purpose text explains the explicitly chosen voice teaching flow. This metadata does not grant permission or prove native microphone, speech-provider or robot-control operation.
 - Existing cloud/Hugging Face/voice settings remain owned by the Python application. No credentials or configuration files are copied into the bundle.
-- A healthy loopback service is not cryptographic server authentication. This slice relies on the same trusted local-machine boundary as the existing application.
+- A healthy loopback service is not cryptographic server authentication. The connection client relies on the same trusted local-machine boundary as the existing application.
 
 ## Verification
 
@@ -99,5 +99,5 @@ The complete resources in the final `.app` must match the staged inventory befor
 GUI acceptance. Bundler or signing changes are a failed gate, not permission to refresh
 the pin silently. Native lifecycle acceptance, a clean machine, distribution, upgrades
 and other platforms are still pending. This source change alone has not built or launched
-an enabled candidate. The earlier8ce child/static snapshot remains distinct from a later
-native wrapper source and does not contain WEB-009.
+an enabled candidate. The earlier `8ce73ee` child/static snapshot remains distinct from a later
+native wrapper source and predates later web presentation changes.

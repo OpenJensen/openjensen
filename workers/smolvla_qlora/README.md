@@ -4,8 +4,7 @@ Native SmolVLA quantized fine-tuning, adapter verification, and diagnostics for
 multiple native model runtimes. This project uses its own Python 3.11 environment;
 ML dependencies are separate from the application's Python 3.14 environment.
 
-Related task: [TRAIN-001 (#41)](https://github.com/sobhanb-eth/firebird-hackathon-codebase/issues/41).
-The branch targets codebase `main`. The integration branch exposes LoRA and QLoRA
+The application exposes LoRA and QLoRA
 as methods under the same application fine-tuning operation, with pinned dataset
 lineage, resource preflight, checkpoint resume and native export. See the
 [workflow guide](../../docs/policy-workflow.md) and [integration evidence](../../docs/workflow-validation.md).
@@ -40,7 +39,7 @@ That is not a full SmolVLA training or robot-quality result. See the
 [execution report](https://github.com/sobhanb-eth/firebird-hackathon-prep/blob/a9a56ea105d061012abb79fe937d4237af2bf33e/docs/tasks/evidence/2026-09-26-rtx3070-validation.md)
 for the exact source revisions and environment. `TRANSFER_ORIGIN.json` records the
 source files relocated into this worker; hardware evidence is historical until
-rerun on this branch. Planning and task records remain in the prep repository.
+rerun with the current source revision.
 
 ## Gradient accumulation and exact resume
 

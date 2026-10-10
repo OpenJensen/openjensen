@@ -1,5 +1,10 @@
 # VLA deployment compiler plan
 
+This research plan describes a proposed compiler. It is not a release capability
+list or evidence that its automation has completed. Use the
+[application workflow](../../../docs/policy-workflow.md) and
+[native acceptance contract](native-acceptance.md) for current support and limits.
+
 ## Product contract
 
 **Input:** a LeRobot-format dataset, a supported VLA checkpoint, target hardware, and deployment constraints.

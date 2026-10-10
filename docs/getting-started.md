@@ -1,6 +1,6 @@
 # Getting started with OPEN JENSEN
 
-In OPEN JENSEN, JENSEN stands for Joint Embodied Neural Simulation & Execution Network. The CLI is still named `firebird`; existing `FIREBIRD_*` settings and `.firebird/` workspaces are unchanged.
+In OPEN JENSEN, JENSEN stands for Joint Embodied Neural Simulation & Execution Network. The command-line client is `firebird`. Application configuration uses `FIREBIRD_*` settings, and workspace data defaults to `.firebird/`.
 
 The [README](../README.md#run-locally) has the standard installation commands. This guide covers tool versions, the first dataset inspection, local data, development mode and the shared CLI.
 

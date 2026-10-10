@@ -7,7 +7,7 @@ not install ModelOpt, PyTorch, a simulator or a scheduler.
 
 The existing `policykit-worker` contract remains conversion-only. Adding these
 Python modules changes its code identity: resolve a new runtime/recipe identity
-before submitting a conversion job. Do not reuse an identity from the base branch.
+before submitting a conversion job. Do not reuse an identity from a different source revision.
 
 ## Required inputs
 
@@ -56,7 +56,7 @@ The recorded AWQ/SmoothQuant pilot needs the seven frozen observations and
 `artifacts/docker/runs/smolvla-experiments-v4/float_reference/task0-init0-seed42-steps500/`.
 The result lists each capture's ID, path, noise seed and hash. Restore those exact
 files from the original evidence workspace to reproduce the reported diagnostic.
-They are not shipped in this source PR. The pilot refuses a different checkpoint,
+They are not included in this repository. The pilot refuses a different checkpoint,
 capture count, capture hash, scope or nonfinite output.
 
 New calibration data must be captured and assigned a separate experiment identity;
@@ -70,8 +70,8 @@ and use an independent final evaluation set as specified in the
 `GPU_ORIGIN.json` maps the precursor scripts into this worker. The
 [evidence manifest](quantization-rtx3070-evidence.json) retains original source,
 model, binary and image hashes; those source paths refer to the historical
-experiment snapshot. They are not an assertion that this branch was already
-executed on GPU. [Branch validation](gpu-branch-validation.md) records the
+experiment snapshot. They do not establish GPU execution with the current source
+revision. The [source import validation](gpu-branch-validation.md) records the
 checks and their exact scope.
 
 The optional ModelOpt CUDA extension fell back in the recorded runtime image,

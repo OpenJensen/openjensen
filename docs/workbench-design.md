@@ -1,13 +1,14 @@
 # Workbench presentation
 
-OPEN JENSEN uses a shared visual system for the workspace and API reference: cool neutral surfaces, a restrained blue selection color, readable stage headings, consistent control spacing, and matching light/dark tokens. Focus indicators, reduced-motion preferences, existing accessible control names, and narrow-screen wrapping remain part of the shell. On narrow screens, the grouped Data, Train, Test and Workspace navigation forms a compact horizontally scrollable strip, with every destination keyboard reachable; project selection and creation share a compact row. Blue indicates selection; semantic green remains reserved for recorded success or connected status. Decoration does not imply connectivity or model quality.
+OPEN JENSEN uses a shared visual system for the workspace and API reference: cool neutral surfaces, a restrained blue selection color, readable stage headings, consistent control spacing, and matching light/dark tokens. Focus indicators, reduced-motion preferences, existing accessible control names, and narrow-screen wrapping remain part of the shell. On narrow screens, the grouped Overview, Data, Train, Test and Workspace navigation forms a compact horizontally scrollable strip, with every destination keyboard reachable; project selection and creation share a compact row. Blue indicates selection; semantic green remains reserved for recorded success or connected status. Decoration does not imply connectivity or model quality.
 
 The sidebar groups work by purpose:
 
+- **Overview:** Dashboard.
 - **Data:** Dataset, Augmentation and Teaching.
 - **Train:** Fine-tune, Distill and Quantize.
 - **Test:** Evaluate, Run and Decision lab.
-- **Workspace:** Cloud runs and Settings & diagnostics.
+- **Workspace:** My models, Cloud runs and Settings & diagnostics.
 
 Augmentation, Teaching and Decision lab have their own destinations. Dataset keeps its Sources and Inspection views, with an **Augment this dataset** handoff from an inspection. Each destination uses one page title. Explanatory subtitles and repeated introductions are omitted; section labels organize the actual controls and results. The [workspace guide](workspace-guide.md), available through **Guide** at `/guide/` on desktop and mobile, explains what each sector does and how to use it. `/docs/` remains the API reference.
 

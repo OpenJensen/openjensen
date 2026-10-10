@@ -1,4 +1,4 @@
-# Python sidecar foundation
+# OPEN JENSEN Python sidecar
 
 Normal-interpreter tests exercise the actual application and its intake worker in
 disposable workspaces. A local macOS ARM64 frozen build and relocation experiment has
@@ -27,7 +27,7 @@ before API imports, including optional Decision/Teaching/augmentation activation
 The parent environment and persistent configuration files are never modified. It ignores
 the working directory for application paths.
 Application data and bundle resources must be disjoint. Local dataset access is disabled
-unless that owner supplies an explicit local root. This slice does not configure or
+unless that owner supplies an explicit local root. The sidecar does not configure or
 activate model, cloud, provider, simulation, or training runtimes.
 
 The existing API lifespan retains its workspace `owner.lock`, database migrations,
@@ -162,7 +162,7 @@ was generated; all 972 original inputs were unchanged. That failure is retained.
 first acceptance attempt then exposed an inspector bug: a dylib's `LC_ID_DYLIB` identity
 was mistaken for a load dependency. The corrected external inspector separates identity
 from actual loads; the unchanged payload then passed the full bounded harness. The
-source snapshot predates WEB-009 and must not be described as the latest web build.
+source snapshot predates later web presentation changes and must not be described as the latest web build.
 
 Production Start remains disabled. Tauri-owned lifecycle, installation on a clean
 machine, upgrades, signing, Linux/Windows and ML runtimes require separate evidence.
