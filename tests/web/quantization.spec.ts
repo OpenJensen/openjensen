@@ -149,6 +149,37 @@ test('preserves an earlier checkpoint selected from a training run through quant
   expect(unexpected).toEqual([]);
 });
 
+test('visualizes paired action drift and matching model-file size without inventing validation loss', async ({ page }) => {
+  const { unexpected, submitted } = await workspace(page, true, false, ({ jobs }) => {
+    jobs.unshift({ id: 'paired-quantization', project_id: projectId, kind: 'policy.quantize', status: 'succeeded', stage: 'completed', created_at: '2026-10-08T12:00:00Z', updated_at: '2026-10-08T12:01:00Z', request: { operation: 'policy.quantize', runtime_id: 'gcp', artifact_id: 'recent-100', precision: { language: 'Q8_0', vision: null } }, result: { artifacts: [], reports: [{ source_artifact_id: 'recent-100', source_manifest_sha256: 'a'.repeat(64), comparison: { schema_version: 1, scope: 'paired_synthetic_native_actions', reference: 'floating_gguf_before_quantization', backend: 'cpu', samples: 1, coordinates: 300, action_chunk_size: 50, real_action_dim: 6, input_sha256: 'b'.repeat(64), executable_sha256: 'c'.repeat(64), source_model_sha256: 'd'.repeat(64), quantized_model_sha256: 'e'.repeat(64), action_rmse: .0042, action_mse: .00001764, action_mae: .003, action_max_abs_difference: .015, source_file_bytes: 1800 * 1024 ** 2, quantized_file_bytes: 900 * 1024 ** 2, validation_loss: null, task_success: null } }] } });
+  });
+  await page.getByRole('link', { name: 'Quantize', exact: true }).click();
+  await page.locator('.job-history-entry[data-job-id="paired-quantization"]').click();
+  const comparison = page.getByRole('region', { name: 'Comparison with original model', exact: true });
+  await expect(comparison.getByRole('img', { name: 'Action difference from original model on fixed inputs' })).toBeVisible();
+  await expect(comparison).toContainText('0.0042');
+  await expect(comparison).toContainText('50% smaller');
+  await expect(comparison).toContainText('1,800 MiB');
+  await expect(comparison).toContainText('Validation loss and robot task success were not measured.');
+  await comparison.getByRole('button', { name: 'Help for Quantization comparison' }).focus();
+  await expect(comparison.getByRole('tooltip')).toContainText('Original is zero by definition');
+  await page.getByRole('heading', { name: 'Compared with original', exact: true }).click();
+  await page.screenshot({ path: test.info().outputPath('quantization-comparison.png'), fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(() => document.documentElement.clientWidth) + 1);
+  expect(submitted).toEqual([]);
+  expect(unexpected).toEqual([]);
+});
+
+test('old quantization jobs explain missing paired measurements instead of drawing invented points', async ({ page }) => {
+  const { submitted } = await workspace(page, true, false, ({ jobs }) => jobs.unshift({ id: 'legacy-quantization', project_id: projectId, kind: 'policy.quantize', status: 'succeeded', stage: 'completed', created_at: '2026-10-08T12:00:00Z', updated_at: '2026-10-08T12:01:00Z', request: { operation: 'policy.quantize', runtime_id: 'gcp', artifact_id: 'recent-100', precision: { language: 'Q8_0', vision: null } }, result: { artifacts: [], reports: [{ inference: { finite_action_values: 1600, wall_seconds: 2 } }] } }));
+  await page.getByRole('link', { name: 'Quantize', exact: true }).click();
+  await page.locator('.job-history-entry[data-job-id="legacy-quantization"]').click();
+  const comparison = page.getByRole('region', { name: 'Comparison with original model', exact: true });
+  await expect(comparison).toContainText('This job did not record a paired comparison');
+  await expect(comparison.getByRole('img')).toHaveCount(0);
+  expect(submitted).toEqual([]);
+});
+
 test('cloud quantization keeps Q8 by default and accepts explicit experimental precision without a native Spatial protocol', async ({ page }) => {
   await page.addInitScript(id => localStorage.setItem(`firebird.workflow.${id}`, JSON.stringify({
     suite: 'libero_spatial', mode: 'engine', steps: 10, compareQ4: true,

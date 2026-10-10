@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CloudConnectionsPanel } from "@/components/cloud-connections";
 import { QuantizationCompression, QuantizationCompute } from "@/components/quantization-settings";
+import { QuantizationComparison } from "@/components/quantization-comparison";
 import { ModelVersionPicker } from "@/components/model-version-picker";
 import { ownedModels } from "@/lib/model-library";
 import { JobHistory } from "@/components/job-history";
@@ -884,6 +885,7 @@ export function WorkflowPanel({
         {isActive(selected) && <button className="secondary-button" disabled={cancel.isPending} onClick={() => cancel.mutate()}>{cancel.isPending ? "Cancelling…" : "Cancel run"}</button>}
         {cancel.error && <p className="error-notice" role="alert">{cancel.error.message}</p>}
         {events.error && <p className="error-notice" role="alert">Activity is unavailable: {events.error.message}</p>}
+        {stage === "Quantize" && selected.kind === "policy.quantize" && <QuantizationComparison job={selected} reports={data?.reports} />}
         {(engineReport || inference) && <section className="workflow-measurements" aria-label="Measured results">
           <h3>Results</h3>
           <dl className="workflow-job-facts">
