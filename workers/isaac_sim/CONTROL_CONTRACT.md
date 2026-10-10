@@ -59,6 +59,6 @@ check those against both recording and execution. No physical-to-simulator map i
 validated by this route, and the rejected SO101 calibration remains rejected.
 
 The source regression fixtures are synthetic and run without Torch or Isaac.
-Their passing results establish schema, identity, portable export metadata and
-mismatch rejection only. Native training, fresh model export/reload, actual Isaac
-execution and task quality require separately recorded acceptance evidence.
+Use them to check schema, identity, portable export metadata and mismatch
+rejection. Native training, fresh model export/reload, actual Isaac execution
+and task quality require separate runtime and closed-loop verification.

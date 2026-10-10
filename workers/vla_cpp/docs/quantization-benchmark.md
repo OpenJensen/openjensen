@@ -1,18 +1,17 @@
 # Quantization hypothesis benchmark
 
-## Current evidence
+## Engine screen
 
-The packed-runtime follow-up is `artifacts/docker/runs/smolvla-packed-v2/REPORT.md`.
-It preserves the original v1 failures, reuses the exact same artifact hashes, and
-adds packed resident-tensor verification, BF16 action regression, loading time,
-sampled peak process RSS, and 20-call latency measurements. The runtime fix is
-versioned as [a source patch](../patches/README.md), automatically applied by the
-configured preparation step. All numerical action comparisons use the 350 real
-control values, excluding padded channels, and fixed synthetic inputs/noise.
+`policykit.screen` compares one immutable SmolVLA checkpoint across a floating
+reference and four component-specific PTQ candidates. It records conversion
+logs, source/runtime commits, artifact hashes, quantization duration, inference
+commands, precision audits, size and synthetic inference latency. Missing values
+mean unmeasured, never zero. These CPU diagnostics do not establish CUDA or
+Jetson performance or robot-task quality.
 
-The actual local report is `artifacts/docker/runs/smolvla-screen-v1/REPORT.md`, with machine-readable evidence in `results.json` next to it. Missing values mean **unmeasured**, never zero. The report is updated after every candidate.
-
-The first lane is Docker Linux CPU on the Intel Mac. It does not establish CUDA or Jetson performance. `policykit.screen` compares one immutable SmolVLA checkpoint across a floating reference and four component-specific PTQ candidates. It records conversion logs, source/runtime commits, artifact SHA256, quantization duration, exact inference commands, tensor precision audits, size, and synthetic inference latency.
+The packed-runtime [source patch](../patches/README.md) is applied by the configured
+preparation step. Compare all real control values with identical inputs and
+noise; exclude padded channels.
 
 | Hypothesis | LM | Vision | Action expert/projector | Evidence required |
 |---|---|---|---|---|
@@ -45,7 +44,7 @@ The screen uses four CPU inference threads, two 512-pixel synthetic camera image
 
 An engine-only result never selects a deployable winner. Next run the floating reference and viable candidates on identical LIBERO task IDs, seeds and checkpoint-appropriate action chunking, saving separate per-phase/per-task/per-seed logs and videos. Stop candidates that fail execution or an explicitly configured smoke-quality threshold.
 
-Before selection, require an explicit absolute minimum task-success target, the allowed drop versus the floating reference (initial hypothesis: 5 percentage points), the target memory budget and the maximum end-to-end latency. Report paired episode outcomes and uncertainty; a small smoke suite cannot establish a 5-point quality difference. Re-evaluate finalists with enough episodes to support the decision. Choose the fastest candidate meeting every gate; use size as a secondary objective, and report the size/latency frontier rather than assuming lower bit-width is faster.
+Before selection, require an explicit absolute minimum task-success target, the allowed drop versus the floating reference (initial hypothesis: 5 percentage points), the target memory budget and the maximum end-to-end latency. Report paired episode outcomes and uncertainty; a small smoke suite cannot establish a 5-point quality difference. Re-evaluate finalists with enough episodes to support the decision. Choose the smallest candidate meeting the explicit quality, memory and latency constraints; report the size/latency frontier rather than assuming lower bit-width is faster.
 
 The existing `BenchmarkRunner`/selector needs those admission gates and per-seed evidence isolation before being used to declare a product winner. Its current smoke pass only establishes execution, and its selector only checks relative success and artifact size.
 

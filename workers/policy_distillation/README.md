@@ -139,8 +139,8 @@ training supervisor it has no elapsed-time deadline of its own.
 Synthetic snapshot lineage is automatically retained as `generated_fixture` and
 requires `compatibility: generated_fixture`. Mixed generated/recorded sources fail.
 A generated corpus can verify the algorithm and software; it is not recorded robot
-training evidence. The first full native writer→snapshot→reader→training proof uses
-three declared generated scene groups,6episodes,24frames and12sampled observations.
+training evidence. Use the native writer, immutable snapshot validation and
+reader checks to verify each admitted dataset pipeline before training.
 
 ## Output and honest acceptance
 
@@ -156,16 +156,8 @@ its observation corpus. This establishes a reloadable inference artifact, not an
 optimizer/RNG checkpoint: `training_resume_supported=false`.
 
 The student is already `use_vae=false`; do **not** send it through ACT VAE-removal
-export. The API snapshot-to-distillation job and checkpoint download are verified
-in [application evidence](evidence/app-integration.json). The [browser integration
-proof](evidence/browser-integration.json) also verifies a manually submitted 12-step
-local job through the production web UI, successful registration and the exact
-browser-downloaded package. It used a generated ACT teacher and three generated
-scene groups, not recorded robot skill. All original source hashes were unchanged;
-all 10 archive files matched the registered package. The student weights were
-55,946,840 bytes; total job elapsed time was 170.426 seconds on macOS CPU. This is
-software verification, not a speed benchmark. CUDA, Isaac rollout, timing speedup,
-calibration and task quality remain unverified.
+export. CPU distillation does not qualify CUDA execution, Isaac rollout, timing
+speedup, physical calibration or task quality.
 `quality_verified`, `calibration_verified`, `speedup_verified` and
 `isaac_runtime_verified` remain false; `task_success` is null. Offline teacher
 imitation error can improve while robot success worsens. Teacher failure may be
@@ -174,8 +166,7 @@ exported packages are required before recommending deployment.
 
 Teacher/data licenses, redistribution permission, unknown teacher training overlap,
 recorded-coordinate compatibility and robot calibration remain separate gates.
-The local fixture proof does not establish any of them and redistributes no user
-weights or recordings. Smaller weights are measured against the already-inference
+Generated fixture checks do not establish any of them. Smaller weights are measured against the already-inference
 teacher tensors so VAE removal is not counted as a distillation gain.
 
 ## Verification
@@ -188,8 +179,8 @@ PYTHONPATH=workers/policy_distillation/src:workers/act_optimizer/src:workers/smo
 Tests exercise actual native teacher/student updates, smaller serialized weights,
 strict fresh-process reload, group/episode leakage, padding, finite data, strict JSON,
 input mutation, atomic no-overwrite, source preservation and real process cleanup.
-The genuine native-v3 preparation proof runs separately in the dataset environment;
-its generated captures and artifact evidence are retained outside Git.
+Run native-v3 preparation checks separately in the dataset environment and keep
+generated captures and artifacts outside Git.
 
 
 ## Inherited control and timing continuation
@@ -225,10 +216,9 @@ This differs deliberately from packed-model identity, which inventories and hash
 all packed inference files. Fresh reload must reproduce both sidecar claims and
 full prediction hashes; original source files remain unchanged.
 
-This continuation is currently source/test authoring only. No nondefault-horizon
-student training, native fresh reload, packing, HTTP serving or Isaac execution has
-been verified for it. Earlier 100/100 evidence above remains historical and does
-not establish this new chain. Physical calibration and task quality remain open.
+Nondefault-horizon student training, fresh reload, packing and HTTP serving require
+the opt-in native checks below before use. Isaac execution, physical calibration
+and task quality require separate runtime and closed-loop evaluation.
 
 
 The generated native 8/3 regression is explicitly opt-in with
@@ -236,5 +226,5 @@ The generated native 8/3 regression is explicitly opt-in with
 `test_native_8_3_preserves_semantics_and_normalized_teacher_targets`. It is not
 part of the lightweight metadata admission checks. It retains the existing
 100/100 native regression and uses nonidentity processor statistics to check
-that teacher targets remain in normalized coordinates. It has not been run for
-this draft. Coordinate its CPU, disk and process budget before enabling it.
+that teacher targets remain in normalized coordinates. Coordinate its CPU, disk
+and process budget before enabling it.

@@ -20,4 +20,7 @@ python robot/build_robot.py --joint-degrees 0 0 0 0 0 0
 
 Stage units are meters. USD joint state, limits and drive targets use degrees. Position drives retain URDF effort/velocity limits; gains are simulation estimates. Place the root 0.002401 m above a support plane to seat the CAD base. Fixed-root joint frames are ignored by PhysX.
 
-Static checks verified references, articulation topology, FK, inertias and matching states/targets. Isaac Sim 6.1 on an NVIDIA L4 resolved all seven links and six DOFs and held the initial pose for five simulated seconds. See `../evidence/isaac-result.json`. Grasp behavior remains untested.
+Verify references, articulation topology, forward kinematics, inertias and
+matching states/targets after rebuilding. Live Isaac checks must confirm all
+seven links, six DOFs, fixed-base behavior and initial-pose stability. These
+checks do not establish grasp behavior or learned control.

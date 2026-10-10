@@ -6,7 +6,7 @@ The only supported model is [muose/Muose-50M-Decision](https://huggingface.co/mu
 
 ## Install separately
 
-The tested tuple is Python 3.12.14, Torch 2.11.0, safetensors 0.8.0, tokenizers 0.23.2, and uv 0.12.19. Keep it out of the application environment. The worker currently requires Linux/macOS POSIX file and process facilities; Windows execution is unsupported. The recorded real-model proof was run on macOS ARM64; Linux model scoring has not yet been verified.
+Use Python 3.12.14, Torch 2.11.0, safetensors 0.8.0, tokenizers 0.23.2, and uv 0.12.19. Keep this runtime out of the application environment. The worker requires Linux/macOS POSIX file and process facilities; Windows execution is unsupported. Verify the pinned model and scoring process on the selected host before use.
 
 From the repository root, using the pinned uv binary:
 
@@ -93,9 +93,9 @@ The interpreter must already contain the pinned dependencies above. The worker r
 
 Only one score runs per application process; concurrent submissions receive HTTP409. There is no automatic write retry, queue, saved job or motion operation. The app sends the fixed public CLI a 30-second deadline within an outer 40-second timeout; cleanup first allows the CLI 6 seconds to reap its child, then forces owned-process-group cleanup if needed. This is a local execution deadline, not a model-quality claim. Child processes receive a minimal environment without inherited provider or cloud credentials. Disconnect, timeout, excessive output and cancellation are covered by local subprocess tests.
 
-Open **Dataset → Decision lab**, enter a state and 2–8 unique criteria, and explicitly choose **Score criteria**. The result is a manual experiment. Changing the input clears the displayed result. Stopping or leaving the panel cancels the browser request; no automatic retry or action follows. The panel displays the existing 3/6 workflow-fixture limitation and uncalibrated labels prominently. Real-model application validation on macOS uses the exact pinned model and unchanged source inventory; it does not establish Linux/Windows model scoring or robotics success.
+Open **Dataset → Decision lab**, enter a state and 2–8 unique criteria, and explicitly choose **Score criteria**. The result is advisory and uncalibrated. Changing the input clears the displayed result. Stopping or leaving the panel cancels the browser request; no automatic retry or action follows. Scoring must not drive automatic workflow routing or robot action selection.
 
-## Tests and measured limitations
+## Verification procedures
 
 Unit tests need the worker test requirements. The real model test is opt-in and never downloads weights:
 
@@ -113,6 +113,5 @@ FIREBIRD_DECISION_MODEL=/absolute/operator/path/to/pinned-muose \
 
 The receipt destination must not already exist. The real probe has an outer 120-second deadline and tests the public supervised CLI as well. It checks deterministic repetition, criterion-order invariance, token rejection, complete response identity, and all seven source hashes before/after execution. The unit suite exercises malformed/oversized JSON, checksum and symlink/FIFO rejection, mutation during reads, response forgery, real child timeouts/output bounds, creation-time interruption, and repeated signals during cleanup.
 
-On 2026-09-27, the predeclared [12-example fixture](fixtures/scoring-v1.json), SHA256 `0e0053fe2e77d1407714180604acc2f926ca27e51c2c41af1e0661d87b2bee5f`, measured **5/6 banking** and **3/6 workflow examples** correct. Both clarification requests were wrongly classified as dataset inspection; the simulation-evaluation request was also classified as inspection. One lost-card request was classified as a phone-number change. These small, hand-authored cases are neither a representative benchmark nor robotics validation, and were not used for prompt tuning.
-
-That macOS ARM64 run measured 1.677 seconds for checksum validation/import/model loading. Across 12 warmed four-criterion requests, median scoring time was 42.16 ms and nearest-rank p95 was 48.82 ms (only 12 samples; not a latency guarantee). Original source hashes were unchanged, and repetition/order checks passed. The first measurement attempt failed after scoring because platform metadata collection tried a subprocess blocked by the guard; the metadata lookup was corrected without changing the prompt, model, examples, or expected answers. These results support a working optional local scorer; they do **not** support automatic workflow routing or robot action selection.
+The hand-authored [scoring fixture](fixtures/scoring-v1.json) checks software behavior.
+It is not a representative quality benchmark, robotics validation or a latency guarantee.

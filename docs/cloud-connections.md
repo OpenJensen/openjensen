@@ -50,6 +50,3 @@ selected provider automatically; the user does not need a separate setup check.
 A saved account makes the GPU selectable, while live access, quota, and capacity
 are checked during preparation and launch. See [compute settings](compute-settings.md)
 and the [SkyPilot job lifecycle](skypilot-training.md).
-
-The backend tests in `tests/test_cloud_connections.py` mock all provider commands.
-They do not inspect the developer's credentials or call any real cloud account.

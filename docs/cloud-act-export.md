@@ -52,19 +52,11 @@ export is registered on download, integrity or parity failure. A failed export
 may leave unregistered diagnostic output in its job directory; it cannot appear
 as a successful package. An explicit later request starts a separate job.
 
-## What the download proves
+## Output and limits
 
 This recipe removes training-only VAE tensors and retains FP32 inference weights
 and saved normalization. It requires complete synthetic action-chunk parity and
 fresh-process reload of the exact published policy package. The downloaded archive
-contains that tested export and its provenance. It is inference only, not a resume
+contains the export and its provenance. It is inference only, not a resume
 checkpoint, quantization result, calibrated robot policy, task-success evaluation,
 GPU-memory measurement or speedup claim.
-
-Offline API tests exercise a real supervised copy subprocess over fixture GCS
-streams, repeated-cancellation ownership, corruption, byte limits, source mutation,
-publication races, cross-project rejection and full-profile lineage. Browser
-checks cover explicit final/periodic selection, local ancestry/download links and
-export-only runtime filtering. These fixtures do not exercise live GCS permissions.
-
-A genuine saved native LeRobot 0.6.2 ACT fixture also passed the complete app route through fixture GCS streams and the unchanged 0.6.1 CPU consumer. Its archive was verified against every published file and the original bundle remained unchanged. The fixture was trained on generated batches; this establishes transport, source admission and export integration, not real-dataset task quality or live GCS access.

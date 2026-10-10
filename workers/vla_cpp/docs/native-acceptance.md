@@ -1,9 +1,8 @@
 # Native application acceptance contract
 
-NATIVE-001 repairs the application-owned entry point, `policykit.application`.
-The historical standalone CPU/CUDA experiment tools and their recorded evidence
-are preserved. These acceptance checks do not establish L4 throughput or policy
-quality; hardware and simulator runs must be repeated with the repaired revision.
+The application-owned entry point is `policykit.application`. Acceptance checks
+validate artifact and runtime contracts. Hardware performance and policy quality
+require model-specific hardware and simulator evaluation.
 
 ## What is accepted
 
@@ -11,8 +10,8 @@ The native engine checks the GGUF architecture, positive action dimensions,
 artifact action-dimension declaration, tensor precision inventory and conversion
 audit before running the native probe. Probe output length comes from
 `smolvla.chunk_size * smolvla.max_action_dim`. Resident language/vision matrix
-counts come from the audited tensors, allowing both the historical 224-matrix
-model and the newer 112-matrix model without declaring them interchangeable.
+counts come from the audited tensors rather than a fixed matrix count. Different
+model inventories do not establish checkpoint interchangeability.
 The current instrumentation admits at most 50 action steps, at most 32 padded
 action channels, and 512px images. Other shapes fail explicitly.
 
@@ -64,13 +63,7 @@ those reserved names are rejected, so evidence cannot silently replace a tested
 input. The report retains the staging path where execution occurred; the final
 package has identical tested payload bytes at its returned path.
 
-## CPU regression evidence
-
-Base revision: `9e06b9750c31d7347e323c3d8ada283b138739ae`.
-An initial 14-test regression set failed before implementation, reproducing the
-fixed action/matrix counts, incomplete telemetry qualification, missing execution
-input fingerprints and source-first package evaluation. Two further regressions
-failed before fixing nonfinite telemetry serialization and export-name collisions.
+## Local verification
 
 Run inside `workers/vla_cpp` using an isolated Python 3.11 environment with only
 `quantize` and `test` extras (no Torch/GPU dependencies):
@@ -83,16 +76,14 @@ ruff format --check policykit/acceptance.py policykit/provenance.py policykit/ap
   tests/test_application_acceptance.py tests/test_application.py
 ```
 
-Observed after repair: **132 passed, 4 skipped**. The skips require prepared vendor
-source (two tests) or Linux native runtime integration (two tests). Focused Ruff
-checks pass. Tests use small real GGUF tensors, controlled native log/resource
-fixtures and a fresh synthetic worker process whose original source directory is
-made unavailable. They establish acceptance behavior, not full-model native reload,
-simulator success, or L4 performance. No cloud/GPU job was launched.
+Tests use small GGUF tensors, controlled native log/resource fixtures and a fresh
+synthetic worker process. Vendor-source and Linux native integration checks need
+their prepared environments. Report unavailable checks as skipped; contract tests
+do not establish full-model reload, simulator success or GPU performance.
 
 ## Spatial integration boundary (EVAL-003)
 
-NATIVE-001 retains the legacy LIBERO Object adapter. The separate
+The native worker retains the legacy LIBERO Object adapter. The separate
 [Spatial application integration](spatial-application.md) adds the newer model
 without treating its 112 matrices as sufficient compatibility evidence. It packages the pinned processor, tokenizer,
 normalization statistics and derived observation configuration alongside weights;

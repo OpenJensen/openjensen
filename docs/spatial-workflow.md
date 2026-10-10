@@ -1,10 +1,10 @@
-# Spatial optimizer workflow — software gates, hardware acceptance pending
+# LIBERO Spatial optimizer workflow
 
 This lane integrates the pinned `lerobot/smolvla_libero` policy with LIBERO Spatial.
-It preserves the older Object adapter as a separate suite. Software tests use
-synthetic subprocess fixtures; they do not establish L4 quality, memory savings,
-latency or a deployable robot capability. L4 access, resource budget, final-state
-approval and measured acceptance remain pending.
+It preserves the Object adapter as a separate suite. The workflow requires
+prepared inference and simulator assets, a compatible GPU, and explicit action
+parity and quality thresholds. Configuration alone does not establish task
+quality, memory savings, latency or robot deployment compatibility.
 
 ## Validate local assets before GPU work
 
@@ -51,24 +51,20 @@ files use the same snapshot approach. Duplicate entries, oversized declared shap
 corrupt bytes and changed identities fail validation.
 
 The existing [local bundle preparation command](../workers/vla_cpp/docs/spatial-application.md#prepare-exact-local-assets)
-now runs these same checks in a private sibling staging directory. It publishes
+runs these same checks in a private sibling staging directory. It publishes
 the requested output only after success and prints the final manifest digest.
 Publication refuses any existing destination, including one created during
 preparation, and failure removes only its own staging directory. Inputs and other
 staging directories remain unchanged. Atomic no-replace publication uses the
 platform's native operation on Linux, macOS and Windows; unavailable operations
-fail closed. Atomic no-replace publication passed the macOS regression suite and
-the Linux native-worker CI for PR #70 (`d8af68ab3f89d8736fe344cce3592960f229952c`).
-Native Windows publication is implemented but unverified.
+fail closed. Windows publication requires separate platform checks.
 
 `static_assets_verified` is deliberately limited to hashes, declared GGUF layout,
 normalization and fixture arrays. The receipt marks **GPU, runtime, episodes,
 authorization, action parity and model loading as not checked**. It does not prove
 a complete executable weight inventory or confer selection/deployment eligibility.
-Tests use tiny actual-format files with synthetic contents; the real pinned bundle
-and its full model remain unexercised in this CPU-only slice. Preparing simulator
-assets, capturing real observations, approving thresholds, and running the L4
-acceptance protocol remain separate steps.
+Preparing simulator assets, capturing observations, choosing thresholds, and
+running the GPU evaluation protocol are separate steps.
 
 ## Configure and submit
 
@@ -102,8 +98,7 @@ A Spatial workflow requires an explicit `evaluation.parity_limits` object with
 `profile`, `max_rmse`, and `max_abs_error`. Choose and review these values for the
 fixed observation-to-action fixtures before running; no universal tolerance or
 empirically approved threshold is supplied by the software. The UI leaves them
-blank until entered. Synthetic tests use exact-zero tolerances only for synthetic
-identical actions. These are not recommended real-model tolerances.
+blank until entered. Choose thresholds for the selected model and observations.
 
 Q8 is the initial packed candidate. Q4 and vision packing require explicit choices.
 Automatic selection additionally requires LIBERO mode and `limits`; existing
@@ -163,45 +158,14 @@ add only `reload-verification.json`, `runtime-lock.json`, `tested-payload.json`,
 The package
 is not registered if core acceptance rejects its report.
 
-## Software evidence
+## Local checks
 
-`tests/test_spatial_workflow.py` uses a separate explicitly synthetic worker. It
-checks suite admission, task counts, fixed environment selection, parity failure
-before compression, native-versus-C++ identity separation, wrong model/protocol,
-duplicate episodes, missing telemetry, quality loss against both controls, final
-failure without replacement and rejected packages remaining unregistered.
-
-Run these gates together with legacy lifecycle regressions:
+Run the Spatial and lifecycle contract checks from the application checkout:
 
 ```sh
 uv run --frozen pytest -q tests/test_spatial_workflow.py tests/test_lifecycle.py
 ```
 
-Independent review first reproduced eight failing acceptance/admission regressions.
-After the follow-up repairs: **100 passed** (37 Spatial gates plus 63 legacy lifecycle
-tests), no skips. The regressions cover unsupported protocol admission, zero-step
-success, incomplete or unrelated parity inputs, and untested export-time assets.
-One existing Starlette test-client deprecation warning remains. The browser payload
-test also checks the restricted protocol controls and migration of old saved settings:
-**2 passed**, desktop and mobile, against the production frontend build. Production
-build, TypeScript and focused Ruff/format checks passed. An initial browser run used
-an over-specific label selector; inspecting the accessible tree identified the issue,
-and the test now selects the named protocol combobox directly. No payload assertion
-was weakened. API/client files were regenerated for this validation; the integration
-branch owns the final generated-file commit.
-
-Real acceptance still requires the pinned worker environment on the dedicated L4,
-validated preprocessing/normalization, approved parity/quality thresholds, measured
-resource coverage, and the final exact-package rerun. No hardware result is inferred
-from these tests or copied from historical benchmark reports.
-
-## Combined coordinator validation
-
-After integrating the core, worker and independent-review corrections on top of
-the phase-2 repair revision `7154a4d`, the coordinator ran the complete combined
-suite: **391 core tests passed, 1 expected skip; 204 native worker tests passed,
-4 prepared-vendor/Linux integration skips; production build and 52 browser tests
-passed** on macOS arm64. OpenAPI and the TypeScript client were regenerated from
-these contracts. The final three real-process cancellation/timeout regressions
-also passed independently. No simulator episode or GPU inference was executed.
-Cross-platform CI and real L4 acceptance remain separate gates.
+GPU evaluation requires the pinned worker environment, compatible hardware,
+validated preprocessing/normalization, explicit parity/quality thresholds,
+resource telemetry, and the final exact-package rerun described above.

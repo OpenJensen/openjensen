@@ -1,8 +1,7 @@
 # Isaac recording worker
 
-Records simulations with Isaac's RTX real-time renderer (RT2). The bundled
-falling-cube scene produced a verified recording on GCP L4. Offline path
-tracing is not required.
+Records simulations with Isaac's RTX real-time renderer (RT2). A falling-cube
+scene is bundled for setup checks. Offline path tracing is not required.
 
 For calibrated ACT/SmolVLA control through a separate inference VM, see
 [the rollout adapter](ROLLOUT.md).
@@ -171,12 +170,6 @@ verify adapter contracts and failure publication, not rendering or physics.
 GPU acceptance requires visible falling motion, nonblack frames, a six-second
 MP4 at 1280×720/30 fps, matching GCS checksum and terminal result, and verified
 VM cleanup. Repeat acceptance after renderer, driver or simulator changes.
-
-On 2026-09-26, Isaac 6.1.0 with driver 580.159.04 on GCP L4 produced all 180
-visible frames at 1280×720/30 fps with cube motion. The downloaded GCS MP4
-matched the terminal result's SHA-256. All 22 worker tests passed in the worker
-container, including FFmpeg encoding; all 41 launcher tests passed locally.
-Container removal was verified. Full VM teardown remains unverified.
 
 References: [Isaac container setup](https://docs.isaacsim.omniverse.nvidia.com/6.1.0/installation/install_container.html),
 [Replicator troubleshooting](https://docs.isaacsim.omniverse.nvidia.com/6.1.0/replicator_tutorials/troubleshooting.html),

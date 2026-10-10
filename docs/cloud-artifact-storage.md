@@ -36,6 +36,6 @@ survives teardown. Cancellation preserves checkpoints already published to GCS.
 Storage objects are retained until the operator removes them; GPU autodown does
 not erase checkpoints or eliminate GCS storage charges.
 
-Legacy jobs from before this feature keep their original local transfer behavior
-and evidence. New cloud jobs use GCS automatically. Retrying an old failed job
-creates a new run with current storage behavior.
+Cloud jobs use GCS automatically. Jobs with saved local artifact locations retain
+their original transfer behavior. Retrying a failed job creates a new run with
+current storage behavior.

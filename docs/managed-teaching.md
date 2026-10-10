@@ -56,6 +56,4 @@ Verified bytes are copied to a private staging directory outside the catalog, re
 
 The existing recording catalog and durable `dataset.inspect` preparation path consume the published session and exact episode hashes. LeRobot writing, full dataset readback, immutable snapshot creation and explicit Training selection remain separate existing steps. Capture validation alone claims neither trainability of one lineage group nor task quality.
 
-## Verification scope
-
-The tests distinguish generated Session/Journal raw-capture fixtures and real disposable CPU process ownership from real Isaac execution. An actual configured Isaac host, rendered episode, finalized capture publication, genuine writer/readback and Training handoff are required before claiming live simulator acceptance. These checks do not establish live runtime acceptance. LiveKit credentials, provider entitlement, Unity transport and remote capture transfer remain separate operational work.
+LiveKit credentials, provider entitlement, Unity transport and remote capture transfer require separate setup.

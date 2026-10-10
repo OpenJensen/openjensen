@@ -47,10 +47,3 @@ packages and an accelerator-specific architecture are selected on the isolated
 Ubuntu VM. The shared SkyPilot deadline, cancellation, result publication and
 owned-cluster cleanup apply to both operations. Runtime checks reject silent CPU
 fallback and missing memory/timing evidence.
-
-Software validation covers dispatch, admission, package routing, unsupported
-modes, bounded setup and single-camera workload selection. The recorded
-[SmolVLA L4 checks](jobs-first-verification.md#real-evaluate-and-run-checks) verify
-the CUDA build and synthetic-input inference on one selected artifact. They do
-not establish robot task success or other model/hardware combinations; fixture
-tests remain separate from that live execution evidence.

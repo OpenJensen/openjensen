@@ -1,48 +1,16 @@
-# Product screenshot provenance
+# Interface image assets
 
-Captured on September 27, 2026 at 11:39 Asia/Yerevan from OPEN JENSEN
-(Joint Embodied Neural Simulation & Execution Network) at
-`http://127.0.0.1:8000/`, using Playwright 1.63 and Chromium. Each of these three historical PNGs is a
-1600 × 1000 desktop viewport at 1× device scale, in the product's light theme.
-Fonts and the relevant records or camera frame were loaded before capture.
+These files are retained as interface layout references. Some show earlier
+navigation or generated example data; use the [workspace guide](../workspace-guide.md)
+for current controls. They are not published model results or release validation.
 
-These captures predate the current navigation and minimal page layout. They remain historical evidence of the captured screens; see the [workspace guide](../workspace-guide.md) for current controls.
-
-Repository HEAD at capture was `58d77e4`, with the OPEN JENSEN branding changes
-present in the working tree. Screenshots use the freshly rebuilt frontend
-export, build ID `M5R1NVHXku2DeTClMKmIW`. The served page title was
-`OPEN JENSEN · Dataset workspace`, and the visible sidebar brand and `OJ`
-workspace badge were verified in all three images. The existing backend was
-not restarted.
-
-The served index SHA-256 was
-`775b411dc7b65f5840785cb01aaeb75613914f812eb494846de67b34e1c79008`.
-
-| File | Actual screen and evidence scope |
+| File | Interface shown |
 | --- | --- |
-| `dataset-explorer.png` | A saved inspection of the public [`codywang/so101_pickup_test`](https://huggingface.co/datasets/codywang/so101_pickup_test) dataset: 30 episodes, 4,500 frames, 30 FPS. Episode 0 is paused at two seconds. The page is scrolled to show the camera and shared playback controls. |
-| `training-workspace.png` | A genuine completed ACT run recorded by the application: 100 optimizer steps, recorded training and validation loss, and a saved checkpoint. This is training telemetry, not evidence of task success or a VLA benchmark. |
-| `native-simulation.png` | The Native Isaac setup form at capture time with a registered SO-101 cup profile and an existing ACT inference export selected. This shows configuration only; no simulation was launched and no successful rollout is implied. |
+| `dataset-explorer.png` | Dataset camera previews, episode selection and shared playback controls. The source dataset is [`codywang/so101_pickup_test`](https://huggingface.co/datasets/codywang/so101_pickup_test). |
+| `training-workspace.png` | Fine-tuning monitor layout, including activity, metric and checkpoint panels. |
+| `native-simulation.png` | Native Isaac policy and scene configuration form. |
+| `workspace-models.png` | Distill model-family overview and explicit model selection. |
+| `decision-form.png` | Decision lab fields, criteria and action-row layout. |
 
-These are unmodified product screenshots, with no mocked API responses,
-fabricated metrics, substituted text, or injected styles. Browser interactions
-were limited to reading saved records, navigation, scrolling, camera playback
-position, and selecting an existing policy in the form. Non-read HTTP requests
-were blocked in the capture browser. No jobs, imports, settings changes, cloud
-operations, or uploads were submitted.
-
-
-## Current model-choice preview
-
-`workspace-models.png` shows the current Distill overview at 1440 × 1000 in the
-light theme. It was captured by the desktop model-choice browser test on
-September 27, 2026 from this UI revision. The test uses generated project and
-worker API records; the image demonstrates layout and explicit selection only.
-No training, distillation or cloud job was started for the capture.
-
-
-`decision-form.png` shows the repaired Decision lab layout at a 1440px desktop
-viewport. The generated browser fixture leaves the scorer unconfigured and
-submits no scoring request. It verifies layout only: labels above full-width
-fields, separated criteria, and the styled action row. Responsive geometry is
-also checked at 560px and 320px in light and dark themes.
+Keep source-dataset attribution with any reused dataset imagery. For the pinned
+dataset stills and their licenses, see [the asset notes](../../apps/web/public/datasets/README.md).

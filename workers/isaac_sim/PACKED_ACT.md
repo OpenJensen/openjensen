@@ -61,7 +61,7 @@ ResNet18, no VAE/PEFT/AMP/temporal ensembling, one RGB camera, six state/action
 coordinates and `1 <= execution <= prediction <= 1024`. Existing bounds on image size and architecture still
 apply. A different model needs a separately verified adapter.
 
-## Evidence and limits
+## Verification and limits
 
 The regression suite covers wrapped TAR admission, source/model identity,
 strict encoding types, runtime pins, no-Torch metadata inspection, corrupt
@@ -69,20 +69,11 @@ weights, links, mutation, source snapshot races and early device/shape rejection
 Opt-in pinned-runtime tests convert generated ACT weights, execute real HTTP
 full-chunk predictions, reset episodes and reject relabeled packed precision.
 
-Separately, both actual saved user INT8/INT4 packages were loaded in fresh local
-processes and served through HTTP on generated seeds171/902. Each100×6
-postprocessed chunk exactly matched the frozen packed verification output, and
-repeated reset produced the same output. The proof blocked external network and
-floating-master reads and checked source hashes afterward. These generated
-observations are not independent task-quality data. The prior measured drift
-from FP32 remains in each package and is not replaced by a parity claim.
+Packed-versus-itself reload checks do not establish FP32 parity, task quality,
+physical calibration, GPU support or simulator acceptance. Application selection,
+local execution ownership and simulator routes require their configured adapters.
 
-Application selection, local execution ownership and any simulator route must
-be integrated and reviewed separately. No cloud image, credentials, room,
-provider settings, original weights or physical robot were changed here.
-
-
-Changed-horizon ACT software proof uses separate full-prediction and execution
+Changed-horizon ACT checks use separate full-prediction and execution
 prefix HTTP configurations. For an 8/3 checkpoint, `--action-steps 8` returns the
 full prediction for inspection; `--action-steps 3` returns its execution prefix.
 Observation replay deliberately retains all eight predictions and applies none.

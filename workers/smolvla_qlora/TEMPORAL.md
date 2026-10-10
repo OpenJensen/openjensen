@@ -55,7 +55,7 @@ ACT config/model; [SmolVLA 0.4.4 configuration](https://github.com/huggingface/l
 and [queue/loss implementation](https://github.com/huggingface/lerobot/blob/v0.4.4/src/lerobot/policies/smolvla/modeling_smolvla.py).
 ACT changed-horizon native optimizer/resume, processor-bound inference export,
 packing, fresh HTTP and observation replay now have a reproducible generated
-[CPU fixture workflow](../act_optimizer/README.md#changed-horizon-software-acceptance).
-Full TRAIN-006 remains open for genuine SmolVLA training/resume/export/serving,
-GPU/simulator acceptance and any future history/stride controls. No recorded-data
+[CPU fixture workflow](../act_optimizer/README.md#verify-independent-prediction-and-execution-horizons).
+SmolVLA training/resume/export/serving, GPU/simulator execution and future
+history/stride controls require separate family-specific verification. No recorded-data
 quality acceptance follows from generated CPU fixtures.

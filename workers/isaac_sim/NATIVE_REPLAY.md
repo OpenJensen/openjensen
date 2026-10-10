@@ -130,7 +130,7 @@ Pinned-runtime tests exercise actual generated ACT INT8/INT4 models through the
 full supervisor and HTTP path. Actual user weights and native-writer fixtures
 are separate evidence: generated observations never become robot task proof.
 
-Application registration, recorded-data selection and UI dispatch are separate
-integration work. The existing user1920×1080 policy does not yet have a verified
-matching local recording with coordinate attestation in this implementation's
-evidence. No cloud profile, live workspace, credentials or original model changed.
+Application registration and UI dispatch require the configured replay adapter.
+Recorded observations must match the policy's camera, state, action coordinates
+and cadence, with explicit operator attestation. Generated fixture checks do not
+establish physical calibration, task quality or simulator execution.

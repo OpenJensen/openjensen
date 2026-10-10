@@ -204,9 +204,8 @@ uv pip compile workers/local_cpu/reader-linux-x86_64.in \
 
 Only independently reviewed lock updates should replace repository locks. No
 install or fresh-machine acceptance is implied by dependency resolution or a
-mocked installer test. The initial implementation was tested with generated local
-processes and offline ACT sync dry-run; new persistent installation remains an
-explicit opt-in action after review.
+mocked installer test. Persistent installation remains an explicit opt-in action
+after review.
 
 Primary references: [uv PyTorch CPU index configuration](https://docs.astral.sh/uv/guides/integration/pytorch/),
 [uv lock/sync behavior](https://docs.astral.sh/uv/concepts/projects/sync/),

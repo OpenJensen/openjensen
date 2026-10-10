@@ -25,40 +25,17 @@ OPEN JENSEN brings dataset exploration, training, quantization and simulation in
 | Decision lab | Compare text criteria with the configured local Muose scorer. Results are uncalibrated advice and never execute actions. |
 | Cloud runs / Settings | Review saved cloud activity, configure connections and compute, and inspect project diagnostics. |
 
-Each operation has its own model, dataset and runtime requirements. The interface shows configured capabilities; a registered adapter does not mean every model has completed a GPU run.
+Each operation has its own model, dataset and runtime requirements. Available workflows depend on the configured workers and compatible model adapters.
 
 [OPEN JENSEN Quant](workers/firebird_quant/README.md) is a 4/8-bit quantization library and CLI for dense PyTorch models. Its native ACT packing path is integrated with the workspace; broader library support does not imply every architecture has an application adapter. Model quality and hardware speed need separate evaluation.
 
-## Inside the workspace
-
-![OPEN JENSEN showing a completed ACT training run, loss curves and checkpoint status](docs/images/training-workspace.png)
-
-*A saved ACT training run with reported losses and checkpoint status. Training completion and reload verification are separate from robot task performance.*
-
-![OPEN JENSEN Native Isaac setup for an ACT or SmolVLA policy package](docs/images/native-simulation.png)
-
-*Native Isaac setup uses an explicit policy package and configured runner. Cup-task scoring remains unavailable while calibration and success criteria are unresolved.*
-
-These are dated captures of the product interface, not generated mockups. They predate the current navigation and minimal page layout; use the [workspace guide](docs/workspace-guide.md) for current controls. Capture details are in the [screenshot notes](docs/images/README.md).
-
 ## Current status
 
-OPEN JENSEN is a development preview. The repository includes real GPU execution records as well as software and integration tests. Their scope differs:
+OPEN JENSEN is a development preview for a self-hosted, single-workspace installation. The core runs without a GPU; training, native inference and simulation require their respective workers and compatible hardware.
 
-| Area | Current evidence and limits |
-| --- | --- |
-| Training | **15 registered policy routes.** SmolVLA LoRA and ACT have completed recorded NVIDIA L4 training runs and fresh-process checkpoint reloads. Other routes have configuration, dependency or contract checks; GPU acceptance remains model-specific. |
-| SmolVLA quantization | A trained checkpoint has completed GGUF conversion, Q4 packing and native execution. **Q8 is the default; Q4 is experimental.** These checks do not establish retained task quality for a new policy. |
-| Evaluate and Run | Recorded cloud SmolVLA checks exercise real CUDA inference and package reloads with synthetic inputs. Configured LIBERO can measure benchmark outcomes; the newer integrated Spatial workflow still awaits hardware acceptance. |
-| ACT export | The supported final native checkpoint can be materialized and exported on CPU with action-chunk parity and reload checks. This is an inference export, not quantization. Local-dataset ACT export is not supported yet. |
-| ACT distillation | The browser has submitted a real local ACT→ACT256 training job, registered the fresh-reloaded student and downloaded it. The verified example uses generated observations and demonstrates software execution, not learned robot competence. SmolVLA and cross-family distillation remain planned. |
-| Native ACT packing and replay | INT8/INT4 policies have returned full 100×6 action chunks through fresh CPU workers, including reset checks. The application can replay explicitly selected immutable observations and display saved action traces. Stored-weight compression does not establish lower runtime memory, faster execution, task success or packed-policy Isaac support. |
-| Native Isaac | ACT/SmolVLA package import, job controls, status and output handling are implemented. The web workflow has fixture coverage; live rollout acceptance and scored cup-pickup evaluation are separate work. |
-| Teaching and augmentation | Recording and LeRobot writer/readback are implemented. Live voice-to-Isaac acceptance and live augmentation quality remain unverified. Local teaching captures can train native LeRobot adapters; the dedicated SmolVLA and Psi-Zero routes still require Hub datasets. |
-| Clients and extensions | The Textual client and Tauri desktop connector are implemented. Desktop requires a separately running backend. Unity is a receive-only viewer. Muose is advisory; Jev and Mk1.5 adapters are not connected to the control loop. |
-| Planned | Broader distillation adapters, a bundled desktop backend, and verified physical-robot deployment. |
+Model and format support follows the [training adapters](docs/native-training.md) and [policy workflow](docs/policy-workflow.md). SmolVLA uses the GGUF workflow, with Q8 as the default and Q4 experimental. ACT uses separate export, distillation and packing workers; local-dataset ACT export and broader distillation adapters are not supported.
 
-See the [cloud training record](docs/cloud-training-verification.md), [native inference record](docs/jobs-first-verification.md), and [native simulation scope](docs/native-simulation.md) for the experiments, inputs and remaining checks. A completed job, lower training loss or successful model conversion does not by itself establish task success.
+[Isaac simulation](docs/native-simulation.md) is experimental and does not provide a scored cup-pickup benchmark. The desktop connector requires a separately running backend, Unity is a receive-only viewer, and Decision lab output is advisory. A bundled desktop backend and physical-robot deployment remain planned.
 
 ## Run locally
 
@@ -112,7 +89,7 @@ Start with the [workspace guide](docs/workspace-guide.md) for a short explanatio
 | Evaluation and simulation | [Native Isaac](docs/native-simulation.md), [LIBERO Spatial](docs/spatial-workflow.md), [cloud inference](docs/cloud-inference.md), [cloud run monitoring](docs/cloud-runs.md) |
 | Other clients | [Terminal workbench](docs/terminal.md), [desktop connector](apps/desktop/README.md), [Unity viewer](apps/unity/com.firebird.teaching-viewer/README.md) |
 | Optional AI services | [Voice connections](docs/teaching-connections.md), [Muose decision worker](workers/decision/README.md), [Jev and Mk1.5 proposals](workers/teaching/PROVIDERS.md) |
-| Verification | [Cloud training](docs/cloud-training-verification.md), [inference and package reload](docs/jobs-first-verification.md), [application integration](docs/integration-journey-validation.md), [CI and local checks](docs/ci.md) |
+| Development | [CI and local checks](docs/ci.md) |
 
 The separate [`/docs/`](http://127.0.0.1:8000/docs/) route serves the [API reference](http://127.0.0.1:8000/docs/) and [OpenAPI schema](http://127.0.0.1:8000/openapi.json).
 
@@ -127,7 +104,7 @@ workers/           Isolated training, inference, simulation and data workers
 apps/desktop/      Tauri connector to a separately running local application
 apps/unity/        Receive-only simulation viewer
 tests/             Core, worker-contract and browser integration checks
-docs/              Setup guides, workflow boundaries and verification records
+docs/              Setup guides and workflow documentation
 ```
 
 Project data lives in `.firebird/` by default. Set `FIREBIRD_DATA_DIR` to change it. One application process owns each workspace. Cloud training stores checkpoints in private GCS; explicit downloads and export operations can materialize them locally.

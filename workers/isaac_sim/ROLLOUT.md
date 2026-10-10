@@ -129,14 +129,5 @@ The probe checks visible RGB, observation clock stability, fixed-step physics,
 measured joint motion, and reset accuracy. The regular recording regression tests
 remain part of the suite.
 
-SkyPilot job 20 passed this probe on the existing L4 with Isaac 6.1: 30 HTTP
-control steps advanced exactly one simulated second; a 0.03-radian command moved
-the measured joint 0.029994 radians, and reset restored all initial joint values.
-Startup and execution took about nine minutes. The supplied ACT checkpoint also
-passed a separate CPU inference check through the HTTP server.
-
-On 2026-09-26, SkyPilot job 2 passed private-network readiness in `us-central1-a`:
-L4 `10.43.0.3` sent a recorded frame and joint state to the ACT checkpoint on H100
-Spot `10.43.0.4:8080` and received a six-joint action. This check applied no robot actions
-and did not start Isaac. Learned control remains unverified and requires a
-validated dataset-to-URDF calibration.
+Learned control requires validated dataset-to-URDF calibration. A readiness
+response or synthetic joint-nudge probe does not qualify trained-policy quality.

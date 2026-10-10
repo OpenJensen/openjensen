@@ -26,17 +26,15 @@ This is an approximate reconstruction. The dataset provides RGB and joint
 samples, but no measured geometry, depth, camera calibration, motor calibration
 or object physics. Hidden surfaces and clipped graphics are incomplete. Exact
 scene identity and trajectory replay cannot be established from these files.
-First-video episodes 0–3 and the first frame of video 7 were visually inspected;
-all 30 episode metadata records were checked. This scene represents episode 0,
-not every episode's changing cup position.
+This scene represents episode 0, not every episode's changing cup position.
 
 ### Episode 1 profile
 
-`scene.episode-001.usda` matches the successful episode 1 starting arrangement.
+`scene.episode-001.usda` provides the episode 1 starting arrangement.
 `episode-001.json` records its source frame, initial joint state, fitted props,
 and **5-second rollout (150 steps at 30 Hz)**. The baseline scene is unchanged.
 
-| Cup measurement | Baseline | Episode 1 fit |
+| Cup dimensions | Baseline | Episode 1 profile |
 | --- | --- | --- |
 | Height | 10.50 cm | 10.22 cm |
 | Upper body diameter | 7.40 cm | 8.31 cm |
@@ -48,13 +46,10 @@ open wall colliders, label surface, center of mass, and inertia are rebuilt
 together. The box opening is fitted to 27.17 × 19.17 cm; its estimated height
 stays 20 cm. Camera and shelf geometry retain the original shelf fit.
 
-Cup contour error on held-out stationary frames is 0.98 px at 1920×1080
-(0.33 px at policy resolution). Box corner RMS improves from 17.94 to 5.91 px
-at policy resolution. Measurements and limitations are in `evidence/episode-001/`.
-These image fits do **not** establish physical scale: shelf width remains an
-assumed 1 m. The rolled cup lip, torn box rim, lighting, and contact properties
-remain approximate. The unverified joint map still clips the initial shoulder
-lift by 11.42°; matching prop geometry does not validate robot calibration.
+These dimensions are image-derived estimates and do not establish physical
+scale: shelf width is assumed to be 1 m. The cup lip, box rim, lighting and
+contact properties remain approximate. The joint map is unverified; matching
+prop geometry does not validate robot calibration.
 
 Rebuild and validate:
 
@@ -91,21 +86,12 @@ Rebuild the robot separately with `python robot/build_robot.py`.
 Source revisions and file hashes are retained under `robot/source/` and
 `evidence/dataset.json`.
 
-Verified locally: USD composition and assets, physics graph, FK, inertias,
-joint states/drives, open colliders, camera aspect ratio, and capture manifest.
-The base seats on the shelf; the cup starts 0.5 mm above it. `preview.png` renders
-the actual USD in Blender with renderer-specific light conversion. It is a
-geometry preview. `evidence/isaac-frame.png` is the actual Isaac render.
-
-SkyPilot job 18 passed on GCP `g2-standard-16` / NVIDIA L4 with Isaac Sim 6.1:
-150 visible frames at 1280×720/30 fps, one seven-link articulation, six valid
-joint states, fixed base, supported cup, and advancing physics. The run took
-8m 36s, mostly renderer startup. Reports and image digest are in
-`evidence/isaac-result.json` and `evidence/isaac-run.json`. Grasp behavior remains
-untested; no pickup controller is included.
-
-Job 19 also passed the corrected articulation lookup without the visual-mesh
-lookup warnings. Other runtime warnings remain; see `evidence/warnings.md`.
+The base seats on the shelf; the cup starts 0.5 mm above it. `preview.png` is a
+Blender geometry preview with renderer-specific light conversion. Verify USD
+composition, asset references, physics topology, FK, inertias, joint drives,
+colliders, camera dimensions and capture settings after rebuilding. A live smoke
+check is required for renderer and passive-stability behavior. No pickup
+controller is included, and passive stability does not establish grasp success.
 
 ## Recording
 

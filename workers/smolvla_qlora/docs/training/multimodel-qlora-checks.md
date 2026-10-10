@@ -1,24 +1,21 @@
 # QLoRA checks using the quantization benchmark catalog
 
 `firebird-check-qlora` consumes the exact model identities and revisions in
-[the six-model catalog](../../configs/benchmarks/open_weight_vlas.json), following
-[idea document 18](../idea/18_multimodel-quantization-benchmark.md).
+[the six-model catalog](../../configs/benchmarks/open_weight_vlas.json).
 The existing SO-101 trainer remains a separate recipe. Its base checkpoint,
 camera mapping and action data are not substituted into a LIBERO comparison.
 
-## Scope and current evidence
+## Scope and prerequisites
 
 These are **native training-batch integration diagnostics**. They check whether
 the catalog checkpoint can load, compute its native loss, train LoRA parameters
 over actual NF4 backbone weights, and reproduce the saved adapted loss in a new
 process. They do not fine-tune on a complete dataset or measure robot success.
 
-All six native loader/loss paths are implemented but **CUDA-unverified**. On the
-development Mac, CPU contract tests pass; the native GPU checks cannot run.
-The [recorded metadata inspection](qlora-model-inspection-2026-09-26.json) verified
-the five Hugging Face revisions and required asset presence. π₀.₅ is blocked on
-source-file hashes and a verified PyTorch conversion. Metadata inspection is not
-evidence that QLoRA works.
+All six native loader/loss paths require model-specific CUDA verification.
+Metadata inspection checks model revisions and required assets; it does not
+establish that QLoRA works. π₀.₅ additionally requires source-file hashes and a
+verified PyTorch conversion.
 
 | Catalog model | Native loss/checkpoint handling | Additional prerequisite |
 |---|---|---|

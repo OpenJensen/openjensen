@@ -384,13 +384,9 @@ owned-child cleanup. CI requires the SDK compatibility tests rather than silentl
 skipping them. These are offline contract tests: live reconciliation of a newly
 submitted cloud job remains unverified until a separately authorized run.
 
-On 2026-09-26, managed job 2 passed readiness in `us-central1-a`: L4
-`10.43.0.3` sent a recorded observation to the ACT step-29000 checkpoint on H100
-Spot `10.43.0.4:8080` and received a six-joint action over private HTTP. These addresses
-belong to that run; discovery resolves each new run. No robot actions were applied.
-This verifies deployment and inference, not Isaac rendering or learned control.
-A normal trained-policy rollout requires verified calibration; experimental motion
-must opt in explicitly.
+A normal trained-policy rollout requires verified calibration; experimental
+motion must opt in explicitly. Readiness checks apply no robot actions and do
+not establish rendering, learned control or task success.
 
 References: [SkyPilot Job Groups](https://docs.skypilot.ai/en/latest/examples/job-groups.html),
 [LeRobot SmolVLA](https://huggingface.co/docs/lerobot/smolvla).
@@ -428,8 +424,7 @@ Limits: 256 total members, 4 GiB archive/expanded payload, 2 GiB per file,
 characters per path. Links, devices, FIFOs, traversal, duplicate/case-colliding
 paths, sparse files and ambiguous multiple policies are rejected. Unknown ordinary
 extra files are retained but never executed. Directory snapshots require
-POSIX directory-FD support (tested on macOS; Linux validation is recorded
-separately). The private copy is removed after launcher submission/attached run,
+POSIX directory-FD support. The private copy is removed after launcher submission/attached run,
 including errors; originals stay unchanged. Job imports use an exclusive new
 output directory and complete only after their receipt has been written.
 

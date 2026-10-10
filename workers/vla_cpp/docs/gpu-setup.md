@@ -22,7 +22,7 @@ it is an expected-byte contract, not evidence of a successful run on a new host.
 | `artifacts/cuda/vendor/llama-download` | Extract `https://codeload.github.com/ggml-org/llama.cpp/tar.gz/7ba604f1cb61cd14898138e9abc0b4ff2601f180` with its leading directory removed. Retain the archive. |
 | `artifacts/docker/sources/smolvla` | Download `HuggingFaceVLA/smolvla_libero` revision `6721902bc4d61e50a3bfdb11dfb4cb626f05d102`, including `config.json`, policy weights and both processor JSON/safetensors sets. |
 | `artifacts/docker/runs/smolvla-screen-v1/results.json` | Copy `configs/cuda-inputs.json` into this path only if it does not already exist; preserve an existing screen manifest. |
-| `artifacts/docker/runs/smolvla-screen-v1/models` | Restore the five recorded GGUFs or regenerate with the command below; all hashes must match the manifest. |
+| `artifacts/docker/runs/smolvla-screen-v1/models` | Supply GGUFs matching the pinned manifest, or regenerate with the command below; all hashes must match. |
 | `artifacts/docker/LIBERO` | Clone `https://github.com/Lifelong-Robot-Learning/LIBERO` at `8f1084e3132a39270c3a13ebe37270a43ece2a01`, including assets and fixed initial states. No training dataset download is needed for this simulator pilot. |
 | `artifacts/cuda/modelopt-metadata` | Run `scripts/prepare_modelopt_metadata.py` in the ModelOpt image to download the pinned tokenizer/config files without base-model weights. |
 
@@ -33,8 +33,8 @@ LIBERO checkout, `artifacts/docker/LIBERO-source.json` must contain `revision`,
 that archive hash. A Git checkout records its actual commit instead.
 
 Build `Dockerfile.modelopt`, then regenerate the GGUFs in a disposable preparation
-container. Its GGUF version matches the recorded experiment; the ordinary worker
-lockfile keeps its own conversion dependency pins.
+container. Use GGUF 0.19.0 with the ModelOpt container; the ordinary worker
+lockfile keeps its separate conversion dependency pins.
 
 ```bash
 docker build -f Dockerfile.modelopt -t firebird-modelopt:20260926 .
@@ -45,36 +45,48 @@ docker run --rm -v "$PWD:/workspace" --entrypoint python firebird-modelopt:20260
 ```
 
 The converter hashes the pinned source and each completed candidate before
-publishing it. It rejects conflicting existing artifacts. Follow the native build,
-engine and rollout commands in the [RTX 3070 report](quantization-rtx3070.md).
+publishing it. It rejects conflicting existing artifacts.
 Mount the worker directory, not the repository root, at `/workspace`.
+
+## Build and run the CUDA tools
+
+Prepare the pinned inputs above, then use a new run name:
+
+```bash
+docker build -f Dockerfile.cuda -t firebird-quant-cuda:20260926 .
+docker run --gpus device=0 --user "$(id -u):$(id -g)" --cpus=4 --memory=8g \
+  -v "$PWD:/workspace" --entrypoint bash firebird-quant-cuda:20260926 scripts/build_cuda.sh
+docker run --gpus device=0 --cpus=4 --memory=8g -v "$PWD:/workspace" \
+  --entrypoint python3 firebird-quant-cuda:20260926 \
+  -m policykit.cuda_bench --run smolvla-cuda-new --reps 20 --rounds 3
+```
+
+The benchmark refuses to overwrite an existing output directory. GPU exposure
+may also be needed when linking on WSL so `libcuda.so.1` resolves. To use the
+optional rollout tools, build `Dockerfile.cuda-sim` and review
+`scripts/run_cuda_rollouts.sh`; its explicit input manifest must point to the
+engine run being evaluated.
 
 ## NVIDIA calibration inputs
 
-The recorded AWQ/SmoothQuant pilot needs the seven frozen observations and
+The AWQ/SmoothQuant pilot requires seven frozen observations and
 `result.json` from the completed development rollout at
 `artifacts/docker/runs/smolvla-experiments-v4/float_reference/task0-init0-seed42-steps500/`.
 The result lists each capture's ID, path, noise seed and hash. Restore those exact
-files from the original evidence workspace to reproduce the reported diagnostic.
+files from the corresponding operator-owned run archive.
 They are not included in this repository. The pilot refuses a different checkpoint,
 capture count, capture hash, scope or nonfinite output.
 
-New calibration data must be captured and assigned a separate experiment identity;
-do not relabel new trajectories as this historical run. The three calibration and
-four comparison frames share one trajectory. Broader work must split by episode
-and use an independent final evaluation set as specified in the
-[NVIDIA plan](nvidia-quantization-plan.md).
+Capture new calibration data under a separate input identity. The pilot's three
+calibration and four comparison frames share one trajectory; they are numerical
+diagnostics, not independent quality data. For deployment evaluation, split by
+episode and use an independent final set under the
+[native acceptance contract](native-acceptance.md).
 
-## Evidence and import boundary
+## Runtime limits
 
-`GPU_ORIGIN.json` maps the precursor scripts into this worker. The
-[evidence manifest](quantization-rtx3070-evidence.json) retains original source,
-model, binary and image hashes; those source paths refer to the historical
-experiment snapshot. They do not establish GPU execution with the current source
-revision. The [source import validation](gpu-branch-validation.md) records the
-checks and their exact scope.
-
-The optional ModelOpt CUDA extension fell back in the recorded runtime image,
-and the full-policy exporter failed at the LeRobot configuration boundary. Neither
-AWQ nor SmoothQuant has a verified packed deployment engine here. AutoQuantize is
-still gated on a fixed-recipe export/reload; native NVFP4 requires a Blackwell lane.
+The ModelOpt numerical pilots do not provide a complete SmolVLA export/runtime
+adapter. AWQ, SmoothQuant and AutoQuantize must not be treated as deployable
+policy paths. Native NVFP4 requires a separately configured Blackwell lane.
+Verify full-action output, exact source/candidate identity and paired closed-loop
+quality before making hardware or deployment claims.

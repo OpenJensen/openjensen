@@ -71,8 +71,7 @@ ownership boundary. This does not add distributed scheduling or cross-workspace 
 
 Desktop/offline tools that only understand revision `0001` must reject `0002` until
 their own strict compatibility checks are updated. Do not copy a new workspace into
-an older payload or remove its submission table to make it open. No live workspace,
-operator configuration or provider was migrated or activated by the disposable tests.
+an older payload or remove its submission table to make it open.
 
 ## Browser submission controller
 
@@ -120,5 +119,4 @@ For integrations, new work requires `hydrated && available && !attempt && !busy`
 `canRetry` governs the separate explicit retry action. `clearLegacy(expected)` may
 only be called after the user explicitly reviews fresh history for that same legacy
 attempt. It cannot clear a valid durable key. Cancellation journals are separate and
-unchanged. The pure controller tests do not establish mounted-form, provider, GPU or
-training-quality acceptance; each adopted form needs its own integration checks.
+unchanged.

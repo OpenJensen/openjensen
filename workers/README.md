@@ -18,8 +18,8 @@ errors survive under the application workspace's job directory. Intake has a
 90-second job deadline; cancellation terminates the process before returning.
 
 The candidate manifests under `workers/lerobot` and `workers/openvla_oft` are
-**not resolved locks or tested capability claims**. Resolve and test each through
-its task before exposing additional operations. Native ML dependencies must not
+**not resolved locks or supported capability declarations**. Resolve and verify
+each environment before exposing additional operations. Native ML dependencies must not
 be added to core. The reserved LeRobot environment is separate from the
 implemented [SmolVLA training worker](smolvla_qlora/README.md). Simulator drivers
 and SkyPilot use their supported separate runtime environments.
@@ -42,9 +42,8 @@ See [workflow setup and contracts](../docs/policy-workflow.md). Capabilities req
 an operator-configured runtime. The supported ACT → ACT256 distillation lane uses
 its [isolated CPU worker](policy_distillation/README.md); other model families
 remain unavailable. The standalone worker CLI
-interfaces remain available for experiments. Registered operations do not establish
-end-to-end hardware acceptance; see the
-[workflow validation evidence](../docs/workflow-validation.md).
+interfaces remain available for experiments. Registered operations require
+model-specific runtime, hardware and task-quality verification before deployment.
 
 ## Standalone Isaac simulation and SkyPilot
 
@@ -53,15 +52,10 @@ end-to-end hardware acceptance; see the
 jobs. The worker publishes MP4s and terminal result manifests to GCS; the launcher
 checks completion and the video checksum.
 
-The documented falling-cube acceptance run produced six seconds of visible
-720p video on GCP L4. The
-[SO101 scene](isaac_sim/scenes/so101-pickup/README.md) records an approximate
-reconstruction. A later experimental ACT/Isaac run completed 150 control steps
-and produced five seconds of 640×360 video using an H100 policy server and L4
-simulator. Calibration remains unverified, with recorded action extrapolation,
-joint-limit clipping and speed-limit clipping. This is motion evidence; it does
-not establish successful pickup or replay fidelity. See the
-[verified run and cleanup receipt](https://github.com/sobhanb-eth/firebird-hackathon-prep/blob/d4ec5e8c48573e0735a3f61223ce4bdb8e9cd3da/docs/tasks/evidence/2026-09-27-cloud-runner-verification.md).
+The [SO101 scene](isaac_sim/scenes/so101-pickup/README.md) is an approximate
+reconstruction. Its calibration is unverified, so experimental motion must be
+explicitly selected. Joint and speed limits can clip actions; a completed motion
+run does not establish pickup success or replay fidelity.
 
 These remain standalone execution tools with no application job submission,
 execution capability or job-database integration. The application now has a
@@ -70,8 +64,8 @@ isolated observer. They do not connect SO101 training to LIBERO evaluation.
 
 The launcher template manages disposable clusters: it requests deletion after
 15 minutes of job inactivity and installs a guest watchdog requesting deletion
-48 hours after VM creation. These controls are not a spending cap, and full VM
-deletion was not validated in the recorded acceptance run. The template is not a
+48 hours after VM creation. These controls are not a spending cap; verify actual
+VM and disk deletion after use. The template is not a
 default setup path for a persistent shared L4 host; review its
 [lifecycle and cleanup behavior](skypilot/README.md#results-and-cleanup) before use.
 
@@ -93,8 +87,7 @@ checkpoints and generated policy packages outside Git.
 [OPEN JENSEN Quant](firebird_quant/README.md) provides a shared packed 4/8-bit API
 for dense PyTorch models and safetensors checkpoints, without model-family or
 parameter-name allowlists. It supports portable dequantize-on-access inference,
-explicit coverage audits, tied weights and verified save/reload. CPU tests cover
-convolutional, recurrent, transformer and custom functional models. It is a
+explicit coverage audits, tied weights and save/reload checks. It is a
 standalone library/CLI. Its bounded [native ACT packing operation](firebird_quant/NATIVE_ACT.md)
 is integrated with the application; broader library support does not imply an
 application adapter. Model-specific quality and optimized runtime deployment

@@ -30,7 +30,7 @@ Conversion writes LeRobot v3 Parquet, MP4, episode metadata, task indices and no
 
 The labeling page exposes beginning, middle and final samples for converted episodes. LeRobot v3 imports expose bounded camera previews where available. Camera display names and text labels use revision checks to prevent overwriting changes from another window. They remain separate from actions and training task instructions.
 
-Save changes before exporting. The ZIP contains LeRobot files, `openjensen/annotations.json` and source/conversion details. It can be used in a LeRobot/Hugging Face dataset repository; publishing to the Hub is a separate action. The deterministic synthetic playground tests import, labels and export, and is not robotics task evidence.
+Save changes before exporting. The ZIP contains LeRobot files, `openjensen/annotations.json` and source/conversion details. It can be used in a LeRobot/Hugging Face dataset repository; publishing to the Hub is a separate action. Use the synthetic playground to try import, labeling and export with generated examples; its data does not establish robot task performance.
 
 ## Reader setup
 

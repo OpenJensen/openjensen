@@ -30,9 +30,8 @@ reports the native method, minimum GPU memory and camera constraints where
 applicable. Gated model access also requires the user's Hugging Face account to
 have accepted the model's access terms. A token alone cannot grant model access.
 
-Adding a model to the catalog does not prove its quality. Consult the live
-verification report for actual GPU-tested paths. Configuration/contract tests for
-other adapters are explicitly weaker evidence than a completed training run.
+Catalog availability describes supported adapters and configuration requirements;
+it does not establish a model's task quality.
 
 ## Checkpoints, results and quantization
 

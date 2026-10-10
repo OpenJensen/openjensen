@@ -217,19 +217,12 @@ Successful write acknowledgments must match the project/job, operation and stabl
 input identities. The server may resolve dataset branches/local paths or restore
 checkpoint-owned training settings; the CLI does not invent those identities.
 
-## Verification
+## Local checks
 
 ```sh
 uv run --frozen --extra tui pytest tests/test_tui.py tests/test_tui_cli.py tests/test_tui_integration.py tests/test_cli_client.py tests/test_cli_workflow.py tests/test_cli_ack_types.py tests/test_tui_lifecycle.py tests/test_tui_lifecycle_integration.py tests/test_tui_policy_modes.py tests/test_tui_policy_api.py tests/test_tui_artifacts.py -q
 ```
 
-Pilot tests exercise keyboard navigation, forms, 48×18 terminal resizing, stale/invalid responses, selection changes, offline recovery, explicit cancellation and non-retried ambiguous writes. The integration test starts a disposable loopback API on an ephemeral port, creates a real project, runs actual local metadata intake and a supervised slow protocol fixture, cancels that fixture, reads the same records with the CLI, and restarts the API to verify persistence. It never contacts a model provider or cloud service. Fixture evidence is not training, robot-quality or hardware evidence.
-
-Lifecycle Pilot cases additionally exercise complete recipes for all four workflows,
-changed ownership/capabilities, separate cloud consent, persisted uncertainty and
-failed attempt storage. A second integration test uses the actual application API
-and its supervised CPU protocol fixture through an in-process HTTP adapter; it
-verifies one explicit quantization submission and persisted results without real
-model inference. This is application protocol evidence, not an ML benchmark.
-
-macOS testing is recorded with this implementation. Native Windows terminal behavior and a desktop installer require their own verification; terminal checks do not establish those claims. [Textual testing](https://textual.textualize.io/guide/testing/) and [workers](https://textual.textualize.io/guide/workers/) describe the upstream UI/test APIs used here.
+Run these checks in the optional TUI environment. Native Windows terminal behavior
+and desktop packaging require separate platform checks. See [Textual testing](https://textual.textualize.io/guide/testing/)
+and [workers](https://textual.textualize.io/guide/workers/) for the upstream APIs.

@@ -9,15 +9,13 @@ For each source above the exact video path is `videos/<camera>/chunk-000/file-00
 
 Both source dataset cards declare Apache-2.0 at these revisions. The license text is included in `LICENSE-APACHE-2.0.txt`. The datasets and their contributors retain their original ownership; these stills are included for attribution-backed dataset selection.
 
-## Catalogue and preview verification
+## Source metadata
 
-Verified against the public Hugging Face API and source files on 2026-09-26. Both revisions declare LeRobot v3.0. Counts come from the pinned `meta/info.json`.
+Both pinned revisions declare LeRobot v3.0. Counts come from the source `meta/info.json` at those revisions.
 
 | Dataset | Episodes | Frames | Camera keys (under `observation.`) |
 | --- | ---: | ---: | --- |
 | SO-101 pickup | 30 | 4,500 | `images.front` |
 | SO-100 pick & place | 50 | 19,631 | `images.top`, `images.wrist` |
-
-For both entries, the application's real `inspect_hub` and `DatasetExplorer.page` / `preview` paths successfully loaded the pinned metadata, the first 12 episode records, every camera URL for episode 0, and five state/action frame samples. Neither returned preview warnings. This checks browsing compatibility; it does not certify training or physical robot compatibility.
 
 To refresh a starter, resolve its Hub SHA, inspect and preview that exact SHA through the backend, update the counts and camera keys, regenerate its still, and update this record together with `src/lib/dataset-starters.ts`. Keep an immutable commit in the catalogue; do not silently replace it with `main`.

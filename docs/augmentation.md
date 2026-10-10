@@ -17,7 +17,7 @@ selection is checked and trimmed before the first generation request. A missing
 dataset offers an import action; unavailable provider setup offers **Open
 settings**, which opens **Settings & diagnostics → Compute**.
 
-This first augmentation method uses Google's Gemini Omni video editing API.
+Appearance augmentation uses Google's Gemini Omni video editing API.
 Google Cloud login uses `gemini-omni-1.1-flash-preview`; the Gemini API key route
 uses `gemini-omni-1.1-flash`. Additional augmentation models are planned.
 
@@ -80,8 +80,7 @@ Review the clips before reusing source action labels. They are exported as
 augmentation candidates and are not automatically registered as a trainable
 LeRobot dataset. Original camera files, action/state records and metadata are
 never overwritten. Multi-camera consistency, full-dataset augmentation, embedded
-image columns, local datasets and automatic merging into training are outside
-this first implementation.
+image columns, local datasets and automatic merging into training are unsupported.
 
 Limits are four clips/job, one active augmentation job, 10 seconds/clip,
 48 MiB per source camera file, 14 MiB per prepared upload and 40 MiB per output.
@@ -132,7 +131,3 @@ The CLI uses the same persistent job service as the UI:
 - `GET /api/v1/jobs/{job_id}/augmentation/clips/{index}?original=true`
 - `GET /api/v1/jobs/{job_id}/augmentation/clips/{index}`
 - `GET /api/v1/jobs/{job_id}/augmentation/download`
-
-Tests use mocked Google responses and deterministic media fixtures. Live paid
-model access and real augmentation quality require a configured account and
-are not established by those tests.

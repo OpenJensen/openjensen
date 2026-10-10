@@ -12,10 +12,6 @@ application-default credentials; SkyPilot needs both compute and storage access.
 New jobs store checkpoints in private GCS and keep only small descriptors and
 telemetry on the application host.
 
-Real SmolVLA and ACT training and SmolVLA quantization were verified using this
-layout. See [the verification record](../../docs/cloud-training-verification.md)
-for measured losses, artifact checks and validation limits.
-
 - Root: `~/ollamaforvlas`
 - Releases: `releases/<timestamp>`; `current` selects the active release.
 - Application workspace: `data/` (separate from the Mac workspace).

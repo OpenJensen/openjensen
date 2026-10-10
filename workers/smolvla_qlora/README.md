@@ -7,7 +7,7 @@ ML dependencies are separate from the application's Python 3.14 environment.
 The application exposes LoRA and QLoRA
 as methods under the same application fine-tuning operation, with pinned dataset
 lineage, resource preflight, checkpoint resume and native export. See the
-[workflow guide](../../docs/policy-workflow.md) and [integration evidence](../../docs/workflow-validation.md).
+[workflow guide](../../docs/policy-workflow.md).
 Capabilities appear only when the operator configures a training environment.
 
 ## Install and test
@@ -31,15 +31,12 @@ Linux CUDA host, follow the pinned installation and native-runtime instructions 
 backend-specific preparation, and explicit unsupported states. Keep outputs,
 weights and datasets outside Git.
 
-## Evidence and limits
+## Runtime limits
 
-The source suite previously passed 63 tests on the RTX 3070 host, including a real
-CUDA NF4 gradient, freeze, save and reload test using a tiny synthetic policy.
-That is not a full SmolVLA training or robot-quality result. See the
-[execution report](https://github.com/sobhanb-eth/firebird-hackathon-prep/blob/a9a56ea105d061012abb79fe937d4237af2bf33e/docs/tasks/evidence/2026-09-26-rtx3070-validation.md)
-for the exact source revisions and environment. `TRANSFER_ORIGIN.json` records the
-source files relocated into this worker; hardware evidence is historical until
-rerun with the current source revision.
+CPU contract checks do not establish CUDA NF4 execution, full SmolVLA training,
+checkpoint portability or robot quality. Verify each configured runtime with
+the native checks in the [training setup guide](docs/training/smolvla-qlora.md)
+before using it for a model workload.
 
 ## Gradient accumulation and exact resume
 

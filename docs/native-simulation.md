@@ -14,8 +14,6 @@ A lost, timed-out, malformed or mismatched mutation receipt is ambiguous. The cl
 
 **Cloud runs** includes application jobs carrying either a persisted cloud compute target or a persisted native simulation target. Current runtime names and cloud-stored input files are not evidence that a job ran in the cloud. External observer snapshots remain a separate source with their own collection time and stale state.
 
-Browser tests use explicitly generated API fixtures to verify transport, exact request payloads, ambiguity, cancellation, output selection and project isolation. They do not establish GPU execution, robot calibration, pickup success or a working live cloud scene. Server/worker checks and any real execution receipts must be reported separately.
-
 ## Operator and API integration
 
 Set `FIREBIRD_SIMULATION_CONFIG` to a private profile file before starting the application. See [runner configuration and ownership](../workers/skypilot/APP_RUNNER.md). Keep credentials, weights, runtime environments and private profiles outside Git. This setup is separate from the single-GPU training target in Settings and reuses the explicitly configured runner.
@@ -24,4 +22,4 @@ Interrupted jobs are marked interrupted. Recovery requests cancellation only for
 
 API clients use `GET /api/v1/simulation-options`, `POST /api/v1/projects/{id}/model-imports?profile_id=...` with the raw TAR body, and the existing policy-job endpoint with `operation: policy.run`, the registered artifact, and `simulation: {profile_id, experimental: true}`. Upload/job identities remain project-bound; the browser cannot supply runner commands, credential paths or cloud YAML.
 
-The original dataset instruction mentions a cube, while the observed object and scene are a cup. Imported policy language is preserved as provenance. Scored Isaac evaluation remains unavailable until the cup task outcome and calibration are verified.
+The registered Isaac scene uses a cup task. Imported policy instructions are preserved as provenance and may describe a different object. Scored Isaac evaluation remains unavailable until the task outcome and calibration are verified.

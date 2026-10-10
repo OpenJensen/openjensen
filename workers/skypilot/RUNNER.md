@@ -111,15 +111,14 @@ autostops after 10 idle minutes; its disk remains. Delete your idle controller w
 | `firebird-artifacts-project-5693e83a-db3a-43e1-98c` bucket | Storage Legacy Bucket Reader + [`firebirdCheckpointObjects`](checkpoint-object-role.json): bucket metadata read; object read/list/create and metadata update |
 
 The checkpoint grant cannot overwrite or delete existing objects. Use unique
-checkpoint names; cleanup requires an administrator. Effective permissions and
-bucket metadata reads passed as the runner on 2026-09-27. Private bucket settings
-and simulation configuration are unchanged. No training launch was tested.
+checkpoint names; cleanup requires an administrator. Verify effective
+permissions and bucket metadata access before launching a workload.
 
 SkyPilot 0.13 uses the existing `skypilot-v1` VM identity. Its jobs inherit Compute
 Admin, Storage Admin and project-wide Service Account User access. This account
 is not restricted to its own VMs. Anyone holding its key has this access; ask an
 administrator to revoke the key when no longer needed or if exposed.
 
-Authentication, SkyPilot's Compute check, all 28 project permissions, VM identity
-attachment, both IAP groups and result downloads passed on 2026-09-26. A full GPU
-launch under this runner identity has not been tested.
+Check authentication, SkyPilot's Compute access, all project permissions, VM
+identity attachment, both IAP groups and result downloads under the runner identity.
+Permission checks alone do not qualify a full GPU launch.

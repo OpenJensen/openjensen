@@ -4,7 +4,7 @@ This Tauri 2 client opens the existing Python-served static OPEN JENSEN web app.
 
 ## Run and build
 
-Use Node 24.21.x, pnpm 12.6.0 and Rust 1.98.1 with rustfmt/clippy and your platform's native Tauri prerequisites. On macOS, Xcode command-line tools and the macOS SDK are required. The desktop dependency set has its own Cargo and pnpm lockfiles; it does not change the root web workspace. The desktop workspace keeps a 24-hour minimum dependency release age, with reviewed exceptions for the 12 exact Tauri CLI/platform 2.12.0 packages listed in `pnpm-workspace.yaml`; later versions are not exempt. Their npm registry integrity values were checked against the lockfile.
+Use Node 24.21.x, pnpm 12.6.0 and Rust 1.98.1 with rustfmt/clippy and your platform's native Tauri prerequisites. On macOS, Xcode command-line tools and the macOS SDK are required. The desktop dependency set has its own Cargo and pnpm lockfiles; it does not change the root web workspace. The desktop workspace keeps a 24-hour minimum dependency release age, with exceptions for the 12 exact Tauri CLI/platform 2.12.0 packages listed in `pnpm-workspace.yaml`; later versions are not exempt.
 
 ```sh
 cd apps/desktop
@@ -45,9 +45,9 @@ node --test tests/connection.test.cjs
 
 Rust tests exercise endpoint policy, successful API/static-page probing, bad and oversized responses, redirects, refused connections, the permission manifest, and private owned-child protocol/workspace/cleanup behavior. Test-only Unix shell fixtures cannot be selected by production commands. Native window checks must additionally cover connection, a stopped-server retry, blocked navigation, the native Connection menu and backend health after the desktop closes. Unit tests alone do not prove native runtime behavior or an installable Python sidecar.
 
-## Verified upstream basis
+## Upstream references
 
-Verified stable releases on 2026-09-27: Rust 1.98.1, Tauri crate/CLI 2.12.0, tauri-build 2.7.0. Registry metadata and exact resolved dependencies are separate from application acceptance.
+The desktop pins Rust 1.98.1, Tauri crate/CLI 2.12.0 and tauri-build 2.7.0. Use the platform prerequisites and distribution guidance below alongside the checked-in locks.
 
 - [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
 - [Next static export integration](https://v2.tauri.app/start/frontend/nextjs/)
@@ -58,7 +58,7 @@ Verified stable releases on 2026-09-27: Rust 1.98.1, Tauri crate/CLI 2.12.0, tau
 
 ## Owned backend foundation (not a packaged release)
 
-Production startup is fail-closed at `PRODUCTION_PAYLOAD = None`. Merely placing an executable in a resource directory cannot enable it. A future separately reviewed payload must pin the complete frozen build and supply the exact executable/resource identities; the resolver now authenticates the complete pinned inventory, including `_internal`, before each owned start; the child additionally verifies every static file before ready. A [local frozen-sidecar experiment](sidecar/README.md#recorded-local-experiment) now verifies the Python payload separately; no Tauri bundle resource mapping, installer or production runtime activation is included yet.
+Production startup is fail-closed at `PRODUCTION_PAYLOAD = None`. Merely placing an executable in a resource directory cannot enable it. A future separately reviewed payload must pin the complete frozen build and supply the exact executable/resource identities; the resolver authenticates the complete pinned inventory, including `_internal`, before each owned start; the child additionally verifies every static file before ready. The [sidecar packaging procedure](sidecar/README.md#opt-in-macos-arm64-frozen-experiment) is separate from the normal desktop build; no installer or production runtime activation is included yet.
 
 The fixed intended resource layout is `sidecar/firebird-sidecar/firebird-sidecar` (with `.exe` on Windows) plus the complete `_internal` tree. Native code resolves it from Tauri's resource directory, never PATH, current working directory or browser input. The child receives a cleared environment with only OS runtime temporary-directory/SystemRoot fields retained; application/provider/cloud and Python override variables are excluded.
 
@@ -96,8 +96,7 @@ and non-ARM64 native inventory. This authenticates an operator-reviewed immutabl
 it is not an OS sandbox against concurrent malicious writes by the same user.
 
 The complete resources in the final `.app` must match the staged inventory before any
-GUI acceptance. Bundler or signing changes are a failed gate, not permission to refresh
-the pin silently. Native lifecycle acceptance, a clean machine, distribution, upgrades
-and other platforms are still pending. This source change alone has not built or launched
-an enabled candidate. The earlier `8ce73ee` child/static snapshot remains distinct from a later
-native wrapper source and predates later web presentation changes.
+GUI acceptance. If bundling or signing changes that inventory, reject the candidate
+and review those changes before replacing the pin.
+Native lifecycle acceptance, clean-machine installation, distribution, upgrades
+and other platforms remain pending.

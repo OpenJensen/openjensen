@@ -3,9 +3,8 @@
 These commands use recorded data and CPU geometry. They start no Isaac process,
 physics, policy server, or cloud job. Active scenes and calibration stay unchanged.
 
-The [latest audit](scenes/so101-pickup/evidence/calibration/offline-audit.json)
-rejected every candidate. Clipping can be eliminated without recovering valid
-geometry; the current runtime calibration remains unverified.
+The current runtime calibration is unverified. Eliminating joint clipping does
+not establish valid geometry or a physical robot-to-simulator mapping.
 
 ```text
 Recorded states -> joint map -> URDF geometry -> camera projection -> video comparison
@@ -94,20 +93,10 @@ python -m unittest discover -s tests -p test_action_replay.py
 python -m unittest discover -s tests -p test_recorded_policy.py
 ```
 
-## Camera decision and completed trial
+## Runtime limits
 
-Keep the default shelf-fit camera in `scene.usda`. Its shelf-reference RMS is
-**6.45 px at 640×360**, versus **61.00 px** for the rejected trial camera.
-The paired trial camera/map improves held-out robot RMS from 25.86 px (clipped)
-to 13.06 px **at 1920×1080**, still above the 9 px acceptance gate. Its maximum
-error is 46.89 px against a 24 px gate; focal length reached the fit bound.
-Shelf dimensions remain estimated, and neither camera is measured calibration.
-
-The [historical scenario-1 record](scenes/so101-pickup/evidence/calibration/scenario-001-smolvla.json)
-retains the paired input hashes and outcome: one 10-second SmolVLA run, no lift
-or placement, 43 shoulder clips, and unavailable contact diagnostics. Both GPU
-workers were deleted. The candidate camera and map remain unverified and are
-not defaults. Future fitting should constrain shelf, cup, and robot together.
-
-The current 5-second configuration is for future runs; it does not alter this
-10-second result. No additional simulation has run.
+Keep the default camera in `scene.usda` until a replacement passes independent
+geometry and held-out calibration checks. Candidate cameras/maps remain
+unverified and must not become defaults merely because fitting completes.
+Constrain shelf, cup and robot together; estimated shelf dimensions and manual
+image landmarks do not provide measured physical calibration.

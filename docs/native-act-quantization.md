@@ -5,7 +5,7 @@ An explicit `policy.quantize` request with `native_quantization` uses the isolat
 The result is a downloadable `native_quantized` package, not an Isaac, evaluation,
 training-resume or deployment-ready artifact.
 
-The first supported source is an application-owned, local ACT `inference_export`
+The supported source is an application-owned, local ACT `inference_export`
 or `native_checkpoint` containing one complete flat inference policy: saved FP32
 weights, config, both saved processors and their statistics; `use_vae=false`,
 one camera, six state/action coordinates and 100-action chunks. A complete ACT
@@ -54,7 +54,7 @@ the same job endpoint and drains the owned worker before publishing any result.
 No automatic resubmission or retry occurs. Worker children are local CPU
 processes with an offline environment, not an operating-system sandbox.
 
-## What the receipt proves
+## Output and limits
 
 The application verifies the registered source manifest, complete inventory and
 metadata before execution and checks them again after exit or cancellation. The

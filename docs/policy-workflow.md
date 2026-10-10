@@ -14,19 +14,10 @@ the latter can create a downloadable package after a fresh native reload.
 [workspace guide](workspace-guide.md) for all destinations.
 
 Open each saved job for metrics, recipes, provenance, stage events and outputs.
-**Settings & diagnostics → Diagnostics** provides separate policy checks and
-benchmark references; **Workflow settings** holds advanced recipes and acceptance
+**Settings & diagnostics → Diagnostics** provides project policy checks;
+**Workflow settings** holds advanced recipes and acceptance
 constraints. Browser preferences are per project, and each job preserves its
 submitted recipe on the server.
-
-Diagnostics also shows the completed GPU benchmark comparison as labelled reference
-results, even before a project has policy runs. NVIDIA L4 (8 vCPUs / 32 GiB), NVIDIA
-L4 (12 vCPUs / 48 GiB) and RTX 3070 have separate views, pinned to evidence commit
-`e5866f0`. The L4 (8 vCPUs / 32 GiB) view
-includes all ten candidates, process-to-first-action startup, cached runtime
-initialization, sampled process VRAM, and paired success changes. Missing RTX runs
-and VRAM appear as dashes. Labels contain only hardware details. These examples do
-not populate project jobs or establish results for a new policy.
 
 To run project diagnostics, select **Settings & diagnostics → Diagnostics**, choose
 an execution target and a project GGUF policy, choose **Engine checks** or **LIBERO
@@ -42,22 +33,18 @@ host through `FIREBIRD_RUNTIME_CONFIG`; these controls do not provision GPUs.
 Workers added through **Check this machine** support fine-tuning only and cannot
 run these diagnostics. Registering an operator-configured
 target advertises its configuration, not a live hardware health check. Worker
-startup failures are reported by the job. The retired benchmark rental and failed
-RTX host are not available execution targets.
+startup failures are reported by the job.
 
 Project diagnostics evaluate **one native policy** using the application's protocol.
-The application defaults to **LIBERO Object**; the recorded comparison uses
-**LIBERO Spatial**. Select the matching suite and configure its required assets
-before comparing scores. Spatial diagnostics require the full 280-step horizon
-and explicit parity limits, as described in the Spatial workflow below.
-They do not launch the ten-stack LeRobot/bitsandbytes/C++/vLLM/TensorRT-LLM comparison,
-whose complete observation-to-action timing, process memory and paired fixture
-contract differ. **Measurement scope & reproduction** in the example links to the
-pinned standalone GPU benchmark setup and commands for reproducing that comparison.
+The application defaults to **LIBERO Object**. Select the desired suite and
+configure its required assets before evaluating. Spatial diagnostics require the
+full 280-step horizon and explicit parity limits, as described in the Spatial
+workflow below.
 
 For the pinned newer Spatial policy, use the [Spatial optimizer workflow](spatial-workflow.md).
 It keeps a native BF16 reference and floating C++ control separate, with explicit
-parity admission before compression. Hardware acceptance is still pending.
+parity admission before compression. A compatible simulator and native-policy
+runtime must be prepared separately.
 
 ## Distillation
 
@@ -90,30 +77,27 @@ See [compute settings](compute-settings.md) and
 
 ## Defaults and selection
 
-The SmolVLA form defaults to **20,000 optimizer steps and batch size 64**,
-verified from KiteML’s signed-in training form on 2026-09-26 with
-`codywang/so101_pickup_test`. OPEN JENSEN publishes **about five checkpoints total** to private GCS by default: every
+The SmolVLA form defaults to **20,000 optimizer steps and batch size 64**.
+OPEN JENSEN publishes **about five checkpoints total** to private GCS by default: every
 4,000 optimizer steps for a 20,000-step run, including the final checkpoint.
 The checkpoint count is editable.
-The displayed step and batch defaults match KiteML. The existing LoRA/QLoRA
-adapter keeps its own optimizer recipe. New UI runs have a 24-hour deadline.
+The LoRA/QLoRA adapter uses its own optimizer recipe. New UI runs have a 24-hour
+deadline.
 
 The initial comparison candidate is **LM Q8_0 on CPU and CUDA**, with vision left
 in its source precision. This starting point requires task-success validation.
-LM Q4 and vision Q8 remain explicit experimental candidates. In the recorded
-RTX 3070 pilot, C++ Q4 completed 8/20 tasks versus 15/20 for native BF16;
-C++ Q8 matched all 20 reference episode outcomes. See the [comparison evidence](../workers/benchmark_gpu/README.md).
-Those measurements do not establish packed-policy quality on L4 or on a new policy.
+LM Q4 and vision Q8 remain explicit experimental candidates. Quantization does
+not establish task quality; evaluate each candidate with a compatible protocol.
 
 SmolVLA fine-tuning defaults to **LoRA**; **QLoRA** uses the same adapter training path over
 an NF4 base. The method registry can grow without making QLoRA mandatory.
 
 `GET /api/v1/policy-options` lists the training model catalog separately from
-prepared native policy sources. It includes all 15 model choices observed in
-KiteML, with pinned sources, supported methods, compatible `runtime_ids` and
+prepared native policy sources. Entries include pinned sources, supported
+methods, compatible `runtime_ids` and
 availability status. SmolVLA uses LoRA/QLoRA; the other supported policies use
-architecture-specific native training adapters. Historical OpenVLA entries remain
-unavailable. See [model adapters and validation scope](native-training.md).
+architecture-specific native training adapters. OpenVLA entries require
+operator-installed adapters. See [model adapters and requirements](native-training.md).
 
 The bundled SmolVLA trainer uses `lerobot/smolvla_base` at revision
 `d9f33c94a60fb382c90dea2164c96845bd955e28`. Each training run uses **one CUDA GPU**
@@ -303,9 +287,9 @@ After a hard kill, an orphan worker/container may still be running. Recovery doe
 not adopt its late output or reuse persisted PIDs. Verify and stop that specific
 orphan before resuming GPU work; ordinary cancellation and shutdown clean up workers.
 
-All execution remains local and single-owner. Windows GPU and robot deployment
-acceptance remain separate gates. See [validation evidence](workflow-validation.md)
-for what was actually executed on this integration branch.
+Local native workers use one application owner per workspace. Windows GPU
+execution and physical robot deployment require separately configured runtimes
+and platform checks.
 
 ## Job history and creation
 

@@ -22,7 +22,7 @@ For affected paths:
 
 Linux is the default application matrix. A manual application run also defaults to Linux; enabling **windows_browser** adds Windows Python/terminal and full web/build/browser checks. Simulation runs only through its separate manual dispatch.
 
-The teaching job checks the real CPU LeRobot recorder/readback and provider proposal contracts in one environment, and voice SDK contracts in another. A separate small decision-worker job runs contracts without installing Torch or downloading Muose; its opt-in real-model test is explicitly skipped. Actual model-scoring evidence remains a separate local receipt. It does not access voice providers, cloud credentials or GPUs. Dependencies are installed on every run; caches contain dependency downloads, not application workspaces, model weights, credentials or virtual environments.
+The teaching job checks the CPU LeRobot recorder/readback and provider proposal contracts in one environment, and voice SDK contracts in another. A separate decision-worker job runs contracts without installing Torch or downloading Muose; its real-model test is opt-in. These default worker checks do not access voice providers, cloud credentials or GPUs. Dependencies are installed on every run; caches contain dependency downloads, not application workspaces, model weights, credentials or virtual environments.
 
 Superseded revisions of the same PR/workflow are cancelled. Each main/manual run keeps a unique concurrency group. The application workflow currently handles main-branch pushes, version-tag pushes, PRs and manual dispatch; no `merge_group` event is configured.
 

@@ -6,7 +6,7 @@ This package is **not** a replacement for the supplied Unity project, a LiveKit 
 
 ## Install and bind
 
-Tested in the installed Unity **6000.6.2f1**, macOS arm64, in a disposable project. The supplied prototype uses 6000.6.0f1 and was not upgraded or opened. Install this directory through Package Manager → Add package from disk → `package.json`. Declared dependencies: Unity Newtonsoft JSON 3.2.2 plus built-in image conversion and IMGUI 1.0.0. Transport uses the .NET HTTP client.
+Use Unity **6000.6** and install this directory through Package Manager → Add package from disk → `package.json`. Declared dependencies: Unity Newtonsoft JSON 3.2.2 plus built-in image conversion and IMGUI 1.0.0. Transport uses the .NET HTTP client.
 
 Create an otherwise empty GameObject with `Firebird.TeachingViewer.TeachingViewer`. From a trusted runtime integration, call:
 
@@ -66,8 +66,6 @@ Run EditMode and PlayMode separately using the actual installed editor executabl
 
 The cross-component EditMode test additionally consumes an explicitly generated teaching-worker `Session.prepare` → mailbox frame. Set `FIREBIRD_UNITY_FRAME_FIXTURE` to that JSON and `FIREBIRD_UNITY_EXPECTED_SESSION` to its independently recorded session. Its fixed synthetic setup is 32×32 RGB, `/World/Camera`, six `joint_0`…`joint_5` coordinates at zero with [-1,1] limits. Without the fixture path this one test is explicitly skipped; do not report that run as cross-component verification.
 
-On 2026-09-27, the disposable macOS 6000.6.2f1 editor passed **40 EditMode tests and two PlayMode tests**, with zero skips. The cross-component fixture came from the teaching worker at `e205bdfe23536caa3c98721d22b4cc10fa90c5c3`; it was generated through Session.prepare and mailbox publication, not Isaac. These are executor-run editor checks; they are not deployed-player or live-room acceptance.
-
 Tests cover contract rejection, context invalidation/replay, freshness and metadata pairing, a real local HTTP GET with an artificial token, generated RGB texture bytes, no auto-connect, no transform changes, and disconnect status. They use no Isaac process, hardware, real credential, provider API, or LiveKit room.
 
-Still unverified: live Isaac rendering orientation, LiveKit transport/publisher identity, calibrated SO-101 pose visualization, deployed-player/AOT builds, Windows/Linux Unity editors, interactive visual inspection, and latency/frame-rate performance under real streams. The original prototype's “100% fidelity” comment is not evidence for these claims.
+Live Isaac rendering orientation, LiveKit transport/publisher identity, calibrated SO-101 pose visualization, deployed-player/AOT builds, Windows/Linux Unity editors, interactive visual inspection, and latency/frame-rate performance under real streams require separate validation before release.

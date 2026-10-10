@@ -60,8 +60,8 @@ The local snapshots must already exist with these exact directory names:
 Native weights must have SHA256
 `9a9f6413e42c0f332fccbce9a0dc796af2790f82cf002f791cdbf7e01e1afca8`.
 The converter's state dimension must be corrected to eight while preserving the
-original checkpoint. The reviewed [conversion adjustment](../../benchmark_gpu/evidence/2026-09-26/conversion-adjustment.json)
-records the original and derived config hashes. Before evaluation the worker
+original checkpoint. Record both the original and derived config hashes in the
+conversion lineage. Before evaluation the worker
 checks GGUF `real_state_dim=8`, `max_state_dim=32`, ten denoising steps, action
 layout 50×32 padded / seven real channels, and 512px model images. It compares
 all eight state and seven action mean/std values directly against the packaged
@@ -178,7 +178,7 @@ all selected-policy hardware constraints. References may exceed the deployment
 budget, but their evidence must be complete. Only then does the package receive
 its evidence files and get renamed to `package`.
 
-## Local evidence and remaining gates
+## Verification and deployment requirements
 
 Run from `workers/vla_cpp` with Python 3.11:
 
@@ -186,12 +186,6 @@ Run from `workers/vla_cpp` with Python 3.11:
 uv sync --locked --extra quantize --extra test
 uv run --locked --extra quantize --extra test pytest -q -rs
 ```
-
-Observed with the frozen Python 3.11 worker environment: **204 passed, 4 skipped**,
-including **72 new Spatial CPU tests**. The skips require the prepared native
-vendor source or Linux native integration. The benchmark CPU suite separately
-passed four tests and skipped two tests needing Torch/LeRobot. These counts do
-not establish actual policy execution or GPU acceptance.
 
 The current CPU regression suite includes exact asset/copy/empty-cache reload,
 raw fixture bounds, 6-to-8 state normalization, full-action parity evidence,
@@ -206,5 +200,5 @@ known unused device state and budget; actual pinned policy/fixture capture;
 explicit parity tolerance review; paired full Spatial development and heldout
 runs; positive complete memory/timing evidence; and a fresh offline exported
 package run. This slice does not generate rollout videos, prove SO-101 control,
-establish training-data independence, or claim reliable speedups/quality from
-historical benchmark numbers.
+establish training-data independence, or qualify speedups/quality without
+model-specific evaluation.

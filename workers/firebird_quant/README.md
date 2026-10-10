@@ -121,7 +121,7 @@ by the original model package. Keep those with the `.fbq` artifact.
 `result.model` do not change the saved recipe. Use `load_model`, not a raw
 `load_state_dict` of the parametrized model, to restore the packed architecture.
 
-## Compatibility and evidence
+## Compatibility and verification
 
 Offline tests execute both precisions on deterministic small MLPs, grouped
 Conv1d/2d/3d and transposed convolution, BatchNorm/GroupNorm, GRU/LSTM/RNN,
@@ -155,8 +155,8 @@ promote either claim.
 
 CI is configured for Torch 2.2.2 / NumPy 1.26.4 and Torch 2.11.0 / NumPy 2.2.6
 on Linux CPU and participates in the required native worker verification gate.
-The recorded hosted jobs did not start because of the account billing block;
-workflow configuration is not a completed hosted test result.
+Run applicable checks locally; workflow configuration alone is not a completed
+verification result.
 
 ## Optional native ACT package worker
 

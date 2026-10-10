@@ -1,10 +1,9 @@
 # OPEN JENSEN Python sidecar
 
-Normal-interpreter tests exercise the actual application and its intake worker in
-disposable workspaces. A local macOS ARM64 frozen build and relocation experiment has
-also passed the bounded checks recorded below. The Tauri shell does not start this
-sidecar yet. Signing, distribution, Windows support and packaged model runtimes remain
-unverified.
+This Python sidecar provides fixed application-serving and metadata-intake modes
+for an optional frozen desktop payload. Normal desktop builds do not start it:
+the production payload pin is absent. Signing, distribution, Windows support and
+packaged model runtimes remain incomplete.
 
 ## Fixed modes and ownership
 
@@ -146,27 +145,6 @@ pass. Retain initial failures and the complete logs. Even a passing local experi
 not establish Tauri-owned packaged lifecycle, upgrades, existing workspace adoption,
 clean-machine installation, notarization, other platforms or separate model runtimes.
 Those gates remain open before production payload activation.
-
-## Recorded local experiment
-
-The macOS ARM64 experiment built core/static source `8ce73ee` using 35 exact, hash-verified
-wheels installed offline in an isolated environment. Its complete payload contains 203
-entries and 13 ARM64 native files. After relocation it served all 36 static files,
-completed generated metadata-only intake, checked SQLite integrity, refused a second
-workspace owner, stopped on command and parent EOF, and restarted with the same saved
-project and job. Tampered static files, a wrong control nonce and generic Python modes
-were refused. This proves neither robotics frame validity nor model execution.
-
-The first build's strict source-inventory gate failed because one Python bytecode cache
-was generated; all 972 original inputs were unchanged. That failure is retained. The
-first acceptance attempt then exposed an inspector bug: a dylib's `LC_ID_DYLIB` identity
-was mistaken for a load dependency. The corrected external inspector separates identity
-from actual loads; the unchanged payload then passed the full bounded harness. The
-source snapshot predates later web presentation changes and must not be described as the latest web build.
-
-Production Start remains disabled. Tauri-owned lifecycle, installation on a clean
-machine, upgrades, signing, Linux/Windows and ML runtimes require separate evidence.
-
 
 ## Local native candidate preparation
 

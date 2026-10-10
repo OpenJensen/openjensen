@@ -43,10 +43,6 @@ before applying the patch, using `VLA_N_THREADS=4 VLA_IMG_SIZE=512` and the same
 floating GGUF. The harness refuses changed artifact hashes and mismatched source
 patches, records the executable hash, and verifies BF16 action regression.
 
-Historical packed-weight CPU/CUDA measurements are recorded separately in the
-worker's quantization reports. The newer embedding reader has compiled regression
-coverage for F32/F16/BF16, and the application requires a fresh native forward pass
-for each cloud quantization result. See the current
-[application verification record](../../../output/verification/README.md) for
-completed whole-model checks and their exact scope. Synthetic finite actions do
-not establish robot task success.
+The embedding reader accepts F32/F16/BF16. Verify these formats with the compiled
+regression checks, and run a fresh native forward pass for each application
+quantization result. Synthetic finite actions do not establish robot task success.

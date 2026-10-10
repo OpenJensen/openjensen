@@ -106,7 +106,7 @@ uv run --no-sync python -m firebird_act.probe /absolute/new-export /absolute/new
 The result path must be new and outside the package. Reload validates the package
 inventory before accepting its weights. Keep receipts with the measured artifact.
 
-## Scope of evidence
+## Export limits
 
 CPU parity on synthetic observations proves only the tested transformation's
 inference equivalence. It does not establish calibration, pickup success, dataset
@@ -117,8 +117,7 @@ alone provides no evidence of faster inference.
 
 The original source must remain available separately for original-objective training.
 Exported training configuration is historical provenance, not a supported resume path.
-See `evidence/local-cpu-parity.json` for the supplied checkpoint's measured software
-receipt. Private model weights and fixture outputs are not committed.
+Keep private model weights and generated fixture outputs outside Git.
 
 ## Tests
 
@@ -196,8 +195,10 @@ The envelope records the parent artifact and both source manifests, saved step,
 model revision, dataset revision, camera and CPU-only verification scope. It does
 not edit the tested inner package. The original resumable checkpoint is preserved.
 The app downloads the envelope with the tested policy under `policy/policy/` in
-its tar archive. Inference exports cannot be selected for training resume,
-quantization or unimplemented simulator execution.
+its tar archive. Inference exports cannot be selected for training resume.
+Native ACT packing accepts registered complete inference exports that satisfy its
+recipe. Simulator use requires a separately configured compatible runtime and
+the applicable coordinate and calibration checks.
 
 The Fine-tune checkpoint monitor offers **Export ACT inference package** for ACT.
 It requires a ready project, enabled local export worker and complete native
@@ -223,21 +224,17 @@ Run `generate`, `resume`, then `bundle` against the same new scratch directory
 in the isolated producer environment. The ACT exporter stays on its unchanged
 LeRobot0.6.1 lock and consumes only the resulting complete bundle.
 
-The recorded macOS CPU proof also ran that bundle through the actual app API,
-export subprocess, artifact registration and tar download; all archive members
-matched the tested package, and source hashes remained unchanged. See
-`evidence/native-application-parity.json`. This is a synthetic full-checkpoint
-compatibility test, not validation of a trained policy or a production training
-run. It establishes neither GPU/native-Windows support nor calibration, task
-success, learned quality or dataset-loader resume correctness. The default
+This synthetic full-checkpoint compatibility fixture does not validate a trained
+policy or a production training run. It does not qualify GPU/native-Windows support,
+calibration, task success, learned quality or dataset-loader resume correctness. The default
 ACT CI tests remain on the pinned0.6.1 consumer; the optional0.6.2 producer is
 not silently installed into that environment.
 
-The recorded PushT checkpoint remains outside this exporter's six-coordinate recipe. Inference-only output must never replace or be presented
+PushT checkpoints remain outside this exporter's six-coordinate recipe. Inference-only output must never replace or be presented
 as the original resumable training checkpoint.
 
 
-## Changed-horizon software acceptance
+## Verify independent prediction and execution horizons
 
 `native_checkpoint_fixture.py` accepts `--prediction-horizon 8 --execution-horizon 3`.
 Run `generate`, `resume`, and `bundle` in order in the separately pinned native
@@ -288,7 +285,7 @@ package that attempts to discard a known contract.
 
 The [simulator contract](../isaac_sim/CONTROL_CONTRACT.md) binds declared joint
 order, radians, cadence, camera and snapshot provenance. It does not establish
-physical calibration, scene asset compatibility or task success. Contract-bearing
-packages are currently rejected by distillation and packed quantization, whose
-end-to-end contract propagation remains unimplemented. The new pure tests use
-stubbed probe outputs; they are not native model or Isaac acceptance evidence.
+physical calibration, scene asset compatibility or task success. Downstream
+distillation and packed quantization must preserve the exact control and timing
+records and satisfy their snapshot, coordinate and native-runtime checks. Pure
+metadata tests do not establish native model execution or Isaac acceptance.

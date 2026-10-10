@@ -132,7 +132,7 @@ establish byte/identity preservation, but native conversion/reload and HTTP test
 must be explicitly run in the pinned environment before claiming runtime evidence
 for a simulator-bound packed policy.
 
-## Evidence meaning
+## Verification output and limits
 
 The converter uses the real saved pre/postprocessors on two explicitly generated
 image/state observations (seeds 171 and 902). It retains the complete raw and
@@ -181,12 +181,12 @@ The complete packed policy now has a strict optional consumer in
 [simulation policy HTTP server](../isaac_sim/PACKED_ACT.md).
 It preserves the producer model identity and saved processors, rejects unsupported
 devices and runtime versions, and loads a private verified byte snapshot.
-CPU serving acceptance does not change the bundle's historical quality,
+CPU serving acceptance does not change the bundle's quality,
 calibration, GPU or simulator verification flags.
 
 
 Temporal portability is covered by the generated ACT producer/export/HTTP
-[fixture workflow](../act_optimizer/README.md#changed-horizon-software-acceptance).
+[fixture workflow](../act_optimizer/README.md#verify-independent-prediction-and-execution-horizons).
 `temporal-contract.json`, when supplied, is validated against config, copied
 byte-for-byte and included in the packed policy identity. Report drift uses
 `prediction_horizon * 6` coordinates, while execution length remains separate.

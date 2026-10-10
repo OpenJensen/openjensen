@@ -12,7 +12,7 @@ Native/CPP observation-to-action execution is shared with the
 [Spatial application adapter](../vla_cpp/docs/spatial-application.md) through
 `policykit.spatial_runtime`. CLI arguments remain unchanged; its model snapshots
 must already be cached locally. The application adapter adds strict package,
-protocol and acceptance gates; historical benchmark evidence is not promoted.
+protocol and acceptance gates; standalone measurements cannot bypass them.
 Use Python 3.11 for native/vLLM and a separate Python 3.12 environment for
 TensorRT-LLM. Do not install these dependency sets together. No model weights,
 private connection configuration, or credentials belong in this directory.
@@ -56,10 +56,10 @@ sudo apt-get install -y build-essential libegl1 libgl1 libgl1-mesa-dev libosmesa
 CUDA-only VM images may omit NVIDIA's EGL library even when `nvidia-smi` works.
 LIBERO needs a working headless rendering context. Install the graphics/EGL
 package matching the existing NVIDIA driver and verify hardware rendering before
-starting quality runs. On the recorded GCP CUDA M132 image, adding
-`libnvidia-gl-580-server=580.178.04-0ubuntu0.22.04.1` supplied the missing EGL vendor
-without changing the compute driver. This example is specific to that Ubuntu
-image; WSL and other driver installations have different graphics packages.
+starting quality runs. For an Ubuntu image with driver 580.178.04, the matching
+package may be `libnvidia-gl-580-server=580.178.04-0ubuntu0.22.04.1`. Verify the
+installed driver and package repository first; WSL and other installations use
+different graphics packages.
 
 ```sh
 uv venv --python 3.11 .venv
@@ -185,14 +185,6 @@ are reported as skips, which must not be counted as GPU validation. The pooling
 patch tests run without GPU dependencies. Keep raw result JSON, action arrays,
 logs, dependency freezes, hashes and measurement commands alongside each report.
 
-Latest committed measurements: [September 26 evidence](evidence/2026-09-26/REPORT.md).
-Each host's `actions.tar.gz` contains the saved FP32 action arrays beside the
-corresponding result paths. Extract it into that host's evidence directory to
-rerun `compare_results.py` without loading a model. Input fixtures and complete
-execution logs remain in the local run archive; their hashes identify the paired
-inputs. The action archives contain no model weights.
-
-RTX 3070 TensorRT-LLM setup is deferred by user decision: the host drive had
-2.2 GiB free and WSL 6.6 GiB before cleaning this task's temporary transfer
-archive, while the tested L4 environment occupies 17 GiB. No alternate disk was
-available. This is a storage limitation, not a failed RTX model-execution test.
+Plan disk and memory headroom for each separate engine environment before
+installation. Keep saved action arrays and input hashes with their run manifests
+so `compare_results.py` can compare matched outputs without loading a model.
