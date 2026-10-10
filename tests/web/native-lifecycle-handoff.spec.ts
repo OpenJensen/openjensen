@@ -1,4 +1,4 @@
-import { chooseTransformationModel, openTransformationJob, transformationJobs } from './lifecycle-controls';
+import { chooseTransformationModel, openTransformationJob, transformationJobs, selectedQuantizationModel, quantizationModelOption, selectQuantizationModel } from './lifecycle-controls';
 import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { initialQuantizeEntry, initialRunEntry } from '../../apps/web/src/lib/workflow-entry';
@@ -12,7 +12,7 @@ const policyChoices = (page: Page, label: string) => page.getByRole(label === 'A
 async function openSavedAct(page: Page) {
   await expect(page).toHaveURL(/\/(distillation|quantization)\//);
   const operation = page.url().includes('/distillation/') ? 'distillation' : 'quantization';
-  await chooseTransformationModel(page, operation, 'Choose Generated teacher · teacher');
+  await chooseTransformationModel(page, operation, 'Choose Generated teacher · teacher', 'source');
 }
 
 const units = ['degrees', 'degrees', 'degrees', 'degrees', 'degrees', 'recorded_gripper'];
@@ -245,7 +245,7 @@ test('explicit Distill to Quantize to Replay carries exact artifacts without sub
   completeStudent(state.jobs.find(item => item.id === 'student-job') as ReturnType<typeof makeJob>); state.artifacts.push(student);
   await page.getByRole('button', { name: 'Refresh distillation jobs', exact: true }).click();
   await page.getByRole('button', { name: 'Open ACT quantization', exact: true }).click();
-  await expect(policyChoices(page, 'ACT inference policy').locator('input:checked')).toHaveValue(student.id); expect(state.mutations).toHaveLength(1);
+  await expect(selectedQuantizationModel(page)).toHaveValue(student.id); expect(state.mutations).toHaveLength(1);
   await page.getByRole('button', { name: 'Create ACT quantized package', exact: true }).click();
   await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toHaveAttribute('data-job-id', 'quant-job');
   expect(state.mutations[1]).toEqual({ path: '/api/v1/projects/alpha/policy-jobs', body: quantRequest() });
@@ -284,14 +284,14 @@ for (const target of ['quantization', 'replay'] as const) test(`${target} handof
   const state = await fixture(page); state.artifacts.push(student, packed);
   if (target === 'quantization') await openStudent(page, state); else await openPacked(page, state);
   const label = target === 'quantization' ? 'ACT inference policy' : 'Packed ACT policy', expected = target === 'quantization' ? student.id : packed.id;
-  await expect(policyChoices(page, label).locator('input:checked')).toHaveValue(expected);
+  await expect(target === 'quantization' ? selectedQuantizationModel(page) : policyChoices(page, label).locator('input:checked')).toHaveValue(expected);
   await selectProject(page, 'beta');
   if (target === 'quantization') {
     await expect(page.getByRole('region', { name: 'Your quantization models' }).locator('button[aria-pressed="true"]')).toHaveCount(0);
     await expect(page.getByRole('button', { name: `Choose Generated ${expected} · ${expected}`, exact: true })).toHaveCount(0);
     await chooseTransformationModel(page, 'quantization', 'Choose Generated beta-float · beta-float');
-    await expect(policyChoices(page, label).locator('input:checked')).toHaveValue('beta-float');
-    await expect(policyChoices(page, label).locator(`input[value="${expected}"]`)).toHaveCount(0);
+    await expect(selectedQuantizationModel(page)).toHaveValue('beta-float');
+    await expect(quantizationModelOption(page, expected)).toHaveCount(0);
     expect(state.mutations).toHaveLength(0); return;
   }
   const choice = page.getByRole('button', { name: target === 'quantization' ? 'ACT' : 'Replay observations', exact: true });
@@ -505,7 +505,7 @@ test('mixed configured workflows start unselected and preserve a deliberate nati
 
 test('a detected training worker is not offered for GGUF quantization or engine evaluation', async ({ page }) => {
   const state = await fixture(page);
-  state.artifacts.push(artifact('smolvla-checkpoint', 'training_checkpoint', { architecture: 'smolvla' }));
+  state.artifacts.push(artifact('smolvla-checkpoint', 'training_checkpoint', { architecture: 'smolvla' }, 'alpha', 'smol-source'));
   state.runtimes = [{ id: 'managed-local-smolvla-test', label: 'Detected GPU trainer', execution: 'native', provider: 'local', device: 'cuda', enabled: true, launchable: true, training: true, training_only: true, training_model_ids: ['smolvla'], simulation: false, run: false, engine_evaluation: false }];
   await reloadProject(page);
   await page.getByRole('link', { name: 'Quantize', exact: true }).click();
@@ -531,7 +531,7 @@ for (const mode of ['distillation', 'quantization', 'replay'] as const) test(`${
     await page.getByRole('checkbox', { name: /I verified that the dataset/ }).check();
   } else if (mode === 'quantization') {
     await openSavedAct(page);
-    await policyChoices(page, 'ACT inference policy').locator(`input[value="${teacher.id}"]`).check();
+    await selectQuantizationModel(page, teacher.id);
   } else {
     await page.getByRole('button', { name: 'Replay observations', exact: true }).click();
     await policyChoices(page, 'Packed ACT policy').locator('input[value="manual-packed"]').check();

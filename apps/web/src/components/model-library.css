@@ -90,3 +90,13 @@
   .model-library-run { padding: 16px; }
   .model-run-rename input { font-size: 16px; }
 }
+
+.model-overview-list { display: grid; gap: 12px; }
+.model-overview-card { display: flex; justify-content: space-between; align-items: center; gap: 24px; width: 100%; padding: 22px; text-align: left; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--ink); cursor: pointer; min-width: 0; }
+.model-overview-card > span:first-child { display: grid; gap: 9px; min-width: 0; overflow-wrap: anywhere; }
+.model-overview-card strong { font-size: 19px; font-weight: 600; }
+.model-overview-card small, .model-overview-card > span:first-child > span, .model-overview-action { font-size: 12px; line-height: 1.6; color: var(--muted); }
+.model-overview-action { flex-shrink: 0; max-width: 240px; }
+.model-overview-card:hover:not(:disabled), .model-overview-card:focus-visible { border-color: var(--accent); }
+.model-overview-card:disabled { opacity: .55; cursor: default; }
+@media (max-width: 720px) { .model-overview-card { flex-direction: column; align-items: start; gap: 12px; padding: 18px; } .model-overview-action { max-width: none; } }

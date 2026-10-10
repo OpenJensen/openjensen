@@ -1,5 +1,6 @@
 import { isDatasetJob, type Job, type PolicyArtifact } from './api';
 import { checkpointStep, quantizationIssue, trainingRunModelLabel } from './checkpoints';
+import { trainingModels } from './training-models';
 import { studentTeacher } from './native-distillation';
 import { nativeQuantizationInput } from './native-quantization';
 import { replayPolicy } from './native-replay';
@@ -19,7 +20,11 @@ export function ownedModels(artifacts: PolicyArtifact[], project: string): Polic
   });
 }
 export function modelRunName(artifact: PolicyArtifact): string {
-  return textValue(artifact.run_name) ?? `Run ${artifact.job_id.slice(0, 8)}`;
+  if (textValue(artifact.run_name)) return artifact.run_name!;
+  const metadata = artifact.metadata ?? {}, step = checkpointStep(artifact);
+  const precision = typeof metadata.precision === 'string' ? metadata.precision : record(metadata.precision).language;
+  const variant = typeof precision === 'string' ? ({Q4_0:'q4',Q8_0:'q8'}[precision] ?? precision.toLowerCase()) : metadata.method === 'full' ? 'sft' : ['lora','qlora'].includes(String(metadata.method)) ? metadata.method : null;
+  return [textValue(metadata.architecture) ?? textValue(metadata.policy_type) ?? trainingModels.find(model=>model.model_id === (record(metadata.base_model).repository ?? metadata.model_id))?.id ?? 'policy', step, variant].filter(value=>value !== null && value !== undefined).map(value=>String(value).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')).join('-');
 }
 export function modelRunGroups(artifacts: PolicyArtifact[]): { key: string; name: string; models: PolicyArtifact[] }[] {
   const groups = new Map<string, { key: string; name: string; models: PolicyArtifact[] }>();
@@ -29,8 +34,8 @@ export function modelRunGroups(artifacts: PolicyArtifact[]): { key: string; name
     group.models.push(artifact);
     groups.set(key, group);
   }
-  for (const group of groups.values()) group.models.sort((a, b) => (checkpointStep(b) ?? -1) - (checkpointStep(a) ?? -1) || a.label.localeCompare(b.label));
-  return [...groups.values()];
+  for (const group of groups.values()) group.models.sort((a, b) => (checkpointStep(b) ?? -1) - (checkpointStep(a) ?? -1) || Number(b.metadata?.reload_verified === true) - Number(a.metadata?.reload_verified === true) || a.label.localeCompare(b.label));
+  return [...groups.values()].map(group=>({...group,name:modelRunName(group.models[0])}));
 }
 export function modelFamily(artifact: PolicyArtifact, jobs: Job[], artifacts: PolicyArtifact[] = []): string {
   const job = jobs.find(item => item.project_id === artifact.project_id && item.id === artifact.job_id);

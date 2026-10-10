@@ -1,4 +1,4 @@
-import { chooseTransformationModel } from './lifecycle-controls';
+import { chooseTransformationModel, selectedQuantizationModel } from './lifecycle-controls';
 import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
 
@@ -1369,7 +1369,7 @@ test('quantization submits Q4 only after an explicit experimental choice', async
   async function submitQuantization(count: number) {
     await page.getByRole('link', { name: 'Quantize', exact: true }).click();
     await chooseTransformationModel(page, 'quantization', 'Choose Synthetic policy · source');
-    await page.getByRole('group', { name: 'My model', exact: true }).locator('input[value="source"]').check();
+    await expect(selectedQuantizationModel(page)).toHaveValue('source');
     await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
     await expect.poll(() => requests.length).toBe(count);
   }
@@ -1449,7 +1449,7 @@ test('Spatial settings require explicit task and parity choices in the submitted
   await page.getByLabel('Maximum absolute action error').fill('0');
   await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await chooseTransformationModel(page, 'quantization', 'Choose Synthetic policy · source');
-  await page.getByRole('group', { name: 'My model', exact: true }).locator('input[value="source"]').check();
+  await expect(selectedQuantizationModel(page)).toHaveValue('source');
   await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0].evaluation).toMatchObject({
@@ -1468,7 +1468,7 @@ test('Spatial settings require explicit task and parity choices in the submitted
   await expect(page.getByLabel('Episode step limit')).toHaveValue('280');
   await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await chooseTransformationModel(page, 'quantization', 'Choose Synthetic policy · source');
-  await page.getByRole('group', { name: 'My model', exact: true }).locator('input[value="source"]').check();
+  await expect(selectedQuantizationModel(page)).toHaveValue('source');
   await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(2);
   expect(submitted[1].evaluation).toEqual(submitted[0].evaluation);
@@ -1498,7 +1498,7 @@ async function workflowPreferenceFixture(page: Page) {
     const count = requests.length;
     await page.getByRole('link', { name: 'Quantize', exact: true }).click();
     await chooseTransformationModel(page, 'quantization', 'Choose Synthetic policy · source');
-    await page.getByRole('group', { name: 'My model', exact: true }).locator('input[value="source"]').check();
+    await expect(selectedQuantizationModel(page)).toHaveValue('source');
     await page.getByRole('button', { name: 'Run quantization workflow', exact: true }).click();
     await expect.poll(() => requests.length).toBe(count + 1);
     return requests.at(-1)!;
@@ -1624,7 +1624,7 @@ test('a project removed during refetch cannot submit with its stale selection', 
   await page.goto('/datasets/');
   await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await chooseTransformationModel(page, 'quantization', 'Choose Synthetic policy · source');
-  await page.getByRole('group', { name: 'My model', exact: true }).locator('input[value="source"]').check();
+  await expect(selectedQuantizationModel(page)).toHaveValue('source');
   await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toBeEnabled();
   removed = true;
   // Advance beyond the configured 5s freshness period without a wall-clock sleep.

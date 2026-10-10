@@ -355,7 +355,7 @@ class Lifecycle:
                     )
                 except (OSError, ValueError, KeyError, TypeError) as exc:
                     logger.warning("Skipping unavailable checkpoint in %s: %s", index_path, exc)
-        return [self.model_names.decorate(artifact) for artifact in artifacts]
+        return [self.model_names.decorate(artifact, artifacts) for artifact in artifacts]
 
     async def rename_model_run(self, project_id: str, job_id: str, name: str):
         job = await self.execution.get(job_id)
