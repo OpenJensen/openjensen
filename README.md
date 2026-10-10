@@ -6,7 +6,7 @@
 
 OPEN JENSEN brings dataset exploration, training, quantization and simulation into one self-hosted workspace. The web app, CLI and optional terminal client share the same projects, jobs and artifacts. Training and simulation run in separate worker environments, locally or on configured cloud compute.
 
-[Get started](#run-locally) · [Workspace guide](docs/workspace-guide.md) · [Product status](#current-status) · [Documentation](#documentation) · [Development](#development)
+[Get started](#run-locally) · [Workspace guide](docs/workspace-guide.md) · [Documentation](#documentation) · [Development](#development)
 
 ![OPEN JENSEN dataset explorer showing recorded camera frames and episode data](docs/images/dataset-explorer.png)
 
@@ -18,24 +18,16 @@ OPEN JENSEN brings dataset exploration, training, quantization and simulation in
 | --- | --- |
 | Dataset | Inspect public LeRobot v2/v3 datasets, play camera recordings and review sampled state/action rows. Validate local v3 datasets into immutable training copies. |
 | Fine-tune | Choose a policy and compatible compute, follow loss and progress, resume supported runs, and download checkpoints with their recipes and provenance. |
-| Distill | Train a student to imitate a teacher using a supported model adapter. Currently only ACT (Action Chunking with Transformers) → ACT256 is implemented, with compatible observations/actions and explicit episode splits; other model families are unavailable. |
-| Quantize | Convert SmolVLA checkpoints to GGUF with Q8 or experimental Q4 language-weight quantization. Export completed ACT checkpoints as FP32 inference packages, then create packed INT8/INT4 ACT candidates with fresh CPU reload checks. |
-| Evaluate / Run | Measure native inference, inspect full packed ACT predictions on recorded observations, run configured LIBERO evaluations, or launch an experimental ACT/SmolVLA Isaac simulation. |
+| Distill | Train an ACT256 student from an ACT (Action Chunking with Transformers) teacher using selected observations, actions and episode splits. |
+| Quantize | Convert SmolVLA checkpoints to GGUF with Q8 or Q4 language-weight quantization. Export completed ACT checkpoints as FP32 inference packages, then create packed INT8/INT4 ACT candidates with fresh CPU reload checks. |
+| Evaluate / Run | Measure native inference, inspect full packed ACT predictions on recorded observations, run configured LIBERO evaluations, or launch an ACT/SmolVLA Isaac simulation. |
 | Teaching / Augmentation | Record demonstrations through the Teaching interface, connect optional voice services, or review appearance-augmentation candidates before reusing them. |
-| Decision lab | Compare text criteria with the configured local Muose scorer. Results are uncalibrated advice and never execute actions. |
+| Decision lab | Compare text criteria with the configured local Muose scorer. |
 | Cloud runs / Settings | Review saved cloud activity, configure connections and compute, and inspect project diagnostics. |
 
 Each operation has its own model, dataset and runtime requirements. Available workflows depend on the configured workers and compatible model adapters.
 
-[OPEN JENSEN Quant](workers/firebird_quant/README.md) is a 4/8-bit quantization library and CLI for dense PyTorch models. Its native ACT packing path is integrated with the workspace; broader library support does not imply every architecture has an application adapter. Model quality and hardware speed need separate evaluation.
-
-## Current status
-
-OPEN JENSEN is a development preview for a self-hosted, single-workspace installation. The core runs without a GPU; training, native inference and simulation require their respective workers and compatible hardware.
-
-Model and format support follows the [training adapters](docs/native-training.md) and [policy workflow](docs/policy-workflow.md). SmolVLA uses the GGUF workflow, with Q8 as the default and Q4 experimental. ACT uses separate export, distillation and packing workers; local-dataset ACT export and broader distillation adapters are not supported.
-
-[Isaac simulation](docs/native-simulation.md) is experimental and does not provide a scored cup-pickup benchmark. The desktop connector requires a separately running backend, Unity is a receive-only viewer, and Decision lab output is advisory. A bundled desktop backend and physical-robot deployment remain planned.
+[OPEN JENSEN Quant](workers/firebird_quant/README.md) is a 4/8-bit quantization library and CLI for dense PyTorch models. Use its native ACT packing path from the workspace or its standalone library and command-line client.
 
 ## Run locally
 
@@ -56,15 +48,13 @@ uv run --frozen firebird serve
 
 Open [localhost:8000](http://127.0.0.1:8000). On Windows, use `workers/_cpu_readers/.venv/Scripts/python.exe` in the reader installation command.
 
-The core application and metadata intake need no GPU or provider key. Public Hub inspection needs network access. Training, native inference, simulation, voice and augmentation need their own configured workers or services. The server binds to loopback; hosted authentication is not implemented.
+The core application and metadata intake need no GPU or provider key. Public Hub inspection needs network access. Training, native inference, simulation, voice and augmentation need their own configured workers or services. The server listens on loopback at the address above.
 
 For tool-version fallbacks, development mode, local dataset configuration and CLI examples, see the [getting started guide](docs/getting-started.md).
 
 For native ACT distillation and packed observation replay, use the separate
-[local CPU worker setup](workers/local_cpu/README.md). It installs isolated worker
-environments and writes a new configuration only when explicitly requested; the
-ordinary application setup above does not install model dependencies or activate
-these workers. Native ACT quantization also needs its
+[local CPU worker setup](workers/local_cpu/README.md) to install dependencies
+and configure the runtimes. For native ACT quantization, configure the
 [registered packing worker](workers/firebird_quant/NATIVE_ACT.md).
 
 ### Your first project
@@ -81,7 +71,7 @@ Start with the [workspace guide](docs/workspace-guide.md) for a short explanatio
 
 | Topic | Guides |
 | --- | --- |
-| Workspace | [Sector guide](docs/workspace-guide.md), [interface conventions](docs/workbench-design.md) |
+| Workspace | [Sector guide](docs/workspace-guide.md), [frontend development](docs/workbench-design.md) |
 | Setup and compute | [Getting started](docs/getting-started.md), [compute settings](docs/compute-settings.md), [cloud training](docs/skypilot-training.md) |
 | Datasets | [Local training and Teaching](docs/local-training.md), [appearance augmentation](docs/augmentation.md), [source provenance](apps/web/public/datasets/README.md) |
 | Policies and artifacts | [Training adapters](docs/native-training.md), [native policy workflow](docs/policy-workflow.md), [ACT export](docs/cloud-act-export.md), [ACT distillation](workers/policy_distillation/README.md), [cloud artifact storage](docs/cloud-artifact-storage.md) |

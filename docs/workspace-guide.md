@@ -1,72 +1,57 @@
 # Workspace guide
 
-Each sidebar destination has its own address: `/dashboard/`, `/datasets/`,
-`/training/` and the other section routes. You can bookmark a section, open it in
-another tab, refresh it, or return with browser Back and Forward. The selected
-project and appearance stay shared across workspace sections.
-
-Use the project menu to select an existing project or choose **Create project…** to add one. Then choose a destination under **Overview**, **Data**, **Train**, **Test** or **Workspace**. **Guide** opens `/guide/`; `/docs/` remains the separate API reference. Selecting a card does not start a job. Configuration, completed jobs and downloaded artifacts do not by themselves establish robot task quality.
+Open the project menu and select or create a project. Use the sidebar to open a page; bookmark its address to return directly. Open **Guide** at `/guide/` and the API reference at `/docs/`.
 
 ## Dashboard
 
-Open **Dashboard** for your models, saved dataset history and separate readiness cards for local compute, Google Cloud and Hugging Face. **Check resources** refreshes configuration and hardware checks without starting training. Open **My models** or **My datasets** to continue with the collection.
+Select **Check resources**, then open **My models**, **My datasets**, or a compute setup card.
 
 ## My models
 
-Open **My models** to find saved checkpoints, imported policies, distilled students and quantized versions across projects. Search by name, dataset or model ID, or show only the current project. Execution records and simulation videos appear as work using a model.
-
-Open a model to trace its recorded parents and producing runs. The history shows available dataset revisions and manifests, episode partitions, worker-reported hardware, recorded compute selection and recipes. Missing ancestry and unrecorded details are shown explicitly. Episodes outside recorded partitions are computed only when the episode count and membership lists are available; the record may not explain why they were excluded.
-
-Continue with a model's **Distill**, **Quantize**, **Evaluate**, **Replay observations** or **Run in simulation** action. The application switches to its owning project and selects that exact version. Compatibility and worker setup still apply. ACT training checkpoints require an inference export before distillation or packing. **Open this checkpoint's training run and export** preserves the selected checkpoint.
-
-**Train a model** opens training setup. **Import a model** opens the existing ACT/SmolVLA archive importer and requires a configured policy profile; importing does not launch simulation. Models appear in the collection after an operation registers their artifact.
+Search the collection, open an exact model version, then choose **Distill**, **Quantize**, **Evaluate**, **Replay observations**, or **Run in simulation**. To export an ACT training checkpoint, choose **Open this checkpoint's training run and export**. Use **Import a model** to upload an ACT/SmolVLA policy archive with a configured import profile.
 
 ## Dataset
 
-**My datasets** lists saved inspections and local imports for the current project. Pick an existing entry to reopen it without another inspection request. Hugging Face entries save the pinned inspection, not the complete dataset files.
+Open **Sources**, choose a starter or enter a Hugging Face repository, then select **Inspect dataset** and **Load visual preview**. For local data, choose **Local files**, upload a folder, ZIP or HDF5 file, and review the conversion settings. Use **Create example** to try the workflow with generated data. Save camera names and labels before exporting.
 
-Import a Hugging Face repository or choose **Local files** and select a folder, ZIP or HDF5 file on your computer. The files are uploaded to the app host; format detection uses file structure and schema. LeRobot v3 folders can be inspected directly. LeRobot v2, robomimic HDF5, ALOHA HDF5 and image sequences with CSV/JSONL records can be converted to LeRobot v3. Review frame rate, task description and field mapping before conversion. Source files are preserved. RLDS/TFRecord and ROS recordings are recognized but require a synchronized export.
-
-Use **Create example** for a small synthetic two-camera dataset. Open a local dataset to rename camera views and label displayed sample images. Save labels before exporting; the ZIP contains LeRobot files plus annotations and source details. Display labels do not replace training task instructions. [Local formats and limits](dataset-import.md)
-
-Choose a source and **Inspect dataset**, then open **Load visual preview** to browse recorded episodes, cameras and sampled actions. Local data requires **Prepare immutable training copy** before supported training. Preview samples are not a dataset-wide audit. [Dataset setup](getting-started.md#inspect-a-public-dataset) · [Local training](local-training.md)
+[Dataset setup](getting-started.md#inspect-a-public-dataset) · [Local imports](dataset-import.md) · [Local training](local-training.md)
 
 ## Augmentation
 
-Choose a video dataset, camera, up to four episodes and 1–10 seconds per clip. Select an appearance edit, review Google billing disclosure, then generate and compare results. Validate motion and action labels before reuse; clips are not added to training automatically. [Setup and limits](augmentation.md)
+Choose a dataset, camera and episodes, set the clip interval, select an appearance edit, review billing, and start generation. Compare the returned clips before downloading them. [Setup](augmentation.md)
 
 ## Teaching
 
-Connect a teaching executor, wait for a fresh camera view, set an instruction and **Start recording**. Pause, correct joints or mark failures, then **Finish episode** and import the recording. Voice is optional; a cloud connection does not start a simulator. [Executor setup](teaching-connections.md) · [Recording](local-training.md#teach-in-simulation) · [Optional AI services](teaching-intelligence.md)
+Start the configured executor, open Teaching, wait for a camera frame, set an instruction, and select **Start recording**. Use pause, joint corrections or failure markers as needed. Select **Finish episode**, then prepare the recording as a dataset. [Executor setup](teaching-connections.md) · [Recording](local-training.md#teach-in-simulation) · [Voice and advice](teaching-intelligence.md)
 
 ## Fine-tune
 
-Open a saved run or start a new one, then choose data, cameras, model and compatible compute. Select a model explicitly, review the recipe, start training and follow loss, checkpoints and status. Download, resume or export where supported; model and dataset requirements differ by adapter. [Training adapters](native-training.md) · [Policy workflow](policy-workflow.md)
+Choose data, cameras, model, method and compute. Review the recipe and start training. Open the saved run to follow progress, download a checkpoint, resume, or export it. [Worker setup](native-training.md) · [Recipes and commands](policy-workflow.md)
 
 ## Distill
 
-Choose an exact saved teacher in **Distill** or continue from its action in **My models**. The resulting student retains a recorded link to that teacher. Only compatible local ACT → ACT256 distillation is implemented; unsupported models show the reason. [Distillation setup](../workers/policy_distillation/README.md) · [CPU workers](../workers/local_cpu/README.md)
+Install the [CPU workers](../workers/local_cpu/README.md). Select an ACT teacher, compatible local observations, and separate training/validation/final episode groups. Review the ACT256 recipe and submit it. [Adapter setup](../workers/policy_distillation/README.md)
 
 ## Quantize
 
-Choose a saved model in **Quantize** or continue from **My models**. Its format determines the workflow: SmolVLA checkpoints use GGUF conversion; compatible ACT inference models use local packing. Defaults are Q8 and INT8; Q4 and INT4 require explicit selection. Review size, drift and reload results. Saved quantization work remains accessible when its source model is missing. [SmolVLA](policy-workflow.md) · [ACT packing](native-quantization.md)
+Choose the SmolVLA or ACT card and select a saved model. For ACT, export its training checkpoint first. Select Q8/Q4 or INT8/INT4, review the recipe, and start. Open the saved job to download the output. [SmolVLA setup](policy-workflow.md) · [ACT setup](native-quantization.md)
 
 ## Evaluate
 
-Select a policy, compute and check type, review the recipe, then start. Inference checks measure loading, finite actions, timing and memory. Configured LIBERO benchmarks measure task outcomes with the required assets and protocol; replay and Isaac recordings do not provide scored success. [Diagnostics](policy-workflow.md) · [LIBERO Spatial](spatial-workflow.md)
+Select the policy, runtime and check type, review the recipe, and start. For LIBERO, prepare the suite assets and task/state settings first. [Diagnostics setup](policy-workflow.md) · [LIBERO Spatial setup](spatial-workflow.md)
 
 ## Run
 
-Choose **3D simulation** for an ACT/SmolVLA Isaac cup recording, **Replay observations** for offline ACT comparison, or **Check inference** for GGUF. Select the required inputs and review launch consent. Isaac pickup success remains unmeasured; replay and inference do not establish closed-loop success. [Isaac](native-simulation.md) · [Replay](../workers/isaac_sim/NATIVE_REPLAY.md) · [Inference](cloud-inference.md)
+Choose **3D simulation**, **Replay observations**, or **Check inference**. Select the configured runtime and inputs, review consent, and start. Open the saved job for status, video or downloadable output. [Isaac](native-simulation.md) · [Replay](../workers/isaac_sim/NATIVE_REPLAY.md) · [Cloud inference](cloud-inference.md)
 
 ## Decision lab
 
-Enter a state, instructions and 2–8 unique criteria, then **Score criteria** using the configured local Muose worker. Each comparison must fit 512 tokens. Scores are uncalibrated advice and never execute actions; the operator must accept the model's noncommercial license. [Scorer setup](../workers/decision/README.md)
+Install the [Muose worker](../workers/decision/README.md), configure its model directory and license acceptance, then enter a state, instructions and 2–8 unique criteria. Keep each comparison within 512 tokens and select **Score criteria**.
 
 ## Cloud runs
 
-Review jobs with saved cloud targets or inspect separate external rollout observations. Open linked jobs for details and check timestamps and stale-state notices. The monitor reads status; it does not create compute, control Teaching or verify resource cleanup. [Cloud monitoring](cloud-runs.md)
+Open an application job to follow its status and events. For an external rollout, configure the observer directory and start the observer command. [Monitor setup](cloud-runs.md)
 
 ## Settings & diagnostics
 
-Use **Compute** for Google Cloud, Hugging Face access and local workers. For an installed SmolVLA CUDA worker, choose **Check this machine → Add worker**, then enable local runs and save. This checks the app host; it does not install dependencies or start jobs. Use **Workflow settings** for recipes and **Diagnostics** for policy checks. [Local setup and limits](compute-settings.md#local-worker-setup) · [Cloud connections](cloud-connections.md) · [Diagnostics](policy-workflow.md)
+Use **Compute** to connect Google Cloud, save Hugging Face access, or add a local worker. For local training, select **Check this machine → Add worker**, enable local runs, and save. Use **Workflow settings** to edit recipes and **Diagnostics** to launch project checks. [Local setup](compute-settings.md#local-worker-setup) · [Cloud connection](cloud-connections.md) · [Diagnostics](policy-workflow.md)

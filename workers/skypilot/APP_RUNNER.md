@@ -1,15 +1,11 @@
-# Application-owned native simulation
+# Configure the application simulation runner
 
-The application adapter in `packages/core/src/vla_platform/lifecycle/isaac_runner.py`
-uses the existing launcher for complete native ACT or SmolVLA policies. It does
-not route these policies through GGUF. This is an **experimental cup rollout**;
-completion means both owned tasks finished and their model/manifest-bound video,
-trajectory and completion records were collected. Pickup success remains unknown.
-The historical dataset/policy prompt may say “cube”; changing that language is a
-separate experiment, not an automatic correction to recorded provenance.
+Prepare [the SkyPilot runner](RUNNER.md), its isolated `.venv`, private
+`config.yaml`, Isaac image and complete ACT/SmolVLA checkpoint imports.
 
-An operator registers an isolated, reviewed runner overlay using a private JSON
-configuration (paths below are examples, not an installed environment):
+## Register a profile
+
+Save a private server-side JSON configuration using this shape:
 
 ```json
 {
@@ -29,63 +25,40 @@ configuration (paths below are examples, not an installed environment):
 }
 ```
 
-The task's `SIM_RESULTS_URI` must match `results_uri`. Its manifest must select
-the reviewed SO101 cup scene, six native joint coordinates, compatible camera
-geometry and experimental calibration. The launcher still performs its complete
-local manifest/network/resource/model checks. Its two workers retain the existing
-L4 simulator and H100 policy-server topology. This profile is separate from the
-application's single-GPU training selection. No new provider configuration or IAM
-changes are performed by the adapter. `accept_eula` records the operator's prior
-license decision; it must not be enabled on their behalf.
+Replace every path/project/hash/result prefix. Match task `SIM_RESULTS_URI` to
+`results_uri`; set `accept_eula` only after the operator accepts NVIDIA's license.
+Keep the task's scene/calibration files and source bundle under `runner_root`.
+Use six native state/action coordinates, one named RGB camera, even image
+dimensions from 2 through 1920 and the checkpoint's exact model fingerprint.
 
-`runner_root` contains the reviewed `workers/skypilot` and `workers/isaac_sim`
-sources, the pinned SkyPilot `.venv`, and existing private `config.yaml`. The
-optional server-only `sky_api_endpoint` selects an already configured endpoint.
-Unrelated inherited API keys, proxies and training endpoint settings are omitted.
-`gcloud_config` preserves a configured isolated Cloud SDK state directory.
-Credentials and local paths are absent from public profile options.
+Point `credential_file` and `gcloud_config` to the configured private account
+files. An optional `sky_api_endpoint` may select an already configured endpoint.
+Set the configuration path on the application host before serving:
 
-`load_profiles(path)` reads the bounded server configuration. `profile.python`
-points to `workers/skypilot/.venv/bin/python`; imports use that isolated Python.
-`admit(profile, checkpoint_metadata)` checks the two supported families, one
-named RGB camera with even dimensions within 1920, six state/action coordinates
-and a model fingerprint. It records a hash of the visible runner scripts, runtime
-configuration and scene assets, excluding credential contents, environments,
-hidden temporary files and model weights. This is a compatibility admission,
-not a model reload, scene calibration or cloud readiness claim.
+```sh
+export FIREBIRD_SIMULATION_CONFIG=/private/simulation-profiles.json
+uv run --frozen firebird serve
+```
 
-The core job owner calls
+## Submit and follow
+
+In **Run → 3D simulation**, select the profile and a complete compatible policy,
+review the preparation form and launch. Use a new job/output directory and an
+integer application timeout from 30 through 7200 seconds. Follow the job's
+status, events and video/download outputs in the application.
+
+For SDK integration, use `load_profiles(path)`, then
+`admit(profile, checkpoint_metadata)`, and invoke
 `run(profile, checkpoint_directory, job_directory, event, timeout_seconds,
-expected_profile_sha256=..., expected_model_id=...)`. The checkpoint has already
-been copied and inventory-verified by the package importer; the runner verifies
-its model fingerprint again. `job_directory` is new and private. The callback
-accepts `(stage, message, data_or_none)`. The runner returns a report with exact
-relative artifact paths, SHA-256, byte counts and GCS generations for the core to
-register. It never invents a score or marks cloud infrastructure deleted.
+expected_profile_sha256=..., expected_model_id=...)`. The event callback accepts
+`(stage, message, data_or_none)`; retain returned relative artifact paths,
+SHA-256, byte counts and GCS generations with the owning job.
 
-For this app path, `--receipt-dir` requires experimental mode and a new directory.
-Before submission, `launch-context.json` records the unique group, rollout label,
-model/manifest hashes and a distinct result prefix beneath the operator's prefix.
-`--expected-model-id` rejects a changed checkpoint before cloud submission.
-Ordinary CLI receipt behavior remains available. Remote outputs are fetched only
-from that job's prefix, with one remote UUID, an exact filename allowlist, fixed
-byte limits and generation-bound reads. Completion requires matching model and
-manifest identities, not just exit code zero. Raw cloud logs are not streamed
-through the app callback.
+## Cancel and reconcile
 
-A job is never automatically resubmitted. Timeout or cancellation stops/reaps
-owned local command processes and requests cancellation of the saved job ID, or
-its pre-submission unique group if an ID was not returned. Repeated cancellation
-waits for that bounded cleanup. A disk error cannot suppress an already-owned
-cancellation request. `recover(profile, job_directory)` provides the same bounded
-cancellation after an app interruption; it does not adopt late output or retry.
-The application must invoke recovery for its interrupted simulation jobs. A changed source/configuration profile or model identity is not used to cancel
-an old numeric job ID; operator reconciliation is required. Missing
-or inconsistent identity produces `cleanup_unknown` for operator reconciliation.
-Even a successful cancellation response means **requested**, not proof of VM
-deletion. The 30–7200-second application deadline plus bounded cleanup is not an
-exact cloud-runtime or billing cap.
-
-The tests use local processes and generated cloud responses. Actual native
-checkpoint loading, GPU execution, cup-task outcome and cloud cleanup must be
-established by a separately authorized run; they are not implied by these tests.
+Cancel the owning application job rather than submitting a replacement. Retain
+its `launch-context.json`, submission/group IDs and result prefix. On app
+interruption use `recover(profile, job_directory)` with the unchanged profile
+identity. Reconcile changed/missing identities manually. Inspect the saved group
+and cloud resource inventory after cancellation, then stop unused controllers
+with [the launcher cleanup commands](ROLLOUT.md#results-and-lifecycle).

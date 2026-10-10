@@ -1,104 +1,26 @@
-# Isaac + VLA Job Group
+# Launch an Isaac and policy Job Group
 
-For the configured ACT/SmolVLA experiment and dedicated service account, start with
-[runner setup](RUNNER.md).
-
-`launch-rollout.sh` submits two GPU tasks through SkyPilot 0.13.0:
-
-```text
-SkyPilot jobs controller (CPU VM)
-  ├─ isaac: L4, g2-standard-16, on-demand
-  │    Isaac → calibrated observations → private HTTP
-  └─ vla: H100, a3-highgpu-1g, Spot
-       ACT or SmolVLA → action targets → Isaac
-```
-
-Isaac is the primary task. SkyPilot terminates VLA after Isaac finishes. A managed
-Job Group also needs a CPU controller VM; this is additional to the two GPU VMs.
-No cloud resources are created by copying files or running `--validate-only`.
-
-## Separate packed ACT CPU profile
-
-`rollout.packed-cpu.example.yaml` adds an explicit `--policy-runtime packed-act-cpu`
-lane. It keeps the existing L4 Isaac task and CPU SkyPilot controller, and replaces
-only the policy worker with one on-demand `n2-standard-8` CPU VM. This is still a
-paid cloud simulation. The resource is an allowlist choice, not measured capacity,
-latency, lower cost, task success or calibration evidence. Existing ACT/SmolVLA
-CUDA templates and `policy_setup.sh` retain their behavior; `lerobot-cuda` remains
-the default when the flag is omitted.
-
-The packed lane admits only an inspected ACT `firebird_quant` package, not SmolVLA
-or a float export. The CUDA lane refuses packed weights before submission. Both
-readiness and experimental launches enforce this distinction. Packed admission
-requires the shared inspector's explicit `model_format=firebird_quant`; an older
-inspector without that field fails closed. Core application registration,
-artifact eligibility and control-contract preservation must be integrated before
-the application advertises this route. A launcher profile alone cannot override
-an unsupported simulator contract or establish policy quality.
-
-Start from the new example and fill its existing operator-owned image, result
-prefix, scene manifest and checkpoint placeholders. Do not change the working
-CUDA YAML or private network configuration. For local validation only:
-
-```bash
-bash launch-rollout.sh /absolute/path/to/packed-cpu.yaml \
-  --policy-runtime packed-act-cpu --experimental --validate-only \
-  --checkpoint /absolute/path/to/complete-packed-policy
-```
-
-This checks local inputs; it does not allocate workers or verify remote quota,
-package installation or real inference. `--check-ready` is the other allowed
-mode; when used without `--validate-only`, it allocates workers and runs actual
-inference. Packed CPU mode has no implicit motion mode. Existing explicit launch
-confirmation, two-task cancellation, persistent receipt directory, model hash,
-result-prefix binding and zero automatic restart behavior remain in force.
-
-The policy task mounts only the checkpoint, the reviewed `remote` scripts and
-the checkout's two source directories: `firebird_quant/src` and
-`act_optimizer/src`. No repository-wide mount, virtualenv, credential or weight
-directory is used for library shipping. The launcher validates these fixed mount
-locations and the exact setup/run commands. The core profile identity must cover
-both source trees plus the CPU scripts/requirements; the launcher context stores
-the selected runtime, device and model format, and the existing SDK submission
-receipt hashes the generated YAML containing those same fields.
-
-`remote/policy_cpu_setup.sh` uses Python 3.12 and the existing uv 0.8.22 bootstrap
-pattern. `remote/policy-cpu.requirements.txt` pins LeRobot 0.6.1, Torch 2.11.0+cpu,
-torchvision 0.26.0+cpu, safetensors 0.8.0, NumPy 2.2.6 and PyYAML 6.0.3. The two
-Linux x86_64 CPU wheel URLs and SHA-256 values come from the checked-in ACT lock;
-this requirements file is not a new fully locked transitive environment. Local
-OPEN JENSEN packages run directly from the fixed source mounts. Installation occurs
-only in the remote policy virtualenv during an explicitly launched job.
-
-`remote/policy_cpu_run.sh` uses `--device cpu`, hides CUDA, disables model Hub
-access and fixes Torch/BLAS thread pools to one. Setup and inference retain the
-2400/4500-second task deadlines with a 60-second termination grace. The existing
-application deadline and cleanup supervisor remain necessary; none is a billing
-cap. Packed storage is decoded for ordinary FP32 eager computation, not fused
-low-bit execution. No packed CPU rollout has been accepted merely by adding
-this source profile.
+Use the isolated SkyPilot **0.13.0** client installed by `install.sh`.
+For the configured shared account follow [runner setup](RUNNER.md).
 
 ## Prerequisites
 
-- An exported Kite ACT or SmolVLA checkpoint: `config.json`, `model.safetensors`, saved
-  `policy_preprocessor.json` and `policy_postprocessor.json`, and their referenced
-  statistics files. A training-run link alone is insufficient.
-- A verified calibration file for this robot, joint order, action convention and
-  gripper. Candidate calibration requires the explicit experimental mode below.
-- L4 quota and one **Spot H100** quota in `us-central1`, plus available capacity.
-- The immutable Isaac worker image used by the existing launcher.
-- The existing [GCP setup](SETUP.md), extended as follows. These changes require
-  your network administrator; the launcher never changes IAM or firewall rules.
+Prepare a complete ACT/SmolVLA export with `config.json`, `model.safetensors`,
+saved `policy_preprocessor.json`/`policy_postprocessor.json` and all referenced
+statistics. Supply a robot/joint/gripper calibration file, L4 and Spot H100
+quota in `us-central1`, the immutable Isaac worker image and
+[the GCP resources](SETUP.md).
+
+The default task uses an L4 `g2-standard-16` Isaac VM, a Spot H100
+`a3-highgpu-1g` policy VM and an `e2-standard-4` CPU controller. Prepare the
+policy environment with Python **3.12** and `lerobot[smolvla]==0.6.1`.
 
 ### Network and controller configuration
 
-Use the same VPC for both tasks and the controller. Add a `us-central1` subnet
-with an unused CIDR, its regional IAP destination group, and your launcher user's
-IAP access. Existing `configure.sh` is hardcoded to `us-east4`; setting an
-environment variable does not configure the new region.
-
-Merge these settings into local `config.yaml`, keeping its existing project,
-identity, VPC and `us-east4` settings. Replace the project placeholder:
+Have the network administrator add an unused `us-central1` subnet, its IAP
+destination group and launcher-user access in the same VPC as both workers.
+Merge the following into local `config.yaml`, replacing the project placeholder
+and retaining the existing `us-east4` entry:
 
 ```yaml
 gcp:
@@ -118,21 +40,12 @@ jobs:
 ```
 
 Keep `gcp.use_internal_ips: true`, `gcp.remote_identity: SERVICE_ACCOUNT`, and
-`gcp.capabilities: [compute]`. Local files stage through the controller instead
-of a newly created SkyPilot bucket. Source and checkpoint copies therefore use
-controller disk; size its disk for the exported model if needed.
+`gcp.capabilities: [compute]`. Size the controller disk for staged checkpoints.
+Check the controller identity with `sky check gcp --verbose`; provide
+`serviceusage.services.use` and `serviceusage.services.enable` in its custom role.
 
-The controller's service account must pass `sky check gcp`, independently of your
-local account. SkyPilot 0.13 requires `serviceusage.services.use` and
-`serviceusage.services.enable`; legacy worker roles can omit both. An administrator
-can grant these through a narrow custom role. A controller-side `sky check gcp
---verbose` identifies missing permissions when jobs report `NoCloudAccessError`.
-
-Allow **TCP 22 and 8080** from the central subnet to VMs using the simulation
-service account. Port 22 lets the controller manage workers directly; SkyPilot
-removes its IAP proxy after entering the VPC. Port 8080 carries policy traffic.
-The existing IAP-only SSH rule does not allow controller-to-worker traffic.
-For example, after verifying the subnet CIDR, an administrator can create:
+Allow TCP 22 and 8080 from the actual central-subnet CIDR to the simulation VM
+identity. After reviewing that CIDR, an administrator can run:
 
 ```bash
 SIM_CENTRAL_CIDR=10.43.0.0/24 # Replace with the actual, nonoverlapping subnet.
@@ -142,18 +55,11 @@ bash sky.sh gcloud compute firewall-rules create sim-rollout-internal \
   --target-service-accounts="skypilot-v1@$SIM_PROJECT_ID.iam.gserviceaccount.com"
 ```
 
-Do not expose port 8080 with SkyPilot `resources.ports` or an internet ingress
-rule. This v1 policy API has no authentication or TLS and belongs on this private
-network. The subnet rule allows these ports to all simulation VMs in its scope.
-
-The launcher labels both GPU VMs with a unique rollout ID. Isaac discovers exactly
-one VLA VM through the Compute API and uses its private address. It does not rely
-on Job Group DNS: native-cloud hostname discovery is not a supported contract in
-the installed version, despite internal SSH host-mapping code.
+Keep policy port 8080 on that private subnet and omit public `resources.ports`.
 
 ## Prepare and launch
 
-From `workers/skypilot`:
+From `workers/skypilot`, prepare local task and simulation manifests:
 
 ```bash
 export SIM_PROJECT_ID=your-gcp-project
@@ -162,29 +68,26 @@ cp ../isaac_sim/scenes/so101-pickup/rollout.example.yaml \
   ../isaac_sim/scenes/so101-pickup/rollout.local.yaml
 ```
 
-Edit the two local files:
+Inspect the checkpoint with the worker's isolated Python:
 
-1. Inspect the checkpoint without loading model weights into a GPU:
+```bash
+PYTHONPATH=../isaac_sim .venv/bin/python - <<'PY'
+from pathlib import Path
+from sim_worker.rollout.checkpoint import inspect_checkpoint
+print(inspect_checkpoint(Path("/path/to/exported-checkpoint")))
+PY
+```
 
-   ```bash
-   PYTHONPATH=../isaac_sim .venv/bin/python - <<'PY'
-   from pathlib import Path
-   from sim_worker.rollout.checkpoint import inspect_checkpoint
-   print(inspect_checkpoint(Path("/path/to/exported-checkpoint")))
-   PY
-   ```
+Fill these local inputs before launch:
 
-2. In `rollout.local.yaml`, set `SIM_IMAGE`, `SIM_RESULTS_URI`, the **local absolute
-   checkpoint directory** mounted at `~/vla-checkpoint`, and `MODEL_ID`.
-   Use the inspector's computed `model_id` fingerprint.
-3. In the simulation manifest, set `policy.model_id` to that exact identifier,
-   confirm camera/joints/task/control values, and select the verified calibration.
-   Keep scene and calibration files inside `workers/isaac_sim`, with relative
-   paths. Set capture width and height to the checkpoint's image dimensions.
-4. Match `POLICY_STATE_DIM` to the number of joints. Keep
-   `POLICY_ACTION_STEPS >= control.execute_steps`; start with both set to one.
-
-After accepting NVIDIA's container license:
+1. In task `rollout.local.yaml`, set `SIM_IMAGE`, `SIM_RESULTS_URI`, the absolute
+   checkpoint mount at `~/vla-checkpoint`, and the inspector's `MODEL_ID`.
+2. In the simulation manifest, use that exact `policy.model_id`; set the scene,
+   camera/joints/task/control values and selected calibration. Keep those files
+   inside `workers/isaac_sim` and use relative references.
+3. Match capture dimensions and `POLICY_STATE_DIM` to the checkpoint. Choose
+   `POLICY_ACTION_STEPS >= control.execute_steps`; begin with one for each.
+4. Accept NVIDIA's container license, then validate and launch:
 
 ```bash
 export ACCEPT_EULA=Y
@@ -194,22 +97,21 @@ bash launch-rollout.sh
 
 ### Experimental policy motion
 
-Use a separate local task file selecting the candidate calibration and scene.
-Set `control.steps` to at most 300 in its simulation manifest:
+Copy a separate task selecting its candidate scene/calibration. Set
+`control.steps` to at most 300 and explicitly select experimental mode:
 
 ```bash
 bash launch-rollout.sh rollout.experimental.local.yaml --experimental --validate-only
 bash launch-rollout.sh rollout.experimental.local.yaml --experimental
 ```
 
-`--experimental` explicitly permits candidate calibration during validation and
-simulation. The launcher forwards `SIM_EXPERIMENTAL=1` to the remote runner, which
-passes the adapter flag. Ordinary launches still require verified calibration.
-The mode cannot be combined with `--check-ready`.
+Keep this mode separate from `--check-ready`. For normal launches select verified
+calibration instead.
 
 ### Select a checkpoint
 
-Use the same scenario for either supported architecture:
+Use `--checkpoint` to fill model identity, camera dimensions, state dimension and
+horizon from a complete export:
 
 ```bash
 bash launch-rollout.sh rollout.experimental.local.yaml \
@@ -218,27 +120,13 @@ bash launch-rollout.sh rollout.experimental.local.yaml \
   --checkpoint ~/Downloads/smolvla_step20000 --experimental --validate-only
 ```
 
-Remove `--validate-only` to launch. `--checkpoint` also works with standard
-rollouts and `--check-ready`; their calibration and readiness checks still apply.
-It overrides the checkpoint mount, model fingerprint, camera key, capture size,
-state dimension and action horizon in an isolated manifest snapshot. It preserves
-the original scenario and task files, including calibration and joint order.
-Relative checkpoint paths resolve from the directory where the command is invoked.
+Replace those example directories with your exports. Remove `--validate-only`
+to launch. With `--checkpoint`, choose `--execute-steps` as a positive replanning
+interval no larger than the export's chunk size. Keep its saved processors and
+normalization files; permit the SmolVLA server to fetch its VLM config/tokenizer
+on first startup.
 
-By default, execution uses the smaller of the scenario's `execute_steps` and the
-export's `n_action_steps` (or `chunk_size` when absent). Set `--execute-steps` with
-`--checkpoint` to choose a shared replanning interval for comparisons. The value
-must be positive and no larger than the model's chunk size.
-
-The included ACT and SmolVLA exports share their dataset and normalization
-statistics, but that does not verify the joint calibration. Compatible exports
-must still match the scenario's robot, action convention and camera view. Other
-architectures require an inference backend; matching dimensions alone is insufficient.
-
-SmolVLA's VLM configuration and tokenizer are fetched on first startup. The full
-export supplies the trained weights; keep its saved processors intact.
-
-For capacity fallback, replace Isaac's `instance_type` with:
+For experimental single-L4 capacity alternatives set Isaac `instance_type` to:
 
 ```yaml
 ordered:
@@ -246,16 +134,9 @@ ordered:
   - instance_type: g2-standard-12
 ```
 
-Keep shared `accelerators: L4:1`, region, image and disk settings. Experimental
-mode accepts the single-L4 sizes `12`, `16` and `32`; each override may change only
-`instance_type`. Standard mode retains `g2-standard-16`.
-To pin an experimental Isaac zone, use `infra: gcp/us-central1/us-central1-c`;
-do not add a separate `zone` field alongside `infra`.
-
-Each test receives a unique `isaac-<policy-type>-test-` group name, disables retries after
-task errors, and inherits the group cleanup. Keep the launcher running for its
-two-hour provisioning and execution deadline; detached tests require manual
-monitoring and cancellation. Results remain experimental even if execution succeeds.
+Retain `accelerators: L4:1`, image, disk and region. For an experimental zone use
+`infra: gcp/us-central1/us-central1-c` rather than a second `zone` field.
+Keep the launcher attached for its two-hour provisioning/execution deadline.
 
 ### Check the VMs before calibration
 
@@ -264,84 +145,44 @@ bash launch-rollout.sh --check-ready --validate-only
 bash launch-rollout.sh --check-ready
 ```
 
-This provisions the same Job Group and loads the actual checkpoint on H100. The
-L4 task uses the pinned Isaac image to send the saved first observation and front
-camera frame, resized to the checkpoint dimensions, over the private network.
-It validates health, reset and prediction, then prints a JSON readiness report.
-It never loads the simulation or applies robot actions; verified calibration is
-still mandatory for normal rollouts.
-
-The readiness task has a 30-minute run limit. The local launcher waits at most two
-hours for provisioning and execution, then requests cancellation of that exact job
-ID if known, otherwise its unique group name. Keep the launcher running: SkyPilot
-otherwise retries capacity or preemption indefinitely. Managed jobs attempt GPU VM
-cleanup; verify resource inventory separately. The CPU controller autostops separately. Use this check to validate deployability, not to
-leave idle GPU VMs running. Readiness JSON remains in the managed job logs.
-
-The auxiliary `vla` task is expected to finish as `CANCELLED` after Isaac completes.
-Confirm the group and primary `isaac` task are `SUCCEEDED`, the readiness JSON
-says `ready`, and both GPU VMs are removed.
-
-`--yes --detach-run` submits without confirmation or log streaming. The local
-timeout then covers submission only. Monitor the printed unique group name and
-cancel it explicitly if capacity stays unavailable; detached managed jobs can
-otherwise keep retrying indefinitely.
+Use the first command for local validation. The second provisions workers and
+runs health/reset/prediction with the saved observation. Read its JSON readiness
+report in job logs. Check the submitted group, primary `isaac` status and terminal
+auxiliary `vla` status, then inspect GPU resources and the CPU controller.
 
 ### Attached completion and submission receipts
 
-The launcher uses the pinned SkyPilot 0.13.0 SDK through the same isolated
-`sky.sh` environment. It loads the prepared parallel Job Group using SkyPilot's
-internal YAML loader and CLI defaults; it does not replace the scheduler.
-Without `--yes`, SkyPilot's resource optimization and interactive confirmation
-remain enabled. Declining returns failure before submission. `--detach-run`
-returns after the job ID is received, with no log following or completion check;
-its zero exit means **submitted**, not completed.
+Retain the printed unique group, request ID, job ID and private receipt directory.
+Copy `submission.json` and `launch-context.json` to an operator-owned job archive
+before temporary files expire. If submission returns no job ID, inspect the saved
+request/group before another launch.
 
-Every launch prints a private temporary receipt directory outside the repository.
-`submission.json` records the prepared YAML digest, pinned SDK version, launch
-request ID, returned job ID, group name and task IDs/roles. The request ID is saved
-before waiting for submission, and the job ID before attaching logs. Both IDs are
-also printed in case a later disk write fails. A lost response is an uncertain
-submission: inspect that request; the launcher never automatically resubmits or
-falls back to a latest-job lookup. Copy receipts to your experiment evidence
-before your operating system clears temporary files.
+`--yes --detach-run` returns after submission. For detached work, follow the
+printed job/group yourself and cancel it explicitly when finished or stalled.
+For attached readiness/experimental work, keep the launcher running through its
+final status check and save `cancellation.json` when interrupted.
 
-SkyPilot can stop attached log following with exit `101` (`NOT_FINISHED`) while
-the auxiliary is cancelling. Only that code triggers up to 120 seconds of final
-status checks, every two seconds between completed reads, each read limited to
-40 seconds or the remaining deadline. The readiness/experimental two-hour outer
-limit still includes this check. Timeout stops owned local processes, with up to
-five seconds of graceful shutdown followed by bounded forced cleanup. This local
-cleanup precedes the cloud cancellation request: it is a supervised cancellation
-guard, not an exact VM-runtime or billing cap. Other attached exit codes are preserved.
+## Separate packed ACT CPU profile
 
-The check queries only the submitted job ID and validates the exact group,
-task-ID/name bindings, parallel execution and explicit primary/auxiliary roles.
-It never refreshes or restarts a stopped cloud controller. Exit 101 becomes zero
-only when `isaac` is `SUCCEEDED` and `vla` is terminal `CANCELLED` or `SUCCEEDED`.
-The group status is **derived from the single primary task**, matching the pinned
-SkyPilot rule; it is not a separate status returned by the queue API. Cancellation
-observed before primary success, failed tasks, missing metadata (including older
-controller role fields), identity mismatches, unknown states, failed reads and
-deadlines remain unresolved with exit 101. The receipt retains the original
-attached exit and the first and last validated observations.
+Copy `rollout.packed-cpu.example.yaml` to a private task file. Fill its worker
+image, results prefix, scene manifest and complete ACT `firebird_quant` package.
+Select the packed runtime explicitly:
 
-An interrupted/timed-out readiness or experimental launch requests cancellation
-with its existing 120-second cancellation bound and records `cancellation.json`.
-A successful cancellation request or terminal auxiliary `CANCELLED` is **not**
-evidence that VMs were deleted or billing stopped; inspect cloud resources
-separately. Queue rows also do not identify who initiated cancellation. These
-outcomes concern execution only, not calibration, pickup success or model quality.
+```bash
+bash launch-rollout.sh /absolute/path/to/packed-cpu.yaml \
+  --policy-runtime packed-act-cpu --experimental --validate-only \
+  --checkpoint /absolute/path/to/complete-packed-policy
+```
 
-Validation checks local files, model fingerprint, policy type, state/action/image
-dimensions, referenced processor statistics, calibration, resource choices and
-network configuration before dispatching SkyPilot. It does not verify live IAM,
-firewall rules, quota, GPU capacity, or successful tensor loading. The server loads
-the checkpoint and its saved processors at startup.
+Use `--check-ready` without `--validate-only` for its remote readiness run; retain
+`--experimental` for an explicit motion run. The template selects an L4 Isaac VM,
+one `n2-standard-8` policy CPU VM and the CPU controller.
 
-The H100 uses a separate Python 3.12 environment with `lerobot[smolvla]==0.6.1`.
-Isaac uses the existing image with the synced worker source mounted read-only;
-the rollout code does not require an image rebuild. Changing dependencies does.
+Keep the fixed `firebird_quant/src` and `act_optimizer/src` source mounts with the
+reviewed `remote` scripts. The policy setup uses Python **3.12**, LeRobot **0.6.1**,
+Torch **2.11.0+cpu**, torchvision **0.26.0+cpu**, safetensors **0.8.0**, NumPy
+**2.2.6** and PyYAML **6.0.3** from `remote/policy-cpu.requirements.txt`.
+Keep `--device cpu`, disabled Hub access and the template's one-thread settings.
 
 ## Results and lifecycle
 
@@ -353,49 +194,19 @@ bash sky.sh jobs cancel JOB_ID
 bash sky.sh status --refresh
 ```
 
-Isaac uploads `job-result.json`, worker logs, `outputs/result.json`,
-`outputs/trajectory.jsonl`, `outputs/video.mp4` and `outputs/final.ppm` beneath
-`SIM_RESULTS_URI/<episode UUID>/`. `job-result.json` is published last. Confirm
-both reports say `succeeded`; that means the rollout executed, not that the robot
-completed the pickup task. On upload failure, preserve the printed VM artifact
-directory before cancelling or deleting the job.
+Read the exact run prefix under `SIM_RESULTS_URI`: `job-result.json`, worker logs,
+`outputs/result.json`, `outputs/trajectory.jsonl`, `outputs/video.mp4` and
+`outputs/final.ppm`. Match terminal reports to the saved group/model/manifest IDs.
+If uploads fail, preserve the printed VM artifact directory before teardown.
 
-Setup, policy discovery and inference are bounded. The Isaac container has a
-one-hour timeout; VLA has a 75-minute limit and is normally terminated sooner by
-the group. Managed jobs attempt GPU cleanup; verify the resource inventory,
-including failed cleanup or provisioning. Inspect `sky status` for the CPU controller and any failed provisioning before leaving; the controller is a
-separate reusable resource and is not the auxiliary VLA task.
-
-Spot interruption during an episode fails that episode after its request timeout.
-There is no transparent replay or policy-state recovery. Submit a fresh group to
-start a new episode with a reset simulation and empty action history.
-
-## Local checks
-
-```bash
-SIM_REQUIRE_SKYPILOT=1 .venv/bin/python -m unittest discover -s tests -v
-```
-
-The launcher suite uses synthetic queue/submission responses and the real pinned
-SDK's local YAML parser, typed queue records and declined-confirmation path with
-network/submission calls blocked. Real local subprocess tests cover query and
-outer-wall deadlines, creation-window interruption, repeated interruption and
-owned-child cleanup. CI requires the SDK compatibility tests rather than silently
-skipping them. These are offline contract tests: live reconciliation of a newly
-submitted cloud job remains unverified until a separately authorized run.
-
-A normal trained-policy rollout requires verified calibration; experimental
-motion must opt in explicitly. Readiness checks apply no robot actions and do
-not establish rendering, learned control or task success.
-
-References: [SkyPilot Job Groups](https://docs.skypilot.ai/en/latest/examples/job-groups.html),
-[LeRobot SmolVLA](https://huggingface.co/docs/lerobot/smolvla).
+After cancellation/completion, inspect GPU resources and failed provisioning;
+stop an unused CPU controller with `bash sky.sh down CONTROLLER_NAME`. Submit a
+fresh group with reset simulation/policy state after an interrupted episode.
 
 ### Import a complete policy folder or downloaded package
 
-`--checkpoint` now admits a private, byte-preserving snapshot of a complete ACT
-or SmolVLA export. Use `--checkpoint-archive` for a TAR (including gzip/bzip2/xz
-compression) instead. These flags are mutually exclusive:
+Use `--checkpoint` for a complete policy directory or the mutually exclusive
+`--checkpoint-archive` for a TAR, optionally gzip/bzip2/xz-compressed:
 
 ```bash
 bash launch-rollout.sh rollout.experimental.local.yaml \
@@ -403,49 +214,32 @@ bash launch-rollout.sh rollout.experimental.local.yaml \
   --experimental --validate-only
 ```
 
-An OPEN JENSEN download contains an outer `policy/` envelope and an inner policy
-folder; the resolver locates exactly one checkpoint without rewriting config,
-weights or processors. External exports do **not** need an OPEN JENSEN manifest.
-When any `manifest.json` is present, its complete inventory and hashes must match.
-Imported parity, task-success or calibration claims never become verified merely
-because the file hashes match. Bare weights are insufficient: the config, saved
-processors and every required normalization statistic must accompany them.
+Include config, weights, processors and every normalization statistic. Keep any
+manifest's full inventory/hashes consistent. Fit within 256 members, 4 GiB
+archive/expanded payload, 2 GiB per file, 2 MiB JSON/statistics, 16 MiB tensor
+headers, eight path levels and 512 characters per path. Use regular files and
+noncolliding relative names.
 
-Admission is CPU-only and does not load Torch, unpickle data, import custom model
-code, download anything or start a cloud job. It verifies safetensors layout and
-required finite normalization statistics. A successful strict runtime reload is
-still required to prove that the tensor names/shapes form an executable model.
-Only the built-in ACT/SmolVLA processor registries are admitted. SmolVLA can still
-need its backbone config/tokenizer when the inference server starts, as described
-above; this import step does not establish offline inference readiness.
-
-Limits: 256 total members, 4 GiB archive/expanded payload, 2 GiB per file,
-2 MiB JSON/statistics files, 16 MiB tensor headers, eight path levels and 512
-characters per path. Links, devices, FIFOs, traversal, duplicate/case-colliding
-paths, sparse files and ambiguous multiple policies are rejected. Unknown ordinary
-extra files are retained but never executed. Directory snapshots require
-POSIX directory-FD support. The private copy is removed after launcher submission/attached run,
-including errors; originals stay unchanged. Job imports use an exclusive new
-output directory and complete only after their receipt has been written.
-
-Inspect without launching:
+From the repository root, inspect without launching:
 
 ```bash
 PYTHONPATH=workers/isaac_sim python -m sim_worker.rollout.checkpoint_package \
   --checkpoint-archive /path/to/package.tar --inspect-only
 ```
 
-The fixed application bridge can persist an admitted copy using
+For a persistent imported copy, invoke that module with
 `--source PATH [--archive] --output-dir NEW_DIR --json-output NEW_RECEIPT`.
-Both output paths must be absent; the receipt is outside the payload. The JSON
-contains `schema_version: 1`, a relative `directory` below `NEW_DIR`, the existing
-`checkpoint` fields (`policy_type`, `model_id`, camera/dimensions/horizons), the
-archive `source_sha256` (null for folders), verified manifest hashes, and exact
-`files` with SHA-256/byte counts. `runtime_verified` and `calibration_verified`
-remain false, and `task_success` remains null. The caller must verify this receipt
-and inventory before registering or running the copied policy.
+Use absent output paths and put the receipt outside the payload. Read its
+relative policy directory, camera/dimensions/horizons, model ID, complete file
+inventory and manifest hashes before selecting the copy.
 
-The current scene object is a **cup**. Some historical dataset/task strings say
-“cube”; those recorded labels are preserved as evidence, not silently corrected.
-Changing the live task prompt or admitting another policy does not establish
-cup-pickup success or fix the still-unverified joint calibration.
+## Local checks
+
+From `workers/skypilot`:
+
+```bash
+SIM_REQUIRE_SKYPILOT=1 .venv/bin/python -m unittest discover -s tests -v
+```
+
+References: [SkyPilot Job Groups](https://docs.skypilot.ai/en/latest/examples/job-groups.html),
+[LeRobot SmolVLA](https://huggingface.co/docs/lerobot/smolvla).

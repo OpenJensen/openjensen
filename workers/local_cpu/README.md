@@ -1,47 +1,14 @@
-# Persistent local ACT CPU runtimes
+# Install local ACT CPU runtimes
 
-Use this explicit setup command for the application’s **ACT distillation**,
-**ACT INT8/INT4 quantization** and **packed ACT observation replay** lanes. It
-creates two separate Python3.12 environments beneath a new persistent directory:
+Use Apple Silicon macOS or Linux x86_64, an existing Python 3.12 interpreter,
+uv 0.12.19 and a complete repository checkout. Install FFmpeg/ffprobe separately
+on the application host. Keep the checkout and installation in persistent paths.
 
-- `act-model/`: LeRobot0.6.1, Torch2.11.0, torchvision0.26.0 and safetensors0.8.0,
-  installed from the existing ACT worker’s frozen lock.
-- `dataset-reader/`: LeRobot0.6.2 source at
-  `e595b7902714ba51f91e47523f66f89c5181b649`, with separately pinned and hashed
-  dataset dependencies. It does not borrow packages from another environment.
+Run the following commands from the repository root, replacing every example
+path. Create the installation's parent directory first and choose a new root.
+The installer creates `act-model/` and `dataset-reader/` beneath it.
 
-The application Python environment stays free of model/dataset dependencies.
-These environments are persistent and independent of temporary proof directories.
-The selected complete repository checkout must also remain available: the app
-loads its reviewed worker modules from that checkout. This is not an installer
-for a packaged desktop app or an offline wheel bundle.
-
-## Prerequisites and supported scope
-
-- Apple Silicon macOS or Linux x86_64. Windows and other architectures are deferred.
-- An existing **Python3.12** interpreter and **uv0.12.19** executable. Supply their
-  absolute paths. This command never installs or upgrades Python/uv itself.
-- A complete checkout containing the model, dataset, quantization, replay and
-  distillation workers.
-- Network access and disk space for the initial explicit installation. The reader
-  is several packages; do not assume it is a small download. Policy weights and
-  datasets are not downloaded by setup.
-- FFmpeg/ffprobe are separate prerequisites for application video intake and
-  teaching conversion. Setup does not install system packages. The runtime probe
-  checks the PyAV H.264 decoder, not system FFmpeg availability.
-
-Linux uses the exact CPU Torch/torchvision wheel URLs and SHA256 identities from
-`workers/act_optimizer/uv.lock`. macOS uses native wheels and all jobs still select
-CPU. The full reader dependency closure is version/hash locked; LeRobot’s source
-archive is independently hash pinned. No floating branch or fallback model fetch
-is used. The native reader’s critical source files are checked again after install.
-
-## Plan first: no writes or subprocesses
-
-From the repository root, supply real absolute paths (examples below must be
-replaced for your machine). Choose a new versioned installation directory whose
-parent you have explicitly created. Prefer a persistent user-owned location such
-as `$HOME/.local/share/openjensen/cpu-20260927`; do not use `/tmp`.
+## Plan
 
 ```sh
 python3 workers/local_cpu/manage.py plan \
@@ -50,13 +17,7 @@ python3 workers/local_cpu/manage.py plan \
   --uv /absolute/existing/uv
 ```
 
-`plan` prints JSON containing exact commands and input hashes. `install` without
-`--execute` also only prints this plan. No current runtime configuration, cloud
-connection, environment variable, shell profile or service is changed.
-
-## Explicit installation
-
-After reviewing the plan:
+## Install
 
 ```sh
 python3 workers/local_cpu/manage.py install --execute \
@@ -65,60 +26,19 @@ python3 workers/local_cpu/manage.py install --execute \
   --uv /absolute/existing/uv
 ```
 
-The destination must not exist. An existing or partial environment is never
-upgraded, repaired or replaced in place. A failed or interrupted installation
-retains its plan and local log for diagnosis, and does not publish a successful
-`installation.json`. Choose a new destination after fixing the cause; cleanup of
-old directories remains an explicit operator action.
-
-Each installation step has a15-minute timeout and its own process group. Signals
-request termination and cleanup; no automatic retry is made. A successful receipt
-requires both dependency checks and fresh offline probes. Probes verify exact
-runtime versions, CPU Torch, native reader source hashes, worker import paths,
-PyArrow and the PyAV decoder. They do not load model weights or evaluate a task.
-Each fresh probe retains its 60-second deadline. A timeout reports whether a complete
-JSON object reached stdout and includes at most the last 2,000 stderr bytes; output
-without normal process exit is never accepted. Dependency metadata is read once per
-installed distribution, retaining duplicate, version and environment-origin checks.
+Verify the installed environments:
 
 ```sh
 python3 workers/local_cpu/manage.py verify --root /absolute/persistent/cpu-20260927
 ```
 
-## Reuse downloaded packages explicitly
+To reuse a uv download cache, add the same
+`--cache /absolute/existing/uv-cache` argument to `plan` and `install --execute`.
+Use an existing cache with `CACHEDIR.TAG`, separate from the new installation.
 
-A later fresh installation may reuse an existing **uv download cache**. Add the
-same `--cache /absolute/existing/uv-cache` argument to `plan` and `install --execute`.
-For example, the `cache/` directory retained by an earlier incomplete attempt can
-be reused while choosing a different, new installation root. This is an operator
-choice; the installer never searches for old environments or retries automatically.
+## Complete an installed partial attempt
 
-The cache must be an existing directory with a valid `CACHEDIR.TAG`, without
-symlinked ancestors. It must be separate from the new installation root, and cannot
-be a Python environment or a directory inside one. Planning validates the cache
-without writing to it. An explicit installation allows uv to update that cache.
-
-Only dependency download/build artifacts are reused: frozen locks, distribution
-hash requirements, the exact source archive hash, and final offline probes remain
-unchanged. uv copies files into the new environments (`UV_LINK_MODE=copy`), so
-installed runtimes do not import packages from that cache or an old environment.
-The Hugging Face cache stays inside the new root; policy weights are not reused or
-downloaded by setup. A cache does not guarantee an offline installation: missing
-packages or source archives still require their original public URLs.
-
-The selected cache path and copy mode are recorded in the plan and successful
-installation receipt. Configuration is still a separate, inactive output. Failed
-roots and their logs are not modified or removed, apart from the explicitly chosen
-uv cache if it is inside a preserved attempt. Do not use an untrusted shared cache;
-operator-owned executables, source and cache directories remain a trust boundary.
-
-## Verify a fully populated partial attempt explicitly
-
-If an attempt installed all dependencies but stopped during its final verification,
-inspect and retain its original failure log. `complete` can verify the same existing
-environments without downloading, installing or repairing any package. It is not a
-retry of `install`, and it cannot complete a directory with missing or incompatible
-packages. Supply the original interpreter, uv and optional shared-cache paths:
+Supply the original paths from the saved plan:
 
 ```sh
 python3 workers/local_cpu/manage.py complete \
@@ -128,21 +48,12 @@ python3 workers/local_cpu/manage.py complete \
   --cache /absolute/original/uv-cache
 ```
 
-Without `--execute`, this only validates the preserved plan and prints the fixed
-verification commands. It creates no files and starts no processes. Add `--execute`
-only after reviewing that plan. The original recorded root, checkout, platform,
-tools, input hashes, cache choice and copied ACT project files must match exactly.
-Changed inputs or an existing `installation.json` cause a refusal. Saved commands
-are never executed; the program reconstructs its fixed verification operations.
+Review the printed commands, then add `--execute` to run verification and write
+`installation.json`.
 
-Execution runs only offline dependency checks and the original fresh probes with
-their 60-second limits. It preserves the original logs and creates a separate
-completion log. A new receipt is atomically published only after every check exits
-successfully and the preserved inputs are checked again. It explicitly records
-verification of an earlier partial attempt, without claiming that the original
-attempt succeeded. Failures still publish no receipt. Configuration remains inactive.
+## Generate application configuration
 
-## Generate a new configuration; preserve the old one
+Choose a new output file; `--base` supplies an existing configuration to extend:
 
 ```sh
 python3 workers/local_cpu/manage.py config \
@@ -151,45 +62,16 @@ python3 workers/local_cpu/manage.py config \
   --output /absolute/new/runtimes-with-local-cpu.json
 ```
 
-The output parent must exist and output file must be new. `--base` is optional for
-a new workspace; when supplied, all existing runtime/source entries are preserved.
-ID collisions fail without replacing either file. The generated file has owner-only
-permissions and contains no newly discovered credentials. Existing operator data in
-a base registry is copied to the requested new file but never printed to the console.
-Do not commit a private registry containing credentials.
+Set `FIREBIRD_RUNTIME_CONFIG` to the generated file and restart the application
+when no owned job is active. The runtime IDs are `local-act-distillation-cpu`,
+`local-act-quantization-cpu` and `local-act-replay-cpu`.
 
-The three added IDs are `local-act-distillation-cpu`, `local-act-quantization-cpu`
-and `local-act-replay-cpu`. Quantization uses `act-model/bin/python` and the
-`workers/firebird_quant` worker root; it needs no dataset-reader interpreter.
-All three are dedicated local CPU lanes; they do not enable generic engine
-Run/Evaluate, SmolVLA distillation, native CUDA or Isaac. The command **does not activate the file**.
-Review it, then explicitly launch/restart the app with `FIREBIRD_RUNTIME_CONFIG`
-pointing to the new path. Preserve the existing data directory and other settings.
-Do not restart while an owned job is active. Google Cloud settings are stored and
-managed separately; this command does not read or modify them.
+Prepare the required policy and data using the
+[distillation](../policy_distillation/README.md),
+[packing](../firebird_quant/NATIVE_ACT.md) and
+[replay](../isaac_sim/NATIVE_REPLAY.md) recipes.
 
-Distillation still requires an admitted complete ACT teacher and explicit disjoint
-train/validation/final episode groups. Quantization requires an admitted complete
-inference-ready ACT policy and an explicit INT8/INT4 recipe; the worker verifies
-packed reload and reports action drift against generated inputs, not robot quality
-or GPU memory/latency. Replay still requires a registered complete
-INT4/INT8 ACT artifact, an immutable matching dataset, explicit selected frames and
-coordinate attestation. Setup cannot make an incompatible model/data pair compatible.
-Replay returns full predicted actions; it never executes them on a robot/simulator.
-No lane claims task quality or calibration from successful setup.
-
-## Reproduce and review dependency locks
-
-`reader-*.in` records the exact dependency closure selected from the validated
-reader metadata; every native LeRobot dataset requirement was checked against it.
-`reader-*.lock` adds distribution hashes using uv0.12.19 public package metadata.
-The platform-specific CPU URLs are reused from the existing reviewed ACT lock.
-`lock-provenance.json` records the input/output hashes and source pin. The reader
-package itself is installed separately with `--no-deps --no-build-isolation` from
-the exact archive; setuptools81.0.0 is already present in its locked dependencies.
-The final `uv pip check` validates the installed full native dependency graph.
-
-For maintainers, public-metadata resolution updates files but installs nothing:
+## Regenerate dependency locks
 
 ```sh
 uv pip compile workers/local_cpu/reader-macos-arm64.in \
@@ -202,17 +84,8 @@ uv pip compile workers/local_cpu/reader-linux-x86_64.in \
   --output-file /absolute/new/reader-linux-x86_64.lock
 ```
 
-Only independently reviewed lock updates should replace repository locks. No
-install or fresh-machine acceptance is implied by dependency resolution or a
-mocked installer test. Persistent installation remains an explicit opt-in action
-after review.
+## Shell completion
 
-Primary references: [uv PyTorch CPU index configuration](https://docs.astral.sh/uv/guides/integration/pytorch/),
-[uv lock/sync behavior](https://docs.astral.sh/uv/concepts/projects/sync/),
-[the pinned LeRobot source](https://github.com/huggingface/lerobot/tree/e595b7902714ba51f91e47523f66f89c5181b649).
-See [Replay](../isaac_sim/NATIVE_REPLAY.md) and
-[Distillation](../policy_distillation/README.md) for supported inputs and output limits.
-
-Optional Bash completion: set `OPENJENSEN_REPO` to the absolute checkout path and
-source `workers/local_cpu/completions.bash` in that shell. The wrapper
-`openjensen-cpu-setup` exposes the same explicit commands. No profile is edited.
+Set `OPENJENSEN_REPO` to the absolute checkout path and source
+`workers/local_cpu/completions.bash`. The `openjensen-cpu-setup` wrapper uses the
+same commands.

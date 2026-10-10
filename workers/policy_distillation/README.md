@@ -1,54 +1,56 @@
-# ACT action-policy distillation
+# Run ACT distillation
 
-This is a working, isolated **ACT teacher → smaller ACT student** training worker.
-It performs native LeRobot gradient updates from detached teacher action chunks,
-saves a complete smaller FP32 inference policy, and tests that saved policy in a
-fresh process. It is neither weight quantization nor a relabelled scratch trainer.
-Only this pair is implemented. SmolVLA and cross-family distillation are unavailable.
+## Install the model runtime
 
-The first recipe retains the teacher's learned ResNet18 backbone (copied exactly
-and frozen), six-coordinate ordering, single camera, saved pre/postprocessors and
-inherited prediction horizon and execution-prefix queue. Horizons satisfy
-`1 <= execution <= prediction <= 1024`; a saved 8/3 policy remains 8/3. The student has width256, FF1024, two encoder layers, one
-decoder, four attention heads, no VAE, and dropout0. It must be smaller than the
-teacher's inference tensors, excluding any teacher VAE. Native ACT's masked L1
-loss learns **normalized teacher actions**; the saved normalizer processes the
-observations once. Targets are never normalized twice. Demonstration actions are
-used only for per-coordinate diagnostics, not secretly blended into training.
+Use a POSIX host with Python 3.12 and the
+[ACT CPU environment](../act_optimizer/README.md): LeRobot 0.6.1,
+Torch 2.11.0, torchvision 0.26.0 and safetensors 0.8.0. Install local source
+packages with `pip install --no-deps -e workers/act_optimizer -e workers/policy_distillation -e workers/smolvla_qlora`,
+or expose the source roots in the command below.
 
-The underlying ACT architecture and zero-latent inference behavior are documented
-by the [ACT authors](https://tonyzhaozh.github.io/aloha/) and the
-[LeRobot ACT guide](https://huggingface.co/docs/lerobot/act). Exact execution uses
-the pinned installed implementation, whose file hashes are recorded with results.
+Prepare a complete ACT teacher with ResNet18, one camera, six state/action
+coordinates and `1 <= execution <= prediction <= 1024`. Include its saved
+processors, statistics and optional timing/control records.
 
-## Runtime and invocation
+## Prepare the corpus
 
-The model process requires Python3.12 and the existing isolated ACT tuple:
-LeRobot0.6.1, Torch2.11.0, torchvision0.26.0, safetensors0.8.0. Linux CPU wheel
-suffixes are accepted and the actual installed versions are retained. Reuse the
-validated `workers/act_optimizer` environment; never install model dependencies
-into the application/core environment. The local packages can be installed with
-`pip install --no-deps -e workers/act_optimizer -e workers/policy_distillation -e workers/smolvla_qlora`,
-or exposed through these fixed source roots:
+Use the separate LeRobot 0.6.2 dataset environment from the
+[local CPU installer](../local_cpu/README.md). Add `workers/policy_distillation/src`,
+`workers/act_optimizer/src` and `workers/smolvla_qlora/src` to `PYTHONPATH`, then
+run `python -m firebird_distill.prepare PREPARE_REQUEST NEW_RESULT`.
 
-```sh
-PYTHONPATH=workers/policy_distillation/src:workers/act_optimizer/src:workers/smolvla_qlora/src \
-  workers/act_optimizer/.venv/bin/python -m firebird_distill.application \
-  /absolute/operator-owned/request.json /absolute/new-result.json
+Save this request with real paths, snapshot identity, matching feature names,
+units and three nonempty disjoint episode/lineage partitions:
+
+```json
+{
+  "schema_version": 1,
+  "teacher": "/absolute/complete-native-act-policy",
+  "dataset_snapshot": {
+    "path": "/absolute/verified-snapshot",
+    "id": "sha256:<manifest-sha256>", "manifest_sha256": "<manifest-sha256>"
+  },
+  "splits": {"train": [0, 1], "validation": [2, 3], "final": [4, 5]},
+  "frame_stride": 30,
+  "semantics": {
+    "state_names": ["joint0", "joint1", "joint2", "joint3", "joint4", "gripper"],
+    "action_names": ["joint0", "joint1", "joint2", "joint3", "joint4", "gripper"],
+    "units": ["degrees", "degrees", "degrees", "degrees", "degrees", "recorded_gripper"],
+    "compatibility": "operator_attested_teacher_recorded_coordinates"
+  },
+  "output_dir": "/absolute/new-corpus"
+}
 ```
 
-This milestone runs only on CPU and the public supervisor currently requires
-POSIX. It has a1–3600second supervised-work deadline after initial source admission and
-owns/cleans its process groups,
-including signal delivery during spawn and a child that exits before descendants.
-Copying and hash verification check the deadline at execution/publication boundaries;
-this is not a hard elapsed-time bound on filesystem I/O. Only local runtime/temp
-environment settings pass to children; provider/cloud
-credentials do not. HF offline flags and Python socket audit hooks prohibit
-network fallback in the model process. These are application controls, **not an OS
-sandbox**. The internal `runtime` module is not a public timeout boundary.
+Set `compatibility` to `operator_attested_teacher_recorded_coordinates` for
+recorded data and `generated_fixture` for generated data. Use the teacher's
+camera resolution, feature order, coordinate system and cadence. For a
+simulator-bound teacher, select the immutable snapshot named by its control record.
+The new corpus is written to `output_dir`; use its manifest SHA256 below.
 
-A request uses exact fields (paths resolved by the operator, never browser input):
+## Run the student job
+
+Save a request with a complete flat teacher inventory and a new output directory:
 
 ```json
 {
@@ -71,160 +73,24 @@ A request uses exact fields (paths resolved by the operator, never browser input
 }
 ```
 
-The abbreviated `files` example must be replaced by the **complete** flat teacher
-inventory: weights, config, processors, statistics and any existing provenance.
-The caller supplies the registered outer identity; the worker independently checks
-every selected source file and records that caller identity. Teacher/source files
-are unchanged. A private verified copy is used; fresh reload is performed after
-removing the teacher copy, with Python reads of original teacher/corpus denied.
-The output must be new; publication is an atomic no-replace directory rename.
+Run from the repository root:
 
-## Real robotics data, explicit splits
-
-The trainer consumes a bounded immutable observation corpus: at most256 samples,
-8MiB per sample,2GiB total. Each safetensors record has original uint8 RGB, raw
-float32 state `[6]`, recorded float32 action chunk `[prediction_horizon,6]`, and bool padding
-`[prediction_horizon]`. Padding must match the actual episode length and frame index. No pickle,
-custom model code, remote loader or augmentation runs. The JSON manifest binds
-all bytes, native source identity, camera shape, coordinate names/units, teacher
-processor identity, episode/frame identity and declared ancestry.
-
-Three explicit, nonempty **train/validation/final** partitions are required.
-Episodes, their length, and lineage groups cannot cross partitions. Repeated
-identical image/state pairs across partitions also fail. The selected last training
-step is fixed in advance; there is no checkpoint search or final-based selection.
-Validation is measured before/after training. Final imitation error is measured
-only after saving the frozen student. Final data are schema-validated beforehand,
-but never supplied to the optimizer or used for an untuned-final comparison.
-Teacher training overlap is unknown; these are student-held-out partitions, not
-proof that the teacher never saw those episodes.
-
-Use the existing **LeRobot0.6.2 dataset environment**, separately, to prepare a
-verified OPEN JENSEN LeRobot-v3 snapshot. Expose these source packages in that reader:
-`workers/policy_distillation/src`, `workers/act_optimizer/src`,
-`workers/smolvla_qlora/src`. Invoke
-`python -m firebird_distill.prepare PREPARE_REQUEST NEW_RESULT`.
-The input has exact fields:
-
-```json
-{
-  "schema_version": 1,
-  "teacher": "/absolute/complete-native-act-policy",
-  "dataset_snapshot": {
-    "path": "/absolute/verified-snapshot",
-    "id": "sha256:<manifest-sha256>", "manifest_sha256": "<manifest-sha256>"
-  },
-  "splits": {"train": [0, 1], "validation": [2, 3], "final": [4, 5]},
-  "frame_stride": 30,
-  "semantics": {
-    "state_names": ["joint0", "joint1", "joint2", "joint3", "joint4", "gripper"],
-    "action_names": ["joint0", "joint1", "joint2", "joint3", "joint4", "gripper"],
-    "units": ["degrees", "degrees", "degrees", "degrees", "degrees", "recorded_gripper"],
-    "compatibility": "operator_attested_teacher_recorded_coordinates"
-  },
-  "output_dir": "/absolute/new-corpus"
-}
+```sh
+PYTHONPATH=workers/policy_distillation/src:workers/act_optimizer/src:workers/smolvla_qlora/src \
+  workers/act_optimizer/.venv/bin/python -m firebird_distill.application \
+  /absolute/operator-owned/request.json /absolute/new-result.json
 ```
 
-Names/order must match the native snapshot. The example units are **not a default**:
-the operator must establish that data use the teacher's recorded coordinates.
-Matching shapes alone does not do this. Simulator radians cannot be silently
-substituted for recorded joint/gripper conventions. Camera resolution is exact;
-no hidden resize or renormalization occurs. Preparation uses the existing complete
-snapshot/media verifier before/after reading, denies Hub fallback and network,
-and checks returned episode/frame identity. Only the explicitly sampled rows are
-decoded. This local preparation CLI is a bounded-data reader; unlike the public
-training supervisor it has no elapsed-time deadline of its own.
+Read `artifact.path` from the result. The package contains `policy/`,
+`training.json`, `verification.json`, `lineage.json` and `manifest.json`.
 
-Synthetic snapshot lineage is automatically retained as `generated_fixture` and
-requires `compatibility: generated_fixture`. Mixed generated/recorded sources fail.
-A generated corpus can verify the algorithm and software; it is not recorded robot
-training evidence. Use the native writer, immutable snapshot validation and
-reader checks to verify each admitted dataset pipeline before training.
-
-## Output and honest acceptance
-
-`RESULT.artifact` is `{path,format:"native_checkpoint",label}`. The directory has
-`policy/` with exact smaller native ACT weights/config/processors/statistics,
-`training.json`, `verification.json`, `lineage.json` and a core-compatible
-`manifest.json` with exact payload hashes. Metadata identifies the parent artifact,
-model/recipe and the source dataset kind. Teacher target hashes, masks/partitions,
-implementation/runtime source hashes, random seed and optimizer losses are kept.
-The fresh process must reproduce all full action-chunk and postprocessed hashes,
-including the inherited execution-prefix queue, its refill and reset behavior, using only the saved student package and
-its observation corpus. This establishes a reloadable inference artifact, not an
-optimizer/RNG checkpoint: `training_resume_supported=false`.
-
-The student is already `use_vae=false`; do **not** send it through ACT VAE-removal
-export. CPU distillation does not qualify CUDA execution, Isaac rollout, timing
-speedup, physical calibration or task quality.
-`quality_verified`, `calibration_verified`, `speedup_verified` and
-`isaac_runtime_verified` remain false; `task_success` is null. Offline teacher
-imitation error can improve while robot success worsens. Teacher failure may be
-copied. Paired closed-loop teacher/student trials on frozen unseen states and exact
-exported packages are required before recommending deployment.
-
-Teacher/data licenses, redistribution permission, unknown teacher training overlap,
-recorded-coordinate compatibility and robot calibration remain separate gates.
-Generated fixture checks do not establish any of them. Smaller weights are measured against the already-inference
-teacher tensors so VAE removal is not counted as a distillation gain.
-
-## Verification
+## Run tests
 
 ```sh
 PYTHONPATH=workers/policy_distillation/src:workers/act_optimizer/src:workers/smolvla_qlora/src \
   workers/act_optimizer/.venv/bin/python -m pytest workers/policy_distillation/tests -q
 ```
 
-Tests exercise actual native teacher/student updates, smaller serialized weights,
-strict fresh-process reload, group/episode leakage, padding, finite data, strict JSON,
-input mutation, atomic no-overwrite, source preservation and real process cleanup.
-Run native-v3 preparation checks separately in the dataset environment and keep
-generated captures and artifacts outside Git.
-
-
-## Inherited control and timing continuation
-
-The worker source now preserves the teacher's exact saved pre/postprocessor JSON,
-normalization statistics, `temporal-contract.json` and `control-contract.json`.
-Prediction length comes from `chunk_size`; the action queue uses `n_action_steps`.
-Training targets remain detached normalized full teacher predictions. Only the
-observation batch enters the saved preprocessor; targets never enter it.
-Postprocessed diagnostics cover the entire prediction horizon, while queue proof
-checks the execution prefix, the next refill, and reset against the first action.
-
-For simulator-bound policies, preparation requires the exact immutable snapshot
-named by the teacher's control record. The existing snapshot verifier and control
-record derivation bind demonstrations, joint order, camera, FPS, source origins and
-root scene hashes. Operator attestation cannot substitute another snapshot or
-coordinate system. This initial scope does not support transfer to a different
-recording snapshot. Three disjoint episode/lineage partitions remain required;
-final observations still cannot choose an optimizer update or candidate.
-
-New corpus manifests include `execution_horizon`, `action_fps`,
-`temporal_contract_sha256`, `control_contract`, and `control_contract_sha256`;
-`chunk_size` retains the prediction horizon. Legacy omission of these fields is
-accepted only for 100/100 teachers with neither sidecar. Partial metadata fails.
-FPS is copied from the verified dataset and compared with every saved cadence
-contract; the ACT model config itself does not contain dataset FPS.
-
-Reports, fresh-reload receipts and artifact metadata expose both horizons and
-exact sidecar identities. The complete policy inventory includes both sidecars.
-FP32 `sim-policy-checkpoint-v1` identity includes the control contract and saved
-processors but excludes temporal provenance, matching the actual Isaac inspector.
-This differs deliberately from packed-model identity, which inventories and hashes
-all packed inference files. Fresh reload must reproduce both sidecar claims and
-full prediction hashes; original source files remain unchanged.
-
-Nondefault-horizon student training, fresh reload, packing and HTTP serving require
-the opt-in native checks below before use. Isaac execution, physical calibration
-and task quality require separate runtime and closed-loop evaluation.
-
-
-The generated native 8/3 regression is explicitly opt-in with
-`FIREBIRD_DISTILL_CONTROL_NATIVE=1` and the exact test selector
-`test_native_8_3_preserves_semantics_and_normalized_teacher_targets`. It is not
-part of the lightweight metadata admission checks. It retains the existing
-100/100 native regression and uses nonidentity processor statistics to check
-that teacher targets remain in normalized coordinates. Coordinate its CPU, disk
-and process budget before enabling it.
+For the native 8/3 fixture, set `FIREBIRD_DISTILL_CONTROL_NATIVE=1` and select
+`test_native_8_3_preserves_semantics_and_normalized_teacher_targets` in the same
+pinned ACT environment.

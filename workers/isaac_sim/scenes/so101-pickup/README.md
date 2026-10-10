@@ -1,80 +1,12 @@
-# SO101 pickup scene
+# Open and record the SO101 scene
 
-Open **`scene.usda`** in Isaac Sim 6.1. Select **`/World/Cameras/Front`**.
-Keep this directory intact: robot meshes and textures use relative paths.
-`/World/Cameras/Overview` provides an alternate view.
-
-The scene reconstructs the first frame of
-[codywang/so101_pickup_test](https://huggingface.co/datasets/codywang/so101_pickup_test/tree/ecef85bc07005f771ad86deeff1427f9d72953ed).
-It contains the SO101 follower, orange finger covers, paper cup, open cardboard
-box, wooden shelves, metal frame, gray fabric panels, carpet and visible cables.
-The dataset label says “cube”; the inspected video shows a paper cup.
-
-## Fidelity
-
-| Part | Basis |
-| --- | --- |
-| Robot geometry, joints, masses, inertias | Pinned manufacturer CAD/URDF; see `robot/README.md` |
-| Surface textures and printed marks | Cropped dataset frame; original retained in `evidence/` |
-| Camera | Estimated perspective, 1920×1080, 30 fps |
-| Environment dimensions and placement | Estimated from the first image |
-| Cup, box, finger covers, cables | Reconstructed geometry |
-| Friction, cup mass, lighting, drive gains | Simulation estimates |
-| Initial joint pose | Visual fit within model limits; calibration unavailable |
-
-This is an approximate reconstruction. The dataset provides RGB and joint
-samples, but no measured geometry, depth, camera calibration, motor calibration
-or object physics. Hidden surfaces and clipped graphics are incomplete. Exact
-scene identity and trajectory replay cannot be established from these files.
-This scene represents episode 0, not every episode's changing cup position.
-
-### Episode 1 profile
-
-`scene.episode-001.usda` provides the episode 1 starting arrangement.
-`episode-001.json` records its source frame, initial joint state, fitted props,
-and **5-second rollout (150 steps at 30 Hz)**. The baseline scene is unchanged.
-
-| Cup dimensions | Baseline | Episode 1 profile |
-| --- | --- | --- |
-| Height | 10.50 cm | 10.22 cm |
-| Upper body diameter | 7.40 cm | 8.31 cm |
-| Bottom diameter | 5.00 cm | 5.53 cm |
-| Horizontal distance from robot base | 31.26 cm | 25.14 cm |
-
-The cup bottom is at `(-0.2247814, -0.0291302, 0.2005)` m. Its visual mesh,
-open wall colliders, label surface, center of mass, and inertia are rebuilt
-together. The box opening is fitted to 27.17 × 19.17 cm; its estimated height
-stays 20 cm. Camera and shelf geometry retain the original shelf fit.
-
-These dimensions are image-derived estimates and do not establish physical
-scale: shelf width is assumed to be 1 m. The cup lip, box rim, lighting and
-contact properties remain approximate. The joint map is unverified; matching
-prop geometry does not validate robot calibration.
-
-Rebuild and validate:
-
-```sh
-python build_episode.py
-python validate.py scene.episode-001.usda
-python -m unittest discover -s . -p test_episode.py
-```
-
-For SkyPilot, copy `workers/skypilot/rollout.experimental.example.yaml` to a local
-task file and set its Isaac `SIM_MANIFEST` to
-`scenes/so101-pickup/rollout.episode-001.yaml`. Launch with `--checkpoint` to select
-ACT or SmolVLA and `--experimental`. The selector updates model identity and
-action horizon while preserving the 150-step duration. No GPU validation of
-this profile is claimed by the local structure tests or Blender preview.
-
-The robot is a fixed-base articulation with six position drives. The cup is
-dynamic with separate wall colliders; the box and shelving are static colliders.
-The cup and box remain open. The stage holds the reconstructed starting pose;
-it contains no recorded pick-and-place animation.
+Open `scene.usda` in Isaac Sim **6.1** and select `/World/Cameras/Front` or
+`/World/Cameras/Overview`. Keep this directory and its robot meshes/textures
+intact so relative references resolve.
 
 ## Checks and rebuild
 
-Opening the supplied USD requires no downloads or Python packages.
-To edit dimensions/materials, change `scene_config.json`, then rebuild:
+From `workers/isaac_sim/scenes/so101-pickup`, edit `scene_config.json` and rebuild:
 
 ```sh
 python -m pip install -r requirements-build.txt
@@ -82,61 +14,64 @@ python build_scene.py
 python validate.py
 ```
 
-Rebuild the robot separately with `python robot/build_robot.py`.
-Source revisions and file hashes are retained under `robot/source/` and
-`evidence/dataset.json`.
+Rebuild the robot with `python robot/build_robot.py`; see
+[robot setup](robot/README.md). Check USD references, articulation joints/drives,
+colliders, camera dimensions and capture settings after edits.
 
-The base seats on the shelf; the cup starts 0.5 mm above it. `preview.png` is a
-Blender geometry preview with renderer-specific light conversion. Verify USD
-composition, asset references, physics topology, FK, inertias, joint drives,
-colliders, camera dimensions and capture settings after rebuilding. A live smoke
-check is required for renderer and passive-stability behavior. No pickup
-controller is included, and passive stability does not establish grasp success.
+### Episode 1 profile
+
+Use `scene.episode-001.usda` for the episode-1 starting arrangement. Rebuild it:
+
+```sh
+python build_episode.py
+python validate.py scene.episode-001.usda
+python -m unittest discover -s . -p test_episode.py
+```
+
+Copy `workers/skypilot/rollout.experimental.example.yaml` to a local task file.
+Set its Isaac `SIM_MANIFEST` to `scenes/so101-pickup/rollout.episode-001.yaml`.
+Use `--checkpoint` and `--experimental` with
+[the SkyPilot rollout launcher](../../../skypilot/ROLLOUT.md); the manifest
+requests 150 control steps at 30 Hz.
 
 ## Recording
 
-`capture.yaml` requests 150 frames at 1920×1080/30 fps. Set `outputs.uri` to your
-GCS prefix. From the existing Isaac worker directory:
+Set `outputs.uri` in `capture.yaml` to your GCS prefix. From `workers/isaac_sim`:
 
 ```sh
 python -m sim_worker --manifest scenes/so101-pickup/capture.yaml --validate-only
 python -m sim_worker --manifest scenes/so101-pickup/capture.yaml --output-dir /outputs
 ```
 
-Run the second command inside the worker's Isaac environment with this entire
-bundle mounted. The recording uses the configured initial pose and physics.
+Run the second command in the Isaac container with the whole bundle mounted.
+The capture manifest requests 150 frames at 1920×1080 and 30 fps.
 
 ## GPU smoke test
 
-`smoke_test.py` uses the worker's renderer and video encoder. In its Isaac
-container, run:
+In the Isaac container, mount a writable `/probe-output` and run:
 
 ```sh
 /isaac-sim/python.sh --no-ros-env /opt/sim-worker/scenes/so101-pickup/smoke_test.py
 ```
 
-Mount a writable `/probe-output`. The test saves a five-second 1280×720 MP4,
-three frames, live joint/body states, and `result.json`. It checks visible
-frames, advancing physics, joint limits, a fixed base, and cup support. A passing
-result verifies passive stability; it does not establish pickup success.
+Inspect its MP4, saved frames, live joint/body states and `result.json` under
+`/probe-output`. Use `check_physics.py` for the articulation check without camera
+rendering. Install the build and worker dependencies before running
+`test_smoke_test.py`.
 
-Both GPU checks require the existing worker source and its dependencies.
-`check_physics.py` checks the same live articulation lookup without camera
-rendering. `test_smoke_test.py` guards the lookup against matching visual meshes;
-run it with the build dependencies and worker dependencies installed.
-
-From `workers/skypilot`, copy the test template once:
+From `workers/skypilot`, prepare the remote check:
 
 ```sh
 cp so101-test.example.yaml so101-test.local.yaml
 ```
 
-Set `SIM_IMAGE` in the local copy to your worker image digest. Submit to the
-existing cluster with the wrapper:
+Set `SIM_IMAGE` to the immutable worker digest, then submit:
 
 ```sh
 SIM_PROJECT_ID=your-project bash sky.sh exec isaac-sim so101-test.local.yaml --env ACCEPT_EULA=Y --detach-run
 ```
+
+Follow logs and stop the cluster using [SkyPilot commands](../../../skypilot/README.md).
 
 ## Sources
 

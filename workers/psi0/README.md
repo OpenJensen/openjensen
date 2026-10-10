@@ -1,12 +1,12 @@
-# Psi-Zero worker
+# Psi-Zero worker setup
 
-This adapter trains the published Psi-Zero action expert while keeping its Qwen
-vision-language model frozen, matching the upstream fine-tuning recipe. It does
-not offer LoRA, QLoRA, or a GGUF quantization path. The adapter still needs a real
-GPU validation run before operational readiness can be claimed.
+Use a cloud worker with one visible BF16-capable GPU and at least 40 GB GPU
+memory, NVIDIA drivers and FFmpeg libraries. Pin sources and weights to
+[environment.toml](environment.toml).
 
-The source and weights are pinned in `environment.toml`. Provision this separate
-environment on a cloud GPU through SkyPilot, not on the application host:
+## Install
+
+Provision the worker through SkyPilot and run:
 
 ```sh
 git clone https://github.com/physical-superintelligence-lab/Psi0.git /opt/firebird/Psi0
@@ -17,33 +17,27 @@ UV_PROJECT_ENVIRONMENT=.venv-psi GIT_LFS_SKIP_SMUDGE=1 uv sync --frozen --group 
 uv pip install --python .venv-psi/bin/python flash_attn==2.7.4.post1 --no-build-isolation
 ```
 
-The cloud image needs NVIDIA drivers and FFmpeg libraries. The OPEN JENSEN runner
-selects the official FlashAttention wheel matching the installed Torch C++ ABI
-and verifies its pinned SHA-256. A CUDA toolkit and development headers are only
-needed when the environment requires a source-build fallback.
-Expose the OPEN JENSEN worker source on `PYTHONPATH`, set `FIREBIRD_PSI_ROOT` to that
-checkout, and invoke `python -m firebird_vla.psi_application REQUEST RESULT`.
-Use one visible GPU with BF16 support; the catalog conservatively requests at
-least 40 GB until memory is measured on a real run.
+Use the official FlashAttention wheel matching the installed Torch C++ ABI;
+provide CUDA toolkit headers when building from source.
 
-Only LeRobot v2.0/v2.1 datasets are supported by Psi's pinned upstream loader.
-The dataset must have task instructions, exactly one selected camera, and
-`action` plus `observation.state` (or the upstream `states` alias), each with
-1–36 dimensions. Smaller vectors are padded to the released 36-dimensional
-expert, and padded dimensions and terminal actions are masked from the loss.
-The published 30-step action chunk is retained.
+## Configure and run
 
-The adapter downloads only the pinned VLM and expert subdirectories and the
-chosen dataset revision on the cloud worker. It splits by episode and calculates
-normalization statistics from training episodes alone. Saved checkpoints include
-the complete action expert, optimizer, scheduler, RNG state, deterministic data
-position, recipe, split, and a fixed inference probe. The frozen VLM is referenced
-by its immutable Hub revision instead of copied into every checkpoint.
+Select the named Psi0 interpreter and the absolute OPEN JENSEN source path:
+
+```sh
+export FIREBIRD_PSI_ROOT=/opt/firebird/Psi0
+PYTHONPATH=/absolute/openjensen/workers/smolvla_qlora/src \
+  /opt/firebird/Psi0/.venv-psi/bin/python -m firebird_vla.psi_application \
+  /absolute/request.json /absolute/new-result.json
+```
+
+Supply a pinned LeRobot v2.0/v2.1 dataset revision with task instructions, one
+selected camera and `action` plus `observation.state` (or `states`), each with
+1–36 dimensions. Use the upstream 30-step action chunk.
 
 Set `FIREBIRD_GCS_PREFIX` and `FIREBIRD_CHECKPOINT_EXPORT_ROOT` through the runner
-to publish checkpoints to Google Cloud. Each final result is verified in a fresh
-process by checking action parity. Held-out flow-matching loss is recorded as
-validation loss; it is not a measurement of robot task success.
+to select the checkpoint destination. Keep the resolved recipe and episode split
+with the saved checkpoint when resuming.
 
-Official sources: [Psi0 repository](https://github.com/physical-superintelligence-lab/Psi0),
-[released checkpoints](https://huggingface.co/USC-PSI-Lab/psi-model).
+Sources: [Psi0](https://github.com/physical-superintelligence-lab/Psi0),
+[checkpoints](https://huggingface.co/USC-PSI-Lab/psi-model).

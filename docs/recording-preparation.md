@@ -1,12 +1,10 @@
-# Prepare a dataset from local teaching captures
-
-The backend can prepare explicitly selected finalized teaching episodes as one saved `dataset.inspect` job. It uses the existing LeRobot 0.6.2 converter, verifies every converted row and video, and registers the existing immutable dataset snapshot. This does not start a simulator, voice provider, training run, or cloud resource. The Teaching page exposes the same project-owned preparation flow beside the live teaching controls. Changing the project does not remount those global controls.
-
-Only finalized captures already present on the API host are available. An operator must copy or mount remote Isaac captures before admission; neither the Teaching relay nor this API transfers remote files. Keep published capture folders quiescent. There is no inferred “session closed” flag: complete source inventories are checked by the converter and rechecked before a result is registered.
+# Prepare a dataset from Teaching captures
 
 ## Operator configuration
 
-Set `FIREBIRD_RECORDING_CONFIG` explicitly for the desired application process to a new configuration file. Creating the file alone does not activate it. Existing Hugging Face intake and `FIREBIRD_LOCAL_DATA_ROOT` retain their behavior.
+Install the isolated Python 3.12/LeRobot 0.6.2 writer with `workers/teaching/requirements-dataset.txt` or the [CPU reader setup](../workers/local_cpu/README.md). Keep the sibling `workers/isaac_sim` source present and install FFmpeg/ffprobe.
+
+Copy or mount finalized captures to the API host. Give each project a distinct capture root, save this configuration with real absolute paths, and set `FIREBIRD_RECORDING_CONFIG` before restarting:
 
 ```json
 {
@@ -21,31 +19,21 @@ Set `FIREBIRD_RECORDING_CONFIG` explicitly for the desired application process t
 }
 ```
 
-The interpreter must be the isolated Python 3.12 / LeRobot 0.6.2 writer runtime already supported by `workers/teaching/requirements-dataset.txt` or the persistent `workers/local_cpu` reader setup. The worker verifies the exact upstream writer source hashes, PyArrow, H.264 decoder/encoder configuration and the configured FFmpeg/ffprobe executables. This is an offline operation: missing packages/assets fail; nothing is installed or downloaded. The sibling `workers/isaac_sim` contract module must be present. No Isaac runtime is imported or required by this adapter.
-
-Configuration, captures, metadata and output paths use no-follow directory traversal. Project capture roots must be disjoint. A configured executable may have a final symlink, as virtualenv interpreters normally do; the original invocation path and resolved target identity are bound and rechecked. Data path links remain forbidden. These are operator-controlled paths, not an adversarial same-user filesystem isolation claim.
-
-`GET /api/v1/projects/{project_id}/recordings/options` returns configuration presence, its identity, limits and setup guidance. `runtime_verified: false` distinguishes structural setup from a successful native job. Configuration alone does not advertise native runtime readiness.
-
-`GET /api/v1/projects/{project_id}/recordings` returns bounded metadata candidates: session/episode identities, metadata/receipt hashes, declared lineage and origin, joint order, radians/controller/timebase, dimensions/rates and unknown or operator-reported-failure outcome. It returns no capture filesystem paths or images. Unfinished episodes are not candidates. Catalog limits are 100 session directories, 1,000 child entries, 16 MiB aggregate metadata and a 1 MiB response.
+Keep selected capture files unchanged during preparation. Prepare episodes with matching joint order, radians/action schema, camera dimensions and rate. Use at least two source lineage groups for a training split.
 
 ## Prepare in the web workspace
 
-Open **Teaching** and choose the project that owns the operator-published captures. The preparation panel lists finalized metadata only; a configured catalog does not prove that the writer is ready. Select the exact episodes, review the unchanged-capture requirement, and explicitly choose **Prepare selected recordings**. Nothing is selected or submitted automatically. Synthetic captures retain their synthetic origin label.
+1. Open **Teaching** and choose the project.
+2. Select finalized sessions/episodes in the preparation panel.
+3. Review the selection and choose **Prepare selected recordings**.
+4. Follow the saved job through conversion and snapshot creation.
+5. Select **View this dataset** or **Train on this dataset** from the completed result.
 
-A saved result shows its exact job, snapshot, episode/frame counts and declared lineage groups. **View this dataset** opens that inspection. **Train on this dataset** opens a new training draft with the exact saved dataset selected; neither action starts training. An explicitly requested dataset or inspection missing from current project history remains unavailable rather than silently selecting another one. A subsequent manual dataset choice takes precedence when later history reads arrive. Single-group snapshots remain inspectable, but their Training handoff is disabled because they cannot supply the required held-out split.
-
-Preparation uses the same durable `dataset.inspect` identity as the Dataset page. Before any submission lookup or catalog recheck, the browser saves a random request key and the exact original project and recipe in this tab's session storage. A scoped lookup must confirm server support before the first POST. A saved job is recovered by its exact key and original recipe; merely visiting Teaching, navigating, or reloading never sends a POST.
-
-After a lost or invalid acknowledgment, **Check saved request** performs a read only. A missing binding keeps the original request unresolved. **Retry same request** is an explicit action using the same saved key and body, never the edited form or a new key. Before posting a recording retry from either page, the browser rechecks its original catalog identities. A found binding can be recovered even if the old catalog is unavailable. Failed initial preflight checks that occur before any POST permit correction; an uncertain retry keeps its original identity. Server-side acceptance is durable, while the browser key/draft is tab-local and is not cross-device recovery.
-
-Older recording submissions without keys remain uncertain on both pages. Only explicit fresh project history review can release them, and known active generic or recording intake jobs block that acknowledgment. Cleanup preserves the draft, manual saved-job selection, receipt and unrelated cancellation journals. Malformed draft data is never silently deleted. Storage failures disable further admission; restore browser storage and reload to restore shared intake recovery. Any verified accepted job remains visible before fallible storage cleanup. Late responses cannot overwrite a newer shared request or a later manual selection.
-
-Cancellation refreshes the selected saved job and binds the request to that exact identity. Navigating to another record during that check prevents the stale cancellation. Project changes, navigation and result handoffs never submit a preparation, training or control command by themselves.
+Choose 1–100 episodes across at most 100 sessions and a 60–1800-second job budget. Keep the selected input within 8 GiB total, 2 GiB per file and 50,000 entries.
 
 ## Submit and inspect
 
-Use the existing project intake endpoint. The client copies the exact catalog identities; it cannot supply a path, executable, unit conversion, lineage override or output directory.
+Read `GET /api/v1/projects/{project_id}/recordings/options` for the configuration hash and `GET /api/v1/projects/{project_id}/recordings` for session/episode IDs and hashes. Send those exact values to the project's intake endpoint:
 
 ```json
 {
@@ -67,10 +55,4 @@ Use the existing project intake endpoint. The client copies the exact catalog id
 }
 ```
 
-Select 1–100 unique episodes across at most 100 unique sessions. The budget is 60–1,800 seconds after the job acquires the existing local native-work slot. Full input inventory is bounded to 50,000 entries / 8 GiB aggregate / 2 GiB per file. Output verification has the same bounds. All selected captures must have the same existing joint/camera/rate/action schema. This adapter does not normalize radians or infer compatibility with a policy's controller coordinates.
-
-The normal job history, status, events and cancellation endpoints apply. Stale metadata or configuration is rejected before enqueue. Accepted jobs can still fail if full raw content is invalid, changes, or cannot be read by the pinned runtime. Only successful complete snapshot results are selectable as dataset inspections. The result adds `recording_preparation` with exact job/selection identity, source/group counts, readback/source-preservation evidence and `task_success_verified: false`. Legacy intake JSON omits this field and `recordings` when absent.
-
-Multiple sources retain their actual source-session IDs, episode IDs, requested/applied action evidence, declared origin and root lineage groups. Episodes are reindexed only for the new dataset. Two captures with the same declared group remain one group; their snapshot can be saved, but they cannot satisfy the existing held-out training split requirement. Declared groups do not independently establish physically independent demonstrations or successful robot behavior.
-
-The supervisor owns the writer and snapshot process groups, waits for bounded cleanup on failure/cancellation, and checks exact output and source inventories before registration. A cancellation never adopts a late result. A hard API crash cannot promise child cleanup: startup marks unfinished jobs interrupted and preserves the existing operator warning; it does not retry, adopt files or kill a PID after restart. Private bounded diagnostic tails and requests remain under the failed job directory. Source captures are never overwritten or deleted.
+Follow the returned job using the ordinary jobs/status/events endpoints. Cancel the selected job to stop preparation. On a lost response, reconcile the saved request key using [submission recovery](job-submissions.md). For stale-content errors, refresh the catalog and reselect unchanged captures.

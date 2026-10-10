@@ -1,18 +1,8 @@
-# Isolated SmolVLA LoRA / QLoRA worker
+# SmolVLA worker setup
 
-Native SmolVLA quantized fine-tuning, adapter verification, and diagnostics for
-multiple native model runtimes. This project uses its own Python 3.11 environment;
-ML dependencies are separate from the application's Python 3.14 environment.
+## Install developer tools
 
-The application exposes LoRA and QLoRA
-as methods under the same application fine-tuning operation, with pinned dataset
-lineage, resource preflight, checkpoint resume and native export. See the
-[workflow guide](../../docs/policy-workflow.md).
-Capabilities appear only when the operator configures a training environment.
-
-## Install and test
-
-Run all worker commands from `workers/smolvla_qlora`:
+From `workers/smolvla_qlora`, use Python 3.11:
 
 ```sh
 uv venv --python 3.11
@@ -24,89 +14,30 @@ uv pip install --python .venv/bin/python -e '.[dev]'
 .venv/bin/firebird-check-qlora --help
 ```
 
-These lightweight checks do not install training dependencies. On a supported
-Linux CUDA host, follow the pinned installation and native-runtime instructions in
-[SmolVLA training](docs/training/smolvla-qlora.md). See
-[multi-model diagnostics](docs/training/multimodel-qlora-checks.md) for the catalog,
-backend-specific preparation, and explicit unsupported states. Keep outputs,
-weights and datasets outside Git.
+For the CUDA environment, smoke run, training, resume and inference loader,
+follow [SmolVLA training setup](docs/training/smolvla-qlora.md).
+For other native model fixtures, use [QLoRA checks](docs/training/multimodel-qlora-checks.md).
 
-## Runtime limits
+## Set training controls
 
-CPU contract checks do not establish CUDA NF4 execution, full SmolVLA training,
-checkpoint portability or robot quality. Verify each configured runtime with
-the native checks in the [training setup guide](docs/training/smolvla-qlora.md)
-before using it for a model workload.
+Set `gradient_accumulation_steps` in the recipe. Count `steps`, learning-rate
+schedules, checkpoint intervals and validation intervals in completed optimizer
+updates. Resume with the same saved recipe, accumulation value and batch size.
+Use [temporal settings](TEMPORAL.md) for prediction and execution horizons.
 
-## Gradient accumulation and exact resume
+For native ACT simulator data, supply a complete local snapshot containing
+`meta/firebird-demonstrations.json`, with matching joint order, radians, camera
+and FPS. Preserve `control-contract.json` at both checkpoint levels when resuming.
 
-The bundled ACT full-training adapter and SmolVLA LoRA/QLoRA worker accept
-`gradient_accumulation_steps`. Public steps, learning-rate schedules, logging,
-validation and checkpoint intervals count **completed optimizer updates**. Native
-LeRobot's internal loop and saved training step still count microbatches; the ACT
-adapter translates the two units explicitly. Other native families and Psi0.5
-retain accumulation of one. This implementation is single-process (`world_size=1`).
+## Run numerical tests
 
-New runs weight each microbatch mean by its actual example count in the complete
-window, including short epoch tails and windows spanning epochs. Only the current
-microbatch is loaded on the device; the worker does not buffer an image window.
-Gradient clipping and scheduler advancement occur once per complete successful
-update. A non-finite or skipped ACT update fails; it cannot silently consume the
-requested update budget. SmolVLA retains its existing bounded overflow handling
-and records skipped windows separately.
-
-Checkpoints include hashed `optimization-contract.json` and
-`optimization-state.json` records. They bind batch size, accumulation, weighting,
-optimizer updates, consumed microbatches/examples and the sampler epoch/offset.
-Incomplete windows cannot be published. Accumulated ACT resume also preserves the
-saved sampler epoch when Accelerate initializes a fresh loader wrapper. Existing
-SmolVLA checkpoints without these records keep their original equal-microbatch
-weighting; old accumulation-one native checkpoints remain supported. Changing an
-existing checkpoint's optimization contract is rejected.
-
-The generated CPU acceptance fixture runs the production ACT hooks with native
-LeRobot 0.6.2, Torch 2.11.0 and Accelerate 1.14.0. It uses a VAE/dropout ACT,
-8-step predictions, 3-step execution, batch size 3 and accumulation 3 over five
-training frames: one window consumes 3+2+3 examples, the next 2+3+2. An interruption
-after a partial window preserves only the preceding complete checkpoint. A fresh
-process resumes that checkpoint and exactly matches uninterrupted model tensors,
-AdamW state and full predictions. Separate numerical tests compare weighted SGD
-and AdamW updates with a large-batch reference and verify scheduler cadence,
-clipping, non-finite handling and actual sampler order across epochs. These tests
-do not establish large-batch equivalence for models with batch-dependent layers.
-
-Reproduce the opt-in numerical tests with an existing compatible CPU environment:
+Use an existing compatible CPU environment:
 
 ```sh
 FIREBIRD_TEST_ACCUMULATION_CPU=1 OMP_NUM_THREADS=1 \
   PYTHONPATH=src python -m pytest tests/test_accumulation_numerical.py -q
 ```
 
-`tests/accumulation_native_fixture.py ROOT MODE [CHECKPOINT]` provides the bounded
-native proof stages (`baseline`, `interrupted`, `resumed`), using generated local
-image data and no model download. Run each stage in a fresh, offline process with
-one CPU thread and an external timeout. The optional checkpoint argument permits
-read-only reuse of a preserved interrupted checkpoint. Keep generated weights
-outside Git. CPU evidence does not establish CUDA memory savings, full SmolVLA
-training/resume, multi-GPU correctness, robot quality or cloud execution.
-
-## Recorded simulator coordinates
-
-For a verified local snapshot containing the existing recorder's
-`meta/firebird-demonstrations.json`, native training derives a canonical
-`control-contract.json`. It validates state/action feature names against recorded
-joint order, applied-target radians, camera key and shape, integer action FPS,
-source origins and the complete episode lineage. The resolved native policy
-configuration must match before training proceeds. A snapshot with no recorder
-provenance retains the legacy path; it is not relabeled as simulator-native.
-
-Every completed native checkpoint contains the contract at its root and under
-`pretrained_model/`, covered by the checkpoint inventory. Resume rederives it from
-the original snapshot and requires both copies; fresh verification reports the
-same record and digest. This does not alter saved processors or normalization.
-See the [consumer contract and limits](../isaac_sim/CONTROL_CONTRACT.md).
-
-The current simulator training route targets native ACT with a local snapshot.
-The dedicated SmolVLA PEFT worker still requires its pinned Hub dataset; a complete
-SmolVLA local simulator training/export proof is not supplied by this change. Pure
-contract tests do not establish native training, CUDA, Isaac or robot quality.
+Run `tests/accumulation_native_fixture.py ROOT MODE [CHECKPOINT]` in `baseline`,
+`interrupted` and `resumed` modes with generated local image data, an external
+timeout and one CPU thread. Keep the scratch directory outside Git.

@@ -1,13 +1,7 @@
-# Runner infrastructure moved
+# Set up CI runners
 
-Terraform, controller, image builds and infrastructure checks now live in
-[OpenJensen/ci-infra](https://github.com/OpenJensen/ci-infra).
-Application workflows, runner routing tests and `runner-smoke.yml` remain here.
+Follow the Terraform, controller and image-build instructions in [OpenJensen/ci-infra](https://github.com/OpenJensen/ci-infra). Use its migration steps when reusing existing deployment state.
 
-Ignored local state, variables and provider files may still exist in this folder.
-Preserve them. Use the infrastructure repository's migration instructions before
-managing an existing deployment; never initialise a replacement state.
+Create the GitHub App under OpenJensen and install it on **OpenJensen/openjensen**. Store the private key in GCP Secret Manager.
 
-Create the GitHub App under OpenJensen and install it on **OpenJensen/openjensen**
-only. The controller still registers repository-scoped runners. Its private key
-belongs in GCP Secret Manager.
+Set the repository variable `CI_RUNNER` to `gcp` to select the configured self-hosted runners. Run `application.yml` from GitHub's Actions tab to check the application, and use [the local verification commands](../../docs/ci.md) for local checks.

@@ -1,17 +1,21 @@
-# Teaching connections and camera preview
+# Connect the Teaching executor
 
-Open **Teaching** directly from the **Data** navigation group. The application's API connection, teaching executor and optional voice service are separate connections. A ready Google Cloud account does not mean a VM or simulator is running. The Teaching page never starts one automatically.
+## Configure the API host
 
-An operator must start a reviewed teaching executor and configure `FIREBIRD_TEACHING_URL` plus `FIREBIRD_TEACHING_CONTROL_TOKEN_FILE` on the application host, following [the worker setup](../workers/teaching/README.md). These are operator settings; the browser cannot choose an arbitrary URL or token path. The existing relay only permits its authenticated loopback origin. Optional voice additionally needs `FIREBIRD_TEACHING_VOICE_URL` and the worker's isolated LiveKit/OpenRouter configuration. Camera viewing does not enable the microphone or join a room.
+Start the [Teaching worker](../workers/teaching/README.md) and its authenticated loopback executor. Set `FIREBIRD_TEACHING_URL` and `FIREBIRD_TEACHING_CONTROL_TOKEN_FILE` on the API host, then restart the application. Use a private token file shared with the executor.
 
-The page polls state every second. **Executor reachable** means a recently answered state request with a session ID, not proof of fresh rendering or progressing physics. A response older than five seconds disables controls; errors do likewise. Recording and correction continue to bind the fresh session/revision and require a final acknowledgement. Timeouts do not automatically retry commands or confirm motion.
+For optional voice, also set `FIREBIRD_TEACHING_VOICE_URL` and configure its LiveKit/OpenRouter services through [voice setup](teaching-intelligence.md).
+
+## Record
+
+1. Open **Teaching** under **Data**.
+2. Wait for the configured executor's current session and camera frame.
+3. Enter an instruction and select **Start recording**.
+4. Pause, correct named joints or mark a failure as needed.
+5. Select **Finish episode**, then [prepare the capture](recording-preparation.md).
 
 ## Atomic preview
 
-The read-only `GET /api/v1/teaching/frame?session_id=...` relays the worker's [atomic schema 1 envelope](../workers/teaching/FRAME.md). The optional query binds the browser's selected session; direct callers without it still receive strict envelope validation. Legacy seven-field payloads are rejected because they cannot establish atomic identity. Unavailable responses retain `{schema_version:1,available:false}`.
+Direct clients read `GET /api/v1/teaching/frame?session_id=...` using the selected session ID. Supply the worker's [schema 1 frame envelope](../workers/teaching/FRAME.md), including its image, joint values, timestamp and hash.
 
-The relay checks exact fields/version, current versus acquisition context, episode identity, camera metadata, finite matched native joints, pixel dimensions, base64 length and SHA256. It adds full application-to-executor request duration to the executor's source age and rejects observations older than five seconds. Source timestamps remain unchanged. Two application fields are additive: `relay_age_ns` is that conservative elapsed duration, and `capture_id` is the decimal source observation timestamp so JavaScript can compare the complete 64-bit identity without rounding.
-
-The browser independently binds the frame to the displayed session/revision/episode/mode, validates pixels and their hash, and adds its complete request/decode duration. It never subtracts clocks on different hosts. Repeated identical responses cannot extend a capture's deadline. A stale, invalidated or disconnected capture stays visibly historical and cannot become fresh again by replay; a newer valid observation is required. New executor sessions reset this capture history. Frame transport has a 6-second deadline and 16 MiB body cap; the relay retains its 4-second deadline. Camera pixels and measured radians are shown together, independent of voice.
-
-The preview does not issue simulator observations, steps, resets or actuator commands. Pausing or changing instruction may invalidate the previous frame until the executor produces another actual observation; the UI does not force rendering to make the image appear live. Joints are native measured radians, without claiming a calibrated physical mapping.
+If the frame is stale or the executor disconnects, inspect the worker and reconnect to its current session. For a command timeout, read the executor's current state/command acknowledgement before sending it again.
