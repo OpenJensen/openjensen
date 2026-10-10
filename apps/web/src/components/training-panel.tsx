@@ -1024,13 +1024,19 @@ export function TrainingPanel({
           <section aria-labelledby="training-model-title">
             <div className="training-heading">
               <h2 id="training-model-title" ref={headingRef} tabIndex={-1}>
-                Model
+                Base model
               </h2>
+              <span className="training-model-selection-count" aria-live="polite">
+                {selectedModels.length} {selectedModels.length === 1 ? "model" : "models"} selected
+              </span>
             </div>
             <fieldset className="training-model-groups">
               <legend className="visually-hidden">Base model</legend>
               {groupedTrainingModels(models).map(group => <section className="training-model-group" key={group.id} aria-labelledby={`training-family-${group.id}`}>
-                <h3 id={`training-family-${group.id}`}>{group.label}</h3>
+                <h3 id={`training-family-${group.id}`}>
+                  {group.label}
+                  <span className="training-model-family-count" aria-hidden="true">{group.models.length}</span>
+                </h3>
                 <div className="training-model-grid">
               {group.models.map((item) => {
                 const statusLabel = modelStatusLabel(item, modelSupported(item));
@@ -1059,18 +1065,6 @@ export function TrainingPanel({
                       mutation.reset();
                     }}
                   />
-                  <span className="training-model-mark">
-                    {(
-                      {
-                        smolvla: "SMOL",
-                        openvla_oft: "OFT",
-                        openvla: "VLA",
-                        pi0: "π₀",
-                        pi05: "π₀.₅",
-                        gr00t_n17: "GR00T",
-                      } as Record<string, string>
-                    )[item.id] ?? item.label.slice(0, 4)}
-                  </span>
                   <span className="training-model-copy">
                     <span>
                       <strong>{item.label}</strong>
@@ -1082,7 +1076,7 @@ export function TrainingPanel({
                     </span>
                     <span className="training-model-memory">
                       {typeof memory === "number" && Number.isFinite(memory) && memory > 0
-                        ? <>GPU budget: <strong>{number(memory)} GB+</strong></>
+                        ? <>GPU budget · <strong>{number(memory)} GB+</strong></>
                         : <strong>GPU budget not verified</strong>}
                     </span>
                   </span>

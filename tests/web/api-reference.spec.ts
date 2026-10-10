@@ -914,7 +914,7 @@ test('training cards and step navigation work from the keyboard at 320px', async
   const steps = page.getByRole('navigation', { name: 'Training setup' });
   await steps.getByRole('button', { name: 'Model', exact: true }).focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('heading', { name: 'Model', level: 2, exact: true })).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'Base model', level: 2, exact: true })).toBeFocused();
   const method = page.getByRole('radio', { name: 'QLoRA', exact: true });
   await method.focus();
   await page.keyboard.press('Space');
