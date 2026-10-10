@@ -94,7 +94,10 @@ test('the contextual guide covers every section and keeps API docs separate', as
   page.on('pageerror', error => errors.push(error.message));
   await workspace(page);
   await page.getByRole('link', { name: 'Distill', exact: true }).click();
-  await page.locator('.page-heading .page-guide').click();
+  await expect(page).toHaveURL(/\/distillation\/$/);
+  const guide = page.locator('.page-heading .page-guide');
+  await expect(guide).toHaveAttribute('href', /\/guide\/#distill$/);
+  await guide.click();
   await expect(page).toHaveURL(/\/guide\/#distill$/);
   await expect(page.getByRole('heading', { name: 'Workspace guide', exact: true })).toBeVisible();
   const sections = page.locator('.guide-sections > section');
@@ -103,7 +106,7 @@ test('the contextual guide covers every section and keeps API docs separate', as
     await expect(sections.getByRole('heading', { name, exact: true })).toBeVisible();
   }
   await expect(page.locator('#distill')).toContainText('ACT256');
-  await expect(page.getByRole('link', { name: 'Distillation setup', exact: true })).toHaveAttribute('href', 'https://github.com/OpenJensen/openjensen/blob/main/workers/policy_distillation/README.md');
+  await expect(page.locator('#distill').getByRole('link', { name: 'Adapter setup', exact: true })).toHaveAttribute('href', 'https://github.com/OpenJensen/openjensen/blob/main/workers/policy_distillation/README.md');
   await page.reload();
   await expect(page.locator('#distill')).toContainText('ACT256');
   await page.setViewportSize({ width: 320, height: 900 });
