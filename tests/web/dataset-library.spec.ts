@@ -229,3 +229,63 @@ test('dashboard uses the current project library scope, and inspection is reache
   await expect(page.getByRole('heading',{name:'My datasets',exact:true})).toBeVisible();
   expect(reads).not.toContain('all');expect(reads).toContain(project);expect(writes).toEqual([]);
 });
+
+test('dashboard resource checks stay in the same position on a fresh visit and after loading dataset styles', async ({ page }, testInfo) => {
+  const project = await (await page.request.post('/api/v1/projects', { data: { name: `Stable dashboard ${testInfo.project.name}` } })).json();
+  await page.addInitScript(id => localStorage.setItem('firebird.project', id), project.id);
+  const settings = await (await page.request.get('/api/v1/compute-settings')).json();
+  await page.route('**/api/v1/compute-settings/gcp/check', route => route.fulfill({ json: settings }));
+  await page.route('**/api/v1/compute-settings/local/check', route => route.fulfill({ json: { host: { name: 'Test host', platform: 'test', architecture: 'test' }, checked_at: new Date().toISOString(), status: 'unavailable', message: 'No GPU in this fixture', candidates: [], issues: [] } }));
+  await page.goto('/dashboard/');
+  const button = page.getByRole('button', { name: 'Check resources', exact: true });
+  await expect(button).toBeVisible();
+  // Compare within the card: clicking an off-screen button normally scrolls mobile pages.
+  const position = () => button.evaluate(node => {
+    const button = node.getBoundingClientRect(), card = node.closest('.dashboard-resources')!.getBoundingClientRect();
+    return { x: button.x - card.x, y: button.y - card.y };
+  });
+  const before = await position();
+  const initial = (await button.boundingBox())!;
+  const heading = (await page.getByRole('heading', { name: 'Resources & connections', exact: true }).boundingBox())!;
+  if (testInfo.project.name === 'desktop') {
+    expect(initial.x).toBeGreaterThan(heading.x + heading.width);
+    expect(Math.abs(initial.y - heading.y)).toBeLessThan(2);
+  }
+  await button.click();
+  await expect(page.getByText('Resource checks completed.', { exact: false })).toBeVisible();
+  const after = await position();
+  expect(Math.abs(after.x - before.x)).toBeLessThan(1);
+  expect(Math.abs(after.y - before.y)).toBeLessThan(1);
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'My datasets', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Dashboard', exact: true }).click();
+  const revisited = await position();
+  expect(Math.abs(revisited.x - before.x)).toBeLessThan(1);
+  expect(Math.abs(revisited.y - before.y)).toBeLessThan(1);
+  await page.screenshot({ path: testInfo.outputPath('stable-resource-check.png'), fullPage: true });
+});
+
+test('immutable training copy keeps its checkbox aligned and explains storage and complete episodes on demand', async ({ page }, testInfo) => {
+  await ownProject(page, `Training copy help ${testInfo.project.name}`);
+  await page.getByRole('radio', { name: 'Local files', exact: true }).check();
+  const option = page.getByRole('checkbox', { name: 'Prepare immutable training copy', exact: true });
+  const help = page.getByRole('button', { name: 'Help for immutable training copy', exact: true });
+  const tooltip = page.getByRole('tooltip');
+  await expect(tooltip).toBeHidden();
+  await expect(option).not.toBeChecked();
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+  await help.focus();
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toContainText('app host’s data directory, inside dataset-snapshots/');
+  await expect(tooltip).toContainText('all declared frames, robot states, actions and camera videos');
+  await expect(tooltip).toContainText('different whole demonstrations for training and validation');
+  await expect(option).not.toBeChecked();
+  const input = (await option.boundingBox())!, label = (await option.locator('..').boundingBox())!;
+  expect(Math.abs(input.y + input.height / 2 - label.y - label.height / 2)).toBeLessThan(1);
+  const bounds = (await tooltip.boundingBox())!;
+  expect(bounds.x).toBeGreaterThanOrEqual(0);
+  expect(bounds.x + bounds.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+  await page.screenshot({ path: testInfo.outputPath('training-copy-help.png'), fullPage: true });
+  await page.getByRole('heading', { name: 'Dataset', exact: true }).click();
+  await expect(tooltip).toBeHidden();
+});

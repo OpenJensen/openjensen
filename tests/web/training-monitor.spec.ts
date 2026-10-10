@@ -148,7 +148,7 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
           compute: { local: { enabled: false, label: 'Local' }, gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 } },
           training_models: [
             { id: 'smolvla', label: 'SmolVLA', description: 'Compact policy', model_id: 'lerobot/smolvla_base', model_revision: revision, methods: ['lora', 'qlora'], suggested_gpu_memory_gb: 16, ...accumulationCapabilities(accumulationCatalog) },
-            { id: 'pi05', label: 'π₀.₅', description: 'Flow policy', model_id: 'lerobot/pi05_base', model_revision: revision, methods: ['full'], minimum_gpu_memory_gb: 40, runtime_ids: ['all-models-a100'] },
+            { id: 'pi05', label: 'π₀.₅', description: 'Flow policy', model_id: 'lerobot/pi05_base', model_revision: revision, methods: ['full'], minimum_gpu_memory_gb: 40, available: true, status: 'ready', runtime_ids: ['all-models-a100'] },
             ...(localDataset ? [{ id: 'act', label: 'ACT', description: 'Native policy', model_id: 'code://lerobot/act', model_revision: revision, methods: ['full'], backend: 'lerobot', minimum_gpu_memory_gb: 16, ...accumulationCapabilities(accumulationCatalog) }] : []),
           ], sources: [], training_methods: [{ id: 'lora', label: 'LoRA', description: 'Train adapters.' }, { id: 'qlora', label: 'QLoRA', description: 'Train quantized adapters.' }, { id: 'full', label: 'Full training', description: 'Train policy.' }], default_training_method: 'lora',
           quantization_defaults: { cuda: { language: 'Q8_0', vision: null }, cpu: { language: 'Q8_0', vision: null }, note: '' },
@@ -278,14 +278,20 @@ test('local training copies open the jobs-first wizard and retain native model a
   expect(unexpected).toEqual([]);
 });
 
-test('metadata-only local inspections cannot enter the training creation flow', async ({ page }) => {
+test('metadata-only local inspections stay removable but cannot be added or submitted', async ({ page }) => {
   const { submitted, unexpected } = await workspace(page, 'local-unprepared', false);
   await page.getByRole('link', { name: 'Dataset', exact: true }).click();
   await page.getByRole('button', { name: 'Open dataset Local dataset', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Train on this dataset', exact: true })).toHaveCount(0);
   await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
-  await expect(page.getByRole('checkbox', { name: 'Local dataset', exact: true })).toBeDisabled();
+  const dataset = page.getByRole('checkbox', { name: 'Local dataset', exact: true });
+  await expect(dataset).toBeChecked();
+  await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeDisabled();
+  await dataset.uncheck();
+  await expect(dataset).not.toBeChecked();
+  await expect(dataset).toBeDisabled();
+  await dataset.locator('..').focus();
   await expect(page.getByText('Prepare an immutable training copy when importing this local dataset.')).toBeVisible();
   expect(submitted).toEqual([]);
   expect(unexpected).toEqual([]);
@@ -1793,4 +1799,49 @@ test('an interrupted multi-model plan reloads without POST and retries its saved
  expect(sent[1]).toEqual(sent[0]);
  expect(sent[2].key).not.toBe(sent[0].key);
  await expect(recovery).toHaveCount(0);
+});
+
+test('dataset choices explain incompatibility before selection and update when the primary is removed', async ({ page }, testInfo) => {
+  const state = await temporalTraining(page, 'ACT');
+  const dataset = state.jobs.find(item => item.id === 'dataset')!;
+  const compatible = { ...dataset, id: 'compatible', result: { ...structuredClone(dataset.result), repo_id: 'fixture/compatible', revision: 'c'.repeat(40) } };
+  const different = { ...dataset, id: 'different-fps', result: { ...structuredClone(dataset.result), repo_id: 'fixture/different-fps', revision: 'd'.repeat(40), fps: 10 } };
+  await page.route(`**/api/v1/projects/${projectId}/jobs`, route => route.fulfill({ json: [dataset, compatible, different] }));
+  await state.setup.getByRole('button', { name: 'Dataset', exact: true }).click();
+  const unavailable = page.getByRole('checkbox', { name: 'fixture/different-fps', exact: true });
+  await expect(unavailable).toBeDisabled();
+  const tile = unavailable.locator('..');
+  await expect(tile.getByRole('tooltip')).toBeHidden();
+  if (testInfo.project.name === 'desktop') await tile.hover();
+  else await tile.focus();
+  await expect(tile.getByRole('tooltip')).toContainText('Frame rates differ: 10 FPS');
+  await expect(tile).toHaveClass(/unavailable/);
+  await expect(page.getByRole('checkbox', { name: 'fixture/compatible', exact: true })).toBeEnabled();
+  await page.getByRole('checkbox', { name: 'fixture/compatible', exact: true }).check();
+  await expect(page.getByRole('checkbox', { name: 'fixture/robot', exact: true })).toBeChecked();
+  await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeEnabled();
+  await tile.focus();
+  await page.screenshot({ path: testInfo.outputPath('dataset-compatibility.png'), fullPage: true });
+  await page.getByRole('checkbox', { name: 'fixture/robot', exact: true }).uncheck();
+  await expect(unavailable).toBeDisabled();
+  await page.getByRole('checkbox', { name: 'fixture/compatible', exact: true }).uncheck();
+  await expect(unavailable).toBeEnabled();
+  await unavailable.check();
+  await expect(page.getByRole('checkbox', { name: 'fixture/robot', exact: true })).toBeDisabled();
+  expect(state.submitted).toEqual([]);
+});
+
+test('model families use separate panels and coming-soon adapters remain disabled at the bottom', async ({ page }, testInfo) => {
+  const state = await temporalTraining(page, 'ACT');
+  await state.setup.getByRole('button', { name: 'Model', exact: true }).click();
+  const models = page.getByRole('group', { name: 'Base model', exact: true });
+  await expect(models.getByRole('region', { name: 'Vision-language-action models', exact: true })).toContainText('SmolVLA');
+  await expect(models.getByRole('region', { name: 'Action sequence policies', exact: true })).toContainText('ACT');
+  const comingSoon = models.getByRole('region', { name: 'Coming soon', exact: true });
+  await expect(comingSoon.getByRole('checkbox', { name: 'OpenVLA', exact: true })).toBeDisabled();
+  await expect(comingSoon.getByRole('checkbox', { name: 'OpenVLA', exact: true }).locator('..')).toHaveClass(/unavailable/);
+  await expect(models.locator('.training-model-group').last()).toHaveAccessibleName('Coming soon');
+  await noOverflow(page);
+  await page.screenshot({ path: testInfo.outputPath('model-families.png'), fullPage: true });
+  expect(state.submitted).toEqual([]);
 });

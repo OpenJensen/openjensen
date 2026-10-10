@@ -12,6 +12,8 @@ import { publicPath } from '@/lib/base-path';
 import { useDurableSubmission } from '@/lib/durable-submission';
 import { intakeAcknowledgement, validatedProjectHistory } from '@/lib/dataset-submission';
 import { DatasetSubmissionRecovery } from '@/components/dataset-submission-recovery';
+import { TrainingHelp } from '@/components/training-help';
+import './datasets.css';
 import { ErrorNotice, displayDate } from '@/components/workspace-ui';
 
 import { useWorkspace } from '@/components/workspace-context';
@@ -117,8 +119,14 @@ function IntakeForm({ project, readinessMessage, localAvailable, onCreated, navi
         <LocalDatasetImport projectId={project?.id ?? ''} value={library} onChange={setLibrary} disabled={!project || blocked} />
         {localAvailable && !library && <details className="intake-advanced"><summary>Folder on the app host</summary><label className="field-label" htmlFor="local-path">Dataset directory</label>
         <input id="local-path" name="path" disabled={!project} value={path} onChange={event => setPath(event.target.value)} placeholder="Path inside the configured dataset directory" autoCapitalize="none" autoCorrect="off" spellCheck={false} /></details>}
-        <label className="field-label"><input type="checkbox" checked={snapshotForTraining} onChange={event => setSnapshotForTraining(event.target.checked)} /> Prepare immutable training copy</label>
-        <p className="field-help">Store a verified training copy. At least two complete episodes are required; original files stay unchanged.</p>
+        <div className="training-copy-option">
+          <label htmlFor="snapshot-for-training"><input id="snapshot-for-training" type="checkbox" checked={snapshotForTraining} aria-describedby="training-copy-help" onChange={event => setSnapshotForTraining(event.target.checked)} /> Prepare immutable training copy</label>
+          <TrainingHelp label="immutable training copy" id="training-copy-help" wide>
+            <p>Creates a separate, verified dataset in the app host’s data directory, inside dataset-snapshots/. The app host is the machine running Open Jensen. Your original files stay unchanged.</p>
+            <p>An episode is one recorded demonstration. Complete episodes contain all declared frames, robot states, actions and camera videos, with consistent metadata. Recording completeness and task success are separate checks.</p>
+            <p>At least two episodes are required to use different whole demonstrations for training and validation. Saved runs use the fixed copy and verify its file hashes, so later edits to the source cannot silently change their training data. Leave this off for inspection only.</p>
+          </TrainingHelp>
+        </div>
       </>}
       <ErrorNotice error={mutation.error} />
       <DatasetSubmissionRecovery submission={submission} onReconcile={async () => { const generation = selection.current.generation; accept(await submission.reconcile(validate), generation); }}
