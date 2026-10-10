@@ -1,32 +1,22 @@
-# Xbox deployment
+# Deploy on Xbox
 
-Run the application under a dedicated user on the Xbox host with Python 3.14.7.
-The Supervisor example expands that user’s `HOME` and uses `~/ollamaforvlas`.
-The web client is built locally and copied with the application source; Node and
-GPU training dependencies are not needed to serve it.
+Use Python 3.14.7 and a dedicated service user on the host. Build the web client locally, then copy the source and export into a timestamped release under `~/ollamaforvlas/releases/`.
 
-Keep timestamped releases under `~/ollamaforvlas/releases/` and select the active
-release with `current`. The application and cloud jobs run independently of the
-browser connection. Connect Google Cloud on the server through its CLI and
-application-default credentials; SkyPilot needs both compute and storage access.
-New jobs store checkpoints in private GCS and keep only small descriptors and
-telemetry on the application host.
+## Set up the service
 
-Real SmolVLA and ACT training and SmolVLA quantization were verified using this
-layout. See [the verification record](../../docs/cloud-training-verification.md)
-for measured losses, artifact checks and validation limits.
+1. Install the application dependencies in the release with `uv sync --frozen`.
+2. Install the [isolated CPU reader](../../workers/_cpu_readers/README.md) in the release checkout, and install FFmpeg/ffprobe on the host for dataset import and video previews.
+3. Select the release using the `~/ollamaforvlas/current` symlink.
+4. Create `data/`, `run/` and `logs/` under `~/ollamaforvlas`.
+5. Install Supervisor into `~/ollamaforvlas/.supervisor` and copy `supervisord.conf` into the deployment root.
+6. Start Supervisor using that configuration. Add an `@reboot` user crontab entry to start it when WSL starts.
+7. Configure [cloud credentials and workers](../../docs/cloud-connections.md) on the service host.
 
-- Root: `~/ollamaforvlas`
-- Releases: `releases/<timestamp>`; `current` selects the active release.
-- Application workspace: `data/` (separate from the Mac workspace).
-- Listener: `127.0.0.1:8096`.
-- Supervisor: `.supervisor/bin/supervisord`, config `supervisord.conf`.
-- Logs: `logs/`, capped at 1 MiB per file with two backups per stream.
-- A user crontab `@reboot` entry starts Supervisor when WSL starts; Supervisor
-  restarts the app after unexpected failures. It does not start WSL when Windows
-  itself is shut down.
+The configuration uses `data/` for application data, `current/apps/web/out` for web files and `127.0.0.1:8096` for the backend. Keep `data/` across release changes.
 
-Service commands over SSH:
+## Check and restart
+
+Run on the deployment host:
 
 ```sh
 ~/ollamaforvlas/.supervisor/bin/supervisorctl -c ~/ollamaforvlas/supervisord.conf status
@@ -34,57 +24,47 @@ Service commands over SSH:
 curl -fsS http://127.0.0.1:8096/api/v1/health
 ```
 
-Restart only when no active run depends on the application process. To roll back,
-select a preserved release with the `current` symlink and restart the service.
-Do not remove `data/` or another experiment's files during deployment.
+Finish active application jobs before restarting. To roll back, point `current` at a preserved release and restart the service.
 
-The listener stays on loopback. Use an SSH tunnel to reach it, replacing `xbox-360` with the
-configured SSH host alias:
+## Connect through SSH
+
+Replace `xbox-360` with the configured SSH host alias:
 
 ```sh
 ssh -N -L 127.0.0.1:18096:127.0.0.1:8096 xbox-360
 ```
 
-Then open `http://127.0.0.1:18096`. The application has no public hosted login.
-Cloud account connections and training workers are configured independently on
-Xbox; deployment does not copy the Mac's authentication credentials or checkpoints.
+Open [localhost:18096](http://127.0.0.1:18096). Read service logs under `~/ollamaforvlas/logs/`.
 
 ## Public Funnel route
 
-The public frontend is built with `NEXT_PUBLIC_BASE_PATH=/firebird`. It is served
-by `firebird-public`, a separate password-protected gateway on `127.0.0.1:8097`.
-This gateway serves the prefixed export and proxies authenticated API requests to
-the existing backend on `8096`; it does not start a second workspace owner.
-The normal root deployment remains available independently.
-Gateway credential loading requires POSIX ownership, mode and no-follow checks
-(as provided by Linux/WSL); it explicitly refuses native Windows configuration
-loading. Non-regular files, including FIFOs, are rejected without blocking startup.
+1. Build the public frontend with `NEXT_PUBLIC_BASE_PATH=/firebird`.
+2. Place the export under `public-web/funnel-20260926/` and copy `public_gateway.py` into the deployment root.
+3. Create `private/public-gateway.json` for the service user, using mode `0600` and a salted password hash. Keep the generated login details outside the repository.
+4. Start or restart the `firebird-public` Supervisor service on `127.0.0.1:8097`.
+5. Preview through a loopback SSH tunnel at `http://127.0.0.1:18097/firebird/`.
+6. Have the host administrator activate the scoped route using the command below.
 
-- Intended URL: `https://<host>.<tailnet>.ts.net/firebird/`
-- Public export: `public-web/funnel-20260926/`
-- Gateway code: `public_gateway.py`
-- Private credential configuration: `private/public-gateway.json`, owned by the
-  service user with mode `0600`. It contains a salted password hash, not plaintext.
-- Store generated login details outside the repository. Never commit the private
-  gateway configuration or plaintext password.
-- Protected preview through an SSH tunnel: `http://127.0.0.1:18097/firebird/`.
+Configure the gateway JSON with these fields, replacing the host, service-user path and password-derived values:
 
-Public activation requires the Xbox administrator to run:
+```json
+{
+  "public_origin": "https://host.tailnet.ts.net",
+  "static_dir": "/home/service-user/ollamaforvlas/public-web/funnel-20260926",
+  "username": "firebird",
+  "password_salt_hex": "REPLACE_WITH_16_BYTE_SALT_AS_HEX",
+  "password_hash_hex": "REPLACE_WITH_PBKDF2_SHA256_HASH_AS_HEX",
+  "password_iterations": 310000,
+  "preview_origins": ["http://127.0.0.1:18097"]
+}
+```
+
+Generate a random 16-byte salt and derive a 32-byte PBKDF2-HMAC-SHA256 hash from the chosen password using 310000 iterations. Encode both as hexadecimal. Use an absolute path to the built public export for `static_dir`.
+
+Activate the route on the host:
 
 ```sh
 sudo tailscale funnel --bg --https=443 --set-path=/firebird http://127.0.0.1:8097/firebird
 ```
 
-The existing `/` service and other Funnel ports remain in place. Tailscale strips
-the mount prefix; the `/firebird` target suffix adds it back for the gateway.
-The `--bg` configuration persists across Tailscale restarts. Do not use `reset`.
-
-The public route is **prepared, not published** until the administrator activates
-it. Use only the scoped route above; do not grant broad operator privileges to
-work around missing administrator access.
-
-After activation, verify that unauthenticated public page/API requests return
-401, authenticated page/API requests succeed, `/firebird/docs` redirects to
-`/firebird/docs/`, and the pre-existing root site is still reachable. Change the
-private credential configuration and restart `firebird-public` to rotate its
-password; the gateway configuration is immutable for a running process.
+Open `https://<host>.<tailnet>.ts.net/firebird/`. Check login, authenticated API requests, `/firebird/docs/` and the existing root route. To rotate the gateway password, update the private configuration and restart `firebird-public`.

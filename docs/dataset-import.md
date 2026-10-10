@@ -1,39 +1,40 @@
 # Dataset import and labeling
 
-The browser selects files from the computer running the browser, including when the app is hosted on xbox-360. A local folder is uploaded to the workspace. ZIP and single HDF5 files are supported. Limits are 2 GiB and 4096 input files, 100,000 converted frames, 2000 episodes and eight synchronized RGB views. Conversion uses one isolated CPU reader at a time. No GPU, cloud job or model download is started.
+## Reader setup
+
+Install the isolated [CPU reader](../workers/_cpu_readers/README.md) and `workers/_cpu_readers/requirements.txt`. Set `FIREBIRD_CPU_READER_PYTHON` to its interpreter and install FFmpeg on the API host.
 
 ## Inputs
 
-| Input | Detection | Conversion |
-| --- | --- | --- |
-| LeRobot v3 | `meta/info.json` and version/schema | Retained; complete validation runs when requesting a training snapshot |
-| LeRobot v2 | `meta/info.json` and version/schema | Frame Parquet and declared image/video paths → LeRobot v3 |
-| robomimic HDF5 | `/data/demo_*/actions` and `/data/demo_*/obs` | Reviewed numeric observations become state; RGB arrays become camera views |
-| ALOHA HDF5 | `/action`, `/observations/qpos`, `/observations/images` | Joint state, actions and raw or JPEG camera arrays → LeRobot v3 |
-| Images + records | `frames.csv`, `frames.jsonl`, `frames.parquet`, `records.csv` or `records.jsonl` | Numeric action/state arrays and referenced images → LeRobot v3 |
-| RLDS / TFRecord | `dataset_info.json` plus TFRecord files | Recognized; synchronized export required |
-| ROS bag / MCAP | `.bag` or `.mcap` files | Recognized; synchronized topic export required |
+Prepare a folder, ZIP or HDF5 file using one of these layouts:
 
-Ambiguous folders are rejected. Detection never executes Python, pickle, TensorFlow builders or scripts supplied by the dataset. External HDF5 links, symlinks, archive traversal and duplicate archive paths are rejected.
+| Format | Files to supply |
+| --- | --- |
+| LeRobot v2/v3 | `meta/info.json` and its declared data/media files. |
+| robomimic HDF5 | `/data/demo_*/actions` and `/data/demo_*/obs`. |
+| ALOHA HDF5 | `/action`, `/observations/qpos`, `/observations/images`. |
+| Images and records | `frames.csv`, `frames.jsonl`, `frames.parquet`, `records.csv` or `records.jsonl`, plus referenced images. |
+| RLDS / TFRecord or ROS | Export synchronized observations/actions into one of the layouts above. |
 
-Image record tables use these columns:
+Use contiguous frame indices and finite numeric state/action vectors. For CSV vector cells, use quoted JSON arrays. An image-record row can use:
 
 ```json
 {"episode_index":0,"frame_index":0,"action":[0.1,0.2],"observation.state":[0.2,0.3],"observation.images.front":"images/front/000.png","task":"Pick up the block"}
 ```
 
-CSV vector cells contain quoted JSON arrays. Frame indices must be contiguous within an episode. Actions and state remain finite float32 vectors; units and controller semantics are not inferred. The reviewed frame rate sets synchronized output timestamps. Missing state, actions or camera frames are not invented.
+Prepare uploads within 2 GiB and 4096 files; use up to 100,000 converted frames, 2000 episodes and eight synchronized RGB views.
 
-Conversion writes LeRobot v3 Parquet, MP4, episode metadata, task indices and normalization statistics. Original files and their SHA-256 inventory remain in the workspace. Identical uploads in one project reuse the saved dataset. Training snapshots apply the complete validator, including the requirement for two finalized episodes.
+## Import
+
+1. Open **Dataset → Sources → Local files**.
+2. Select the folder, ZIP or HDF5 file from the browser computer.
+3. Review detected format, frame rate, task description and field mapping.
+4. Start conversion and open the saved dataset after it finishes.
+
+Files are stored on the API host. Converted data is written as LeRobot v3 Parquet, MP4 and metadata.
 
 ## Labels and export
 
-The labeling page exposes beginning, middle and final samples for converted episodes. LeRobot v3 imports expose bounded camera previews where available. Camera display names and text labels use revision checks to prevent overwriting changes from another window. They remain separate from actions and training task instructions.
-
-Save changes before exporting. The ZIP contains LeRobot files, `openjensen/annotations.json` and source/conversion details. It can be used in a LeRobot/Hugging Face dataset repository; publishing to the Hub is a separate action. The deterministic synthetic playground tests import, labels and export, and is not robotics task evidence.
-
-## Reader setup
-
-Use the existing isolated CPU reader and install `workers/_cpu_readers/requirements.txt`. Set `FIREBIRD_CPU_READER_PYTHON` to its trusted Python path and install FFmpeg on the app host. The core imports no native ML or dataset libraries. Conversion processes have CPU, file and time limits; Linux caps virtual memory at 3 GiB. A parser subprocess is not a general sandbox for arbitrary code.
+Open the dataset, rename camera views and label the displayed samples. Save changes, then export its ZIP. The archive contains LeRobot files, `openjensen/annotations.json` and source/conversion details. Use **Create example** to try the steps with generated data.
 
 References: [LeRobot v3](https://huggingface.co/docs/lerobot/main/lerobot-dataset-v3), [robomimic structure](https://robomimic.github.io/docs/datasets/overview.html#dataset-structure), [ALOHA/ACT](https://github.com/tonyzhaozh/act), [RLDS](https://github.com/google-research/rlds).

@@ -1,64 +1,44 @@
-# Simulator-native policy coordinates
+# Supply simulator policy coordinates
 
-A policy trained from an admitted simulator recording can carry the canonical
-`control-contract.json` sidecar. The record is optional for legacy policies. If a
-known record is present, training resume, ACT inference export, checkpoint import
-and Run must preserve it and its exact SHA256; absence is not a request to fall
-back to physical calibration. Packed ACT structural admission preserves the exact
-record and temporal file through the CPU quantizer, independent reload reports
-and importer. Distillation and application transform admission remain gated until
-their own reviewed implementations preserve this provenance; structural packed
-admission alone does not activate an application or cloud Run route.
+Keep `control-contract.json` beside a simulator-trained policy's weights and
+processors. Preserve its exact bytes and SHA-256 through checkpoint copies,
+imports, resumes and export.
 
 ## Version 1 record
 
-The bounded 64 KiB JSON record has exact fields and types. `schema_version` is 1;
-`kind` is `simulator_joint_position`; `controller` is `joint_position_targets`;
-`state_key` and `action_key` are `observation.state` and `action`. State and action
-units are `radians`, and the timebase is `simulation_seconds`.
+Supply a JSON file of at most 64 KiB using the exact fields in
+`sim_worker/rollout/control_schema.py`:
 
-`joint_order` lists the unique ordered joint names. `camera` contains the native
-observation key, RGB width and height, and USD camera prim. `action_fps` is an
-integer from 1 through 60. `source` binds the snapshot ID and manifest SHA256,
-recording-provenance file SHA256, sorted root scene hashes and original source
-origins (`recorded` or `synthetic`). `physical_calibration_verified` and
-`task_success_verified` are always false. Paths, credentials and capture contents
-are not embedded. The exact schema is in `sim_worker/rollout/control_schema.py`;
-the isolated producer and exporter ship byte-identical copies.
+- `schema_version: 1`, `kind: simulator_joint_position`,
+  `controller: joint_position_targets`.
+- `state_key: observation.state`, `action_key: action`, both units `radians`,
+  and `timebase: simulation_seconds`.
+- Unique ordered `joint_order`; `camera: {key, width, height, prim}` with the
+  saved RGB camera key, even dimensions from 2 through 1920, and USD camera prim.
+- Integer `action_fps` from 1 through 60.
+- `source` with `dataset_snapshot_id`, `dataset_manifest_sha256`,
+  `demonstrations_sha256`, sorted unique `scene_sha256` and `origins` lists,
+  and `scene_hash_scope: "root USD bytes; referenced assets not inventoried"`.
+  Use `sha256:<dataset_manifest_sha256>` as the snapshot ID and select origins
+  from `recorded` and `synthetic`.
+- `physical_calibration_verified: false`, `task_success_verified: false`.
 
-The snapshot verifier and training adapter validate all source file identities
-before deriving the record. Joint names must match both native feature lists;
-the action column denotes applied simulator targets, not requested corrections.
-The contract then binds the resolved ACT/SmolVLA feature keys and dimensions. The
-producer and exporter validate any saved temporal record's FPS independently.
+Use the admitted dataset snapshot's joint lists, applied action targets and
+source identities when producing the file. Match the saved policy feature keys
+and temporal-contract FPS. Serialize it with `control_schema.canonical(record)`
+for the required sorted, two-space JSON and final newline.
 
 ## Explicit Run admission
 
-An admitted rollout manifest embeds `control_contract: {record, sha256}` and sets
-`calibration: null`. Before allocating a runtime, admission requires matching
-ordered joints, control FPS, camera prim and image dimensions, and a root USD
-digest listed in the policy provenance. The launcher binds this envelope to the
-selected checkpoint; neither a missing contract nor a different envelope is
-accepted for a known simulator policy. The contract file also contributes to the
-native model identity used by the HTTP protocol.
+Embed `control_contract: {record, sha256}` in the rollout manifest and set
+`calibration: null`. Match its joint order, FPS, camera prim/dimensions and root
+USD digest to the selected policy. Keep the scene's referenced assets together.
 
-The admitted mapping is a finite radian identity. It always retains the existing
-experimental motion guard, using live joint limits and bounded target speed.
-Reports explicitly record `coordinate_mapping: simulator_native_radians`, the
-contract SHA256, `calibration_status: not_applicable_simulator`, and
-`physical_calibration_verified: false`. The legacy `calibration_sha256` receipt
-field contains the contract digest on this route. `experimental` remains true.
+From `workers/isaac_sim`, validate the prepared manifest before submission:
 
-## Acceptance limits
+```sh
+python -m sim_worker.rollout --manifest /absolute/rollout.local.yaml --validate-only
+```
 
-This is declared data provenance, not proof that an operator's origin label is
-true. Root USD bytes do not inventory referenced assets, articulation topology,
-robot geometry or controller behavior. The recorder currently does not bind an
-articulation prim or complete asset closure; a genuine Isaac acceptance run must
-check those against both recording and execution. No physical-to-simulator map is
-validated by this route, and the rejected SO101 calibration remains rejected.
-
-The source regression fixtures are synthetic and run without Torch or Isaac.
-Their passing results establish schema, identity, portable export metadata and
-mismatch rejection only. Native training, fresh model export/reload, actual Isaac
-execution and task quality require separately recorded acceptance evidence.
+Then use [the policy-server and rollout commands](ROLLOUT.md) or
+[the SkyPilot launcher](../skypilot/ROLLOUT.md).

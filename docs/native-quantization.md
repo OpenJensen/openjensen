@@ -1,17 +1,13 @@
-# Native ACT quantization in the web app
+# Quantize ACT in the web app
 
-In **Quantize**, choose the **ACT** card for INT8/INT4 packing. The **SmolVLA** card opens the separate GGUF workflow. Native ACT conversion appears usable only when the server advertises an enabled, launchable local quantization worker. The browser accepts registered IDs, never executables, paths or cloud configuration. These are the two model-family quantization workflows currently integrated into the app. The standalone `firebird_quant` library supports broader compatible PyTorch modules, but additional families still need application import/export, processor, reload and validation adapters.
+1. Install and register the [local ACT packing worker](native-act-quantization.md).
+2. Export a complete ACT training checkpoint or import a complete native ACT inference policy.
+3. Open **Quantize → ACT** and select that saved policy.
+4. Choose INT8 or INT4, review the recipe, and start.
+5. Open the saved job to follow events and download the packed package.
 
-Select a complete local ACT inference export or imported native policy. Full training checkpoints, cloud descriptors, other architectures and already packed artifacts are excluded. The worker is authoritative for complete configuration, weights/processors/statistics, a single camera, six action coordinates, a 100-action chunk and `use_vae=false`. Missing browser metadata is not evidence that these checks passed; an incompatible source is rejected with preparation guidance.
+Use an input with one camera, six state/action coordinates, 100-action chunks, `use_vae=false`, and saved config/processors/statistics. Set an integer timeout from 30–600 seconds; the default is 600.
 
-INT8 is the default; INT4 is an explicit choice. The request is `policy.quantize` with `native_quantization: {format: "firebird_quant", bits: 8, group_size: 64}` and a whole-number timeout from 30 to 600 seconds (600 by default). The UI does not add an evaluation protocol, legacy GGUF precision or cloud target. Requests are sent once. If the response is lost, malformed or bound to a different project/source/runtime/recipe, further submissions pause until the user refreshes and checks recorded jobs. Navigating away does not cancel a job.
+To replay the output, choose **Replay recorded observations**, configure the [replay worker](../workers/isaac_sim/NATIVE_REPLAY.md) and select the input observations. For SmolVLA, choose its separate card and follow [GGUF setup](policy-workflow.md).
 
-The history shows only native quantization jobs for the selected project. Cancellation requires explicit confirmation, then a fresh exact-job read; changing selection during that read prevents cancellation of the previous selection. Active/terminal status transitions refresh final event history. Connection failures show the previously observed state as potentially stale and disable new submissions.
-
-Successful reports distinguish three measured sizes: source FP32 weights, packed weights and inference payload. The payload excludes the outer download envelope. Two generated observations compare complete 100×6 raw and postprocessed actions against FP32 using RMSE and maximum absolute difference. Postprocessed differences use saved processor output coordinates; physical units and a quality threshold remain unverified. Fresh CPU reload agreement is between the saved packed candidate and its own reference, not equality with FP32.
-
-The `native_quantized` result can be downloaded. Eligible saved results also expose **Replay recorded observations**, which opens **Run → Replay observations** with that policy selected; replay still requires a configured worker and explicit observation selection. It is excluded from training resume, engine evaluation and native Isaac inputs. The current Isaac loader does not accept this packed format. Smaller stored files do not establish lower execution memory, faster inference, calibrated actions or robot task success. No provider is connected, GPU launched or cloud configuration changed by these controls.
-
-Focused desktop/mobile browser tests use explicit generated API fixtures, including unsupported capability/source, exact INT8/INT4 requests, admission failures, lost/mismatched receipts, selection-safe cancellation, project isolation, incomplete reports and narrow-screen results. Those tests do not replace the separately required genuine worker/API integration proof.
-
-The measured summary accepts the application worker’s two ordered generated inputs (seeds 171 and 902) and a SHA-256 model identity. Missing, duplicated, reordered, or malformed evidence remains visible as an incomplete report rather than a verified summary. These inputs are separate from the earlier standalone quantization experiment.
+Cancel the selected job from its history. If a response is lost or the connection fails, refresh the project job list and inspect the saved request before submitting again.

@@ -1,39 +1,19 @@
-# Isaac recording worker
+# Run the Isaac recording worker
 
-Records simulations with Isaac's RTX real-time renderer (RT2). The bundled
-falling-cube scene produced a verified recording on GCP L4. Offline path
-tracing is not required.
-
-For calibrated ACT/SmolVLA control through a separate inference VM, see
-[the rollout adapter](ROLLOUT.md).
-For recorded-state comparisons and calibration fits without starting Isaac, see
-[offline calibration](CALIBRATION_OFFLINE.md).
-
-```text
-YAML -> service -> Isaac adapter -> USD physics + RGB frames
-               -> video adapter -> FFmpeg -> MP4
-               -> artifact adapter -> GCS -> result.json
-```
-
-The CLI calls the service; SDK and subprocess details stay in adapters.
-[SkyPilot](../skypilot/README.md) owns VM provisioning and cleanup.
-The worker uses Isaac's container Python, separate from the application's
-Python 3.14 environment. No simulator dependency is added to core, and no
-application operation is registered by this transfer.
+Prepare the GPU/project resources in [GCP setup](../skypilot/SETUP.md).
+Use the worker's Isaac **6.1.0** container Python and FFmpeg/ffprobe.
+For policy-controlled episodes follow [rollout setup](ROLLOUT.md); for recorded
+state projection use [offline calibration](CALIBRATION_OFFLINE.md).
 
 ## Manifest and outputs
 
-`demo.yaml` requests 180 frames at 1280×720/30 fps. Its output bucket is an
-example. Copy it to `demo.local.yaml` and set `outputs.uri` to your GCS prefix.
-The bundled scene contains a falling cube, ground, light and camera.
+Copy `demo.yaml` to `demo.local.yaml`. Set `outputs.uri` to a private GCS prefix.
+The template requests 180 frames at 1280×720 and 30 fps. Set `scene.uri` to an
+existing `.usd`, `.usda` or `.usdc` and `scene.camera` to its camera prim.
+Resolve relative scene paths from the manifest directory. Choose even H.264
+image dimensions up to 1920×1080, FPS up to 60 and duration up to 600 seconds.
 
-`scene.uri` accepts `.usd`, `.usda` and `.usdc` files. Relative paths resolve
-from the manifest directory and must exist during validation; absolute
-container paths remain supported. Validation rejects unknown/duplicate keys,
-YAML aliases, unsupported URIs and invalid capture values. Limits are
-1920×1080, 60 fps and 600 seconds; H.264 dimensions must be even.
-
-Each invocation creates a UUID below `outputs.uri`:
+Read the UUID printed by each invocation under `outputs.uri`. Inspect its files:
 
 ```text
 <uuid>/manifest.json  # normalized input, uploaded first
@@ -41,21 +21,12 @@ Each invocation creates a UUID below `outputs.uri`:
 <uuid>/result.json    # terminal status, video URI, SHA-256 and frame count
 ```
 
-Consumers require a final `succeeded` result. Uploads are create-only; completion
-is written last, before Isaac shutdown. Failures attempt to publish a failure
-record. VM loss can leave no terminal record. Retries create new UUIDs.
-
-The renderer uses `RealTimePathTracing` (RT2), DLSS quality mode, one capture
-subframe, and disabled responsive denoising to avoid speckled output. An
-eight-subframe warmup runs at simulation time zero before recording. Startup
-and warmup took about eight minutes on the tested L4 host.
-
-The worker rejects entirely black builtin-demo output before publishing
-success. This guard does not validate motion or custom scenes, which may be dark.
+Read the terminal `result.json`, then compare its video URI, hash and frame
+count to the saved video. Download partial logs if no terminal record appears.
 
 ## Custom scenes
 
-Keep the scene and its dependencies together:
+Keep the scene and all relative dependencies together:
 
 ```text
 workers/isaac_sim/jobs/my-scene/
@@ -64,15 +35,14 @@ workers/isaac_sim/jobs/my-scene/
 └── assets/           # referenced layers, models and textures
 ```
 
-From this directory, copy the manifest template:
+From `workers/isaac_sim`, copy the manifest template:
 
 ```sh
 mkdir -p jobs/my-scene
 cp scene.example.yaml jobs/my-scene/job.local.yaml
 ```
 
-Copy your scene bundle there, preserving relative references and directories.
-Set `outputs.uri` to your GCS prefix and edit the manifest's scene:
+Set `outputs.uri`, then supply your scene and existing camera:
 
 ```yaml
 scene:
@@ -80,24 +50,19 @@ scene:
   camera: /World/Camera
 ```
 
-Use an existing camera prim. The scene must supply lighting and any physics
-needed for motion. Recording starts at time zero; the worker supplies no
-policies or controllers. GCS scene staging is not implemented.
-
-Check the manifest and scene path with the worker's Python 3.12 environment:
+Supply lighting, physics and any controller in the scene. Validate locally:
 
 ```sh
 python -m sim_worker --manifest jobs/my-scene/job.local.yaml --validate-only
 ```
 
-`jobs/` is ignored by Git but synced by SkyPilot. Submit with
-`SIM_MANIFEST=jobs/my-scene/job.local.yaml`; see the
-[launcher commands](../skypilot/README.md#custom-usda-jobs). No image rebuild
-is needed. Custom scenes require their own GPU validation.
+Submit with `SIM_MANIFEST=jobs/my-scene/job.local.yaml` using
+[the launcher commands](../skypilot/README.md#custom-usda-jobs).
 
 ## Build
 
-Prerequisites are listed in [GCP setup](../skypilot/SETUP.md). From this directory:
+Complete [Cloud Build setup](../skypilot/SETUP.md#optional-cloud-build-setup).
+From `workers/isaac_sim`:
 
 ```sh
 export SIM_PROJECT_ID=your-project-id
@@ -109,14 +74,9 @@ gcloud builds describe "$SIM_BUILD_ID" \
   --format='yaml(status,results.images,logUrl)'
 ```
 
-Cloud Build uses `sim-builder@<project>.iam.gserviceaccount.com`, the project's
-`<project>-sim-build-source` bucket, an 8-vCPU build machine, 200-GB disk and
-one-hour timeout. It resolves the Isaac 6.1.0 base tag to a digest, builds, tests
-without a GPU, then publishes to Artifact Registry's `simulation` repository.
-Direct Python requirements are pinned; OS and transitive dependencies are not
-fully locked. Build success does not prove GPU rendering.
-
-After `SUCCESS`, retain the image digest:
+Cloud Build uses `sim-builder@<project>.iam.gserviceaccount.com`, the
+`<project>-sim-build-source` bucket, an 8-vCPU machine, 200-GB disk and one-hour
+build timeout. After status `SUCCESS`, record the immutable image digest:
 
 ```sh
 SIM_IMAGE_NAME="$(gcloud builds describe "$SIM_BUILD_ID" \
@@ -128,15 +88,15 @@ SIM_IMAGE_DIGEST="$(gcloud builds describe "$SIM_BUILD_ID" \
 printf '%s@%s\n' "${SIM_IMAGE_NAME%:*}" "$SIM_IMAGE_DIGEST" > worker-image.txt
 ```
 
-Use this immutable reference in the SkyPilot task. SkyPilot mounts the current
-worker source into the image, so Python, scene and manifest changes need no
-rebuild. Dependency or Isaac-version changes do.
+Put that reference in the SkyPilot task. Resubmit after worker/manifest/scene
+changes; rebuild the image after dependency or Isaac-version changes.
 
 ## Direct container execution
 
-On a prepared Linux GPU host, provide a compatible graphics driver, NVIDIA
-Container Toolkit, Docker, registry authentication and a VM service account
-with GCS access. Set `ACCEPT_EULA=Y` only after accepting NVIDIA's license.
+Use a Linux GPU host with a compatible graphics driver, NVIDIA Container
+Toolkit, Docker, Artifact Registry authentication and a VM identity with GCS
+access. Set `ACCEPT_EULA=Y` after accepting NVIDIA's container license.
+Prepare the output owner and run:
 
 ```sh
 export SIM_IMAGE="$(cat worker-image.txt)"
@@ -151,32 +111,20 @@ docker run --rm --gpus all \
   "$SIM_IMAGE" --manifest /inputs/demo.local.yaml --output-dir /outputs
 ```
 
-FFmpeg encodes on CPU. The service verifies MP4 metadata and publishes results
-before Isaac's potentially process-terminating shutdown. The worker does not
-delete the VM. Use SkyPilot for managed lifetimes and diagnostics.
+Use [SkyPilot](../skypilot/README.md) to submit remote jobs and manage VM lifetime.
+Download output and logs before deleting its cluster.
 
-## Verify
+## Local checks
 
-Use an isolated Python 3.12 environment with PyYAML 6.0.3 for local tests:
+Use an isolated Python **3.12** environment with PyYAML **6.0.3**:
 
 ```sh
 python -m sim_worker --manifest demo.yaml --validate-only
 python -m unittest discover -s tests -v
 ```
 
-FFmpeg/ffprobe are required for three encoding tests. Set
-`SIM_REQUIRE_VIDEO_TOOLS=1` to require them, as CI and Cloud Build do. SDK mocks
-verify adapter contracts and failure publication, not rendering or physics.
-
-GPU acceptance requires visible falling motion, nonblack frames, a six-second
-MP4 at 1280×720/30 fps, matching GCS checksum and terminal result, and verified
-VM cleanup. Repeat acceptance after renderer, driver or simulator changes.
-
-On 2026-09-26, Isaac 6.1.0 with driver 580.159.04 on GCP L4 produced all 180
-visible frames at 1280×720/30 fps with cube motion. The downloaded GCS MP4
-matched the terminal result's SHA-256. All 22 worker tests passed in the worker
-container, including FFmpeg encoding; all 41 launcher tests passed locally.
-Container removal was verified. Full VM teardown remains unverified.
+Install FFmpeg/ffprobe for encoding checks; set `SIM_REQUIRE_VIDEO_TOOLS=1` to
+require those tools during the suite.
 
 References: [Isaac container setup](https://docs.isaacsim.omniverse.nvidia.com/6.1.0/installation/install_container.html),
 [Replicator troubleshooting](https://docs.isaacsim.omniverse.nvidia.com/6.1.0/replicator_tutorials/troubleshooting.html),

@@ -1,181 +1,90 @@
-# Python sidecar foundation
+# Build and run the Python sidecar
 
-Normal-interpreter tests exercise the actual application and its intake worker in
-disposable workspaces. A local macOS ARM64 frozen build and relocation experiment has
-also passed the bounded checks recorded below. The Tauri shell does not start this
-sidecar yet. Signing, distribution, Windows support and packaged model runtimes remain
-unverified.
+Use absolute paths for the static resources, application workspace and job files. Keep application data in a separate directory from the packaged resources.
 
-## Fixed modes and ownership
+## Prepare static resources
 
-`entrypoint.py` accepts only:
+Build the frontend from the repository root, then copy the export into a new resource directory:
 
-- `serve --resources ABSOLUTE_DIRECTORY --data-dir ABSOLUTE_DIRECTORY
-  [--local-root ABSOLUTE_DIRECTORY]`
-- `intake-worker ABSOLUTE_JOB_REQUEST_JSON ABSOLUTE_JOB_RESULT_JSON`
+```sh
+pnpm build:web
+python apps/desktop/sidecar/prepare_resources.py \
+  --web /absolute/openjensen/apps/web/out \
+  --output /absolute/new/resources \
+  --build-id EXACT_40_CHARACTER_COMMIT
+```
 
-The second mode requires the same job directory and the exact names `request.json` and
-`result.json`. It calls the existing metadata intake worker. Source installations keep
-exactly their existing `python -m vla_platform.datasets.worker` command; a frozen
-installation uses the same executable with the fixed `intake-worker` mode. There is no
-user-selectable module, script, shell, `-m`, or `-c` execution mode.
+## Start the sidecar
 
-The future native owner supplies absolute trusted paths and private standard pipes.
-It must also construct a minimal environment instead of forwarding parent credentials.
-`serve` removes child-local `FIREBIRD_*` and `GEMINI_API_KEY` environment entries
-before API imports, including optional Decision/Teaching/augmentation activation settings.
-The parent environment and persistent configuration files are never modified. It ignores
-the working directory for application paths.
-Application data and bundle resources must be disjoint. Local dataset access is disabled
-unless that owner supplies an explicit local root. This slice does not configure or
-activate model, cloud, provider, simulation, or training runtimes.
+Start the sidecar from an environment with the core application installed:
 
-The existing API lifespan retains its workspace `owner.lock`, database migrations,
-recovery and job shutdown behavior. Opening an existing workspace can therefore run
-its existing recovery logic; it is not a read-only attach operation. An upgrade backup
-and schema compatibility policy remains required before a packaged release adopts
-existing data. External-backend attachment must continue using the current Tauri
-connection path and must never send this private shutdown protocol to that server.
+```sh
+python apps/desktop/sidecar/entrypoint.py serve \
+  --resources /absolute/new/resources \
+  --data-dir /absolute/workspace
+```
 
-## Private control protocol
+Add `--local-root /absolute/datasets` when using local datasets. To invoke metadata intake, place `request.json` and the new `result.json` path in the same job directory:
 
-The parent must send one UTF-8 JSON line within ten seconds:
+```sh
+python apps/desktop/sidecar/entrypoint.py intake-worker \
+  /absolute/job/request.json /absolute/job/result.json
+```
+
+## Start and stop through stdin
+
+After starting `serve`, send this UTF-8 JSON line through its stdin pipe within ten seconds:
 
 ```json
 {"schema_version":1,"command":"start","nonce":"0123456789abcdef0123456789abcdef"}
 ```
 
-The nonce is 32 lowercase hexadecimal characters. It correlates messages on the owned
-private pipe; it is not an HTTP credential. The child validates bundled file hashes,
-binds its own ephemeral `127.0.0.1` socket, and starts the real API. It emits `ready` only
-after successful lifespan startup, including the nonce, loopback port, app version,
-source build ID, resource-manifest SHA256 and an opaque workspace-path digest. It does
-not emit private filesystem paths on stdout. Logs go to stderr.
+Choose a fresh 32-character lowercase hexadecimal nonce. Read the `ready` message on stdout for the loopback port. Read process logs from stderr. To stop the process, send a `shutdown` message with the same nonce, or close the pipe:
 
-To stop, send `{"schema_version":1,"command":"shutdown","nonce":"..."}` with the
-same nonce, or close the pipe. Malformed, oversized, or mismatched control messages
-also initiate shutdown and cause failure. Each control record is at most 4 KiB; only
-start and shutdown are consumed. A parent that disappears before readiness receives
-no late ready announcement. Startup polling has a 60-second limit, but synchronous
-imports and filesystem validation are not preempted by that poll timer.
-
-Shutdown awaits the existing application cleanup and releases its workspace lock.
-A `stopped` record is emitted only afterward. Uvicorn limits HTTP task draining to five
-seconds; this does **not** impose a hard limit on the application's lifespan cleanup.
-The future native supervisor must implement a separate final owned-child deadline,
-reaping, crash reporting, and restart policy. This Python foundation does not claim
-arbitrary nested detached process cleanup after a forced kill.
-
-## Static resources and future build
-
-`prepare_resources.py --web ABSOLUTE_STATIC_EXPORT --output NEW_ABSOLUTE_DIRECTORY
---build-id EXACT_40_CHARACTER_COMMIT` copies an already-built static export and records
-every file's SHA256 and byte count. It rejects links/special files, missing index,
-more than 10,000 files, and more than 512 MiB total payload. Resource verification uses
-64 KiB chunks. Existing outputs are never replaced; interrupted build directories
-remain for inspection. The manifest is limited to 4 MiB. Runtime validation checks an
-exact file inventory before serving. Bundle immutability after that check relies on
-the installed application's filesystem boundary; this is not a hostile-writer sandbox.
-
-`firebird-sidecar.spec` is a one-directory PyInstaller build specification.
-It includes the bounded resources plus real core Python files needed by Alembic and
-fixed helper subprocesses. Builds use an isolated build-only environment with the
-existing core lock and a pinned freezer, then test from a new location outside the
-repository, with no Python/Node on the runtime PATH. The complete one-directory payload,
-including `_internal`, must be shipped
-as a Tauri resource; copying just the executable is insufficient. Model runtimes stay
-separate. Native start/stop UI and capability changes are deliberately a later review.
+```json
+{"schema_version":1,"command":"shutdown","nonce":"0123456789abcdef0123456789abcdef"}
+```
 
 ## Opt-in macOS ARM64 frozen experiment
 
-The packaging tools in this directory are an experimental verification path. The
-production Rust payload pin remains absent, and the desktop Start control remains
-disabled. A prepared spec or a passed harness unit test is not a frozen-package result.
+Use an isolated CPython 3.14 macOS ARM64 build environment. From the repository root, install the production core dependencies and pinned build tools:
 
-`requirements-build-macos-arm64.txt` pins six prebuilt build-tool wheels by exact public
-URL and SHA256. Use a new isolated CPython 3.14 build environment, `--require-hashes`,
-`--no-deps`, and the exact macOS ARM64 production core dependency closure selected from
-`uv.lock`. Do not use the development/TUI/ML extras or modify an existing environment.
-The spec makes core source discoverable before dynamic hook collection and explicitly
-targets ARM64 on macOS; no other platform build is established by this experiment.
+```sh
+UV_PROJECT_ENVIRONMENT=/absolute/build-env uv sync --frozen --no-dev --no-editable
+uv pip install --python /absolute/build-env/bin/python --require-hashes --no-deps \
+  -r apps/desktop/sidecar/requirements-build-macos-arm64.txt
+```
 
-Prepare a resource directory from the independently verified static-export inputs.
-When an existing export retains older hashed assets, copy only the files in its verified
-build manifest first. Record the source input hashes, static output hashes, tool wheel
-hashes, installed versions, spec hash and build log separately. The manifest build ID
-identifies the core/static source; packaging-source changes must have their own binding.
+Build with the prepared resources and new work and dist directories:
 
-Run PyInstaller's fixed `firebird-sidecar.spec` with `FIREBIRD_DESKTOP_RESOURCES` pointing
-to that absolute directory and fresh scratch work/dist directories. Keep the complete
-one-directory output. Invoke the build interpreter with `-I -B`: isolated mode ignores
-`PYTHONDONTWRITEBYTECODE`, so the explicit `-B` prevents generated caches in the source
-snapshot. `payload_inventory.py PAYLOAD OUTPUT_JSON` records every regular
-file's bytes, SHA256, permissions and Mach-O CPU types, all directories, and literal
-safe relative symlink targets. It rejects escaping, absolute, dangling or cyclic links
-and special entries. Limits are 20,000 entries and 2 GiB. This is evidence for a trusted
-same-user build tree, not a hostile-writer sandbox or a production payload pin.
+```sh
+FIREBIRD_DESKTOP_RESOURCES=/absolute/new/resources \
+  /absolute/build-env/bin/python -I -B -m PyInstaller \
+  --workpath /absolute/new/work --distpath /absolute/new/dist \
+  apps/desktop/sidecar/firebird-sidecar.spec
+```
 
-The opt-in acceptance command is:
+Keep the complete `/absolute/new/dist/firebird-sidecar` directory, including `_internal`.
 
-```text
+Inventory the payload and run the frozen-package checks from the repository root:
+
+```sh
+python apps/desktop/sidecar/payload_inventory.py \
+  /absolute/new/dist/firebird-sidecar /absolute/new/payload-inventory.json
 python apps/desktop/sidecar/verify_frozen.py \
-  --payload /absolute/frozen/firebird-sidecar \
+  --payload /absolute/new/dist/firebird-sidecar \
   --output /absolute/new/experiment \
   --build-id EXACT_SOURCE_COMMIT \
   --resource-sha256 EXACT_RESOURCES_JSON_SHA256
 ```
 
-It copies the complete payload to a new location preserving links, checks every native
-file with the fixed system `otool`, and rejects unresolved/private absolute dependencies.
-It runs the executable from outside the repository with only disposable HOME/TMPDIR and
-a PATH containing no executables; no PYTHONPATH, provider configuration or credentials
-are inherited. Actual HTTP checks cover every recorded static file, health, migrations,
-SQLite integrity, a generated metadata-only intake, duplicate workspace-owner refusal,
-normal stop, parent EOF and same-build restart preserving the project/job. Negative checks
-cover static tampering, a wrong control nonce and generic Python invocation. This does
-not decode robotics video or execute a model.
-
-The harness has a 600-second outer deadline, 90-second readiness/intake observer bounds,
-30-second orderly child-exit bounds and bounded TERM/KILL cleanup. It reconciles its owned
-process group even when the direct child already exited; only kernel-confirmed absence
-is cleanup success. An unresolved cleanup error prevents a successful receipt. These
-are bounded experiment limits, not startup or latency guarantees.
-
-A receipt is written only after all checks and final original/relocated inventory checks
-pass. Retain initial failures and the complete logs. Even a passing local experiment does
-not establish Tauri-owned packaged lifecycle, upgrades, existing workspace adoption,
-clean-machine installation, notarization, other platforms or separate model runtimes.
-Those gates remain open before production payload activation.
-
-## Recorded local experiment
-
-The macOS ARM64 experiment built core/static source `8ce73ee` using 35 exact, hash-verified
-wheels installed offline in an isolated environment. Its complete payload contains 203
-entries and 13 ARM64 native files. After relocation it served all 36 static files,
-completed generated metadata-only intake, checked SQLite integrity, refused a second
-workspace owner, stopped on command and parent EOF, and restarted with the same saved
-project and job. Tampered static files, a wrong control nonce and generic Python modes
-were refused. This proves neither robotics frame validity nor model execution.
-
-The first build's strict source-inventory gate failed because one Python bytecode cache
-was generated; all 972 original inputs were unchanged. That failure is retained. The
-first acceptance attempt then exposed an inspector bug: a dylib's `LC_ID_DYLIB` identity
-was mistaken for a load dependency. The corrected external inspector separates identity
-from actual loads; the unchanged payload then passed the full bounded harness. The
-source snapshot predates WEB-009 and must not be described as the latest web build.
-
-Production Start remains disabled. Tauri-owned lifecycle, installation on a clean
-machine, upgrades, signing, Linux/Windows and ML runtimes require separate evidence.
-
+Use the resource manifest's SHA256 and its exact source commit. Keep the generated receipt and logs with the payload.
 
 ## Local native candidate preparation
 
-`prepare_local_tauri.py` is an opt-in, standard-library preparation step. It does not run
-PyInstaller, Cargo, the frozen executable or any network operation. Give it an absolute
-payload path, its complete inventory and the corresponding completed frozen-harness
-receipt, plus a new absolute output directory:
+Supply the payload, inventory and frozen-check receipt to the scratch preparer:
 
-```text
+```sh
 python -B -s apps/desktop/sidecar/prepare_local_tauri.py \
   --payload /absolute/accepted/firebird-sidecar \
   --manifest /absolute/payload-inventory.json \
@@ -183,27 +92,12 @@ python -B -s apps/desktop/sidecar/prepare_local_tauri.py \
   --output /absolute/new-native-candidate
 ```
 
-Use a sanitized environment without Python path overrides. Unlike the fixed PyInstaller
-build invocation, this direct source helper imports sibling verification modules and uses
-`-B -s`; `-I` would remove its required source directory from module search.
+The output contains `local-payload-pin.rs`, `tauri.local.json`, resources and a preparation receipt. From `apps/desktop`, build with that pin and overlay:
 
-The preparer verifies full payload/resource identity and recorded acceptance fields, then
-copies files/relative links without changing the original. Failed partial directories are
-preserved. The receipt is a trusted local review input, not a signed remote attestation.
-It emits `local-payload-pin.rs`, `tauri.local.json`, the complete resources and a preparation
-receipt. The overlay uses a dedicated experiment identifier; it does not edit the checked-in
-production configuration. Its compiled pin must be supplied explicitly to a reviewed build:
-
-```text
+```sh
 FIREBIRD_DESKTOP_EXPERIMENT_PIN=/absolute/new-native-candidate/local-payload-pin.rs \
   CARGO_NET_OFFLINE=true pnpm exec tauri build --features local-payload-experiment \
   --config /absolute/new-native-candidate/tauri.local.json --bundles app --no-sign
 ```
 
-This build command is a proposal until the source and resource slot are approved. Use the
-cached exact toolchain/locks and a clean environment without signing credentials or Python
-path overrides. Keep `--no-sign` explicit and record the wrapper commit separately from the child source
-commit. The default build keeps Start disabled. Compare the final app's complete resource
-inventory with the original pin before launch; never weaken it because packaging changed a
-file. No installer, runtime activation, model operation or existing user-data adoption is
-performed by the preparer.
+Compare the finished application's resource inventory with the pin before launching it. Use a clean build environment with the cached toolchain and lockfiles.

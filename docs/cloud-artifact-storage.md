@@ -1,40 +1,18 @@
 # Cloud checkpoint storage
 
-OPEN JENSEN serves the application on xbox-360. GCP workers download model and dataset
-weights directly from their pinned sources. Checkpoints, exported policies and
-quantized models stay in a private Google Cloud Storage bucket in the selected
-project. They are not automatically downloaded to the Mac or application server.
+## Configure storage
 
-Each run receives an isolated prefix under
-`gs://firebird-artifacts-<project>/jobs/<job-id>/<stage>/`. The bucket requires
-uniform access and public access prevention. Existing buckets with a different
-ownership label are rejected. Application credentials remain in the configured
-Google Cloud/SkyPilot environments; no credential is embedded in the job recipe.
+Connect the Google Cloud project and prepare SkyPilot on the API host using [compute setup](compute-settings.md). Cloud jobs use a private bucket under `gs://firebird-artifacts-<project>/jobs/<job-id>/<stage>/`. Use uniform bucket access and public access prevention, and keep credentials in the configured Google Cloud/SkyPilot environment.
 
-The worker verifies file hashes and uploads all files before publishing an atomic
-checkpoint index. The application polls only small metadata documents and stores
-manifest descriptors, recipes, metrics and logs. Every committed checkpoint has
-a stable project artifact ID, optimizer step and cloud location. Quantization and
-resume resolve that ID, download its files on the new cloud worker and verify
-both the registered manifest and every file hash before using the checkpoint.
+## Download or resume
 
-The GPU workspace retains only the newest two published working checkpoints.
-Earlier checkpoints remain in GCS and can be selected in OPEN JENSEN. A final
-successful training artifact additionally records fresh-process reload evidence.
-An intermediate checkpoint is selectable after publication but is not labeled
-reload-verified until the worker has actually performed that check.
+1. Open the saved **Fine-tune** run.
+2. Select the exact published checkpoint.
+3. Choose **Download** to stream its TAR to the browser, or **Resume** to start from that checkpoint.
+4. For SmolVLA packing, continue with its **Quantize** action. For ACT, follow [CPU export setup](cloud-act-export.md).
 
-The explicit Download action streams a checked TAR from GCS through the
-application to the requesting browser. It does not cache a TAR or model weights
-on xbox. The download is bounded in memory, checks object sizes and hashes, and
-stops when the client disconnects. Merely viewing runs or selecting a checkpoint
-does not download weights to the client.
+Checkpoint files stay in GCS. The application stores their manifests, recipes, metrics and logs in its workspace. Each artifact record contains its project ID, optimizer step and cloud location.
 
-GPU teardown occurs after result metadata has been collected; durable GCS data
-survives teardown. Cancellation preserves checkpoints already published to GCS.
-Storage objects are retained until the operator removes them; GPU autodown does
-not erase checkpoints or eliminate GCS storage charges.
+## Finish and clean up
 
-Legacy jobs from before this feature keep their original local transfer behavior
-and evidence. New cloud jobs use GCS automatically. Retrying an old failed job
-creates a new run with current storage behavior.
+Follow the saved job through checkpoint publication and GPU cleanup. If cleanup is uncertain, inspect the cluster command shown on that job. Manage retained checkpoint objects in the private bucket separately from GPU teardown.
