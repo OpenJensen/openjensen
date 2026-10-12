@@ -84,5 +84,32 @@
     },
     "browser_regression": "Added deterministic stale conversion read coverage; preserved the original folder import Ready to inspect assertion.",
     "hosted_final_result": "Inspect the checks for the current PR head; these local receipts do not assert hosted success."
+  },
+  "final_import_followup": {
+    "tested_patch_tree_before_receipt_extension": "aa4f68397595dbd4bd94da8c98a2ac9023069ad3",
+    "mapping_initialization": "Initialize FPS/action/state once when detection arrives for the acknowledged upload ID; preserve edits on subsequent reads.",
+    "saved_mapping_recovery": "Isolate malformed detection mappings without overwriting their record or source bytes.",
+    "dataset_and_backup_tests": {
+      "passed": 47,
+      "failed": 0,
+      "seconds": 6.78
+    },
+    "frontend_pure_tests": {
+      "passed": 310,
+      "failed": 0
+    },
+    "frontend_typescript": "passed",
+    "browser_collection": {
+      "configured_tests": 1475,
+      "files": 44,
+      "executed_locally": false
+    },
+    "applicable_ruff": "passed; 212 files already formatted",
+    "hosted_act_confirmation": {
+      "head_revision": "31037fe5fd22b1857aa319f4d96f29bb1abbc398",
+      "tests_passed": 194,
+      "mypy": "passed; 9 source files",
+      "url": "https://github.com/OpenJensen/openjensen/actions/runs/38227830031/job/114739642087"
+    }
   }
 }
