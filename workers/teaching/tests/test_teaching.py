@@ -8,9 +8,9 @@ from urllib.request import Request, urlopen
 import pytest
 from conftest import act, command, record_fixture
 
-from firebird_teaching.contracts import Command, canonical, decode
-from firebird_teaching.control import Client, Mailbox, server
-from firebird_teaching.dataset import convert, inspect_capture
+from jensen_teaching.contracts import Command, canonical, decode
+from jensen_teaching.control import Client, Mailbox, server
+from jensen_teaching.dataset import convert, inspect_capture
 
 
 def test_applied_action_pause_reset_and_lineage(session):
@@ -252,7 +252,7 @@ def test_genuine_lerobot_writer_roundtrip(tmp_path):
     with pytest.raises(FileExistsError):
         convert(root, output, ids)
     # A corrupt local writer output must never invoke metadata or media Hub fallback.
-    from firebird_teaching.dataset import read_local_dataset
+    from jensen_teaching.dataset import read_local_dataset
 
     (output / "meta/tasks.parquet").unlink()
     with pytest.raises(ValueError, match="must never download"):
@@ -341,7 +341,7 @@ def test_lineage_identifier_matches_dataset_admission(tmp_path):
 
 
 def test_metadata_content_is_bound_to_initial_inventory(tmp_path, monkeypatch):
-    from firebird_teaching import dataset
+    from jensen_teaching import dataset
 
     root = tmp_path / "capture"
     ids = record_fixture(root, 1)
@@ -392,7 +392,7 @@ def test_self_consistent_hashes_cannot_forge_motion_lineage(tmp_path, damage):
 
 
 def test_inventory_growth_read_is_bounded(tmp_path, monkeypatch):
-    from firebird_teaching import dataset
+    from jensen_teaching import dataset
 
     root = tmp_path / "capture"
     root.mkdir()
@@ -427,7 +427,7 @@ def test_inventory_growth_read_is_bounded(tmp_path, monkeypatch):
 
 
 def test_ancestor_symlink_cannot_redirect_capture_read(tmp_path):
-    from firebird_teaching.dataset import _read
+    from jensen_teaching.dataset import _read
 
     outside = tmp_path / "outside"
     outside.mkdir()
@@ -439,7 +439,7 @@ def test_ancestor_symlink_cannot_redirect_capture_read(tmp_path):
 
 
 def test_directory_sync_failure_never_acknowledges_an_action(session, monkeypatch):
-    from firebird_teaching import journal
+    from jensen_teaching import journal
 
     act(session, "task", {"instruction": "test"})
     act(session, "start")

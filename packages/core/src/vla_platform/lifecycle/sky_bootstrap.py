@@ -22,6 +22,19 @@ MAX_FILES = 10000
 PART_BYTES = 32 * 1024**2
 
 
+def getenv(name, default=None):
+    """Keep this copied Python-3.11 entry point independent of the core package."""
+    if name.startswith("FIREBIRD_"):
+        canonical = "JENSEN_" + name.removeprefix("FIREBIRD_")
+        legacy = name
+    elif name.startswith("JENSEN_"):
+        canonical = name
+        legacy = "FIREBIRD_" + name.removeprefix("JENSEN_")
+    else:
+        return os.environ.get(name, default)
+    return os.environ.get(canonical, os.environ.get(legacy, default))
+
+
 def publish_archive(output, log_dir):
     index = log_dir / "checkpoint-index" / "index.json"
     published = (
@@ -144,7 +157,7 @@ def run_worker(command, *, env, timeout, terminate_grace=10):
 def main():
     workdir = Path.cwd().resolve()
     config = json.loads((workdir / "dispatch.json").read_text())
-    task_id = os.environ.get("SKYPILOT_INTERNAL_JOB_ID", "")
+    task_id = getenv("SKYPILOT_INTERNAL_JOB_ID", "")
     if not task_id.isdigit():
         raise RuntimeError("SkyPilot did not provide its job identity; training was not started")
     log_dir = Path.home() / "sky_logs" / (task_id + "-" + config["task_name"])
@@ -177,11 +190,11 @@ def main():
             pointer = Path(payload["resume_checkpoint"]) / "remote-checkpoint.json"
             if pointer.is_file():
                 raise ValueError("Resume cloud checkpoint must use its registered artifact")
-    worker_module = config.get("worker_module", "firebird_vla.application")
+    worker_module = config.get("worker_module", "jensen_vla.application")
     if worker_module not in {
-        "firebird_vla.application",
-        "firebird_vla.lerobot_application",
-        "firebird_vla.psi_application",
+        "jensen_vla.application",
+        "jensen_vla.lerobot_application",
+        "jensen_vla.psi_application",
         "policykit.cloud_quantize",
         "policykit.cloud_inference",
     }:
@@ -191,10 +204,16 @@ def main():
         timeout=config["timeout_seconds"],
         env={
             **os.environ,
+            "JENSEN_CHECKPOINT_EXPORT_ROOT": str(log_dir),
             "FIREBIRD_CHECKPOINT_EXPORT_ROOT": str(log_dir),
             "PYTHONPATH": str(workdir),
             **(
-                {"FIREBIRD_GCS_PREFIX": storage_prefix, "FIREBIRD_CLOUD_REQUEST": str(request_path)}
+                {
+                    "JENSEN_GCS_PREFIX": storage_prefix,
+                    "FIREBIRD_GCS_PREFIX": storage_prefix,
+                    "JENSEN_CLOUD_REQUEST": str(request_path),
+                    "FIREBIRD_CLOUD_REQUEST": str(request_path),
+                }
                 if storage_prefix
                 else {}
             ),

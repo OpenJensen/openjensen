@@ -9,15 +9,15 @@ from unittest.mock import Mock
 
 import pytest
 
-from firebird_vla.lerobot_application import cli_arguments, resolve_recipe
-from firebird_vla.local_dataset import (
+from jensen_vla.lerobot_application import cli_arguments, resolve_recipe
+from jensen_vla.local_dataset import (
     load_operation_snapshot,
     make_local_datasets,
     offline_dataset_loading,
     split_lineage,
     verify_local_snapshot,
 )
-from firebird_vla.native_profiles import NATIVE_PROFILES
+from jensen_vla.native_profiles import NATIVE_PROFILES
 
 
 def canonical(value):

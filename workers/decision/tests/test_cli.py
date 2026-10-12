@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-from firebird_decision import __main__ as cli
-from firebird_decision.contracts import LICENSE, canonical
+from jensen_decision import __main__ as cli
+from jensen_decision.contracts import LICENSE, canonical
 
 
 def args(path):

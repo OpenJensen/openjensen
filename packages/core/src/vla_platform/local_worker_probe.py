@@ -3,6 +3,7 @@
 import contextlib
 import importlib
 import importlib.metadata
+import importlib.util
 import json
 import sys
 import uuid
@@ -69,8 +70,20 @@ def probe(root):
         ):
             importlib.import_module(module)
         sys.path.insert(0, str(root / "src"))
-        worker = importlib.import_module("firebird_vla.application")
-        if Path(worker.__file__).resolve() != root / "src/firebird_vla/application.py":
+        # This file runs under an isolated ML Python, without importing the core's
+        # Python-3.14 package or dependencies. The sibling resolver is stdlib only.
+        spec = importlib.util.spec_from_file_location(
+            "_openjensen_worker_paths", Path(__file__).with_name("worker_paths.py")
+        )
+        resolver = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(resolver)
+        try:
+            entry = resolver.worker_module(root, "jensen_vla.application")
+        except ValueError:
+            return unavailable("source_upgrade_required")
+        worker = importlib.import_module(entry)
+        expected = root / "src" / entry.split(".")[0] / "application.py"
+        if Path(worker.__file__).resolve() != expected:
             return unavailable("incompatible_environment")
         properties = torch.cuda.get_device_properties(0)
         identifier = gpu_uuid(getattr(properties, "uuid", None))

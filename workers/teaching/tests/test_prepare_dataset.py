@@ -7,8 +7,8 @@ import sys
 import pytest
 from conftest import record_fixture
 
-from firebird_teaching import prepare_dataset as prepare
-from firebird_teaching.dataset import _inventory
+from jensen_teaching import prepare_dataset as prepare
+from jensen_teaching.dataset import _inventory
 
 
 def request(tmp_path):

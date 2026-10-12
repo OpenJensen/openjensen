@@ -47,8 +47,8 @@ def checkpoint_job(tmp_path, pipeline, *, kind="training_checkpoint", architectu
 
 
 def install_fake_converters(monkeypatch, pipeline, observed):
-    package = ModuleType("firebird_vla")
-    export = ModuleType("firebird_vla.export")
+    package = ModuleType("jensen_vla")
+    export = ModuleType("jensen_vla.export")
 
     def export_checkpoint(source, destination):
         observed["checkpoint"] = source
@@ -59,8 +59,8 @@ def install_fake_converters(monkeypatch, pipeline, observed):
         (destination / "normalizer.safetensors").write_bytes(b"stats")
 
     export.export_checkpoint = export_checkpoint
-    monkeypatch.setitem(sys.modules, "firebird_vla", package)
-    monkeypatch.setitem(sys.modules, "firebird_vla.export", export)
+    monkeypatch.setitem(sys.modules, "jensen_vla", package)
+    monkeypatch.setitem(sys.modules, "jensen_vla.export", export)
 
     def import_policy(job):
         observed["converted"] = job["artifact"]["path"]

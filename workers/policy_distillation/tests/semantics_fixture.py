@@ -3,8 +3,8 @@
 import math
 import struct
 
-from firebird_act.bundle import NORM_MAP, canonical
-from firebird_act.control_schema import SCOPE
+from jensen_act.bundle import NORM_MAP, canonical
+from jensen_act.control_schema import SCOPE
 
 
 def control_record():

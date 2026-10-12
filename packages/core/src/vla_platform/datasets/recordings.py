@@ -201,10 +201,10 @@ def executable_identity(value):
 
 def load_config(config_path):
     if config_path is None:
-        raise RecordingError("Configure FIREBIRD_RECORDING_CONFIG to prepare recordings")
+        raise RecordingError("Configure JENSEN_RECORDING_CONFIG to prepare recordings")
     raw = read(config_path, 65536)
     value = Configuration.model_validate(decode(raw))
-    workers = path(value.worker_root) / "firebird_teaching"
+    workers = path(value.worker_root) / "jensen_teaching"
     isaac = path(value.worker_root).parent / "isaac_sim" / "sim_worker"
     identity = {
         "configuration_sha256": digest(raw),
@@ -842,7 +842,7 @@ class Recordings:
                             loaded.value.dataset_python,
                             "-B",
                             "-m",
-                            "firebird_teaching.prepare_dataset",
+                            "jensen_teaching.prepare_dataset",
                             "--request",
                             str(request_path),
                             "--result",

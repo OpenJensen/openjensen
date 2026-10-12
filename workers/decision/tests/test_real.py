@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from firebird_decision.contracts import LICENSE, canonical
-from firebird_decision.supervisor import run_owned
+from jensen_decision.contracts import LICENSE, canonical
+from jensen_decision.supervisor import run_owned
 
 
 @pytest.mark.skipif(
@@ -44,7 +44,7 @@ def test_pinned_real_model_offline(tmp_path):
         [
             sys.executable,
             "-m",
-            "firebird_decision",
+            "jensen_decision",
             "--model-dir",
             os.environ["FIREBIRD_DECISION_MODEL"],
             "--request",

@@ -31,8 +31,8 @@ from copy import deepcopy
 from pathlib import Path
 
 import pytest
-from firebird_act.bundle import canonical, inventory
-from firebird_act.control_schema import SCOPE
+from jensen_act.bundle import canonical, inventory
+from jensen_act.control_schema import SCOPE
 from semantics_fixture import policy, temporal_record
 
 pytestmark = pytest.mark.skipif(
@@ -84,7 +84,7 @@ def snapshot():
     if version != "0.6.2":
         pytest.fail(f"Requested preparation requires LeRobot 0.6.2, found {version}", pytrace=False)
 
-    from firebird_act.probe import offline_audit
+    from jensen_act.probe import offline_audit
 
     # This opt-in module runs in its own process; the audit hook deliberately
     # remains installed for the entire proof, including genuine writer setup.
@@ -106,8 +106,8 @@ def snapshot():
 
             import numpy as np
             import torch
-            from firebird_vla.control_contract import derive
-            from firebird_vla.local_dataset import verify_local_snapshot
+            from jensen_vla.control_contract import derive
+            from jensen_vla.local_dataset import verify_local_snapshot
             from lerobot.configs.video import RGBEncoderConfig
             from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
@@ -273,7 +273,7 @@ def case(snapshot):
 
 def _check_corpus(request, prediction):
     import torch
-    from firebird_distill.prepare import prepare
+    from jensen_distill.prepare import prepare
     from safetensors.torch import load
 
     teacher = Path(request["teacher"])
@@ -344,7 +344,7 @@ def test_real_reader_keeps_legacy_100_100_without_optional_sidecars(case):
 
 
 def test_real_native_episode_metadata_reports_selected_lengths(snapshot):
-    from firebird_distill.prepare import verify_lengths
+    from jensen_distill.prepare import verify_lengths
 
     result = verify_lengths(
         {"schema_version": 1, "dataset_snapshot": snapshot["pointer"], "episodes": [3, 0, 2]}
@@ -374,7 +374,7 @@ def test_real_native_episode_metadata_reports_selected_lengths(snapshot):
     ],
 )
 def test_real_preparation_refuses_mismatch_without_publication(case, mutation, message):
-    from firebird_distill.prepare import prepare
+    from jensen_distill.prepare import prepare
 
     request, config = case
     teacher = Path(request["teacher"])
@@ -420,7 +420,7 @@ def test_real_preparation_refuses_mismatch_without_publication(case, mutation, m
 
 
 def test_preparation_never_overwrites_existing_output(case):
-    from firebird_distill.prepare import prepare
+    from jensen_distill.prepare import prepare
 
     request, _ = case
     output = Path(request["output_dir"])

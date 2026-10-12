@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from firebird_decision import integrity
-from firebird_decision.contracts import LICENSE, DecisionError
+from jensen_decision import integrity
+from jensen_decision.contracts import LICENSE, DecisionError
 
 
 def test_license_checked_before_read(monkeypatch):
@@ -76,7 +76,7 @@ def test_parent_traversal_and_directory_rejected(tmp_path):
 
 
 def test_failed_integrity_never_executes_source(monkeypatch):
-    from firebird_decision import scorer
+    from jensen_decision import scorer
 
     def fail(*args):
         raise DecisionError("checksum failure", "model_integrity")
@@ -88,7 +88,7 @@ def test_failed_integrity_never_executes_source(monkeypatch):
 
 
 def test_wrong_runtime_rejected_before_custom_source(monkeypatch):
-    from firebird_decision import scorer
+    from jensen_decision import scorer
 
     monkeypatch.setattr(scorer, "verified_files", lambda *args: {})
     monkeypatch.setattr(scorer.importlib.metadata, "version", lambda *args: "0.0.0")

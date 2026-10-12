@@ -6069,6 +6069,57 @@
         ]
       }
     },
+    "/api/v1/dataset-uploads/{ident}": {
+      "delete": {
+        "operationId": "discard_upload_api_v1_dataset_uploads__ident__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Discard Upload",
+        "tags": [
+          "Dataset library"
+        ]
+      }
+    },
     "/api/v1/dataset-uploads/{ident}/file": {
       "put": {
         "operationId": "upload_file_api_v1_dataset_uploads__ident__file_put",

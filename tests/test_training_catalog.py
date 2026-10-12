@@ -521,11 +521,11 @@ def test_chained_cloud_resume_uses_checkpoint_recipe_and_camera_lineage(
 @pytest.mark.parametrize(
     "model_id,module,expected",
     [
-        ("smolvla", "firebird_vla.application", True),
-        ("act", "firebird_vla.lerobot_application", True),
+        ("smolvla", "jensen_vla.application", True),
+        ("act", "jensen_vla.lerobot_application", True),
         ("act", "custom_training.application", False),
         ("smolvla", "custom_training.application", False),
-        ("pi0", "firebird_vla.lerobot_application", False),
+        ("pi0", "jensen_vla.lerobot_application", False),
         ("psi0", "custom_training.application", False),
     ],
 )
@@ -543,7 +543,7 @@ def test_accumulation_catalog_is_bound_to_the_installed_adapter(model_id, module
     "model_id,module",
     [
         ("act", "custom_training.application"),
-        ("pi0", "firebird_vla.lerobot_application"),
+        ("pi0", "jensen_vla.lerobot_application"),
         ("psi0", "custom_training.application"),
     ],
 )
@@ -583,9 +583,9 @@ def test_unsupported_accumulation_rejected_before_job_or_dataset_execution(
 @pytest.mark.parametrize(
     "module,memory,issue",
     [
-        ("firebird_vla.application", 81920, "native LeRobot worker"),
-        ("firebird_vla.lerobot_application", 16384, "at least 24 GB"),
-        ("firebird_vla.lerobot_application", 24576, None),
+        ("jensen_vla.application", 81920, "native LeRobot worker"),
+        ("jensen_vla.lerobot_application", 16384, "at least 24 GB"),
+        ("jensen_vla.lerobot_application", 24576, None),
     ],
 )
 def test_native_smolvla_admission_binds_worker_memory_and_dataset_before_execution(
@@ -593,7 +593,7 @@ def test_native_smolvla_admission_binds_worker_memory_and_dataset_before_executi
 ):
     worker = runtime(training_module=module, training_model_ids=["smolvla"], gpu_memory_mib=memory)
     models = public_training_models(RuntimeCatalog(runtimes=[worker]))
-    assert ("full" in models[0]["methods"]) == (module == "firebird_vla.lerobot_application")
+    assert ("full" in models[0]["methods"]) == (module == "jensen_vla.lerobot_application")
     lifecycle = Lifecycle.__new__(Lifecycle)
     lifecycle.settings = SimpleNamespace(data_dir=tmp_path)
     lifecycle.compute = ComputeSettings(tmp_path)

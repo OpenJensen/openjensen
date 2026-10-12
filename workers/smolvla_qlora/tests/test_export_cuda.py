@@ -12,8 +12,8 @@ def test_materialized_export_preserves_trained_base_and_saved_modules(method):
         pytest.skip("BF16 CUDA required")
     from peft import LoraConfig, get_peft_model
 
-    from firebird_vla.export import floating_state_dict
-    from firebird_vla.model import quantize_linears
+    from jensen_vla.export import floating_state_dict
+    from jensen_vla.model import quantize_linears
 
     class Tiny(torch.nn.Module):
         def __init__(self):

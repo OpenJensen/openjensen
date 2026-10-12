@@ -120,24 +120,24 @@ def test_runtime_has_no_implicit_engine_or_training_capability(tmp_path):
     catalog = RuntimeCatalog(runtimes=[runtime])
     assert not catalog.public()["runtimes"][0]["native_distillation"]
     for path in [
-        root / "src/firebird_distill/application.py",
-        root / "src/firebird_distill/prepare.py",
-        root.parent / "act_optimizer/src/firebird_act/application.py",
-        root.parent / "smolvla_qlora/src/firebird_vla/local_dataset.py",
+        root / "src/jensen_distill/application.py",
+        root / "src/jensen_distill/prepare.py",
+        root.parent / "act_optimizer/src/jensen_act/application.py",
+        root.parent / "smolvla_qlora/src/jensen_vla/local_dataset.py",
     ]:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("# installed worker marker")
     for folder, names in (
         (
-            root / "src/firebird_distill",
+            root / "src/jensen_distill",
             ("__init__.py", "runtime.py", "contracts.py", "provenance.py"),
         ),
         (
-            root.parent / "act_optimizer/src/firebird_act",
+            root.parent / "act_optimizer/src/jensen_act",
             ("bundle.py", "probe.py", "control_schema.py"),
         ),
         (
-            root.parent / "smolvla_qlora/src/firebird_vla",
+            root.parent / "smolvla_qlora/src/jensen_vla",
             ("control_contract.py", "control_schema.py"),
         ),
     ):

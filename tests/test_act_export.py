@@ -74,7 +74,7 @@ def test_fixed_export_command_never_uses_gpu_training_image_or_request_module(tm
         "container",
         act_export=True,
     )
-    assert argv[:3] == [sys.executable, "-m", "firebird_act.application"]
+    assert argv[:3] == [sys.executable, "-m", "jensen_act.application"]
     assert cwd == str(FIXTURE.resolve())
     assert env["CUDA_VISIBLE_DEVICES"] == "" and env["HF_HUB_OFFLINE"] == "1"
     assert "docker" not in argv and "policykit.application" not in argv
@@ -254,7 +254,7 @@ def test_act_training_cannot_start_an_unsupported_gguf_workflow(application):
     configured = catalog.runtimes[0]
     configured.training_python = sys.executable
     configured.training_root = str(FIXTURE)
-    configured.training_module = "firebird_vla.lerobot_application"
+    configured.training_module = "jensen_vla.lerobot_application"
     configured.training_model_ids = ["act"]
     replace_catalog(app, catalog)
     response = client.post(

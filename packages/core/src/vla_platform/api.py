@@ -300,7 +300,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 description=(
                     "Local metadata intake is configured; target evidence awaits CAP-001."
                     if settings.local_root
-                    else "Local intake is disabled; configure FIREBIRD_LOCAL_DATA_ROOT."
+                    else "Local intake is disabled; configure JENSEN_LOCAL_DATA_ROOT."
                 ),
             ),
         ]
@@ -344,7 +344,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             and payload.library_id is None
             and settings.local_root is None
         ):
-            raise HTTPException(422, "Local intake is disabled; configure FIREBIRD_LOCAL_DATA_ROOT")
+            raise HTTPException(422, "Local intake is disabled; configure JENSEN_LOCAL_DATA_ROOT")
         try:
             job = await execution.inspections.submit(
                 project_id, payload, idempotency_key=idempotency_key

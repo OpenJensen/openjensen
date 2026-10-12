@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from firebird_act.export import export_policy
+from jensen_act.export import export_policy
 
 
 def test_existing_output_is_never_replaced(tmp_path: Path) -> None:
@@ -26,8 +26,8 @@ def test_missing_source_does_not_publish(tmp_path: Path) -> None:
 def test_real_act_export_fresh_process_parity_and_source_preserved(
     act_source: Path, tmp_path: Path
 ) -> None:
-    from firebird_act.bundle import inventory, read_json, tensor_header
-    from firebird_act.export import run_probe
+    from jensen_act.bundle import inventory, read_json, tensor_header
+    from jensen_act.export import run_probe
 
     before = inventory(act_source)
     output = tmp_path / "export"

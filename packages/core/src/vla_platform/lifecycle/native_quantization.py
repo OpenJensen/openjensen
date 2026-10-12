@@ -9,6 +9,8 @@ import re
 import stat
 from pathlib import Path
 
+from vla_platform.worker_paths import worker_module
+
 from .contracts import LifecycleResult, PolicyArtifact
 from .control_provenance import policy_claims, records, transform_claims
 from .runtime import native_quantization_ready
@@ -312,7 +314,7 @@ def command(runtime, request, result):
         [
             runtime.native_quantization_python,
             "-m",
-            "firebird_quant.native_application",
+            worker_module(root, "jensen_quant.native_application"),
             str(request),
             str(result),
         ],

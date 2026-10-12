@@ -93,10 +93,8 @@ ACT_PROTOCOL_FILES = ("__init__.py", "application.py", "bundle.py", "probe.py", 
 
 def install_protocol_dependencies(worker):
     """Inert file-presence fixtures; only the existing protocol entrypoint executes."""
-    paths = [worker / "src/firebird_quant" / name for name in QUANT_PROTOCOL_FILES]
-    paths += [
-        worker.parent / "act_optimizer/src/firebird_act" / name for name in ACT_PROTOCOL_FILES
-    ]
+    paths = [worker / "src/jensen_quant" / name for name in QUANT_PROTOCOL_FILES]
+    paths += [worker.parent / "act_optimizer/src/jensen_act" / name for name in ACT_PROTOCOL_FILES]
     for path in paths:
         path.parent.mkdir(parents=True, exist_ok=True)
         if not path.exists():
@@ -123,15 +121,15 @@ def test_public_capability_requires_installed_worker_without_paths(tmp_path):
 def test_missing_execution_dependency_disables_quantization_before_admission(
     tmp_path, family, name
 ):
-    worker = tmp_path / "workers/firebird_quant"
+    worker = tmp_path / "workers/jensen_quant"
     install_protocol_dependencies(worker)
     configured = runtime(worker)
     catalog = RuntimeCatalog(runtimes=[configured])
     assert catalog.public()["runtimes"][0]["native_quantization"]
     folder = (
-        worker / "src/firebird_quant"
+        worker / "src/jensen_quant"
         if family == "quant"
-        else worker.parent / "act_optimizer/src/firebird_act"
+        else worker.parent / "act_optimizer/src/jensen_act"
     )
     (folder / name).unlink()
     assert not catalog.public()["runtimes"][0]["native_quantization"]
@@ -169,7 +167,7 @@ def save_manifest(root, metadata):
 
 @pytest.fixture
 def application(tmp_path):
-    worker = tmp_path / "workers/firebird_quant"
+    worker = tmp_path / "workers/jensen_quant"
     shutil.copytree(Path(__file__).parent / "fixtures/native_quant_worker", worker)
     install_protocol_dependencies(worker)
     catalog = tmp_path / "runtimes.json"
@@ -383,7 +381,7 @@ def test_worker_environment_excludes_credentials_and_runtime_overrides(applicati
     monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", "/private/key")
     monkeypatch.setenv("OPENROUTER_API_KEY", "private")
     argv, _, env = command(configured, Path("/tmp/request"), Path("/tmp/response"))
-    assert argv[1:3] == ["-m", "firebird_quant.native_application"]
+    assert argv[1:3] == ["-m", "jensen_quant.native_application"]
     assert env["CUDA_VISIBLE_DEVICES"] == ""
     assert not set(env) & {"PROVIDER_KEY", "GOOGLE_APPLICATION_CREDENTIALS", "OPENROUTER_API_KEY"}
 

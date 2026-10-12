@@ -6,12 +6,13 @@ are fetched by a subsequent cloud worker, checked against the committed manifest
 
 import hashlib
 import json
-import os
 import re
 import sys
 import tarfile
 import tempfile
 from pathlib import Path, PurePosixPath
+
+from vla_platform.environment import required_env
 
 MAX_METADATA = 8 * 1024**2
 MAX_FILES = 10000
@@ -186,11 +187,11 @@ def publish_training_checkpoint(checkpoint):
     if not re.fullmatch(r"checkpoint-\d{6,}", checkpoint.name) or step != int(checkpoint.name[11:]):
         raise ValueError("Invalid checkpoint step")
     files = checked_files(source)
-    request = json.loads(Path(os.environ["FIREBIRD_CLOUD_REQUEST"]).read_text())
+    request = json.loads(Path(required_env("JENSEN_CLOUD_REQUEST")).read_text())
     recipe = json.loads((checkpoint / "recipe.json").read_text())
     data = request.get("dataset", {})
     model = recipe.get("policy_type") or recipe.get("architecture") or "smolvla"
-    uri = os.environ["FIREBIRD_GCS_PREFIX"] + "/checkpoints/" + checkpoint.name
+    uri = required_env("JENSEN_GCS_PREFIX") + "/checkpoints/" + checkpoint.name
     bucket_name, prefix = split_uri(uri)
     bucket = client().bucket(bucket_name)
     wrapper_files, total = {}, 0

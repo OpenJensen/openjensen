@@ -82,7 +82,7 @@ class ApiClient:
         uncertain = (
             " Outcome unknown; the request was sent once. Refresh jobs before submitting again."
             if method != "GET"
-            else " Start 'firebird serve' or check FIREBIRD_API_URL; press Ctrl+R to refresh."
+            else " Start 'jensen serve' or check JENSEN_API_URL; press Ctrl+R to refresh."
         )
         try:
             async with asyncio.timeout(self.deadline):

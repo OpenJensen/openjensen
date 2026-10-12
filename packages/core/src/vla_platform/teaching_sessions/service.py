@@ -16,6 +16,7 @@ import httpx
 from vla_platform.contracts import TERMINAL
 from vla_platform.datasets import recordings
 from vla_platform.teaching_api import public_frame, public_receipt, public_state
+from vla_platform.worker_paths import worker_module
 
 from . import publication
 from .config import TeachingError, load, options
@@ -312,7 +313,9 @@ class TeachingSessions:
             args = [
                 sys.executable,
                 "-m",
-                "firebird_teaching.managed",
+                worker_module(
+                    Path(profile.value.worker_root), "jensen_teaching.managed", layout=""
+                ),
                 "run",
                 "--isaac-python",
                 profile.value.isaac_python,
@@ -409,7 +412,9 @@ class TeachingSessions:
             verifier = await spawn(
                 sys.executable,
                 "-m",
-                "firebird_teaching.managed",
+                worker_module(
+                    Path(profile.value.worker_root), "jensen_teaching.managed", layout=""
+                ),
                 "verify",
                 "--capture",
                 str(directory / "capture"),

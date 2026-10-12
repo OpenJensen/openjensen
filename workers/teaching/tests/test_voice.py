@@ -5,14 +5,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from firebird_teaching.credentials import control_token
-from firebird_teaching.livekit_agent import (
+from jensen_teaching.credentials import control_token
+from jensen_teaching.livekit_agent import (
     SessionClient,
     VoiceSettings,
     build_agent,
     validate_dispatch,
 )
-from firebird_teaching.voice_join import JoinBroker
+from jensen_teaching.voice_join import JoinBroker
 
 
 @pytest.fixture
@@ -103,7 +103,7 @@ def test_actual_livekit_tools_use_only_typed_executor():
 
 def test_session_restart_invalidates_room(monkeypatch):
     monkeypatch.setattr(
-        "firebird_teaching.control.Client.request", lambda *args, **kwargs: {"session_id": "new"}
+        "jensen_teaching.control.Client.request", lambda *args, **kwargs: {"session_id": "new"}
     )
     client = SessionClient("http://127.0.0.1:8768", "x" * 32, "old")
     with pytest.raises(ValueError, match="changed"):
@@ -192,7 +192,7 @@ def test_private_token_file_and_nonregular_rejection(tmp_path, monkeypatch):
 
 
 def test_broker_missing_model_key_is_explicit_without_secret_values(voice_env, monkeypatch):
-    from firebird_teaching.livekit_agent import VoiceConfigurationError
+    from jensen_teaching.livekit_agent import VoiceConfigurationError
 
     monkeypatch.delenv("OPENROUTER_API_KEY")
     client = SimpleNamespace(request=lambda path: {"session_id": "session", "mode": "idle"})

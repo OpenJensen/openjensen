@@ -15,14 +15,14 @@ from vla_platform.lifecycle import simulation
 from vla_platform.lifecycle.contracts import PolicyArtifact, SimulationTarget
 
 CPU_FILES = (
-    "firebird_quant/src/firebird_quant/native_consumer.py",
-    "firebird_quant/src/firebird_quant/native_package.py",
-    "firebird_quant/src/firebird_quant/codec.py",
-    "firebird_quant/src/firebird_quant/model.py",
-    "firebird_quant/src/firebird_quant/state.py",
-    "act_optimizer/src/firebird_act/bundle.py",
-    "act_optimizer/src/firebird_act/probe.py",
-    "act_optimizer/src/firebird_act/control_schema.py",
+    "jensen_quant/src/jensen_quant/native_consumer.py",
+    "jensen_quant/src/jensen_quant/native_package.py",
+    "jensen_quant/src/jensen_quant/codec.py",
+    "jensen_quant/src/jensen_quant/model.py",
+    "jensen_quant/src/jensen_quant/state.py",
+    "act_optimizer/src/jensen_act/bundle.py",
+    "act_optimizer/src/jensen_act/probe.py",
+    "act_optimizer/src/jensen_act/control_schema.py",
     "skypilot/remote/policy_cpu_setup.sh",
     "skypilot/remote/policy_cpu_run.sh",
     "skypilot/remote/policy-cpu.requirements.txt",
@@ -152,7 +152,7 @@ def test_packed_profile_has_explicit_cpu_capability_and_only_fixed_local_paths(
     env = packed_profile.environment()
     assert env["PYTHONPATH"].split(os.pathsep) == [
         str(packed_profile.runner_root / "workers" / name)
-        for name in ("isaac_sim", "firebird_quant/src", "act_optimizer/src")
+        for name in ("isaac_sim", "jensen_quant/src", "act_optimizer/src")
     ]
     assert "OPENROUTER_API_KEY" not in env
 
@@ -193,7 +193,7 @@ def test_packed_dependency_symlink_is_not_an_admitted_source(packed_profile, tmp
 def test_packed_dependencies_do_not_redefine_legacy_cuda_source_scope(packed_profile):
     legacy = replace(packed_profile, policy_runtime="lerobot-cuda")
     before = legacy.identity_hash()
-    path = packed_profile.runner_root / "workers/firebird_quant/src/firebird_quant/codec.py"
+    path = packed_profile.runner_root / "workers/jensen_quant/src/jensen_quant/codec.py"
     path.write_text("# changed packed-only decoder\n")
     assert legacy.identity_hash() == before
     assert packed_profile.identity_hash() != before

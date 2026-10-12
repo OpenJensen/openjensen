@@ -1,7 +1,7 @@
 """Generated ACT temporal HTTP acceptance; not a simulator or task-quality test.
 
 Run in the pinned ACT0.6.1 CPU environment with act_optimizer/src,
-firebird_quant/src and isaac_sim on PYTHONPATH. The verification argument is the
+jensen_quant/src and isaac_sim on PYTHONPATH. The verification argument is the
 packing operation's verification.json: floating and packed outputs remain distinct.
 Every run is a fresh interpreter; only its ephemeral loopback listener is allowed.
 """
@@ -51,8 +51,8 @@ def main():
     from sim_worker.rollout.contracts import Frame, Observation
     from sim_worker.rollout.server import create_server
 
-    from firebird_act.bundle import canonical, inventory
-    from firebird_act.probe import check_queue, runtime_versions
+    from jensen_act.bundle import canonical, inventory
+    from jensen_act.probe import check_queue, runtime_versions
 
     versions = runtime_versions()
     torch.set_num_threads(1)

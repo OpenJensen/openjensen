@@ -13,6 +13,7 @@ from pydantic import Field
 
 from vla_platform.lifecycle.contracts import StrictRecord
 from vla_platform.lifecycle.runtime import Runtime, RuntimeCatalog
+from vla_platform.worker_paths import canonical_module
 
 _MAX_REGISTRY_BYTES = 131072
 
@@ -29,7 +30,7 @@ _MANAGED_FIELDS = {
     "gpu_memory_mib",
     "env",
 }
-_TRAINING_MODULES = {"firebird_vla.application", "firebird_vla.lerobot_application"}
+_TRAINING_MODULES = {"jensen_vla.application", "jensen_vla.lerobot_application"}
 _CUDA_TARGETS = re.compile(
     r"(?:\d+|(?:GPU|MIG)-[A-Za-z0-9/-]+)(?:,(?:\d+|(?:GPU|MIG)-[A-Za-z0-9/-]+))*"
 )
@@ -50,7 +51,7 @@ def _validate_managed(runtime: Runtime) -> Runtime:
         not runtime.id.startswith("managed-local-")
         or len(runtime.id) > 100
         or not runtime.training_only
-        or runtime.training_module not in _TRAINING_MODULES
+        or canonical_module(runtime.training_module) not in _TRAINING_MODULES
         or set(runtime.model_dump(exclude_defaults=True)) - _MANAGED_FIELDS
         or set(runtime.env) != {"CUDA_VISIBLE_DEVICES"}
         or len(runtime.env["CUDA_VISIBLE_DEVICES"]) > 1024
@@ -77,7 +78,7 @@ def _identity(runtime: Runtime) -> tuple:
         runtime.execution,
         runtime.provider,
         runtime.device,
-        runtime.training_module,
+        canonical_module(runtime.training_module),
         runtime.training_image,
         tuple(sorted(runtime.training_model_ids)),
         os.path.normpath(runtime.training_python or ""),

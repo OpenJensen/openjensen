@@ -300,7 +300,7 @@ def test_generated_registry_matches_actual_core_contract(configured):
     assert quantization.id == "local-act-quantization-cpu"
     assert quantization.native_quantization_only
     assert quantization.native_quantization_python == str(installation / "act-model/bin/python")
-    assert quantization.native_quantization_root == str(repo / "workers/firebird_quant")
+    assert quantization.native_quantization_root == str(repo / "workers/jensen_quant")
     assert not quantization.native_replay_only and not quantization.native_distillation_only
     raw = json.loads(output.read_text())["runtimes"][2]
     assert not any("dataset_python" in key for key in raw)

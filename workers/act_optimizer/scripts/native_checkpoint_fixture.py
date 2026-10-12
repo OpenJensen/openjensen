@@ -28,7 +28,7 @@ def audit(event, args):
 sys.addaudithook(audit)
 import torch
 from accelerate import Accelerator
-from firebird_vla.temporal import resolved_temporal
+from jensen_vla.temporal import resolved_temporal
 from lerobot.common.train_utils import resume_after_prepare, resume_before_prepare, save_checkpoint
 from lerobot.configs import FeatureType, PolicyFeature, PreTrainedConfig
 from lerobot.configs.default import DatasetConfig
@@ -275,8 +275,8 @@ elif args.mode == "resume":
     }
     (root / "resumed.json").write_bytes(canonical(result))
 else:
-    from firebird_vla.application import publish
-    from firebird_vla.lerobot_train import commit_checkpoint
+    from jensen_vla.application import publish
+    from jensen_vla.lerobot_train import commit_checkpoint
 
     proof = json.loads((root / "resumed.json").read_text())
     assert proof["reload_verified"] and proof["next_update_exact"]

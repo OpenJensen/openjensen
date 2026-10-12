@@ -12,6 +12,7 @@ from typing import Annotated
 import typer
 
 from vla_platform import cli_client
+from vla_platform.environment import getenv
 from vla_platform.tui_client import ApiError, segment
 
 app = typer.Typer(
@@ -271,7 +272,7 @@ def main(
 @app.command()
 def tui(
     api_url: Annotated[
-        str | None, typer.Option(help="Application URL; defaults to FIREBIRD_API_URL.")
+        str | None, typer.Option(help="Application URL; defaults to JENSEN_API_URL.")
     ] = None,
 ):
     """Open the keyboard workbench. Install with: uv sync --all-packages --extra tui."""
@@ -282,14 +283,14 @@ def tui(
         )
         raise typer.Exit(2)
     try:
-        from vla_platform.tui import FirebirdApp
+        from vla_platform.tui import JensenApp
     except ModuleNotFoundError as exc:
         if exc.name != "textual":
             raise
         typer.echo("Install the optional client: uv sync --all-packages --extra tui", err=True)
         raise typer.Exit(2) from exc
     try:
-        terminal = FirebirdApp(api_url or os.getenv("FIREBIRD_API_URL", "http://127.0.0.1:8000"))
+        terminal = JensenApp(api_url or getenv("JENSEN_API_URL", "http://127.0.0.1:8000"))
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
     terminal.run()

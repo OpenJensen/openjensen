@@ -2,7 +2,7 @@ import hashlib
 
 import pytest
 
-from firebird_decision.contracts import (
+from jensen_decision.contracts import (
     CAVEATS,
     LICENSE,
     MODEL_SHA256,

@@ -10,8 +10,8 @@ readonly CONTROL_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 [[ "${POLICY_RUNTIME:-}" == packed-act-cpu && "${POLICY_DEVICE:-}" == cpu ]]
 [[ "${POLICY_MODEL_FORMAT:-}" == firebird_quant ]]
 [[ "$(uname -s)" == Linux && "$(uname -m)" == x86_64 ]]
-test -f "$HOME/firebird-quant-src/firebird_quant/native_consumer.py"
-test -f "$HOME/firebird-act-src/firebird_act/probe.py"
+test -f "$HOME/firebird-quant-src/jensen_quant/native_consumer.py"
+test -f "$HOME/firebird-act-src/jensen_act/probe.py"
 
 # New CPU worker only; the existing CUDA setup script remains unchanged.
 sudo apt-get update
@@ -28,8 +28,8 @@ export PYTHONPATH="$HOME/sky_workdir:$HOME/firebird-quant-src:$HOME/firebird-act
 "$POLICY_ENV/bin/python" - <<'PY'
 import sys
 import torch
-from firebird_act.probe import runtime_versions
-from firebird_quant.native_consumer import load_packed_act
+from jensen_act.probe import runtime_versions
+from jensen_quant.native_consumer import load_packed_act
 
 assert sys.version_info[:2] == (3, 12), "Packed ACT requires Python 3.12"
 runtime_versions()

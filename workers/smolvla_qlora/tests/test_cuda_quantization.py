@@ -14,8 +14,8 @@ def test_nf4_gradient_freeze_and_adapter_reload(tmp_path, dtype_name):
     dtype = getattr(torch, dtype_name)
     bnb = pytest.importorskip("bitsandbytes")
     peft = pytest.importorskip("peft")
-    from firebird_vla.model import promote_trainable_parameters, quantize_linears
-    from firebird_vla.train import optimizer_step
+    from jensen_vla.model import promote_trainable_parameters, quantize_linears
+    from jensen_vla.train import optimizer_step
 
     class TinyPolicy(torch.nn.Module):
         def __init__(self):

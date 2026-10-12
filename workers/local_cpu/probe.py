@@ -67,20 +67,20 @@ def distillation_source_identity(repo: Path) -> dict[str, str]:
     groups = (
         (
             "distillation",
-            "firebird_distill",
-            "policy_distillation/src/firebird_distill",
+            "jensen_distill",
+            "policy_distillation/src/jensen_distill",
             ("__init__", "application", "contracts", "prepare", "runtime", "provenance"),
         ),
         (
             "act",
-            "firebird_act",
-            "act_optimizer/src/firebird_act",
+            "jensen_act",
+            "act_optimizer/src/jensen_act",
             ("bundle", "probe", "control_schema"),
         ),
         (
             "data",
-            "firebird_vla",
-            "smolvla_qlora/src/firebird_vla",
+            "jensen_vla",
+            "smolvla_qlora/src/jensen_vla",
             ("control_contract", "control_schema"),
         ),
     )
@@ -99,7 +99,7 @@ def distillation_source_identity(repo: Path) -> dict[str, str]:
             if not raw or len(raw) > 1024 * 1024:
                 raise ValueError(f"Invalid bounded worker source: {imported}")
             expected[f"{prefix}/{name}.py"] = hashlib.sha256(raw).hexdigest()
-    application = importlib.import_module("firebird_distill.application")
+    application = importlib.import_module("jensen_distill.application")
     actual = application.implementation_identity()
     if actual != expected:
         raise ValueError("Distillation implementation identity differs from selected source files")
@@ -146,16 +146,16 @@ def check(role: str, repo: Path) -> dict[str, object]:
             raise ValueError("PyArrow import/runtime check failed")
     folders = [
         "isaac_sim",
-        "firebird_quant/src",
+        "jensen_quant/src",
         "act_optimizer/src",
         "policy_distillation/src",
         "smolvla_qlora/src",
     ]
     sys.path[:0] = [str(repo / "workers" / x) for x in folders]
     modules = (
-        ["sim_worker.rollout.native_replay", "firebird_distill.application"]
+        ["sim_worker.rollout.native_replay", "jensen_distill.application"]
         if role == "model"
-        else ["sim_worker.rollout.native_replay_prepare", "firebird_distill.prepare"]
+        else ["sim_worker.rollout.native_replay_prepare", "jensen_distill.prepare"]
     )
     loaded = {}
     for name in modules:

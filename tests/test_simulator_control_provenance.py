@@ -250,8 +250,8 @@ def test_isolated_workers_ship_the_same_versioned_coordinate_schema():
     root = Path(__file__).resolve().parents[1]
     expected = Path(schema.__file__).read_bytes()
     paths = [
-        "workers/smolvla_qlora/src/firebird_vla/control_schema.py",
-        "workers/act_optimizer/src/firebird_act/control_schema.py",
+        "workers/smolvla_qlora/src/jensen_vla/control_schema.py",
+        "workers/act_optimizer/src/jensen_act/control_schema.py",
         "workers/isaac_sim/sim_worker/rollout/control_schema.py",
     ]
     for path in paths:

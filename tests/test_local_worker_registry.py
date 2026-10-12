@@ -175,7 +175,7 @@ def test_command_rejects_other_operations_even_with_training_flag(tmp_path, oper
         training=True,
         operation="policy.finetune",
     )
-    assert argv[:3] == [sys.executable, "-m", "firebird_vla.application"]
+    assert argv[:3] == [sys.executable, "-m", "jensen_vla.application"]
     assert cwd == str(tmp_path / "private-worker")
     assert env["CUDA_VISIBLE_DEVICES"] == "GPU-test-1234"
 

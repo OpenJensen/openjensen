@@ -3,8 +3,8 @@
 from pathlib import Path
 
 import pytest
-from firebird_act.bundle import canonical
-from firebird_distill.contracts import digest
+from jensen_act.bundle import canonical
+from jensen_distill.contracts import digest
 from native_fixture import make_job, make_teacher
 
 

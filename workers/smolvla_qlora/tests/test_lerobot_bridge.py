@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from firebird_vla.checkpoint import verify_bundle
-from firebird_vla.lerobot_application import cli_arguments, resolve_recipe
-from firebird_vla.lerobot_train import commit_checkpoint, metric_value
-from firebird_vla.native_profiles import LEROBOT_REVISION, NATIVE_PROFILES, native_requirement
+from jensen_vla.checkpoint import verify_bundle
+from jensen_vla.lerobot_application import cli_arguments, resolve_recipe
+from jensen_vla.lerobot_train import commit_checkpoint, metric_value
+from jensen_vla.native_profiles import LEROBOT_REVISION, NATIVE_PROFILES, native_requirement
 
 
 def require_native_upstream():
@@ -49,7 +49,7 @@ def request(model="act", **overrides):
 
 
 def test_native_smolvla_supervised_training_uses_expert_weights_without_peft():
-    from firebird_vla.native_profiles import SMOLVLA_NATIVE_PROFILE, native_profile_for_recipe
+    from jensen_vla.native_profiles import SMOLVLA_NATIVE_PROFILE, native_profile_for_recipe
 
     job = request()
     job["parameters"]["training"].update(
@@ -149,12 +149,12 @@ def test_nonfinite_metrics_cannot_be_published():
 def test_operator_and_worker_profile_copies_stay_identical():
     root = Path(__file__).parents[3]
     assert (root / "packages/core/src/vla_platform/lifecycle/native_profiles.py").read_bytes() == (
-        root / "workers/smolvla_qlora/src/firebird_vla/native_profiles.py"
+        root / "workers/smolvla_qlora/src/jensen_vla/native_profiles.py"
     ).read_bytes()
 
 
 def test_eo1_checkpoint_config_migration_preserves_original_and_weights(tmp_path):
-    from firebird_vla.lerobot_train import compatible_model_snapshot
+    from jensen_vla.lerobot_train import compatible_model_snapshot
 
     original = tmp_path / "snapshot"
     original.mkdir()
@@ -172,7 +172,7 @@ def test_eo1_checkpoint_config_migration_preserves_original_and_weights(tmp_path
 def test_explicit_optimizer_settings_survive_upstream_policy_presets():
     from types import SimpleNamespace
 
-    from firebird_vla.lerobot_train import apply_optimizer_overrides
+    from jensen_vla.lerobot_train import apply_optimizer_overrides
 
     cfg = SimpleNamespace(
         resume=False,
@@ -194,7 +194,7 @@ def test_explicit_optimizer_settings_survive_upstream_policy_presets():
 
 
 def test_native_working_retention_preserves_latest_two_and_other_directories(tmp_path):
-    from firebird_vla.lerobot_train import prune_native_working_checkpoints
+    from jensen_vla.lerobot_train import prune_native_working_checkpoints
 
     for name in ("000001", "000002", "000003", "notes"):
         (tmp_path / name).mkdir()
@@ -211,7 +211,7 @@ def test_probe_handles_pusht_camera_and_restores_training_precision(monkeypatch)
     require_native_upstream()
     torch = pytest.importorskip("torch")
     pytest.importorskip("lerobot.scripts.lerobot_train")
-    from firebird_vla.lerobot_train import probe
+    from jensen_vla.lerobot_train import probe
 
     class Policy:
         training = True

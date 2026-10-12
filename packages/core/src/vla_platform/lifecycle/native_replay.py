@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from vla_platform.contracts import DatasetProfile
 from vla_platform.datasets.local_preview import _open_beneath
 from vla_platform.datasets.snapshots import resolve_snapshot, stage_snapshot, verify_snapshot
+from vla_platform.worker_paths import worker_package, worker_project
 
 from .contracts import LifecycleResult, PolicyArtifact
 from .native_quantization import (
@@ -346,7 +347,7 @@ def command(runtime, mode, request, result):
         PYTHONPATH=os.pathsep.join(
             [
                 str(root),
-                str(root.parent / "firebird_quant/src"),
+                str(worker_project(root.parent, "jensen_quant") / "src"),
                 str(root.parent / "act_optimizer/src"),
                 str(root.parent / "smolvla_qlora/src"),
             ]
@@ -382,8 +383,8 @@ def implementation_identity(runtime):
     }
     for package, directory, names in (
         (
-            "firebird_quant",
-            root.parent / "firebird_quant/src/firebird_quant",
+            worker_package(worker_project(root.parent, "jensen_quant"), "jensen_quant").name,
+            worker_package(worker_project(root.parent, "jensen_quant"), "jensen_quant"),
             ("native_application", "native_consumer", "native_package"),
         ),
         ("sim_worker.rollout", replay, ("backend", "client", "server")),

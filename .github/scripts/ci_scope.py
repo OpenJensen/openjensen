@@ -32,7 +32,7 @@ SCOPES = (
 LANES = ("desktop_lane", "mobile_lane")
 WORKERS = {
     "quantization": "workers/vla_cpp/",
-    "unified_quantization": "workers/firebird_quant/",
+    "unified_quantization": "workers/jensen_quant/",
     "training": "workers/smolvla_qlora/",
     "benchmark": "workers/benchmark_gpu/",
     "act": "workers/act_optimizer/",

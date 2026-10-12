@@ -5,7 +5,8 @@ build-backend = "hatchling.build"
 [project]
 name = "vla-platform"
 version = "0.1.0"
-description = "Local VLA lifecycle application: first foundation and intake slice"
+description = "OPEN JENSEN self-hosted robotics research workspace"
+license = "Apache-2.0"
 requires-python = ">=3.14,<3.15"
 dependencies = [
   "fastapi==0.141.1",
@@ -23,6 +24,8 @@ dependencies = [
 tui = ["textual==8.2.8"]
 
 [project.scripts]
+jensen = "vla_platform.cli:app"
+# Compatibility command for alpha installations.
 firebird = "vla_platform.cli:app"
 
 [tool.hatch.build.targets.wheel]

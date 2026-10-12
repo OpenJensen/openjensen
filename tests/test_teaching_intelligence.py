@@ -291,10 +291,10 @@ def test_actual_app_to_broker_to_provider_adapter_uses_saved_file_and_no_control
 
     monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "workers/teaching"))
     monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "workers/isaac_sim"))
-    from firebird_teaching import intelligence_config
-    from firebird_teaching.intelligence import IntelligenceService
-    from firebird_teaching.providers import Providers
-    from firebird_teaching.voice_join import JoinBroker, serve
+    from jensen_teaching import intelligence_config
+    from jensen_teaching.intelligence import IntelligenceService
+    from jensen_teaching.providers import Providers
+    from jensen_teaching.voice_join import JoinBroker, serve
 
     settings.save(
         tmp_path,
@@ -386,5 +386,5 @@ def test_actual_app_to_broker_to_provider_adapter_uses_saved_file_and_no_control
         # This app test deliberately imports optional worker modules without installing them.
         # Other core tests should not depend on that import side effect.
         for name in list(sys.modules):
-            if name.startswith("firebird_teaching"):
+            if name.startswith("jensen_teaching"):
                 sys.modules.pop(name)

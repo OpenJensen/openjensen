@@ -34,7 +34,7 @@ def test_fixed_chain_reuses_one_saved_student_and_both_packed_outputs(tmp_path):
     assert stages[1][1] == [
         "/pinned/python",
         "-m",
-        "firebird_distill.application",
+        "jensen_distill.application",
         str(root / "distill-request.json"),
         str(root / "distill-result.json"),
     ]

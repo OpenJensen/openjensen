@@ -339,7 +339,7 @@ def test_frame_relay_accepts_actual_worker_generated_envelope():
 
     name = "firebird_test_atomic_frame"
     spec = importlib.util.spec_from_file_location(
-        name, Path(__file__).parents[1] / "workers/teaching/firebird_teaching/frame_snapshot.py"
+        name, Path(__file__).parents[1] / "workers/teaching/jensen_teaching/frame_snapshot.py"
     )
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module

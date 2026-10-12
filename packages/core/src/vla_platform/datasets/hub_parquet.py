@@ -3,11 +3,11 @@
 import asyncio
 import json
 import math
-import os
 from pathlib import Path
 from typing import Literal
 
 from vla_platform.datasets.local_preview import reader_python
+from vla_platform.environment import getenv
 
 WORKER_SCRIPT = Path(__file__).with_name("hub_parquet_worker.py")
 MAX_INPUT_BYTES = 32 * 1024 * 1024
@@ -60,7 +60,7 @@ async def read_parquet(
     executable = (
         Path(python)
         if python is not None
-        else Path(os.environ.get("FIREBIRD_CPU_READER_PYTHON") or reader_python())
+        else Path(getenv("JENSEN_CPU_READER_PYTHON") or reader_python())
     )
     process = None
     tasks: list[asyncio.Task] = []

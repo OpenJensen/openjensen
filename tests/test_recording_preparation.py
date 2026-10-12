@@ -119,7 +119,7 @@ def write(path, value):
 def configuration(tmp_path):
     root = tmp_path / "captures"
     root.mkdir()
-    worker = tmp_path / "worker/firebird_teaching"
+    worker = tmp_path / "worker/jensen_teaching"
     worker.mkdir(parents=True)
     for name in ("__init__.py", "prepare_dataset.py", "dataset.py", "contracts.py", "journal.py"):
         (worker / name).write_text("# fixed worker fixture\n")
@@ -216,7 +216,7 @@ def test_reviewed_identity_change_rejected(tmp_path, change):
         "session": root / "session/session.json",
         "episode": root / "session" / ("d" * 32) / "episode.json",
         "config": config,
-        "worker": tmp_path / "worker/firebird_teaching/dataset.py",
+        "worker": tmp_path / "worker/jensen_teaching/dataset.py",
         "executable": tmp_path / "python",
     }[change]
     target.write_bytes(target.read_bytes() + b" ")

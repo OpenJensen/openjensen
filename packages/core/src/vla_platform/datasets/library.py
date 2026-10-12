@@ -1,13 +1,18 @@
 """Workspace-owned dataset uploads, deterministic adapters and editable annotations."""
 
 import asyncio
+import errno
 import json
+import math
 import os
 import re
 import shutil
 import signal
 import tempfile
+import unicodedata
 import zipfile
+import zlib
+from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -15,9 +20,73 @@ from filelock import FileLock
 
 from vla_platform.contracts import DatasetProfile, IntakeRequest, now
 from vla_platform.datasets.local_preview import reader_python
+from vla_platform.environment import getenv
 
 MAX_BYTES = 2 * 1024**3
 MAX_FILES = 4096
+MAX_RECORD_BYTES = 32 * 1024**2
+DISK_HEADROOM = 1024**3
+
+
+def canonical_name(name):
+    if (
+        not isinstance(name, str)
+        or not name
+        or len(name) > 1024
+        or any(character in name for character in "\\\0:")
+        or any(not character.isprintable() for character in name)
+        or any(part in ("", ".", "..") for part in name.split("/"))
+    ):
+        raise LibraryError("Dataset file must use a canonical relative path")
+    return name
+
+
+def name_key(name):
+    # Keep uploads portable across case-insensitive and Unicode-normalizing filesystems.
+    return unicodedata.normalize("NFC", canonical_name(name)).casefold()
+
+
+def record_pairs(pairs):
+    value = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError("Duplicate dataset record keys")
+        value[key] = item
+    return value
+
+
+def invalid_number(_):
+    raise ValueError("Non-finite dataset record number")
+
+
+def finite_float(raw):
+    value = float(raw)
+    if not math.isfinite(value):
+        raise ValueError("Non-finite dataset record number")
+    return value
+
+
+def sync_directory(directory):
+    if os.name == "posix":
+        descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
+
+async def owned_thread(function, *args):
+    task = asyncio.create_task(asyncio.to_thread(function, *args))
+    cancelled = False
+    while not task.done():
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            cancelled = True
+    result = task.result()
+    if cancelled:
+        raise asyncio.CancelledError
+    return result
 
 
 class LibraryError(ValueError):
@@ -27,8 +96,7 @@ class LibraryError(ValueError):
 
 
 def contained(root, name):
-    if not name or len(name) > 1024 or "\\" in name or "\0" in name:
-        raise LibraryError("Invalid dataset file name")
+    canonical_name(name)
     path = Path(name)
     if path.is_absolute() or any(p in (".", "..") for p in path.parts):
         raise LibraryError("Dataset file must be relative to its folder")
@@ -45,37 +113,185 @@ class DatasetLibrary:
         self.tasks = {}
         self.lock = asyncio.Lock()
         self.worker_limit = asyncio.Semaphore(1)
-        for record in self.root.glob("*/record.json"):
-            value = json.loads(record.read_text())
+        for value in self.records():
             if reconcile and value["status"] == "converting":
                 value.update(
                     status="failed",
                     error="Conversion was interrupted by app restart. Retry conversion.",
                 )
-                self.save(value)
+                try:
+                    self.save(value)
+                except OSError:
+                    # A read-only or full workspace must still serve its saved diagnostics.
+                    continue
 
     def directory(self, ident):
         if not re.fullmatch(r"[a-f0-9]{32}", ident):
             raise LibraryError("Dataset not found", 404)
-        return self.root / ident
+        directory = self.root / ident
+        if directory.is_symlink():
+            raise LibraryError("Dataset directory is unavailable", 422)
+        return directory
+
+    def validate_record(self, value, ident):
+        if not isinstance(value, dict) or value.get("id") != ident:
+            raise ValueError("Invalid record identity")
+        if (
+            not isinstance(value.get("project_id"), str)
+            or not 1 <= len(value["project_id"]) <= 128
+            or not isinstance(value.get("name"), str)
+            or not 1 <= len(value["name"]) <= 100
+            or value.get("source") != "local"
+            or value.get("status") not in {"uploading", "detected", "converting", "ready", "failed"}
+            or not isinstance(value.get("created_at"), str)
+        ):
+            raise ValueError("Invalid record fields")
+        datetime.fromisoformat(value["created_at"])
+        files = value.get("files")
+        if not isinstance(files, dict) or len(files) > MAX_FILES:
+            raise ValueError("Invalid file inventory")
+        keys = set()
+        for name, size in files.items():
+            key = name_key(name)
+            if key in keys or type(size) is not int or size < 0:
+                raise ValueError("Invalid file inventory")
+            keys.add(key)
+        if (
+            type(value.get("total_bytes")) is not int
+            or value["total_bytes"] != sum(files.values())
+            or not 0 <= value["total_bytes"] <= MAX_BYTES
+            or type(value.get("annotation_revision")) is not int
+            or value["annotation_revision"] < 0
+        ):
+            raise ValueError("Invalid record inventory or revision")
+        annotations = value.get("annotations")
+        if not isinstance(annotations, dict):
+            raise ValueError("Invalid annotations")
+        for key, maximum, length in (("views", 8, 100), ("frames", 12000, 1000)):
+            labels = annotations.get(key)
+            if (
+                not isinstance(labels, dict)
+                or len(labels) > maximum
+                or any(
+                    not isinstance(name, str) or not isinstance(label, str) or len(label) > length
+                    for name, label in labels.items()
+                )
+            ):
+                raise ValueError("Invalid annotations")
+        detection = value.get("detection")
+        if detection is not None or value["status"] != "uploading":
+            if (
+                not isinstance(detection, dict)
+                or not isinstance(detection.get("sha256"), str)
+                or not re.fullmatch(r"[a-f0-9]{64}", detection["sha256"])
+                or not isinstance(detection.get("format"), str)
+                or not detection["format"]
+                or type(detection.get("convertible")) is not bool
+                or not isinstance(detection.get("cameras"), list)
+                or any(not isinstance(camera, str) for camera in detection["cameras"])
+            ):
+                raise ValueError("Invalid detection")
+        if "converted" in value and (
+            not isinstance(value["converted"], dict)
+            or not isinstance(value["converted"].get("cameras"), list)
+            or any(not isinstance(camera, str) for camera in value["converted"]["cameras"])
+        ):
+            raise ValueError("Invalid converted dataset")
+        if value.get("error") is not None and not isinstance(value["error"], str):
+            raise ValueError("Invalid record diagnostic")
+        for key in ("normalized", "source_directory"):
+            if value.get(key) is not None:
+                canonical_name(value[key])
+        if value["status"] == "ready" and (
+            not value.get("normalized") or not isinstance(value.get("detection"), dict)
+        ):
+            raise ValueError("Incomplete accepted dataset")
+        return value
+
+    def unavailable(self, ident):
+        return {
+            "id": ident,
+            "project_id": None,
+            "name": "Unavailable saved dataset",
+            "source": "local",
+            "status": "unavailable",
+            "created_at": "",
+            "total_bytes": None,
+            "uploaded_files": None,
+            "can_discard": False,
+            "error": (
+                "Saved dataset metadata is missing, invalid or unreadable. "
+                "Original files are preserved; review the workspace record before repairing it."
+            ),
+        }
+
+    def records(self):
+        for directory in self.root.iterdir():
+            if re.fullmatch(r"[a-f0-9]{32}", directory.name) and directory.is_dir():
+                yield self.get(directory.name)
 
     def save(self, value):
+        self.validate_record(value, value["id"])
         path = self.directory(value["id"]) / "record.json"
-        temporary = path.with_suffix(".tmp")
-        temporary.write_text(json.dumps(value, allow_nan=False))
-        temporary.replace(path)
+        payload = json.dumps(value, allow_nan=False).encode()
+        if len(payload) > MAX_RECORD_BYTES:
+            raise LibraryError("Saved dataset record exceeds its size limit")
+        descriptor, name = tempfile.mkstemp(prefix=".record-", dir=path.parent)
+        temporary = Path(name)
+        try:
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            temporary.replace(path)
+            sync_directory(path.parent)
+        finally:
+            temporary.unlink(missing_ok=True)
 
     def get(self, ident, project_id=None):
+        if not re.fullmatch(r"[a-f0-9]{32}", ident):
+            raise LibraryError("Dataset not found", 404)
         try:
-            value = json.loads((self.directory(ident) / "record.json").read_text())
-        except FileNotFoundError as exc:
-            raise LibraryError("Dataset not found", 404) from exc
+            directory = self.directory(ident)
+            if not directory.exists():
+                raise LibraryError("Dataset not found", 404)
+            path = directory / "record.json"
+            if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_RECORD_BYTES:
+                raise ValueError("Invalid record file")
+            with path.open("rb") as handle:
+                raw = handle.read(MAX_RECORD_BYTES + 1)
+            if len(raw) > MAX_RECORD_BYTES:
+                raise ValueError("Oversized record")
+            value = self.validate_record(
+                json.loads(
+                    raw,
+                    object_pairs_hook=record_pairs,
+                    parse_constant=invalid_number,
+                    parse_float=finite_float,
+                ),
+                ident,
+            )
+        except LibraryError as exc:
+            if exc.status == 404:
+                raise
+            value = self.unavailable(ident)
+        except OSError, ValueError, TypeError, KeyError, RecursionError:
+            value = self.unavailable(ident)
         if project_id and value["project_id"] != project_id:
             raise LibraryError("Dataset does not belong to this project", 404)
         return value
 
     def public(self, value):
-        return {k: v for k, v in value.items() if k not in ("normalized", "files")}
+        result = {k: v for k, v in value.items() if k not in ("normalized", "files")}
+        result["uploaded_files"] = len(value["files"]) if "files" in value else None
+        result["can_discard"] = value["status"] == "uploading" and not (
+            value.get("detection") or value.get("normalized") or value.get("converted")
+        )
+        if value["status"] == "uploading" and not result.get("error"):
+            result["error"] = (
+                "Upload is unfinished. Finalize the saved files or discard this upload."
+            )
+        return result
 
     def begin(self, project_id, name):
         value = {
@@ -103,9 +319,12 @@ class DatasetLibrary:
             value = self.get(ident)
             if value["status"] != "uploading":
                 raise LibraryError("This upload is already finalized", 409)
-            if len(value["files"]) >= MAX_FILES or name in value["files"]:
+            key = name_key(name)
+            if len(value["files"]) >= MAX_FILES or key in {name_key(n) for n in value["files"]}:
                 raise LibraryError("File already uploaded or file count limit exceeded", 409)
             destination = contained(self.directory(ident) / "source", name)
+            if destination.exists() or destination.is_symlink():
+                raise LibraryError("File already exists; its original bytes were preserved", 409)
             destination.parent.mkdir(parents=True, exist_ok=True)
             descriptor, temporary = tempfile.mkstemp(prefix=".upload-", dir=destination.parent)
             size = 0
@@ -115,12 +334,22 @@ class DatasetLibrary:
                         size += len(chunk)
                         if size + value["total_bytes"] > MAX_BYTES:
                             raise LibraryError("Local uploads support at most 2 GiB", 413)
-                        if shutil.disk_usage(self.root).free < 1024**3 + len(chunk):
+                        if shutil.disk_usage(self.root).free < DISK_HEADROOM + len(chunk):
                             raise LibraryError("Not enough free storage for this upload", 507)
                         handle.write(chunk)
-                Path(temporary).replace(destination)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                # A hard link publishes without replacing a file created by an alias or race.
+                try:
+                    os.link(temporary, destination)
+                except FileExistsError as exc:
+                    raise LibraryError(
+                        "File already exists; its original bytes were preserved", 409
+                    ) from exc
+                sync_directory(destination.parent)
                 value["files"][name] = size
                 value["total_bytes"] += size
+                value["error"] = None
                 self.save(value)
             finally:
                 Path(temporary).unlink(missing_ok=True)
@@ -132,41 +361,117 @@ class DatasetLibrary:
         names = list(value["files"])
         if len(names) != 1 or not names[0].lower().endswith(".zip"):
             return
-        destination = self.directory(ident) / "extracted"
-        destination.mkdir()
-        total, count = 0, 0
+        directory = self.directory(ident)
+        destination = directory / "extracted"
+        staging = None
         try:
             with zipfile.ZipFile(source / names[0]) as archive:
+                entries, keys, total = [], set(), 0
                 for info in archive.infolist():
+                    name = info.filename.rstrip("/") if info.is_dir() else info.filename
+                    canonical_name(name)
                     if info.is_dir():
                         continue
                     if (info.external_attr >> 16) & 0o170000 == 0o120000:
                         raise LibraryError("ZIP symlinks are unsupported")
-                    target = contained(destination, info.filename)
-                    total += info.file_size
-                    count += 1
-                    if total > MAX_BYTES or count > MAX_FILES:
-                        raise LibraryError("Expanded ZIP exceeds 2 GiB / 4096 files", 413)
-                    if target.exists():
+                    key = name_key(info.filename)
+                    if key in keys:
                         raise LibraryError("ZIP has duplicate file paths")
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    with archive.open(info) as original, target.open("xb") as handle:
-                        shutil.copyfileobj(original, handle, 1024**2)
+                    keys.add(key)
+                    total += info.file_size
+                    entries.append(info)
+                    if total > MAX_BYTES or len(entries) > MAX_FILES:
+                        raise LibraryError("Expanded ZIP exceeds 2 GiB / 4096 files", 413)
+                if not entries:
+                    raise LibraryError("ZIP contains no dataset files")
+                saved = value.get("source_directory")
+                if saved and saved.split("/")[0].startswith("extracted"):
+                    destination = directory / saved.split("/")[0]
+                if self.complete_extraction(destination, entries):
+                    pass  # Also recovers publication before its record was saved.
+                else:
+                    if destination.exists() or destination.is_symlink():
+                        # Preserve older partial extractions; publish into a fresh owned folder.
+                        destination = directory / ("extracted-" + uuid4().hex)
+                    if shutil.disk_usage(self.root).free < total + DISK_HEADROOM:
+                        raise LibraryError("Not enough free storage to extract this ZIP", 507)
+                    staging = Path(tempfile.mkdtemp(prefix=".extract-", dir=directory))
+                    expanded = 0
+                    for info in entries:
+                        target = contained(staging, info.filename)
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        with archive.open(info) as original, target.open("xb") as handle:
+                            size = 0
+                            while chunk := original.read(1024**2):
+                                size += len(chunk)
+                                expanded += len(chunk)
+                                if size > info.file_size or expanded > MAX_BYTES:
+                                    raise LibraryError(
+                                        "Expanded ZIP exceeds its declared size", 413
+                                    )
+                                if shutil.disk_usage(self.root).free < DISK_HEADROOM + len(chunk):
+                                    raise LibraryError(
+                                        "Not enough free storage to extract this ZIP", 507
+                                    )
+                                handle.write(chunk)
+                            if size != info.file_size:
+                                raise LibraryError("ZIP file is incomplete")
+                            handle.flush()
+                            os.fsync(handle.fileno())
+                        sync_directory(target.parent)
+                    sync_directory(staging)
+                    staging.rename(destination)
+                    staging = None
+                    sync_directory(directory)
             children = list(destination.iterdir())
             if len(children) == 1 and children[0].is_dir():
-                value["source_directory"] = "extracted/" + children[0].name
+                value["source_directory"] = destination.name + "/" + children[0].name
             else:
-                value["source_directory"] = "extracted"
+                value["source_directory"] = destination.name
             self.save(value)
-        except BaseException:
-            shutil.rmtree(destination)
-            raise
+        except (zipfile.BadZipFile, RuntimeError) as exc:
+            raise LibraryError("ZIP is invalid, incomplete or encrypted") from exc
+        except OSError as exc:
+            raise LibraryError(
+                "ZIP extraction could not be saved; uploaded source bytes were preserved",
+                507 if exc.errno == errno.ENOSPC else 422,
+            ) from exc
+        finally:
+            if staging is not None:
+                shutil.rmtree(staging)
+
+    def complete_extraction(self, directory, entries):
+        if directory.is_symlink() or not directory.is_dir():
+            return False
+        expected = {info.filename: info for info in entries}
+        actual = {}
+        try:
+            for path in directory.rglob("*"):
+                if path.is_symlink():
+                    return False
+                if path.is_file():
+                    actual[path.relative_to(directory).as_posix()] = path
+            if set(actual) != set(expected):
+                return False
+            for name, path in actual.items():
+                info = expected[name]
+                if path.stat().st_size != info.file_size:
+                    return False
+                crc = 0
+                with path.open("rb") as handle:
+                    while chunk := handle.read(1024**2):
+                        crc = zlib.crc32(chunk, crc)
+                if crc != info.CRC:
+                    return False
+        except OSError:
+            return False
+        return True
 
     def source(self, value):
         return contained(self.directory(value["id"]), value.get("source_directory", "source"))
 
     async def worker(self, payload, timeout=300):
-        executable = os.environ.get("FIREBIRD_CPU_READER_PYTHON") or str(reader_python())
+        executable = getenv("JENSEN_CPU_READER_PYTHON") or str(reader_python())
         async with self.worker_limit:
             try:
                 process = await asyncio.create_subprocess_exec(
@@ -217,12 +522,24 @@ class DatasetLibrary:
                 return self.public(value)
             if not value["files"]:
                 raise LibraryError("Select dataset files first")
-            await asyncio.to_thread(self.extract, ident)
-            value = self.get(ident)
-            detection = await self.worker({"operation": "detect", "root": str(self.source(value))})
+            try:
+                await owned_thread(self.extract, ident)
+                value = self.get(ident)
+                detection = await self.worker(
+                    {"operation": "detect", "root": str(self.source(value))}
+                )
+            except (LibraryError, asyncio.CancelledError) as exc:
+                value = self.get(ident)
+                if value["status"] == "uploading":
+                    value["error"] = (
+                        "Finalization was interrupted. Retry finalizing the saved files."
+                        if isinstance(exc, asyncio.CancelledError)
+                        else str(exc)
+                    )
+                    self.save(value)
+                raise
             # Identical uploads in one project reuse the saved source and labels.
-            for record in self.root.glob("*/record.json"):
-                existing = json.loads(record.read_text())
+            for existing in self.records():
                 if (
                     existing["id"] != ident
                     and existing["project_id"] == value["project_id"]
@@ -248,8 +565,7 @@ class DatasetLibrary:
             return self.public(value)
 
     async def example(self, project_id):
-        for record in self.root.glob("*/record.json"):
-            value = json.loads(record.read_text())
+        for value in self.records():
             if value["project_id"] == project_id and value.get("example"):
                 return self.public(value)
         value = self.begin(project_id, "Robot labeling playground")
@@ -361,11 +677,13 @@ class DatasetLibrary:
         return Path(name)
 
     async def list(self, projects, execution, project_id=None):
-        rows = [self.public(json.loads(p.read_text())) for p in self.root.glob("*/record.json")]
+        rows = [self.public(value) for value in self.records()]
         rows = [
             r
             for r in rows
-            if r["status"] != "uploading" and (not project_id or r["project_id"] == project_id)
+            if not project_id
+            or r["project_id"] == project_id
+            or (r["status"] == "unavailable" and r["project_id"] is None)
         ]
         for project in await projects.list():
             if project_id and project.id != project_id:
@@ -379,6 +697,7 @@ class DatasetLibrary:
                 if isinstance(job.request, IntakeRequest) and job.request.library_id:
                     for row in rows:
                         if row["id"] == job.request.library_id:
+                            row["can_discard"] = False
                             if not row.get("job_id") or job.result.snapshot:
                                 row["job_id"] = job.id
                             row["training_copy"] = row.get("training_copy", False) or bool(
@@ -405,6 +724,21 @@ class DatasetLibrary:
                     }
                 )
         return sorted(rows, key=lambda row: row["created_at"], reverse=True)
+
+    async def discard(self, ident, project_id, execution):
+        async with self.lock:
+            value = self.get(ident, project_id)
+            if not self.public(value)["can_discard"] or ident in self.tasks:
+                raise LibraryError("Only an unfinished, unaccepted upload can be discarded", 409)
+            for job in await execution.list(project_id):
+                if isinstance(job.request, IntakeRequest) and job.request.library_id == ident:
+                    raise LibraryError(
+                        "This upload is referenced by a saved job and is preserved", 409
+                    )
+            directory = self.directory(ident)
+            await owned_thread(shutil.rmtree, directory)
+            sync_directory(self.root)
+            return {"discarded": True, "id": ident}
 
     async def close(self):
         for task in list(self.tasks.values()):

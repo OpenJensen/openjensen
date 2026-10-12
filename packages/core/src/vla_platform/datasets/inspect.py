@@ -176,13 +176,13 @@ async def inspect_hub(request: IntakeRequest) -> DatasetProfile:
 
 def inspect_local(request: IntakeRequest, allowed_root: str | None) -> DatasetProfile:
     if not allowed_root:
-        raise ValueError("Local intake is disabled; configure FIREBIRD_LOCAL_DATA_ROOT first")
+        raise ValueError("Local intake is disabled; configure JENSEN_LOCAL_DATA_ROOT first")
     root = Path(allowed_root).resolve(strict=True)
     candidate = Path(request.path or "")
     dataset = (candidate if candidate.is_absolute() else root / candidate).resolve(strict=True)
     target = (dataset / "meta/info.json").resolve(strict=True)
     if not dataset.is_relative_to(root) or not target.is_relative_to(root):
-        raise ValueError("Dataset metadata must remain within FIREBIRD_LOCAL_DATA_ROOT")
+        raise ValueError("Dataset metadata must remain within JENSEN_LOCAL_DATA_ROOT")
     if not target.is_file():
         raise ValueError("Local dataset metadata must be a regular file")
     with target.open("rb") as handle:

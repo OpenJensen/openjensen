@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import os
 import time
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -15,6 +14,7 @@ from vla_platform.augmentation.service import Augmentation
 from vla_platform.contracts import TERMINAL, IntakeRequest, Job, WorkerRequest, WorkerResult, now
 from vla_platform.datasets.cache import Inspections
 from vla_platform.datasets.recordings import Recordings
+from vla_platform.environment import getenv
 from vla_platform.frozen_commands import intake_command
 from vla_platform.lifecycle.contracts import PolicyRequest, SimulationTarget
 from vla_platform.lifecycle.service import Lifecycle
@@ -50,6 +50,7 @@ class Execution:
         self._submission_locks = [asyncio.Lock() for _ in range(64)]
         self._accepting: set[asyncio.Task] = set()
         self._closing = False
+        self.cloud_cleanup_pending = False
 
     async def get(self, job_id: str) -> Job | None:
         async with self.storage.engine.connect() as connection:
@@ -107,7 +108,7 @@ class Execution:
                 and prepared.library_id is None
                 and self.settings.local_root is None
             ):
-                raise ValueError("Local intake is disabled; configure FIREBIRD_LOCAL_DATA_ROOT")
+                raise ValueError("Local intake is disabled; configure JENSEN_LOCAL_DATA_ROOT")
             if isinstance(prepared, IntakeRequest) and not prepared.snapshot_for_training:
                 resolved = await self.inspections.prepare(prepared)
                 if resolved is not None:
@@ -242,7 +243,7 @@ class Execution:
                 task.cancel()
         if task:
             await asyncio.gather(task, return_exceptions=True)
-        return job
+        return await self.get(job_id)
 
     async def finish(self, job_id: str, response: WorkerResult) -> None:
         async with self.lock:
@@ -270,7 +271,7 @@ class Execution:
                 intake=intake,
                 snapshot_store=str(self.settings.data_dir / "dataset-snapshots"),
                 local_root=str(local_root) if local_root else None,
-                reader_python=os.environ.get("FIREBIRD_CPU_READER_PYTHON"),
+                reader_python=getenv("JENSEN_CPU_READER_PYTHON"),
             ).model_dump_json(),
             encoding="utf-8",
         )
@@ -369,7 +370,9 @@ class Execution:
                     current.status = "failed"
                     current.error = f"{type(exc).__name__}: {str(exc)[:2000]}"
                     await self.save(current)
-                elif current.status == "cancelled" and "Cloud cleanup" in str(exc):
+                elif current.status == "cancelled" and any(
+                    label in str(exc) for label in ("Cloud cleanup", "Worker cleanup")
+                ):
                     current.error = f"{current.error or 'Cancelled.'}\n{str(exc)[:2000]}"
                     await self.save(current)
 
@@ -450,7 +453,9 @@ class Execution:
         # job-owned dispatch records, never unrelated operator clusters.
         from vla_platform.lifecycle.sky_runner import recover
 
-        for failure in await recover(self.settings.data_dir):
+        failures = await recover(self.settings.data_dir)
+        self.cloud_cleanup_pending = any("cleanup" in item["error"].lower() for item in failures)
+        for failure in failures:
             job = await self.get(failure["job_id"])
             if job is None:
                 continue

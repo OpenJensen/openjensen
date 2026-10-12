@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from firebird_vla.checkpoint import (
+from jensen_vla.checkpoint import (
     publish_checkpoint,
     resolve_checkpoint,
     sha256,
@@ -17,7 +17,7 @@ from firebird_vla.checkpoint import (
     verify_training_checkpoint,
     write_json,
 )
-from firebird_vla.config import TrainConfig
+from jensen_vla.config import TrainConfig
 
 
 def bundle(path, step=1):
@@ -79,7 +79,7 @@ def test_killed_publication_recovers_last_committed_bundle(tmp_path, phase):
     program = """
 import os, sys, time
 from pathlib import Path
-from firebird_vla.checkpoint import publish_checkpoint
+from jensen_vla.checkpoint import publish_checkpoint
 staging, destination, ready, phase = sys.argv[1:]
 operation = 'rename' if phase == 'before_bundle_rename' else 'replace'
 original = getattr(os, operation)
@@ -211,7 +211,7 @@ def test_resume_recipe_accepts_equivalent_single_camera_representations(tmp_path
 def test_save_commits_durable_checkpoint_before_cloud_snapshot(tmp_path, monkeypatch, upload_fails):
     from types import SimpleNamespace
 
-    from firebird_vla import checkpoint, snapshots
+    from jensen_vla import checkpoint, snapshots
 
     # Integrity/protocol bytes only. No Torch model or GPU computation is simulated.
     torch = SimpleNamespace(

@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote, urlsplit
 
+from vla_platform.worker_paths import worker_project
+
 JSON_LIMIT = 1024 * 1024
 OUTPUT_LIMIT = 128 * 1024
 POLL_SECONDS = 5
@@ -144,7 +146,7 @@ class SimulationProfile:
         folders = [self.runner_root / "workers/isaac_sim"]
         if self.policy_runtime == "packed-act-cpu":
             folders.extend(
-                self.runner_root / "workers" / name / "src"
+                worker_project(self.runner_root / "workers", name) / "src"
                 for name in ("firebird_quant", "act_optimizer")
             )
         return os.pathsep.join(map(str, folders))
@@ -183,7 +185,7 @@ class SimulationProfile:
         folders = [self.skypilot, self.runner_root / "workers" / "isaac_sim"]
         if self.policy_runtime == "packed-act-cpu":
             folders.extend(
-                self.runner_root / "workers" / name / "src"
+                worker_project(self.runner_root / "workers", name) / "src"
                 for name in ("firebird_quant", "act_optimizer")
             )
         for folder in folders:
@@ -223,14 +225,14 @@ class SimulationProfile:
                 raise ValueError("Simulation runner is missing reviewed source/configuration")
         if self.policy_runtime == "packed-act-cpu":
             for name in (
-                "workers/firebird_quant/src/firebird_quant/native_consumer.py",
-                "workers/firebird_quant/src/firebird_quant/native_package.py",
-                "workers/firebird_quant/src/firebird_quant/codec.py",
-                "workers/firebird_quant/src/firebird_quant/model.py",
-                "workers/firebird_quant/src/firebird_quant/state.py",
-                "workers/act_optimizer/src/firebird_act/bundle.py",
-                "workers/act_optimizer/src/firebird_act/probe.py",
-                "workers/act_optimizer/src/firebird_act/control_schema.py",
+                "workers/jensen_quant/src/jensen_quant/native_consumer.py",
+                "workers/jensen_quant/src/jensen_quant/native_package.py",
+                "workers/jensen_quant/src/jensen_quant/codec.py",
+                "workers/jensen_quant/src/jensen_quant/model.py",
+                "workers/jensen_quant/src/jensen_quant/state.py",
+                "workers/act_optimizer/src/jensen_act/bundle.py",
+                "workers/act_optimizer/src/jensen_act/probe.py",
+                "workers/act_optimizer/src/jensen_act/control_schema.py",
                 "workers/skypilot/remote/policy_cpu_setup.sh",
                 "workers/skypilot/remote/policy_cpu_run.sh",
                 "workers/skypilot/remote/policy-cpu.requirements.txt",

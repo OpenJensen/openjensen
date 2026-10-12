@@ -8,9 +8,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from firebird_vla.control_contract import check_checkpoint, check_resolved, derive, save
-from firebird_vla.control_schema import FILE, canonical, optional, validate
-from firebird_vla.local_dataset import bind_local_recipe, load_operation_snapshot
+from jensen_vla.control_contract import check_checkpoint, check_resolved, derive, save
+from jensen_vla.control_schema import FILE, canonical, optional, validate
+from jensen_vla.local_dataset import bind_local_recipe, load_operation_snapshot
 
 
 def snapshot(tmp_path):
@@ -169,8 +169,8 @@ def test_schema_copies_identical_without_runtime_package_dependency():
     files = [
         root / p
         for p in (
-            "workers/smolvla_qlora/src/firebird_vla/control_schema.py",
-            "workers/act_optimizer/src/firebird_act/control_schema.py",
+            "workers/smolvla_qlora/src/jensen_vla/control_schema.py",
+            "workers/act_optimizer/src/jensen_act/control_schema.py",
             "workers/isaac_sim/sim_worker/rollout/control_schema.py",
         )
     ]

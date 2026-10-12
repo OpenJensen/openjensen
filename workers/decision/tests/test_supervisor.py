@@ -6,8 +6,8 @@ import time
 
 import pytest
 
-from firebird_decision import supervisor
-from firebird_decision.contracts import DecisionError
+from jensen_decision import supervisor
+from jensen_decision.contracts import DecisionError
 
 
 def test_real_child_result_and_stderr_is_not_reflected():
@@ -79,8 +79,8 @@ def test_signal_during_creation_and_repeated_cleanup_reaps_child(monkeypatch):
 def test_offline_guard_rejects_python_network_and_subprocess_operations():
     script = """
 import sys
-from firebird_decision.scorer import offline_guard
-from firebird_decision.contracts import DecisionError
+from jensen_decision.scorer import offline_guard
+from jensen_decision.contracts import DecisionError
 offline_guard()
 for event in ('socket.connect', 'socket.getaddrinfo', 'subprocess.Popen', 'os.system'):
     try:

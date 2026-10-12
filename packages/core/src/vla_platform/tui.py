@@ -168,7 +168,7 @@ class CancelForm(Form):
         self.dismiss(True)
 
 
-class FirebirdApp(App):
+class JensenApp(App):
     ENABLE_COMMAND_PALETTE = False
     TITLE = "OPEN JENSEN"
     SUB_TITLE = "Dataset → Fine-tune → Distill → Quantize → Evaluate → Run"
@@ -343,7 +343,7 @@ class FirebirdApp(App):
                         json.dumps({"job": job, "events": events}, indent=2, ensure_ascii=False)
                     )
                     if len(raw) > 120000:
-                        raw = raw[:120000] + "\n[Display truncated; use firebird jobs show/events.]"
+                        raw = raw[:120000] + "\n[Display truncated; use jensen jobs show/events.]"
                     self.query_one("#detail", TextArea).load_text(raw)
                 elif job_id:
                     self.job_id = None
@@ -596,3 +596,7 @@ class FirebirdApp(App):
         }.get(event.button.id)
         if action:
             action()
+
+
+# Import compatibility for optional alpha terminal clients.
+FirebirdApp = JensenApp

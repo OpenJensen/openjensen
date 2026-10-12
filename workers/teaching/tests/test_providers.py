@@ -11,7 +11,7 @@ import httpx
 import pytest
 from PIL import Image
 
-from firebird_teaching import providers as p
+from jensen_teaching import providers as p
 
 KEY = "fixture-openrouter-key-not-real"
 CONTEXT = p.SourceContext("generated-session", "generated-episode", 2)

@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from firebird_vla.telemetry import environment_report, report
+from jensen_vla.telemetry import environment_report, report
 
 
 def test_phase_reports_preserve_observed_steps_and_atomic_status(tmp_path, capsys):

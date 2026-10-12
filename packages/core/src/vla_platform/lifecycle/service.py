@@ -37,6 +37,7 @@ from vla_platform.lifecycle.training_catalog import (
     training_model_for_recipe,
 )
 from vla_platform.local_worker_registry import LocalWorkerRegistry
+from vla_platform.worker_paths import canonical_module
 
 logger = logging.getLogger(__name__)
 
@@ -662,6 +663,12 @@ class Lifecycle:
             raise ValueError("This runtime supports ACT inference export only")
         cloud_target = None
         if runtime.execution == "skypilot":
+            if getattr(self.execution, "cloud_cleanup_pending", False):
+                raise ValueError(
+                    "Earlier cloud cleanup needs attention. Review the saved jobs, verify "
+                    "their owned resources are stopped, then restart the application before "
+                    "starting new cloud work. Local workspace access remains available."
+                )
             if request.operation not in {
                 "policy.finetune",
                 "policy.quantize",
@@ -799,7 +806,7 @@ class Lifecycle:
                 model.id == "smolvla"
                 and request.training_method == "full"
                 and runtime.execution != "skypilot"
-                and runtime.training_module != "firebird_vla.lerobot_application"
+                and canonical_module(runtime.training_module) != "jensen_vla.lerobot_application"
             ):
                 raise ValueError(
                     "Native SmolVLA training requires the native LeRobot worker or Google Cloud"
@@ -1086,26 +1093,34 @@ class Lifecycle:
                 raise asyncio.CancelledError
 
     async def stop(self, process, container_name: str | None, *, grace_seconds=5):
+        cleanup_error = None
         if container_name:
-            cleanup = await asyncio.create_subprocess_exec(
-                "docker",
-                "rm",
-                "--force",
-                container_name,
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
             try:
-                await asyncio.wait_for(cleanup.wait(), 15)
-            except TimeoutError:
-                cleanup.kill()
-                await cleanup.wait()
+                cleanup = await asyncio.create_subprocess_exec(
+                    "docker",
+                    "rm",
+                    "--force",
+                    container_name,
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                try:
+                    code = await asyncio.wait_for(cleanup.wait(), 15)
+                    if code:
+                        cleanup_error = f"Docker removal exited with code {code}."
+                except TimeoutError:
+                    cleanup.kill()
+                    await cleanup.wait()
+                    cleanup_error = "Docker removal timed out."
+            except OSError:
+                cleanup_error = "Docker removal could not be started."
         if process.returncode is None or os.name == "posix":
             if os.name == "posix":
                 try:
                     os.killpg(process.pid, signal.SIGTERM)
                 except ProcessLookupError:
                     pass
+
             elif os.name == "nt":
                 killer = await asyncio.create_subprocess_exec(
                     "taskkill",
@@ -1137,6 +1152,13 @@ class Lifecycle:
                     os.killpg(process.pid, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
+
+        if cleanup_error:
+            raise RuntimeError(
+                f"Worker cleanup needs attention for container {container_name}: "
+                f"{cleanup_error} Resource deletion is not confirmed. "
+                "Inspect the owned container before retrying its removal."
+            )
 
     async def act_stop_owned(self, process, *, grace_seconds=5):
         """Finish ACT child cleanup despite repeated cancellation, then propagate it."""

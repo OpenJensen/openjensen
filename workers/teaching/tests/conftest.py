@@ -16,9 +16,9 @@ sys.path.insert(0, str(isaac))
 
 from sim_worker.rollout.contracts import Frame, Observation, SimSpec  # noqa: E402
 
-from firebird_teaching.contracts import Command, Settings  # noqa: E402
-from firebird_teaching.journal import Journal  # noqa: E402
-from firebird_teaching.session import Session  # noqa: E402
+from jensen_teaching.contracts import Command, Settings  # noqa: E402
+from jensen_teaching.journal import Journal  # noqa: E402
+from jensen_teaching.session import Session  # noqa: E402
 
 
 class SimulationFixture:

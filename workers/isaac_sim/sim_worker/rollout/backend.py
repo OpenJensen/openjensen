@@ -75,7 +75,7 @@ class LeRobotPolicy:
             raise ValueError("CUDA was requested but is unavailable")
 
         if packed:
-            from firebird_quant.native_consumer import load_packed_act
+            from jensen_quant.native_consumer import load_packed_act
 
             self._policy, config, self._pre, self._post, loaded_id = load_packed_act(
                 checkpoint.absolute(), device=device, expected_model_id=info.model_id

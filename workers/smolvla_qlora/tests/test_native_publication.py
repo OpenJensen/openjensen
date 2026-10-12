@@ -8,7 +8,7 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from firebird_vla import checkpoint, lerobot_train, psi_train
+from jensen_vla import checkpoint, lerobot_train, psi_train
 
 
 @pytest.fixture(params=["native", "psi"])

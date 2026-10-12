@@ -4,7 +4,7 @@ requires-python = "==3.14.*"
 
 [manifest]
 members = [
-    "firebird-workspace",
+    "openjensen-workspace",
     "vla-platform",
 ]
 
@@ -124,7 +124,7 @@ wheels = [
 ]
 
 [[package]]
-name = "firebird-workspace"
+name = "openjensen-workspace"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
