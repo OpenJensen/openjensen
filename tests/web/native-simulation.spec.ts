@@ -168,7 +168,7 @@ test('verified native record exposes fixed video/download paths without claiming
   await page.getByRole('button', { name: 'Refresh simulation jobs' }).click(); await page.getByLabel('Saved simulation job').selectOption('done');
   await expect(page.getByRole('link', { name: 'Download simulation record' })).toHaveAttribute('href', '/api/v1/projects/alpha/artifacts/record/download');
   await expect(page.getByText(/The recorded video is unavailable/)).toBeVisible();
-  await expect(page.getByText('Execution completed. This is not a scored evaluation or proof of cup pickup.')).toBeVisible();
+  await expect(page.getByText('Execution completed. Cup pickup was not scored.')).toBeVisible();
   await page.getByRole('link', { name: 'Cloud runs', exact: true }).click();
   await expect(page.getByLabel('Application cloud job', { exact: true })).toHaveValue('done');
   await expect(page.getByText('Execution target', { exact: true }).locator('..')).toContainText('L4 + H100');
@@ -656,7 +656,7 @@ test('native late acknowledged receipt survives unmount without replacing a manu
     await prepareExplicitRun(page); await page.getByRole('button', { name: 'Start experimental simulation' }).click();
     await expect.poll(() => state.posts.length).toBe(1); await openNativeAgain(page);
     await page.getByLabel('Saved simulation job').selectOption(done.id); release();
-    await expect(page.getByRole('region', { name: 'Native submission receipt' })).toContainText('late-ack');
+    await expect(page.getByRole('region', { name: 'Native request status' })).toContainText('late-ack');
     await expect(page.getByRole('article', { name: 'Native simulation job details' })).toHaveAttribute('data-job-id', done.id);
     await expect(page.getByRole('link', { name: 'Download simulation record' })).toHaveAttribute('href', '/api/v1/projects/alpha/artifacts/record/download');
     await page.getByRole('button', { name: 'View acknowledged job' }).click();

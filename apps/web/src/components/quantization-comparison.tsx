@@ -43,7 +43,7 @@ export function QuantizationComparison({ job, reports = [] }: { job: Job; report
   const active = job.status === 'queued' || job.status === 'running';
   if (!comparison) return <section className="quantization-comparison" aria-label="Comparison with original model">
     <h3>Compared with original</h3>
-    <p className="quantization-comparison-empty" role="status">{active ? 'The paired prediction comparison appears after quantization and verification finish.' : job.status === 'succeeded' ? 'This job did not record a paired comparison. New supported quantization jobs compare the original and quantized predictions on identical fixed inputs.' : 'No completed paired comparison is available for this job.'}</p>
+    <p className="quantization-comparison-empty" role="status">{active ? 'The paired prediction comparison appears after quantization and output checks finish.' : job.status === 'succeeded' ? 'This job did not record a paired comparison. New supported quantization jobs compare the original and quantized predictions on identical fixed inputs.' : 'No completed paired comparison is available for this job.'}</p>
   </section>;
   const saved = (1 - comparison.packedBytes / comparison.sourceBytes) * 100;
   const largest = Math.max(comparison.sourceBytes, comparison.packedBytes);

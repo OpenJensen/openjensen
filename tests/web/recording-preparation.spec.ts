@@ -102,7 +102,7 @@ test('changed metadata before preparation refuses all POST and does not substitu
 });
 for (const unavailable of ['unconfigured', 'empty', 'error']) test(`${unavailable} recording catalog has explicit state and no mutation`, async ({ page }) => {
   const s = await fixture(page); if (unavailable === 'unconfigured') s.configured = false; else if (unavailable === 'empty') s.captures.captures = []; else s.failCatalog = true; await refresh(page).click();
-  await expect(panel(page).getByText(unavailable === 'unconfigured' ? /Remote Isaac captures/ : unavailable === 'empty' ? 'No finalized episodes are published for this project.' : /Recording availability is unverified/)).toBeVisible(); await expect(submit(page)).toBeDisabled(); expect(s.posts).toEqual([]);
+  await expect(panel(page).getByText(unavailable === 'unconfigured' ? /Remote Isaac captures/ : unavailable === 'empty' ? 'No finalized episodes are published for this project.' : /Recording availability could not be checked/)).toBeVisible(); await expect(submit(page)).toBeDisabled(); expect(s.posts).toEqual([]);
 });
 for (const bad of ['array', 'foreign', 'recipe']) test(`${bad} invalid acknowledgement remains uncertain after reload`, async ({ page }) => {
   const s = await fixture(page); s.bad = bad; await selectEpisodes(page); await submit(page).click(); await expect(checkSaved(page)).toBeEnabled(); await page.reload(); await page.getByRole('link', { name: 'Teaching', exact: true }).click(); await expect(checkSaved(page)).toBeEnabled(); await expect(ack(page)).toHaveCount(0); await expect(submit(page)).toBeDisabled(); expect(s.posts).toHaveLength(1);

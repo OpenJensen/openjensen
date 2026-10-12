@@ -266,7 +266,7 @@ test('explicit Distill to Quantize to Replay carries exact artifacts without sub
   const replay = state.jobs.find(item => item.id === 'replay-job')!; replay.status = 'succeeded'; replay.result = { artifacts: [artifact('replay:record', 'native_run_record', { recipe: 'native-observation-replay-v1', model_id: model }, 'alpha', replay.id)], reports: [{ operation: 'policy.run', stage: 'native_replay', mode: 'independent_observation_replay', device: 'cpu', source_artifact_id: packed.id, dataset_job_id: 'alpha-data', observation_source: { kind: 'generated_fixture' }, model_id: model, observations: 2, action_shape: [100, 6], reset_repeat_exact: true, server_closed: true, task_success: null, quality_verified: false, calibration_verified: false, speedup_verified: false, isaac_runtime_verified: false, elapsed_seconds: 2 }] };
   await page.getByRole('button', { name: 'Refresh replay jobs', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Predicted action chunks' }).getByRole('img')).toHaveCount(6);
-  await expect(page.getByRole('link', { name: 'Download verified replay record', exact: true })).toHaveAttribute('href', /replay%3Arecord\/download$/);
+  await expect(page.getByRole('link', { name: 'Download replay record', exact: true })).toHaveAttribute('href', /replay%3Arecord\/download$/);
   await expect(page.getByText(/does not measure task success/)).toBeVisible(); expect(state.mutations).toHaveLength(3);
 });
 
@@ -318,7 +318,7 @@ test('owned saved history restores ACT quantization and exact replay without mut
   await expect(page.getByRole('button', { name: 'Replay observations', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('article', { name: 'Observation replay details' })).toHaveAttribute('data-job-id', replay.id);
   await expect(page.getByRole('region', { name: 'Predicted action chunks' }).getByRole('img')).toHaveCount(6);
-  await expect(page.getByRole('link', { name: 'Download verified replay record', exact: true })).toHaveAttribute('href', '/api/v1/projects/alpha/artifacts/replay%3Arecord/download');
+  await expect(page.getByRole('link', { name: 'Download replay record', exact: true })).toHaveAttribute('href', '/api/v1/projects/alpha/artifacts/replay%3Arecord/download');
   expect(state.mutations).toHaveLength(0);
 });
 

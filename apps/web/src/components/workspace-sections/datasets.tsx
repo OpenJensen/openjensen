@@ -27,7 +27,7 @@ function formatNumber(value: number) {
 
 function DatasetResult({ profile, history }: { profile: DatasetProfile; history?: ReactNode }) {
   return <section className="result inspection-overview" aria-labelledby="result-title">
-    {profile.snapshot && <p role="status">Training copy verified · {profile.snapshot.file_count} files · {profile.snapshot.lineage_validated ? 'Recorded lineage retained' : 'Ancestry unknown; not independent evaluation evidence'}</p>}
+    {profile.snapshot && <p role="status">Training copy ready · {profile.snapshot.file_count} files · {profile.snapshot.lineage_validated ? 'Source history retained' : 'Source history unknown; use separate data for evaluation'}</p>}
     <div className="result-heading">
       <div><h3 id="result-title">{profile.repo_id || 'Local dataset'}</h3></div>
       <span className="metadata-badge"><Icon name="check" size={14} /> {profile.format.replace('_', ' ')}</span>

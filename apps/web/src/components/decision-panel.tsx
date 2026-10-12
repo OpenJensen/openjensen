@@ -121,7 +121,7 @@ export function DecisionPanel() {
       <p>Highest relative score: {result.criteria[result.receipt.scores.findIndex(item => item.id === result.receipt.selected_id)]} · no action was taken.</p>
       <ol>{result.receipt.scores.map((row, index) => <li key={row.id}><strong>{result.criteria[index]}</strong>: {(row.relative_weight * 100).toFixed(2)}% relative weight (uncalibrated); raw score {row.logit.toFixed(4)}; {row.tokens} tokens.</li>)}</ol>
       <p>Observed CPU load: {result.receipt.timing_ms.load.toFixed(1)} ms · scoring: {result.receipt.timing_ms.score.toFixed(1)} ms</p>
-      <details><summary>Verified receipt identity</summary><p style={{ overflowWrap: "anywhere" }}>Model revision: {result.receipt.revision}<br />Request SHA256: {result.receipt.request_sha256}</p></details>
+      <details><summary>Scoring details</summary><p style={{ overflowWrap: "anywhere" }}>Model revision: {result.receipt.revision}<br />Request SHA256: {result.receipt.request_sha256}</p></details>
     </section>}
   </section>;
 }

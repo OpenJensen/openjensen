@@ -25,9 +25,9 @@ def registry(
             operation="policy.export",
             status="untested" if act_export_configured else "planned",
             description=(
-                "ACT FP32 export removes only the training VAE and checks synthetic CPU parity. "
-                "Requires a complete local native checkpoint and a separately configured worker. "
-                "No task success, calibration or GPU speed claim."
+                "Export a complete ACT checkpoint as an FP32 inference package. "
+                "Requires a separately configured export worker. "
+                "Evaluate the exported policy before using it for a task."
             ),
         ),
         Capability(
@@ -35,8 +35,8 @@ def registry(
             operation="dataset.inspect",
             status="untested",
             description=(
-                "Public HF and allowed local LeRobot metadata only; "
-                "no semantic or media validation. Target evidence awaits CAP-001."
+                "Inspect public Hugging Face and allowed local LeRobot dataset metadata. "
+                "Dataset contents and media availability depend on the source."
             ),
         ),
         *[
@@ -47,24 +47,28 @@ def registry(
                 description=(
                     "Local ACT teacher to ACT256 student distillation is configured; "
                     "explicit recorded-coordinate compatibility and three disjoint episode "
-                    "and lineage partitions are required. Reload and imitation error do not "
-                    "establish robot success, calibration or speedup."
+                    "and lineage partitions are required. Evaluate the student on your task "
+                    "before deployment."
                     if stage == "Distill" and native_distillation_configured
                     else "Packed ACT CPU observation replay is configured; exact outputs and "
-                    "reset repeatability only, no environment advancement or task score."
+                    "reset repeatability are measured without advancing a simulated environment."
                     if stage == "Run" and native_replay_configured and not native_configured
                     else "Native ACT 4/8-bit packing and fresh CPU reload are configured; "
-                    "generated action drift only, no simulation, quality or speedup claim."
+                    "compare generated-input action differences before evaluating your task."
                     if stage == "Quantize" and native_quantization_configured
-                    else "Execution worker configured; target support evidence is unregistered. "
-                    "Each job performs runtime preflight."
+                    else "Execution worker configured. "
+                    "Each job checks runtime compatibility before starting."
                     if stage in configured
                     else description
                 ),
                 support=[],
             )
             for stage, operation, description in [
-                ("Fine-tune", "policy.finetune", "Native training recipe integration is planned."),
+                (
+                    "Fine-tune",
+                    "policy.finetune",
+                    "Configure a compatible training worker to fine-tune a policy.",
+                ),
                 (
                     "Distill",
                     "policy.distill",
@@ -73,7 +77,7 @@ def registry(
                 (
                     "Quantize",
                     "policy.quantize",
-                    "Packed conversion and reload remain unimplemented.",
+                    "Configure a compatible quantization worker to create a packed policy.",
                 ),
                 (
                     "Evaluate",
@@ -83,7 +87,7 @@ def registry(
                 (
                     "Run",
                     "policy.run",
-                    "Exact tested policy export and native execution are planned.",
+                    "Configure a compatible runtime to run an imported policy.",
                 ),
             ]
         ],

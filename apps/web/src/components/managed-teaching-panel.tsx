@@ -103,12 +103,12 @@ export function ManagedTeachingPanel({ projectId, onPublishedCapture }: {
       const fresh = await readManagedStatus(projectId, job.id, job.request);
       if (!live(version) || selectedRef.current !== job.id) return;
       if (!active(fresh.job)) { cacheStatus(fresh); return; }
-      client.setQueryData<StopState>(key, { pending: true, uncertain: false, message: 'Stop requested. Waiting for verified capture publication.' });
+      client.setQueryData<StopState>(key, { pending: true, uncertain: false, message: 'Stop requested. Waiting for finalized recordings to be saved.' });
       const result = await stopManagedSession(projectId, job.id, job.request);
       cacheStatus(result);
-      client.setQueryData<StopState>(key, { pending: false, uncertain: false, message: active(result.job) ? 'Stop acknowledged; capture verification and publication are still pending.' : 'Session ended. Review the saved result.' });
+      client.setQueryData<StopState>(key, { pending: false, uncertain: false, message: active(result.job) ? 'Stop acknowledged; finalized recordings are still being checked and saved.' : 'Session ended. Review the saved result.' });
     } catch (cause) {
-      client.setQueryData<StopState>(key, { pending: false, uncertain: true, message: 'Stop outcome is unverified. Check the saved session; do not assume the capture was published. You may explicitly repeat Stop for this same job.' });
+      client.setQueryData<StopState>(key, { pending: false, uncertain: true, message: 'Stop outcome is not confirmed. Check the saved session before repeating Stop for this job.' });
       if (live(version)) setError(message(cause));
     } finally { working.current = false; if (mounted.current) { setBusy(false); setConfirmStop(false); } }
   }
@@ -130,7 +130,7 @@ export function ManagedTeachingPanel({ projectId, onPublishedCapture }: {
     {profiles.data && <p role="status">{profiles.data.message}</p>}
     {profiles.error && <p role="alert">Teaching profiles could not be checked. Starting is disabled.</p>}
     {history.error && <p role="alert">Saved teaching sessions could not be checked. Starting is disabled.</p>}
-    {accepted && retainedOnly && <p role="status">Acknowledgement retained for job {accepted.id} ({accepted.status}). Select this job to check its current session and publication; this receipt alone does not verify either.</p>}
+    {accepted && retainedOnly && <p role="status">Acknowledgement retained for job {accepted.id} ({accepted.status}). Select this job to check its current session and publication; the saved request does not include the latest session status.</p>}
     <form className="workbench-form" onSubmit={event => { event.preventDefault(); if (ready) void submit('start'); }}>
       <div className="workbench-field"><label htmlFor={`teaching-profile-${projectId}`}>Teaching profile</label><select id={`teaching-profile-${projectId}`} value={profileId} disabled={!profiles.data?.available || busy || submission.busy || !!submission.attempt} onChange={event => { edit(); setProfileId(event.target.value); }}><option value="">Choose a configured profile</option>{profiles.data?.profiles.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}</select></div>
       <div className="workbench-field"><label htmlFor={`teaching-time-${projectId}`}>Session time limit (seconds)</label><input id={`teaching-time-${projectId}`} inputMode="numeric" value={seconds} disabled={busy || submission.busy || !!submission.attempt} onChange={event => { edit(); setSeconds(event.target.value); }} /></div>
@@ -149,12 +149,12 @@ export function ManagedTeachingPanel({ projectId, onPublishedCapture }: {
       <p>Job {status.job.id} · {status.job.status} · {status.job.stage ?? 'waiting'}</p>
       {status.job.error && <p role="alert">{status.job.error}</p>}
       {active(status.job) && stopState.message && <p role={stopState.uncertain ? 'alert' : 'status'}>{stopState.message}</p>}
-      {active(status.job) && status.stop_requested && <p role="status">Stopping and verifying this capture. Publication is not confirmed yet.</p>}
+      {active(status.job) && status.stop_requested && <p role="status">Stopping this session and saving its finalized recordings. Recordings are not confirmed saved yet.</p>}
       {transport && <TeachingPanel transport={transport} />}
       {active(status.job) && !status.stop_requested && <div className="workbench-actions"><button type="button" className="secondary-button" disabled={busy || stopState.pending} onClick={() => setConfirmStop(true)}>Stop and publish</button></div>}
       {confirmStop && active(status.job) && <div className="warning-box"><p>Stop only session {status.job.id}, await its process cleanup and verify finalized captures before publication? Unmounting this panel alone does not stop it.</p><button type="button" className="primary-button" disabled={busy} onClick={() => void stopAndPublish()}>Confirm stop and publish</button><button type="button" className="text-link" disabled={busy} onClick={() => setConfirmStop(false)}>Keep session running</button></div>}
       {status.job.status === 'succeeded' && <><p>Capture {publishedCapture(status.job).session_id} published with {publishedCapture(status.job).episodes.length} finalized episodes. Simulator coordinates are preserved; physical calibration and task success are unverified.</p><button type="button" className="primary-button" disabled={busy} onClick={() => void reviewCapture()}>Review for dataset preparation</button></>}
-      {['failed', 'cancelled', 'interrupted'].includes(status.job.status) && <p>Capture publication is not confirmed by this job. Inspect its saved error and retained evidence; no retry or dataset preparation was started.</p>}
+      {['failed', 'cancelled', 'interrupted'].includes(status.job.status) && <p>Capture publication is not confirmed. Review the saved error and session details before continuing.</p>}
     </section>}
   </section>;
 }

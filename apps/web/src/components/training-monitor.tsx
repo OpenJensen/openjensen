@@ -44,7 +44,7 @@ function description(value: unknown) {
 const phaseNames: Record<string, string> = {
   queued: "Queued", preparing: "Preparing your GPU", training: "Training", operation: "Training worker",
   validation: "Validating on held-out episodes", checkpoint: "Saving checkpoint",
-  verifying: "Verifying the saved model", completed: "Completed", succeeded: "Completed",
+  verifying: "Checking the saved model", completed: "Completed", succeeded: "Completed",
   failed: "Failed", cancelled: "Cancelled", interrupted: "Interrupted",
 };
 
@@ -210,7 +210,7 @@ export function TrainingMonitor({ run, projectId, active, artifacts, preferredCh
         <strong>{percent !== null ? `${percent.toLocaleString(undefined, { maximumFractionDigits: 1 })}%` : "—"}</strong>
       </div>
       <progress className="training-progress" aria-label="Training step progress" max="100" {...(percent !== null ? { value: percent } : {})} />
-      <p className="training-monitor-note">Progress counts completed optimizer steps. Setup, validation and checkpoint verification can take additional time.</p>
+      <p className="training-monitor-note">Progress counts completed optimizer steps. Setup, validation and checkpoint checks can take additional time.</p>
       {stale && <p className="training-stale-notice" role="status">No new training metric for {duration((now - lastMetricTime) / 1000)}. Last reported values are shown; the run may still be preparing data, validating, or saving.</p>}
       <dl className="training-metrics">
         <div><dt>Training loss</dt><dd>{metric(latestTraining?.train_loss)}</dd><small>{latestTraining ? `Step ${latestTraining.step.toLocaleString()}` : "Awaiting a metric"}</small></div>
@@ -257,8 +257,8 @@ export function TrainingMonitor({ run, projectId, active, artifacts, preferredCh
       </details>
         </>}
       </details>
-      <details className="training-monitor-disclosure training-reproducibility"><summary>Reproducibility <span>Recipe, revisions and run evidence</span></summary>
-        <p className="training-monitor-note">The saved recipe and available evidence describe this run. Downloads include the accepted request, dataset snapshot, compute selection and checkpoint lineage.</p>
+      <details className="training-monitor-disclosure training-reproducibility"><summary>Run configuration <span>Recipe, revisions and compute</span></summary>
+        <p className="training-monitor-note">Saved settings for this run include the model, dataset snapshot, compute target and checkpoint history.</p>
         {!!Object.keys(reproducibility).length && <>
           <dl className="training-reproducibility-facts">
             <div><dt>Model</dt><dd>{description(model.repository ?? recipe.model_id)}</dd></div>
@@ -271,7 +271,7 @@ export function TrainingMonitor({ run, projectId, active, artifacts, preferredCh
             <div><dt>Runtime</dt><dd>{description(object(reproducibility.runtime).label ?? object(reproducibility.runtime).id ?? ("runtime_id" in run.request ? run.request.runtime_id : undefined))}</dd></div>
           </dl>
           {limitations.length > 0 && <ul className="training-monitor-limitations">{limitations.map((item, index) => <li key={index}>{item}</li>)}</ul>}
-          <a className="secondary-button training-reproducibility-download" href={trainingReproducibilityUrl(run.id)}>Download reproducibility JSON</a>
+          <a className="secondary-button training-reproducibility-download" href={trainingReproducibilityUrl(run.id)}>Download run configuration</a>
           <details><summary>Full recorded configuration</summary><pre>{JSON.stringify(reproducibility, null, 2)}</pre></details>
         </>}
         {!Object.keys(reproducibility).length && <p className="training-monitor-note">The recorded configuration is not available yet.</p>}

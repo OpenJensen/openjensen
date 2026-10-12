@@ -64,7 +64,7 @@ test('open an imported two-view fixture, save labels, reopen it and reach the da
   const completed=await waitForJob(page.request,recorded[0].id,'succeeded');
   expect(completed.project_id).toBe(project.id);
   expect(completed.result.inspection_scope).toBe('complete_snapshot');
-  await expect(page.getByText(/Training copy verified/)).toBeVisible();
+  await expect(page.getByText(/Training copy ready/)).toBeVisible();
   await expect(page.getByRole('button',{name:'Train on this dataset'})).toBeEnabled();
   await page.getByRole('link',{name:'Dashboard',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Resources & connections'})).toBeVisible();

@@ -346,17 +346,7 @@ test('shared workspace shell preserves training, defaults, and separate diagnost
   await expect(page.getByRole('heading', { name: 'Run diagnostics' })).toBeVisible();
   await expect(page.getByLabel('Quantization recipe')).toHaveCount(0);
   await expect(page.getByText('No policy runs in this project yet.', { exact: true })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Recorded benchmark comparison' })).toBeVisible();
-  const reference = page.getByRole('table', { name: 'NVIDIA L4 · 8 vCPUs / 32 GiB · recorded reference results' });
-  await expect(reference.getByRole('row', { name: /^native-bf16 / })).toContainText('342.59');
-  await expect(reference.getByRole('row', { name: /^cpp-Q4_0 / })).toContainText('4/20');
-  await page.getByLabel('Reference hardware').selectOption('rtx3070');
-  const rtx = page.getByRole('table', { name: 'NVIDIA RTX 3070 · recorded reference results' });
-  await expect(rtx.getByRole('row', { name: /^cpp-Q4_0 / })).toContainText('110.92');
-  await expect(rtx.getByRole('row', { name: /^cpp-Q4_0 / })).toContainText('8/20');
-  await expect(rtx.getByRole('columnheader', { name: /VRAM/ })).toHaveCount(1);
-  await expect(rtx.getByRole('row', { name: /^cpp-Q4_0 / }).getByRole('cell').nth(2)).toHaveText('—');
-  await expect(page.getByRole('link', { name: 'View source report' })).toHaveAttribute('href', /\/tree\/[0-9a-f]{40}\/workers\/benchmark_gpu\/evidence\/2026-09-26\/REPORT.md$/);
+  await expect(page.getByRole('button', { name: 'Start diagnostics', exact: true })).toBeDisabled();
   await expectNoPageOverflow(page);
 });
 
@@ -1423,7 +1413,7 @@ test('Spatial settings require explicit task and parity choices in the submitted
     await expect(page.getByLabel('Quantization recipe')).toBeDisabled();
     await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
     await expect(page.getByLabel('Diagnostic mode')).toBeDisabled();
-    await expect(page.getByRole('heading', { name: 'Recorded benchmark comparison' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Run diagnostics', exact: true })).toBeVisible();
     await page.getByRole('link', { name: 'Quantize', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Your quantization models' }).getByRole('button', { name: 'Choose Synthetic policy · source', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'New quantization', exact: true })).toHaveCount(0);
@@ -1570,8 +1560,7 @@ for (const state of ['empty', 'error'] as const) {
     await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
     await expect(page.getByLabel('Diagnostic mode')).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Start diagnostics', exact: true })).toBeDisabled();
-    await page.getByLabel('Reference hardware').selectOption('rtx3070');
-    await expect(page.getByRole('table', { name: 'NVIDIA RTX 3070 · recorded reference results' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Run diagnostics', exact: true })).toBeVisible();
     await page.getByRole('link', { name: 'Quantize', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Your quantization models' }).getByRole('button', { name: 'Choose Synthetic policy · source', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'New quantization', exact: true })).toHaveCount(0);
