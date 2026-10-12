@@ -110,9 +110,9 @@ def test_replay_only_runtime_has_no_implicit_engine_training_or_simulator(tmp_pa
         root / "sim_worker/rollout/native_replay_prepare.py",
         root / "sim_worker/rollout/native_replay_contracts.py",
         root / "sim_worker/rollout/server.py",
-        root.parent / "firebird_quant/src/firebird_quant/native_consumer.py",
-        root.parent / "act_optimizer/src/firebird_act/application.py",
-        root.parent / "smolvla_qlora/src/firebird_vla/local_dataset.py",
+        root.parent / "jensen_quant/src/jensen_quant/native_consumer.py",
+        root.parent / "act_optimizer/src/jensen_act/application.py",
+        root.parent / "smolvla_qlora/src/jensen_vla/local_dataset.py",
     ]:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("# installed worker marker")

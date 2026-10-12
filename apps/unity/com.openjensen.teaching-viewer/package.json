@@ -1,0 +1,13 @@
+{
+  "name": "com.openjensen.teaching-viewer",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "displayName": "OPEN JENSEN Teaching Viewer",
+  "description": "Receive-only session-bound simulator observation viewer. No actuation.",
+  "unity": "6000.6",
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.2.2",
+    "com.unity.modules.imageconversion": "1.0.0",
+    "com.unity.modules.imgui": "1.0.0"
+  }
+}

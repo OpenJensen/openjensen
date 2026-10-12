@@ -1,0 +1,9 @@
+{
+  "name": "OpenJensen.TeachingViewer",
+  "rootNamespace": "OpenJensen.TeachingViewer",
+  "references": [],
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "Newtonsoft.Json.dll"
+  ]
+}

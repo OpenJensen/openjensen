@@ -1,7 +1,7 @@
 """Reusable generated native ACT builders; no pytest or ML import at module load."""
 
-from firebird_act.bundle import canonical, inventory
-from firebird_distill.contracts import digest, teacher_info
+from jensen_act.bundle import canonical, inventory
+from jensen_distill.contracts import digest, teacher_info
 
 
 def make_teacher(root, prediction=100, execution=100, *, sidecars=False):
@@ -46,7 +46,7 @@ def make_teacher(root, prediction=100, execution=100, *, sidecars=False):
     pre.save_pretrained(root, config_filename="policy_preprocessor.json")
     post.save_pretrained(root, config_filename="policy_postprocessor.json")
     if sidecars:
-        from firebird_distill.contracts import read
+        from jensen_distill.contracts import read
         from semantics_fixture import control_record, temporal_record
 
         config = read(root / "config.json")
@@ -57,7 +57,7 @@ def make_teacher(root, prediction=100, execution=100, *, sidecars=False):
 
 def make_job(teacher, tmp_path):
     import torch
-    from firebird_distill.provenance import action_fps, policy_metadata
+    from jensen_distill.provenance import action_fps, policy_metadata
     from safetensors.torch import save
 
     expected = inventory(teacher)

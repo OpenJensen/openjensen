@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { mkdir, readFile } from 'node:fs/promises';
+import { selectProject } from './project-controls';
 
 test.describe.configure({timeout:60000});
 async function ownProject(page:Page,name:string) {
@@ -288,4 +289,165 @@ test('immutable training copy keeps its checkbox aligned and explains storage an
   await page.screenshot({ path: testInfo.outputPath('training-copy-help.png'), fullPage: true });
   await page.getByRole('heading', { name: 'Dataset', exact: true }).click();
   await expect(tooltip).toBeHidden();
+});
+
+async function importRecoveryFixture(page:Page) {
+  const project='label-drafts',time='2026-10-07T00:00:00Z',id='a'.repeat(32);
+  const entry:any={id,project_id:project,name:'Saved local data',source:'local',status:'ready',created_at:time,annotation_revision:0,annotations:{views:{},frames:{}},converted:{format:'lerobot_v3',episodes:2,frames:4,fps:10,cameras:['front']},detection:{format:'lerobot_v3',convertible:true,cameras:['front'],mapping:{},file_count:2,total_bytes:20}};
+  const state={entries:[entry],revision:0,deletes:[] as string[],saves:[] as any[]};
+  await page.route('**/api/v1/**',route=>{
+    const request=route.request(),url=new URL(request.url()),path=url.pathname;
+    if(path==='/api/v1/projects')return route.fulfill({json:[{id:project,name:'Draft project',created_at:time},{id:'other',name:'Other project',created_at:time}]});
+    if(path==='/api/v1/datasets')return route.fulfill({json:state.entries.filter(value=>value.project_id===null||value.project_id===url.searchParams.get('project_id'))});
+    if(path===`/api/v1/datasets/${id}/annotations`){const body=request.postDataJSON();state.saves.push(body);if(body.revision!==state.revision)return route.fulfill({status:409,json:{detail:'Labels changed in another window. Reload before saving.'}});entry.annotations={views:body.views,frames:body.frames};entry.annotation_revision=++state.revision;return route.fulfill({json:entry});}
+    if(path===`/api/v1/datasets/${id}/samples`)return route.fulfill({json:[]});
+    if(path.startsWith('/api/v1/datasets/'))return route.fulfill({json:state.entries.find(value=>path.endsWith(value.id))??entry});
+    if(path.startsWith('/api/v1/dataset-uploads/')&&request.method()==='DELETE'){state.deletes.push(url.pathname+url.search);const upload=path.split('/').at(-1);state.entries=state.entries.filter(value=>value.id!==upload);return route.fulfill({json:{discarded:true,id:upload}});}
+    if(path.endsWith('/jobs')||path.endsWith('/artifacts'))return route.fulfill({json:[]});
+    return route.continue();
+  });
+  await page.addInitScript(id=>localStorage.setItem('firebird.project',id),project);
+  await page.goto('/datasets/');
+  return {state,entry,id,project};
+}
+
+test('unsaved labels survive library, workflow, project and reload navigation with their original revision',async({page})=>{
+  const {state,entry}=await importRecoveryFixture(page);
+  page.on('dialog',dialog=>void dialog.accept());
+  const open=()=>page.getByRole('button',{name:'Open dataset Saved local data',exact:true}).click();
+  const field=()=>page.getByRole('textbox',{name:'View name front',exact:true});
+  await open();await field().fill('Unsaved front camera');
+  await page.getByRole('button',{name:'← Back to library',exact:true}).click();await open();await expect(field()).toHaveValue('Unsaved front camera');
+  await page.getByRole('button',{name:'Inspect for training',exact:true}).click();await open();await expect(field()).toHaveValue('Unsaved front camera');
+  await page.getByRole('link',{name:'Fine-tune',exact:true}).click();await page.getByRole('link',{name:'Dataset',exact:true}).click();await open();await expect(field()).toHaveValue('Unsaved front camera');
+  await selectProject(page,'other');await expect(page.getByRole('textbox',{name:'View name front',exact:true})).toHaveCount(0);await selectProject(page,'label-drafts');await open();await expect(field()).toHaveValue('Unsaved front camera');
+  state.revision=1;entry.annotation_revision=1;entry.annotations={views:{front:'Changed in another window'},frames:{}};
+  await page.reload();await open();await expect(field()).toHaveValue('Unsaved front camera');
+  await page.getByRole('button',{name:'Save labels',exact:true}).click();await expect(page.getByRole('alert').filter({hasText:'Labels changed in another window'})).toBeVisible();
+  expect(state.saves).toHaveLength(1);expect(state.saves[0].revision).toBe(0);
+  await page.getByRole('button',{name:'Reload saved labels',exact:true}).click();await expect(field()).toHaveValue('Changed in another window');
+  await page.getByRole('button',{name:'← Back to library',exact:true}).click();await open();await expect(field()).toHaveValue('Changed in another window');
+});
+
+test('unavailable browser draft storage preserves labels during in-app navigation and gives an actionable warning',async({page})=>{
+  await page.addInitScript(()=>Object.defineProperty(window,'sessionStorage',{value:{getItem(){throw new Error('denied');},setItem(){throw new Error('denied');},removeItem(){throw new Error('denied');}}}));
+  await importRecoveryFixture(page);
+  await page.getByRole('button',{name:'Open dataset Saved local data',exact:true}).click();
+  const field=page.getByRole('textbox',{name:'View name front',exact:true});await field.fill('Draft without storage');
+  await expect(page.getByRole('alert').filter({hasText:'Browser storage is unavailable'})).toBeVisible();
+  await page.getByRole('button',{name:'← Back to library',exact:true}).click();await page.getByRole('button',{name:'Open dataset Saved local data',exact:true}).click();
+  await expect(field).toHaveValue('Draft without storage');
+  await page.getByRole('button',{name:'Save labels',exact:true}).click();await expect(page.getByText('Labels saved',{exact:true})).toBeVisible();
+});
+
+test('unfinished uploads are visible and explicit discard targets only that project upload',async({page})=>{
+  const {state,project}=await importRecoveryFixture(page);
+  const id='b'.repeat(32);state.entries.push({id,project_id:project,name:'Interrupted folder',source:'local',status:'uploading',created_at:new Date().toISOString(),uploaded_files:3,total_bytes:100,can_discard:true,error:'Upload is unfinished.'});
+  await page.getByRole('button',{name:'Refresh datasets',exact:true}).click();
+  const card=page.getByRole('button',{name:'Open dataset Interrupted folder',exact:true});await expect(card).toContainText('3 files uploaded');await card.click();
+  await expect(page.getByRole('region',{name:'Detected dataset'})).toContainText('This upload is unfinished');
+  await expect(page.getByRole('button',{name:'Inspect dataset',exact:true})).toBeDisabled();
+  await page.getByRole('button',{name:'Discard unfinished upload',exact:true}).click();expect(state.deletes).toEqual([]);
+  await page.getByRole('button',{name:'Keep upload',exact:true}).click();expect(state.deletes).toEqual([]);
+  await page.getByRole('button',{name:'Discard unfinished upload',exact:true}).click();await page.getByRole('button',{name:'Confirm discard upload',exact:true}).click();
+  await expect(card).toHaveCount(0);expect(state.deletes).toEqual([`/api/v1/dataset-uploads/${id}?project_id=${project}`]);
+  await expect(page.getByRole('button',{name:'Open dataset Saved local data',exact:true})).toBeVisible();
+  state.entries.push({id:'c'.repeat(32),project_id:project,name:'Damaged record',source:'local',status:'unavailable',created_at:'',can_discard:false,error:'Record damaged.'});
+  await page.getByRole('button',{name:'Refresh datasets',exact:true}).click();await page.getByRole('button',{name:'Open dataset Damaged record',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Discard unfinished upload',exact:true})).toHaveCount(0);await expect(page.getByRole('alert').filter({hasText:'files have been preserved'})).toBeVisible();
+});
+
+test('unknown-owner records are workspace repair notices with no project or discard action',async({page})=>{
+  const {state}=await importRecoveryFixture(page);
+  state.entries.push({id:'d'.repeat(32),project_id:null,name:'Unavailable saved dataset',status:'unavailable',created_at:'',can_discard:false,error:'Record invalid; original files preserved.'});
+  await page.getByRole('button',{name:'Refresh datasets',exact:true}).click();
+  const notice=page.getByRole('alert',{name:'Workspace dataset repair notice'});
+  await expect(notice).toContainText('project ownership could not be verified');
+  await expect(notice).toContainText('original files preserved');
+  await expect(notice.getByRole('button')).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Open dataset Unavailable saved dataset',exact:true})).toHaveCount(0);
+  expect(state.deletes).toEqual([]);
+  await page.getByRole('link',{name:'Dashboard',exact:true}).click();
+  await expect(page.getByRole('button',{name:'My datasets',exact:true})).toContainText('1 saved datasets');
+});
+
+test('late label-save acknowledgement does not erase a newer draft after reopening',async({page})=>{
+  const {entry,id}=await importRecoveryFixture(page);
+  let release!:()=>void;
+  const waiting=new Promise<void>(resolve=>{release=resolve;});
+  await page.route(`**/api/v1/datasets/${id}/annotations`,async route=>{const body=route.request().postDataJSON();await waiting;entry.annotations={views:body.views,frames:body.frames};entry.annotation_revision=1;await route.fulfill({json:entry});});
+  const open=()=>page.getByRole('button',{name:'Open dataset Saved local data',exact:true}).click();
+  const field=()=>page.getByRole('textbox',{name:'View name front',exact:true});
+  await open();await field().fill('First submitted draft');await page.getByRole('button',{name:'Save labels',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Saving…',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'← Back to library',exact:true}).click();await open();await field().fill('Newer unsaved draft');
+  const response=page.waitForResponse(value=>value.url().endsWith(`/datasets/${id}/annotations`));release();await response;
+  await page.getByRole('button',{name:'← Back to library',exact:true}).click();await open();await expect(field()).toHaveValue('Newer unsaved draft');
+});
+
+test('accepted conversion survives an earlier GET and keeps observing until ready without another POST',async({page})=>{
+  const {entry,id}=await importRecoveryFixture(page);
+  entry.status='detected';entry.converted=undefined;entry.detection.format='image_records';
+  const earlier=structuredClone(entry);
+  let releaseEarlier!:()=>void,reads=0,posts=0;
+  const waiting=new Promise<void>(resolve=>{releaseEarlier=resolve;});
+  await page.route(`**/api/v1/datasets/${id}`,async route=>{
+    reads++;
+    if(reads===1){await waiting;await route.fulfill({json:earlier}).catch(()=>{});return;}
+    // The first fresh read still reports detection; polling must not stop there.
+    if(reads===2)return route.fulfill({json:earlier});
+    return route.fulfill({json:{...earlier,status:'ready',converted:{format:'lerobot_v3',episodes:2,frames:4,fps:10,cameras:['front']}}});
+  });
+  await page.route(`**/api/v1/datasets/${id}/convert`,route=>{posts++;return route.fulfill({status:202,json:{...earlier,status:'converting'}});});
+  try {
+    await page.getByRole('button',{name:'Refresh datasets',exact:true}).click();
+    await page.getByRole('button',{name:'Open dataset Saved local data',exact:true}).click();
+    await expect.poll(()=>reads).toBe(1);
+    await page.getByRole('button',{name:'Convert to LeRobot',exact:true}).click();
+    await expect.poll(()=>reads).toBeGreaterThanOrEqual(2);releaseEarlier();
+    await expect(page.getByRole('region',{name:'Detected dataset'}).getByText(/Ready to inspect/)).toBeVisible();
+    expect(reads).toBeGreaterThanOrEqual(3);expect(posts).toBe(1);
+    await expect(page.getByRole('button',{name:'Inspect dataset',exact:true})).toBeEnabled();
+  } finally {releaseEarlier();}
+});
+
+test('upload detection initializes mapping and FPS once without replacing edits on a later read',async({page})=>{
+  const {state,project}=await importRecoveryFixture(page),id='b'.repeat(32);
+  state.entries=[];
+  const uploading:any={id,project_id:project,name:'late-detection.hdf5',source:'local',status:'uploading',created_at:'2026-10-12T00:00:00Z',uploaded_files:0,total_bytes:0,can_discard:true};
+  const detected:any={...uploading,status:'detected',can_discard:false,detection:{format:'image_records',convertible:true,sha256:'c'.repeat(64),file_count:1,total_bytes:4,fps:12,cameras:['front'],mapping:{action:'controls',state:['position.x','position.y'],cameras:['front'],table:'records.jsonl'}}};
+  let saved=uploading,releaseFile!:()=>void,refresh=false,refreshReads=0;
+  const fileWaiting=new Promise<void>(resolve=>{releaseFile=resolve;});
+  const conversions:any[]=[];
+  await page.route(`**/api/v1/projects/${project}/dataset-uploads`,route=>{state.entries=[uploading];return route.fulfill({status:201,json:uploading});});
+  await page.route(`**/api/v1/dataset-uploads/${id}/file?*`,async route=>{await fileWaiting;return route.fulfill({json:{uploaded:true}});});
+  await page.route(`**/api/v1/dataset-uploads/${id}/finish`,route=>{saved=detected;state.entries=[detected];return route.fulfill({json:detected});});
+  await page.route(`**/api/v1/datasets/${id}`,route=>{
+    if(refresh&&saved.status==='detected'){refreshReads++;return route.fulfill({json:{...saved,detection:{...detected.detection,fps:24,mapping:{...detected.detection.mapping,action:'new_server_action',state:['new_server_state']}}}});}
+    return route.fulfill({json:saved});
+  });
+  await page.route(`**/api/v1/datasets/${id}/convert`,route=>{conversions.push(route.request().postDataJSON());saved={...detected,status:'ready',converted:{format:'lerobot_v3',episodes:2,frames:4,fps:9,cameras:['front']}};state.entries=[saved];return route.fulfill({status:202,json:{...detected,status:'converting'}});});
+  try {
+    await page.getByRole('button',{name:'Refresh datasets',exact:true}).click();
+    await page.getByRole('radio',{name:'Local files',exact:true}).check();
+    await page.getByLabel('Choose dataset archive or HDF5',{exact:true}).setInputFiles({name:'late-detection.hdf5',mimeType:'application/octet-stream',buffer:Buffer.from('data')});
+    const region=page.getByRole('region',{name:'Detected dataset'});
+    await expect(region.getByText(/This upload is unfinished/)).toBeVisible();
+    await expect(page.getByLabel('Frame rate (FPS)',{exact:true})).toHaveCount(0);
+    releaseFile();
+    const fps=page.getByLabel('Frame rate (FPS)',{exact:true});
+    await expect(fps).toHaveValue('12');
+    await region.getByText('Field mapping & robot',{exact:true}).click();
+    await expect(page.getByLabel('Action field',{exact:true})).toHaveValue('controls');
+    await expect(page.getByLabel('State fields (in order, comma separated)',{exact:true})).toHaveValue('position.x, position.y');
+    await fps.fill('9');await page.getByLabel('Task description',{exact:true}).fill('User task');
+    refresh=true;
+    await expect.poll(async()=>{await page.evaluate(()=>window.dispatchEvent(new Event('visibilitychange')));return refreshReads;},{timeout:10_000}).toBeGreaterThan(0);
+    await expect(fps).toHaveValue('9');
+    await expect(page.getByLabel('Action field',{exact:true})).toHaveValue('controls');
+    await expect(page.getByLabel('State fields (in order, comma separated)',{exact:true})).toHaveValue('position.x, position.y');
+    await page.getByRole('button',{name:'Convert to LeRobot',exact:true}).click();
+    await expect(region.getByText(/Ready to inspect/)).toBeVisible();
+    expect(conversions).toEqual([{fps:9,task:'User task',robot_type:'unspecified',mapping:{action:'controls',state:['position.x','position.y'],cameras:['front'],table:'records.jsonl'}}]);
+  } finally {releaseFile();}
 });

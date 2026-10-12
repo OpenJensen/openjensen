@@ -4,10 +4,10 @@ import copy
 from pathlib import Path
 
 import pytest
-from firebird_act.bundle import canonical, inventory
-from firebird_distill.application import native_model_id
-from firebird_distill.contracts import corpus, digest, read, teacher_info
-from firebird_distill.provenance import (
+from jensen_act.bundle import canonical, inventory
+from jensen_distill.application import native_model_id
+from jensen_distill.contracts import corpus, digest, read, teacher_info
+from jensen_distill.provenance import (
     action_fps,
     check_snapshot_control,
     inherited_files,
@@ -259,12 +259,12 @@ def test_snapshot_contract_derivation_requires_exact_source_and_cadence(tmp_path
 
 
 def test_implementation_identity_includes_exact_reader_derivation_sources():
-    from firebird_distill.application import implementation_identity
+    from jensen_distill.application import implementation_identity
 
     workers = Path(__file__).resolve().parents[2]
     paths = {
         **{
-            "distillation/" + name: workers / "policy_distillation/src/firebird_distill" / name
+            "distillation/" + name: workers / "policy_distillation/src/jensen_distill" / name
             for name in (
                 "__init__.py",
                 "application.py",
@@ -275,11 +275,11 @@ def test_implementation_identity_includes_exact_reader_derivation_sources():
             )
         },
         **{
-            "act/" + name: workers / "act_optimizer/src/firebird_act" / name
+            "act/" + name: workers / "act_optimizer/src/jensen_act" / name
             for name in ("bundle.py", "probe.py", "control_schema.py")
         },
         **{
-            "data/" + name: workers / "smolvla_qlora/src/firebird_vla" / name
+            "data/" + name: workers / "smolvla_qlora/src/jensen_vla" / name
             for name in ("control_contract.py", "control_schema.py")
         },
     }
@@ -366,7 +366,7 @@ def test_homogeneous_selected_origin_can_use_mixed_source_snapshot(tmp_path, kin
     ],
 )
 def test_existing_export_teacher_metadata_is_retained_but_not_student_payload(tmp_path, name):
-    from firebird_distill.contracts import policy_info
+    from jensen_distill.contracts import policy_info
 
     teacher = tmp_path / "teacher"
     config = policy(teacher)

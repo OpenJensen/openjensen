@@ -6,6 +6,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from payload_inventory import executable_name
+
 SYSTEM_ROOTS = (Path("/usr/lib"), Path("/System/Library"))
 
 
@@ -122,7 +124,7 @@ def inspect(root: Path, recorded: dict[str, Any]) -> dict[str, Any]:
     This is static dependency evidence, not a clean-machine or deployment-target proof.
     """
     root = root.resolve(strict=True)
-    executable = root / "firebird-sidecar"
+    executable = root / executable_name(recorded["entries"])
     binaries = [
         root / name
         for name, item in recorded["entries"].items()

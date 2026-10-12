@@ -44,7 +44,7 @@ SOURCE_DIRS = (
     "workers/policy_distillation/src",
     "workers/act_optimizer/src",
     "workers/smolvla_qlora/src",
-    "workers/firebird_quant/src",
+    "workers/jensen_quant/src",
     "workers/isaac_sim/sim_worker",
 )
 PYTHON_ROOTS = (*SOURCE_DIRS[:-1], "workers/isaac_sim")
@@ -532,7 +532,7 @@ def stages(repo, python, output):
             [
                 python,
                 "-m",
-                "firebird_distill.application",
+                "jensen_distill.application",
                 str(root / "distill-request.json"),
                 str(root / "distill-result.json"),
             ],
@@ -547,7 +547,7 @@ def stages(repo, python, output):
                 [
                     python,
                     "-m",
-                    "firebird_quant.native_application",
+                    "jensen_quant.native_application",
                     str(root / f"quant-{bits}-request.json"),
                     str(root / f"quant-{bits}-result.json"),
                 ],

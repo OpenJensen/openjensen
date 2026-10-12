@@ -26,9 +26,9 @@ def setup(workspace, tmp_path):  # noqa: F811
     old_dir, new_dir = tmp_path / "old", tmp_path / "new"
     old_dir.mkdir()
     new_dir.mkdir()
-    old = t.PayloadFiles(*payload_fixture(old_dir))
+    old = t.PayloadFiles(*payload_fixture(old_dir, "firebird-sidecar"))
     new = t.PayloadFiles(*payload_fixture(new_dir))
-    executable = new.root / "firebird-sidecar"
+    executable = new.root / "jensen-sidecar"
     executable.write_bytes(executable.read_bytes() + b"different generated payload")
     from payload_inventory import inventory
 
@@ -103,7 +103,7 @@ def test_changes_and_uncertain_states_refuse_without_marker_change(setup, phase,
     elif fault == "backup":
         (backup / "workspace/private-settings.json").write_text("changed")
     elif fault == "payload":
-        (new.root / "firebird-sidecar").write_bytes(b"changed")
+        (new.root / "jensen-sidecar").write_bytes(b"changed")
     elif fault == "started":
         (journal / "start-intent.json").write_text("{}")
     elif fault == "extra":
@@ -282,7 +282,7 @@ def test_payload_change_during_marker_publication_prevents_completion(setup, mon
 
     def change(*args):
         actual(*args)
-        (setup[3].root / "firebird-sidecar").write_bytes(b"changed after validation")
+        (setup[3].root / "jensen-sidecar").write_bytes(b"changed after validation")
 
     monkeypatch.setattr(t, "replace_marker", change)
     with pytest.raises(ValueError):

@@ -23,6 +23,7 @@ from pydantic import Field
 
 from vla_platform.lifecycle.contracts import StrictRecord
 from vla_platform.lifecycle.runtime import Runtime
+from vla_platform.worker_paths import canonical_module, worker_package
 
 PROBE_TIMEOUT = 30
 HARDWARE_TIMEOUT = 5
@@ -36,6 +37,10 @@ REASONS = {
     "unsupported_gpu": "SmolVLA requires an NVIDIA GPU with compute capability 7.0 or newer.",
     "dependency_import_failed": "The installed worker could not load its training dependencies.",
     "probe_failed": "The installed worker could not complete its readiness check.",
+    "source_upgrade_required": (
+        "Upgrade the installed worker source to the matching OPEN JENSEN release, "
+        "preserving its environment and data, then check it again."
+    ),
 }
 
 
@@ -158,8 +163,10 @@ def _worker_root():
     if repository / "packages/core/src/vla_platform/local_worker_discovery.py" != source:
         return None
     root = repository / "workers/smolvla_qlora"
-    if not (repository / "pyproject.toml").is_file() or not all(
-        (root / name).is_file() for name in ("pyproject.toml", "src/firebird_vla/application.py")
+    if (
+        not (repository / "pyproject.toml").is_file()
+        or not (root / "pyproject.toml").is_file()
+        or not (worker_package(root, "jensen_vla") / "application.py").is_file()
     ):
         return None
     return root
@@ -296,7 +303,8 @@ class LocalWorkerDiscoveryService:
                 and existing.training_image == runtime.training_image
                 and existing.training_python == runtime.training_python
                 and existing.training_root == runtime.training_root
-                and existing.training_module == runtime.training_module
+                and canonical_module(existing.training_module)
+                == canonical_module(runtime.training_module)
                 and sorted(existing.training_model_ids) == sorted(runtime.training_model_ids)
                 and self._same_device(existing, runtime)
             ),

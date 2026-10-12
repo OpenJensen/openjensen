@@ -62,13 +62,13 @@ python3 workers/local_cpu/manage.py config \
   --output /absolute/new/runtimes-with-local-cpu.json
 ```
 
-Set `FIREBIRD_RUNTIME_CONFIG` to the generated file and restart the application
+Set `JENSEN_RUNTIME_CONFIG` to the generated file and restart the application
 when no owned job is active. The runtime IDs are `local-act-distillation-cpu`,
 `local-act-quantization-cpu` and `local-act-replay-cpu`.
 
 Prepare the required policy and data using the
 [distillation](../policy_distillation/README.md),
-[packing](../firebird_quant/NATIVE_ACT.md) and
+[packing](../jensen_quant/NATIVE_ACT.md) and
 [replay](../isaac_sim/NATIVE_REPLAY.md) recipes.
 
 ## Regenerate dependency locks

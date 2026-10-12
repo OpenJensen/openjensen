@@ -3,7 +3,9 @@
 import shutil
 from pathlib import Path
 
-WORKER_MODULE = "firebird_vla.psi_application"
+from vla_platform.worker_paths import worker_package
+
+WORKER_MODULE = "jensen_vla.psi_application"
 UPSTREAM_REVISION = "4f3720d45e102b36d7c3e9465ab8062274170518"
 
 
@@ -15,7 +17,7 @@ def stage_psi(bundle: Path, training_root: Path) -> list[str]:
     No upstream model weights are downloaded or staged on the application host.
     """
     for name in ("psi_application.py", "psi_train.py", "psi_verify.py", "psi_profile.py"):
-        if not (training_root / "src" / "firebird_vla" / name).is_file():
+        if not (worker_package(training_root, "jensen_vla") / name).is_file():
             raise ValueError("The bundled Psi-Zero worker is missing on the application server")
     if not (bundle / "worker").is_dir():
         raise ValueError("Stage the shared OPEN JENSEN worker before Psi-Zero setup")

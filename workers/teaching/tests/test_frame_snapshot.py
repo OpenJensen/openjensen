@@ -10,9 +10,9 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from conftest import act, command, make_session
 
-from firebird_teaching.control import Client, Mailbox, server
-from firebird_teaching.frame_snapshot import admit_frame
-from firebird_teaching.providers import ProviderError, Providers, ProviderSettings
+from jensen_teaching.control import Client, Mailbox, server
+from jensen_teaching.frame_snapshot import admit_frame
+from jensen_teaching.providers import ProviderError, Providers, ProviderSettings
 
 
 def published(session):
@@ -141,7 +141,7 @@ def test_reset_restart_fault_and_close_cannot_reuse_context(session, tmp_path, m
 
 
 def test_source_age_does_not_reset_on_republish_or_poll(session, monkeypatch):
-    import firebird_teaching.control as control
+    import jensen_teaching.control as control
 
     session.prepare()
     acquired = session.frame_snapshot.observation_received_monotonic_ns

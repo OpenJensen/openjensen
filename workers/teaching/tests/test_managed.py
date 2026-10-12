@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 from conftest import act
 
-from firebird_teaching.dataset import inspect_capture
-from firebird_teaching.managed import capture_size, verify_capture
+from jensen_teaching.dataset import inspect_capture
+from jensen_teaching.managed import capture_size, verify_capture
 
 
 def test_verifier_preserves_existing_applied_action_and_provenance(session, tmp_path):
@@ -89,7 +89,7 @@ def test_real_owned_group_stops_reaps_and_retains_reason(tmp_path, action):
     lease = os.open(lease_path, os.O_CREAT | os.O_RDWR, 0o600)
     fcntl.flock(lease, fcntl.LOCK_EX | fcntl.LOCK_NB)
     code = (
-        "import sys; from pathlib import Path; from firebird_teaching.managed import supervise; "
+        "import sys; from pathlib import Path; from jensen_teaching.managed import supervise; "
         "supervise([sys.executable, sys.argv[1], sys.argv[2]], Path(sys.argv[3]), "
         "Path(sys.argv[4]), Path(sys.argv[5]), 20, 1048576, int(sys.argv[6]))"
     )

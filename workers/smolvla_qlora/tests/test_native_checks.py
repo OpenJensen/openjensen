@@ -7,8 +7,8 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from firebird_vla.checkpoint import sha256
-from firebird_vla.checks import fixtures, native, worker
+from jensen_vla.checkpoint import sha256
+from jensen_vla.checks import fixtures, native, worker
 
 
 def test_gr00t_keeps_dispatch_identifier_and_pins_backbone_and_processor(monkeypatch, tmp_path):

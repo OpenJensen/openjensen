@@ -11,10 +11,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 WORKERS = Path(__file__).resolve().parents[2]
-for source in (WORKERS / "firebird_quant/src", WORKERS / "act_optimizer/src"):
+for source in (WORKERS / "jensen_quant/src", WORKERS / "act_optimizer/src"):
     sys.path.insert(0, str(source))
 
-from firebird_quant.native_package import encoding, inspect_policy
+from jensen_quant.native_package import encoding, inspect_policy
 from test_checkpoint_package import export, manifest, tensor_file
 
 from sim_worker.rollout.checkpoint import inspect_checkpoint
@@ -171,7 +171,7 @@ class PackedCheckpointTests(unittest.TestCase):
         code = (
             "import sys;sys.path[:0]="
             + repr(
-                [str(WORKERS / p) for p in ("isaac_sim", "firebird_quant/src", "act_optimizer/src")]
+                [str(WORKERS / p) for p in ("isaac_sim", "jensen_quant/src", "act_optimizer/src")]
             )
             + ";from sim_worker.rollout.checkpoint import inspect_checkpoint"
             + ";from pathlib import Path;inspect_checkpoint(Path(sys.argv[1]))"
@@ -186,7 +186,7 @@ class PackedCheckpointTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_configuration_metadata_is_bound_to_fingerprinted_bytes(self):
-        import firebird_quant.native_package as package
+        import jensen_quant.native_package as package
 
         policy = packed_fixture(self.root / "policy")
         original = package.inspect_policy
@@ -291,7 +291,7 @@ class PackedCheckpointTests(unittest.TestCase):
                 self.assertEqual(admitted.metadata()["checkpoint"]["control_contract"], record)
 
     def test_contract_change_between_packed_and_checkpoint_inspection_is_rejected(self):
-        import firebird_quant.native_package as package
+        import jensen_quant.native_package as package
 
         policy = packed_fixture(self.root / "policy")
         record = add_control_contract(policy)

@@ -46,7 +46,7 @@ def quantize_checkpoint(job):
     with tempfile.TemporaryDirectory(prefix=".floating-", dir=output) as temporary:
         intermediate = Path(temporary)
         if artifact["format"] == "training_checkpoint":
-            from firebird_vla.export import export_checkpoint
+            from jensen_vla.export import export_checkpoint
 
             checkpoint = source / "checkpoint"
             # Individual saved checkpoints may be represented directly; final
@@ -75,14 +75,17 @@ def quantize_checkpoint(job):
         executable = Path(job["runtime"]["smoke_build"]) / "tests/vla_predict_check"
         reference_output = intermediate / "reference-check"
         progress("baseline", "Measuring original model predictions on fixed inputs")
-        reference = verify_cpu_inference(floating_model, executable, reference_output,
-                                         cameras=len(cameras))
+        reference = verify_cpu_inference(
+            floating_model, executable, reference_output, cameras=len(cameras)
+        )
         source_file_bytes = floating_model.stat().st_size
         progress("quantizing", "Packing language weights and preserving the action expert")
         result = application.quantize_policy({**job, "artifact": artifact})
         bundle = Path(result["artifact"]["path"])
         final_manifest = application.verify(bundle)
-        progress("verifying", "Comparing quantized predictions with the original on identical inputs")
+        progress(
+            "verifying", "Comparing quantized predictions with the original on identical inputs"
+        )
         smoke = verify_cpu_inference(
             bundle / "model.gguf",
             executable,
@@ -90,8 +93,10 @@ def quantize_checkpoint(job):
             cameras=len(cameras),
         )
         comparison = compare_cpu_predictions(reference, smoke, reference_output, bundle)
-        comparison.update(source_file_bytes=source_file_bytes,
-                          quantized_file_bytes=(bundle / "model.gguf").stat().st_size)
+        comparison.update(
+            source_file_bytes=source_file_bytes,
+            quantized_file_bytes=(bundle / "model.gguf").stat().st_size,
+        )
         # Keep bounded reference outputs/evidence after the floating weights are retired.
         shutil.copytree(reference_output, bundle / "reference-check")
         atomic_json(bundle / "quantization-comparison.json", comparison)

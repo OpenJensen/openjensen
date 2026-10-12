@@ -312,7 +312,7 @@ def collect(args, previous, fetcher=fetch):
     snapshot = copy.deepcopy(previous)
     try:
         states = fetcher(args, "queue")
-    except (OSError, ValueError, subprocess.SubprocessError):
+    except OSError, ValueError, subprocess.SubprocessError:
         snapshot["collection_error"] = (
             "SkyPilot status collection failed or timed out; last evidence retained."
         )
@@ -325,7 +325,7 @@ def collect(args, previous, fetcher=fetch):
                 snapshot["logs"][task] = clean_log(
                     f"SkyPilot {task} state: {states[task]}\n" + future.result()
                 )
-            except (OSError, ValueError, subprocess.SubprocessError):
+            except OSError, ValueError, subprocess.SubprocessError:
                 failures.append(task)
     if failures:
         # Do not relabel partially refreshed logs as a fully fresh observation.

@@ -341,7 +341,7 @@ def verify(
                 if len(raw) <= 64 * 1024:
                     try:
                         complete_json = isinstance(json.loads(raw.decode("utf-8")), dict)
-                    except (ValueError, UnicodeError):
+                    except ValueError, UnicodeError:
                         pass
                 stderr.seek(0, os.SEEK_END)
                 stderr.seek(max(0, stderr.tell() - 2000))
@@ -517,7 +517,7 @@ def config(root: Path, output: Path, base: Path | None) -> dict[str, Any]:
     for name, folder in (
         ("replay", "isaac_sim"),
         ("distillation", "policy_distillation"),
-        ("quantization", "firebird_quant"),
+        ("quantization", "jensen_quant"),
     ):
         identifier = f"local-act-{name}-cpu"
         if identifier in ids:

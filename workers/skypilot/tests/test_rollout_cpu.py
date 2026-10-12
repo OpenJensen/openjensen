@@ -26,7 +26,7 @@ def case(monkeypatch):
         launcher,
         "_source_paths",
         lambda: {
-            "~/firebird-quant-src": value.worker.parent / "firebird_quant/src",
+            "~/firebird-quant-src": value.worker.parent / "jensen_quant/src",
             "~/firebird-act-src": value.worker.parent / "act_optimizer/src",
         },
     )

@@ -16,6 +16,7 @@ from vla_platform.datasets.snapshots import (
     stage_snapshot,
     verify_snapshot,
 )
+from vla_platform.worker_paths import worker_module, worker_package
 
 from .contracts import LifecycleResult, PolicyArtifact
 from .control_provenance import policy_claims, transform_claims
@@ -228,17 +229,17 @@ def implementation_identity(runtime):
         "provenance.py",
     )
     result = {
-        "distillation/" + name: hash_file(root / "src/firebird_distill" / name)["sha256"]
+        "distillation/" + name: hash_file(worker_package(root, "jensen_distill") / name)["sha256"]
         for name in names
     }
     for name in ("bundle.py", "probe.py", "control_schema.py"):
-        result["act/" + name] = hash_file(root.parent / "act_optimizer/src/firebird_act" / name)[
-            "sha256"
-        ]
+        result["act/" + name] = hash_file(
+            worker_package(root.parent / "act_optimizer", "jensen_act") / name
+        )["sha256"]
     for name in ("control_contract.py", "control_schema.py"):
-        result["data/" + name] = hash_file(root.parent / "smolvla_qlora/src/firebird_vla" / name)[
-            "sha256"
-        ]
+        result["data/" + name] = hash_file(
+            worker_package(root.parent / "smolvla_qlora", "jensen_vla") / name
+        )["sha256"]
     return result
 
 
@@ -319,7 +320,13 @@ def command(runtime, mode, request, result):
         else runtime.native_distillation_python
     )
     module = "prepare" if mode == "metadata" else mode
-    argv = [python, "-m", "firebird_distill." + module, str(request), str(result)]
+    argv = [
+        python,
+        "-m",
+        worker_module(root, "jensen_distill." + module),
+        str(request),
+        str(result),
+    ]
     if mode == "metadata":
         argv.append("--metadata-only")
     return argv, str(root), env

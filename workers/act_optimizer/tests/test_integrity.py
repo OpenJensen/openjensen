@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from firebird_act import bundle
-from firebird_act.bundle import (
+from jensen_act import bundle
+from jensen_act.bundle import (
     canonical,
     decode,
     inventory,
@@ -22,7 +22,7 @@ from firebird_act.bundle import (
     validate_config,
     validate_processors,
 )
-from firebird_act.export import compare_probes, export_policy, run_probe
+from jensen_act.export import compare_probes, export_policy, run_probe
 
 
 def test_duplicate_and_nonfinite_json_rejected() -> None:
@@ -201,7 +201,7 @@ def test_real_process_deadline_kills_verification_child(
 
 
 def valid_probe() -> dict:
-    from firebird_act.probe import FIXTURE_SEEDS, VERSIONS
+    from jensen_act.probe import FIXTURE_SEEDS, VERSIONS
 
     return {
         "schema_version": 1,
@@ -261,7 +261,7 @@ def test_equal_but_invalid_probe_reports_fail_closed(mutation: str) -> None:
 def test_failed_probe_cleans_owned_staging_and_never_publishes(
     act_source: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from firebird_act import export
+    from jensen_act import export
 
     before = inventory(act_source)
 
@@ -314,7 +314,7 @@ def test_real_strict_loader_rejects_invalid_retained_weights(
 
 
 def test_network_attempt_is_rejected() -> None:
-    from firebird_act.probe import offline_audit
+    from jensen_act.probe import offline_audit
 
     with pytest.raises(RuntimeError, match="Network"):
         offline_audit("socket.connect", ())
@@ -322,7 +322,7 @@ def test_network_attempt_is_rejected() -> None:
 
 
 def test_wrong_runtime_version_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
-    from firebird_act import probe
+    from jensen_act import probe
 
     monkeypatch.setattr(probe.importlib.metadata, "version", lambda _: "0.0.0")
     with pytest.raises(ValueError, match="requires"):
@@ -332,7 +332,7 @@ def test_wrong_runtime_version_rejected(monkeypatch: pytest.MonkeyPatch) -> None
 def test_source_mutation_during_verification_rejects_publication(
     act_source: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from firebird_act import export
+    from jensen_act import export
 
     source = tmp_path / "source"
     shutil.copytree(act_source, source)
@@ -369,7 +369,7 @@ def test_nonfinite_processor_statistics_fail_even_if_unused(
 
 @pytest.mark.runtime
 def test_published_package_rejects_tampering(act_source: Path, tmp_path: Path) -> None:
-    from firebird_act.bundle import verify_export
+    from jensen_act.bundle import verify_export
 
     output = tmp_path / "out"
     export_policy(act_source, output)
@@ -417,7 +417,7 @@ def test_changed_file_length_detected(tmp_path: Path, monkeypatch: pytest.Monkey
 
 
 def test_final_verifier_cannot_open_original_source(tmp_path: Path) -> None:
-    from firebird_act.probe import offline_audit
+    from jensen_act.probe import offline_audit
 
     with pytest.raises(RuntimeError, match="Source reads"):
         offline_audit("open", (str(tmp_path / "model.safetensors"), "r", 0), (tmp_path,))
@@ -492,7 +492,7 @@ def test_probe_receipt_cannot_mutate_package_or_replace_file(
     if existing:
         report.write_text("preserve me")
     result = subprocess.run(
-        [sys.executable, "-m", "firebird_act.probe", str(checkpoint), str(report)],
+        [sys.executable, "-m", "jensen_act.probe", str(checkpoint), str(report)],
         text=True,
         capture_output=True,
         timeout=15,

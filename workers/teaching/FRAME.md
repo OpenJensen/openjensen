@@ -24,7 +24,7 @@ then pass the response and expected session to the admission helper:
 
 ```python
 import time
-from firebird_teaching.frame_snapshot import admit_frame
+from jensen_teaching.frame_snapshot import admit_frame
 
 started = time.monotonic_ns()
 payload = trusted_loopback_client.request("/frame")

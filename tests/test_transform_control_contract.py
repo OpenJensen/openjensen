@@ -255,7 +255,7 @@ def packed_fixture(f):
     }
     worker = (
         Path(__file__).parent
-        / "fixtures/native_quant_worker/src/firebird_quant/native_application.py"
+        / "fixtures/native_quant_worker/src/jensen_quant/native_application.py"
     )
     response = runpy.run_path(str(worker))["package"](payload)
     job = SimpleNamespace(id="packing", request=request(artifact_id=f.source.id))

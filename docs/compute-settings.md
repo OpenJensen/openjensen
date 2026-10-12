@@ -2,6 +2,11 @@
 
 Open **Settings & diagnostics → Compute**. Preferences are saved in the workspace's `compute-settings.json`.
 
+You can inspect datasets before configuring compute. Install or connect workers
+only when choosing a training/inference/simulation workflow. A successful
+prerequisite check reports configuration readiness, not completed model training
+or task quality; see the [support matrix](support.md).
+
 ## Local worker setup
 
 Use Linux x86-64, a visible NVIDIA GPU, `uv`, and at least 24 GiB free disk space for automatic SmolVLA setup.
@@ -43,4 +48,4 @@ See Google's [GPU machine types](https://docs.cloud.google.com/compute/docs/gpus
 
 ## Existing native workers
 
-Set `FIREBIRD_RUNTIME_CONFIG` to an operator runtime file. Supply each worker's installed interpreter, source root and model assets. Use `provider: local` or `provider: gcp`, and the same provider for entries on one application host. Add an optional `region` for the host. Follow [native runtime setup](policy-workflow.md#configure-a-local-native-execution-host).
+Set `JENSEN_RUNTIME_CONFIG` to an operator runtime file. Supply each worker's installed interpreter, source root and model assets. Use `provider: local` or `provider: gcp`, and the same provider for entries on one application host. Add an optional `region` for the host. Follow [native runtime setup](policy-workflow.md#configure-a-local-native-execution-host).

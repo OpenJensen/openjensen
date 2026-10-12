@@ -9,10 +9,10 @@ from test_application import stub_probes as stub_probes
 from test_training_source import digest, edit, resign, write
 from test_training_source import training_bundle as training_bundle
 
-from firebird_act import application, export
-from firebird_act.bundle import read_json
-from firebird_act.control_schema import FILE, SCOPE, canonical, metadata
-from firebird_act.training_source import admit_training_source
+from jensen_act import application, export
+from jensen_act.bundle import read_json
+from jensen_act.control_schema import FILE, SCOPE, canonical, metadata
+from jensen_act.training_source import admit_training_source
 
 
 def local_control(root):

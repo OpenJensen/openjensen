@@ -56,7 +56,7 @@ class Child:
         ]
         if local:
             command += ["--local-root", str(local)]
-        fake_worker = root / "fake-decision/src/firebird_decision/__main__.py"
+        fake_worker = root / "fake-decision/src/jensen_decision/__main__.py"
         fake_worker.parent.mkdir(parents=True, exist_ok=True)
         fake_worker.write_text("raise AssertionError('must never run')")
         env = {
@@ -73,6 +73,13 @@ class Child:
             "FIREBIRD_DATA_DIR": str(root / "wrong-data"),
             "FIREBIRD_WEB_DIR": str(root / "wrong-static"),
             "FIREBIRD_RUNTIME_CONFIG": str(root / "missing-runtimes.json"),
+            "JENSEN_DATA_DIR": str(root / "wrong-canonical-data"),
+            "JENSEN_WEB_DIR": str(root / "wrong-canonical-static"),
+            "JENSEN_RUNTIME_CONFIG": str(root / "missing-canonical-runtimes.json"),
+            "JENSEN_DECISION_PYTHON": sys.executable,
+            "JENSEN_DECISION_ROOT": str(root / "fake-decision"),
+            "JENSEN_DECISION_MODEL_DIR": str(root),
+            "JENSEN_DECISION_ACCEPT_LICENSE": "CC-BY-NC-SA-4.0",
         }
         self.process = subprocess.Popen(
             command,
@@ -153,7 +160,8 @@ def test_http_intake_shutdown_restart_preserves_workspace_and_static(tmp_path):
             assert api.get("/api/v1/health").json()["status"] == "ok"
             assert api.get("/api/v1/decision/status").json()["configured"] is False
             assert api.get("/api/v1/augmentation-options").json()["auth_mode"] == "unconfigured"
-            assert api.get("/").content == (resources / "web/index.html").read_bytes()
+            assert api.get("/").status_code == 307
+            assert api.get("/index.html").content == (resources / "web/index.html").read_bytes()
             response = api.post("/api/v1/projects", json={"name": "Sidecar fixture"})
             assert response.status_code == 201
             project = response.json()
@@ -175,6 +183,7 @@ def test_http_intake_shutdown_restart_preserves_workspace_and_static(tmp_path):
         assert owned.record()["reason"] == "shutdown"
         owned.finish()
     assert not (tmp_path / "wrong-data").exists()
+    assert not (tmp_path / "wrong-canonical-data").exists()
     with child(tmp_path, resources, data, local=datasets) as owned:
         owned.send()
         with client_for(owned.record()) as api:

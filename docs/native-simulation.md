@@ -2,7 +2,7 @@
 
 ## Operator and API integration
 
-Prepare an Isaac runner using [runner setup](../workers/skypilot/APP_RUNNER.md). Save a private profile file and set `FIREBIRD_SIMULATION_CONFIG` to its absolute path before starting the API.
+Prepare an Isaac runner using [runner setup](../workers/skypilot/APP_RUNNER.md). Save a private profile file and set `JENSEN_SIMULATION_CONFIG` to its absolute path before starting the API.
 
 Prepare a complete ACT/SmolVLA policy TAR with safetensors weights, configuration, saved processors and normalization statistics. Use an archive within 4 GiB. For a training checkpoint, export/materialize its inference package first.
 

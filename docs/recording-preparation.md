@@ -4,7 +4,7 @@
 
 Install the isolated Python 3.12/LeRobot 0.6.2 writer with `workers/teaching/requirements-dataset.txt` or the [CPU reader setup](../workers/local_cpu/README.md). Keep the sibling `workers/isaac_sim` source present and install FFmpeg/ffprobe.
 
-Copy or mount finalized captures to the API host. Give each project a distinct capture root, save this configuration with real absolute paths, and set `FIREBIRD_RECORDING_CONFIG` before restarting:
+Copy or mount finalized captures to the API host. Give each project a distinct capture root, save this configuration with real absolute paths, and set `JENSEN_RECORDING_CONFIG` before restarting:
 
 ```json
 {

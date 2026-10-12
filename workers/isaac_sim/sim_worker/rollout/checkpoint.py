@@ -42,7 +42,7 @@ def inspect_checkpoint(path: Path) -> Checkpoint:
     """Validate metadata and fingerprint weights plus their saved processors."""
     # Packed admission retains lexical paths so symlink ancestry is not erased.
     if (path / "encoding.json").exists() or (path / "model.fbq").exists():
-        from firebird_quant.native_package import decode, inspect_policy, read, sha
+        from jensen_quant.native_package import decode, inspect_policy, read, sha
 
         packed = inspect_policy(path.absolute())
         raw_config = read(path.absolute() / "config.json")

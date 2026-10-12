@@ -2,7 +2,7 @@
 
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type Project } from '@/lib/api';
-import { datasetLibrary, type LibraryDataset } from '@/lib/dataset-library';
+import { datasetLibrary, isProjectDataset, type LibraryDataset } from '@/lib/dataset-library';
 import { ownedModels } from '@/lib/model-library';
 import { Icon } from './icon';
 import './workspace-dashboard.css';
@@ -12,8 +12,8 @@ export function WorkspaceDashboard({projects,projectId,onModels,onDatasets,onDat
   // The collection link opens this project's library, so its count and recent
   // rows must use the same scope. Never substitute the global collection while
   // project membership is loading or unavailable.
-  const datasets=useQuery({queryKey:['datasets',projectId],queryFn:async()=>(await datasetLibrary.list(projectId)).filter(entry=>entry.project_id===projectId),enabled:!!projectId,retry:false,refetchInterval:10000});
-  const entries=(datasets.data??[]).filter(entry=>entry.project_id===projectId);
+  const datasets=useQuery({queryKey:['datasets',projectId],queryFn:({signal})=>datasetLibrary.list(projectId,signal),enabled:!!projectId,retry:false,refetchInterval:10000});
+  const entries=(datasets.data??[]).filter((entry):entry is LibraryDataset=>isProjectDataset(entry,projectId));
   const models=useQueries({queries:projects.map(project=>({queryKey:['artifacts',project.id],queryFn:()=>api.artifacts(project.id),retry:false,refetchInterval:10000}))});
   const compute=useQuery({queryKey:['compute-settings'],queryFn:api.computeSettings,retry:false,refetchInterval:15000});
   const setup=useQuery({queryKey:['local-setup-status'],queryFn:api.localSetupStatus,retry:false});

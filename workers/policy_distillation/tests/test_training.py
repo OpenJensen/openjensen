@@ -2,9 +2,9 @@ import os
 from pathlib import Path
 
 import pytest
-from firebird_act.bundle import inventory
-from firebird_distill.application import run_job
-from firebird_distill.contracts import digest, read
+from jensen_act.bundle import inventory
+from jensen_distill.application import run_job
+from jensen_distill.contracts import digest, read
 
 
 def test_actual_native_act_distillation_and_fresh_reload(job):
@@ -90,7 +90,7 @@ def test_missing_observation_does_not_publish(job):
 
 
 def test_worker_failure_does_not_publish_and_removes_private_snapshots(job, monkeypatch):
-    from firebird_distill.application import Owner
+    from jensen_distill.application import Owner
 
     def failed(*_):
         raise TimeoutError("injected bounded training deadline")
@@ -104,7 +104,7 @@ def test_worker_failure_does_not_publish_and_removes_private_snapshots(job, monk
 
 
 def test_original_corpus_mutation_during_worker_refuses_publication(job, monkeypatch):
-    from firebird_distill.application import Owner
+    from jensen_distill.application import Owner
 
     def mutation(*_):
         path = Path(job["dataset"]["path"]) / "sample-000000.safetensors"
@@ -141,9 +141,9 @@ def test_native_8_3_preserves_semantics_and_normalized_teacher_targets(tmp_path)
     """Generated model/corpus proof; does not claim genuine recording or Isaac quality."""
     import torch
     from conftest import make_job, make_teacher
-    from firebird_distill.contracts import load_sample
-    from firebird_distill.provenance import inherited_files, policy_metadata
-    from firebird_distill.runtime import batch_for, chunk, load_policy, processed, tensor_sha
+    from jensen_distill.contracts import load_sample
+    from jensen_distill.provenance import inherited_files, policy_metadata
+    from jensen_distill.runtime import batch_for, chunk, load_policy, processed, tensor_sha
 
     teacher = make_teacher(tmp_path / "teacher", 8, 3, sidecars=True)
     job = make_job(teacher, tmp_path)

@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 from conftest import rebind_manifest
-from firebird_act.bundle import canonical
-from firebird_distill.contracts import corpus, decode, digest, load_sample, request, teacher_info
+from jensen_act.bundle import canonical
+from jensen_distill.contracts import corpus, decode, digest, load_sample, request, teacher_info
 
 
 @pytest.mark.parametrize(

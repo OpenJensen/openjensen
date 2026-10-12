@@ -2,7 +2,7 @@ import copy
 
 import pytest
 
-from firebird_decision.contracts import (
+from jensen_decision.contracts import (
     DecisionError,
     canonical,
     parse_json,

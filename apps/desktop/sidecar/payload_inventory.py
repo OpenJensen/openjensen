@@ -14,6 +14,14 @@ MAX_BYTES = 2 * 1024**3
 MAX_MANIFEST = 8 * 1024**2
 
 
+def executable_name(entries: dict[str, Any]) -> str:
+    """Choose one fixed executable name without changing historical payload bytes."""
+    found = [name for name in ("jensen-sidecar", "firebird-sidecar") if name in entries]
+    if len(found) != 1:
+        raise ValueError("Payload must contain exactly one fixed sidecar executable name")
+    return found[0]
+
+
 def native_architectures(header: bytes) -> list[int] | None:
     """Read Mach-O CPU identifiers without loading or executing a library."""
     thin = {

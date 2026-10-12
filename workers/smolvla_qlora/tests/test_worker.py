@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from firebird_vla.checkpoint import sha256, verify_bundle, write_json
-from firebird_vla.config import TrainConfig, batch_indices, split_episodes
-from firebird_vla.data import vector_stats
-from firebird_vla.train import lr_multiplier
+from jensen_vla.checkpoint import sha256, verify_bundle, write_json
+from jensen_vla.config import TrainConfig, batch_indices, split_episodes
+from jensen_vla.data import vector_stats
+from jensen_vla.train import lr_multiplier
 
 
 @pytest.mark.parametrize(
@@ -171,7 +171,7 @@ def test_cli_dry_run_needs_no_ml_stack_or_download(tmp_path):
         [
             sys.executable,
             "-m",
-            "firebird_vla.train",
+            "jensen_vla.train",
             "--config",
             str(config),
             "--smoke",

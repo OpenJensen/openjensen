@@ -11,10 +11,10 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from firebird_teaching import intelligence as mod
-from firebird_teaching import intelligence_config as config
-from firebird_teaching.frame_snapshot import ObservationSnapshot
-from firebird_teaching.providers import ProviderError, Providers
+from jensen_teaching import intelligence as mod
+from jensen_teaching import intelligence_config as config
+from jensen_teaching.frame_snapshot import ObservationSnapshot
+from jensen_teaching.providers import ProviderError, Providers
 
 
 class Stream(httpx.AsyncByteStream):
@@ -354,7 +354,7 @@ def test_private_file_rejects_unsafe_sources(tmp_path, malformation):
 
 
 def test_actual_broker_auth_origin_body_limits_and_fixed_routes():
-    from firebird_teaching.voice_join import JoinBroker, serve
+    from jensen_teaching.voice_join import JoinBroker, serve
 
     service, seen, _, _ = setup()
     broker = JoinBroker(service.control)

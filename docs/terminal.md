@@ -6,16 +6,16 @@ From the source checkout, install the optional TUI environment and start the API
 
 ```sh
 uv sync --frozen --all-packages --extra tui
-uv run --frozen --extra tui firebird serve
+uv run --frozen --extra tui jensen serve
 ```
 
 In a second interactive terminal:
 
 ```sh
-uv run --frozen --extra tui firebird tui
+uv run --frozen --extra tui jensen tui
 ```
 
-Set `FIREBIRD_API_URL` or use `firebird tui --api-url http://127.0.0.1:8001` for a different API address.
+Set `JENSEN_API_URL` or use `jensen tui --api-url http://127.0.0.1:8001` for a different API address.
 
 | Key | Action |
 | --- | --- |
@@ -50,15 +50,15 @@ Open F6, select the registered artifact and a new local destination file in an e
 ## Follow lifecycle jobs from the CLI
 
 ```sh
-firebird policy options
-firebird policy submit PROJECT recipe.json
-firebird jobs wait JOB --timeout 600 --interval 2
-firebird jobs events JOB
-firebird policy artifacts PROJECT
-firebird policy download PROJECT ARTIFACT --output ./new-policy.tar
+jensen policy options
+jensen policy submit PROJECT recipe.json
+jensen jobs wait JOB --timeout 600 --interval 2
+jensen jobs events JOB
+jensen policy artifacts PROJECT
+jensen policy download PROJECT ARTIFACT --output ./new-policy.tar
 ```
 
-Replace `PROJECT`, `JOB` and `ARTIFACT` with returned IDs. Use `firebird jobs cancel JOB` to cancel. For `jobs wait`, set `--timeout` from 1–86400 seconds and `--interval` from 0.1–30 seconds.
+Replace `PROJECT`, `JOB` and `ARTIFACT` with returned IDs. Use `jensen jobs cancel JOB` to cancel. For `jobs wait`, set `--timeout` from 1–86400 seconds and `--interval` from 0.1–30 seconds.
 
 For downloads, use `--max-bytes` from 1 byte to 100 GiB, `--timeout` from 1–3600 seconds, and `--expected-sha256 HEX` when you have an independent checksum. Choose a new destination file and inspect the returned path/byte/checksum receipt after the transfer.
 

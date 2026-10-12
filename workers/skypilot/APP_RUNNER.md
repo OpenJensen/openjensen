@@ -36,8 +36,8 @@ files. An optional `sky_api_endpoint` may select an already configured endpoint.
 Set the configuration path on the application host before serving:
 
 ```sh
-export FIREBIRD_SIMULATION_CONFIG=/private/simulation-profiles.json
-uv run --frozen firebird serve
+export JENSEN_SIMULATION_CONFIG=/private/simulation-profiles.json
+uv run --frozen jensen serve
 ```
 
 ## Submit and follow

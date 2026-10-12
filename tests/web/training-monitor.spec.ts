@@ -1425,7 +1425,7 @@ async function temporalTraining(page: Page, model = 'ACT', accumulationCatalog: 
   const dataset = state.jobs.find(item => item.id === 'dataset')!;
   Object.assign(dataset.result!, { source: 'huggingface', repo_id: 'fixture/robot', revision });
   state.extraRuntimes.push({ id: 'all-models-a100', label: 'A100', accelerator: 'A100', provider: 'gcp', execution: 'skypilot', device: 'cuda', enabled: true, training: true, training_model_ids: ['act', 'smolvla', 'pi05'], gpu_memory_mib: 40960 });
-  if (savedAccumulation !== undefined) await page.evaluate(({ projectId, savedAccumulation }) => { const key = `firebird.workflow.${projectId}`; localStorage.setItem(key, JSON.stringify({ ...JSON.parse(localStorage.getItem(key) ?? '{}'), gradientAccumulation: savedAccumulation })); }, { projectId, savedAccumulation });
+  if (savedAccumulation !== undefined) await page.evaluate(({ projectId, savedAccumulation }) => { const key = `jensen.workflow.${projectId}`; localStorage.setItem(key, JSON.stringify({ ...JSON.parse(localStorage.getItem(key) ?? '{}'), gradientAccumulation: savedAccumulation })); }, { projectId, savedAccumulation });
   await page.reload();
   await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
@@ -1540,7 +1540,7 @@ test('keyed training retry after reload preserves the original key and recipe wi
   // The journal appears before the support lookup; observe the lost POST before reloading.
   await expect.poll(() => requests.length).toBe(1);
   await expect(recovery.getByRole('button', { name: 'Check saved request' })).toBeEnabled();
-  await page.evaluate(project => localStorage.setItem(`firebird.workflow.${project}`, JSON.stringify({ trainingDefaultsVersion: 3, trainingSteps: 777, trainingModelId: 'smolvla' })), projectId);
+  await page.evaluate(project => localStorage.setItem(`jensen.workflow.${project}`, JSON.stringify({ trainingDefaultsVersion: 3, trainingSteps: 777, trainingModelId: 'smolvla' })), projectId);
   await page.reload();
   await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   await expect(recovery.getByRole('button', { name: 'Retry same request' })).toBeDisabled();

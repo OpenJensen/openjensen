@@ -77,6 +77,17 @@ async def finish_upload(ident: str, library: LibraryDep):
     return await library.finalize(ident)
 
 
+@router.delete("/dataset-uploads/{ident}")
+async def discard_upload(
+    ident: str,
+    request: Request,
+    library: LibraryDep,
+    project_id: Annotated[str, Query(min_length=1, max_length=128)],
+):
+    await project(request, project_id)
+    return await library.discard(ident, project_id, request.app.state.execution)
+
+
 @router.post("/projects/{project_id}/datasets/example", status_code=202)
 async def example(project_id: str, request: Request, library: LibraryDep):
     await project(request, project_id)

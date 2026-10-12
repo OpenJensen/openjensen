@@ -11,6 +11,7 @@ from urllib.parse import unquote
 import httpx
 
 from vla_platform.contracts import TERMINAL, IntakeRequest, Job, Project, ProjectCreate
+from vla_platform.environment import getenv
 from vla_platform.lifecycle.contracts import PolicyArtifact
 from vla_platform.tui_client import ApiClient, ApiError, segment
 
@@ -23,7 +24,7 @@ class WaitDeadline(ApiError):
 
 
 def client() -> ApiClient:
-    return ApiClient(os.getenv("FIREBIRD_API_URL", "http://127.0.0.1:8000"))
+    return ApiClient(getenv("JENSEN_API_URL", "http://127.0.0.1:8000"))
 
 
 async def request_json(method: str, path: str, payload=None, *, idempotency_key: str | None = None):
@@ -241,7 +242,7 @@ async def download_artifact(
             if expected_artifact is not None and before != expected_artifact:
                 raise ApiError("Artifact changed since review; review it again before downloading.")
             descriptor, name = tempfile.mkstemp(
-                prefix=".firebird-download-", suffix=".partial", dir=output.parent
+                prefix=".jensen-download-", suffix=".partial", dir=output.parent
             )
             temporary = Path(name)
             digest, received = hashlib.sha256(), 0

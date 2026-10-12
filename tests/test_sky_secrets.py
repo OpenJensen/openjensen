@@ -111,8 +111,8 @@ def test_command_redacts_split_token_before_capture_log_lines_and_telemetry(
 @pytest.fixture
 def fixture_dispatch(tmp_path, monkeypatch):
     worker = tmp_path / "worker"
-    (worker / "src/firebird_vla").mkdir(parents=True)
-    (worker / "src/firebird_vla/application.py").write_text("# fixture only\n")
+    (worker / "src/jensen_vla").mkdir(parents=True)
+    (worker / "src/jensen_vla/application.py").write_text("# fixture only\n")
     (worker / "pyproject.toml").write_text("[project]\nname='fixture'\nversion='1'\n")
     (worker / "requirements-smolvla-linux.txt").write_text("setuptools==80.10.2\n")
     monkeypatch.setattr(sky_runner, "worker_root", lambda: worker)

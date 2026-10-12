@@ -115,7 +115,7 @@ def preview_local(
     """
     limits = limits or PreviewLimits()
     if not allowed_root:
-        raise PreviewError("local_disabled", "Configure FIREBIRD_LOCAL_DATA_ROOT first")
+        raise PreviewError("local_disabled", "Configure JENSEN_LOCAL_DATA_ROOT first")
     _require_secure_opens()
     if kind not in ("frames", "episodes"):
         raise PreviewError("invalid_request", "kind must be frames or episodes")

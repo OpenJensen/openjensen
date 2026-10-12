@@ -89,8 +89,11 @@ Have an administrator provision and review these grants before sharing the key:
 | `skypilot-v1` service account | Service Account User for VM identity attachment. |
 | `sim-ssh` IAP groups in `us-central1`/`us-east4` | IAP tunnel access. |
 | Simulation results bucket | Storage Object Viewer. |
-| `firebird-artifacts-project-5693e83a-db3a-43e1-98c` | Storage Legacy Bucket Reader and [checkpoint object role](checkpoint-object-role.json). |
+| Configured private checkpoint bucket | Storage Legacy Bucket Reader and [checkpoint object role](checkpoint-object-role.json). |
 
 Use unique checkpoint object names. Check effective project, VM identity, IAP and
 bucket permissions under this account before launch; ask the administrator to
 revoke the shared key when its work ends.
+
+Keep existing deployment bucket names, object URIs and identities when updating
+the application. The product/CLI rename does not provision replacement resources.

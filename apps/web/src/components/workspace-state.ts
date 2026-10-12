@@ -15,6 +15,7 @@ import type { DistillationModel } from '@/components/distillation-panel';
 import type { ManagedPublishedCapture } from '@/lib/managed-teaching';
 import type { LibraryDataset } from '@/lib/dataset-library';
 import { workspaceRoutes, workspaceStage } from '@/lib/workspace-routes';
+import { readPublicPreference, writePublicPreference } from '@/lib/public-preferences';
 
 export function useWorkbenchState() {
   const queryClient = useQueryClient();
@@ -79,7 +80,7 @@ export function useWorkbenchState() {
   useEffect(() => {
     if (!projects.data || projects.data.some(project => project.id === projectId)) return;
     let stored = '';
-    try { stored = localStorage.getItem('firebird.project') ?? ''; } catch { /* Storage may be unavailable. */ }
+    try { stored = readPublicPreference(localStorage,'project') ?? ''; } catch { /* Storage may be unavailable. */ }
     const selected = projects.data.find(project => project.id === stored) ?? projects.data[0];
     setProjectId(selected?.id ?? '');
   }, [projects.data, projectId]);
@@ -126,7 +127,7 @@ export function useWorkbenchState() {
     setSelectedJobId('');
     setDatasetView('sources');
     setSelectedLibrary(null); setImportLibrary(null);
-    try { localStorage.setItem('firebird.project', id); } catch { /* Session selection still works. */ }
+    try { writePublicPreference(localStorage,'project',id); } catch { /* Session selection still works. */ }
   }
   const projectMutation = useMutation({
     mutationFn: (name: string) => api.createProject(name),

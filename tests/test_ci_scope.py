@@ -37,14 +37,14 @@ WEB_BOTH = {"desktop_lane", "mobile_lane"}
         (["tests/test_tui.py"], {"application"}),
         (["tests/fixtures/browser_worker/worker.py"], PR_LANE),
         # Worker-only pull requests skip the Python adapter suite.
-        (["workers/act_optimizer/src/firebird_act/application.py"], {"act"}),
+        (["workers/act_optimizer/src/jensen_act/application.py"], {"act"}),
         (["workers/vla_cpp/src/quantize.py"], {"quantization", "benchmark"}),
-        (["workers/firebird_quant/src/firebird_quant/codec.py"], {"unified_quantization"}),
+        (["workers/jensen_quant/src/jensen_quant/codec.py"], {"unified_quantization"}),
         (
-            ["workers/smolvla_qlora/src/firebird_vla/local_dataset.py"],
+            ["workers/smolvla_qlora/src/jensen_vla/local_dataset.py"],
             {"training", "act", "teaching"},
         ),
-        (["workers/decision/src/firebird_decision/contracts.py"], {"decision"}),
+        (["workers/decision/src/jensen_decision/contracts.py"], {"decision"}),
         (["workers/teaching/requirements-voice.txt"], {"teaching"}),
         (["workers/skypilot/launch.py"], {"application"}),
         (["workers/isaac_sim/run.py"], {"application", "teaching"}),
@@ -65,7 +65,7 @@ def test_selects_changed_area_and_consumers(paths, expected):
 
 
 def test_worker_adapters_run_after_merge_only():
-    paths = ["workers/act_optimizer/src/firebird_act/application.py"]
+    paths = ["workers/act_optimizer/src/jensen_act/application.py"]
     assert ci_scope.select(paths) == {"act"}
     assert ci_scope.select(paths, adapters=True) == {"application", "act"}
 

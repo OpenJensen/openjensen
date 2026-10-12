@@ -70,10 +70,10 @@ def main():
     from lerobot.policies.act.configuration_act import ACTConfig
     from lerobot.scripts import lerobot_train as trainer
 
-    from firebird_vla.accumulation import checkpoint_optimization
-    from firebird_vla.checkpoint import sha256
-    from firebird_vla.lerobot_train import install_training_hooks
-    from firebird_vla.native_profiles import NATIVE_PROFILES
+    from jensen_vla.accumulation import checkpoint_optimization
+    from jensen_vla.checkpoint import sha256
+    from jensen_vla.lerobot_train import install_training_hooks
+    from jensen_vla.native_profiles import NATIVE_PROFILES
 
     torch.set_num_threads(1)
     root, mode = Path(sys.argv[1]), sys.argv[2]

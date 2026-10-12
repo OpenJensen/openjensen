@@ -90,6 +90,21 @@ fn read_regular(path: &Path, maximum: u64) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
+fn fixed_payload_path(root: &Path, names: [&str; 2]) -> Result<PathBuf, String> {
+    // Compatibility selects only one known name; the immutable full pin is verified below.
+    let mut found = names
+        .into_iter()
+        .map(|name| root.join(name))
+        .filter(|path| path.symlink_metadata().is_ok());
+    let path = found
+        .next()
+        .ok_or_else(|| "Required fixed sidecar path is missing.".to_string())?;
+    if found.next().is_some() {
+        return Err("Bundled sidecar paths are ambiguous.".into());
+    }
+    Ok(path)
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ResourceManifest {
@@ -115,12 +130,18 @@ impl Payload {
         let root = root
             .canonicalize()
             .map_err(|_| "Bundled resource directory is missing.")?;
-        let folder = root.join("sidecar/firebird-sidecar");
-        let executable = folder.join(if cfg!(windows) {
-            "firebird-sidecar.exe"
-        } else {
-            "firebird-sidecar"
-        });
+        let folder = fixed_payload_path(
+            &root.join("sidecar"),
+            ["jensen-sidecar", "firebird-sidecar"],
+        )?;
+        let executable = fixed_payload_path(
+            &folder,
+            if cfg!(windows) {
+                ["jensen-sidecar.exe", "firebird-sidecar.exe"]
+            } else {
+                ["jensen-sidecar", "firebird-sidecar"]
+            },
+        )?;
         let resources = folder.join("_internal/sidecar-resources");
         for path in [&folder, &resources, &executable] {
             if fs::symlink_metadata(path)

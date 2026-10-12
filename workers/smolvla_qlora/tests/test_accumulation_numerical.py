@@ -60,7 +60,7 @@ def split(batch):
 
 @pytest.mark.parametrize("optimizer_name", ["SGD", "AdamW"])
 def test_actual_accelerate_update_matches_large_batch_with_short_tail(runtime, optimizer_name):
-    from firebird_vla.accumulation import NativeAccumulation, make_contract
+    from jensen_vla.accumulation import NativeAccumulation, make_contract
 
     torch, accelerator = runtime
     torch.manual_seed(81)
@@ -119,7 +119,7 @@ def test_actual_accelerate_update_matches_large_batch_with_short_tail(runtime, o
 
 
 def test_actual_checkpoint_state_restores_next_weighted_update(runtime, tmp_path):
-    from firebird_vla.accumulation import NativeAccumulation, make_contract, validate_progress
+    from jensen_vla.accumulation import NativeAccumulation, make_contract, validate_progress
 
     torch, accelerator = runtime
     torch.manual_seed(17)
@@ -192,7 +192,7 @@ def test_actual_checkpoint_state_restores_next_weighted_update(runtime, tmp_path
 
 
 def test_nonfinite_native_gradient_never_steps_scheduler_or_publishes(runtime):
-    from firebird_vla.accumulation import NativeAccumulation, make_contract
+    from jensen_vla.accumulation import NativeAccumulation, make_contract
 
     torch, accelerator = runtime
     model = policy(torch)
@@ -231,7 +231,7 @@ def test_nonfinite_native_gradient_never_steps_scheduler_or_publishes(runtime):
 
 
 def test_actual_cpu_grad_scaler_rejects_nonfinite_smol_window(runtime):
-    from firebird_vla.train import optimizer_step
+    from jensen_vla.train import optimizer_step
 
     torch, _ = runtime
     parameter = torch.nn.Parameter(torch.tensor([2.0]))
@@ -270,7 +270,7 @@ def test_native_sampler_resume_keeps_actual_order_across_epochs(runtime):
     expected = [batch.tolist() for batch in islice(cycle(original), 10)]
     resumed = loader({"epoch": 1, "start_index": 3})
     # After one A=3 window, resume inside epoch 1 and cross several more epochs.
-    from firebird_vla.accumulation import bind_resumed_sampler_epoch
+    from jensen_vla.accumulation import bind_resumed_sampler_epoch
 
     bind_resumed_sampler_epoch(resumed.sampler, consumed=3, frames=5, batch_size=3)
     resumed = accelerator.prepare_data_loader(resumed)

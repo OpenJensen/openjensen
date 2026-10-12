@@ -3,7 +3,8 @@ requires = ["setuptools>=71,<82"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "firebird-act-optimizer"
+license = {text = "Apache-2.0"}
+name = "jensen-act-optimizer"
 version = "0.1.0"
 description = "Isolated, inference-only ACT export with fresh CPU parity verification"
 requires-python = ">=3.12,<3.13"
@@ -14,7 +15,9 @@ cpu = ["lerobot==0.6.1", "torch==2.11.0", "torchvision==0.26.0", "safetensors==0
 dev = ["pytest==9.1.1", "ruff==0.16.9", "mypy==1.19.1", "pytest-cov==7.0.0"]
 
 [project.scripts]
-firebird-act-export = "firebird_act.export:main"
+jensen-act-export = "jensen_act.export:main"
+# Compatibility command for alpha installations.
+firebird-act-export = "jensen_act.export:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -35,7 +38,7 @@ strict = true
 ignore_missing_imports = true
 
 [tool.coverage.run]
-source = ["firebird_act"]
+source = ["jensen_act"]
 patch = ["subprocess"]
 parallel = true
 

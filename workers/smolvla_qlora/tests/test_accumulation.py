@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from firebird_vla.accumulation import (
+from jensen_vla.accumulation import (
     CONTRACT_FILE,
     LEGACY_WEIGHTING,
     STATE_FILE,
@@ -184,7 +184,7 @@ def test_oversize_optimization_record_refused(tmp_path):
 def test_validation_log_converts_only_complete_microstep_boundaries():
     import logging
 
-    from firebird_vla.lerobot_train import ValidationLog
+    from jensen_vla.lerobot_train import ValidationLog
 
     records = []
     handler = ValidationLog(lambda step, **kw: records.append((step, kw)), accumulation=4)

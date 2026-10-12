@@ -12,8 +12,8 @@ payload = module("payload_inventory")
 
 def tree(root):
     (root / "_internal/Python.framework/Versions/A").mkdir(parents=True)
-    (root / "firebird-sidecar").write_bytes(b"\xcf\xfa\xed\xfe" + struct.pack("<I", 0x100000C))
-    (root / "firebird-sidecar").chmod(0o755)
+    (root / "jensen-sidecar").write_bytes(b"\xcf\xfa\xed\xfe" + struct.pack("<I", 0x100000C))
+    (root / "jensen-sidecar").chmod(0o755)
     (root / "_internal/Python.framework/Versions/A/Python").write_bytes(b"library")
     (root / "_internal/Python.framework/Versions/Current").symlink_to("A", target_is_directory=True)
     (root / "_internal/Python.framework/Python").symlink_to("Versions/Current/Python")
@@ -25,7 +25,7 @@ def test_full_identity_survives_relocation_with_relative_links(tmp_path):
     expected = payload.inventory(original)
     shutil.copytree(original, relocated, symlinks=True)
     payload.verify(relocated, expected)
-    assert expected["entries"]["firebird-sidecar"]["macho_cpu_types"] == [0x100000C]
+    assert expected["entries"]["jensen-sidecar"]["macho_cpu_types"] == [0x100000C]
     assert (
         expected["entries"]["_internal/Python.framework/Python"]["target"]
         == "Versions/Current/Python"
@@ -36,7 +36,7 @@ def test_full_identity_survives_relocation_with_relative_links(tmp_path):
 def test_inventory_binds_all_entries(tmp_path, fault):
     tree(tmp_path)
     expected = payload.inventory(tmp_path)
-    executable = tmp_path / "firebird-sidecar"
+    executable = tmp_path / "jensen-sidecar"
     if fault == "bytes":
         executable.write_bytes(b"changed")
     elif fault == "missing":

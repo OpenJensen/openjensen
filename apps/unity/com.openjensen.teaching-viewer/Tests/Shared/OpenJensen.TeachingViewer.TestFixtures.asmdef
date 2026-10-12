@@ -1,0 +1,15 @@
+{
+  "name": "OpenJensen.TeachingViewer.TestFixtures",
+  "references": [
+    "OpenJensen.TeachingViewer"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "includePlatforms": [],
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "Newtonsoft.Json.dll",
+    "nunit.framework.dll"
+  ]
+}

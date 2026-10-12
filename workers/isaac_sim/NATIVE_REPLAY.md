@@ -4,7 +4,7 @@
 
 Prepare the model runtime with Python **3.12**, LeRobot **0.6.1**, Torch **2.11.0**,
 torchvision **0.26.0** and safetensors **0.8.0**. Set its `PYTHONPATH` to
-`workers/isaac_sim:workers/firebird_quant/src:workers/act_optimizer/src` from the
+`workers/isaac_sim:workers/jensen_quant/src:workers/act_optimizer/src` from the
 repository root.
 
 Prepare a separate LeRobot **0.6.2** dataset runtime; add

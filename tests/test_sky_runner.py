@@ -43,8 +43,8 @@ def target():
 @pytest.fixture(autouse=True)
 def isolated_worker(tmp_path, monkeypatch):
     worker = tmp_path / "worker-src"
-    (worker / "src" / "firebird_vla").mkdir(parents=True)
-    (worker / "src" / "firebird_vla" / "application.py").write_text("# fixture only\n")
+    (worker / "src" / "jensen_vla").mkdir(parents=True)
+    (worker / "src" / "jensen_vla" / "application.py").write_text("# fixture only\n")
     (worker / "pyproject.toml").write_text("[project]\nname = 'fixture'\nversion = '1'\n")
     (worker / "requirements-smolvla-linux.txt").write_text("setuptools==80.10.2\n")
     monkeypatch.setattr(sky_runner, "worker_root", lambda: worker)
@@ -103,9 +103,9 @@ def test_native_smolvla_routes_to_native_worker_without_changing_adapter_methods
         "model_revision": SMOLVLA_NATIVE_PROFILE["model_revision"],
     }
     for method, module in [
-        ("full", "firebird_vla.lerobot_application"),
-        ("lora", "firebird_vla.application"),
-        ("qlora", "firebird_vla.application"),
+        ("full", "jensen_vla.lerobot_application"),
+        ("lora", "jensen_vla.application"),
+        ("qlora", "jensen_vla.application"),
     ]:
         payload["parameters"]["training_method"] = method
         path, _ = sky_runner.prepare(payload, tmp_path / method, target)
@@ -175,7 +175,7 @@ def test_resume_selects_native_worker_from_checkpoint_lineage(
     task_path, _ = sky_runner.prepare(payload, stage, target)
     task = json.loads(task_path.read_text())
     dispatch = json.loads((stage / "sky-bundle/dispatch.json").read_text())
-    assert dispatch["worker_module"] == "firebird_vla.lerobot_application"
+    assert dispatch["worker_module"] == "jensen_vla.lerobot_application"
     assert "--python 3.12" in task["setup"]
     assert LEROBOT_REVISION in task["setup"]
     assert "--index-url https://download.pytorch.org/whl/cu128" in task["setup"]
@@ -217,7 +217,7 @@ def test_psi_dispatch_uses_its_isolated_environment(payload, target, tmp_path, m
     task_path, _ = sky_runner.prepare(payload, stage, target)
     task = json.loads(task_path.read_text())
     dispatch = json.loads((stage / "sky-bundle/dispatch.json").read_text())
-    assert dispatch["worker_module"] == "firebird_vla.psi_application"
+    assert dispatch["worker_module"] == "jensen_vla.psi_application"
     assert task["envs"]["FIREBIRD_PSI_ROOT"] == "psi"
     assert task["resources"]["memory"] == "32+"
     assert "--python 3.11" in task["setup"]
@@ -368,7 +368,7 @@ def test_remote_bootstrap_runs_protocol_and_makes_downloadable_bundle(tmp_path, 
 
     def run_worker(argv, **kwargs):
         assert kwargs["timeout"] == 300
-        assert argv[1:3] == ["-m", "firebird_vla.application"]
+        assert argv[1:3] == ["-m", "jensen_vla.application"]
         request = json.loads(Path(argv[3]).read_text())
         output = Path(request["output_dir"])
         (output / "bundle").mkdir()
@@ -1052,3 +1052,120 @@ def test_final_only_checkpoints_are_verified_before_resume_pointer(tmp_path, mon
         with pytest.raises(ValueError, match="checksum"):
             sky_runner.collect(stage, "cluster")
         assert not (stage / "training" / "latest.json").exists()
+
+
+def test_recovery_budget_preserves_unconfirmed_owned_resources(
+    payload, target, tmp_path, monkeypatch
+):
+    stage = tmp_path / "jobs" / payload["job_id"] / "operation"
+    _, original = sky_runner.prepare(payload, stage, target)
+    cancelled = []
+
+    async def stalled_cleanup(_stage, _state):
+        try:
+            await asyncio.sleep(60)
+        finally:
+            cancelled.append(True)
+
+    monkeypatch.setattr(sky_runner, "cleanup", stalled_cleanup)
+    monkeypatch.setattr(sky_runner, "RECOVERY_BUDGET_SECONDS", 0.02)
+    failures = asyncio.run(sky_runner.recover(tmp_path))
+    saved = json.loads((stage / sky_runner.STATE_NAME).read_text())
+    assert cancelled == [True]
+    assert saved["cluster"] == original["cluster"]
+    assert saved["phase"] == "cleanup_failed"
+    assert "time budget" in failures[0]["error"]
+    assert "No resource deletion is confirmed" in failures[0]["error"]
+
+
+def test_recovery_budget_does_not_sync_cleaned_cloud_metadata_forever(
+    payload, target, tmp_path, monkeypatch
+):
+    stage = tmp_path / "jobs" / payload["job_id"] / "operation"
+    _, state = sky_runner.prepare(payload, stage, target)
+    state["phase"] = "cleaned_up"
+    state["target"]["storage_uri"] = "gs://private-fixture/checkpoints"
+    sky_runner._write_json(stage / sky_runner.STATE_NAME, state)
+
+    async def stalled_sync(*args):
+        await asyncio.sleep(60)
+
+    monkeypatch.setattr(sky_runner, "sync_final_metadata", stalled_sync)
+    monkeypatch.setattr(sky_runner, "RECOVERY_BUDGET_SECONDS", 0.02)
+    failures = asyncio.run(sky_runner.recover(tmp_path))
+    saved = json.loads((stage / sky_runner.STATE_NAME).read_text())
+    assert saved["phase"] == "cleaned_up"
+    assert not saved.get("final_metadata_synced")
+    assert "deferred" in failures[0]["error"]
+
+
+def test_recovery_record_cap_preserves_unvisited_dispatches_and_reports_unknown_cleanup(
+    payload, target, tmp_path, monkeypatch
+):
+    originals = {}
+    for index in range(3):
+        job_id = f"bounded-dispatch-{index}"
+        stage = tmp_path / "jobs" / job_id / "operation"
+        sky_runner.prepare({**payload, "job_id": job_id}, stage, target)
+        path = stage / sky_runner.STATE_NAME
+        originals[job_id] = path.read_bytes()
+    cleaned = []
+
+    async def cleanup(stage, state):
+        cleaned.append(state["job_id"])
+        state["phase"] = "cleaned_up"
+        sky_runner._write_json(stage / sky_runner.STATE_NAME, state)
+        return True
+
+    monkeypatch.setattr(sky_runner, "RECOVERY_RECORD_LIMIT", 2)
+    monkeypatch.setattr(sky_runner, "cleanup", cleanup)
+    failures = asyncio.run(sky_runner.recover(tmp_path))
+    assert len(cleaned) == 2 and len(set(cleaned)) == 2
+    untouched = set(originals) - set(cleaned)
+    assert len(untouched) == 1
+    job_id = untouched.pop()
+    assert (
+        tmp_path / "jobs" / job_id / "operation" / sky_runner.STATE_NAME
+    ).read_bytes() == originals[job_id]
+    assert len(failures) == 1 and failures[0]["job_id"] == job_id
+    assert "record budget" in failures[0]["error"]
+    assert "without confirming resource deletion" in failures[0]["error"]
+
+
+@pytest.mark.parametrize("damage", ["symlink", "oversize", "version", "target", "cluster"])
+def test_unverifiable_recovery_records_are_preserved_without_remote_cleanup(
+    payload, target, tmp_path, monkeypatch, damage
+):
+    stage = tmp_path / "jobs" / payload["job_id"] / "operation"
+    _, state = sky_runner.prepare(payload, stage, target)
+    path = stage / sky_runner.STATE_NAME
+    if damage == "symlink":
+        preserved = tmp_path / "operator-owned-state.json"
+        path.rename(preserved)
+        path.symlink_to(preserved)
+    elif damage == "oversize":
+        path.write_bytes(b" " * 65537)
+        preserved = path
+    else:
+        state[{"version": "version", "target": "target", "cluster": "cluster"}[damage]] = {
+            "version": 99,
+            "target": [],
+            "cluster": None,
+        }[damage]
+        sky_runner._write_json(path, state)
+        preserved = path
+    before = preserved.read_bytes()
+
+    async def no_cleanup(*args):
+        pytest.fail("An unverified record must not cause remote cleanup")
+
+    monkeypatch.setattr(sky_runner, "cleanup", no_cleanup)
+    monkeypatch.setattr(sky_runner, "sync_final_metadata", no_cleanup)
+    failures = asyncio.run(sky_runner.recover(tmp_path))
+    assert len(failures) == 1
+    assert failures[0]["job_id"] == payload["job_id"]
+    assert failures[0]["cluster"] is None
+    assert "cleanup requires attention" in failures[0]["error"]
+    assert "operator-owned" not in failures[0]["error"]
+    assert preserved.read_bytes() == before
+    assert path.is_symlink() if damage == "symlink" else not path.is_symlink()

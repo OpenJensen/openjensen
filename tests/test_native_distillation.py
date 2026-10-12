@@ -121,19 +121,19 @@ def fixture(tmp_path):
     data["episode_lengths"] = {0: 2, 1: 2, 2: 2}
     worker = tmp_path / "workers/policy_distillation"
     for p in [
-        worker / "src/firebird_distill/prepare.py",
-        worker / "src/firebird_distill/application.py",
-        worker.parent / "act_optimizer/src/firebird_act/application.py",
-        worker.parent / "smolvla_qlora/src/firebird_vla/local_dataset.py",
+        worker / "src/jensen_distill/prepare.py",
+        worker / "src/jensen_distill/application.py",
+        worker.parent / "act_optimizer/src/jensen_act/application.py",
+        worker.parent / "smolvla_qlora/src/jensen_vla/local_dataset.py",
     ]:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("# protocol fixture")
     for name in ("__init__.py", "contracts.py", "runtime.py", "provenance.py"):
-        (worker / "src/firebird_distill" / name).write_text("# protocol fixture")
+        (worker / "src/jensen_distill" / name).write_text("# protocol fixture")
     for name in ("bundle.py", "probe.py", "control_schema.py"):
-        (worker.parent / "act_optimizer/src/firebird_act" / name).write_text("# protocol fixture")
+        (worker.parent / "act_optimizer/src/jensen_act" / name).write_text("# protocol fixture")
     for name in ("control_contract.py", "control_schema.py"):
-        (worker.parent / "smolvla_qlora/src/firebird_vla" / name).write_text("# protocol fixture")
+        (worker.parent / "smolvla_qlora/src/jensen_vla" / name).write_text("# protocol fixture")
     runtime = configured(worker)
     data["implementation"] = nd.implementation_identity(runtime)
     lifecycle = SimpleNamespace(
@@ -389,7 +389,7 @@ def test_commands_are_fixed_offline_and_exclude_credentials(fixture, monkeypatch
     monkeypatch.setenv("HF_TOKEN", "private")
     for mode in ["prepare", "application"]:
         argv, _, env = nd.command(fixture.runtime, mode, Path("/request"), Path("/response"))
-        assert argv[1:3] == ["-m", "firebird_distill." + mode]
+        assert argv[1:3] == ["-m", "jensen_distill." + mode]
         assert "HF_TOKEN" not in env and "GOOGLE_APPLICATION_CREDENTIALS" not in env
         assert env["CUDA_VISIBLE_DEVICES"] == "" and env["OMP_NUM_THREADS"] == "1"
     with pytest.raises(ValueError):

@@ -197,7 +197,7 @@ def test_borrowed_download_cancel_drains_partial_without_closing_connection(tmp_
             )
         )
         await hold.wait()
-        assert list(tmp_path.glob(".firebird-download-*.partial"))
+        assert list(tmp_path.glob(".jensen-download-*.partial"))
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task

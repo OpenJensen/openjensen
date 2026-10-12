@@ -189,7 +189,7 @@ wheels = [
 ]
 
 [[package]]
-name = "firebird-act-optimizer"
+name = "jensen-act-optimizer"
 version = "0.1.0"
 source = { editable = "." }
 

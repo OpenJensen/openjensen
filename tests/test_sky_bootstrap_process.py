@@ -22,6 +22,41 @@ def test_bootstrap_remains_standalone_python311(bootstrap_source):
     ast.parse(bootstrap_source.read_text(), feature_version=(3, 11))
 
 
+@pytest.mark.parametrize(
+    "values,expected",
+    [
+        ({"FIREBIRD_WORKER_TEST": "legacy"}, "legacy"),
+        ({"JENSEN_WORKER_TEST": "current", "FIREBIRD_WORKER_TEST": "legacy"}, "current"),
+        ({"JENSEN_WORKER_TEST": "", "FIREBIRD_WORKER_TEST": "legacy"}, ""),
+    ],
+)
+def test_copied_bootstrap_loads_in_isolated_python_with_environment_aliases(
+    tmp_path, bootstrap_source, values, expected
+):
+    copied = tmp_path / "bootstrap.py"
+    copied.write_bytes(bootstrap_source.read_bytes())
+    script = f"""
+import importlib.util, json, sys
+spec = importlib.util.spec_from_file_location('copied_bootstrap', {str(copied)!r})
+bootstrap = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(bootstrap)
+assert not any(name == 'vla_platform' or name.startswith('vla_platform.') for name in sys.modules)
+print(json.dumps([
+    bootstrap.getenv('FIREBIRD_WORKER_TEST'), bootstrap.getenv('JENSEN_WORKER_TEST')
+]))
+"""
+    result = subprocess.run(
+        [sys.executable, "-I", "-B", "-c", script],
+        cwd=tmp_path,
+        env={**os.environ, **values},
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=5,
+    )
+    assert json.loads(result.stdout) == [expected, expected]
+
+
 def wait_for(path, process):
     deadline = time.monotonic() + 5
     while not path.exists():

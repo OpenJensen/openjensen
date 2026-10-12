@@ -10,10 +10,10 @@ uv pip install --python .venv/bin/python -e .
 . .venv/bin/activate
 
 # No ML imports, downloads or jobs:
-firebird-check-qlora --output-dir outputs/qlora-plan
+jensen-check-qlora --output-dir outputs/qlora-plan
 
 # Small public metadata/config reads only; no weight downloads:
-firebird-check-qlora --inspect --output-dir outputs/qlora-inspection
+jensen-check-qlora --inspect --output-dir outputs/qlora-inspection
 ```
 
 Use a new output directory for each command. Model revisions are in the
@@ -47,8 +47,8 @@ Export one batch after the model's native processor and collator:
 
 ```python
 import json
-from firebird_vla.checks.catalog import PROFILES
-from firebird_vla.checks.fixtures import save_fixture
+from jensen_vla.checks.catalog import PROFILES
+from jensen_vla.checks.fixtures import save_fixture
 
 catalog = json.load(open("configs/benchmarks/open_weight_vlas.json"))
 model_id = "smolvla"  # Run this inside that model's native data pipeline.
@@ -92,7 +92,7 @@ converted file hash after completing floating action-equivalence checks:
 ## Run on CUDA
 
 ```bash
-firebird-check-qlora --run \
+jensen-check-qlora --run \
   --runtimes /absolute/path/to/qlora-runtimes.json \
   --models smolvla openvla_oft \
   --output-dir outputs/qlora-native-checks

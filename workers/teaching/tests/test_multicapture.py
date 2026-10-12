@@ -9,10 +9,10 @@ import pytest
 from conftest import SimulationFixture, act, settings
 from sim_worker.rollout.contracts import Frame, Observation
 
-from firebird_teaching import dataset
-from firebird_teaching.dataset import CaptureSelection, additional_captures, convert_captures
-from firebird_teaching.journal import Journal
-from firebird_teaching.session import Session
+from jensen_teaching import dataset
+from jensen_teaching.dataset import CaptureSelection, additional_captures, convert_captures
+from jensen_teaching.journal import Journal
+from jensen_teaching.session import Session
 
 
 def record_scene(path: Path, seed: int, *, frames=12):

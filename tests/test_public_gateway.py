@@ -130,6 +130,72 @@ def test_static_prefix_redirects_assets_and_path_containment(config, tmp_path):
         )
 
 
+def test_canonical_config_routes_static_and_api_without_exposing_legacy_path(config):
+    canonical = gateway.GatewayConfig.from_value(
+        {**config[1], "username": "jensen", "path_prefix": "/jensen"}
+    )
+    auth = "Basic " + base64.b64encode(f"jensen:{PASSWORD}".encode()).decode()
+    received = []
+
+    async def upstream(request):
+        received.append(request)
+        return httpx.Response(307, headers={"Location": "/api/v1/result?part=2"}, stream=Chunks())
+
+    with TestClient(
+        gateway.PublicGateway(canonical, transport=httpx.MockTransport(upstream)),
+        base_url=ORIGIN,
+    ) as client:
+        assert client.get("/jensen/").status_code == 401
+        client.headers["Authorization"] = auth
+        assert client.get("/jensen/docs/").text == "<h1>API reference</h1>"
+        assert client.get("/jensen", follow_redirects=False).headers["location"] == "/jensen/"
+        assert (
+            client.get("/jensen/docs", follow_redirects=False).headers["location"]
+            == "/jensen/docs/"
+        )
+        assert client.get("/firebird/").status_code == 404
+        assert client.get("/jensenevil/api/v1/health").status_code == 404
+        assert client.post("/jensen/api/v1/jobs").status_code == 403
+        assert not received
+        response = client.post(
+            "/jensen/api/v1/jobs?name=a%2Fb",
+            headers={"Origin": ORIGIN},
+            follow_redirects=False,
+        )
+        assert response.headers["location"] == "/jensen/api/v1/result?part=2"
+        assert str(received[-1].url) == "http://127.0.0.1:8096/api/v1/jobs?name=a%2Fb"
+        assert "authorization" not in received[-1].headers
+        assert client.get("/jensen/", headers={"Authorization": AUTH}).status_code == 401
+    assert config[0].path_prefix == "/firebird"
+
+
+@pytest.mark.parametrize(
+    "canonical,legacy,expected",
+    [
+        (None, "/alpha.json", "/alpha.json"),
+        ("/new.json", "/alpha.json", "/new.json"),
+        ("/new.json", None, "/new.json"),
+        ("", "/alpha.json", ""),
+    ],
+)
+def test_config_environment_prefers_canonical_and_preserves_legacy(
+    monkeypatch, canonical, legacy, expected
+):
+    for name, value in (("JENSEN_PUBLIC_CONFIG", canonical), ("FIREBIRD_PUBLIC_CONFIG", legacy)):
+        if value is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, value)
+    assert gateway.configuration_path() == expected
+
+
+def test_config_environment_requires_explicit_path(monkeypatch):
+    monkeypatch.delenv("JENSEN_PUBLIC_CONFIG", raising=False)
+    monkeypatch.delenv("FIREBIRD_PUBLIC_CONFIG", raising=False)
+    with pytest.raises(KeyError, match="JENSEN_PUBLIC_CONFIG"):
+        gateway.configuration_path()
+
+
 def test_http_funnel_hop_with_public_host_never_redirects_to_http_or_loopback(config):
     with TestClient(
         gateway.PublicGateway(config[0]),
@@ -332,6 +398,11 @@ def test_config_requires_private_file_and_rejects_arbitrary_preview_origin(confi
         ("password_hash_hex", None),
         ("preview_origins", {}),
         ("preview_origins", [{}]),
+        ("path_prefix", "/"),
+        ("path_prefix", "/jensen/"),
+        ("path_prefix", "/other"),
+        ("path_prefix", []),
+        ("username", "other"),
     ],
 )
 def test_malformed_config_field_types_fail_closed(config, field, value):

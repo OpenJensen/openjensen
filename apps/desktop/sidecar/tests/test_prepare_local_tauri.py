@@ -10,13 +10,13 @@ from test_sidecar import module, resource_tree
 prepare = module("prepare_local_tauri")
 
 
-def fixture(tmp_path):
+def fixture(tmp_path, executable_name="jensen-sidecar"):
     payload = tmp_path / "payload"
     payload.mkdir()
-    executable = payload / "firebird-sidecar"
+    executable = payload / executable_name
     executable.write_bytes(b"\xcf\xfa\xed\xfe" + struct.pack("<I", 0x100000C) + b"fixture")
     executable.chmod(0o755)
-    (payload / "safe-link").symlink_to("firebird-sidecar")
+    (payload / "safe-link").symlink_to(executable_name)
     resource_tree(payload / "_internal/sidecar-resources")
     value = module("payload_inventory").inventory(payload)
     manifest = tmp_path / "inventory.json"
@@ -26,7 +26,7 @@ def fixture(tmp_path):
         "source_build_id": resources.build_id,
         "resources_sha256": resources.manifest_sha256,
         "payload_identity_sha256": value["identity_sha256"],
-        "native_files": {"firebird-sidecar": [0x100000C]},
+        "native_files": {executable_name: [0x100000C]},
         **{
             key: True
             for key in [
@@ -45,28 +45,47 @@ def fixture(tmp_path):
     return payload, manifest, acceptance
 
 
-def test_prepare_copies_complete_payload_and_generates_default_off_fixed_inputs(tmp_path):
-    payload, manifest, acceptance = fixture(tmp_path)
+@pytest.mark.parametrize("executable_name", ["jensen-sidecar", "firebird-sidecar"])
+def test_prepare_copies_complete_payload_and_generates_default_off_fixed_inputs(
+    tmp_path, executable_name
+):
+    payload, manifest, acceptance = fixture(tmp_path, executable_name)
     output = tmp_path / "candidate"
     result = prepare.prepare(payload, manifest, acceptance, output)
-    assert (output / "resources/firebird-sidecar/safe-link").is_symlink()
-    assert (output / "resources/firebird-sidecar/safe-link").readlink() == Path("firebird-sidecar")
+    assert (output / "resources/jensen-sidecar/safe-link").is_symlink()
+    assert (output / "resources/jensen-sidecar/safe-link").readlink() == Path(executable_name)
     assert result["production_activation"] is False
     assert result["native_candidate_built"] is False
-    assert result["identifier"].startswith("dev.firebird.workbench.experiment.")
+    assert result["identifier"].startswith("org.openjensen.workbench.experiment.")
     config = json.loads((output / "tauri.local.json").read_text())
     assert config["identifier"] == result["identifier"]
     assert set(config["bundle"]["resources"].values()) == {
-        "sidecar/firebird-sidecar",
+        "sidecar/jensen-sidecar",
         "sidecar/payload-manifest.json",
     }
     assert Path(config["build"]["frontendDist"]).is_absolute()
     assert "LOCAL_EXPERIMENT_PAYLOAD" in (output / "local-payload-pin.rs").read_text()
     assert "PRODUCTION_PAYLOAD" not in (output / "local-payload-pin.rs").read_text()
     prepare.verify(payload, json.loads(manifest.read_text()))
-    prepare.verify(output / "resources/firebird-sidecar", json.loads(manifest.read_text()))
+    prepare.verify(output / "resources/jensen-sidecar", json.loads(manifest.read_text()))
     with pytest.raises(ValueError, match="must not exist"):
         prepare.prepare(payload, manifest, acceptance, output)
+
+
+def test_ambiguous_fixed_executable_names_fail_before_creating_candidate(tmp_path):
+    payload, manifest, acceptance = fixture(tmp_path)
+    (payload / "firebird-sidecar").write_bytes((payload / "jensen-sidecar").read_bytes())
+    (payload / "firebird-sidecar").chmod(0o755)
+    recorded = module("payload_inventory").inventory(payload)
+    manifest.write_text(json.dumps(recorded))
+    report = json.loads(acceptance.read_text())
+    report["payload_identity_sha256"] = recorded["identity_sha256"]
+    report["native_files"]["firebird-sidecar"] = [0x100000C]
+    acceptance.write_text(json.dumps(report))
+    output = tmp_path / "candidate"
+    with pytest.raises(ValueError, match="exactly one fixed sidecar"):
+        prepare.prepare(payload, manifest, acceptance, output)
+    assert not output.exists()
 
 
 @pytest.mark.parametrize(
@@ -89,9 +108,9 @@ def test_bad_inputs_fail_before_creating_candidate(tmp_path, fault):
     payload, manifest, acceptance = fixture(tmp_path)
     output = tmp_path / "candidate"
     if fault == "modified":
-        (payload / "firebird-sidecar").write_bytes(b"changed")
+        (payload / "jensen-sidecar").write_bytes(b"changed")
     elif fault == "missing":
-        (payload / "firebird-sidecar").unlink()
+        (payload / "jensen-sidecar").unlink()
     elif fault == "extra":
         (payload / "extra").write_text("extra")
     elif fault == "symlink":
@@ -113,7 +132,7 @@ def test_bad_inputs_fail_before_creating_candidate(tmp_path, fault):
         elif fault == "missing-proof":
             del value["workspace_owner_exclusion"]
         elif fault == "wrong-arch":
-            value["native_files"] = {"firebird-sidecar": [7]}
+            value["native_files"] = {"jensen-sidecar": [7]}
         acceptance.write_text(json.dumps(value))
     with pytest.raises(ValueError):
         prepare.prepare(payload, manifest, acceptance, output)

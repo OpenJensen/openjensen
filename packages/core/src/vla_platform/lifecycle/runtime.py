@@ -9,6 +9,12 @@ from pydantic import Field, model_validator
 from vla_platform.lifecycle.contracts import StrictRecord
 from vla_platform.lifecycle.native_profiles import NATIVE_PROFILES
 from vla_platform.lifecycle.training_catalog import TRAINING_MODEL_BY_ID
+from vla_platform.worker_paths import (
+    canonical_module,
+    worker_module,
+    worker_package,
+    worker_project,
+)
 
 
 class Runtime(StrictRecord):
@@ -48,7 +54,7 @@ class Runtime(StrictRecord):
     # An operator-installed module must implement the native application protocol.
     # API callers may select a registered model, never its executable/module.
     training_module: str = Field(
-        default="firebird_vla.application", pattern=r"^[A-Za-z_]\w*(\.[A-Za-z_]\w*)+$"
+        default="jensen_vla.application", pattern=r"^[A-Za-z_]\w*(\.[A-Za-z_]\w*)+$"
     )
     training_model_ids: list[str] = Field(default_factory=lambda: ["smolvla"], min_length=1)
     vendor: str | None = None
@@ -200,12 +206,12 @@ class Runtime(StrictRecord):
         if any(model_id not in TRAINING_MODEL_BY_ID for model_id in self.training_model_ids):
             raise ValueError("Training model is not registered")
         if (
-            self.training_module == "firebird_vla.application"
+            canonical_module(self.training_module) == "jensen_vla.application"
             and self.execution != "skypilot"
             and self.training_model_ids != ["smolvla"]
         ):
             raise ValueError("The bundled training module supports only SmolVLA")
-        if self.training_module == "firebird_vla.lerobot_application" and any(
+        if canonical_module(self.training_module) == "jensen_vla.lerobot_application" and any(
             key not in NATIVE_PROFILES and key != "smolvla" for key in self.training_model_ids
         ):
             raise ValueError("The native LeRobot module supports registered native policies only")
@@ -373,9 +379,16 @@ def native_replay_ready(runtime: Runtime) -> bool:
                 "sim_worker/rollout/server.py",
             )
         )
-        and (root.parent / "firebird_quant/src/firebird_quant/native_consumer.py").is_file()
-        and (root.parent / "act_optimizer/src/firebird_act/application.py").is_file()
-        and (root.parent / "smolvla_qlora/src/firebird_vla/local_dataset.py").is_file()
+        and (
+            worker_package(worker_project(root.parent, "jensen_quant"), "jensen_quant")
+            / "native_consumer.py"
+        ).is_file()
+        and (
+            worker_package(root.parent / "act_optimizer", "jensen_act") / "application.py"
+        ).is_file()
+        and (
+            worker_package(root.parent / "smolvla_qlora", "jensen_vla") / "local_dataset.py"
+        ).is_file()
     )
 
 
@@ -399,7 +412,7 @@ def native_distillation_ready(runtime: Runtime) -> bool:
         and all(p.is_absolute() and p.is_file() and os.access(p, os.X_OK) for p in interpreters)
         and root.is_absolute()
         and all(
-            (root / "src/firebird_distill" / name).is_file()
+            (worker_package(root, "jensen_distill") / name).is_file()
             for name in (
                 "__init__.py",
                 "application.py",
@@ -410,11 +423,11 @@ def native_distillation_ready(runtime: Runtime) -> bool:
             )
         )
         and all(
-            (root.parent / "act_optimizer/src/firebird_act" / name).is_file()
+            (worker_package(root.parent / "act_optimizer", "jensen_act") / name).is_file()
             for name in ("application.py", "bundle.py", "probe.py", "control_schema.py")
         )
         and all(
-            (root.parent / "smolvla_qlora/src/firebird_vla" / name).is_file()
+            (worker_package(root.parent / "smolvla_qlora", "jensen_vla") / name).is_file()
             for name in ("local_dataset.py", "control_contract.py", "control_schema.py")
         )
     )
@@ -433,7 +446,7 @@ def native_quantization_ready(runtime: Runtime) -> bool:
         and os.access(python, os.X_OK)
         and root.is_absolute()
         and all(
-            (root / "src/firebird_quant" / name).is_file()
+            (worker_package(root, "jensen_quant") / name).is_file()
             for name in (
                 "__init__.py",
                 "native_application.py",
@@ -446,7 +459,7 @@ def native_quantization_ready(runtime: Runtime) -> bool:
             )
         )
         and all(
-            (root.parent / "act_optimizer/src/firebird_act" / name).is_file()
+            (worker_package(root.parent / "act_optimizer", "jensen_act") / name).is_file()
             for name in (
                 "__init__.py",
                 "application.py",
@@ -498,7 +511,7 @@ def command(
         argv = [
             runtime.act_export_python,
             "-m",
-            "firebird_act.application",
+            worker_module(Path(root), "jensen_act.application"),
             str(request),
             str(output),
         ]
@@ -509,6 +522,13 @@ def command(
         raise ValueError("The selected runtime has no training environment")
     module = runtime.training_module if training else "policykit.application"
     image = runtime.training_image if training else runtime.image
+    if training:
+        try:
+            module = worker_module(Path(root), module)
+        except ValueError:
+            # Image-only operator modules need not have unpacked source on the app host.
+            if not image:
+                raise
     if conversion and runtime.conversion_python:
         python = runtime.conversion_python
         image = runtime.conversion_image

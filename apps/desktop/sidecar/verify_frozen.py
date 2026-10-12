@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from native_dependencies import inspect as inspect_native
-from payload_inventory import inventory, verify
+from payload_inventory import executable_name, inventory, verify
 from sidecar_resources import load_resources
 
 NONCE = "4d" * 16
@@ -268,7 +268,7 @@ def run(payload: Path, output: Path, build_id: str, resource_sha256: str) -> dic
     verify(relocated, original)
     native_links = inspect_native(relocated, original)
     (output / "native-dependencies.json").write_text(json.dumps(native_links, indent=2) + "\n")
-    executable = relocated / "firebird-sidecar"
+    executable = relocated / executable_name(original["entries"])
     assert executable.is_file() and os.access(executable, os.X_OK)
     resources_path = relocated / "_internal/sidecar-resources"
     resources = load_resources(resources_path)
@@ -300,7 +300,7 @@ def run(payload: Path, output: Path, build_id: str, resource_sha256: str) -> dic
         assert expect_json(port, "/api/v1/augmentation-options")["auth_mode"] == "unconfigured"
         static = json.loads((resources_path / "resources.json").read_text())["files"]
         for name, entry in static.items():
-            code, raw = request(port, "/" if name == "index.html" else "/" + name)
+            code, raw = request(port, "/" + name)
             assert code == 200 and len(raw) == entry["bytes"]
             assert hashlib.sha256(raw).hexdigest() == entry["sha256"], name
         project = expect_json(

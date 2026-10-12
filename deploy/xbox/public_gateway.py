@@ -1,4 +1,4 @@
-"""Authenticated /firebird gateway. Run with FIREBIRD_PUBLIC_CONFIG pointing to a 0600 JSON file."""
+"""Authenticated OPEN JENSEN gateway with a private JENSEN_PUBLIC_CONFIG JSON file."""
 
 import asyncio
 import base64
@@ -21,7 +21,8 @@ from starlette.responses import RedirectResponse, Response, StreamingResponse
 from starlette.routing import Route
 from starlette.staticfiles import StaticFiles
 
-PREFIX = "/firebird"
+# Existing deployed configurations keep their route until explicitly migrated.
+LEGACY_PREFIX = "/firebird"
 UPSTREAM = httpx.URL("http://127.0.0.1:8096")
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 HOP_HEADERS = {
@@ -52,6 +53,7 @@ class GatewayConfig:
     password_hash: bytes
     iterations: int
     preview_origins: tuple[str, ...] = ()
+    path_prefix: str = LEGACY_PREFIX
 
     @classmethod
     def from_value(cls, value):
@@ -63,6 +65,7 @@ class GatewayConfig:
             "password_hash_hex",
             "password_iterations",
             "preview_origins",
+            "path_prefix",
         }
         if not isinstance(value, dict) or set(value) - expected:
             raise ValueError("Invalid gateway configuration")
@@ -85,8 +88,10 @@ class GatewayConfig:
             password_hash = bytes.fromhex(value["password_hash_hex"])
             iterations = value["password_iterations"]
             previews = value.get("preview_origins", [])
+            path_prefix = value.get("path_prefix", LEGACY_PREFIX)
             if (
-                value["username"] != "firebird"
+                value["username"] not in ("jensen", "firebird")
+                or path_prefix not in ("/jensen", LEGACY_PREFIX)
                 or len(salt) != 16
                 or len(password_hash) != 32
                 or type(iterations) is not int
@@ -108,7 +113,16 @@ class GatewayConfig:
                 raise ValueError
         except KeyError, TypeError, AttributeError, ValueError:
             raise ValueError("Invalid gateway configuration") from None
-        return cls(origin, directory, "firebird", salt, password_hash, iterations, tuple(previews))
+        return cls(
+            origin,
+            directory,
+            value["username"],
+            salt,
+            password_hash,
+            iterations,
+            tuple(previews),
+            path_prefix,
+        )
 
     @classmethod
     def load(cls, path):
@@ -161,7 +175,7 @@ def filtered_headers(headers, *, request=False):
     ]
 
 
-def public_location(location, origin):
+def public_location(location, origin, path_prefix=LEGACY_PREFIX):
     parsed = urlsplit(location)
     internal = not parsed.netloc and location.startswith("/")
     if parsed.netloc:
@@ -172,8 +186,8 @@ def public_location(location, origin):
         ) or location.startswith(origin + "/")
     if internal:
         path = parsed.path
-        if path != PREFIX and not path.startswith(PREFIX + "/"):
-            path = PREFIX + (path if path.startswith("/") else "/" + path)
+        if path != path_prefix and not path.startswith(path_prefix + "/"):
+            path = path_prefix + (path if path.startswith("/") else "/" + path)
         return urlunsplit(("", "", path, parsed.query, parsed.fragment))
     return location
 
@@ -181,6 +195,7 @@ def public_location(location, origin):
 class PublicGateway:
     def __init__(self, config, *, transport=None):
         self.config = config
+        self.prefix = config.path_prefix
         self.transport = transport
         self.client = None
         self.static = StaticFiles(directory=config.static_dir, html=True, follow_symlink=False)
@@ -279,9 +294,9 @@ class PublicGateway:
                 scope,
                 401,
                 "Authentication required",
-                **{"www-authenticate": 'Basic realm="Firebird", charset="UTF-8"'},
+                **{"www-authenticate": 'Basic realm="OPEN JENSEN", charset="UTF-8"'},
             )
-        elif not (scope["path"] == PREFIX or scope["path"].startswith(PREFIX + "/")):
+        elif not (scope["path"] == self.prefix or scope["path"].startswith(self.prefix + "/")):
             response = self.error(scope, 404, "Not found")
         else:
             origin = single_header(scope, b"origin")
@@ -303,14 +318,14 @@ class PublicGateway:
         await response(scope, receive, send)
 
     async def handle(self, request: Request):
-        path = request.scope["path"][len(PREFIX) :] or "/"
-        if request.scope["path"] == PREFIX:
-            response = RedirectResponse(PREFIX + "/", status_code=307)
+        path = request.scope["path"][len(self.prefix) :] or "/"
+        if request.scope["path"] == self.prefix:
+            response = RedirectResponse(self.prefix + "/", status_code=307)
         elif path == "/api" or path.startswith("/api/") or path == "/openapi.json":
             raw_path = request.scope.get("raw_path", request.scope["path"].encode())
-            if not raw_path.startswith(PREFIX.encode() + b"/"):
+            if not raw_path.startswith(self.prefix.encode() + b"/"):
                 return self.error(request.scope, 400, "Invalid path")
-            upstream_path = raw_path[len(PREFIX) :]
+            upstream_path = raw_path[len(self.prefix) :]
             if request.scope["query_string"]:
                 upstream_path += b"?" + request.scope["query_string"]
             url = UPSTREAM.copy_with(raw_path=upstream_path)
@@ -337,7 +352,7 @@ class PublicGateway:
             response.raw_headers = filtered_headers(upstream.headers.raw)
             if "location" in response.headers:
                 response.headers["location"] = public_location(
-                    response.headers["location"], self.config.public_origin
+                    response.headers["location"], self.config.public_origin, self.prefix
                 )
         else:
             try:
@@ -356,10 +371,17 @@ class PublicGateway:
         return response
 
 
+def configuration_path():
+    path = os.environ.get("JENSEN_PUBLIC_CONFIG", os.environ.get("FIREBIRD_PUBLIC_CONFIG"))
+    if path is None:
+        raise KeyError("JENSEN_PUBLIC_CONFIG")
+    return path
+
+
 if __name__ == "__main__":
     import uvicorn
 
-    config = GatewayConfig.load(os.environ["FIREBIRD_PUBLIC_CONFIG"])
+    config = GatewayConfig.load(configuration_path())
     uvicorn.run(
         PublicGateway(config),
         host="127.0.0.1",

@@ -1,6 +1,7 @@
 use std::io::Read;
 
 fn main() {
+    println!("cargo:rerun-if-env-changed=JENSEN_DESKTOP_EXPERIMENT_PIN");
     println!("cargo:rerun-if-env-changed=FIREBIRD_DESKTOP_EXPERIMENT_PIN");
     if std::env::var_os("CARGO_FEATURE_LOCAL_PAYLOAD_EXPERIMENT").is_some() {
         assert_eq!(
@@ -14,7 +15,8 @@ fn main() {
             "Local payload experiment is ARM64-only"
         );
         let input = std::path::PathBuf::from(
-            std::env::var_os("FIREBIRD_DESKTOP_EXPERIMENT_PIN")
+            std::env::var_os("JENSEN_DESKTOP_EXPERIMENT_PIN")
+                .or_else(|| std::env::var_os("FIREBIRD_DESKTOP_EXPERIMENT_PIN"))
                 .expect("Explicit generated local experiment pin is required"),
         );
         assert!(input.is_absolute(), "Generated pin path must be absolute");

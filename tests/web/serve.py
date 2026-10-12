@@ -2,7 +2,6 @@
 
 import hashlib
 import json
-import os
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -10,18 +9,19 @@ from tempfile import TemporaryDirectory
 import uvicorn
 from vla_platform.api import create_app
 from vla_platform.compute_settings import ComputeSettings, ComputeSettingsUpdate
+from vla_platform.environment import getenv
 from vla_platform.settings import Settings
 
 static_dir = Path(
-    os.environ.get(
-        "FIREBIRD_TEST_WEB_DIR",
-        Path(__file__).resolve().parents[2] / "apps" / "web" / "out",
+    getenv(
+        "JENSEN_TEST_WEB_DIR",
+        str(Path(__file__).resolve().parents[2] / "apps" / "web" / "out"),
     )
 )
 if not (static_dir / "docs" / "index.html").is_file():
     raise SystemExit("Build the web app before browser tests: pnpm build:web")
 
-with TemporaryDirectory(prefix="firebird-browser-tests-") as data_dir:
+with TemporaryDirectory(prefix="jensen-browser-tests-") as data_dir:
     workspace = Path(data_dir).resolve()
     source = workspace / "synthetic-source"
     source.write_bytes(b"synthetic browser fixture: not policy weights")
@@ -62,7 +62,7 @@ with TemporaryDirectory(prefix="firebird-browser-tests-") as data_dir:
         ),
         encoding="utf-8",
     )
-    if os.getenv("FIREBIRD_BROWSER_NATIVE_FIXTURE") == "1":
+    if getenv("JENSEN_BROWSER_NATIVE_FIXTURE") == "1":
         # Diagnostics use real protocol subprocesses, with no model or GPU.
         worker = Path(__file__).resolve().parents[1] / "fixtures/native_worker"
         runtime_config.write_text(
@@ -96,9 +96,9 @@ with TemporaryDirectory(prefix="firebird-browser-tests-") as data_dir:
             ),
             encoding="utf-8",
         )
-    elif os.getenv("FIREBIRD_BROWSER_EMPTY_RUNTIME") == "1":
+    elif getenv("JENSEN_BROWSER_EMPTY_RUNTIME") == "1":
         runtime_config.write_text('{"runtimes": [], "sources": []}', encoding="utf-8")
-    if os.getenv("FIREBIRD_BROWSER_EMPTY_RUNTIME") != "1":
+    if getenv("JENSEN_BROWSER_EMPTY_RUNTIME") != "1":
         # Only this disposable fixture opts into its synthetic local workers.
         # The application's default continues to require explicit local enablement.
         ComputeSettings(workspace).update(
@@ -114,6 +114,6 @@ with TemporaryDirectory(prefix="firebird-browser-tests-") as data_dir:
             )
         ),
         host="127.0.0.1",
-        port=int(os.getenv("FIREBIRD_BROWSER_PORT", "8765")),
+        port=int(getenv("JENSEN_BROWSER_PORT", "8765")),
         log_level="warning",
     )

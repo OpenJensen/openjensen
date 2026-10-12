@@ -14,12 +14,12 @@ import pytest
 
 WORKERS = Path(__file__).resolve().parents[2]
 for p in (
-    WORKERS / "firebird_quant/src",
+    WORKERS / "jensen_quant/src",
     WORKERS / "act_optimizer/src",
     WORKERS / "firebird_quant/tests",
 ):
     sys.path.insert(0, str(p))
-from firebird_quant.native_package import canonical, inspect_policy, sha
+from jensen_quant.native_package import canonical, inspect_policy, sha
 from test_native_runtime import real_act as _real_act
 from test_packed_checkpoint import packed_fixture
 
@@ -277,8 +277,8 @@ def test_owned_timeout_and_spawn_signal(tmp_path):
 )
 @pytest.mark.parametrize("bits", [8, 4])
 def test_actual_packed_http_replay(native_act_source, tmp_path, bits):
-    from firebird_quant.native_application import run_job as quantize
-    from firebird_quant.native_package import inventory
+    from jensen_quant.native_application import run_job as quantize
+    from jensen_quant.native_package import inventory
 
     source = native_act_source
     converted = quantize(
@@ -339,7 +339,7 @@ def test_actual_packed_http_replay(native_act_source, tmp_path, bits):
 
 
 def valid_result(job):
-    from firebird_quant.native_package import RUNTIME
+    from jensen_quant.native_package import RUNTIME
 
     doc, _ = validate(job)
     row = doc["samples"][0]

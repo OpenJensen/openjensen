@@ -86,20 +86,20 @@ def worker_sources(tmp_path, monkeypatch):
     groups = (
         (
             "distillation",
-            "firebird_distill",
-            "policy_distillation/src/firebird_distill",
+            "jensen_distill",
+            "policy_distillation/src/jensen_distill",
             ("__init__", "application", "contracts", "prepare", "runtime", "provenance"),
         ),
         (
             "act",
-            "firebird_act",
-            "act_optimizer/src/firebird_act",
+            "jensen_act",
+            "act_optimizer/src/jensen_act",
             ("bundle", "probe", "control_schema"),
         ),
         (
             "data",
-            "firebird_vla",
-            "smolvla_qlora/src/firebird_vla",
+            "jensen_vla",
+            "smolvla_qlora/src/jensen_vla",
             ("control_contract", "control_schema"),
         ),
     )
@@ -115,7 +115,7 @@ def worker_sources(tmp_path, monkeypatch):
     def identity():
         return {key: hashlib.sha256(path.read_bytes()).hexdigest() for key, path in files.items()}
 
-    modules["firebird_distill.application"].implementation_identity = identity
+    modules["jensen_distill.application"].implementation_identity = identity
 
     def selected_import(name):
         if name not in modules:
@@ -145,7 +145,7 @@ def test_declared_worker_identity_must_match_exact_sources(worker_sources, fault
         reported["data/control_contract.py"] = "0" * 64
     else:
         reported["distillation/undeclared.py"] = "0" * 64
-    modules["firebird_distill.application"].implementation_identity = lambda: reported
+    modules["jensen_distill.application"].implementation_identity = lambda: reported
     with pytest.raises(ValueError, match="implementation identity"):
         p.distillation_source_identity(repo)
 
@@ -153,7 +153,7 @@ def test_declared_worker_identity_must_match_exact_sources(worker_sources, fault
 @pytest.mark.parametrize("fault", ["missing_file", "missing_module", "borrowed", "no_source"])
 def test_dependency_source_origin_and_presence_are_required(worker_sources, fault, monkeypatch):
     repo, files, modules, _ = worker_sources
-    key = "firebird_distill.provenance"
+    key = "jensen_distill.provenance"
     if fault == "missing_file":
         files["distillation/provenance.py"].unlink()
     elif fault == "missing_module":

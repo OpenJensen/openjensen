@@ -18,9 +18,9 @@ Copy [runtime.example.json](runtime.example.json) and replace all absolute paths
 Start the server with that configuration:
 
 ```sh
-export FIREBIRD_RUNTIME_CONFIG=/absolute/path/runtime-local.json
-export FIREBIRD_DATA_DIR=/absolute/path/firebird-workspace
-uv run --frozen firebird serve
+export JENSEN_RUNTIME_CONFIG=/absolute/path/runtime-local.json
+export JENSEN_DATA_DIR=/absolute/path/jensen-workspace
+uv run --frozen jensen serve
 ```
 
 For a custom training adapter, install its Python module in the training environment and register it with its model IDs, for example:
@@ -69,11 +69,11 @@ Save a JSON recipe and replace runtime/source IDs with values from `policy optio
 ```
 
 ```sh
-uv run --frozen firebird policy options
-uv run --frozen firebird policy submit PROJECT_ID recipe.json
-uv run --frozen firebird jobs show JOB_ID
-uv run --frozen firebird jobs events JOB_ID
-uv run --frozen firebird policy artifacts PROJECT_ID
+uv run --frozen jensen policy options
+uv run --frozen jensen policy submit PROJECT_ID recipe.json
+uv run --frozen jensen jobs show JOB_ID
+uv run --frozen jensen jobs events JOB_ID
+uv run --frozen jensen policy artifacts PROJECT_ID
 ```
 
 Use `policy.finetune` with `dataset_job_id`, `training_method` and `training` for training, or select the saved artifact for an export/quantization request. Recipes, stage requests, logs and outputs are retained in the job's workspace directory.

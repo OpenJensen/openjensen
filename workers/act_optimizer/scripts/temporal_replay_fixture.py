@@ -21,7 +21,7 @@ def main():
         parser.error("Output must be new and outside the packed package")
     os.environ.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1", CUDA_VISIBLE_DEVICES="")
     import torch
-    from firebird_quant.native_package import canonical, inspect_policy, read_json, sha
+    from jensen_quant.native_package import canonical, inspect_policy, read_json, sha
     from sim_worker.rollout.native_replay import run_job
 
     torch.set_num_threads(1)

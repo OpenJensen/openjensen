@@ -3,7 +3,8 @@ requires = ["setuptools>=71,<81"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "firebird-vla"
+license = {text = "Apache-2.0"}
+name = "jensen-vla"
 version = "0.1.0"
 description = "Isolated SmolVLA quantized fine-tuning worker"
 requires-python = ">=3.11,<3.13"
@@ -25,9 +26,13 @@ smolvla = [
 dev = ["pytest==8.4.2", "ruff==0.13.2", "datasets==4.8.5", "numpy==2.2.6"]
 
 [project.scripts]
-firebird-finetune = "firebird_vla.train:main"
-firebird-verify = "firebird_vla.verify:main"
-firebird-check-qlora = "firebird_vla.checks.cli:main"
+jensen-finetune = "jensen_vla.train:main"
+jensen-verify = "jensen_vla.verify:main"
+jensen-check-qlora = "jensen_vla.checks.cli:main"
+# Compatibility commands for alpha installations.
+firebird-finetune = "jensen_vla.train:main"
+firebird-verify = "jensen_vla.verify:main"
+firebird-check-qlora = "jensen_vla.checks.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

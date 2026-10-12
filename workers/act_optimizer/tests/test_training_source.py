@@ -10,9 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from firebird_act import training_source
-from firebird_act.bundle import NORM_MAP, canonical, removal_keys
-from firebird_act.training_source import TRAINING_REVISION, admit_training_source
+from jensen_act import training_source
+from jensen_act.bundle import NORM_MAP, canonical, removal_keys
+from jensen_act.training_source import TRAINING_REVISION, admit_training_source
 
 
 def tensor_file(tensors: dict[str, tuple[list[int], float]]) -> bytes:

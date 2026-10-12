@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from firebird_vla import checkpoint, snapshots
+from jensen_vla import checkpoint, snapshots
 
 
 def native(root, step):

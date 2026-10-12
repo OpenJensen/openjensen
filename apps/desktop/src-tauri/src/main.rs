@@ -100,10 +100,14 @@ fn shutdown(app: &tauri::AppHandle, complete: &Arc<AtomicBool>) {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let attached = match std::env::var("FIREBIRD_DESKTOP_PORT") {
+    let port_setting = match std::env::var("JENSEN_DESKTOP_PORT") {
+        Err(std::env::VarError::NotPresent) => std::env::var("FIREBIRD_DESKTOP_PORT"),
+        value => value,
+    };
+    let attached = match port_setting {
         Ok(ref value) => Backend::from_port(Some(value)),
         Err(std::env::VarError::NotPresent) => Backend::from_port(None),
-        Err(_) => Err("FIREBIRD_DESKTOP_PORT must contain a valid decimal port.".into()),
+        Err(_) => Err("JENSEN_DESKTOP_PORT must contain a valid decimal port.".into()),
     };
     if std::env::args().any(|arg| arg == "--self-check") {
         let result = match &attached {

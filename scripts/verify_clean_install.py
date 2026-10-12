@@ -34,10 +34,15 @@ def verify(evidence: Path):
     evidence.mkdir(parents=True, exist_ok=True)
     # Never leave a stale passing receipt next to a failed rerun log.
     (evidence / "receipt.json").unlink(missing_ok=True)
-    with tempfile.TemporaryDirectory(prefix="firebird-clean-install-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="openjensen-clean-install-") as temporary:
         root = Path(temporary)
         log = (evidence / "install.log").open("w", encoding="utf-8")
-        env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
+        env = {
+            key: value
+            for key, value in os.environ.items()
+            if key not in {"PYTHONPATH", "GEMINI_API_KEY"}
+            and not key.startswith(("JENSEN_", "FIREBIRD_"))
+        }
         server = None
         channel = socket.socket()
         channel.bind(("127.0.0.1", 0))
@@ -140,7 +145,7 @@ def verify(evidence: Path):
             (wheel,) = (root / "wheel").glob("*.whl")
             run([*UV, "venv", "--python", "3.14.7", root / "environment"])
             python = root / "environment/bin/python"
-            entrypoint = root / "environment/bin/firebird"
+            entrypoint = root / "environment/bin/jensen"
             run([*UV, "pip", "sync", "--python", python, root / "requirements.txt"])
             run([*UV, "pip", "install", "--python", python, "--no-deps", wheel])
             imports = json.loads(
@@ -191,11 +196,11 @@ print(json.dumps({'python':platform.python_version(),'api_file':vla_platform.api
                 )
             )
             env.update(
-                FIREBIRD_DATA_DIR=str(root / "workspace"),
-                FIREBIRD_RUNTIME_CONFIG=str(config),
-                FIREBIRD_API_URL=origin,
-                FIREBIRD_LOCAL_DATA_ROOT=str(ROOT / "tests/fixtures"),
-                FIREBIRD_WEB_DIR=str(root / "no-bundled-web-assets"),
+                JENSEN_DATA_DIR=str(root / "workspace"),
+                JENSEN_RUNTIME_CONFIG=str(config),
+                JENSEN_API_URL=origin,
+                JENSEN_LOCAL_DATA_ROOT=str(ROOT / "tests/fixtures"),
+                JENSEN_WEB_DIR=str(root / "no-bundled-web-assets"),
             )
 
             def cli(*args):

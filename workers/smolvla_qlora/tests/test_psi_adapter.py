@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from firebird_vla.psi_profile import (
+from jensen_vla.psi_profile import (
     PSI_EXPERT_DIRECTORY,
     PSI_MODEL_ID,
     PSI_MODEL_REVISION,

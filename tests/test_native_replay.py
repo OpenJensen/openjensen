@@ -126,7 +126,7 @@ def fixture(dataset_fixture):
     path = worker / "sim_worker/policy_http_server.py"
     path.write_text("# protocol fixture")
     for name in ("native_application.py", "native_consumer.py", "native_package.py"):
-        path = worker.parent / "firebird_quant/src/firebird_quant" / name
+        path = worker.parent / "jensen_quant/src/jensen_quant" / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("# protocol fixture")
     runtime = configured(worker)

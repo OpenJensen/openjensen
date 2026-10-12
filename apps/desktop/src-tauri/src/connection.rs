@@ -18,13 +18,13 @@ impl Backend {
     pub fn from_port(value: Option<&str>) -> Result<Self, String> {
         let raw = value.unwrap_or("8000");
         if raw.is_empty() || !raw.bytes().all(|b| b.is_ascii_digit()) {
-            return Err("FIREBIRD_DESKTOP_PORT must be a decimal port from 1 to 65535.".into());
+            return Err("JENSEN_DESKTOP_PORT must be a decimal port from 1 to 65535.".into());
         }
         let port = raw
             .parse::<u16>()
             .ok()
             .filter(|port| *port != 0)
-            .ok_or_else(|| "FIREBIRD_DESKTOP_PORT must be from 1 to 65535.".to_string())?;
+            .ok_or_else(|| "JENSEN_DESKTOP_PORT must be from 1 to 65535.".to_string())?;
         let url = Url::parse(&format!("http://127.0.0.1:{port}/"))
             .map_err(|_| "Could not construct the local application address.".to_string())?;
         Ok(Self { url })
@@ -121,7 +121,13 @@ fn check(backend: &Backend, timeout: Duration) -> Result<String, String> {
             env!("CARGO_PKG_VERSION")
         ));
     }
-    let response = client.get(backend.url.clone()).send().map_err(|_| {
+    // The application home redirects to its dashboard. Probe the fixed export itself
+    // while keeping redirects disabled and the verified loopback origin unchanged.
+    let web_url = backend
+        .url
+        .join("index.html")
+        .map_err(|_| "Could not construct the static-export address.".to_string())?;
+    let response = client.get(web_url).send().map_err(|_| {
         "The API is reachable, but the web interface could not be loaded.".to_string()
     })?;
     if response.status() != reqwest::StatusCode::OK
@@ -191,13 +197,21 @@ mod tests {
         ))
         .expect("test backend");
         let task = thread::spawn(move || {
-            for reply in replies {
+            for (index, reply) in replies.into_iter().enumerate() {
                 let mut stream = accept_bounded(&listener);
                 stream
                     .set_read_timeout(Some(Duration::from_secs(2)))
                     .expect("read timeout");
                 let mut request = [0; 2048];
-                let _ = stream.read(&mut request);
+                let length = stream.read(&mut request).expect("request");
+                let path = if index == 0 {
+                    "/api/v1/health"
+                } else {
+                    "/index.html"
+                };
+                assert!(String::from_utf8_lossy(&request[..length]).starts_with(&format!(
+                    "GET {path} HTTP/1.1\r\n"
+                )));
                 let _ = stream.write_all(reply.as_bytes());
             }
         });

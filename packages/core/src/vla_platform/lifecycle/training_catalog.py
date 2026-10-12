@@ -9,6 +9,8 @@ a separate pinned LeRobot environment.
 from dataclasses import asdict, dataclass, replace
 from typing import TYPE_CHECKING
 
+from vla_platform.worker_paths import canonical_module
+
 from .native_profiles import NATIVE_PROFILES
 
 if TYPE_CHECKING:
@@ -122,13 +124,15 @@ TRAINING_MODEL_BY_ID = {model.id: model for model in TRAINING_MODELS}
 def supports_gradient_accumulation(model: TrainingModel, runtime: Runtime) -> bool:
     """Only reviewed bundled adapters declare optimizer-window semantics."""
     expected = {
-        "smolvla": "firebird_vla.application",
-        "act": "firebird_vla.lerobot_application",
+        "smolvla": "jensen_vla.application",
+        "act": "jensen_vla.lerobot_application",
     }.get(model.id)
     return bool(
         expected
         and model.id in runtime.training_model_ids
-        and (runtime.execution == "skypilot" or runtime.training_module == expected)
+        and (
+            runtime.execution == "skypilot" or canonical_module(runtime.training_module) == expected
+        )
     )
 
 
@@ -151,7 +155,7 @@ def public_training_models(catalog: RuntimeCatalog) -> list[dict]:
             if runtime.id in runtime_ids
             and (
                 runtime.execution == "skypilot"
-                or runtime.training_module == "firebird_vla.lerobot_application"
+                or canonical_module(runtime.training_module) == "jensen_vla.lerobot_application"
             )
         ]
         if not runtime_ids:
@@ -176,7 +180,8 @@ def public_training_models(catalog: RuntimeCatalog) -> list[dict]:
                             runtime.id in runtime_ids
                             and (
                                 runtime.execution == "skypilot"
-                                or runtime.training_module != "firebird_vla.lerobot_application"
+                                or canonical_module(runtime.training_module)
+                                != "jensen_vla.lerobot_application"
                             )
                             for runtime in catalog.runtimes
                         )

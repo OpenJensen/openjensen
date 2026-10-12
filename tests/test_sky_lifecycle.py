@@ -193,6 +193,51 @@ async def finished(execution, job):
     return await execution.get(job.id)
 
 
+@pytest.mark.parametrize(
+    "diagnostic",
+    [
+        "Cloud cleanup needs attention: startup record budget was reached.",
+        "Saved SkyPilot cleanup requires attention; check this job's sky-state.json.",
+    ],
+)
+def test_pending_recovery_fences_new_cloud_acceptance_while_local_workspace_is_usable(
+    cloud, diagnostic
+):
+    state, runner, workspace = cloud
+
+    async def unconfirmed(_directory):
+        return [
+            {
+                "job_id": "earlier-dispatch",
+                "cluster": None,
+                "error": diagnostic,
+            }
+        ]
+
+    runner.recover = unconfirmed
+
+    async def exercise():
+        from vla_platform.submissions import lookup
+
+        async with workspace() as execution:
+            await execution.reconcile()
+            assert execution.cloud_cleanup_pending is True
+            with pytest.raises(ValueError, match="Earlier cloud cleanup needs attention"):
+                await execution.submit(PROJECT, request(), idempotency_key="blocked-cloud-attempt")
+            assert (
+                await lookup(execution.storage, PROJECT, "policy.finetune", "blocked-cloud-attempt")
+                is None
+            )
+            assert [job.id for job in await execution.list(PROJECT)] == [DATASET]
+            inspected = await execution.inspections.submit(
+                PROJECT, IntakeRequest(repo_id="fixture/data", revision=SHA)
+            )
+            assert inspected.id == DATASET and inspected.status == "succeeded"
+            assert state["native_calls"] == 0
+
+    asyncio.run(exercise())
+
+
 def test_cloud_training_uses_sky_and_imports_verified_bundle(cloud):
     state, runner, workspace = cloud
     calls = []

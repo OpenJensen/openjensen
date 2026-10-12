@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test';
+import { getenv } from '../../apps/web/src/lib/environment';
 
-const origin = `http://127.0.0.1:${process.env.FIREBIRD_PREFIX_SMOKE_PORT ?? '18766'}`;
-const prefix = (process.env.NEXT_PUBLIC_BASE_PATH ?? '/firebird').replace(/\/+$/, '');
+const origin = `http://127.0.0.1:${getenv('JENSEN_PREFIX_SMOKE_PORT',process.env,'18766')}`;
+const prefix = (process.env.NEXT_PUBLIC_BASE_PATH ?? '/jensen').replace(/\/+$/, '');
 
 test('prefixed export loads bundles, library media, API and docs without escaping its mount', async ({ page }) => {
   const escaped: string[] = [];

@@ -9,8 +9,8 @@ import tempfile
 import time
 from pathlib import Path
 
-from firebird_quant.native_application import _Owner
-from firebird_quant.native_package import (
+from jensen_quant.native_application import _Owner
+from jensen_quant.native_package import (
     canonical,
     checked_path,
     decode,
@@ -39,8 +39,8 @@ class Owner(_Owner):
 
 
 def environment(forbidden):
-    import firebird_act
-    import firebird_quant
+    import jensen_act
+    import jensen_quant
 
     value = {
         k: os.environ[k] for k in ("PATH", "TMPDIR", "SYSTEMROOT", "WINDIR") if k in os.environ
@@ -49,8 +49,8 @@ def environment(forbidden):
         PYTHONPATH=os.pathsep.join(
             [
                 str(Path(__file__).resolve().parents[2]),
-                str(Path(firebird_quant.__file__).resolve().parents[1]),
-                str(Path(firebird_act.__file__).resolve().parents[1]),
+                str(Path(jensen_quant.__file__).resolve().parents[1]),
+                str(Path(jensen_act.__file__).resolve().parents[1]),
             ]
         ),
         HF_HUB_OFFLINE="1",
@@ -59,13 +59,14 @@ def environment(forbidden):
         OMP_NUM_THREADS="1",
         OPENBLAS_NUM_THREADS="1",
         PYTHONDONTWRITEBYTECODE="1",
+        JENSEN_REPLAY_FORBIDDEN=json.dumps([str(p) for p in forbidden]),
         FIREBIRD_REPLAY_FORBIDDEN=json.dumps([str(p) for p in forbidden]),
     )
     return value
 
 
 def implementation_identity():
-    from firebird_quant import native_application, native_consumer, native_package
+    from jensen_quant import native_application, native_consumer, native_package
 
     from . import backend, client, server
 

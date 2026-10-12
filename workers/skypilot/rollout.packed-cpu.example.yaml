@@ -38,7 +38,7 @@ workdir: ../isaac_sim
 file_mounts:
   ~/sim-control: ./remote
   ~/vla-checkpoint: /CHANGE_ME_LOCAL_PACKED_POLICY_DIRECTORY
-  ~/firebird-quant-src: ../firebird_quant/src
+  ~/firebird-quant-src: ../jensen_quant/src
   ~/firebird-act-src: ../act_optimizer/src
 num_nodes: 1
 resources:

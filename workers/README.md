@@ -1,5 +1,10 @@
 # Worker setup
 
+Dataset inspection needs only the CPU reader. Install the other workers when you
+choose their workflows; each has separate dependencies, inputs and acceptance
+limits. Read the [support matrix](../docs/support.md) before treating a configured
+runtime as a verified model route.
+
 Run each worker's installation commands in its own directory with the Python
 version named in its guide.
 
@@ -10,8 +15,8 @@ version named in its guide.
 | ACT export | [Install and export](act_optimizer/README.md) |
 | ACT distillation | [Prepare data and run](policy_distillation/README.md) |
 | Local ACT CPU runtimes | [Install and configure](local_cpu/README.md) |
-| Packed weights | [Install and quantize](firebird_quant/README.md) |
-| Native ACT packing | [Run the package worker](firebird_quant/NATIVE_ACT.md) |
+| Packed weights | [Install and quantize](jensen_quant/README.md) |
+| Native ACT packing | [Run the package worker](jensen_quant/NATIVE_ACT.md) |
 | SmolVLA GGUF | [Prepare and convert](vla_cpp/README.md) |
 | GPU comparison | [Prepare and run](benchmark_gpu/README.md) |
 | Psi-Zero | [Install and run](psi0/README.md) |

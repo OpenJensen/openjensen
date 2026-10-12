@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { waitForJob } from './job-waiter';
 
-const configured = `http://127.0.0.1:${process.env.FIREBIRD_DIAGNOSTICS_CONFIGURED_PORT ?? '8766'}`;
+const configured = `http://127.0.0.1:${process.env.JENSEN_DIAGNOSTICS_CONFIGURED_PORT ?? process.env.FIREBIRD_DIAGNOSTICS_CONFIGURED_PORT ?? '8766'}`;
 
 async function project(request: APIRequestContext, origin = '') {
   const response = await request.post(`${origin}/api/v1/projects`, { data: { name: 'Diagnostics browser test' } });

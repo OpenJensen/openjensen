@@ -457,9 +457,7 @@ def test_core_and_native_group_split_implementations_remain_identical():
     import inspect
 
     root = Path(__file__).parents[1]
-    worker = ast.parse(
-        (root / "workers/smolvla_qlora/src/firebird_vla/local_dataset.py").read_text()
-    )
+    worker = ast.parse((root / "workers/smolvla_qlora/src/jensen_vla/local_dataset.py").read_text())
     definition = next(
         node
         for node in worker.body

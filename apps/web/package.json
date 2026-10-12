@@ -1,7 +1,8 @@
 {
-  "name": "@firebird/web",
+  "name": "@openjensen/web",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1",
     "build": "next build",

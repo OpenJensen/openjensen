@@ -14,6 +14,9 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from vla_platform.environment import getenv
+from vla_platform.worker_paths import worker_module, worker_package
+
 router = APIRouter(prefix="/api/v1/decision", tags=["Decision advisory"])
 MODEL = "muose/Muose-50M-Decision"
 REVISION = "5afb8eeff127621fea2d66fc63f56798ada12eda"
@@ -139,8 +142,8 @@ def strict_json(raw):
 
 def configuration():
     names = ("FIREBIRD_DECISION_PYTHON", "FIREBIRD_DECISION_ROOT", "FIREBIRD_DECISION_MODEL_DIR")
-    values = [os.getenv(name) for name in names]
-    if not all(values) or os.getenv("FIREBIRD_DECISION_ACCEPT_LICENSE") != LICENSE:
+    values = [getenv(name) for name in names]
+    if not all(values) or getenv("JENSEN_DECISION_ACCEPT_LICENSE") != LICENSE:
         raise HTTPException(
             503, "The operator must configure the local scorer and accept its license."
         )
@@ -150,7 +153,7 @@ def configuration():
         or not all(path.is_absolute() for path in (python, root, model))
         or not python.is_file()
         or not os.access(python, os.X_OK)
-        or not (root / "src/firebird_decision/__main__.py").is_file()
+        or not (worker_package(root, "jensen_decision") / "__main__.py").is_file()
         or not model.is_dir()
     ):
         raise HTTPException(503, "The local scorer configuration is unavailable on this host.")
@@ -255,7 +258,7 @@ async def supervised(payload, paths, request):
     python, root, model = paths
     process = None
     reads = []
-    with tempfile.TemporaryDirectory(prefix="firebird-decision-api-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="jensen-decision-api-") as temporary:
         temporary = str(Path(temporary).resolve())
         path = Path(temporary) / "request.json"
         path.write_bytes(canonical(payload))
@@ -271,7 +274,7 @@ async def supervised(payload, paths, request):
         command = [
             str(python),
             "-m",
-            "firebird_decision",
+            worker_module(root, "jensen_decision"),
             "--model-dir",
             str(model),
             "--request",

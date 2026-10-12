@@ -7,11 +7,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from firebird_vla.checkpoint import sha256, write_json
-from firebird_vla.checks.catalog import PROFILES, load_catalog, result_row, selected_module
-from firebird_vla.checks.cli import run_entry, runtime_blockers, summarize_phases
-from firebird_vla.checks.fixtures import validate_fixture
-from firebird_vla.checks.native import checked_hf_load, validate_conversion
+from jensen_vla.checkpoint import sha256, write_json
+from jensen_vla.checks.catalog import PROFILES, load_catalog, result_row, selected_module
+from jensen_vla.checks.cli import run_entry, runtime_blockers, summarize_phases
+from jensen_vla.checks.fixtures import validate_fixture
+from jensen_vla.checks.native import checked_hf_load, validate_conversion
 
 CATALOG = Path(__file__).resolve().parents[1] / "configs/benchmarks/open_weight_vlas.json"
 
@@ -186,7 +186,7 @@ def test_cli_keeps_unselected_models_pending_without_ml_imports(tmp_path):
         [
             sys.executable,
             "-m",
-            "firebird_vla.checks.cli",
+            "jensen_vla.checks.cli",
             "--catalog",
             str(CATALOG),
             "--models",
@@ -207,7 +207,7 @@ def test_missing_runtimes_produce_six_blocked_rows_and_failure_exit(tmp_path):
         [
             sys.executable,
             "-m",
-            "firebird_vla.checks.cli",
+            "jensen_vla.checks.cli",
             "--catalog",
             str(CATALOG),
             "--run",

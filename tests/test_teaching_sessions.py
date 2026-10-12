@@ -481,8 +481,8 @@ def test_real_journal_bytes_publish_into_existing_recording_catalog(tmp_path):
     spec = importlib.util.spec_from_file_location("managed_teaching_fixture", source)
     fixture = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(fixture)
-    from firebird_teaching.dataset import inspect_capture
-    from firebird_teaching.managed import verify_capture
+    from jensen_teaching.dataset import inspect_capture
+    from jensen_teaching.managed import verify_capture
 
     config_path, recording_path, _settings, _scene = operator_files(tmp_path)
     profile = config.load(config_path, recording_path, "local", "p")
@@ -556,6 +556,9 @@ def controlled_run(tmp_path, monkeypatch):
     """Run the real adapter control flow with inert process handles, never an SDK."""
     from vla_platform.teaching_sessions import service as module
 
+    worker = tmp_path / "jensen_teaching"
+    worker.mkdir()
+    (worker / "managed.py").write_text("# Inert registered entry point; spawn is mocked.\n")
     catalog = tmp_path / "catalog"
     catalog.mkdir()
     job = SimpleNamespace(

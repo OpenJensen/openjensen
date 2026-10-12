@@ -35,7 +35,7 @@ def fixed_sources() -> None:
             "policy_distillation/src",
             "act_optimizer/src",
             "smolvla_qlora/src",
-            "firebird_quant/src",
+            "jensen_quant/src",
             "isaac_sim",
         )
     ]
@@ -91,13 +91,13 @@ def inventory(root: Path) -> dict[str, Any]:
 
 
 def read(path: Path) -> dict[str, Any]:
-    from firebird_act.bundle import decode, safe_file
+    from jensen_act.bundle import decode, safe_file
 
     return decode(safe_file(path, JSON_LIMIT))
 
 
 def write(path: Path, value: Any) -> None:
-    from firebird_act.bundle import canonical
+    from jensen_act.bundle import canonical
 
     raw = canonical(value)
     require(len(raw) <= 1024**2, "Stage receipt exceeds the one MiB bound")
@@ -112,7 +112,7 @@ def new_outputs(*paths: Path) -> None:
 
 
 def source_identity() -> dict[str, str]:
-    from firebird_distill.application import implementation_identity
+    from jensen_distill.application import implementation_identity
 
     result = implementation_identity()
     for relative in (
@@ -129,10 +129,10 @@ def generate(root: Path) -> None:
     """Generate once and independently seal normalized targets before optimization."""
     new_outputs(root)
     import torch
-    from firebird_act.probe import runtime_versions
-    from firebird_distill.contracts import load_sample
-    from firebird_distill.provenance import inherited_files, policy_metadata
-    from firebird_distill.runtime import batch_for, chunk, load_policy, processed, tensor_sha
+    from jensen_act.probe import runtime_versions
+    from jensen_distill.contracts import load_sample
+    from jensen_distill.provenance import inherited_files, policy_metadata
+    from jensen_distill.runtime import batch_for, chunk, load_policy, processed, tensor_sha
     from native_fixture import make_job, make_teacher
 
     root.mkdir()  # Parent exists; no reuse of an earlier or partially generated root.
@@ -252,7 +252,7 @@ def checkpoint(root: Path, expected: dict[str, Any], model_id: str) -> None:
 
 def verify_distill(root: Path) -> None:
     """Check real saved optimizer/reload evidence, then prepare both exact input requests."""
-    from firebird_distill.application import implementation_identity, native_model_id
+    from jensen_distill.application import implementation_identity, native_model_id
 
     outputs = [
         root / "distill-verification.json",
@@ -407,8 +407,8 @@ def verify_distill(root: Path) -> None:
 
 def verify_final(root: Path) -> None:
     """Bind both fresh packed HTTP receipts to the same immutable saved student."""
-    from firebird_act.bundle import canonical
-    from firebird_quant.native_package import inspect_policy
+    from jensen_act.bundle import canonical
+    from jensen_quant.native_package import inspect_policy
 
     new_outputs(root / "chain-verification.json")
     fixture, _ = originals(root)

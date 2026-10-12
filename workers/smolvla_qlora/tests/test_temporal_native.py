@@ -23,7 +23,7 @@ def test_native_act_horizons_dataset_padding_loss_queue_and_reload(tmp_path):
     from lerobot.policies.act.modeling_act import ACTPolicy
     from torch.utils.data import default_collate
 
-    from firebird_vla.temporal import check_dataset_temporal, resolved_temporal
+    from jensen_vla.temporal import check_dataset_temporal, resolved_temporal
 
     torch.set_num_threads(1)
     torch.manual_seed(42)

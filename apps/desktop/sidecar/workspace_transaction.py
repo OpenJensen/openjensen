@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import workspace_maintenance as m
-from payload_inventory import MAX_MANIFEST, verify
+from payload_inventory import MAX_MANIFEST, executable_name, verify
 from sidecar_resources import load_resources
 
 JOURNAL = ".desktop-handoff"
@@ -67,7 +67,7 @@ def accepted_payload(files, budget):
         for name, item in manifest["entries"].items()
         if item["kind"] == "file" and item["macho_cpu_types"] is not None
     }
-    executable = manifest["entries"].get("firebird-sidecar", {})
+    executable = manifest["entries"][executable_name(manifest["entries"])]
     if (
         report.get("source_build_id") != resources.build_id
         or report.get("resources_sha256") != resources.manifest_sha256

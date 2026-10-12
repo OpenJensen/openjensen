@@ -8,7 +8,7 @@ import threading
 import time
 from pathlib import Path
 
-from firebird_quant.native_package import canonical, read_json, sha, write_new
+from jensen_quant.native_package import canonical, read_json, sha, write_new
 
 from .native_replay_contracts import observations, policy
 
@@ -33,7 +33,7 @@ def run(job):
                 raise RuntimeError("Original source and floating master reads are disabled")
 
     sys.addaudithook(audit)
-    from firebird_act.probe import runtime_versions
+    from jensen_act.probe import runtime_versions
 
     versions = runtime_versions()
     import torch
@@ -69,7 +69,7 @@ def run(job):
     records = []
     try:
         for index, sample in enumerate(doc["samples"]):
-            from firebird_quant.native_package import read
+            from jensen_quant.native_package import read
 
             from .native_replay_contracts import MAX_RGB_BYTES
 

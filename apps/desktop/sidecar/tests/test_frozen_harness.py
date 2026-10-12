@@ -18,6 +18,7 @@ harness = module("verify_frozen")
 def test_clean_environment_has_no_ambient_configuration(tmp_path, monkeypatch):
     monkeypatch.setenv("PYTHONPATH", "/private/source")
     monkeypatch.setenv("FIREBIRD_RUNTIME_CONFIG", "/private/runtime.json")
+    monkeypatch.setenv("JENSEN_RUNTIME_CONFIG", "/private/canonical-runtime.json")
     monkeypatch.setenv("HTTPS_PROXY", "http://not-used.invalid")
     value = harness.clean_environment(tmp_path)
     assert set(value) == {"HOME", "TMPDIR", "PATH"}

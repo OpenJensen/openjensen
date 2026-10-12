@@ -18,6 +18,8 @@ dist/
 build/
 target/
 *.tsbuildinfo
+.jensen/
+# Alpha workspace compatibility.
 .firebird/
 .cache/
 playwright-report/

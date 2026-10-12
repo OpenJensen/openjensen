@@ -7,14 +7,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from firebird_vla.model import (
+from jensen_vla.model import (
     prepare_base_precision,
     preserve_attention_precision,
     promote_trainable_parameters,
     quantize_linears,
     runtime_compute_dtype,
 )
-from firebird_vla.train import optimizer_step, validate_resume_cursor
+from jensen_vla.train import optimizer_step, validate_resume_cursor
 
 
 @pytest.mark.parametrize("major,expected", [(7, "float16"), (8, "bfloat16"), (9, "bfloat16")])

@@ -64,7 +64,7 @@ def configured(client, tmp_path, monkeypatch):
     if os.name != "posix":
         pytest.skip("The advisory worker intentionally requires a POSIX host")
     root = tmp_path / "worker"
-    package = root / "src/firebird_decision"
+    package = root / "src/jensen_decision"
     package.mkdir(parents=True)
     (package / "__init__.py").write_text("")
     main = package / "__main__.py"

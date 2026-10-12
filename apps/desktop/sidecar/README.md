@@ -1,5 +1,10 @@
 # Build and run the Python sidecar
 
+These are developer instructions for an opt-in frozen-payload experiment. The
+production desktop build continues to connect to an existing application. This
+guide does not establish a signed installer, current-product fresh-machine
+acceptance or a verified upgrade/rollback between two packaged versions.
+
 Use absolute paths for the static resources, application workspace and job files. Keep application data in a separate directory from the packaged resources.
 
 ## Prepare static resources
@@ -58,21 +63,21 @@ uv pip install --python /absolute/build-env/bin/python --require-hashes --no-dep
 Build with the prepared resources and new work and dist directories:
 
 ```sh
-FIREBIRD_DESKTOP_RESOURCES=/absolute/new/resources \
+JENSEN_DESKTOP_RESOURCES=/absolute/new/resources \
   /absolute/build-env/bin/python -I -B -m PyInstaller \
   --workpath /absolute/new/work --distpath /absolute/new/dist \
-  apps/desktop/sidecar/firebird-sidecar.spec
+  apps/desktop/sidecar/jensen-sidecar.spec
 ```
 
-Keep the complete `/absolute/new/dist/firebird-sidecar` directory, including `_internal`.
+Keep the complete `/absolute/new/dist/jensen-sidecar` directory, including `_internal`.
 
 Inventory the payload and run the frozen-package checks from the repository root:
 
 ```sh
 python apps/desktop/sidecar/payload_inventory.py \
-  /absolute/new/dist/firebird-sidecar /absolute/new/payload-inventory.json
+  /absolute/new/dist/jensen-sidecar /absolute/new/payload-inventory.json
 python apps/desktop/sidecar/verify_frozen.py \
-  --payload /absolute/new/dist/firebird-sidecar \
+  --payload /absolute/new/dist/jensen-sidecar \
   --output /absolute/new/experiment \
   --build-id EXACT_SOURCE_COMMIT \
   --resource-sha256 EXACT_RESOURCES_JSON_SHA256
@@ -86,7 +91,7 @@ Supply the payload, inventory and frozen-check receipt to the scratch preparer:
 
 ```sh
 python -B -s apps/desktop/sidecar/prepare_local_tauri.py \
-  --payload /absolute/accepted/firebird-sidecar \
+  --payload /absolute/accepted/jensen-sidecar \
   --manifest /absolute/payload-inventory.json \
   --acceptance /absolute/acceptance/receipt.json \
   --output /absolute/new-native-candidate
@@ -95,7 +100,7 @@ python -B -s apps/desktop/sidecar/prepare_local_tauri.py \
 The output contains `local-payload-pin.rs`, `tauri.local.json`, resources and a preparation receipt. From `apps/desktop`, build with that pin and overlay:
 
 ```sh
-FIREBIRD_DESKTOP_EXPERIMENT_PIN=/absolute/new-native-candidate/local-payload-pin.rs \
+JENSEN_DESKTOP_EXPERIMENT_PIN=/absolute/new-native-candidate/local-payload-pin.rs \
   CARGO_NET_OFFLINE=true pnpm exec tauri build --features local-payload-experiment \
   --config /absolute/new-native-candidate/tauri.local.json --bundles app --no-sign
 ```

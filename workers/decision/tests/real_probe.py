@@ -10,9 +10,9 @@ import statistics
 import sys
 from pathlib import Path
 
-from firebird_decision.contracts import LICENSE, DecisionError, canonical, validate_response
-from firebird_decision.integrity import FILES, read_file
-from firebird_decision.scorer import DecisionScorer, offline_guard
+from jensen_decision.contracts import LICENSE, DecisionError, canonical, validate_response
+from jensen_decision.integrity import FILES, read_file
+from jensen_decision.scorer import DecisionScorer, offline_guard
 
 
 def inventory(root):

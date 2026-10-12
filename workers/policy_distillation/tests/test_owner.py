@@ -3,7 +3,7 @@ import signal
 import sys
 
 import pytest
-from firebird_distill.application import Owner, environment
+from jensen_distill.application import Owner, environment
 
 
 def test_environment_never_inherits_credentials(monkeypatch):
@@ -73,7 +73,7 @@ def test_successful_leader_does_not_leave_grandchild(tmp_path):
 
 
 def test_transient_cleanup_permission_error_requires_kernel_confirmation(monkeypatch):
-    from firebird_distill.application import signal_owned_group
+    from jensen_distill.application import signal_owned_group
 
     observed = []
 
@@ -89,7 +89,7 @@ def test_transient_cleanup_permission_error_requires_kernel_confirmation(monkeyp
 
 
 def test_real_cleanup_permission_failure_remains_visible(monkeypatch):
-    from firebird_distill.application import signal_owned_group
+    from jensen_distill.application import signal_owned_group
 
     def kill(pid, sig):
         if sig:

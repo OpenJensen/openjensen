@@ -36,7 +36,7 @@ _CUDA_RUNTIME = "lerobot-cuda"
 _CPU_RUNTIME = "packed-act-cpu"
 _POLICY_RUNTIMES = (_CUDA_RUNTIME, _CPU_RUNTIME)
 _CPU_SOURCE_MOUNTS = {
-    "~/firebird-quant-src": "firebird_quant/src",
+    "~/firebird-quant-src": "jensen_quant/src",
     "~/firebird-act-src": "act_optimizer/src",
 }
 _CPU_SETUP = (

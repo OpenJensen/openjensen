@@ -16,6 +16,7 @@ import { checkpointLabel, checkpointStep, isCloudArtifact, quantizationIssue, so
 import "./workflow-panel.css";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BenchmarkReference } from "@/components/benchmark-reference";
+import { readPublicPreference, writePublicPreference } from "@/lib/public-preferences";
 import {
   api,
   artifactDownloadUrl,
@@ -193,7 +194,7 @@ export function WorkflowPanel({
       const restored: Preferences = {
         ...initial,
         ...JSON.parse(
-          localStorage.getItem(`firebird.workflow.${projectId}`) ?? "{}",
+          readPublicPreference(localStorage,`workflow.${projectId}`) ?? "{}",
         ),
       };
       // Restore saved Spatial preferences from before the protocol was restricted.
@@ -207,8 +208,8 @@ export function WorkflowPanel({
   useEffect(() => {
     if (ready)
       try {
-        localStorage.setItem(
-          `firebird.workflow.${projectId}`,
+        writePublicPreference(localStorage,
+          `workflow.${projectId}`,
           JSON.stringify(preferences),
         );
       } catch {
@@ -659,7 +660,7 @@ export function WorkflowPanel({
                   : `Evaluates LIBERO Object task ${preferences.task} with initial states ${preferences.searchStates}, seed 42 and up to ${preferences.steps} steps. The policy must declare LIBERO Object compatibility.`}</p></details>
               <button className="text-link" type="button" onClick={() => setTab("settings")}>Edit diagnostic settings</button>
               {diagnosticBlocker && <p className="warning-box" id="diagnostic-readiness" role="status">{diagnosticBlocker}</p>}
-              {!runtime && !options.isPending && <p className="muted"><a className="text-link" href="https://github.com/sobhanb-eth/firebird-hackathon-codebase/blob/main/docs/policy-workflow.md#configure-the-execution-host" target="_blank" rel="noreferrer">Worker setup instructions ↗</a></p>}
+              {!runtime && !options.isPending && <p className="muted"><a className="text-link" href="https://github.com/OpenJensen/openjensen/blob/main/docs/policy-workflow.md#configure-the-execution-host" target="_blank" rel="noreferrer">Worker setup instructions ↗</a></p>}
               {!!runtime && !inputs.length && !artifacts.isPending && <button className="secondary-button" type="button" onClick={onOpenQuantize}>Open Quantize</button>}
               <button className="primary-button" type="submit" disabled={!!diagnosticBlocker || mutation.isPending} aria-describedby={diagnosticBlocker ? "diagnostic-readiness" : undefined}>
                 {mutation.isPending ? "Starting…" : "Start diagnostics"}

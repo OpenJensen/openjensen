@@ -1,10 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 import base from './playwright.config';
+import { getenv } from './apps/web/src/lib/environment';
 
 const python = process.platform === 'win32' ? '.venv/Scripts/python.exe' : '.venv/bin/python';
 const command = process.env.CI ? 'uv run --frozen python tests/web/serve.py' : `${python} tests/web/serve.py`;
-const emptyPort = process.env.FIREBIRD_DIAGNOSTICS_EMPTY_PORT ?? '8767';
-const configuredPort = process.env.FIREBIRD_DIAGNOSTICS_CONFIGURED_PORT ?? '8766';
+const emptyPort = getenv('JENSEN_DIAGNOSTICS_EMPTY_PORT',process.env,'8767')!;
+const configuredPort = getenv('JENSEN_DIAGNOSTICS_CONFIGURED_PORT',process.env,'8766')!;
 
 export default defineConfig({
   ...base,
@@ -18,8 +19,8 @@ export default defineConfig({
   ],
   webServer: [
     { command, url: `http://127.0.0.1:${emptyPort}/api/v1/health`, reuseExistingServer: false,
-      env: { FIREBIRD_BROWSER_PORT: emptyPort, FIREBIRD_BROWSER_EMPTY_RUNTIME: '1' } },
+      env: { JENSEN_BROWSER_PORT: emptyPort, JENSEN_BROWSER_EMPTY_RUNTIME: '1' } },
     { command, url: `http://127.0.0.1:${configuredPort}/api/v1/health`, reuseExistingServer: false,
-      env: { FIREBIRD_BROWSER_PORT: configuredPort, FIREBIRD_BROWSER_NATIVE_FIXTURE: '1' } },
+      env: { JENSEN_BROWSER_PORT: configuredPort, JENSEN_BROWSER_NATIVE_FIXTURE: '1' } },
   ],
 });

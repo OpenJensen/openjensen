@@ -7,7 +7,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from firebird_quant.native_package import canonical, checked_path, read_json, sha, write_new
+from jensen_quant.native_package import canonical, checked_path, read_json, sha, write_new
 
 from .native_replay_contracts import (
     MAX_SAMPLES,
@@ -51,12 +51,12 @@ def prepare(value):
         raise ValueError("Selected RGB observations exceed128MiB before decoding")
     if importlib.metadata.version("lerobot") != "0.6.2":
         raise ValueError("Preparation requires the isolated LeRobot0.6.2 dataset runtime")
-    from firebird_act.probe import offline_audit
+    from jensen_act.probe import offline_audit
 
     os.environ.update(HF_HUB_OFFLINE="1", HF_DATASETS_OFFLINE="1", CUDA_VISIBLE_DEVICES="")
     sys.addaudithook(offline_audit)
     import torch
-    from firebird_vla.local_dataset import offline_dataset_loading, verify_local_snapshot
+    from jensen_vla.local_dataset import offline_dataset_loading, verify_local_snapshot
     from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
     data, manifest = verify_local_snapshot(value["dataset_snapshot"])

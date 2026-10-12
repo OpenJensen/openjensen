@@ -5,7 +5,7 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from firebird_vla.dataset_mixture import bind_sources, load_mixture
+from jensen_vla.dataset_mixture import bind_sources, load_mixture
 
 
 def test_combination_preserves_decoder_boundaries_and_excludes_validation(monkeypatch):

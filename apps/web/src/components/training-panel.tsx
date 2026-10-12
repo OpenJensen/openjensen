@@ -12,6 +12,7 @@ import {
   type PolicyRequest,
 } from "@/lib/api";
 import { datasetStarters } from "@/lib/dataset-starters";
+import { readPublicPreference, writePublicPreference } from "@/lib/public-preferences";
 import { gradientAccumulationAvailable, groupedTrainingModels, trainingModels, type TrainingModel } from "@/lib/training-models";
 import { checkpointStep, trainingRunModelLabel } from "@/lib/checkpoints";
 import { CameraPlayer } from "@/components/dataset-explorer";
@@ -290,7 +291,7 @@ export function TrainingPanel({
     if (!projectId) { setLoaded(false); return; }
     try {
       const saved = JSON.parse(
-        localStorage.getItem(`firebird.workflow.${projectId}`) ?? "{}",
+        readPublicPreference(localStorage,`workflow.${projectId}`) ?? "{}",
       );
       const restored = savedRecipe(saved);
       setRecipe(restored);
@@ -309,10 +310,10 @@ export function TrainingPanel({
     if (!loaded || !projectId) return;
     try {
       const saved = JSON.parse(
-        localStorage.getItem(`firebird.workflow.${projectId}`) ?? "{}",
+        readPublicPreference(localStorage,`workflow.${projectId}`) ?? "{}",
       );
-      localStorage.setItem(
-        `firebird.workflow.${projectId}`,
+      writePublicPreference(localStorage,
+        `workflow.${projectId}`,
         JSON.stringify({ ...saved, ...recipe, trainingTemporalByModel: temporalDrafts, modelBatchSizes, trainingModelId: modelId, checkpointEvery: undefined, trainingDefaultsVersion: 3 }),
       );
     } catch {

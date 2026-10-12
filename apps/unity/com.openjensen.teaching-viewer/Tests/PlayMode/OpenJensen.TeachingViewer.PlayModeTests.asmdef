@@ -1,0 +1,16 @@
+{
+  "name": "OpenJensen.TeachingViewer.PlayModeTests",
+  "references": [
+    "OpenJensen.TeachingViewer",
+    "OpenJensen.TeachingViewer.TestFixtures"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "includePlatforms": [],
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "Newtonsoft.Json.dll",
+    "nunit.framework.dll"
+  ]
+}

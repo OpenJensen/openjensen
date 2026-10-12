@@ -4,7 +4,7 @@ Open **Cloud runs** and select an application job to follow its saved status, ta
 
 ## Configure the observer
 
-Set `FIREBIRD_CLOUD_RUNS_DIR` to a dedicated absolute directory outside Git and restart the application. Start the observer separately with its operator-owned runner and key paths:
+Set `JENSEN_CLOUD_RUNS_DIR` to a dedicated absolute directory outside Git and restart the application. Start the observer separately with its operator-owned runner and key paths:
 
 ```sh
 bash workers/skypilot/watch-rollout.sh RUNNER_ROOT KEY_FILE JOB_ID GROUP_NAME OUTPUT_DIR [--once]

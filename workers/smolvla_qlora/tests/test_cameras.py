@@ -7,9 +7,9 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from firebird_vla.config import TrainConfig
-from firebird_vla.data import load_data, prepare_batch
-from firebird_vla.model import configure_policy_features
+from jensen_vla.config import TrainConfig
+from jensen_vla.data import load_data, prepare_batch
+from jensen_vla.model import configure_policy_features
 
 TOP = "observation.images.top"
 WRIST = "observation.images.wrist"
@@ -222,7 +222,7 @@ def test_missing_selected_camera_cannot_silently_train_on_other_view():
 
 
 def test_application_resume_rejects_changed_camera_selection(monkeypatch, tmp_path):
-    from firebird_vla import application, model
+    from jensen_vla import application, model
 
     previous = TrainConfig.from_dict({"camera_keys": [TOP, WRIST]})
     checkpoint = tmp_path / "checkpoint"

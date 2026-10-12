@@ -18,6 +18,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from vla_platform.environment import getenv
 from vla_platform.lifecycle.contracts import StrictRecord
 
 router = APIRouter(prefix="/api/v1/teaching", tags=["Teaching"])
@@ -64,8 +65,8 @@ class VoiceJoin(StrictRecord):
 
 
 def configuration(voice=False):
-    raw = os.getenv("FIREBIRD_TEACHING_VOICE_URL" if voice else "FIREBIRD_TEACHING_URL")
-    token_path = os.getenv("FIREBIRD_TEACHING_CONTROL_TOKEN_FILE")
+    raw = getenv("FIREBIRD_TEACHING_VOICE_URL" if voice else "FIREBIRD_TEACHING_URL")
+    token_path = getenv("JENSEN_TEACHING_CONTROL_TOKEN_FILE")
     if not raw or not token_path:
         raise HTTPException(
             503, "Connect a teaching executor in the application host configuration."
@@ -201,7 +202,7 @@ async def state(response: Response):
         "connected": True,
         "message": None,
         "state": value,
-        "voice_configured": bool(os.getenv("FIREBIRD_TEACHING_VOICE_URL")),
+        "voice_configured": bool(getenv("JENSEN_TEACHING_VOICE_URL")),
     }
 
 

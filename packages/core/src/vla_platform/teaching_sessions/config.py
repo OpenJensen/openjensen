@@ -9,6 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from vla_platform.datasets import recordings
+from vla_platform.worker_paths import worker_package
 
 MAX_CONFIG_BYTES = 65536
 MAX_SOURCE_BYTES = 8 * 1024**2
@@ -72,7 +73,7 @@ class LoadedProfile:
 
     @property
     def worker(self) -> Path:
-        return Path(self.value.worker_root) / "firebird_teaching"
+        return worker_package(Path(self.value.worker_root), "jensen_teaching", layout="")
 
     def environment(self, token_path: Path) -> dict[str, str]:
         result = {
@@ -89,6 +90,7 @@ class LoadedProfile:
             HF_HUB_OFFLINE="1",
             TRANSFORMERS_OFFLINE="1",
             ACCEPT_EULA="Y",
+            JENSEN_TEACHING_CONTROL_TOKEN_FILE=str(token_path),
             FIREBIRD_TEACHING_CONTROL_TOKEN_FILE=str(token_path),
         )
         return result
@@ -121,7 +123,10 @@ def load(config_path: Path | None, recording_path: Path | None, profile_id: str,
     root = recordings.path(profile.worker_root)
     sources = {}
     total = 0
-    for prefix in (root / "firebird_teaching", root.parent / "isaac_sim" / "sim_worker"):
+    for prefix in (
+        worker_package(root, "jensen_teaching", layout=""),
+        root.parent / "isaac_sim" / "sim_worker",
+    ):
         with recordings.directory(prefix):
             pass
         for source in sorted(prefix.rglob("*.py")):
@@ -131,7 +136,8 @@ def load(config_path: Path | None, recording_path: Path | None, profile_id: str,
             total += len(data)
             sources[str(source)] = recordings.digest(data)
     required = [
-        root / "firebird_teaching" / name for name in ("isaac.py", "managed.py", "dataset.py")
+        worker_package(root, "jensen_teaching", layout="") / name
+        for name in ("isaac.py", "managed.py", "dataset.py")
     ]
     if any(str(source) not in sources for source in required):
         raise TeachingError("Managed teaching worker is incomplete", 503)

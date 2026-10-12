@@ -9,10 +9,10 @@ Use a separate key for each intended project/operation request. Keep that key wi
 ## Submit and follow
 
 ```sh
-firebird policy submit PROJECT recipe.json --idempotency-key UNIQUE-KEY
-firebird jobs submission PROJECT policy.finetune UNIQUE-KEY
-firebird inspect PROJECT --path dataset --idempotency-key ANOTHER-KEY
-firebird augmentation submit PROJECT augmentation.json --idempotency-key ANOTHER-KEY
+jensen policy submit PROJECT recipe.json --idempotency-key UNIQUE-KEY
+jensen jobs submission PROJECT policy.finetune UNIQUE-KEY
+jensen inspect PROJECT --path dataset --idempotency-key ANOTHER-KEY
+jensen augmentation submit PROJECT augmentation.json --idempotency-key ANOTHER-KEY
 ```
 
 Replace `PROJECT`, keys and recipe files with your saved values. Send the key on project `intakes`, `augmentations` or `policy-jobs` POST requests. Read the returned job ID to follow status, events and output.

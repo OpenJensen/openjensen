@@ -8,10 +8,10 @@ from types import SimpleNamespace
 import pytest
 from test_lerobot_bridge import request
 
-from firebird_vla.config import TrainConfig
-from firebird_vla.lerobot_application import cli_arguments, resolve_recipe
-from firebird_vla.model import configure_policy_temporal
-from firebird_vla.temporal import (
+from jensen_vla.config import TrainConfig
+from jensen_vla.lerobot_application import cli_arguments, resolve_recipe
+from jensen_vla.model import configure_policy_temporal
+from jensen_vla.temporal import (
     action_timestamps,
     check_dataset_temporal,
     resolved_temporal,
@@ -129,7 +129,7 @@ def test_invalid_fps_rejected(fps):
 def test_core_worker_temporal_rules_are_identical():
     root = Path(__file__).parents[3]
     assert (root / "packages/core/src/vla_platform/lifecycle/temporal.py").read_bytes() == (
-        root / "workers/smolvla_qlora/src/firebird_vla/temporal.py"
+        root / "workers/smolvla_qlora/src/jensen_vla/temporal.py"
     ).read_bytes()
 
 
@@ -137,7 +137,7 @@ def test_smol_loader_uses_prediction_horizon_not_execution_horizon(monkeypatch):
     import sys
     from types import ModuleType
 
-    from firebird_vla.data import load_data
+    from jensen_vla.data import load_data
 
     calls = []
     features = {

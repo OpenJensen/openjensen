@@ -8,9 +8,9 @@ import pytest
 from test_training_source import digest, resign
 from test_training_source import training_bundle as training_bundle
 
-from firebird_act import application, export
-from firebird_act.bundle import canonical, inventory, read_json, verify_export
-from firebird_act.probe import FIXTURE_SEEDS, VERSIONS
+from jensen_act import application, export
+from jensen_act.bundle import canonical, inventory, read_json, verify_export
+from jensen_act.probe import FIXTURE_SEEDS, VERSIONS
 
 
 def job(source: Path, output: Path) -> dict:

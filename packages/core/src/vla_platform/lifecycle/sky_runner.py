@@ -17,14 +17,17 @@ import shutil
 import signal
 import tarfile
 import tempfile
+import time
 from collections.abc import Awaitable, Callable
 from contextlib import contextmanager
 from contextvars import ContextVar
+from itertools import islice
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
 from uuid import uuid4
 
 from vla_platform import cloud_compute_catalog
+from vla_platform.worker_paths import worker_package
 
 MAX_ARTIFACT_BYTES = 20 * 1024**3
 MAX_ARTIFACT_FILES = 10000
@@ -32,6 +35,8 @@ MAX_PART_BYTES = 32 * 1024**2
 MAX_LOG_BYTES = 5 * 1024**2
 CHECKPOINT_POLL_SECONDS = 15
 STATE_NAME = "sky-state.json"
+RECOVERY_BUDGET_SECONDS = 10
+RECOVERY_RECORD_LIMIT = 256
 Event = Callable[[str], Awaitable[None]]
 CLUSTER_PATTERN = r"fb-[a-f0-9]{12}-[a-f0-9]{8}"
 _RUN_SECRETS: ContextVar[tuple[str, ...]] = ContextVar("firebird_run_secrets", default=())
@@ -72,7 +77,7 @@ def executable() -> str:
 def worker_root() -> Path:
     for parent in Path(__file__).resolve().parents:
         candidate = parent / "workers" / "smolvla_qlora"
-        if (candidate / "src" / "firebird_vla" / "application.py").is_file():
+        if (worker_package(candidate, "jensen_vla") / "application.py").is_file():
             return candidate
     raise ValueError("The bundled SmolVLA worker sources are missing on the application server.")
 
@@ -231,7 +236,7 @@ def prepare(payload: dict, stage_dir: Path, target: dict) -> tuple[Path, dict]:
         payload["operation"] == "policy.finetune"
         and training_model_for_recipe(recipe).backend == "psi0"
     )
-    worker_module = "firebird_vla.lerobot_application" if profile else "firebird_vla.application"
+    worker_module = "jensen_vla.lerobot_application" if profile else "jensen_vla.application"
     extra_setup = []
     if psi_training:
         from vla_platform.lifecycle.sky_psi import WORKER_MODULE, stage_psi
@@ -730,7 +735,7 @@ async def sync_checkpoints(sky: str, stage_dir: Path, state: dict, on_event: Eve
                     "--",
                     ".venv/bin/python",
                     "-m",
-                    "firebird_vla.snapshots",
+                    "jensen_vla.snapshots",
                     encoded,
                 ],
                 stage_dir,
@@ -1236,22 +1241,52 @@ async def _run(
 
 
 async def recover(data_dir: Path) -> list[dict]:
-    """Retry teardown for interrupted dispatches; return visible cleanup failures."""
+    """Bound startup teardown; preserve unfinished ownership for explicit cleanup.
+
+    Provider outages must not prevent access to local projects. A timeout never
+    means the cluster was deleted: retain its dispatch and a visible diagnostic.
+    """
     failures = []
-    for state_path in sorted((data_dir / "jobs").glob(f"*/*/{STATE_NAME}")):
-        if state_path.is_symlink() or state_path.stat().st_size > 65536:
-            continue
+    deadline = time.monotonic() + RECOVERY_BUDGET_SECONDS
+    paths = list(islice((data_dir / "jobs").glob(f"*/*/{STATE_NAME}"), RECOVERY_RECORD_LIMIT + 1))
+    if len(paths) > RECOVERY_RECORD_LIMIT:
+        failures.append(
+            {
+                "job_id": paths[-1].parent.parent.name,
+                "cluster": None,
+                "error": "Cloud cleanup needs attention: the startup record budget was reached. "
+                "Additional saved dispatches were preserved without confirming resource deletion. "
+                "Review the workspace's sky-state.json records before starting new cloud work.",
+            }
+        )
+    for state_path in paths[:RECOVERY_RECORD_LIMIT]:
         try:
+            if (
+                state_path.is_symlink()
+                or not state_path.is_file()
+                or state_path.stat().st_size > 65536
+            ):
+                raise ValueError("Unsafe saved dispatch file")
             state = json.loads(state_path.read_text())
             if not isinstance(state, dict) or state.get("job_id") != state_path.parent.parent.name:
                 raise ValueError("Saved dispatch does not belong to this job")
-            if state.get("version") != 1:
-                continue
+            if type(state.get("version")) is not int or state["version"] != 1:
+                raise ValueError("Unsupported saved dispatch version")
+            cluster = state.get("cluster")
+            prefix = "fb-" + hashlib.sha256(state["job_id"].encode()).hexdigest()[:12] + "-"
+            if (
+                not isinstance(cluster, str)
+                or not re.fullmatch(CLUSTER_PATTERN, cluster)
+                or not cluster.startswith(prefix)
+                or not isinstance(state.get("target"), dict)
+                or not isinstance(state.get("phase"), str)
+            ):
+                raise ValueError("Invalid saved dispatch identity or shape")
             if state.get("phase") == "cleaned_up":
                 if (
                     state.get("target", {}).get("storage_uri")
                     and not state.get("final_metadata_synced")
-                    and not await sync_final_metadata(executable(), state_path.parent, state)
+                    and not await _recover_metadata(state_path, state, deadline)
                 ):
                     failures.append(
                         {
@@ -1261,7 +1296,22 @@ async def recover(data_dir: Path) -> list[dict]:
                         }
                     )
                 continue
-            if not await cleanup(state_path.parent, state):
+            remaining = deadline - time.monotonic()
+            try:
+                if remaining <= 0:
+                    raise TimeoutError
+                async with asyncio.timeout(remaining):
+                    cleaned = await cleanup(state_path.parent, state)
+            except TimeoutError:
+                state["phase"] = "cleanup_failed"
+                state["cleanup_error"] = (
+                    "Cloud cleanup needs attention: startup recovery reached its time budget. "
+                    "No resource deletion is confirmed. Check this job's sky-state.json and "
+                    "run sky down -y for its verified owned cluster on this host."
+                )
+                _write_json(state_path, state)
+                cleaned = False
+            if not cleaned:
                 failures.append(
                     {
                         "job_id": state.get("job_id"),
@@ -1279,3 +1329,19 @@ async def recover(data_dir: Path) -> list[dict]:
                 }
             )
     return failures
+
+
+async def _recover_metadata(state_path: Path, state: dict, deadline: float) -> bool:
+    remaining = deadline - time.monotonic()
+    try:
+        if remaining <= 0:
+            raise TimeoutError
+        async with asyncio.timeout(remaining):
+            return await sync_final_metadata(executable(), state_path.parent, state)
+    except TimeoutError:
+        state["metadata_sync_error"] = (
+            "Cloud checkpoints remain in GCS; local metadata synchronization was deferred "
+            "when startup recovery reached its time budget."
+        )
+        _write_json(state_path, state)
+        return False

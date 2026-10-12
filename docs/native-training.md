@@ -1,5 +1,10 @@
 # Set up native policy training
 
+A configured/ready model has an admissible runtime configuration; it does not
+establish execution or task-quality acceptance for every method/GPU/dataset.
+Consult the [support matrix](support.md), retain the exact recipe/runtime/input
+identities, and inspect completed checkpoint/reload evidence for the route you use.
+
 ## Prepare the worker
 
 Install the [training worker](../workers/smolvla_qlora/README.md) in its own environment. Use the pinned LeRobot 0.4.4/Python 3.11 environment for SmolVLA, Python 3.12 with upstream revision `e595b7902714ba51f91e47523f66f89c5181b649` (LeRobot 0.6.2) for native adapters, and the separate [Psi-Zero worker](../workers/psi0/README.md) for Psi-Zero.

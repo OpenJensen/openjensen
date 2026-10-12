@@ -10,7 +10,7 @@ def test_psi_setup_uses_its_pinned_environment_without_staging_weights(tmp_path)
     bundle = tmp_path / "bundle"
     (bundle / "worker").mkdir(parents=True)
     setup = "\n".join(stage_psi(bundle, training_root))
-    assert WORKER_MODULE == "firebird_vla.psi_application"
+    assert WORKER_MODULE == "jensen_vla.psi_application"
     assert UPSTREAM_REVISION in setup
     assert "--project psi --frozen --group psi --inexact" in setup
     assert 'UV_PROJECT_ENVIRONMENT="$PWD/.venv"' in setup

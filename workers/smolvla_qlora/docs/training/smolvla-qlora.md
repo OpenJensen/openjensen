@@ -16,9 +16,9 @@ uv pip install --no-deps -e .
 ## Run the smoke recipe
 
 ```bash
-firebird-finetune --config configs/smolvla_qlora.json --smoke --dry-run
-firebird-finetune --config configs/smolvla_qlora.json --smoke
-firebird-verify outputs/smolvla-qlora-smoke/checkpoint-000002
+jensen-finetune --config configs/smolvla_qlora.json --smoke --dry-run
+jensen-finetune --config configs/smolvla_qlora.json --smoke
+jensen-verify outputs/smolvla-qlora-smoke/checkpoint-000002
 ```
 
 Choose a new output directory with `--output-dir`. The first run fetches the
@@ -29,14 +29,14 @@ deterministic episode splits.
 ## Fine-tune and resume
 
 ```bash
-firebird-finetune --config configs/smolvla_qlora.json
+jensen-finetune --config configs/smolvla_qlora.json
 
 # Resume an interrupted run from a completed checkpoint, retaining the original recipe:
-firebird-finetune --config configs/smolvla_qlora.json \
+jensen-finetune --config configs/smolvla_qlora.json \
   --resume outputs/smolvla-qlora/checkpoint-000100 \
   --output-dir outputs/smolvla-qlora-resumed
 
-firebird-verify outputs/smolvla-qlora/checkpoint-020000
+jensen-verify outputs/smolvla-qlora/checkpoint-020000
 ```
 
 Edit the JSON recipe before a new run. `steps` counts optimizer updates. Resume
@@ -51,11 +51,9 @@ with front images in `[0,1]`, state and a task list:
 
 ```python
 import torch
-from firebird_vla.checkpoint import load_for_inference
+from jensen_vla.checkpoint import load_for_inference
 
-policy, preprocess, postprocess = load_for_inference(
-    "outputs/smolvla-qlora/checkpoint-001000"
-)
+policy, preprocess, postprocess = load_for_inference("outputs/smolvla-qlora/checkpoint-001000")
 policy.reset()  # At each episode boundary.
 # observation is a raw BATCHED LeRobot dict: front image in [0,1], state, task list.
 with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):

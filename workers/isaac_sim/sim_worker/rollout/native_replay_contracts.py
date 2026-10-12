@@ -3,7 +3,7 @@
 import math
 import os
 
-from firebird_quant.native_package import (
+from jensen_quant.native_package import (
     RUNTIME,
     SHA,
     canonical,
@@ -215,7 +215,7 @@ def observations(root, expected_sha, config):
 
 def publish(stage, destination):
     """No-replace publication with file and directory sync; success follows persistence."""
-    from firebird_act.bundle import publish_new_directory
+    from jensen_act.bundle import publish_new_directory
 
     for file in stage.iterdir():
         with file.open("rb") as stream:
