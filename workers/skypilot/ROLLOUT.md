@@ -165,7 +165,7 @@ final status check and save `cancellation.json` when interrupted.
 ## Separate packed ACT CPU profile
 
 Copy `rollout.packed-cpu.example.yaml` to a private task file. Fill its worker
-image, results prefix, scene manifest and complete ACT `firebird_quant` package.
+image, results prefix, scene manifest and complete ACT `jensen_quant` package.
 Select the packed runtime explicitly:
 
 ```bash
@@ -178,7 +178,7 @@ Use `--check-ready` without `--validate-only` for its remote readiness run; reta
 `--experimental` for an explicit motion run. The template selects an L4 Isaac VM,
 one `n2-standard-8` policy CPU VM and the CPU controller.
 
-Keep the fixed `firebird_quant/src` and `act_optimizer/src` source mounts with the
+Keep the fixed `jensen_quant/src` and `act_optimizer/src` source mounts with the
 reviewed `remote` scripts. The policy setup uses Python **3.12**, LeRobot **0.6.1**,
 Torch **2.11.0+cpu**, torchvision **0.26.0+cpu**, safetensors **0.8.0**, NumPy
 **2.2.6** and PyYAML **6.0.3** from `remote/policy-cpu.requirements.txt`.

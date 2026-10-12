@@ -19,7 +19,7 @@ From the repository root, set `ACT_PYTHON` and `POLICY_DIRECTORY` to your runtim
 interpreter and complete policy directory, then inspect:
 
 ```sh
-export PYTHONPATH="$PWD/workers/isaac_sim:$PWD/workers/firebird_quant/src:$PWD/workers/act_optimizer/src"
+export PYTHONPATH="$PWD/workers/isaac_sim:$PWD/workers/jensen_quant/src:$PWD/workers/act_optimizer/src"
 # ACT_PYTHON and POLICY_DIRECTORY are operator-owned local paths.
 "$ACT_PYTHON" -m sim_worker.rollout.checkpoint_package \
   --checkpoint "$POLICY_DIRECTORY" --inspect-only

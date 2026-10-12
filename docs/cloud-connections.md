@@ -18,6 +18,6 @@ Inspect a project with `gcloud projects describe`. See the [login reference](htt
 | `POST /api/v1/cloud-connections/gcp/recheck` | Check the saved selection again. |
 | `POST /api/v1/cloud-connections/gcp/disconnect` | Remove the workspace association. |
 
-The association is saved in `FIREBIRD_DATA_DIR/cloud-connections.json`. After restarting, use **Recheck**. For `setup_required`, install the reported CLI or refresh credentials, then recheck. For `error`, read the message and correct the project/region selection.
+The association is saved in `JENSEN_DATA_DIR/cloud-connections.json`. After restarting, use **Recheck**. For `setup_required`, install the reported CLI or refresh credentials, then recheck. For `error`, read the message and correct the project/region selection.
 
 Keep credentials in the Google Cloud CLI environment. Configure SkyPilot and application-default credentials through [compute setup](compute-settings.md).

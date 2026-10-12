@@ -2,9 +2,9 @@
 
 ## Explicit operator configuration
 
-Prepare a local Linux Isaac installation and the pinned [Teaching worker](../workers/teaching/README.md). Configure the project's capture root with `FIREBIRD_RECORDING_CONFIG` using [recording setup](recording-preparation.md).
+Prepare a local Linux Isaac installation and the pinned [Teaching worker](../workers/teaching/README.md). Configure the project's capture root with `JENSEN_RECORDING_CONFIG` using [recording setup](recording-preparation.md).
 
-Save a private session profile file and set `FIREBIRD_TEACHING_SESSION_CONFIG` to its absolute path before restarting the API:
+Save a private session profile file and set `JENSEN_TEACHING_SESSION_CONFIG` to its absolute path before restarting the API:
 
 ```json
 {

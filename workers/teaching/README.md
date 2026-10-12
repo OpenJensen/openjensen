@@ -6,9 +6,9 @@ Use separate runtimes for the following processes:
 
 | Process | Required runtime |
 | --- | --- |
-| `firebird_teaching.isaac` | Existing Isaac **6.1** Python and simulator dependencies. |
-| `firebird_teaching.voice_join`, `firebird_teaching.livekit_agent` | Python **3.12** with `requirements-voice.txt`. |
-| `firebird_teaching.dataset` | Python **3.12** with `requirements-dataset.txt`, CPU Torch/torchvision and FFmpeg. |
+| `jensen_teaching.isaac` | Existing Isaac **6.1** Python and simulator dependencies. |
+| `jensen_teaching.voice_join`, `jensen_teaching.livekit_agent` | Python **3.12** with `requirements-voice.txt`. |
+| `jensen_teaching.dataset` | Python **3.12** with `requirements-dataset.txt`, CPU Torch/torchvision and FFmpeg. |
 
 Use the pinned LiveKit Agents **1.8.3** / RTC **1.1.18** pair. For Linux dataset
 installation apply the pinned CPU wheel URLs/hashes from the ACT worker lock;
@@ -27,22 +27,22 @@ configuration directory. Resolve `scene` relative to that copied file and keep
 all referenced USD assets together. Set joint order, native radians, camera,
 FPS, `max_steps` and `max_episode_bytes` for the recording.
 
-Set `FIREBIRD_TEACHING_CONTROL_TOKEN_FILE` to a private owner-only file containing
+Set `JENSEN_TEACHING_CONTROL_TOKEN_FILE` to a private owner-only file containing
 at least 32 nonspace ASCII characters. Alternatively set
-`FIREBIRD_TEACHING_CONTROL_TOKEN`; choose exactly one token source. Keep the
+`JENSEN_TEACHING_CONTROL_TOKEN`; choose exactly one token source. Keep the
 executor/broker on loopback; use a configured tunnel for a remote executor.
 Create the capture output parent, then select a new session directory.
 
 Validate settings in the worker environment:
 
 ```sh
-python -m firebird_teaching.isaac --settings workers/teaching/settings.example.json --output /operator/capture/new-session --validate-only
+python -m jensen_teaching.isaac --settings workers/teaching/settings.example.json --output /operator/capture/new-session --validate-only
 ```
 
 Run on the GPU host in its Isaac runtime after accepting NVIDIA's license:
 
 ```sh
-/isaac-sim/python.sh --no-ros-env -m firebird_teaching.isaac --settings /operator/teaching.json --output /operator/capture/new-session --port 8768 --max-seconds 300
+/isaac-sim/python.sh --no-ros-env -m jensen_teaching.isaac --settings /operator/teaching.json --output /operator/capture/new-session --port 8768 --max-seconds 300
 ```
 
 Keep an outer container timeout and kill grace around the session process.
@@ -52,12 +52,12 @@ interruption. Use one Isaac process for the selected scene.
 ## Issue manual commands
 
 ```sh
-export FIREBIRD_TEACHING_CONTROL_URL=http://127.0.0.1:8768
-python -m firebird_teaching.command task --arguments '{"instruction":"Move shoulder_pan slightly"}'
-python -m firebird_teaching.command start
-python -m firebird_teaching.command correct --arguments '{"joint":"shoulder_pan","delta_rad":0.03}'
-python -m firebird_teaching.command pause
-python -m firebird_teaching.command finish
+export JENSEN_TEACHING_CONTROL_URL=http://127.0.0.1:8768
+python -m jensen_teaching.command task --arguments '{"instruction":"Move shoulder_pan slightly"}'
+python -m jensen_teaching.command start
+python -m jensen_teaching.command correct --arguments '{"joint":"shoulder_pan","delta_rad":0.03}'
+python -m jensen_teaching.command pause
+python -m jensen_teaching.command finish
 ```
 
 Poll each command receipt rather than resubmitting a pending command. Use
@@ -70,20 +70,20 @@ nonzero `delta_rad` of at most 0.15 radians.
 Supply these values through the operator's existing `--env-file`:
 
 - `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`.
-- `OPENROUTER_API_KEY` and explicit `FIREBIRD_VOICE_MODEL`.
-- `FIREBIRD_TEACHING_CONTROL_URL` and the private control token source.
-- Default `FIREBIRD_VOICE_MODE=openrouter` uses LiveKit Cloud STT/TTS:
+- `OPENROUTER_API_KEY` and explicit `JENSEN_VOICE_MODEL`.
+- `JENSEN_TEACHING_CONTROL_URL` and the private control token source.
+- Default `JENSEN_VOICE_MODE=openrouter` uses LiveKit Cloud STT/TTS:
   `deepgram/flux-general`, `fishaudio/s2.1-pro`, voice
-  `fa4c9eb3dccc4806b382b40d61c6b10a`. Override `FIREBIRD_STT_MODEL`,
-  `FIREBIRD_TTS_MODEL`, `FIREBIRD_TTS_VOICE` as needed.
-- For custom speech set `FIREBIRD_VOICE_MODE=openrouter-custom-speech` with
-  `FIREBIRD_STT_BASE_URL`, `FIREBIRD_STT_API_KEY`, `FIREBIRD_TTS_BASE_URL`,
-  `FIREBIRD_TTS_API_KEY` and explicit speech model/voice settings.
+  `fa4c9eb3dccc4806b382b40d61c6b10a`. Override `JENSEN_STT_MODEL`,
+  `JENSEN_TTS_MODEL`, `JENSEN_TTS_VOICE` as needed.
+- For custom speech set `JENSEN_VOICE_MODE=openrouter-custom-speech` with
+  `JENSEN_STT_BASE_URL`, `JENSEN_STT_API_KEY`, `JENSEN_TTS_BASE_URL`,
+  `JENSEN_TTS_API_KEY` and explicit speech model/voice settings.
 
 ```sh
-python -m firebird_teaching.livekit_agent --env-file /operator/livekit.env --check-config
-python -m firebird_teaching.livekit_agent --env-file /operator/livekit.env dev
-python -m firebird_teaching.voice_join --env-file /operator/livekit.env --port 8769
+python -m jensen_teaching.livekit_agent --env-file /operator/livekit.env --check-config
+python -m jensen_teaching.livekit_agent --env-file /operator/livekit.env dev
+python -m jensen_teaching.voice_join --env-file /operator/livekit.env --port 8769
 ```
 
 Start the agent and broker in separate shells with the same executor session.
@@ -110,7 +110,7 @@ Command arguments are `task:{instruction}`, `start:{}`, `pause:{}`, `reset:{}`,
 Finish selected episodes, then run in the isolated dataset environment:
 
 ```sh
-HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 python -m firebird_teaching.dataset /operator/capture/new-session /operator/datasets/new-snapshot --episode EPISODE_ID --repo-id local/teaching
+HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 python -m jensen_teaching.dataset /operator/capture/new-session /operator/datasets/new-snapshot --episode EPISODE_ID --repo-id local/teaching
 ```
 
 Use explicit episode IDs and a new output directory. Fit the input selection

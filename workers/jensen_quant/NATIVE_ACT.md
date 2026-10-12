@@ -13,8 +13,8 @@ RGB camera, six state/action coordinates and
 From the repository root:
 
 ```sh
-PYTHONPATH=workers/firebird_quant/src:workers/act_optimizer/src \
-  workers/act_optimizer/.venv/bin/python -m firebird_quant.native_application \
+PYTHONPATH=workers/jensen_quant/src:workers/act_optimizer/src \
+  workers/act_optimizer/.venv/bin/python -m jensen_quant.native_application \
   /absolute/request.json /absolute/new-result.json
 ```
 
@@ -41,6 +41,10 @@ path. Select integer `bits` 4 or 8 and `group_size` 64.
 }
 ```
 
+The `format: "firebird_quant"` discriminator is retained for package compatibility;
+current imports and worker paths use `jensen_quant`. Do not edit an existing
+encoding or manifest to rename its stored identity.
+
 The package is written to `output_dir/native-quantized/`:
 
 ```text
@@ -64,9 +68,9 @@ policy/
 Use the pinned ACT interpreter:
 
 ```sh
-FIREBIRD_TEST_NATIVE_ACT=1 \
-PYTHONPATH=workers/firebird_quant/src:workers/act_optimizer/src \
-  workers/act_optimizer/.venv/bin/python -m pytest workers/firebird_quant/tests
+JENSEN_TEST_NATIVE_ACT=1 \
+PYTHONPATH=workers/jensen_quant/src:workers/act_optimizer/src \
+  workers/act_optimizer/.venv/bin/python -m pytest workers/jensen_quant/tests
 ```
 
 To serve the resulting policy, follow the [CPU policy-server recipe](../isaac_sim/PACKED_ACT.md).

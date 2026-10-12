@@ -1,10 +1,10 @@
 # Working safely in this repository
 
-Read the current task card and source before editing. Preserve working configuration, user data and previously verified behavior. Planning and task records belong to the separate `firebird-hackathon-prep` repository; application code belongs here. The coordinator owns shared interfaces and integration.
+Read the current issue/task record and source before editing. Preserve working configuration, user data and previously verified behavior. Keep application code and concise verification records here; use the designated planning location for larger coordination records. The coordinator owns shared interfaces and integration.
 
 ## Local verification and publication
 
-GitHub Actions is unavailable for this project. Run the applicable checks locally and retain source-bound results; hosted CI is not an acceptance gate. Keep each independent change in its own focused commit, push a feature branch and open a pull request with the local verification results. Do not merge or push directly to `main` unless the user explicitly requests it. Leave previously published runs and commit history as they are. Do not report resource-stopped or unexecuted checks as passing, and do not remove workflow definitions merely because hosted execution is unavailable.
+GitHub Actions runs the selected application, browser and worker checks. Inspect the current-head jobs and their actual results; a green contract suite does not establish GPU training, native desktop installation or simulator acceptance. Run applicable checks locally when practical and retain source-bound results. If hosted execution is unavailable, report that limitation and use explicit local evidence instead of assuming failure or success. Keep each independent change in its own focused commit, push a feature branch and open a pull request with the verification results. Do not merge or push directly to `main` unless the user explicitly requests it. Leave previously published runs, evidence hashes and commit history as they are. Do not report resource-stopped or unexecuted checks as passing, and do not remove workflow definitions merely because hosted execution is unavailable.
 
 ## Local resource budget
 

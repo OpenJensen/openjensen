@@ -14,7 +14,7 @@ Install the pinned [ACT consumer](../workers/act_optimizer/README.md) in a durab
 }
 ```
 
-Set `FIREBIRD_RUNTIME_CONFIG` before starting the server and enable local compute in Settings. Prepare the SkyPilot interpreter with access to the checkpoint's private GCS objects.
+Set `JENSEN_RUNTIME_CONFIG` before starting the server and enable local compute in Settings. Prepare the SkyPilot interpreter with access to the checkpoint's private GCS objects.
 
 ## Select and export
 

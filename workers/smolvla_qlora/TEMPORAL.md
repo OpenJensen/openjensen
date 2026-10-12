@@ -18,6 +18,6 @@ sampling indices.
 ## Run the native test
 
 In the pinned LeRobot 0.6.2 CPU environment, enable
-`FIREBIRD_TEST_NATIVE_TEMPORAL=1` and run `tests/test_temporal_native.py` offline.
+`JENSEN_TEST_NATIVE_TEMPORAL=1` and run `tests/test_temporal_native.py` offline.
 For export, packing and HTTP checks, use the
 [ACT fixture commands](../act_optimizer/README.md#verify-independent-prediction-and-execution-horizons).

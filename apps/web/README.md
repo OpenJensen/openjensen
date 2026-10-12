@@ -3,7 +3,7 @@
 Use the repository's pinned Node and pnpm versions. Complete the [application setup](../../docs/getting-started.md), then start the API in one terminal:
 
 ```sh
-uv run --frozen firebird serve
+uv run --frozen jensen serve
 ```
 
 ## Develop
@@ -22,7 +22,7 @@ Open [localhost:3000](http://127.0.0.1:3000). Development requests use the API a
 
 ```sh
 pnpm build:web
-uv run --frozen firebird serve
+uv run --frozen jensen serve
 ```
 
 The export is written to `apps/web/out/`. Open [localhost:8000](http://127.0.0.1:8000); use `/guide/` for workspace instructions and `/docs/` for the API reference.
@@ -30,7 +30,7 @@ The export is written to `apps/web/out/`. Open [localhost:8000](http://127.0.0.1
 For a prefixed installation, set `NEXT_PUBLIC_BASE_PATH` during the build:
 
 ```sh
-NEXT_PUBLIC_BASE_PATH=/firebird pnpm build:web
+NEXT_PUBLIC_BASE_PATH=/jensen pnpm build:web
 ```
 
 ## Keep the workspace and API reference aligned

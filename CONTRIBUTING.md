@@ -1,0 +1,9 @@
+# Contributing to OPEN JENSEN
+
+Use [GitHub issues](https://github.com/OpenJensen/openjensen/issues) for reproducible bugs and bounded proposals. Include the source revision, OS, relevant tool versions, steps, expected behavior and redacted error output. Follow [security reporting](SECURITY.md) for sensitive concerns.
+
+Read [AGENTS.md](AGENTS.md) and the affected source before editing. Use the [pinned source setup](README.md#run-locally), keep ML workers in their separate environments, and run the checks relevant to your change from [docs/ci.md](docs/ci.md). Regenerate the OpenAPI schema/client when the API changes; do not hand-edit generated types.
+
+Keep changes focused and submit a feature-branch pull request describing the problem, resulting behavior, verification and remaining limits. Distinguish mocked/generated fixtures, real worker execution and task-quality evidence. Record unavailable or interrupted checks accurately. Preserve user workspaces, credentials, published evidence hashes and historical receipts.
+
+Project code is licensed under [Apache License 2.0](LICENSE); [NOTICE](NOTICE) records project notices. Third-party code, datasets, model weights and assets retain their own terms and attribution. Adding an adapter or fixture does not grant redistribution rights for its upstream model or data.

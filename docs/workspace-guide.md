@@ -12,7 +12,9 @@ Search the collection, open an exact model version, then choose **Distill**, **Q
 
 ## Dataset
 
-Open **Sources**, choose a starter or enter a Hugging Face repository, then select **Inspect dataset** and **Load visual preview**. For local data, choose **Local files**, upload a folder, ZIP or HDF5 file, and review the conversion settings. Use **Create example** to try the workflow with generated data. Save camera names and labels before exporting.
+Open **Sources**, select **Hugging Face**, and enter `codywang/so101_pickup_test` in **Dataset repository**. For the pinned example, expand **Revision (optional)** and enter `ecef85bc07005f771ad86deeff1427f9d72953ed`; leave it blank to use the repository's latest `main` revision. Select **Inspect dataset**. After inspection succeeds, the episode list and first episode's camera previews load automatically. Select an episode, use **Play** and the playback slider, and open **Frame samples** to inspect state or action values.
+
+For local data, choose **Local files**, upload a folder, ZIP or HDF5 file, and review the conversion settings. Use **Create example** to try the workflow with generated data. Save camera names and labels before exporting.
 
 [Dataset setup](getting-started.md#inspect-a-public-dataset) · [Local imports](dataset-import.md) · [Local training](local-training.md)
 

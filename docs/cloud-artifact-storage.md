@@ -2,7 +2,7 @@
 
 ## Configure storage
 
-Connect the Google Cloud project and prepare SkyPilot on the API host using [compute setup](compute-settings.md). Cloud jobs use a private bucket under `gs://firebird-artifacts-<project>/jobs/<job-id>/<stage>/`. Use uniform bucket access and public access prevention, and keep credentials in the configured Google Cloud/SkyPilot environment.
+Connect the Google Cloud project and prepare SkyPilot on the API host using [compute setup](compute-settings.md). Cloud jobs use the configured private checkpoint bucket under `gs://<checkpoint-bucket>/jobs/<job-id>/<stage>/`. Use uniform bucket access and public access prevention, and keep credentials in the configured Google Cloud/SkyPilot environment. Existing alpha bucket names and saved object references are retained; do not rename cloud resources to match the new CLI name.
 
 ## Download or resume
 

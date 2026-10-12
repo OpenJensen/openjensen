@@ -9,9 +9,9 @@ uv venv --python 3.11
 uv pip install --python .venv/bin/python -e '.[dev]'
 .venv/bin/python -m pytest -q
 .venv/bin/ruff check src tests
-.venv/bin/firebird-finetune --help
-.venv/bin/firebird-verify --help
-.venv/bin/firebird-check-qlora --help
+.venv/bin/jensen-finetune --help
+.venv/bin/jensen-verify --help
+.venv/bin/jensen-check-qlora --help
 ```
 
 For the CUDA environment, smoke run, training, resume and inference loader,
@@ -34,7 +34,7 @@ and FPS. Preserve `control-contract.json` at both checkpoint levels when resumin
 Use an existing compatible CPU environment:
 
 ```sh
-FIREBIRD_TEST_ACCUMULATION_CPU=1 OMP_NUM_THREADS=1 \
+JENSEN_TEST_ACCUMULATION_CPU=1 OMP_NUM_THREADS=1 \
   PYTHONPATH=src python -m pytest tests/test_accumulation_numerical.py -q
 ```
 

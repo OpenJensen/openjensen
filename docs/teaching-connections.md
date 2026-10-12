@@ -2,9 +2,9 @@
 
 ## Configure the API host
 
-Start the [Teaching worker](../workers/teaching/README.md) and its authenticated loopback executor. Set `FIREBIRD_TEACHING_URL` and `FIREBIRD_TEACHING_CONTROL_TOKEN_FILE` on the API host, then restart the application. Use a private token file shared with the executor.
+Start the [Teaching worker](../workers/teaching/README.md) and its authenticated loopback executor. Set `JENSEN_TEACHING_URL` and `JENSEN_TEACHING_CONTROL_TOKEN_FILE` on the API host, then restart the application. Use a private token file shared with the executor.
 
-For optional voice, also set `FIREBIRD_TEACHING_VOICE_URL` and configure its LiveKit/OpenRouter services through [voice setup](teaching-intelligence.md).
+For optional voice, also set `JENSEN_TEACHING_VOICE_URL` and configure its LiveKit/OpenRouter services through [voice setup](teaching-intelligence.md).
 
 ## Record
 

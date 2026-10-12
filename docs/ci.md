@@ -1,4 +1,8 @@
-# Run local verification
+# Local and CI verification
+
+GitHub Actions runs the selected Linux application, browser and worker checks for pushes and pull requests. Windows application/browser lanes are a manual opt-in; simulation has a separate manual workflow. Inspect the checks selected for the actual revision and retain local results when a required environment or hosted execution is unavailable.
+
+Browser desktop/mobile lanes exercise web layouts. Worker contract tests and generated CPU fixtures do not establish live GPU training, Isaac execution or installed desktop acceptance. Keep those receipts separate and bound to their exact source/runtime/inputs.
 
 ## Run locally
 
@@ -23,8 +27,8 @@ pnpm test:diagnostics --retries=0
 Run the prefixed-export check, then rebuild the normal export:
 
 ```sh
-NEXT_PUBLIC_BASE_PATH=/firebird FIREBIRD_PREFIX_SMOKE_EXPORT=1 pnpm build:web
-NEXT_PUBLIC_BASE_PATH=/firebird FIREBIRD_TEST_WEB_DIR="$PWD/apps/web/out/prefix-smoke" pnpm exec playwright test --config tests/web/base-path.config.ts
+NEXT_PUBLIC_BASE_PATH=/jensen JENSEN_PREFIX_SMOKE_EXPORT=1 pnpm build:web
+NEXT_PUBLIC_BASE_PATH=/jensen JENSEN_TEST_WEB_DIR="$PWD/apps/web/out/prefix-smoke" pnpm exec playwright test --config tests/web/base-path.config.ts
 pnpm build:web
 ```
 

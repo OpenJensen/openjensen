@@ -17,7 +17,7 @@ For the web flow follow [Teaching intelligence setup](../../docs/teaching-intell
 Supply a current immutable session context and callback from trusted server code:
 
 ```python
-from firebird_teaching.providers import Choice, Providers, ProviderSettings, SourceContext
+from jensen_teaching.providers import Choice, Providers, ProviderSettings, SourceContext
 
 provider = Providers(ProviderSettings.from_env())
 context = SourceContext(session_id="actual-session-id", episode_id=None, revision=2)
@@ -26,8 +26,10 @@ proposal = await provider.decide(
     context,
     state="The user's target and measured evidence, with no credentials.",
     question="Which already eligible configuration best matches the stated preference?",
-    choices=(Choice("candidate-a", "Measured eligible configuration A"),
-             Choice("candidate-b", "Measured eligible configuration B")),
+    choices=(
+        Choice("candidate-a", "Measured eligible configuration A"),
+        Choice("candidate-b", "Measured eligible configuration B"),
+    ),
     current=lambda: current_session_snapshot,
 )
 ```
@@ -62,10 +64,10 @@ Use the existing teaching test environment with pytest, Pillow, pytest-cov,
 mypy and Ruff:
 
 ```sh
-PYTHONPATH=workers/teaching:workers/isaac_sim python -m pytest workers/teaching/tests/test_providers.py -q --cov=firebird_teaching.providers --cov-report=term-missing
-python -m mypy --strict --follow-imports=skip workers/teaching/firebird_teaching/providers.py
-python -m ruff check workers/teaching/firebird_teaching/providers.py workers/teaching/tests/test_providers.py
-python -m ruff format --check workers/teaching/firebird_teaching/providers.py workers/teaching/tests/test_providers.py
+PYTHONPATH=workers/teaching:workers/isaac_sim python -m pytest workers/teaching/tests/test_providers.py -q --cov=jensen_teaching.providers --cov-report=term-missing
+python -m mypy --strict --follow-imports=skip workers/teaching/jensen_teaching/providers.py
+python -m ruff check workers/teaching/jensen_teaching/providers.py workers/teaching/tests/test_providers.py
+python -m ruff format --check workers/teaching/jensen_teaching/providers.py workers/teaching/tests/test_providers.py
 ```
 
 ## API references

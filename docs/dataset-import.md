@@ -2,7 +2,7 @@
 
 ## Reader setup
 
-Install the isolated [CPU reader](../workers/_cpu_readers/README.md) and `workers/_cpu_readers/requirements.txt`. Set `FIREBIRD_CPU_READER_PYTHON` to its interpreter and install FFmpeg on the API host.
+Install the isolated [CPU reader](../workers/_cpu_readers/README.md) and `workers/_cpu_readers/requirements.txt`. Set `JENSEN_CPU_READER_PYTHON` to its interpreter and install FFmpeg on the API host.
 
 ## Inputs
 

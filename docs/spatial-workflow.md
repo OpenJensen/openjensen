@@ -19,7 +19,7 @@ Use assets with 8-state/7-action normalization, 50×32 padded actions, ten denoi
 
 ## Configure and submit
 
-Copy [runtime.spatial.example.json](runtime.spatial.example.json), replace its absolute paths and digests, and set `FIREBIRD_RUNTIME_CONFIG` before starting the server. Supply `evaluation_python`, or `evaluation_image` for the same worker inside Docker.
+Copy [runtime.spatial.example.json](runtime.spatial.example.json), replace its absolute paths and digests, and set `JENSEN_RUNTIME_CONFIG` before starting the server. Supply `evaluation_python`, or `evaluation_image` for the same worker inside Docker.
 
 Set the source task to `libero_spatial`, its local `evaluation_bundle` to the prepared bundle, and the expected hash to its `spatial-assets.json` SHA-256. Supply the floating GGUF's separate hash.
 

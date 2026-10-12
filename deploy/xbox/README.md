@@ -2,6 +2,15 @@
 
 Use Python 3.14.7 and a dedicated service user on the host. Build the web client locally, then copy the source and export into a timestamped release under `~/ollamaforvlas/releases/`.
 
+Use the canonical public route below for a new deployment. The supplied Supervisor
+template retains the alpha service labels `firebird` and `firebird-public` for
+operational compatibility; use those labels in control commands. Existing alpha
+installations keep their configured service names, paths, username, credentials
+and cloud identities until their administrator explicitly migrates them. Updating
+source does not rename deployed resources. Use [stop-and-copy backups](../../docs/upgrading.md)
+before changing a release; rollback requires the preserved pre-upgrade workspace,
+not only the old application symlink.
+
 ## Set up the service
 
 1. Install the application dependencies in the release with `uv sync --frozen`.
@@ -24,7 +33,10 @@ Run on the deployment host:
 curl -fsS http://127.0.0.1:8096/api/v1/health
 ```
 
-Finish active application jobs before restarting. To roll back, point `current` at a preserved release and restart the service.
+Finish or cancel active application jobs and confirm their cleanup before stopping
+the service. Back up the whole stopped workspace before an upgrade. For rollback,
+use the preserved release/runtime with a restored copy of its pre-upgrade
+workspace. Changing `current` alone cannot reverse a database migration.
 
 ## Connect through SSH
 
@@ -38,11 +50,11 @@ Open [localhost:18096](http://127.0.0.1:18096). Read service logs under `~/ollam
 
 ## Public Funnel route
 
-1. Build the public frontend with `NEXT_PUBLIC_BASE_PATH=/firebird`.
+1. Build the public frontend with `NEXT_PUBLIC_BASE_PATH=/jensen`.
 2. Place the export under `public-web/funnel-20260926/` and copy `public_gateway.py` into the deployment root.
 3. Create `private/public-gateway.json` for the service user, using mode `0600` and a salted password hash. Keep the generated login details outside the repository.
-4. Start or restart the `firebird-public` Supervisor service on `127.0.0.1:8097`.
-5. Preview through a loopback SSH tunnel at `http://127.0.0.1:18097/firebird/`.
+4. Start or restart the template's `firebird-public` Supervisor service on `127.0.0.1:8097`.
+5. Preview through a loopback SSH tunnel at `http://127.0.0.1:18097/jensen/`.
 6. Have the host administrator activate the scoped route using the command below.
 
 Configure the gateway JSON with these fields, replacing the host, service-user path and password-derived values:
@@ -51,7 +63,8 @@ Configure the gateway JSON with these fields, replacing the host, service-user p
 {
   "public_origin": "https://host.tailnet.ts.net",
   "static_dir": "/home/service-user/ollamaforvlas/public-web/funnel-20260926",
-  "username": "firebird",
+  "username": "jensen",
+  "path_prefix": "/jensen",
   "password_salt_hex": "REPLACE_WITH_16_BYTE_SALT_AS_HEX",
   "password_hash_hex": "REPLACE_WITH_PBKDF2_SHA256_HASH_AS_HEX",
   "password_iterations": 310000,
@@ -61,10 +74,19 @@ Configure the gateway JSON with these fields, replacing the host, service-user p
 
 Generate a random 16-byte salt and derive a 32-byte PBKDF2-HMAC-SHA256 hash from the chosen password using 310000 iterations. Encode both as hexadecimal. Use an absolute path to the built public export for `static_dir`.
 
+`JENSEN_PUBLIC_CONFIG` selects the private configuration file; the alpha
+`FIREBIRD_PUBLIC_CONFIG` setting remains accepted. The template supplies both
+settings, and both application data/web settings, with identical paths so a
+preserved alpha runtime can still use them during rollback. New gateway configs
+use `username: "jensen"` and `path_prefix: "/jensen"`. An existing config without
+`path_prefix` retains `/firebird`; its existing username, route, frontend base path
+and Funnel mapping must be migrated together if the administrator chooses to
+change them.
+
 Activate the route on the host:
 
 ```sh
-sudo tailscale funnel --bg --https=443 --set-path=/firebird http://127.0.0.1:8097/firebird
+sudo tailscale funnel --bg --https=443 --set-path=/jensen http://127.0.0.1:8097/jensen
 ```
 
-Open `https://<host>.<tailnet>.ts.net/firebird/`. Check login, authenticated API requests, `/firebird/docs/` and the existing root route. To rotate the gateway password, update the private configuration and restart `firebird-public`.
+Open `https://<host>.<tailnet>.ts.net/jensen/`. Check login, authenticated API requests, `/jensen/docs/` and the existing root route. To rotate the gateway password, update the private configuration and restart `firebird-public`.

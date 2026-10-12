@@ -27,10 +27,10 @@ provide `artifacts/docker/LIBERO-source.json` with `revision`, `url`,
 Use GGUF 0.19.0 in the ModelOpt container:
 
 ```bash
-docker build -f Dockerfile.modelopt -t firebird-modelopt:20260926 .
-docker run --rm -v "$PWD:/workspace" --entrypoint bash firebird-modelopt:20260926 -lc \
+docker build -f Dockerfile.modelopt -t jensen-modelopt:20260926 .
+docker run --rm -v "$PWD:/workspace" --entrypoint bash jensen-modelopt:20260926 -lc \
   'python -m pip install --no-cache-dir gguf==0.19.0 && python -m scripts.prepare_cuda_models'
-docker run --rm -v "$PWD:/workspace" --entrypoint python firebird-modelopt:20260926 \
+docker run --rm -v "$PWD:/workspace" --entrypoint python jensen-modelopt:20260926 \
   scripts/prepare_modelopt_metadata.py
 ```
 
@@ -39,11 +39,11 @@ docker run --rm -v "$PWD:/workspace" --entrypoint python firebird-modelopt:20260
 Choose a new run name:
 
 ```bash
-docker build -f Dockerfile.cuda -t firebird-quant-cuda:20260926 .
+docker build -f Dockerfile.cuda -t jensen-quant-cuda:20260926 .
 docker run --gpus device=0 --user "$(id -u):$(id -g)" --cpus=4 --memory=8g \
-  -v "$PWD:/workspace" --entrypoint bash firebird-quant-cuda:20260926 scripts/build_cuda.sh
+  -v "$PWD:/workspace" --entrypoint bash jensen-quant-cuda:20260926 scripts/build_cuda.sh
 docker run --gpus device=0 --cpus=4 --memory=8g -v "$PWD:/workspace" \
-  --entrypoint python3 firebird-quant-cuda:20260926 \
+  --entrypoint python3 jensen-quant-cuda:20260926 \
   -m policykit.cuda_bench --run smolvla-cuda-new --reps 20 --rounds 3
 ```
 

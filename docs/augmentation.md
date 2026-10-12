@@ -37,10 +37,10 @@ Save this recipe as `augmentation.json`, replacing the inspection and camera IDs
 ```
 
 ```sh
-firebird augmentation options
-firebird augmentation submit PROJECT_ID augmentation.json
-firebird jobs show JOB_ID
-firebird jobs cancel JOB_ID
+jensen augmentation options
+jensen augmentation submit PROJECT_ID augmentation.json
+jensen jobs show JOB_ID
+jensen jobs cancel JOB_ID
 ```
 
 Direct clients use `POST /api/v1/projects/{project_id}/augmentations`. Read `GET /api/v1/jobs/{job_id}` for status and `GET /api/v1/jobs/{job_id}/augmentation/download` for the ZIP. Use `POST /api/v1/jobs/{job_id}/cancel` to cancel.

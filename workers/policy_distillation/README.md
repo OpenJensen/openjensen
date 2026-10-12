@@ -17,7 +17,7 @@ processors, statistics and optional timing/control records.
 Use the separate LeRobot 0.6.2 dataset environment from the
 [local CPU installer](../local_cpu/README.md). Add `workers/policy_distillation/src`,
 `workers/act_optimizer/src` and `workers/smolvla_qlora/src` to `PYTHONPATH`, then
-run `python -m firebird_distill.prepare PREPARE_REQUEST NEW_RESULT`.
+run `python -m jensen_distill.prepare PREPARE_REQUEST NEW_RESULT`.
 
 Save this request with real paths, snapshot identity, matching feature names,
 units and three nonempty disjoint episode/lineage partitions:
@@ -77,7 +77,7 @@ Run from the repository root:
 
 ```sh
 PYTHONPATH=workers/policy_distillation/src:workers/act_optimizer/src:workers/smolvla_qlora/src \
-  workers/act_optimizer/.venv/bin/python -m firebird_distill.application \
+  workers/act_optimizer/.venv/bin/python -m jensen_distill.application \
   /absolute/operator-owned/request.json /absolute/new-result.json
 ```
 
@@ -91,6 +91,6 @@ PYTHONPATH=workers/policy_distillation/src:workers/act_optimizer/src:workers/smo
   workers/act_optimizer/.venv/bin/python -m pytest workers/policy_distillation/tests -q
 ```
 
-For the native 8/3 fixture, set `FIREBIRD_DISTILL_CONTROL_NATIVE=1` and select
+For the native 8/3 fixture, set `JENSEN_DISTILL_CONTROL_NATIVE=1` and select
 `test_native_8_3_preserves_semantics_and_normalized_teacher_targets` in the same
 pinned ACT environment.

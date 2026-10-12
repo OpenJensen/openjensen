@@ -4,7 +4,7 @@
 
 Use Unity **6000.6**. Choose **Package Manager → Add package from disk** and select this directory's `package.json`. Install Unity Newtonsoft JSON 3.2.2, image conversion 1.0.0 and IMGUI 1.0.0.
 
-Start the [teaching worker](../../../workers/teaching/README.md). For a remote worker, establish a loopback tunnel first. Create an empty GameObject and add `Firebird.TeachingViewer.TeachingViewer`.
+Start the [teaching worker](../../../workers/teaching/README.md). For a remote worker, establish a loopback tunnel first. Create an empty GameObject and add `OpenJensen.TeachingViewer.TeachingViewer`.
 
 Supply the session ID, camera prim, image dimensions and ordered joint limits from the session/controller configuration. Use articulation coordinates in radians. Supply the worker bearer token through runtime code, then configure and start viewing:
 
@@ -27,13 +27,13 @@ Install Unity Test Framework 1.8.0 and add this package to the test project's `t
 ```json
 {
   "dependencies": {
-    "com.firebird.teaching-viewer": "file:/absolute/path/to/com.firebird.teaching-viewer",
+    "com.openjensen.teaching-viewer": "file:/absolute/path/to/com.openjensen.teaching-viewer",
     "com.unity.nuget.newtonsoft-json": "3.2.2",
     "com.unity.test-framework": "1.8.0",
     "com.unity.modules.imageconversion": "1.0.0",
     "com.unity.modules.imgui": "1.0.0"
   },
-  "testables": ["com.firebird.teaching-viewer"]
+  "testables": ["com.openjensen.teaching-viewer"]
 }
 ```
 
@@ -46,4 +46,4 @@ Set `UNITY_EDITOR` to the installed editor, `DISPOSABLE_PROJECT` to the test pro
   -runTests -testPlatform PlayMode -testResults "$OUTPUT/play.xml" -logFile "$OUTPUT/play.log"
 ```
 
-For the cross-component test, set `FIREBIRD_UNITY_FRAME_FIXTURE` to a generated teaching-worker mailbox-frame JSON and `FIREBIRD_UNITY_EXPECTED_SESSION` to its session ID. Use 32×32 RGB, `/World/Camera`, and six `joint_0` through `joint_5` coordinates at zero with [-1,1] joint bounds.
+For the cross-component test, set `JENSEN_UNITY_FRAME_FIXTURE` to a generated teaching-worker mailbox-frame JSON and `JENSEN_UNITY_EXPECTED_SESSION` to its session ID. Use 32×32 RGB, `/World/Camera`, and six `joint_0` through `joint_5` coordinates at zero with [-1,1] joint bounds.

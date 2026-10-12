@@ -6,7 +6,7 @@
 
 OPEN JENSEN brings dataset exploration, training, quantization and simulation into one self-hosted workspace. The web app, CLI and optional terminal client share the same projects, jobs and artifacts. Training and simulation run in separate worker environments, locally or on configured cloud compute.
 
-[Get started](#run-locally) · [Workspace guide](docs/workspace-guide.md) · [Documentation](#documentation) · [Development](#development)
+[Get started](#run-locally) · [Workspace guide](docs/workspace-guide.md) · [Support matrix](docs/support.md) · [Backup and upgrade](docs/upgrading.md)
 
 ![OPEN JENSEN dataset explorer showing recorded camera frames and episode data](docs/images/dataset-explorer.png)
 
@@ -25,28 +25,30 @@ OPEN JENSEN brings dataset exploration, training, quantization and simulation in
 | Decision lab | Compare text criteria with the configured local Muose scorer. |
 | Cloud runs / Settings | Review saved cloud activity, configure connections and compute, and inspect project diagnostics. |
 
-Each operation has its own model, dataset and runtime requirements. Available workflows depend on the configured workers and compatible model adapters.
+Each operation has its own model, dataset and runtime requirements. A configured worker enables compatible operations; it does not establish training or task-quality acceptance for every listed model. Read the [support matrix](docs/support.md) before choosing a runtime.
 
-[OPEN JENSEN Quant](workers/firebird_quant/README.md) is a 4/8-bit quantization library and CLI for dense PyTorch models. Use its native ACT packing path from the workspace or its standalone library and command-line client.
+[OPEN JENSEN Quant](workers/jensen_quant/README.md) is a 4/8-bit quantization library and CLI for dense PyTorch models. Use its native ACT packing path from the workspace or its standalone library and command-line client.
 
 ## Run locally
 
-Use the pinned toolchain: **Python 3.14.7**, **uv 0.12.19**, **Node 24.21.0** and **pnpm 12.6.0**. Node is needed to build or develop the frontend. The running application is served by Python.
+Build from source with **Python 3.14.7**, **uv 0.12.19**, **Node 24.21.0** and **pnpm 12.6.0**. Node builds the frontend; Python serves the running application. The desktop client currently connects to this server; a self-contained desktop installer remains experimental.
 
-The command-line client is `firebird`. Application configuration uses `FIREBIRD_*` settings, and workspace data defaults to `.firebird/`.
+The command-line client is `jensen`. Application configuration uses `JENSEN_*` settings, and new workspace data defaults to `.jensen/`. Existing alpha workspaces are preserved; see [upgrade compatibility](docs/upgrading.md#alpha-compatibility).
 
-From the repository root:
+Clone the repository, then install and run from its root:
 
 ```sh
+git clone https://github.com/OpenJensen/openjensen.git
+cd openjensen
 uv sync --frozen
 uv venv --python 3.14.7 workers/_cpu_readers/.venv
-uv pip install --python workers/_cpu_readers/.venv/bin/python --no-deps pyarrow==25.0.1
+uv pip install --python workers/_cpu_readers/.venv/bin/python --no-deps -r workers/_cpu_readers/requirements.txt
 pnpm install --frozen-lockfile
 pnpm build:web
-uv run --frozen firebird serve
+uv run --frozen jensen serve
 ```
 
-Open [localhost:8000](http://127.0.0.1:8000). On Windows, use `workers/_cpu_readers/.venv/Scripts/python.exe` in the reader installation command.
+Open [localhost:8000](http://127.0.0.1:8000). The reader requirements include Parquet, NumPy, HDF5 and image support. Install FFmpeg/ffprobe on the application host for local video imports and immutable training copies. Windows uses `workers/_cpu_readers/.venv/Scripts/python.exe`; native Windows worker and desktop installation acceptance remain pending.
 
 The core application and metadata intake need no GPU or provider key. Public Hub inspection needs network access. Training, native inference, simulation, voice and augmentation need their own configured workers or services. The server listens on loopback at the address above.
 
@@ -55,15 +57,18 @@ For tool-version fallbacks, development mode, local dataset configuration and CL
 For native ACT distillation and packed observation replay, use the separate
 [local CPU worker setup](workers/local_cpu/README.md) to install dependencies
 and configure the runtimes. For native ACT quantization, configure the
-[registered packing worker](workers/firebird_quant/NATIVE_ACT.md).
+[registered packing worker](workers/jensen_quant/NATIVE_ACT.md).
 
 ### Your first project
 
-1. Create a project and open **Dataset → Sources**.
-2. Choose the pinned **SO-101 pickup** or **SO-100 pick & place** starter and select **Inspect dataset**.
-3. Open **Load visual preview** to browse episodes, camera recordings and sampled actions.
-4. In **Settings & diagnostics → Compute**, connect Google Cloud or use **Check this machine → Add worker** for an [installed local SmolVLA worker](docs/compute-settings.md#local-worker-setup). For local compute, enable local runs and save. Choose compatible compute and a recipe in **Fine-tune**. Cloud jobs use your configured account.
-5. Open the saved run to review progress, checkpoints and provenance. Use the supported export or quantization path for that model.
+1. Open the project menu, choose **Create project**, and give it a name.
+2. Open **Dataset → Sources**, select **Hugging Face**, and enter `codywang/so101_pickup_test` in **Dataset repository**.
+3. Expand **Revision (optional)** and enter `ecef85bc07005f771ad86deeff1427f9d72953ed` to use the pinned example.
+4. Select **Inspect dataset**. After inspection succeeds, the episode list and first episode's camera previews load automatically. Select an episode, use **Play** and the playback slider, and open **Frame samples → Action** to inspect sampled actions.
+
+This first workflow needs network access and the CPU reader, with no GPU or provider key. Stop the server with `Ctrl+C`; the project remains in its workspace for your next launch.
+
+When you are ready to train, follow [compute setup](docs/compute-settings.md) and [native training](docs/native-training.md). Local and cloud workers require separate environments. Review the recipe and cloud billing consent before starting a job. For import examples, configuration and common errors, see [getting started](docs/getting-started.md).
 
 ## Documentation
 
@@ -72,12 +77,12 @@ Start with the [workspace guide](docs/workspace-guide.md) for a short explanatio
 | Topic | Guides |
 | --- | --- |
 | Workspace | [Sector guide](docs/workspace-guide.md), [frontend development](docs/workbench-design.md) |
-| Setup and compute | [Getting started](docs/getting-started.md), [compute settings](docs/compute-settings.md), [cloud training](docs/skypilot-training.md) |
+| Setup and compute | [Getting started](docs/getting-started.md), [support matrix](docs/support.md), [backup and upgrade](docs/upgrading.md), [compute settings](docs/compute-settings.md), [cloud training](docs/skypilot-training.md) |
 | Datasets | [Local training and Teaching](docs/local-training.md), [appearance augmentation](docs/augmentation.md), [source provenance](apps/web/public/datasets/README.md) |
 | Policies and artifacts | [Training adapters](docs/native-training.md), [native policy workflow](docs/policy-workflow.md), [ACT export](docs/cloud-act-export.md), [ACT distillation](workers/policy_distillation/README.md), [cloud artifact storage](docs/cloud-artifact-storage.md) |
-| Local optimization | [CPU worker setup](workers/local_cpu/README.md), [native ACT packing](workers/firebird_quant/NATIVE_ACT.md), [recorded-observation replay](workers/isaac_sim/NATIVE_REPLAY.md) |
+| Local optimization | [CPU worker setup](workers/local_cpu/README.md), [native ACT packing](workers/jensen_quant/NATIVE_ACT.md), [recorded-observation replay](workers/isaac_sim/NATIVE_REPLAY.md) |
 | Evaluation and simulation | [Native Isaac](docs/native-simulation.md), [LIBERO Spatial](docs/spatial-workflow.md), [cloud inference](docs/cloud-inference.md), [cloud run monitoring](docs/cloud-runs.md) |
-| Other clients | [Terminal workbench](docs/terminal.md), [desktop connector](apps/desktop/README.md), [Unity viewer](apps/unity/com.firebird.teaching-viewer/README.md) |
+| Other clients | [Terminal workbench](docs/terminal.md), [desktop connector](apps/desktop/README.md), [Unity viewer](apps/unity/com.openjensen.teaching-viewer/README.md) |
 | Optional AI services | [Voice connections](docs/teaching-connections.md), [Muose decision worker](workers/decision/README.md), [Jev and Mk1.5 proposals](workers/teaching/PROVIDERS.md) |
 | Development | [CI and local checks](docs/ci.md) |
 
@@ -97,7 +102,9 @@ tests/             Core, worker-contract and browser integration checks
 docs/              Setup guides and workflow documentation
 ```
 
-Project data lives in `.firebird/` by default. Set `FIREBIRD_DATA_DIR` to change it. One application process owns each workspace. Cloud training stores checkpoints in private GCS; explicit downloads and export operations can materialize them locally.
+New project data lives in `.jensen/` by default. Set `JENSEN_DATA_DIR` to choose a persistent absolute directory, and start one application process for each workspace. Cloud training stores checkpoints in private GCS; a local workspace backup preserves their references and does not copy those remote objects.
+
+The deployment scope is a single-user application on loopback, with an SSH tunnel for remote access. See [security guidance](SECURITY.md) before changing its network exposure.
 
 ## Development
 
@@ -113,4 +120,8 @@ pnpm exec playwright install chromium
 pnpm test:web
 ```
 
-Workers keep separate environments and checks. Do not hand-edit generated API types. Follow the [CI guide](docs/ci.md) for optional terminal checks, schema generation, platform requirements and the full verification sequence.
+Workers keep separate environments and checks. Do not hand-edit generated API types. Follow the [CI guide](docs/ci.md) for optional terminal checks, schema generation, platform requirements and the full verification sequence, and [contribution guidance](CONTRIBUTING.md) when proposing a change.
+
+## License
+
+Project code is licensed under [Apache License 2.0](LICENSE); see [NOTICE](NOTICE). Third-party code, model weights, datasets and assets retain their own terms and attribution. Check their source terms before reuse or redistribution.
