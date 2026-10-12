@@ -58,9 +58,9 @@ def check_queue(policy: Any, batch: Any, chunk: Any, execution: int, torch: Any)
 def infer(checkpoint: Path) -> dict[str, Any]:
     """Strictly load one checkpoint without another policy process or network."""
     os.environ.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1", CUDA_VISIBLE_DEVICES="")
-    forbidden = tuple(
-        Path(p).resolve() for p in json.loads(getenv("JENSEN_ACT_FORBIDDEN_SOURCES", "[]"))
-    )
+    raw_forbidden = getenv("JENSEN_ACT_FORBIDDEN_SOURCES", "[]")
+    assert raw_forbidden is not None
+    forbidden = tuple(Path(p).resolve() for p in json.loads(raw_forbidden))
     sys.addaudithook(lambda event, args: offline_audit(event, args, forbidden))
     versions = runtime_versions()
     import torch
