@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { datasetDownload, datasetLibrary, formatName, sampleImage, labelDraftKey, readLabelDraft, sameLabelDraft, isProjectDataset, type LabelDraft, type DatasetLabels, type LibraryDataset } from '@/lib/dataset-library';
 import { api, apiMediaUrl } from '@/lib/api';
+import { datasetPollingInterval, publishDatasetReceipt } from '@/lib/dataset-cache';
 import { Icon } from './icon';
 import './dataset-library.css';
 
@@ -103,16 +104,18 @@ export function LocalDatasetImport({projectId,value,onChange,disabled}:{projectI
   const uploadController=useRef<AbortController|null>(null);
   const alive=useRef(true);
   const [confirmDiscard,setConfirmDiscard]=useState(false);
+  const [acceptedConversionId,setAcceptedConversionId]=useState<string|null>(null);
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;uploadController.current?.abort();};},[]);
-  const upload=useMutation({mutationFn:async(files:File[])=>{const controller=new AbortController();uploadController.current=controller;try{return await datasetLibrary.upload(projectId,files,message=>{if(alive.current)setProgress(message);},controller.signal,entry=>{client.setQueryData(['dataset-import',entry.id],entry);if(alive.current)onChange(entry);void client.invalidateQueries({queryKey:['datasets']});});}finally{if(uploadController.current===controller)uploadController.current=null;}},onSuccess:entry=>{client.setQueryData(['dataset-import',entry.id],entry);if(alive.current)onChange(entry);},onSettled:()=>{if(alive.current)setProgress('');void client.invalidateQueries({queryKey:['datasets']});void client.invalidateQueries({queryKey:['dataset-import']});}});
-  const saved=useQuery({queryKey:['dataset-import',value?.id],queryFn:({signal})=>datasetLibrary.get(value!.id,signal),enabled:!!value && !value.id.startsWith('inspection:'),retry:false,refetchInterval:query=>['converting','uploading'].includes(query.state.data?.status??'') ? 1000 : false});
+  const upload=useMutation({mutationFn:async(files:File[])=>{const controller=new AbortController();uploadController.current=controller;try{return await datasetLibrary.upload(projectId,files,message=>{if(alive.current)setProgress(message);},controller.signal,entry=>{client.setQueryData(['dataset-import',entry.id],entry);if(alive.current)onChange(entry);void client.invalidateQueries({queryKey:['datasets']});});}finally{if(uploadController.current===controller)uploadController.current=null;}},onSuccess:async entry=>{await publishDatasetReceipt(client,entry);if(alive.current)onChange(client.getQueryData<LibraryDataset>(['dataset-import',entry.id])??entry);},onSettled:()=>{if(alive.current)setProgress('');void client.invalidateQueries({queryKey:['datasets']});}});
+  const saved=useQuery({queryKey:['dataset-import',value?.id],queryFn:({signal})=>datasetLibrary.get(value!.id,signal),enabled:!!value && !value.id.startsWith('inspection:'),retry:false,refetchInterval:query=>datasetPollingInterval(query.state.data,acceptedConversionId)});
   const current=saved.data??value;
   useEffect(()=>{if(saved.data)onChange(saved.data);},[saved.data,onChange]);
   useEffect(()=>{setConfirmDiscard(false);setFps(value?.detection?.fps??30);setStateKeys(value?.detection?.mapping.state?.join(', ')??'');setActionKey(value?.detection?.mapping.action??'');},[value?.id]);
-  const convert=useMutation({mutationFn:()=>datasetLibrary.convert(current!.id,{fps,task,robot_type:robot,mapping:current?.detection?.mapping.action ? {...current.detection.mapping,action:actionKey,state:stateKeys.split(',').map(k=>k.trim()).filter(Boolean)} : undefined}),onSuccess:entry=>{client.setQueryData(['dataset-import',entry.id],entry);onChange(entry);void client.invalidateQueries({queryKey:['datasets']});}});
+  const convert=useMutation({mutationFn:()=>datasetLibrary.convert(current!.id,{fps,task,robot_type:robot,mapping:current?.detection?.mapping.action ? {...current.detection.mapping,action:actionKey,state:stateKeys.split(',').map(k=>k.trim()).filter(Boolean)} : undefined}),onSuccess:async entry=>{if(alive.current&&entry.status==='converting')setAcceptedConversionId(entry.id);await publishDatasetReceipt(client,entry);if(alive.current)onChange(client.getQueryData<LibraryDataset>(['dataset-import',entry.id])??entry);void client.invalidateQueries({queryKey:['datasets']});}});
   const discard=useMutation({mutationFn:()=>datasetLibrary.discard(current!.id,projectId),onSuccess:receipt=>{if(receipt.discarded!==true||receipt.id!==current?.id)throw new Error('Discard could not be confirmed. Refresh the saved upload.');client.removeQueries({queryKey:['dataset-import',receipt.id]});onChange(null);setConfirmDiscard(false);upload.reset();void client.invalidateQueries({queryKey:['datasets']});}});
   function choose(event:ChangeEvent<HTMLInputElement>) { const files=Array.from(event.target.files??[]);event.target.value='';if(!disabled&&!busy&&current?.status!=='uploading'&&files.length)upload.mutate(files); }
-  const busy=upload.isPending || current?.status==='converting' || convert.isPending || discard.isPending;
+  const conversionObserved=!!current&&current.id===acceptedConversionId&&datasetPollingInterval(current,acceptedConversionId)!==false;
+  const busy=upload.isPending || current?.status==='converting' || conversionObserved || convert.isPending || discard.isPending;
   return <div className="local-dataset-import">
     <input ref={folder} className="visually-hidden" type="file" multiple aria-label="Choose dataset folder" disabled={disabled||busy||current?.status==='uploading'} {...({webkitdirectory:'',directory:''} as Record<string,string>)} onChange={choose}/>
     <input ref={archive} className="visually-hidden" type="file" accept=".zip,.h5,.hdf5" aria-label="Choose dataset archive or HDF5" disabled={disabled||busy||current?.status==='uploading'} onChange={choose}/>
@@ -126,6 +129,7 @@ export function LocalDatasetImport({projectId,value,onChange,disabled}:{projectI
       {current.status==='unavailable' && <p role="alert">The saved dataset record is unavailable. Its files have been preserved; ask the app host operator to repair the record before reusing it.</p>}
       {!current.detection?.convertible && <p role="alert">{current.detection?.reason}</p>}
       {current.status==='converting' && <p role="status">Converting synchronized frames and camera views… You can leave this page; the import is saved.</p>}
+      {conversionObserved&&current.status!=='converting' && <p role="status">Checking the saved conversion status… A conversion was accepted; it has not reported completion yet.</p>}
       {current.status==='ready' ? <p className="local-import-ready" role="status"><Icon name="check" size={16}/> Ready to inspect · {formatName(current.converted?.format??current.detection?.format)}</p> : current.detection?.convertible && current.status!=='converting' && <div className="conversion-form">
         <label>Frame rate (FPS)<input type="number" min={1} max={240} value={fps} onChange={event=>setFps(Number(event.target.value))}/></label>
         <label>Task description<input value={task} maxLength={1000} onChange={event=>setTask(event.target.value)}/></label>

@@ -384,3 +384,29 @@ test('late label-save acknowledgement does not erase a newer draft after reopeni
   const response=page.waitForResponse(value=>value.url().endsWith(`/datasets/${id}/annotations`));release();await response;
   await page.getByRole('button',{name:'← Back to library',exact:true}).click();await open();await expect(field()).toHaveValue('Newer unsaved draft');
 });
+
+test('accepted conversion survives an earlier GET and keeps observing until ready without another POST',async({page})=>{
+  const {entry,id}=await importRecoveryFixture(page);
+  entry.status='detected';entry.converted=undefined;entry.detection.format='image_records';
+  const earlier=structuredClone(entry);
+  let releaseEarlier!:()=>void,reads=0,posts=0;
+  const waiting=new Promise<void>(resolve=>{releaseEarlier=resolve;});
+  await page.route(`**/api/v1/datasets/${id}`,async route=>{
+    reads++;
+    if(reads===1){await waiting;await route.fulfill({json:earlier}).catch(()=>{});return;}
+    // The first fresh read still reports detection; polling must not stop there.
+    if(reads===2)return route.fulfill({json:earlier});
+    return route.fulfill({json:{...earlier,status:'ready',converted:{format:'lerobot_v3',episodes:2,frames:4,fps:10,cameras:['front']}}});
+  });
+  await page.route(`**/api/v1/datasets/${id}/convert`,route=>{posts++;return route.fulfill({status:202,json:{...earlier,status:'converting'}});});
+  try {
+    await page.getByRole('button',{name:'Refresh datasets',exact:true}).click();
+    await page.getByRole('button',{name:'Open dataset Saved local data',exact:true}).click();
+    await expect.poll(()=>reads).toBe(1);
+    await page.getByRole('button',{name:'Convert to LeRobot',exact:true}).click();
+    await expect.poll(()=>reads).toBeGreaterThanOrEqual(2);releaseEarlier();
+    await expect(page.getByRole('region',{name:'Detected dataset'}).getByText(/Ready to inspect/)).toBeVisible();
+    expect(reads).toBeGreaterThanOrEqual(3);expect(posts).toBe(1);
+    await expect(page.getByRole('button',{name:'Inspect dataset',exact:true})).toBeEnabled();
+  } finally {releaseEarlier();}
+});
