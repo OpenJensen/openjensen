@@ -41,7 +41,7 @@ Metadata and recordings need network access. If a request fails, use **Retry epi
 
 Open **Guide** or the [workspace guide](workspace-guide.md), then follow the steps for the page you want to use.
 
-For browser uploads, open **Dataset → Sources → Local files** and review the detected format, frame rate and mapping. **Create example** provides generated data for trying import, preview and export after the CPU reader and FFmpeg are installed. See [supported input layouts](dataset-import.md).
+For browser uploads, open **Dataset → Sources → Local files**, choose your folder, ZIP or HDF5 file, and review the detected format, frame rate and mapping. Install the CPU reader and FFmpeg before converting local recordings. See [supported input layouts](dataset-import.md).
 
 ## Use local data
 

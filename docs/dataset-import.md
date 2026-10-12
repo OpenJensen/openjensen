@@ -35,6 +35,6 @@ Files are stored on the API host. Converted data is written as LeRobot v3 Parque
 
 ## Labels and export
 
-Open the dataset, rename camera views and label the displayed samples. Save changes, then export its ZIP. The archive contains LeRobot files, `openjensen/annotations.json` and source/conversion details. Use **Create example** to try the steps with generated data.
+Open the dataset, rename camera views and label the displayed samples. Save changes, then export its ZIP. The archive contains LeRobot files, `openjensen/annotations.json` and source/conversion details.
 
 References: [LeRobot v3](https://huggingface.co/docs/lerobot/main/lerobot-dataset-v3), [robomimic structure](https://robomimic.github.io/docs/datasets/overview.html#dataset-structure), [ALOHA/ACT](https://github.com/tonyzhaozh/act), [RLDS](https://github.com/google-research/rlds).
