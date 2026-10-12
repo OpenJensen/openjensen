@@ -116,7 +116,7 @@ export function TeachingIntelligence({ context, online }: { context: Context | n
       <p>{saved.data?.saved ? `Saved voice model: ${saved.data.voice_model}. Provider access is unverified.` : "No app-managed credentials saved."}</p>
       {configurationMessage && <p role="status">{configurationMessage}</p>}
       {saved.isError && <p role="alert">Saved settings could not be checked.</p>}
-      <p className="field-help">The operator must explicitly point the separate broker and voice agent at <code>teaching-intelligence.json</code> in the application data directory using <code>FIREBIRD_TEACHING_INTELLIGENCE_FILE</code>. Existing environment credentials take precedence. Restart the voice agent after changing its model.</p>
+      <p className="field-help">The operator must explicitly point the separate broker and voice agent at <code>teaching-intelligence.json</code> in the application data directory using <code>JENSEN_TEACHING_INTELLIGENCE_FILE</code>. Existing environment credentials take precedence. Restart the voice agent after changing its model.</p>
       {saved.data?.saved && readiness.data?.configuration_revision !== saved.data.revision && <p role="status">The broker has not confirmed loading this saved revision. It may use its own environment or require configuration.</p>}
     </div></details>
     <div className="workbench-form teaching-advice-form">

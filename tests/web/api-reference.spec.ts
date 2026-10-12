@@ -82,7 +82,7 @@ test('theme selection survives home/reference navigation and direct reloads', as
   await page.getByRole('link', { name: 'OPEN JENSEN workspace home' }).click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole('button', { name: 'Light', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  expect(await page.evaluate(() => localStorage.getItem('firebird.theme'))).toBe('light');
+  expect(await page.evaluate(() => localStorage.getItem('jensen.theme'))).toBe('light');
   expect(context.pages()).toHaveLength(1);
 });
 
@@ -1296,7 +1296,7 @@ for (const fixture of [
     await expect(page.getByRole('spinbutton', { name: 'Batch size', exact: true })).toHaveValue(String(fixture.expected.batchSize));
     await expect(page.getByRole('spinbutton', { name: 'Checkpoints', exact: true })).toHaveValue(String(fixture.expected.checkpointCount));
     if (fixture.expected.checkpointIntervalOverride) { await page.getByRole('button', { name: 'Help for Checkpoints', exact: true }).focus(); await expect(page.getByRole('tooltip')).toContainText(`Every ${fixture.interval} steps`); }
-    await expect.poll(() => page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? '{}'), `firebird.workflow.${trainingProject}`)).toMatchObject({ ...fixture.expected, trainingDefaultsVersion: 3 });
+    await expect.poll(() => page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? '{}'), `jensen.workflow.${trainingProject}`)).toMatchObject({ ...fixture.expected, trainingDefaultsVersion: 3 });
     await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
     await expect.poll(() => submitted.length).toBe(1);
     expect(submitted[0].training.save_every).toBe(fixture.interval);
@@ -1319,7 +1319,7 @@ test('checkpoint count follows run length and replaces a clearly identified save
   await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0].training.save_every).toBe(4000);
-  await expect.poll(() => page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? '{}'), `firebird.workflow.${trainingProject}`)).toMatchObject({ checkpointCount: 5, checkpointIntervalOverride: null, trainingDefaultsVersion: 3 });
+  await expect.poll(() => page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? '{}'), `jensen.workflow.${trainingProject}`)).toMatchObject({ checkpointCount: 5, checkpointIntervalOverride: null, trainingDefaultsVersion: 3 });
   expect(unexpectedRequests).toEqual([]);
 });
 
@@ -1458,7 +1458,7 @@ test('Spatial settings require explicit task and parity choices in the submitted
   });
   // Old saved preferences must not revive the unsupported engine/short horizon.
   await page.evaluate(() => {
-    const key = 'firebird.workflow.spatial-review';
+    const key = 'jensen.workflow.spatial-review';
     localStorage.setItem(key, JSON.stringify({ ...JSON.parse(localStorage.getItem(key) ?? '{}'), mode: 'engine', steps: 1 }));
   });
   await page.reload();
@@ -1548,8 +1548,8 @@ test('restored workflow preferences and submitted requests stay isolated when sw
   expect(await fixture.submit()).toEqual(projectA);
   const stored = await page.evaluate(() => ({
     empty: localStorage.getItem('firebird.workflow.'),
-    a: JSON.parse(localStorage.getItem('firebird.workflow.preferences-a')!),
-    b: JSON.parse(localStorage.getItem('firebird.workflow.preferences-b')!),
+    a: JSON.parse(localStorage.getItem('jensen.workflow.preferences-a')!),
+    b: JSON.parse(localStorage.getItem('jensen.workflow.preferences-b')!),
   }));
   expect(stored.empty).toBeNull();
   expect(stored.a.taskIds).toBe('1,3');

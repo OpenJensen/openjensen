@@ -3,7 +3,7 @@ export function normalizeBasePath(value: string | undefined) {
   const path = (value ?? '').trim().replace(/\/+$/, '');
   if (!path) return '';
   if (!/^\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+$/.test(path)) {
-    throw new Error('NEXT_PUBLIC_BASE_PATH must be an absolute URL path such as /firebird.');
+    throw new Error('NEXT_PUBLIC_BASE_PATH must be an absolute URL path such as /jensen.');
   }
   return path;
 }

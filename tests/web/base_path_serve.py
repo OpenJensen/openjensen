@@ -9,20 +9,19 @@ import uvicorn
 from starlette.applications import Starlette
 from starlette.routing import Mount
 from vla_platform.api import create_app
+from vla_platform.environment import getenv
 from vla_platform.settings import Settings
 
-prefix = os.environ.get("NEXT_PUBLIC_BASE_PATH", "/firebird").rstrip("/")
+prefix = os.environ.get("NEXT_PUBLIC_BASE_PATH", "/jensen").rstrip("/")
 static_dir = Path(
-    os.environ.get(
-        "FIREBIRD_TEST_WEB_DIR", str(Path(__file__).resolve().parents[2] / "apps" / "web" / "out")
-    )
+    getenv("JENSEN_TEST_WEB_DIR", str(Path(__file__).resolve().parents[2] / "apps" / "web" / "out"))
 )
 if not prefix or not (static_dir / "index.html").is_file():
     raise SystemExit(
-        "Build with NEXT_PUBLIC_BASE_PATH=/firebird before running the prefix smoke test"
+        "Build with NEXT_PUBLIC_BASE_PATH=/jensen before running the prefix smoke test"
     )
 
-with TemporaryDirectory(prefix="firebird-prefix-smoke-") as data_dir:
+with TemporaryDirectory(prefix="jensen-prefix-smoke-") as data_dir:
     application = create_app(Settings(data_dir=Path(data_dir).resolve(), static_dir=static_dir))
 
     @asynccontextmanager
@@ -33,6 +32,6 @@ with TemporaryDirectory(prefix="firebird-prefix-smoke-") as data_dir:
     uvicorn.run(
         Starlette(routes=[Mount(prefix, app=application)], lifespan=lifespan),
         host="127.0.0.1",
-        port=int(os.environ.get("FIREBIRD_PREFIX_SMOKE_PORT", "18766")),
+        port=int(getenv("JENSEN_PREFIX_SMOKE_PORT", "18766")),
         log_level="warning",
     )

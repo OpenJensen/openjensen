@@ -1,7 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
+import { getenv } from './apps/web/src/lib/environment';
 
 const python = process.platform === 'win32' ? '.venv/Scripts/python.exe' : '.venv/bin/python';
-const port = process.env.FIREBIRD_BROWSER_PORT ?? '8765';
+const port = getenv('JENSEN_BROWSER_PORT',process.env,'8765');
 
 export default defineConfig({
   testDir: './tests/web',

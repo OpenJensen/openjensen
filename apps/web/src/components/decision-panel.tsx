@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiOrigin } from "@/lib/api";
 import { publicPath } from "@/lib/base-path";
+import { publicMessage } from "@/lib/public-display";
 import { WorkflowIntegration } from "./workflow-integration";
 import { WorkbenchDisclosure } from "./workbench-disclosure";
 import "./workbench-form.css";
@@ -108,7 +109,7 @@ export function DecisionPanel() {
       </div>
     </form>
     <div className="decision-model-details"><WorkbenchDisclosure title="Model details">
-      {status.data?.message && <p>{status.data.message}</p>}
+      {status.data?.message && <p>{publicMessage(status.data.message)}</p>}
       <p>Muose-50M runs on the application host CPU. Scoring never starts a job, calls a tool, or moves a robot.</p>
       <p>Only 3 of 6 workflow examples were correct in a small hand-authored fixture (5 of 6 banking examples). This is not a robotics benchmark. Relative weights are uncalibrated, not probabilities of correctness.</p>
       <p>Model: muose/Muose-50M-Decision · Noncommercial CC-BY-NC-SA-4.0; the operator must explicitly accept the license.</p>

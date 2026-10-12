@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { writePublicPreference } from '@/lib/public-preferences';
 
 type Theme = 'light' | 'dark';
 
@@ -17,7 +18,7 @@ export function ThemeToggle() {
     setTheme(nextTheme);
     document.documentElement.dataset.theme = nextTheme;
     try {
-      localStorage.setItem('firebird.theme', nextTheme);
+      writePublicPreference(localStorage,'theme',nextTheme);
     } catch { /* Theme switching still works when storage is unavailable. */ }
   }
 

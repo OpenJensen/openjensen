@@ -5,6 +5,7 @@ import { studentTeacher } from './native-distillation';
 import { nativeQuantizationInput } from './native-quantization';
 import { replayPolicy } from './native-replay';
 import { nativeInput } from './native-simulation';
+import { publicFormatLabel } from './public-display';
 
 export type ModelAction = 'distill' | 'quantize' | 'evaluate' | 'replay' | 'simulate';
 export const modelFormats = new Set(['training_checkpoint', 'native_checkpoint', 'inference_export', 'gguf', 'native_quantized', 'deployment_package']);
@@ -46,7 +47,8 @@ export function modelFormat(artifact: PolicyArtifact): string {
   const labels: Record<string, string> = { training_checkpoint: 'Training checkpoint', native_checkpoint: 'Policy checkpoint', inference_export: 'Inference export', native_quantized: 'Packed policy', gguf: 'GGUF policy', deployment_package: 'Deployment package' };
   const precision = textValue(artifact.metadata?.precision);
   const step = checkpointStep(artifact);
-  return [labels[artifact.format] ?? artifact.format, precision, step !== null ? `Step ${step.toLocaleString()}` : null].filter(Boolean).join(' · ');
+  const packing = artifact.metadata?.format === 'firebird_quant' ? publicFormatLabel(artifact.metadata.format) : null;
+  return [labels[artifact.format] ?? publicFormatLabel(artifact.format), packing, precision, step !== null ? `Step ${step.toLocaleString()}` : null].filter(Boolean).join(' · ');
 }
 export function quantizeModeFor(artifact: PolicyArtifact): 'native' | 'gguf' | null {
   if (artifact.metadata?.architecture === 'smolvla' && quantizationIssue(artifact)) return null;

@@ -1,14 +1,15 @@
 {
-  "name": "firebird-workspace",
+  "name": "openjensen-workspace",
   "private": true,
+  "license": "Apache-2.0",
   "packageManager": "pnpm@12.6.0",
   "engines": {
     "node": ">=24.21.0 <25"
   },
   "scripts": {
-    "dev:web": "pnpm --filter @firebird/web dev",
-    "build:web": "pnpm --filter @firebird/web build",
-    "check:web": "pnpm --filter @firebird/web typecheck",
+    "dev:web": "pnpm --filter @openjensen/web dev",
+    "build:web": "pnpm --filter @openjensen/web build",
+    "check:web": "pnpm --filter @openjensen/web typecheck",
     "test:web": "playwright test",
     "test:diagnostics": "playwright test --config playwright.diagnostics.config.ts",
     "generate:client": "openapi-typescript packages/core/openapi.json -o apps/web/src/lib/api.generated.ts",
