@@ -103,6 +103,7 @@ export function LocalDatasetImport({projectId,value,onChange,disabled}:{projectI
   const client=useQueryClient();
   const uploadController=useRef<AbortController|null>(null);
   const alive=useRef(true);
+  const detectionInitializedFor=useRef<string|null>(null);
   const [confirmDiscard,setConfirmDiscard]=useState(false);
   const [acceptedConversionId,setAcceptedConversionId]=useState<string|null>(null);
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;uploadController.current?.abort();};},[]);
@@ -110,7 +111,14 @@ export function LocalDatasetImport({projectId,value,onChange,disabled}:{projectI
   const saved=useQuery({queryKey:['dataset-import',value?.id],queryFn:({signal})=>datasetLibrary.get(value!.id,signal),enabled:!!value && !value.id.startsWith('inspection:'),retry:false,refetchInterval:query=>datasetPollingInterval(query.state.data,acceptedConversionId)});
   const current=saved.data??value;
   useEffect(()=>{if(saved.data)onChange(saved.data);},[saved.data,onChange]);
-  useEffect(()=>{setConfirmDiscard(false);setFps(value?.detection?.fps??30);setStateKeys(value?.detection?.mapping.state?.join(', ')??'');setActionKey(value?.detection?.mapping.action??'');},[value?.id]);
+  useEffect(()=>{detectionInitializedFor.current=null;setConfirmDiscard(false);setFps(30);setStateKeys('');setActionKey('');},[current?.id]);
+  useEffect(()=>{
+    // The first upload receipt has an ID but no detection. Initialize the
+    // conversion fields when detection arrives, then retain edits on refetch.
+    if(!current?.detection||detectionInitializedFor.current===current.id)return;
+    detectionInitializedFor.current=current.id;
+    setFps(current.detection.fps??30);setStateKeys(current.detection.mapping.state?.join(', ')??'');setActionKey(current.detection.mapping.action??'');
+  },[current?.id,current?.detection]);
   const convert=useMutation({mutationFn:()=>datasetLibrary.convert(current!.id,{fps,task,robot_type:robot,mapping:current?.detection?.mapping.action ? {...current.detection.mapping,action:actionKey,state:stateKeys.split(',').map(k=>k.trim()).filter(Boolean)} : undefined}),onSuccess:async entry=>{if(alive.current&&entry.status==='converting')setAcceptedConversionId(entry.id);await publishDatasetReceipt(client,entry);if(alive.current)onChange(client.getQueryData<LibraryDataset>(['dataset-import',entry.id])??entry);void client.invalidateQueries({queryKey:['datasets']});}});
   const discard=useMutation({mutationFn:()=>datasetLibrary.discard(current!.id,projectId),onSuccess:receipt=>{if(receipt.discarded!==true||receipt.id!==current?.id)throw new Error('Discard could not be confirmed. Refresh the saved upload.');client.removeQueries({queryKey:['dataset-import',receipt.id]});onChange(null);setConfirmDiscard(false);upload.reset();void client.invalidateQueries({queryKey:['datasets']});}});
   function choose(event:ChangeEvent<HTMLInputElement>) { const files=Array.from(event.target.files??[]);event.target.value='';if(!disabled&&!busy&&current?.status!=='uploading'&&files.length)upload.mutate(files); }

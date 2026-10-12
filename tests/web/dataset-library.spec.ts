@@ -410,3 +410,44 @@ test('accepted conversion survives an earlier GET and keeps observing until read
     await expect(page.getByRole('button',{name:'Inspect dataset',exact:true})).toBeEnabled();
   } finally {releaseEarlier();}
 });
+
+test('upload detection initializes mapping and FPS once without replacing edits on a later read',async({page})=>{
+  const {state,project}=await importRecoveryFixture(page),id='b'.repeat(32);
+  state.entries=[];
+  const uploading:any={id,project_id:project,name:'late-detection.hdf5',source:'local',status:'uploading',created_at:'2026-10-12T00:00:00Z',uploaded_files:0,total_bytes:0,can_discard:true};
+  const detected:any={...uploading,status:'detected',can_discard:false,detection:{format:'image_records',convertible:true,sha256:'c'.repeat(64),file_count:1,total_bytes:4,fps:12,cameras:['front'],mapping:{action:'controls',state:['position.x','position.y'],cameras:['front'],table:'records.jsonl'}}};
+  let saved=uploading,releaseFile!:()=>void,refresh=false,refreshReads=0;
+  const fileWaiting=new Promise<void>(resolve=>{releaseFile=resolve;});
+  const conversions:any[]=[];
+  await page.route(`**/api/v1/projects/${project}/dataset-uploads`,route=>{state.entries=[uploading];return route.fulfill({status:201,json:uploading});});
+  await page.route(`**/api/v1/dataset-uploads/${id}/file?*`,async route=>{await fileWaiting;return route.fulfill({json:{uploaded:true}});});
+  await page.route(`**/api/v1/dataset-uploads/${id}/finish`,route=>{saved=detected;state.entries=[detected];return route.fulfill({json:detected});});
+  await page.route(`**/api/v1/datasets/${id}`,route=>{
+    if(refresh&&saved.status==='detected'){refreshReads++;return route.fulfill({json:{...saved,detection:{...detected.detection,fps:24,mapping:{...detected.detection.mapping,action:'new_server_action',state:['new_server_state']}}}});}
+    return route.fulfill({json:saved});
+  });
+  await page.route(`**/api/v1/datasets/${id}/convert`,route=>{conversions.push(route.request().postDataJSON());saved={...detected,status:'ready',converted:{format:'lerobot_v3',episodes:2,frames:4,fps:9,cameras:['front']}};state.entries=[saved];return route.fulfill({status:202,json:{...detected,status:'converting'}});});
+  try {
+    await page.getByRole('button',{name:'Refresh datasets',exact:true}).click();
+    await page.getByRole('radio',{name:'Local files',exact:true}).check();
+    await page.getByLabel('Choose dataset archive or HDF5',{exact:true}).setInputFiles({name:'late-detection.hdf5',mimeType:'application/octet-stream',buffer:Buffer.from('data')});
+    const region=page.getByRole('region',{name:'Detected dataset'});
+    await expect(region.getByText(/This upload is unfinished/)).toBeVisible();
+    await expect(page.getByLabel('Frame rate (FPS)',{exact:true})).toHaveCount(0);
+    releaseFile();
+    const fps=page.getByLabel('Frame rate (FPS)',{exact:true});
+    await expect(fps).toHaveValue('12');
+    await region.getByText('Field mapping & robot',{exact:true}).click();
+    await expect(page.getByLabel('Action field',{exact:true})).toHaveValue('controls');
+    await expect(page.getByLabel('State fields (in order, comma separated)',{exact:true})).toHaveValue('position.x, position.y');
+    await fps.fill('9');await page.getByLabel('Task description',{exact:true}).fill('User task');
+    refresh=true;
+    await expect.poll(async()=>{await page.evaluate(()=>window.dispatchEvent(new Event('visibilitychange')));return refreshReads;},{timeout:10_000}).toBeGreaterThan(0);
+    await expect(fps).toHaveValue('9');
+    await expect(page.getByLabel('Action field',{exact:true})).toHaveValue('controls');
+    await expect(page.getByLabel('State fields (in order, comma separated)',{exact:true})).toHaveValue('position.x, position.y');
+    await page.getByRole('button',{name:'Convert to LeRobot',exact:true}).click();
+    await expect(region.getByText(/Ready to inspect/)).toBeVisible();
+    expect(conversions).toEqual([{fps:9,task:'User task',robot_type:'unspecified',mapping:{action:'controls',state:['position.x','position.y'],cameras:['front'],table:'records.jsonl'}}]);
+  } finally {releaseFile();}
+});
