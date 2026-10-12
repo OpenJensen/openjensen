@@ -51,19 +51,19 @@ def test_malformed_or_unsupported_dylib_commands_fail_closed(text):
 def test_private_or_escaping_paths_rejected(tmp_path, reference):
     root = tmp_path / "payload"
     root.mkdir()
-    binary = root / "firebird-sidecar"
+    binary = root / "jensen-sidecar"
     binary.write_bytes(b"macho")
     with pytest.raises((ValueError, FileNotFoundError)):
         native._location(reference, binary, binary, root)
 
 
 def test_resolve_relocated_dependency_and_reject_unknown_rpath(tmp_path, monkeypatch):
-    main = tmp_path / "firebird-sidecar"
+    main = tmp_path / "jensen-sidecar"
     main.write_bytes(b"main")
     internal = tmp_path / "_internal"
     internal.mkdir()
     (internal / "lib.dylib").write_bytes(b"library")
-    recorded = {"entries": {"firebird-sidecar": {"kind": "file", "macho_cpu_types": [0x100000C]}}}
+    recorded = {"entries": {"jensen-sidecar": {"kind": "file", "macho_cpu_types": [0x100000C]}}}
 
     def fake_tool(path, option, limit):
         if option == "-L":
@@ -80,7 +80,7 @@ def test_resolve_relocated_dependency_and_reject_unknown_rpath(tmp_path, monkeyp
 
     monkeypatch.setattr(native, "_tool", fake_tool)
     result = native.inspect(tmp_path, recorded)
-    assert result["native_files"]["firebird-sidecar"]["resolved_dependencies"][0]["resolved"] == [
+    assert result["native_files"]["jensen-sidecar"]["resolved_dependencies"][0]["resolved"] == [
         "_internal/lib.dylib"
     ]
     (internal / "lib.dylib").unlink()
@@ -89,9 +89,9 @@ def test_resolve_relocated_dependency_and_reject_unknown_rpath(tmp_path, monkeyp
 
 
 def test_inspector_excludes_only_identity_not_same_named_load(tmp_path, monkeypatch):
-    binary = tmp_path / "firebird-sidecar"
+    binary = tmp_path / "jensen-sidecar"
     binary.write_bytes(b"main")
-    recorded = {"entries": {"firebird-sidecar": {"kind": "file", "macho_cpu_types": [0x100000C]}}}
+    recorded = {"entries": {"jensen-sidecar": {"kind": "file", "macho_cpu_types": [0x100000C]}}}
     commands = "cmd LC_ID_DYLIB\nname @rpath/libpython3.14.dylib (offset 24)\n"
     monkeypatch.setattr(
         native,
@@ -103,7 +103,7 @@ def test_inspector_excludes_only_identity_not_same_named_load(tmp_path, monkeypa
             else commands
         ),
     )
-    item = native.inspect(tmp_path, recorded)["native_files"]["firebird-sidecar"]
+    item = native.inspect(tmp_path, recorded)["native_files"]["jensen-sidecar"]
     assert item["install_names"] == ["@rpath/libpython3.14.dylib"]
     assert item["resolved_dependencies"] == []
     commands += "cmd LC_LOAD_DYLIB\nname @rpath/libpython3.14.dylib (offset 24)\n"

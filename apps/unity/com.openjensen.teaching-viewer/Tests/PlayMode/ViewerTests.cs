@@ -7,7 +7,7 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
 
-namespace Firebird.TeachingViewer.Tests
+namespace OpenJensen.TeachingViewer.Tests
 {
     public sealed class ViewerTests
     {

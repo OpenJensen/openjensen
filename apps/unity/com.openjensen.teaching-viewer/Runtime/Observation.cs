@@ -8,7 +8,7 @@ using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-namespace Firebird.TeachingViewer
+namespace OpenJensen.TeachingViewer
 {
     public sealed class JointLimit
     {

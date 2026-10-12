@@ -1,6 +1,6 @@
 {
-  "name": "Firebird.TeachingViewer",
-  "rootNamespace": "Firebird.TeachingViewer",
+  "name": "OpenJensen.TeachingViewer",
+  "rootNamespace": "OpenJensen.TeachingViewer",
   "references": [],
   "overrideReferences": true,
   "precompiledReferences": [

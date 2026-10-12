@@ -363,63 +363,61 @@ fn attached_state_is_not_stopped_or_restarted_and_exit_blocks_new_start() {
 #[test]
 #[cfg(unix)]
 fn payload_pin_verifies_fixed_executable_and_manifest_before_admission() {
-    let scratch = Scratch::new();
-    let folder = scratch.0.join("sidecar/firebird-sidecar");
-    let resources = folder.join("_internal/sidecar-resources");
-    fs::create_dir_all(&resources).unwrap();
-    let executable = folder.join(if cfg!(windows) {
-        "firebird-sidecar.exe"
-    } else {
-        "firebird-sidecar"
-    });
-    fs::write(&executable, b"fixed bundled executable").unwrap();
-    let manifest = serde_json::to_vec(&serde_json::json!({"schema_version":1,"build_id":"b".repeat(40),"app_version":"0.1.0","files":{"index.html":{"bytes":0,"sha256":"a".repeat(64)}}})).unwrap();
-    fs::write(resources.join("resources.json"), &manifest).unwrap();
-    use std::os::unix::fs::PermissionsExt;
-    let mut entries = serde_json::Map::new();
-    for name in [
-        "_internal",
-        "_internal/sidecar-resources",
-        "_internal/sidecar-resources/resources.json",
-        "firebird-sidecar",
-    ] {
-        let path = folder.join(name);
-        let info = fs::metadata(&path).unwrap();
-        let mode = info.permissions().mode() & 0o7777;
-        let entry = if info.is_dir() {
-            serde_json::json!({"kind":"directory","mode":mode})
-        } else {
-            serde_json::json!({"kind":"file","mode":mode,"bytes":info.len(),"sha256":hex(&Sha256::digest(fs::read(&path).unwrap())),"macho_cpu_types":null})
+    for executable_name in ["jensen-sidecar", "firebird-sidecar"] {
+        let scratch = Scratch::new();
+        let folder = scratch.0.join("sidecar").join(executable_name);
+        let resources = folder.join("_internal/sidecar-resources");
+        fs::create_dir_all(&resources).unwrap();
+        let executable = folder.join(executable_name);
+        fs::write(&executable, b"fixed bundled executable").unwrap();
+        let manifest = serde_json::to_vec(&serde_json::json!({"schema_version":1,"build_id":"b".repeat(40),"app_version":"0.1.0","files":{"index.html":{"bytes":0,"sha256":"a".repeat(64)}}})).unwrap();
+        fs::write(resources.join("resources.json"), &manifest).unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        let mut entries = serde_json::Map::new();
+        for name in [
+            "_internal",
+            "_internal/sidecar-resources",
+            "_internal/sidecar-resources/resources.json",
+            executable_name,
+        ] {
+            let path = folder.join(name);
+            let info = fs::metadata(&path).unwrap();
+            let mode = info.permissions().mode() & 0o7777;
+            let entry = if info.is_dir() {
+                serde_json::json!({"kind":"directory","mode":mode})
+            } else {
+                serde_json::json!({"kind":"file","mode":mode,"bytes":info.len(),"sha256":hex(&Sha256::digest(fs::read(&path).unwrap())),"macho_cpu_types":null})
+            };
+            entries.insert(name.into(), entry);
+        }
+        let full_manifest=serde_json::to_vec(&serde_json::json!({"schema_version":1,"entries":entries,"entry_count":4,"file_bytes":24+manifest.len(),"identity_sha256":"c".repeat(64)})).unwrap();
+        fs::write(
+            scratch.0.join("sidecar/payload-manifest.json"),
+            &full_manifest,
+        )
+        .unwrap();
+        let pin = PayloadPin {
+            manifest: crate::payload_manifest::ManifestPin {
+                sha256: Box::leak(hex(&Sha256::digest(&full_manifest)).into_boxed_str()),
+                bytes: full_manifest.len() as u64,
+                identity: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                entries: 4,
+                file_bytes: 24 + manifest.len() as u64,
+            },
+            executable_sha256: Box::leak(
+                hex(&Sha256::digest(b"fixed bundled executable")).into_boxed_str(),
+            ),
+            executable_bytes: 24,
+            resources_sha256: Box::leak(hex(&Sha256::digest(&manifest)).into_boxed_str()),
+            build_id: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         };
-        entries.insert(name.into(), entry);
+        let admitted = Payload::from_pin(&scratch.0, pin).unwrap();
+        fs::write(resources.join("resources.json"), b"{}").unwrap();
+        assert!(admitted.verify().is_err());
+        fs::write(resources.join("resources.json"), manifest).unwrap();
+        fs::write(&executable, b"other bundled executable").unwrap();
+        assert!(admitted.verify().is_err());
     }
-    let full_manifest=serde_json::to_vec(&serde_json::json!({"schema_version":1,"entries":entries,"entry_count":4,"file_bytes":24+manifest.len(),"identity_sha256":"c".repeat(64)})).unwrap();
-    fs::write(
-        scratch.0.join("sidecar/payload-manifest.json"),
-        &full_manifest,
-    )
-    .unwrap();
-    let pin = PayloadPin {
-        manifest: crate::payload_manifest::ManifestPin {
-            sha256: Box::leak(hex(&Sha256::digest(&full_manifest)).into_boxed_str()),
-            bytes: full_manifest.len() as u64,
-            identity: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-            entries: 4,
-            file_bytes: 24 + manifest.len() as u64,
-        },
-        executable_sha256: Box::leak(
-            hex(&Sha256::digest(b"fixed bundled executable")).into_boxed_str(),
-        ),
-        executable_bytes: 24,
-        resources_sha256: Box::leak(hex(&Sha256::digest(&manifest)).into_boxed_str()),
-        build_id: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-    };
-    let admitted = Payload::from_pin(&scratch.0, pin).unwrap();
-    fs::write(resources.join("resources.json"), b"{}").unwrap();
-    assert!(admitted.verify().is_err());
-    fs::write(resources.join("resources.json"), manifest).unwrap();
-    fs::write(&executable, b"other bundled executable").unwrap();
-    assert!(admitted.verify().is_err());
 }
 
 #[test]
@@ -478,11 +476,11 @@ fn stopping_attached_mode_does_not_affect_the_actual_external_http_server() {
 fn compiled_candidate_identifier_cannot_adopt_the_normal_application_namespace() {
     #[cfg(feature = "local-payload-experiment")]
     {
-        assert!(validate_identifier("dev.firebird.workbench").is_err());
+        assert!(validate_identifier("org.openjensen.workbench").is_err());
         assert!(validate_identifier(LOCAL_EXPERIMENT_IDENTIFIER).is_ok());
     }
     #[cfg(not(feature = "local-payload-experiment"))]
-    assert!(validate_identifier("dev.firebird.workbench").is_ok());
+    assert!(validate_identifier("org.openjensen.workbench").is_ok());
 }
 
 fn handoff(scratch: &Scratch, payload: &Payload, reverse: bool) -> (PathBuf, PathBuf) {

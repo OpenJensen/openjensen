@@ -1,15 +1,13 @@
 {
-  "name": "Firebird.TeachingViewer.EditorTests",
+  "name": "OpenJensen.TeachingViewer.PlayModeTests",
   "references": [
-    "Firebird.TeachingViewer",
-    "Firebird.TeachingViewer.TestFixtures"
+    "OpenJensen.TeachingViewer",
+    "OpenJensen.TeachingViewer.TestFixtures"
   ],
   "optionalUnityReferences": [
     "TestAssemblies"
   ],
-  "includePlatforms": [
-    "Editor"
-  ],
+  "includePlatforms": [],
   "overrideReferences": true,
   "precompiledReferences": [
     "Newtonsoft.Json.dll",

@@ -171,6 +171,10 @@ def test_inherited_optional_environment_is_not_activated(monkeypatch):
     entry = module("entrypoint")
     monkeypatch.setattr(os, "environ", dict(os.environ))
     for name in (
+        "JENSEN_TEACHING_URL",
+        "JENSEN_TEACHING_CONTROL_TOKEN_FILE",
+        "JENSEN_DECISION_PYTHON",
+        "JENSEN_RUNTIME_CONFIG",
         "FIREBIRD_TEACHING_URL",
         "FIREBIRD_TEACHING_CONTROL_TOKEN_FILE",
         "FIREBIRD_DECISION_PYTHON",
@@ -180,6 +184,6 @@ def test_inherited_optional_environment_is_not_activated(monkeypatch):
         monkeypatch.setenv(name, "not-a-real-secret-or-runtime")
     monkeypatch.setenv("PATH", "/test/platform/path")
     entry.clear_optional_environment()
-    assert not any(name.startswith("FIREBIRD_") for name in os.environ)
+    assert not any(name.startswith(("JENSEN_", "FIREBIRD_")) for name in os.environ)
     assert "GEMINI_API_KEY" not in os.environ
     assert os.environ["PATH"] == "/test/platform/path"

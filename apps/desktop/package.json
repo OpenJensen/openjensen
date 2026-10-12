@@ -1,7 +1,8 @@
 {
-  "name": "@firebird/desktop",
+  "name": "@openjensen/desktop",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build --bundles app",

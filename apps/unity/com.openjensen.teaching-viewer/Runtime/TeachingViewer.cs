@@ -8,7 +8,7 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Firebird.TeachingViewer
+namespace OpenJensen.TeachingViewer
 {
     /// <summary>Camera and numeric joint display only. No motor, physics, command, or room API.</summary>
     public sealed class TeachingViewer : MonoBehaviour

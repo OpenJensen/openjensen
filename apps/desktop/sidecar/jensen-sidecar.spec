@@ -10,7 +10,12 @@ repository = sidecar.parents[2]
 sys.path[:0] = [str(sidecar), str(repository / "packages/core/src")]
 from sidecar_resources import load_resources
 
-resources = load_resources(Path(os.environ["FIREBIRD_DESKTOP_RESOURCES"]))
+resource_path = os.environ.get(
+    "JENSEN_DESKTOP_RESOURCES", os.environ.get("FIREBIRD_DESKTOP_RESOURCES")
+)
+if resource_path is None:
+    raise ValueError("JENSEN_DESKTOP_RESOURCES must point to the prepared static resources")
+resources = load_resources(Path(resource_path))
 a = Analysis(
     [str(sidecar / "entrypoint.py")],
     pathex=[str(sidecar), str(repository / "packages/core/src")],
@@ -28,7 +33,7 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 exe = EXE(
-    pyz, a.scripts, [], exclude_binaries=True, name="firebird-sidecar", debug=False,
+    pyz, a.scripts, [], exclude_binaries=True, name="jensen-sidecar", debug=False,
     bootloader_ignore_signals=False, strip=False, upx=False, console=True, target_arch="arm64" if sys.platform == "darwin" else None,
 )
-coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="firebird-sidecar")
+coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="jensen-sidecar")

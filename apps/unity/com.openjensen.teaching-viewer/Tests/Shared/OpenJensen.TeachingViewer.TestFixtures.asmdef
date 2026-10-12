@@ -1,7 +1,7 @@
 {
-  "name": "Firebird.TeachingViewer.TestFixtures",
+  "name": "OpenJensen.TeachingViewer.TestFixtures",
   "references": [
-    "Firebird.TeachingViewer"
+    "OpenJensen.TeachingViewer"
   ],
   "optionalUnityReferences": [
     "TestAssemblies"

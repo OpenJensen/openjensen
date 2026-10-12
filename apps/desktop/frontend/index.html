@@ -18,6 +18,6 @@
     <div class="actions"><button id="start" type="button" disabled>Start desktop workspace</button><button id="open-owned" type="button" hidden>Open workspace</button><button id="stop" type="button" disabled>Stop desktop backend</button><button id="restart" type="button" disabled>Restart desktop backend</button></div>
   </section>
   <p class="note">Attached applications keep running when this window closes. A desktop-owned backend receives a shutdown request; its workspace data is preserved.</p>
-  <details><summary>Connection help</summary><p>Start the local application with <code>firebird serve</code>. It must also serve the built web interface. The default address is <code>http://127.0.0.1:8000</code>.</p><p>Use the native <strong>OPEN JENSEN → Connection</strong> menu to return here. A different local port can be selected before launch with <code>FIREBIRD_DESKTOP_PORT</code>.</p></details>
+  <details><summary>Connection help</summary><p>Start the local application with <code>jensen serve</code>. It must also serve the built web interface. The default address is <code>http://127.0.0.1:8000</code>.</p><p>Use the native <strong>OPEN JENSEN → Connection</strong> menu to return here. A different local port can be selected before launch with <code>JENSEN_DESKTOP_PORT</code>.</p></details>
 </main><script src="connection.js"></script>
 </body></html>

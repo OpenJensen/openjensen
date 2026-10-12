@@ -99,7 +99,7 @@ async def early_shutdown(queue: asyncio.Queue, nonce: str) -> bool:
 def clear_optional_environment() -> None:
     """Child-local only: optional routes must not activate from inherited app settings."""
     for name in tuple(os.environ):
-        if name.startswith("FIREBIRD_") or name == "GEMINI_API_KEY":
+        if name.startswith(("JENSEN_", "FIREBIRD_")) or name == "GEMINI_API_KEY":
             os.environ.pop(name, None)
 
 

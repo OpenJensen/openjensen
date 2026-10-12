@@ -5,7 +5,7 @@ using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-namespace Firebird.TeachingViewer.Tests
+namespace OpenJensen.TeachingViewer.Tests
 {
     public static class Fixture
     {

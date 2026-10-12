@@ -4,7 +4,7 @@ using System.Text;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 
-namespace Firebird.TeachingViewer.Tests
+namespace OpenJensen.TeachingViewer.Tests
 {
     public sealed class FrameTests
     {
@@ -156,10 +156,12 @@ namespace Firebird.TeachingViewer.Tests
         [Test]
         public void GenuineWorkerGeneratedSnapshotMatchesTheUnityContract()
         {
-            string path = Environment.GetEnvironmentVariable("FIREBIRD_UNITY_FRAME_FIXTURE");
+            string path = Environment.GetEnvironmentVariable("JENSEN_UNITY_FRAME_FIXTURE")
+                ?? Environment.GetEnvironmentVariable("FIREBIRD_UNITY_FRAME_FIXTURE");
             if (string.IsNullOrEmpty(path)) Assert.Ignore("Explicit generated worker fixture path required.");
             byte[] raw = File.ReadAllBytes(path);
-            string expectedSession = Environment.GetEnvironmentVariable("FIREBIRD_UNITY_EXPECTED_SESSION");
+            string expectedSession = Environment.GetEnvironmentVariable("JENSEN_UNITY_EXPECTED_SESSION")
+                ?? Environment.GetEnvironmentVariable("FIREBIRD_UNITY_EXPECTED_SESSION");
             Assert.That(expectedSession, Is.Not.Null.And.Not.Empty, "Expected session must be independently configured.");
             var binding = new ViewBinding(expectedSession, "observation.images.front", "/World/Camera", 32, 32,
                 new[] { new JointLimit("joint_0", -1, 1), new JointLimit("joint_1", -1, 1), new JointLimit("joint_2", -1, 1), new JointLimit("joint_3", -1, 1), new JointLimit("joint_4", -1, 1), new JointLimit("joint_5", -1, 1) }, true);

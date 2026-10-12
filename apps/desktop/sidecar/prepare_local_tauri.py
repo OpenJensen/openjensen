@@ -10,7 +10,7 @@ import re
 import shutil
 from pathlib import Path
 
-from payload_inventory import MAX_MANIFEST, verify
+from payload_inventory import MAX_MANIFEST, executable_name, verify
 from sidecar_resources import json_object, load_resources, read_regular
 
 
@@ -58,7 +58,7 @@ def prepare(payload: Path, manifest: Path, acceptance: Path, output: Path) -> di
         for name, item in recorded["entries"].items()
         if item["kind"] == "file" and item["macho_cpu_types"] is not None
     }
-    executable = recorded["entries"].get("firebird-sidecar", {})
+    executable = recorded["entries"][executable_name(recorded["entries"])]
     if (
         not native
         or any(arch != [0x100000C] for arch in native.values())
@@ -67,7 +67,7 @@ def prepare(payload: Path, manifest: Path, acceptance: Path, output: Path) -> di
         or report.get("native_files") != native
     ):
         raise ValueError("The complete accepted ARM64 payload is required")
-    identifier = "dev.firebird.workbench.experiment.p" + recorded["identity_sha256"][:16]
+    identifier = "org.openjensen.workbench.experiment.p" + recorded["identity_sha256"][:16]
     # All values interpolated into Rust are bounded digests/integers from independently
     # rehashed files and strict resource validation. No operator text becomes Rust code.
     pin = (
@@ -85,7 +85,7 @@ def prepare(payload: Path, manifest: Path, acceptance: Path, output: Path) -> di
         " },\n};\n"
     )
     output.mkdir()  # exclusive creation; preserve partial copies on failure
-    staged = output / "resources/firebird-sidecar"
+    staged = output / "resources/jensen-sidecar"
     staged.parent.mkdir()
     shutil.copytree(payload, staged, symlinks=True)
     verify(staged, recorded)
@@ -99,7 +99,7 @@ def prepare(payload: Path, manifest: Path, acceptance: Path, output: Path) -> di
         "build": {"frontendDist": str(repo / "apps/desktop/frontend")},
         "bundle": {
             "resources": {
-                str(staged): "sidecar/firebird-sidecar",
+                str(staged): "sidecar/jensen-sidecar",
                 str(manifest_copy): "sidecar/payload-manifest.json",
             }
         },
