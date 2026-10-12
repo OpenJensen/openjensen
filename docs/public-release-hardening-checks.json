@@ -14,16 +14,34 @@
         "One actual Windows rejection check requires Windows."
       ]
     },
-    "frontend_pure_tests": {"passed": 308, "failed": 0},
+    "frontend_pure_tests": {
+      "passed": 308,
+      "failed": 0
+    },
     "frontend_typescript": "passed",
-    "browser_collection": {"configured_tests": 1469, "files": 43, "executed": false},
-    "desktop_sidecar_source_tests": {"passed": 226, "failed": 0, "seconds": 8.35},
-    "desktop_connection_javascript_tests": {"passed": 5, "failed": 0},
+    "browser_collection": {
+      "configured_tests": 1469,
+      "files": 43,
+      "executed": false
+    },
+    "desktop_sidecar_source_tests": {
+      "passed": 226,
+      "failed": 0,
+      "seconds": 8.35
+    },
+    "desktop_connection_javascript_tests": {
+      "passed": 5,
+      "failed": 0
+    },
     "core_scripts_tests_ruff": "passed; 212 files already formatted",
     "renamed_worker_sources_ruff": "passed; 90 files already formatted",
     "openapi_runtime_schema_and_generated_client": "matched",
     "application_uv_lock_offline_check": "passed",
-    "current_documentation_relative_links": {"markdown_files": 83, "links": 284, "unresolved": 0},
+    "current_documentation_relative_links": {
+      "markdown_files": 83,
+      "links": 284,
+      "unresolved": 0
+    },
     "git_diff_whitespace": "passed"
   },
   "environment": {
@@ -49,5 +67,22 @@
     "pnpm test:web:pure",
     "PYTHONPATH=packages/core/src:apps/desktop/sidecar uv run --frozen pytest -q apps/desktop/sidecar/tests",
     "node --test apps/desktop/tests/connection.test.cjs"
-  ]
+  ],
+  "ci_followup_repairs": {
+    "tested_patch_tree_before_receipt_extension": "1e5f38954e00eb06a4345a889452186ca94a5f35",
+    "act_worker": "Typed the alpha import shim and narrowed the optional environment value before JSON decoding; 103 lightweight tests and applicable Ruff passed. Hosted ACT runtime tests had passed 194/194; hosted mypy revalidation is required.",
+    "dataset_conversion": "Cancel older reads before publishing receipts and keep an accepted conversion observed through earlier detection reads until a recorded terminal state.",
+    "frontend_pure_tests": {
+      "passed": 310,
+      "failed": 0
+    },
+    "frontend_typescript": "passed",
+    "browser_collection": {
+      "configured_tests": 1473,
+      "files": 44,
+      "executed_locally": false
+    },
+    "browser_regression": "Added deterministic stale conversion read coverage; preserved the original folder import Ready to inspect assertion.",
+    "hosted_final_result": "Inspect the checks for the current PR head; these local receipts do not assert hosted success."
+  }
 }
