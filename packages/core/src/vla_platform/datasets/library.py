@@ -191,6 +191,23 @@ class DatasetLibrary:
                 or any(not isinstance(camera, str) for camera in detection["cameras"])
             ):
                 raise ValueError("Invalid detection")
+            mapping = detection.get("mapping")
+            if (
+                not isinstance(mapping, dict)
+                or any(
+                    key in mapping and not isinstance(mapping[key], str)
+                    for key in ("action", "table")
+                )
+                or any(
+                    key in mapping
+                    and (
+                        not isinstance(mapping[key], list)
+                        or any(not isinstance(name, str) for name in mapping[key])
+                    )
+                    for key in ("state", "cameras")
+                )
+            ):
+                raise ValueError("Invalid detection mapping")
         if "converted" in value and (
             not isinstance(value["converted"], dict)
             or not isinstance(value["converted"].get("cameras"), list)

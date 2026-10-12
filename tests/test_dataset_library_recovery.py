@@ -127,6 +127,7 @@ def test_zip_finalize_retries_after_reader_failure_without_reextracting(tmp_path
                 "sha256": "a" * 64,
                 "convertible": False,
                 "cameras": [],
+                "mapping": {},
             }
         )
         finished = await library.finalize(entry["id"])
@@ -152,6 +153,7 @@ def test_incomplete_legacy_extraction_preserved_and_retry_publishes_complete_cop
                 "sha256": "a" * 64,
                 "convertible": False,
                 "cameras": [],
+                "mapping": {},
             }
         )
         await library.finalize(entry["id"])
@@ -242,6 +244,7 @@ def test_discard_rejects_detected_upload(tmp_path):
                 "format": "unknown",
                 "convertible": False,
                 "cameras": [],
+                "mapping": {},
             },
         )
         library.save(value)
@@ -298,9 +301,20 @@ def test_malformed_saved_camera_shape_is_diagnosed_before_labeling(tmp_path, dam
     value.update(
         status="ready",
         normalized="source",
-        detection={"sha256": "a" * 64, "format": "lerobot_v3", "convertible": True, "cameras": []},
+        detection={
+            "sha256": "a" * 64,
+            "format": "lerobot_v3",
+            "convertible": True,
+            "cameras": [],
+            "mapping": {},
+        },
     )
-    value[damaged] = {"sha256": "a" * 64, "format": "lerobot_v3", "convertible": True}
+    value[damaged] = {
+        "sha256": "a" * 64,
+        "format": "lerobot_v3",
+        "convertible": True,
+        "mapping": {},
+    }
     record = library.directory(entry["id"]) / "record.json"
     original = json.dumps(value)
     record.write_text(original)
@@ -309,3 +323,68 @@ def test_malformed_saved_camera_shape_is_diagnosed_before_labeling(tmp_path, dam
     with pytest.raises(LibraryError, match="conversion"):
         restored.annotate(entry["id"], {"revision": 0, "views": {}, "frames": {}})
     assert record.read_text() == original
+
+
+@pytest.mark.parametrize(
+    "mapping",
+    [
+        None,
+        [],
+        {"action": []},
+        {"table": 7},
+        {"state": "state"},
+        {"state": [None]},
+        {"cameras": "camera"},
+        {"cameras": [{}]},
+    ],
+)
+def test_malformed_saved_mapping_is_unavailable_and_preserved(tmp_path, mapping):
+    library = DatasetLibrary(tmp_path)
+    entry = library.begin("one", "Previously saved")
+    value = library.get(entry["id"])
+    value.update(
+        status="detected",
+        detection={
+            "sha256": "a" * 64,
+            "format": "image_records",
+            "convertible": True,
+            "cameras": [],
+        },
+    )
+    if mapping is not None:
+        value["detection"]["mapping"] = mapping
+    record = library.directory(entry["id"]) / "record.json"
+    original = json.dumps(value).encode()
+    record.write_bytes(original)
+    source = record.parent / "source/original"
+    source.write_bytes(b"preserved")
+
+    restored = DatasetLibrary(tmp_path)
+    diagnostic = restored.get(entry["id"])
+    assert diagnostic["status"] == "unavailable"
+    assert diagnostic["can_discard"] is False
+    assert "detection" not in diagnostic
+    projects = SimpleNamespace(list=AsyncMock(return_value=[]))
+    execution = SimpleNamespace(list=AsyncMock(return_value=[]))
+    assert asyncio.run(restored.list(projects, execution, project_id="one"))[0] == diagnostic
+    assert record.read_bytes() == original
+    assert source.read_bytes() == b"preserved"
+
+
+@pytest.mark.parametrize("format_name", ["unknown", "rlds_tfrecord", "ros_recording", "lerobot_v3"])
+def test_empty_worker_mapping_remains_available(tmp_path, format_name):
+    library = DatasetLibrary(tmp_path)
+    entry = library.begin("one", "Supported empty mapping")
+    value = library.get(entry["id"])
+    value.update(
+        status="detected",
+        detection={
+            "sha256": "a" * 64,
+            "format": format_name,
+            "convertible": format_name == "lerobot_v3",
+            "cameras": [],
+            "mapping": {},
+        },
+    )
+    library.save(value)
+    assert DatasetLibrary(tmp_path).get(entry["id"])["detection"]["mapping"] == {}
