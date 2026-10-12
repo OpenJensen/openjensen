@@ -6,11 +6,11 @@ Keep the workspace in a persistent directory outside a disposable checkout. Set 
 
 The canonical command is `jensen`, settings use `JENSEN_*`, and new workspaces default to `.jensen/`. The alpha command `firebird` and `FIREBIRD_*` settings remain compatibility aliases. When `.firebird/` already exists and `.jensen/` does not, the application reuses the alpha workspace rather than creating a replacement. Use an explicit `JENSEN_DATA_DIR` when multiple directories are present or when launching from another location.
 
-Existing dataset metadata names such as `meta/firebird-lineage.json` and `meta/firebird-demonstrations.json`, stored format discriminators and model identities are compatibility protocols. Keep their saved bytes and names. Do not bulk-replace product names inside databases, manifests, recipes, datasets, hashes or published evidence. Current documentation uses the renamed worker imports and paths; historical evidence retains its original identifiers.
+Existing dataset metadata names such as `meta/firebird-lineage.json` and `meta/firebird-demonstrations.json`, stored format discriminators and model identities are compatibility protocols. Keep their saved bytes and names. Do not bulk-replace product names inside databases, manifests, recipes or datasets. Use the current worker imports and paths when configuring a new installation.
 
 ## Make a stopped-workspace backup
 
-1. Finish active jobs or cancel each selected job and inspect its cleanup status. Check cloud runs separately; stopping the API is not proof that a paid cloud resource has stopped.
+1. Finish active jobs or cancel each selected job and inspect its cleanup status. Confirm separately that cloud runs and paid resources have stopped before shutting down the API.
 2. Stop the API with `Ctrl+C`, or stop its service and prevent automatic restart. Stop any desktop-owned backend and standalone writer using the same workspace. Confirm the server process has exited before copying.
 3. Copy the **whole** workspace to a new private directory. Include hidden files, the database and any SQLite sidecars, job records, local artifacts, settings and submission journals. Do not copy only the database.
 

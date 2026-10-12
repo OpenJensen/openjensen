@@ -60,6 +60,6 @@ jensen policy download PROJECT ARTIFACT --output ./new-policy.tar
 
 Replace `PROJECT`, `JOB` and `ARTIFACT` with returned IDs. Use `jensen jobs cancel JOB` to cancel. For `jobs wait`, set `--timeout` from 1–86400 seconds and `--interval` from 0.1–30 seconds.
 
-For downloads, use `--max-bytes` from 1 byte to 100 GiB, `--timeout` from 1–3600 seconds, and `--expected-sha256 HEX` when you have an independent checksum. Choose a new destination file and inspect the returned path/byte/checksum receipt after the transfer.
+For downloads, use `--max-bytes` from 1 byte to 100 GiB, `--timeout` from 1–3600 seconds, and `--expected-sha256 HEX` when you have an independent checksum. Choose a new destination file and check the downloaded path, size and checksum after the transfer.
 
 If a write is interrupted or its response is lost, read the saved job/project before submitting again. Refresh F2/F3 after reconnecting to the API.

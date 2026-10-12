@@ -14,4 +14,4 @@ pnpm exec playwright install chromium
 pnpm test:web
 ```
 
-Check the edited pages in light and dark themes, at desktop and narrow mobile widths, and with keyboard navigation. See [local verification](ci.md) for the full commands.
+Check the edited pages in light and dark themes, at desktop and narrow mobile widths, and with keyboard navigation. See [development checks](ci.md) for the full commands.

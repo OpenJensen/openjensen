@@ -77,5 +77,5 @@ and enable offline execution and one CPU thread:
 ```sh
 workers/act_optimizer/.venv/bin/python workers/act_optimizer/scripts/temporal_http_fixture.py /absolute/export/policy /absolute/packed/verification.json /absolute/new-float.json
 workers/act_optimizer/.venv/bin/python workers/act_optimizer/scripts/temporal_http_fixture.py /absolute/packed/policy /absolute/packed/verification.json /absolute/new-packed.json --packed
-workers/act_optimizer/.venv/bin/python workers/act_optimizer/scripts/temporal_replay_fixture.py /absolute/packed /absolute/new-replay-proof
+workers/act_optimizer/.venv/bin/python workers/act_optimizer/scripts/temporal_replay_fixture.py /absolute/packed /absolute/new-replay-results
 ```

@@ -1,9 +1,8 @@
 # Set up native policy training
 
-A configured/ready model has an admissible runtime configuration; it does not
-establish execution or task-quality acceptance for every method/GPU/dataset.
-Consult the [support matrix](support.md), retain the exact recipe/runtime/input
-identities, and inspect completed checkpoint/reload evidence for the route you use.
+Choose a model and runtime from the [support guide](support.md). Before starting,
+check that the worker, GPU memory, dataset cameras and action dimensions match
+the selected policy. Save the recipe with your run so you can resume it later.
 
 ## Prepare the worker
 
