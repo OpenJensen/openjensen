@@ -6,7 +6,7 @@
 
 OPEN JENSEN brings dataset exploration, training, quantization and simulation into one self-hosted workspace. The web app, CLI and optional terminal client share the same projects, jobs and artifacts. Training and simulation run in separate worker environments, locally or on configured cloud compute.
 
-[Get started](#run-locally) · [Workspace guide](docs/workspace-guide.md) · [Support matrix](docs/support.md) · [Backup and upgrade](docs/upgrading.md)
+[Get started](#run-locally) · [Workspace guide](docs/workspace-guide.md) · [Requirements and support](docs/support.md) · [Backup and upgrade](docs/upgrading.md)
 
 ![OPEN JENSEN dataset explorer showing recorded camera frames and episode data](docs/images/dataset-explorer.png)
 
@@ -17,15 +17,15 @@ OPEN JENSEN brings dataset exploration, training, quantization and simulation in
 | Sector | In the workspace |
 | --- | --- |
 | Dataset | Inspect public LeRobot v2/v3 datasets, play camera recordings and review sampled state/action rows. Validate local v3 datasets into immutable training copies. |
-| Fine-tune | Choose a policy and compatible compute, follow loss and progress, resume supported runs, and download checkpoints with their recipes and provenance. |
+| Fine-tune | Choose a policy and compatible compute, follow loss and progress, resume supported runs, and download checkpoints with their training settings. |
 | Distill | Train an ACT256 student from an ACT (Action Chunking with Transformers) teacher using selected observations, actions and episode splits. |
-| Quantize | Convert SmolVLA checkpoints to GGUF with Q8 or Q4 language-weight quantization. Export completed ACT checkpoints as FP32 inference packages, then create packed INT8/INT4 ACT candidates with fresh CPU reload checks. |
+| Quantize | Convert SmolVLA checkpoints to GGUF with Q8 or Q4 language-weight quantization. Export completed ACT checkpoints as FP32 inference packages, then create packed INT8/INT4 ACT packages. |
 | Evaluate / Run | Measure native inference, inspect full packed ACT predictions on recorded observations, run configured LIBERO evaluations, or launch an ACT/SmolVLA Isaac simulation. |
 | Teaching / Augmentation | Record demonstrations through the Teaching interface, connect optional voice services, or review appearance-augmentation candidates before reusing them. |
 | Decision lab | Compare text criteria with the configured local Muose scorer. |
 | Cloud runs / Settings | Review saved cloud activity, configure connections and compute, and inspect project diagnostics. |
 
-Each operation has its own model, dataset and runtime requirements. A configured worker enables compatible operations; it does not establish training or task-quality acceptance for every listed model. Read the [support matrix](docs/support.md) before choosing a runtime.
+Each operation needs a worker that matches the policy, dataset format and available hardware. Some advanced workflows remain experimental; check [requirements and support](docs/support.md) before choosing a runtime.
 
 [OPEN JENSEN Quant](workers/jensen_quant/README.md) is a 4/8-bit quantization library and CLI for dense PyTorch models. Use its native ACT packing path from the workspace or its standalone library and command-line client.
 
@@ -48,7 +48,7 @@ pnpm build:web
 uv run --frozen jensen serve
 ```
 
-Open [localhost:8000](http://127.0.0.1:8000). The reader requirements include Parquet, NumPy, HDF5 and image support. Install FFmpeg/ffprobe on the application host for local video imports and immutable training copies. Windows uses `workers/_cpu_readers/.venv/Scripts/python.exe`; native Windows worker and desktop installation acceptance remain pending.
+Open [localhost:8000](http://127.0.0.1:8000). The reader requirements include Parquet, NumPy, HDF5 and image support. Install FFmpeg/ffprobe on the application host for local video imports and immutable training copies. Windows uses `workers/_cpu_readers/.venv/Scripts/python.exe`; its source setup is experimental. Use Linux for NVIDIA training and Isaac workers.
 
 The core application and metadata intake need no GPU or provider key. Public Hub inspection needs network access. Training, native inference, simulation, voice and augmentation need their own configured workers or services. The server listens on loopback at the address above.
 
@@ -77,14 +77,14 @@ Start with the [workspace guide](docs/workspace-guide.md) for a short explanatio
 | Topic | Guides |
 | --- | --- |
 | Workspace | [Sector guide](docs/workspace-guide.md), [frontend development](docs/workbench-design.md) |
-| Setup and compute | [Getting started](docs/getting-started.md), [support matrix](docs/support.md), [backup and upgrade](docs/upgrading.md), [compute settings](docs/compute-settings.md), [cloud training](docs/skypilot-training.md) |
-| Datasets | [Local training and Teaching](docs/local-training.md), [appearance augmentation](docs/augmentation.md), [source provenance](apps/web/public/datasets/README.md) |
+| Setup and compute | [Getting started](docs/getting-started.md), [requirements and support](docs/support.md), [backup and upgrade](docs/upgrading.md), [compute settings](docs/compute-settings.md), [cloud training](docs/skypilot-training.md) |
+| Datasets | [Dataset imports](docs/dataset-import.md), [local training and Teaching](docs/local-training.md), [appearance augmentation](docs/augmentation.md) |
 | Policies and artifacts | [Training adapters](docs/native-training.md), [native policy workflow](docs/policy-workflow.md), [ACT export](docs/cloud-act-export.md), [ACT distillation](workers/policy_distillation/README.md), [cloud artifact storage](docs/cloud-artifact-storage.md) |
 | Local optimization | [CPU worker setup](workers/local_cpu/README.md), [native ACT packing](workers/jensen_quant/NATIVE_ACT.md), [recorded-observation replay](workers/isaac_sim/NATIVE_REPLAY.md) |
 | Evaluation and simulation | [Native Isaac](docs/native-simulation.md), [LIBERO Spatial](docs/spatial-workflow.md), [cloud inference](docs/cloud-inference.md), [cloud run monitoring](docs/cloud-runs.md) |
 | Other clients | [Terminal workbench](docs/terminal.md), [desktop connector](apps/desktop/README.md), [Unity viewer](apps/unity/com.openjensen.teaching-viewer/README.md) |
 | Optional AI services | [Voice connections](docs/teaching-connections.md), [Muose decision worker](workers/decision/README.md), [Jev and Mk1.5 proposals](workers/teaching/PROVIDERS.md) |
-| Development | [CI and local checks](docs/ci.md) |
+| Development | [Development checks](docs/ci.md) |
 
 The separate [`/docs/`](http://127.0.0.1:8000/docs/) route serves the [API reference](http://127.0.0.1:8000/docs/) and [OpenAPI schema](http://127.0.0.1:8000/openapi.json).
 
@@ -120,7 +120,7 @@ pnpm exec playwright install chromium
 pnpm test:web
 ```
 
-Workers keep separate environments and checks. Do not hand-edit generated API types. Follow the [CI guide](docs/ci.md) for optional terminal checks, schema generation, platform requirements and the full verification sequence, and [contribution guidance](CONTRIBUTING.md) when proposing a change.
+Workers keep separate environments and checks. Do not hand-edit generated API types. Follow [development checks](docs/ci.md) for optional terminal checks, schema generation and platform requirements, and [contribution guidance](CONTRIBUTING.md) when proposing a change.
 
 ## License
 

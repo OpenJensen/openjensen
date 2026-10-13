@@ -144,8 +144,8 @@ test('late start acknowledgement never moves a different project or stops a sess
 test('stop ambiguity and remount retain saved stopping state without claiming publication or reposting', async ({ page }) => {
   const s = await fixture(page, [job()]); await chooseSaved(page); s.lostStop = true;
   await managed(page).getByRole('button', { name: 'Stop and publish', exact: true }).click(); expect(s.posts).toEqual([]);
-  await managed(page).getByRole('button', { name: 'Confirm stop and publish', exact: true }).click(); await expect(managed(page).getByText(/Stop outcome is unverified/)).toBeVisible();
-  await page.reload(); await enterManaged(page); await chooseSaved(page); await expect(managed(page).getByText(/Publication is not confirmed yet/)).toBeVisible();
+  await managed(page).getByRole('button', { name: 'Confirm stop and publish', exact: true }).click(); await expect(managed(page).getByText(/Stop outcome is not confirmed/)).toBeVisible();
+  await page.reload(); await enterManaged(page); await chooseSaved(page); await expect(managed(page).getByText(/Recordings are not confirmed saved yet/)).toBeVisible();
   await expect(managed(page).getByRole('button', { name: 'Review for dataset preparation', exact: true })).toHaveCount(0); expect(s.posts).toEqual([{ path: '/api/v1/projects/alpha/teaching/sessions/capture-a/stop', body: {}, key: '' }]);
 });
 test('interrupted history is visible but never offers controls or published handoff', async ({ page }) => {

@@ -11,7 +11,7 @@ import { storeAttempt, type PolicyJobAttempt } from "@/lib/policy-job-attempt";
 import { UncertainPolicyJob } from "@/lib/policy-job-mutation";
 
 class ExportJournalUnavailable extends Error {
-  constructor() { super("Browser session storage is unavailable or its export receipt is unreadable. Restore it and reload, then inspect recorded export jobs before submitting again."); }
+  constructor() { super("Browser session storage is unavailable or its saved export request is unreadable. Restore it and reload, then inspect recorded export jobs before submitting again."); }
 }
 
 export function ActExportControl({ projectId, checkpoint, runtimes, jobs, artifacts, active, onNativeQuantize, onNativeDistill }: {
@@ -74,10 +74,10 @@ export function ActExportControl({ projectId, checkpoint, runtimes, jobs, artifa
     typeof snapshot.manifest_sha256 === "string" && /^[a-f0-9]{64}$/.test(snapshot.manifest_sha256) &&
     snapshot.id === `sha256:${snapshot.manifest_sha256}` && checkpoint.metadata?.reload_verified === true;
   const issue = !projectId || checkpoint.project_id !== projectId ? "Select a ready project to export." : cloud && (sourceJob?.status !== "succeeded" || checkpoint.metadata?.reload_verified !== true)
-    ? "Wait for the completed, reload-verified ACT checkpoint. Intermediate saves cannot be exported."
+    ? "Wait for the completed ACT checkpoint after its reload check. Intermediate saves cannot be exported."
     : checkpoint.format !== "training_checkpoint" || checkpoint.metadata?.training_backend !== "lerobot" || checkpoint.metadata?.method !== "full"
       ? "This export requires a complete native ACT training checkpoint."
-      : dataset?.source !== "huggingface" && !localSnapshot ? "Export needs Hugging Face lineage or a complete, reload-verified local LeRobot v3 snapshot with matching snapshot identity."
+      : dataset?.source !== "huggingface" && !localSnapshot ? "Export needs a Hugging Face source history or a complete local LeRobot v3 training copy with matching snapshot identity and successful reload checks."
       : !runtime ? "Ask the app operator to configure the local ACT export worker." : null;
   const journalReady = readyContext === context && !storageError.data;
   const submitting = journalReady && attempt.data?.state === "pending";
@@ -136,9 +136,9 @@ export function ActExportControl({ projectId, checkpoint, runtimes, jobs, artifa
     <button type="button" className="primary-button" disabled={!ready} onClick={() => void submit()}>{submitting || pending ? "Exporting ACT policy…" : cloud ? "Download checkpoint and export" : "Export ACT inference package"}</button>
     <button type="button" className="text-link" disabled={!active || history.isFetching} onClick={() => void refresh()}>Refresh export jobs</button>
     {issue && <p role="status" className="training-monitor-note">{issue}</p>}
-    {latest && <section aria-label="ACT export receipt"><p role="status">Export {latest.status} · {latest.id}. {pending ? pending.stage === "downloading" ? "Downloading and verifying the checkpoint." : "Preparing or verifying the CPU export." : "Recorded export job."}</p></section>}
+    {latest && <section aria-label="ACT export status"><p role="status">Export {latest.status} · {latest.id}. {pending ? pending.stage === "downloading" ? "Downloading and checking the checkpoint." : "Preparing or checking the CPU export." : "Recorded export job."}</p></section>}
     {latest?.status === "failed" && <p role="alert">Export failed: {latest.error ?? "See the recorded job for details."}</p>}
-    {latest && ["cancelled", "interrupted"].includes(latest.status) && <p role="status">Export {latest.status}. No verified package is ready from this attempt.</p>}
+    {latest && ["cancelled", "interrupted"].includes(latest.status) && <p role="status">Export {latest.status}. No completed package is ready from this attempt.</p>}
     {history.isError && <p role="alert">Export job updates are unavailable. Previously received status may be stale.</p>}
     {(storageError.data || error) && <p role="alert">{storageError.data || error}</p>}
     {submitting && <p role="status">{attempt.data?.message}</p>}

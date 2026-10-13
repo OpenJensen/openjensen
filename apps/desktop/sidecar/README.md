@@ -1,9 +1,9 @@
 # Build and run the Python sidecar
 
-These are developer instructions for an opt-in frozen-payload experiment. The
-production desktop build continues to connect to an existing application. This
-guide does not establish a signed installer, current-product fresh-machine
-acceptance or a verified upgrade/rollback between two packaged versions.
+These developer instructions build an experimental bundled Python payload on
+macOS ARM64. The default desktop build connects to a separately running
+application. Before distributing a bundled build, sign it and test installation,
+upgrade and rollback on a clean machine.
 
 Use absolute paths for the static resources, application workspace and job files. Keep application data in a separate directory from the packaged resources.
 

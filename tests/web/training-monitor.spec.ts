@@ -316,12 +316,12 @@ test('shows observed progress, loss curves, saved activity, worker output and do
   await expect(monitor.getByLabel('Persisted training activity')).toContainText('Checkpoint 20 saved locally');
   await monitor.locator('.training-worker-logs > summary').click();
   await expect(monitor.getByLabel('Worker output')).toContainText('capacity was unavailable');
-  await monitor.locator('summary').filter({ hasText: /^Reproducibility/ }).click();
+  await monitor.locator('summary').filter({ hasText: /^Run configuration/ }).click();
   await expect(monitor.getByText('8 train · 2 validation episodes')).toBeVisible();
-  await expect(monitor.getByRole('link', { name: 'Download reproducibility JSON' })).toHaveAttribute('href', /\/jobs\/run-001\/training\/reproducibility$/);
+  await expect(monitor.getByRole('link', { name: 'Download run configuration' })).toHaveAttribute('href', /\/jobs\/run-001\/training\/reproducibility$/);
   await expect(monitor.getByRole('link', { name: 'Download Checkpoint step 20' })).toHaveAttribute('href', /\/artifacts\/checkpoint-artifact\/download$/);
   const downloadPromise = page.waitForEvent('download');
-  await monitor.getByRole('link', { name: 'Download reproducibility JSON' }).click();
+  await monitor.getByRole('link', { name: 'Download run configuration' }).click();
   const downloaded = await downloadPromise;
   const record = JSON.parse(await readFile((await downloaded.path())!, 'utf8'));
   expect(record.recipe.seed).toBe(42);
@@ -450,7 +450,7 @@ test('an older running application keeps observed progress and activity without 
   await expect(monitor.getByText('Latest checkpoint: step 20', { exact: true })).toBeVisible();
   await expect(monitor.locator('.training-metrics dd')).toHaveText(['—', '—', '—', '—', '—']);
   await expect(monitor.getByRole('alert')).toHaveCount(0);
-  await expect(monitor.getByRole('link', { name: 'Download reproducibility JSON' })).toHaveCount(0);
+  await expect(monitor.getByRole('link', { name: 'Download run configuration' })).toHaveCount(0);
   await page.clock.fastForward(10000);
   await expect(monitor.getByRole('progressbar')).toHaveAttribute('value', '25');
   expect(telemetryRequests).toHaveLength(1);
@@ -501,7 +501,7 @@ test('ACT checkpoint exports inference-only package through local registered run
 for (const mode of ['remote', 'unconfigured'] as const) test(`ACT export refuses ${mode} checkpoint without a job`, async ({ page }) => {
   const { monitor, submitted } = await workspace(page, 'running', true, mode);
   await expect(monitor.getByRole('button', { name: mode === 'remote' ? 'Download checkpoint and export' : 'Export ACT inference package' })).toBeDisabled();
-  await expect(monitor.getByText(mode === 'remote' ? 'Wait for the completed, reload-verified ACT checkpoint.' : 'Ask the app operator to configure the local ACT export worker.', { exact: false })).toBeVisible();
+  await expect(monitor.getByText(mode === 'remote' ? 'Wait for the completed ACT checkpoint after its reload check.' : 'Ask the app operator to configure the local ACT export worker.', { exact: false })).toBeVisible();
   expect(submitted).toEqual([]);
 });
 
@@ -517,7 +517,7 @@ test('ACT export failure stays visible without a download or quality claim', asy
 test('ACT export refuses local lineage without a verified complete snapshot', async ({ page }) => {
   const { monitor, submitted } = await workspace(page, 'running', true, 'local-dataset');
   await expect(monitor.getByRole('button', { name: 'Export ACT inference package' })).toBeDisabled();
-  await expect(monitor.getByText('Export needs Hugging Face lineage or a complete, reload-verified local LeRobot v3 snapshot with matching snapshot identity.')).toBeVisible();
+  await expect(monitor.getByText('Export needs a Hugging Face source history or a complete local LeRobot v3 training copy with matching snapshot identity and successful reload checks.')).toBeVisible();
   expect(submitted).toEqual([]);
 });
 
@@ -557,7 +557,7 @@ for (const fault of ['snapshot-identity', 'manifest', 'incomplete', 'not-reloade
   if (fault === 'format') metadata.dataset.format = 'lerobot_v2';
   await page.reload(); await reopenExport(page);
   await expect(state.monitor.getByRole('button', { name: 'Export ACT inference package', exact: true })).toBeDisabled();
-  await expect(state.monitor.getByText('Export needs Hugging Face lineage or a complete, reload-verified local LeRobot v3 snapshot with matching snapshot identity.')).toBeVisible();
+  await expect(state.monitor.getByText('Export needs a Hugging Face source history or a complete local LeRobot v3 training copy with matching snapshot identity and successful reload checks.')).toBeVisible();
   expect(state.submitted).toEqual([]);
 });
 
@@ -569,7 +569,7 @@ test('completed cloud ACT checkpoint explicitly downloads and exports with separ
   await expect(checkpoint.locator('option').first()).toContainText('Reload-verified bundle');
   await checkpoint.selectOption('periodic-same-step');
   await expect(monitor.getByRole('button', { name: 'Download checkpoint and export' })).toBeDisabled();
-  await expect(monitor.getByText('Wait for the completed, reload-verified ACT checkpoint.', { exact: false })).toBeVisible();
+  await expect(monitor.getByText('Wait for the completed ACT checkpoint after its reload check.', { exact: false })).toBeVisible();
   await checkpoint.selectOption('checkpoint-artifact');
   await expect(monitor.getByText('It does not start a cloud GPU.', { exact: false })).toBeVisible();
   await monitor.getByRole('button', { name: 'Download checkpoint and export' }).click();
@@ -786,11 +786,11 @@ test('ACT export retains acknowledged job while history is stale and prevents an
     await route.fulfill({ status: 202, json: exportReceipt(state, body) });
   });
   await exportButton(page).click();
-  await expect(page.getByRole('region', { name: 'ACT export receipt' })).toContainText('acknowledged-export');
-  await expect(page.getByRole('region', { name: 'ACT export receipt' })).toContainText('queued');
+  await expect(page.getByRole('region', { name: 'ACT export status' })).toContainText('acknowledged-export');
+  await expect(page.getByRole('region', { name: 'ACT export status' })).toContainText('queued');
   await expect(page.getByRole('button', { name: 'Exporting ACT policy…', exact: true })).toBeDisabled();
   await page.getByRole('link', { name: 'Dataset', exact: true }).click(); await reopenExport(page);
-  await expect(page.getByRole('region', { name: 'ACT export receipt' })).toContainText('acknowledged-export');
+  await expect(page.getByRole('region', { name: 'ACT export status' })).toContainText('acknowledged-export');
   await expect(page.getByRole('button', { name: 'Exporting ACT policy…', exact: true })).toBeDisabled();
   expect(state.submitted).toHaveLength(1);
   const image = testInfo.outputPath('export-receipt.png');
@@ -810,7 +810,7 @@ test('ACT export unmount during submission preserves pending identity and late a
     await page.getByRole('link', { name: 'Dataset', exact: true }).click(); await reopenExport(page);
     await expect(page.getByRole('button', { name: 'Exporting ACT policy…', exact: true })).toBeDisabled();
     release();
-    await expect(page.getByRole('region', { name: 'ACT export receipt' })).toContainText('acknowledged-export');
+    await expect(page.getByRole('region', { name: 'ACT export status' })).toContainText('acknowledged-export');
     expect(state.submitted).toHaveLength(1);
   } finally { release(); }
 });
@@ -823,7 +823,7 @@ test('ACT export mismatched acknowledgment is uncertain and never promoted to a 
   });
   await exportButton(page).click();
   await expect(page.getByRole('region', { name: 'ACT inference export' })).toContainText('outcome is unverified');
-  await expect(page.getByRole('region', { name: 'ACT export receipt' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'ACT export status' })).toHaveCount(0);
   await expect(exportButton(page)).toBeDisabled(); expect(state.submitted).toHaveLength(1);
 });
 
@@ -843,7 +843,7 @@ for (const field of ['project', 'runtime', 'operation', 'budget', 'status', 'tim
     });
     await exportButton(page).click();
     await expect(page.getByRole('region', { name: 'ACT export recovery' })).toContainText('unverified');
-    await expect(page.getByRole('region', { name: 'ACT export receipt' })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'ACT export status' })).toHaveCount(0);
     await expect(exportButton(page)).toBeDisabled(); expect(state.submitted).toHaveLength(1);
   });
 }
@@ -889,7 +889,7 @@ for (const failure of ['receipt-write', 'cleanup', 'unmounted-cleanup'] as const
       if (failure === 'unmounted-cleanup') {
         await page.getByRole('link', { name: 'Dataset', exact: true }).click(); release(); await reopenExport(page);
       }
-      await expect(page.getByRole('region', { name: 'ACT export receipt' })).toContainText('acknowledged-export');
+      await expect(page.getByRole('region', { name: 'ACT export status' })).toContainText('acknowledged-export');
       await expect(page.getByRole('region', { name: 'ACT export recovery' })).toContainText('storage is unavailable');
       await expect(page.getByRole('button', { name: 'Exporting ACT policy…', exact: true })).toBeDisabled();
       await expect(page.getByRole('region', { name: 'ACT inference export' })).not.toContainText('Submitting one');
@@ -906,9 +906,9 @@ test('ACT export retained active receipt survives reload even when history omits
     await route.fulfill({ status: 202, json: exportReceipt(state, body) });
   });
   await exportButton(page).click();
-  await expect(page.getByRole('region', { name: 'ACT export receipt' })).toContainText('acknowledged-export');
+  await expect(page.getByRole('region', { name: 'ACT export status' })).toContainText('acknowledged-export');
   await page.reload(); await reopenExport(page);
-  await expect(page.getByRole('region', { name: 'ACT export receipt' })).toContainText('acknowledged-export');
+  await expect(page.getByRole('region', { name: 'ACT export status' })).toContainText('acknowledged-export');
   await expect(page.getByRole('button', { name: 'Exporting ACT policy…', exact: true })).toBeDisabled();
   expect(state.submitted).toHaveLength(1);
 });
@@ -954,7 +954,7 @@ test('ACT export definite rejection permits an explicit request without a false 
   await exportButton(page).click();
   await expect(page.getByRole('region', { name: 'ACT inference export' })).toContainText('Checkpoint does not meet export requirements.');
   await expect(exportButton(page)).toBeEnabled();
-  await expect(page.getByRole('region', { name: 'ACT export receipt' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'ACT export status' })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'ACT export recovery' })).toHaveCount(0);
   expect(state.submitted).toHaveLength(1);
 });
@@ -976,9 +976,9 @@ test('ACT export double activation and checkpoint switching keep the original re
     await expect(page.getByRole('button', { name: 'Exporting ACT policy…', exact: true })).toBeDisabled();
     release();
     await expect(exportButton(page)).toBeEnabled();
-    await expect(page.getByRole('region', { name: 'ACT export receipt' })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'ACT export status' })).toHaveCount(0);
     await page.getByRole('combobox', { name: 'Checkpoint', exact: true }).selectOption('checkpoint-artifact');
-    await expect(page.getByRole('region', { name: 'ACT export receipt' })).toContainText('acknowledged-export');
+    await expect(page.getByRole('region', { name: 'ACT export status' })).toContainText('acknowledged-export');
     await expect(page.getByRole('button', { name: 'Exporting ACT policy…', exact: true })).toBeDisabled();
     expect(state.submitted).toEqual([{ operation: 'policy.export', runtime_id: 'act-cpu', artifact_id: 'checkpoint-artifact', training_method: 'full', timeout_seconds: 600 }]);
   } finally { release(); }
@@ -999,7 +999,7 @@ test('ACT export ignores another project receipt and download ancestry', async (
   await page.reload(); await reopenExport(page);
   await expect(exportButton(page)).toBeEnabled();
   const control = page.getByRole('region', { name: 'ACT inference export' });
-  await expect(control.getByRole('region', { name: 'ACT export receipt' })).toHaveCount(0);
+  await expect(control.getByRole('region', { name: 'ACT export status' })).toHaveCount(0);
   await expect(control.getByRole('link', { name: 'Download ACT inference package' })).toHaveCount(0);
   expect(state.submitted).toHaveLength(0);
 });
@@ -1007,9 +1007,9 @@ test('ACT export ignores another project receipt and download ancestry', async (
 test('ACT export corrupt stored receipt blocks submission without claiming acceptance', async ({ page }) => {
   await page.addInitScript(project => sessionStorage.setItem(`firebird:act-export-receipt:${project}:checkpoint-artifact`, '{broken'), projectId);
   const state = await exportRecoveryFixture(page);
-  await expect(page.getByRole('region', { name: 'ACT inference export' })).toContainText('receipt is unreadable');
+  await expect(page.getByRole('region', { name: 'ACT inference export' })).toContainText('saved export request is unreadable');
   await expect(exportButton(page)).toBeDisabled();
-  await expect(page.getByRole('region', { name: 'ACT export receipt' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'ACT export status' })).toHaveCount(0);
   expect(state.submitted).toHaveLength(0);
 });
 

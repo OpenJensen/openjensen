@@ -33,31 +33,15 @@ async function policy(request: APIRequestContext, id: string) {
   return artifacts[0].id as string;
 }
 
-test('shows complete reference numbers with separate hardware and honest missing values', async ({ page, request }, testInfo) => {
+test('an empty diagnostics workspace requires configured compute and has no static benchmark reports', async ({ page, request }, testInfo) => {
   await openDiagnostics(page, await project(request));
-  const table = page.getByRole('table', { name: /NVIDIA L4 · 8 vCPUs/ });
-  const native = table.getByRole('row').filter({ has: page.getByRole('rowheader', { name: 'native-bf16', exact: true }) });
-  await expect(native).toContainText('342.59');
-  await expect(native).toContainText('37.96');
-  await expect(native).toContainText('1186');
-  await expect(native).toContainText('16/20');
-  const q4 = table.getByRole('row').filter({ has: page.getByRole('rowheader', { name: 'cpp-Q4_0', exact: true }) });
-  await expect(q4).toContainText('4/20');
-  await expect(q4).toContainText('13 lost / 1 gained');
-  await expect(table.getByRole('row')).toHaveCount(11);
   await expect(page.getByRole('button', { name: 'Start diagnostics', exact: true })).toBeDisabled();
   await expect(page.getByText('No execution target is configured.', { exact: false })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'View source report' })).toHaveAttribute('href', /e5866f0.*dedicated-l4\/REPORT.md$/);
-  await page.getByRole('combobox', { name: 'Reference hardware' }).selectOption('existingL4');
-  await expect(page.getByRole('table', { name: /NVIDIA L4 · 12 vCPUs/ })).toContainText('348.80');
-  await expect(page.getByRole('columnheader', { name: 'Process to first action (s)', exact: true })).toHaveCount(0);
-  await page.getByRole('combobox', { name: 'Reference hardware' }).selectOption('rtx3070');
-  const rtx = page.getByRole('table', { name: /NVIDIA RTX 3070/ });
-  await expect(rtx.getByRole('row').filter({ has: page.getByRole('rowheader', { name: 'cpp-Q4_0', exact: true }) })).toContainText('8/20');
-  await expect(rtx).not.toContainText(/Not recorded|Not collected|Deferred|host failed/);
-  const missing = rtx.getByRole('row').filter({ has: page.getByRole('rowheader', { name: 'trtllm-fp16', exact: true }) });
-  await expect(missing.getByRole('cell')).toHaveText(['—', '—', '—', '—', '—']);
-  await page.getByRole('combobox', { name: 'Reference hardware' }).selectOption('dedicatedL4');
+  await expect(page.getByText('No policy runs in this project yet.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('table', { name: 'Recorded policy measurements' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Recorded benchmark comparison' })).toHaveCount(0);
+  await expect(page.getByRole('combobox', { name: 'Reference hardware' })).toHaveCount(0);
+  await expect(page.locator('a[href*="workers/benchmark_gpu"]')).toHaveCount(0);
   const sizes = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
   expect(sizes.scroll).toBeLessThanOrEqual(sizes.width + 1);
   await page.screenshot({ path: testInfo.outputPath('diagnostics.png'), fullPage: true });
@@ -161,13 +145,13 @@ test('cancels an active diagnostic worker from the diagnostics tab', async ({ pa
   await expect(page.getByRole('button', { name: 'Cancel run', exact: true })).toHaveCount(0);
 });
 
-test('keeps reference results visible and blocks launch when target discovery fails', async ({ page, request }) => {
+test('keeps diagnostics visible and blocks launch when target discovery fails', async ({ page, request }) => {
   const id = await project(request);
   await page.route('**/api/v1/policy-options', route => route.fulfill({ status: 503, json: { detail: 'Target discovery unavailable' } }));
   await openDiagnostics(page, id);
   await expect(page.getByRole('alert').filter({ hasText: 'Target discovery unavailable' })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole('button', { name: 'Start diagnostics', exact: true })).toBeDisabled();
-  await expect(page.getByRole('table', { name: /NVIDIA L4 · 8 vCPUs/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Run diagnostics', exact: true })).toBeVisible();
 });
 
 test('worker waits reject wrong terminal states and report bounded timeouts without cancelling work', async ({ request }) => {

@@ -6,7 +6,7 @@ const stages = [
   { id: 'environment', label: 'Preparing environment' },
   { id: 'inputs', label: 'Loading data and model' },
   { id: 'training', label: 'Training' },
-  { id: 'verification', label: 'Saving and verifying' },
+  { id: 'verification', label: 'Saving and checking' },
   { id: 'ready', label: 'Ready' },
 ] as const;
 

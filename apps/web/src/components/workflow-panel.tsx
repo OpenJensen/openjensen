@@ -15,7 +15,6 @@ import { conciseRunError, observedProgress, runLabel, runSummary } from "@/lib/r
 import { checkpointLabel, checkpointStep, isCloudArtifact, quantizationIssue, sortCheckpoints, trainingRunModelLabel } from "@/lib/checkpoints";
 import "./workflow-panel.css";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BenchmarkReference } from "@/components/benchmark-reference";
 import { readPublicPreference, writePublicPreference } from "@/lib/public-preferences";
 import {
   api,
@@ -111,7 +110,7 @@ export function currentStage(job: Job, phase = job.stage): string {
   if (job.status === "queued") return "Queued";
   const labels: Record<string, string> = {
     preparing: "Preparing worker", setup: "Installing dependencies", compiling: "Compiling native engine", exporting: "Merging checkpoint", converting: "Converting policy",
-    quantizing: "Quantizing weights", quantize: "Quantizing weights", verifying: "Verifying model",
+    quantizing: "Quantizing weights", quantize: "Quantizing weights", verifying: "Checking model",
     saving: "Saving output", finishing: "Finalizing", evaluating: "Evaluating policy", running: "Running policy",
     "training-export": "Exporting checkpoint", "floating-conversion": "Converting policy", baseline: "Checking reference",
   };
@@ -782,7 +781,6 @@ export function WorkflowPanel({
             ) : (
               <p>No policy runs in this project yet.</p>
             )}
-            <BenchmarkReference />
           </>
         )}
       </section>
@@ -875,7 +873,7 @@ export function WorkflowPanel({
             <progress className="workflow-progress" aria-label="Run in progress" />
           </>}
           {error && <p className="error-notice" role="alert">{error}</p>}
-          {selected.status === "succeeded" && <p>{selected.kind === "policy.quantize" ? "Quantized policy ready." : data?.decision === "validated" ? "Passed the requested acceptance checks." : data?.decision === "no_feasible_candidate" ? "No candidate met the acceptance limits." : data?.decision === "diagnostics_only" ? "Diagnostics complete." : "Results are ready."}</p>}
+          {selected.status === "succeeded" && <p>{selected.kind === "policy.quantize" ? "Quantized policy ready." : data?.decision === "validated" ? "The model meets your requested limits." : data?.decision === "no_feasible_candidate" ? "No candidate meets your requested limits." : data?.decision === "diagnostics_only" ? "Diagnostics complete." : "Results are ready."}</p>}
         </section>
         <dl className="workflow-job-facts">
           <div><dt>Checkpoint</dt><dd>{checkpointFor(selected)}</dd></div>

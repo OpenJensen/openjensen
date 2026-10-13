@@ -132,10 +132,10 @@ export function NativeQuantizationPanel({ projectId, preferredArtifactId, prefer
           <QuantizationComparison job={selected} reports={reports} />
           <p>Generated observations only. Exact reload does not mean unchanged FP32 actions.</p>
           <WorkbenchDisclosure title="Action differences"><p>Payload size excludes the outer download envelope. These observations are not held-out robotics evaluation.</p><div className="native-quantization-drift" role="region" aria-label="FP32 action differences" tabIndex={0}><table><caption>Difference from FP32 across each full {measured.prediction_horizon} × 6 action chunk</caption><thead><tr><th>Fixture seed</th><th>Raw RMSE</th><th>Raw maximum</th><th>Postprocessed RMSE</th><th>Postprocessed maximum</th></tr></thead><tbody>{measured.drift_from_fp32.map((row, index) => <tr key={`${row.input_sha256}-${index}`}><th scope="row">{row.seed}</th><td>{row.raw.rmse.toPrecision(6)}</td><td>{row.raw.maximum_absolute_difference.toPrecision(6)}</td><td>{row.postprocessed.rmse.toPrecision(6)}</td><td>{row.postprocessed.maximum_absolute_difference.toPrecision(6)}</td></tr>)}</tbody></table></div>
-          <p>Postprocessed differences use saved processor output coordinates; physical units are unverified. No accepted quality threshold or GPU memory/latency improvement is established.</p></WorkbenchDisclosure>
-        </section> : <p role="alert">A complete measured quantization report is unavailable. Do not infer reload or quality acceptance from the job status alone.</p>)}
+          <p>Postprocessed differences use saved processor output coordinates. Physical units, model quality, GPU memory and latency have not been measured.</p></WorkbenchDisclosure>
+        </section> : <p role="alert">The quantization results are incomplete. Reload accuracy and model quality cannot be assessed from the job status alone.</p>)}
 
-      {selected.status === 'succeeded' && <><p>Task quality, calibration, speed and GPU memory savings remain unverified.</p>{downloads.map(item => {
+      {selected.status === 'succeeded' && <><p>Task quality, calibration, speed and GPU memory savings have not been measured.</p>{downloads.map(item => {
         const handoff = quantizedSimulationHandoff(item, selected, measured ?? null);
         const compatible = simulation.data ? simulationHandoffProfiles(item, simulation.data.profiles) : [];
         return <div key={item.id} data-artifact-id={item.id}>

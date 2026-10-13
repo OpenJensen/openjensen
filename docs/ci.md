@@ -1,8 +1,8 @@
-# Local and CI verification
+# Development checks
 
-GitHub Actions runs the selected Linux application, browser and worker checks for pushes and pull requests. Windows application/browser lanes are a manual opt-in; simulation has a separate manual workflow. Inspect the checks selected for the actual revision and retain local results when a required environment or hosted execution is unavailable.
+GitHub Actions runs Linux application, browser and worker checks for pushes and pull requests. Windows application and browser checks can be run manually; simulation has a separate manual workflow. Check the jobs for your pull request and include relevant test results in its description.
 
-Browser desktop/mobile lanes exercise web layouts. Worker contract tests and generated CPU fixtures do not establish live GPU training, Isaac execution or installed desktop acceptance. Keep those receipts separate and bound to their exact source/runtime/inputs.
+Browser tests cover desktop and mobile web layouts. GPU training, Isaac simulation and desktop installation require their own environments. Run the checks relevant to the code you change and report any you could not run.
 
 ## Run locally
 

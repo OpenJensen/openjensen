@@ -133,7 +133,7 @@ test('completed candidate shows measured storage and drift separately from exact
   await page.getByText('Action differences', { exact: true }).focus(); await page.keyboard.press('Enter');
   await expect(page.getByRole('region', { name: 'FP32 action differences', exact: true })).toBeVisible();
   await expect(measured).toContainText('Exact agreement with the packed candidate'); await expect(measured).toContainText('0.0948200');
-  await expect(measured).toContainText('physical units are unverified');
+  await expect(measured).toContainText('Physical units, model quality, GPU memory and latency have not been measured');
   await expect(page.getByRole('link', { name: 'Download INT8 package' })).toHaveCount(1);
   await expect(page.getByRole('link', { name: 'Download INT8 package' })).toHaveAttribute('href', '/api/v1/projects/alpha/artifacts/packed-result/download');
   await expect(page.getByRole('group',{name:'ACT quantization setup',exact:true})).toHaveCount(0);
@@ -149,7 +149,7 @@ test('completed candidate shows measured storage and drift separately from exact
 test('missing or incomplete report never displays inferred reload or numeric acceptance', async ({ page }) => {
   const state = await fixture(page); const done = job('incomplete', 'succeeded'); done.result = { reports: [{ ...report(), drift_from_fp32: [] }], artifacts: [] }; state.jobs.push(done);
   await refresh(page); await openTransformationJob(page, 'quantization', done.id);
-  await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true }).getByRole('alert')).toContainText('complete measured quantization report is unavailable');
+  await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true }).getByRole('alert')).toContainText('quantization results are incomplete');
   await expect(page.getByRole('region', { name: 'Measured ACT quantization results' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Download INT8 package' })).toHaveCount(0);
 });
@@ -225,7 +225,7 @@ for (const invalid of ['model-id', 'duplicate-seeds', 'reversed-seeds']) test(`i
   done.result = { reports: [value], artifacts: [] }; state.jobs.push(done); await refresh(page);
   await openTransformationJob(page, 'quantization', done.id);
   await expect(page.getByRole('region', { name: 'Measured ACT quantization results' })).toHaveCount(0);
-  await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true }).getByRole('alert')).toContainText('complete measured quantization report is unavailable');
+  await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true }).getByRole('alert')).toContainText('quantization results are incomplete');
 });
 
 
@@ -440,6 +440,6 @@ test('8-step packed report displays its full prediction dimensions without quali
   await expect(page.getByRole('region', { name: 'Measured ACT quantization results' })).toBeVisible();
   await page.getByText('Action differences', { exact: true }).click();
   await expect(page.getByRole('table')).toHaveAccessibleName('Difference from FP32 across each full 8 × 6 action chunk');
-  await expect(page.getByText('Task quality, calibration, speed and GPU memory savings remain unverified.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Task quality, calibration, speed and GPU memory savings have not been measured.', { exact: true })).toBeVisible();
   expect(state.posts).toEqual([]);
 });

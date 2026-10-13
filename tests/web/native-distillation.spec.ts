@@ -90,14 +90,14 @@ test('completed generated evidence has scoped metrics and missing report never i
   await expect(page.getByRole('article', { name: 'Distillation job details' })).toHaveAttribute('data-job-id', 'student-001');
   const saved = state.jobs.find(item => item.id === 'student-001')!;
   saved.status = 'succeeded'; saved.stage = 'distilling'; saved.result = { artifacts: [{ ...teacher, id: 'student-001:distilled', job_id: 'student-001', label: 'ACT256 student', metadata: { architecture: 'act', recipe: 'act-action-distillation-v1' } }], reports: [{ operation: 'policy.distill', adapter: 'act-act-v1', teacher_artifact_id: teacher.id, dataset_job_id: 'data', steps: 100, fresh_reload_verified: true, quality_verified: false, calibration_verified: false, speedup_verified: false, task_success: null, dataset_kind: 'generated_fixture', student_weights_bytes: 55971416, teacher_inference_tensor_bytes: 136972568, trained_student: { validation: { teacher_normalized_l1: .33 }, final: { teacher_normalized_l1: .39 } } }] };
-  await refresh(page); await expect(page.getByText('Generated observations · software verification only')).toBeVisible();
+  await refresh(page); await expect(page.getByText('Generated sample observations · offline imitation')).toBeVisible();
   await expect(page.getByRole('article', { name: 'Distillation job details' }).locator('.native-result-summary')).toHaveText('Recorded job · student-001');
   await expect(page.getByRole('link', { name: 'Download tested student package' })).toHaveAttribute('href', /student-001%3Adistilled\/download$/);
-  await expect(page.getByText(/do not prove task success/)).toBeVisible();
+  await expect(page.getByRole('article', { name: 'Distillation job details' }).getByText(/These metrics measure teacher imitation\. Task success, speed, calibration and simulation performance have not been measured/)).toBeVisible();
   const widths = await page.evaluate(() => ({ inner: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth })); expect(widths.scroll).toBeLessThanOrEqual(widths.inner + 1);
   await page.screenshot({ path: testInfo.outputPath('distillation-result.png'), fullPage: true });
   saved.result.reports[0].dataset_kind = 'lerobot'; await refresh(page);
-  await expect(page.getByText('Generated observations · software verification only')).toHaveCount(0);
+  await expect(page.getByText('Generated sample observations · offline imitation')).toHaveCount(0);
   await expect(panel(page).getByRole('alert')).toContainText('Complete distillation measurements are unavailable');
   saved.result.reports = []; await refresh(page); await expect(panel(page).getByRole('alert')).toContainText('Complete distillation measurements are unavailable');
 });

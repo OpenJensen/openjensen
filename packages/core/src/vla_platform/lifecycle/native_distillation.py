@@ -616,7 +616,7 @@ def check_result(response, job, source, admitted, data, doc, corpus_sha, destina
             if k not in {"fresh_reload_verified", "elapsed_seconds", "scope"}
         },
         train,
-        "Distillation report differs from saved training evidence",
+        "Distillation report differs from saved training details",
     )
     for key, expected in {
         "schema_version": 1,

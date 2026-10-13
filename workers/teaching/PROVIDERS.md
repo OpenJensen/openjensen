@@ -24,7 +24,7 @@ context = SourceContext(session_id="actual-session-id", episode_id=None, revisio
 # Populate from admitted candidates and an actual immutable session snapshot.
 proposal = await provider.decide(
     context,
-    state="The user's target and measured evidence, with no credentials.",
+    state="The user's target and observations, with no credentials.",
     question="Which already eligible configuration best matches the stated preference?",
     choices=(
         Choice("candidate-a", "Measured eligible configuration A"),

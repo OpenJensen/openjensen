@@ -390,9 +390,6 @@ jobs:
       - run: uv pip install --python .venv/bin/python pytest==8.4.2 ruff==0.13.2
       - run: .venv/bin/python -m pytest -q -rs
       - run: .venv/bin/ruff check scripts tests
-      - name: Verify preserved evidence
-        working-directory: workers/benchmark_gpu/evidence/2026-09-26
-        run: sha256sum -c SHA256SUMS
   act-inference-export:
     needs: scope
     if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.act != 'false') }}

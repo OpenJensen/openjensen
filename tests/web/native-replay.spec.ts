@@ -83,7 +83,7 @@ test('saved full action chunks render without a simulation quality claim', async
   await page.getByRole('button', { name: 'Refresh replay jobs' }).click();
   await expect(page.getByRole('region', { name: 'Predicted action chunks' }).getByRole('img')).toHaveCount(6);
   await page.getByLabel('Recorded observation', { exact: true }).selectOption('1');
-  await expect(page.getByRole('link', { name: 'Download verified replay record' })).toHaveAttribute('href', /replay-001%3Aoperation\/download$/);
+  await expect(page.getByRole('link', { name: 'Download replay record' })).toHaveAttribute('href', /replay-001%3Aoperation\/download$/);
   await expect(page.getByText(/does not measure task success/)).toBeVisible();
   await page.getByRole('button', { name: 'Dark', exact: true }).click();
   const width = await page.evaluate(() => [document.documentElement.clientWidth, document.documentElement.scrollWidth]); expect(width[1]).toBeLessThanOrEqual(width[0] + 1);
@@ -94,7 +94,7 @@ test('a mismatched saved record is withheld, and unmeasured report claims are re
   await expect(page.getByRole('article', { name: 'Observation replay details' })).toHaveAttribute('data-job-id', 'replay-001'); state.invalid = true; const job = complete(state);
   await page.getByRole('button', { name: 'Refresh replay jobs' }).click(); await expect(panel(page).getByRole('alert')).toContainText('does not match'); await expect(page.getByRole('region', { name: 'Predicted action chunks' })).toHaveCount(0);
   job.result.reports[0].quality_verified = true; await page.getByRole('button', { name: 'Refresh replay jobs' }).click();
-  await expect(panel(page).getByRole('alert')).toContainText('Complete replay evidence is unavailable'); await expect(page.getByRole('link', { name: 'Download verified replay record' })).toHaveCount(0);
+  await expect(panel(page).getByRole('alert')).toContainText('The replay results are incomplete'); await expect(page.getByRole('link', { name: 'Download replay record' })).toHaveCount(0);
 });
 
 

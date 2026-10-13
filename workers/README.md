@@ -1,9 +1,9 @@
 # Worker setup
 
 Dataset inspection needs only the CPU reader. Install the other workers when you
-choose their workflows; each has separate dependencies, inputs and acceptance
-limits. Read the [support matrix](../docs/support.md) before treating a configured
-runtime as a verified model route.
+choose their workflows; each has separate dependencies and input requirements.
+Use the [support guide](../docs/support.md) to choose a compatible platform and
+runtime.
 
 Run each worker's installation commands in its own directory with the Python
 version named in its guide.

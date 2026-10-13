@@ -28,8 +28,8 @@ install the exact complete requirements above. The application host needs this
 interpreter even when the browser runs on another computer.
 `DatasetExplorer` also accepts the operator-side `reader_python` argument.
 
-The Windows path is source-install syntax; native Windows worker/desktop
-acceptance remains incomplete. See the [support matrix](../../docs/support.md).
+The Windows commands describe source setup. Use macOS or Linux for the current
+worker and desktop workflows; see the [support guide](../../docs/support.md).
 
 ## Check the installation
 
