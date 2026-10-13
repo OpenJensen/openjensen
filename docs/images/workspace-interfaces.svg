@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="510" viewBox="0 0 1200 510" role="img" aria-labelledby="title description">
+  <title id="title">Three ways to use OPEN JENSEN</title>
+  <desc id="description">Illustrated interfaces: the web app for visual workflows, the jensen CLI for scripts, and the optional keyboard-driven terminal client. Each connects to the same application API and shares projects, jobs and artifacts.</desc>
+  <defs>
+    <linearGradient id="background" x2="1" y2="1"><stop stop-color="#eef5fc"/><stop offset="1" stop-color="#f7f9fc"/></linearGradient>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; }
+      .label { fill: #274d72; font-size: 13px; font-weight: 700; letter-spacing: 1.4px; }
+      .heading { fill: #122c44; font-size: 24px; font-weight: 650; }
+      .copy { fill: #50677e; font-size: 15px; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; }
+    </style>
+  </defs>
+  <rect width="1200" height="510" rx="18" fill="url(#background)"/>
+  <text x="36" y="45" class="heading">One workspace. Three ways in.</text>
+  <text x="36" y="72" class="copy">Choose the interface that fits how you work.</text>
+  <!-- These compact interface illustrations use real navigation and commands. -->
+  <g transform="translate(36 98)">
+    <rect width="360" height="316" rx="12" fill="white" stroke="#d7e2ed"/>
+    <text x="22" y="31" class="label">WEB APP</text>
+    <rect x="18" y="50" width="324" height="180" rx="7" fill="#f8fafc" stroke="#d7e2ed"/>
+    <path d="M18 76h324" stroke="#d7e2ed"/>
+    <circle cx="32" cy="63" r="3" fill="#b7c8da"/><circle cx="42" cy="63" r="3" fill="#b7c8da"/><circle cx="52" cy="63" r="3" fill="#b7c8da"/>
+    <text x="79" y="67" font-size="10" fill="#50677e">127.0.0.1:8000</text>
+    <path d="M103 76v154" stroke="#d7e2ed"/>
+    <text x="30" y="98" fill="#122c44" font-size="10" font-weight="600">Open Jensen</text>
+    <rect x="25" y="111" width="70" height="22" rx="4" fill="#e2edf9"/>
+    <text x="32" y="125" fill="#274d72" font-size="10">Dataset</text>
+    <text x="32" y="151" fill="#50677e" font-size="10">Fine-tune</text>
+    <text x="32" y="177" fill="#50677e" font-size="10">My models</text>
+    <text x="119" y="100" fill="#122c44" font-size="13" font-weight="600">Dataset explorer</text>
+    <rect x="118" y="111" width="142" height="88" rx="4" fill="#dce8f3"/>
+    <path d="M119 179h140M149 174l25-26 24 10 20-28 28 16" fill="none" stroke="#739abb" stroke-width="7" stroke-linejoin="round"/>
+    <rect x="270" y="111" width="56" height="40" rx="4" fill="#e8eef5"/><rect x="270" y="159" width="56" height="40" rx="4" fill="#e8eef5"/>
+    <path d="M120 214h204" stroke="#b7c8da" stroke-width="3"/><circle cx="189" cy="214" r="4" fill="#274d72"/>
+    <text x="22" y="265" class="heading" font-size="19">Explore visually</text>
+    <text x="22" y="291" class="copy">Inspect data, set up training, follow jobs.</text>
+  </g>
+  <g transform="translate(420 98)">
+    <rect width="360" height="316" rx="12" fill="white" stroke="#d7e2ed"/>
+    <text x="22" y="31" class="label">COMMAND-LINE INTERFACE</text>
+    <rect x="18" y="50" width="324" height="180" rx="7" fill="#152b40"/>
+    <path d="M18 76h324" stroke="#30485f"/>
+    <text x="32" y="67" fill="#a6bdd1" class="mono" font-size="10">jensen CLI</text>
+    <g class="mono" fill="#d5e5f3">
+      <text x="32" y="105"><tspan fill="#8bc6f2">$</tspan> jensen projects list</text>
+      <text x="32" y="137"><tspan fill="#8bc6f2">$</tspan> jensen jobs list &lt;project&gt;</text>
+      <text x="32" y="169"><tspan fill="#8bc6f2">$</tspan> jensen jobs events &lt;job&gt;</text>
+      <text x="32" y="208" fill="#91aabd">Requests · JSON · automation</text>
+    </g>
+    <text x="22" y="265" class="heading" font-size="19">Automate with commands</text>
+    <text x="22" y="291" class="copy">Script requests and retrieve artifacts.</text>
+  </g>
+  <g transform="translate(804 98)">
+    <rect width="360" height="316" rx="12" fill="white" stroke="#d7e2ed"/>
+    <text x="22" y="31" class="label">INTERACTIVE TERMINAL</text>
+    <rect x="18" y="50" width="324" height="180" rx="7" fill="#152b40"/>
+    <text x="32" y="72" fill="#d5e5f3" class="mono" font-weight="600">OPEN JENSEN</text>
+    <path d="M18 84h324" stroke="#30485f"/>
+    <g class="mono" font-size="11" fill="#91aabd">
+      <rect x="25" y="93" width="103" height="24" rx="3" fill="#2c5274"/>
+      <text x="32" y="109" fill="#e8f2fb">F1 Projects</text><text x="140" y="109">F2 Jobs</text><text x="224" y="109">F3 Details</text>
+      <rect x="28" y="129" width="303" height="23" fill="#203d58"/>
+      <text x="36" y="145" fill="#d5e5f3">&gt; Robotics examples</text>
+      <text x="36" y="171">  PushT benchmark</text>
+      <text x="32" y="215">Ctrl+R Refresh   Ctrl+Q Quit</text>
+    </g>
+    <text x="22" y="265" class="heading" font-size="19">Work from your keyboard</text>
+    <text x="22" y="291" class="copy">Browse projects, jobs and recipe forms.</text>
+  </g>
+  <g stroke="#b7c8da" fill="none"><path d="M216 414v20h384v14M984 414v20H600M600 414v20"/></g>
+  <rect x="350" y="448" width="500" height="38" rx="19" fill="#274d72"/>
+  <text x="600" y="472" text-anchor="middle" fill="white" font-size="14" font-weight="550">Same API · Same projects · Same jobs · Same artifacts</text>
+</svg>

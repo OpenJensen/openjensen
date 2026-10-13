@@ -719,12 +719,15 @@ async function mockTrainingWorkspace(page: Page, {
 
 test('training choices submit both selected cameras, pinned model, method and GPU', async ({ page }) => {
   const { submitted, unexpectedRequests } = await mockTrainingWorkspace(page);
-  const datasetChoices = page.getByRole('group', { name: 'Inspected dataset', exact: true });
+  await expect(page.getByRole('region', { name: 'Recent datasets', exact: true }).getByRole('checkbox')).toHaveCount(3);
+  await page.getByRole('button', { name: /Browse all datasets/ }).click();
+  const datasetChoices = page.getByRole('dialog', { name: 'Choose datasets', exact: true });
   await expect(datasetChoices.getByRole('checkbox')).toHaveCount(4);
   await expect(datasetChoices.getByRole('checkbox', { name: 'fixture/pick-and-place', exact: true })).toHaveCount(1);
   await expect(datasetChoices.getByRole('checkbox', { name: 'fixture/local', exact: true })).toBeDisabled();
   await expect(datasetChoices.getByRole('checkbox', { name: 'fixture/unpinned', exact: true })).toBeDisabled();
   await expect(datasetChoices.getByRole('checkbox', { name: 'fixture/failed', exact: true })).toHaveCount(0);
+  await datasetChoices.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Start fine-tuning', exact: true })).toHaveCount(0);
   await expect(page.getByRole('checkbox', { name: 'observation.images.front', exact: true })).toBeChecked();
   await expect(page.getByRole('checkbox', { name: 'observation.images.wrist', exact: true })).toBeChecked();

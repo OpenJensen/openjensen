@@ -1909,3 +1909,107 @@ test('training timeline follows observed allocation environment downloads and fi
  await expect(timeline.locator('.timeline-complete')).toHaveCount(7);
  await noOverflow(page);
 });
+
+async function datasetBrowserFixture(page: Page) {
+  const state = await temporalTraining(page, 'ACT');
+  const original = state.jobs.find(job => job.id === 'dataset')!;
+  original.created_at = '2026-10-01T00:00:00Z';
+  const additions = Array.from({ length: 9 }, (_, index) => ({
+    ...original, id: `browser-data-${index + 1}`, created_at: `2026-10-${String(index + 2).padStart(2, '0')}T00:00:00Z`,
+    result: { ...original.result, repo_id: `fixture/data-${index + 1}`, revision: String(index + 1).repeat(40) },
+  }));
+  const mismatch = { ...additions[0], id: 'mismatched-data', result: { ...additions[0].result, repo_id: 'fixture/wrong-fps', fps: 15 } };
+  state.jobs.push(...additions, mismatch);
+  const reads: string[] = [];
+  await page.route('**/api/v1/datasets?*', route => {
+    reads.push(new URL(route.request().url()).searchParams.get('project_id') ?? 'all');
+    return route.fulfill({ json: [
+      { id: 'unfinished-import', project_id: projectId, name: 'Unfinished upload', source: 'local', status: 'uploading', created_at: timestamp() },
+      { id: 'foreign-import', project_id: 'other-project', name: 'Other project dataset', source: 'local', status: 'ready', created_at: timestamp() },
+    ] });
+  });
+  await state.setup.getByRole('button', { name: 'Dataset', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Recent datasets', exact: true }).getByRole('checkbox')).toHaveCount(3);
+  return { ...state, reads };
+}
+
+test('dataset browser keeps filtered multi-selection inside training and submits older exact inspections', async ({ page }, testInfo) => {
+  const state = await datasetBrowserFixture(page);
+  const recent = page.getByRole('region', { name: 'Recent datasets', exact: true });
+  await expect(recent.getByRole('checkbox', { name: 'fixture/data-9', exact: true })).toBeVisible();
+  await expect(recent.getByRole('checkbox', { name: 'fixture/data-1', exact: true })).toHaveCount(0);
+  const url = page.url();
+  await page.getByRole('button', { name: /Browse all datasets/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Choose datasets', exact: true });
+  const search = dialog.getByRole('searchbox', { name: 'Search datasets for training', exact: true });
+  await expect(search).toBeFocused();
+  for (const input of await dialog.locator('input:checked').all()) await input.uncheck();
+  await search.fill('data-1');
+  await dialog.getByRole('checkbox', { name: 'fixture/data-1', exact: true }).check();
+  await search.fill('data-2');
+  await dialog.getByRole('checkbox', { name: 'fixture/data-2', exact: true }).check();
+  await search.fill('no match');
+  await expect(dialog.getByText('No matching datasets. Try another search.', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('2 of 8 selected', { exact: true })).toBeVisible();
+  await search.fill('');
+  await expect(dialog.getByRole('checkbox', { name: 'Unfinished upload', exact: true })).toBeDisabled();
+  await expect(dialog.getByText('Finish importing before training.', { exact: true })).toBeVisible();
+  await expect(dialog.getByRole('checkbox', { name: 'Other project dataset', exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole('checkbox', { name: 'fixture/wrong-fps', exact: true })).toBeDisabled();
+  await expect(dialog.getByText(/Frame rates differ/)).toBeVisible();
+  await noOverflow(page);
+  await page.screenshot({ path: testInfo.outputPath('training-dataset-browser.png'), fullPage: true });
+  await dialog.getByRole('button', { name: 'Use selected datasets', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(page.url()).toBe(url);
+  const selected = page.getByRole('region', { name: 'Selected older datasets', exact: true });
+  await expect(selected.getByRole('checkbox', { name: 'fixture/data-1', exact: true })).toBeChecked();
+  await expect(selected.getByRole('checkbox', { name: 'fixture/data-2', exact: true })).toBeChecked();
+  const refreshed = page.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/projects/${projectId}/jobs`);
+  const chosenExtra = state.jobs.find(job => job.id === 'browser-data-2')!;
+  state.jobs.push({ ...chosenExtra, id: 'newer-duplicate-inspection', created_at: '2026-10-12T00:00:00Z' });
+  await refreshed;
+  await expect(selected.getByRole('checkbox', { name: 'fixture/data-2', exact: true })).toHaveValue('browser-data-2');
+  await expect(selected.getByRole('checkbox', { name: 'fixture/data-2', exact: true })).toBeChecked();
+  expect(state.submitted).toEqual([]);
+  await state.setup.getByRole('button', { name: 'Compute', exact: true }).click();
+  await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
+  await expect.poll(() => state.submitted.length).toBe(1);
+  expect(state.submitted[0]).toMatchObject({ dataset_job_id: 'browser-data-1', dataset_job_ids: ['browser-data-1', 'browser-data-2'],
+    dataset_camera_mappings: { 'browser-data-2': { 'observation.images.front': 'observation.images.front' } } });
+  expect(state.reads.length).toBeGreaterThan(0);
+  expect(new Set(state.reads)).toEqual(new Set([projectId]));
+});
+
+test('dataset browser cancel and Escape preserve the recipe and restore focus', async ({ page }) => {
+  await datasetBrowserFixture(page);
+  const button = page.getByRole('button', { name: /Browse all datasets/ });
+  const selectedBefore = await page.locator('input[name="training-dataset"]:checked').evaluateAll(inputs => inputs.map(input => (input as HTMLInputElement).value));
+  for (const cancel of ['Cancel', 'Escape']) {
+    await button.click();
+    const dialog = page.getByRole('dialog', { name: 'Choose datasets', exact: true });
+    for (const input of await dialog.locator('input:checked').all()) await input.uncheck();
+    await dialog.getByRole('checkbox', { name: 'fixture/data-1', exact: true }).check();
+    if (cancel === 'Escape') await page.keyboard.press('Escape');
+    else await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(button).toBeFocused();
+    expect(await page.locator('input[name="training-dataset"]:checked').evaluateAll(inputs => inputs.map(input => (input as HTMLInputElement).value))).toEqual(selectedBefore);
+  }
+});
+
+test('dataset browser caps mixtures at eight and allows removing a selected dataset at the limit', async ({ page }) => {
+  const state = await datasetBrowserFixture(page);
+  await page.getByRole('button', { name: /Browse all datasets/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Choose datasets', exact: true });
+  for (const input of await dialog.locator('input:checked').all()) await input.uncheck();
+  for (let index = 1; index <= 8; index++) await dialog.getByRole('checkbox', { name: `fixture/data-${index}`, exact: true }).check();
+  await expect(dialog.getByText('8 of 8 selected', { exact: true })).toBeVisible();
+  await expect(dialog.getByRole('checkbox', { name: 'fixture/data-9', exact: true })).toBeDisabled();
+  await dialog.getByRole('checkbox', { name: 'fixture/data-3', exact: true }).uncheck();
+  await expect(dialog.getByRole('checkbox', { name: 'fixture/data-9', exact: true })).toBeEnabled();
+  await dialog.getByRole('checkbox', { name: 'fixture/data-9', exact: true }).check();
+  await dialog.getByRole('button', { name: 'Use selected datasets', exact: true }).click();
+  await expect(page.locator('input[name="training-dataset"]:checked')).toHaveCount(8);
+  expect(state.submitted).toEqual([]);
+});
