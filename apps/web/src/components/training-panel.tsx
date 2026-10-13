@@ -11,7 +11,8 @@ import {
   type Job,
   type PolicyRequest,
 } from "@/lib/api";
-import { datasetStarters } from "@/lib/dataset-starters";
+import { datasetLibrary, isProjectDataset } from "@/lib/dataset-library";
+import { TrainingDatasetPicker } from "./training-dataset-picker";
 import { readPublicPreference, writePublicPreference } from "@/lib/public-preferences";
 import { gradientAccumulationAvailable, groupedTrainingModels, trainingModels, type TrainingModel } from "@/lib/training-models";
 import { checkpointStep, trainingRunModelLabel } from "@/lib/checkpoints";
@@ -273,6 +274,13 @@ export function TrainingPanel({
     refetchInterval: (query) =>
       active ? (query.state.data?.some(isActive) ? 1000 : 5000) : false,
   });
+  const library = useQuery({
+    queryKey: ["datasets", projectId],
+    queryFn: ({ signal }) => datasetLibrary.list(projectId, signal),
+    enabled: active && !!projectId,
+    retry: false,
+    refetchInterval: active ? 5000 : false,
+  });
   const artifacts = useQuery({
     queryKey: ["artifacts", projectId],
     queryFn: () => api.artifacts(projectId),
@@ -370,11 +378,11 @@ export function TrainingPanel({
     const key = `${job.result.source}:${job.result.repo_id ?? job.id}:${job.result.revision}`;
     if (
       !unique.has(key) ||
-      job.id === (resumeId ? priorRequest?.dataset_job_id : datasetId)
+      (resumeId ? [priorRequest?.dataset_job_id] : [datasetId, ...extraDatasetIds]).includes(job.id)
     )
       unique.set(key, job);
   }
-  const datasets = [...unique.values()];
+  const datasets = [...unique.values()].sort((a, b) => b.created_at.localeCompare(a.created_at));
   // Explicit handoffs and manual choices retain their exact identity when history
   // is delayed or changes. A fresh form may default only without a requested ID.
   const dataset = datasetId
@@ -801,84 +809,42 @@ export function TrainingPanel({
             {!resumeId && datasetId && datasetId !== "__none__" && !dataset && !jobs.isPending && <p className="warning-box" role="alert">Selected dataset {datasetId} is unavailable in this project. Another dataset has not been substituted. Refresh or select a dataset explicitly.</p>}
             {jobs.isPending && projectId ? (
               <p role="status">Loading datasets…</p>
-            ) : datasets.length ? (
-              <fieldset className="training-datasets">
-                <legend className="visually-hidden">Inspected dataset</legend>
-                {datasets.map((job) => {
-                  const profile = job.result;
-                  const starter = datasetStarters.find(
-                    (item) =>
-                      item.repoId === profile.repo_id &&
-                      item.revision === profile.revision,
-                  );
-                  const selected = resumeId ? activeDataset?.id === job.id : selectedDatasets.some(item => item.id === job.id);
-                  const issue = datasetIssue(profile) ?? (!selected && dataset
-                    ? selectedDatasets.length >= 8 ? "Select up to eight datasets per training job."
-                      : datasetCombinationIssue(dataset.result, profile, selectedCameras)
-                    : null);
-                  const unavailable = !!issue && !selected;
-                  const reasonId = `training-dataset-reason-${job.id}`;
-                  return (
-                    <label
-                      className={`training-dataset${unavailable ? " unavailable" : ""}`}
-                      key={job.id}
-                      title={unavailable ? undefined : profile.repo_id ?? "Local dataset"}
-                      tabIndex={unavailable ? 0 : undefined}
-                      aria-describedby={unavailable ? reasonId : undefined}
-                    >
-                      <input
-                        type="checkbox"
-                        name="training-dataset"
-                        value={job.id}
-                        aria-label={profile.repo_id ?? "Local dataset"}
-                        checked={selected}
-                        aria-describedby={unavailable ? reasonId : undefined}
-                        disabled={unavailable || !!resumeId || busy}
-                        onChange={() => {
-                          if (selectedDatasets.some(item => item.id === job.id)) {
-                            if (dataset?.id === job.id) { setDatasetId(extraDatasetIds[0] ?? "__none__"); setExtraDatasetIds(extraDatasetIds.slice(1)); }
-                            else setExtraDatasetIds(previous => previous.filter(id => id !== job.id));
-                          } else if (!dataset) setDatasetId(job.id);
-                          else {
-                            setCameraMappings(previous => ({ ...previous, [job.id]: combinationCameraMapping(dataset.result, profile, selectedCameras) }));
-                            setExtraDatasetIds(previous => [...previous, job.id]);
-                          }
-                          mutation.reset();
-                        }}
-                      />
-                      {starter ? (
-                        <img src={starter.poster} alt="" />
-                      ) : (
-                        <span className="training-dataset-icon">
-                          <Icon name="database" size={18} />
-                        </span>
-                      )}
-                      <span className="training-dataset-copy">
-                        <strong>
-                          {starter?.title ??
-                            profile.repo_id?.split("/").at(-1) ??
-                            "Local dataset"}
-                        </strong>
-                        <small>
-                          {`${profile.total_episodes} episodes · ${cameras(profile).length} ${cameras(profile).length === 1 ? "camera" : "cameras"}`}
-                        </small>
-                      </span>
-                      {unavailable && <span className="training-dataset-reason" id={reasonId} role="tooltip">{issue}</span>}
-                    </label>
-                  );
-                })}
-              </fieldset>
             ) : (
-              <div className="training-empty">
-                <p>No inspected datasets.</p>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={onChooseDataset}
-                >
-                  Import dataset <Icon name="arrow" size={15} />
-                </button>
-              </div>
+              <TrainingDatasetPicker
+                datasets={datasets}
+                library={(library.data ?? []).filter(entry => isProjectDataset(entry, projectId))}
+                selectedIds={resumeId ? activeDataset ? [activeDataset.id] : [] : selectedDatasets.map(item => item.id)}
+                disabled={!!resumeId || busy}
+                libraryLoading={library.isPending}
+                libraryError={library.error?.message}
+                onRetryLibrary={() => { void library.refetch(); }}
+                issue={(job, ids) => {
+                  const selected = ids.includes(job.id);
+                  const reference = datasets.find(item => item.id === ids[0]);
+                  const views = reference && cameraSelections[reference.id] !== undefined
+                    ? cameras(reference.result).filter(key => cameraSelections[reference.id].includes(key))
+                    : cameras(reference?.result);
+                  return datasetIssue(job.result) ?? (!selected && reference
+                    ? ids.length >= 8 ? "Select up to eight datasets per training job."
+                      : datasetCombinationIssue(reference.result, job.result, views)
+                    : null);
+                }}
+                onChange={ids => {
+                  const reference = datasets.find(item => item.id === ids[0]);
+                  const views = reference && cameraSelections[reference.id] !== undefined
+                    ? cameras(reference.result).filter(key => cameraSelections[reference.id].includes(key))
+                    : cameras(reference?.result);
+                  setCameraMappings(previous => Object.fromEntries(ids.slice(1).map(id => {
+                    const candidate = datasets.find(item => item.id === id)!;
+                    return [id, reference?.id === dataset?.id && previous[id] ? previous[id]
+                      : combinationCameraMapping(reference!.result, candidate.result, views)];
+                  })));
+                  setDatasetId(ids[0] ?? "__none__");
+                  setExtraDatasetIds(ids.slice(1));
+                  mutation.reset();
+                }}
+                onImport={onChooseDataset}
+              />
             )}
             {!resumeId && selectedDatasets.slice(1).map(item => <fieldset key={item.id} className="training-camera-mapping"><legend>Camera mapping · {item.result.repo_id}</legend>{selectedCameras.map(key => <label key={key}>{key.replace(/^observation\.images\./, "")}<select aria-label={`${item.result.repo_id}: ${key}`} value={mappings[item.id][key]} disabled={busy} onChange={event => setCameraMappings(previous => ({ ...previous, [item.id]: { ...previous[item.id], [key]: event.target.value } }))}><option value="">Choose matching camera</option>{cameras(item.result).map(source => <option key={source} value={source}>{source.replace(/^observation\.images\./, "")}</option>)}</select></label>)}</fieldset>)}
             {mixtureIssue && <p className="error-notice" role="alert">{mixtureIssue}</p>}

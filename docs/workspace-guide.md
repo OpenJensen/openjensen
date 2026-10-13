@@ -28,7 +28,7 @@ Start the configured executor, open Teaching, wait for a camera frame, set an in
 
 ## Fine-tune
 
-Choose data, cameras, model, method and compute. Review the recipe and start training. Open the saved run to follow progress, download a checkpoint, resume, or export it. [Worker setup](native-training.md) · [Recipes and commands](policy-workflow.md)
+Choose a recent dataset or use **Browse all datasets** to search saved datasets in this project and select up to eight compatible datasets without leaving the training form. Apply the selection, then choose cameras, model, method and compute. Review the recipe and start training. Open the saved run to follow progress, download a checkpoint, resume, or export it. [Worker setup](native-training.md) · [Recipes and commands](policy-workflow.md)
 
 ## Distill
 
