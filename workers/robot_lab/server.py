@@ -21,6 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
+from assembled_session import AssembledSession, CalibrationRevisions, empty_assembled_state
 from camera import CameraPool
 from dataset import DatasetWriter, atomic_json, dataset_file, list_datasets, manifest, safe_slug
 from dispatch import MainThreadDispatcher
@@ -139,6 +140,9 @@ class RobotLab:
         camera=None,
         port_provider=serial_ports,
         start_threads=True,
+        assembled_factory=None,
+        movement_detector=None,
+        observe_timeout=45,
     ):
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -153,6 +157,12 @@ class RobotLab:
         self.stop_lock = threading.Lock()
         self.lifecycle_lock = threading.RLock()
         self.stopping = False
+        self.assembled_factory = assembled_factory
+        self.movement_detector = movement_detector
+        self.observe_timeout = observe_timeout
+        self.calibration_revisions = CalibrationRevisions(self.data_dir)
+        self.assembled_session = None
+        self.assembled_state = empty_assembled_state()
         self.bus_factory = bus_factory
         self.port_provider = port_provider
         self.camera = camera or CameraPool()
@@ -200,11 +210,16 @@ class RobotLab:
             / f"{robot_id}.json"
         )
 
-    def load_calibration(self, robot_id, role):
+    def load_calibration(self, robot_id, role, port=None):
         path = self.calibration_path(robot_id, role)
         if not path.is_file():
             raise RequestError(f"No saved calibration for {robot_id}; complete calibration first")
-        return valid_calibration(json.loads(path.read_text()))
+        calibration = valid_calibration(json.loads(path.read_text()))
+        if port and not self.calibration_revisions.fresh(port, robot_id, role, path):
+            raise RequestError(
+                "Motor IDs changed on this port; save a new calibration before control"
+            )
+        return calibration
 
     def _port(self, value):
         if not isinstance(value, str) or value not in {
@@ -218,6 +233,7 @@ class RobotLab:
             self.mode != "idle"
             or self.bus is not None
             or self.pending_bus is not None
+            or self.assembled_session is not None
             or self.stopping
         ):
             raise RequestError("Stop the current session before changing hardware setup")
@@ -234,6 +250,15 @@ class RobotLab:
             for path in self.calibration_root.glob(pattern):
                 calibrations.append({"robot_id": path.stem, "role": role, "path": str(path)})
         writer = self.writer
+        with self.lifecycle_lock:
+            assembled = json.loads(json.dumps(self.assembled_state))
+        try:
+            assembled["calibration_required"] = self.calibration_revisions.required(
+                assembled["port"]
+            )
+        except (ValueError, OSError) as error:
+            assembled["calibration_required"] = True
+            assembled["error"] = str(error)
         return {
             "ok": True,
             "version": "1",
@@ -245,6 +270,7 @@ class RobotLab:
                 "probe": hardware,
                 "camera": deps["cv2"]["installed"],
                 "motor_setup": hardware,
+                "assembled_setup": hardware,
                 "calibration": hardware,
                 "control": hardware,
                 "recording": hardware
@@ -257,10 +283,11 @@ class RobotLab:
                 "role": self.role,
                 "positions": dict(self.positions),
                 "torque_enabled": self.torque,
-                "watchdog_seconds": 10.0 if self.mode == "calibration" else 2.0,
+                "watchdog_seconds": 10.0 if self.mode in {"calibration", "setup"} else 2.0,
                 "error": self.error,
             },
             "calibration": json.loads(json.dumps(self.calibration_state)),
+            "assembled": assembled,
             "recording": {
                 "actual_fps": writer.actual_fps if writer else None,
                 "active": writer is not None and not writer.finalized,
@@ -319,36 +346,141 @@ class RobotLab:
             baud = payload.get("baudrate", 1_000_000)
             if baud not in BAUDRATES:
                 raise RequestError("Unsupported baudrate")
-            bus = self.bus_factory(self._port(payload.get("port")), baud)
+            port = self._port(payload.get("port"))
+            generation = self.generation
+            bus = self.bus_factory(port, baud)
+            with self.stop_lock, self.lifecycle_lock:
+                if generation != self.generation or self.stopping:
+                    bus.close()
+                    raise RequestError("Motor setup cancelled by Stop")
+                self.pending_bus = bus
             try:
                 with bus.lock:
-                    scan = probe_bus(bus, range(1, 254), repeats=1)["motors"]
+                    scan = []
+                    for motor_id in range(1, 254):
+                        if generation != self.generation:
+                            raise RequestError("Motor setup cancelled by Stop")
+                        scan.extend(probe_bus(bus, [motor_id], repeats=1)["motors"])
                     if len(scan) != 1:
                         raise RequestError(
                             "Expected exactly one responding ID; physically isolate the "
                             "selected motor. " + ISOLATION_WARNING
                         )
                     current = scan[0]["id"]
-                    repeated = [bus.ping(current) for _ in range(3)]
-                    if repeated != [777] * 3:
+                    if [bus.ping(current) for _ in range(3)] != [777] * 3:
                         raise RequestError(
                             "Motor replies are intermittent or model is not STS3215; no ID written"
                         )
-                    bus.write("Torque_Enable", current, 0)
-                    bus.write("Lock", current, 0)
-                    bus.write("ID", current, IDS[joint])
-                    bus.write("Baud_Rate", IDS[joint], 0)
-                    bus.port.setBaudRate(1_000_000)
-                    if [bus.ping(IDS[joint]) for _ in range(3)] != [777] * 3:
-                        raise HardwareError(
-                            "ID write needs inspection: motor did not verify at new ID/baudrate"
-                        )
+                    if generation != self.generation:
+                        raise RequestError("Motor setup cancelled by Stop")
+                    self.calibration_revisions.mark_dirty(port)
+                    if generation != self.generation:
+                        raise RequestError("Motor setup cancelled by Stop")
+                    # Once started, finish the bounded ID/baud/re-lock transaction
+                    # under the bus lock before Stop can close this port.
+                    unlocked = relocked = False
+                    try:
+                        bus.write("Torque_Enable", current, 0)
+                        bus.write("Lock", current, 0)
+                        unlocked = True
+                        bus.write("ID", current, IDS[joint])
+                        bus.write("Baud_Rate", IDS[joint], 0)
+                        bus.port.setBaudRate(1_000_000)
+                        if [bus.ping(IDS[joint]) for _ in range(3)] != [777] * 3:
+                            raise HardwareError(
+                                "ID write needs inspection: motor did not verify at new ID/baudrate"
+                            )
+                        bus.write("Lock", IDS[joint], 1)
+                        if bus.read("Lock", IDS[joint]) != 1:
+                            raise HardwareError("Motor EEPROM could not be locked at its new ID")
+                        relocked = True
+                    finally:
+                        if unlocked and not relocked:
+                            # An acknowledged ID may be lost on a cable error.
+                            # Try only EEPROM re-lock at the two possible IDs.
+                            for motor_id in {current, IDS[joint]}:
+                                try:
+                                    bus.write("Lock", motor_id, 1)
+                                except Exception:
+                                    pass
             finally:
+                with self.lifecycle_lock:
+                    if self.pending_bus is bus:
+                        self.pending_bus = None
                 bus.close()
             return {
                 "assigned": {"joint": joint, "id": IDS[joint], "baudrate": 1_000_000},
                 "warning": ISOLATION_WARNING,
             }
+
+    def _assembled_changed(self, controller, snapshot, terminal):
+        # Engine progress may run under its I/O lock. Never acquire lab.lock here.
+        with self.lifecycle_lock:
+            if self.assembled_session is not controller:
+                return
+            self.assembled_state = snapshot
+            if terminal:
+                self.assembled_session = None
+                self.mode = "idle"
+                self.torque = False
+                if snapshot.get("error"):
+                    self.error = snapshot["error"]
+
+    def assembled_start(self, payload):
+        require(payload, "confirm", "START ASSEMBLED SETUP")
+        if payload.get("supported") is not True:
+            raise RequestError(
+                "Support the SO-101 arm and confirm its six STS3215 motors "
+                "before experimental ID reboots"
+            )
+        with self.lock:
+            self._idle()
+            port = self._port(payload.get("port"))
+            generation = self.generation
+            # Preserve old profiles, but revoke their authority before the first
+            # possible ID write, including interrupted/partially completed work.
+            self.calibration_revisions.mark_dirty(port)
+            with self.stop_lock, self.lifecycle_lock:
+                if generation != self.generation or self.stopping:
+                    raise RequestError("Setup was cancelled before it started")
+                controller = AssembledSession(
+                    port,
+                    self.data_dir,
+                    self._assembled_changed,
+                    engine_factory=self.assembled_factory,
+                    detector=self.movement_detector,
+                    observe_timeout=self.observe_timeout,
+                    verified_so101=True,
+                )
+                self.assembled_session = controller
+                self.assembled_state = controller.snapshot()
+                self.generation += 1
+                self.mode, self.port = "setup", port
+                self.robot_id = self.role = None
+                self.positions = {}
+                self.action = {}
+                self.torque = False
+                self.error = None
+                self.heartbeat = time.monotonic()
+        controller.start()
+        return self.status()
+
+    def assembled_action(self, action, payload):
+        with self.lifecycle_lock:
+            controller = self.assembled_session
+            if controller is None or self.mode != "setup" or self.stopping:
+                raise RequestError("Start assembled motor setup first")
+        # Reads and background-thread publication never hold the global lab lock.
+        if action == "observe":
+            controller.observe(payload.get("joint"))
+        elif action == "accept":
+            controller.accept(payload.get("joint"), payload.get("motor_id"))
+        elif action == "finish":
+            require(payload, "confirm", "SAVE MOTOR IDS")
+            controller.finish()
+        else:
+            raise RequestError("Unknown assembled setup operation")
+        return self.status()
 
     def calibration_start(self, payload):
         require(payload, "confirm", "START CALIBRATION")
@@ -490,6 +622,9 @@ class RobotLab:
                         backup = path.with_name(path.stem + f".backup-{time.time_ns()}.json")
                         backup.write_bytes(path.read_bytes())
                     atomic_json(path, calibration)
+                    self.calibration_revisions.acknowledge(
+                        self.port, self.robot_id, self.role, path
+                    )
                     self.original_calibration = None
                     state["phase"] = "saved"
         self.stop()
@@ -504,7 +639,7 @@ class RobotLab:
             self._idle()
             port = self._port(payload.get("port"))
             robot_id = safe_slug(payload.get("robot_id"))
-            calibration = self.load_calibration(robot_id, "follower")
+            calibration = self.load_calibration(robot_id, "follower", port)
             generation = self.generation
             leader, bus = None, self.bus_factory(port)
             with self.stop_lock, self.lifecycle_lock:
@@ -543,7 +678,7 @@ class RobotLab:
                                 "Leader and follower must use separate serial devices"
                             )
                         leader_calibration = self.load_calibration(
-                            payload.get("leader_id"), "leader"
+                            payload.get("leader_id"), "leader", leader_port
                         )
                         leader = self.bus_factory(leader_port)
                         with leader.lock:
@@ -652,6 +787,10 @@ class RobotLab:
         # Invalidate in-flight capture before waiting on any camera/serialization.
         with self.lifecycle_lock:
             self.generation += 1
+            assembled = self.assembled_session
+            self.assembled_session = None
+            if assembled is not None:
+                assembled.stop_event.set()
             bus, leader = self.bus or self.pending_bus, self.leader
             self.bus = self.leader = self.pending_bus = None
             self.torque = False
@@ -661,6 +800,14 @@ class RobotLab:
             if self.writer:
                 self.writer.episode_active = False
         errors = []
+        if assembled is not None:
+            try:
+                assembled.cancel()
+            except Exception as caught:
+                errors.append(str(caught))
+            finally:
+                with self.lifecycle_lock:
+                    self.assembled_state = assembled.snapshot()
         for device in (bus, leader):
             if device is None:
                 continue
@@ -811,9 +958,13 @@ class RobotLab:
     def _watchdog(self):
         while not self.finished.wait(0.1):
             if self.mode != "idle" and time.monotonic() - self.heartbeat > (
-                10 if self.mode == "calibration" else 2
+                10 if self.mode in {"calibration", "setup"} else 2
             ):
-                self.stop("Browser heartbeat timed out; motor torque disabled")
+                self.stop(
+                    "Setup heartbeat timed out; ID work stopped"
+                    if self.mode == "setup"
+                    else "Browser heartbeat timed out; motor torque disabled"
+                )
 
     def close(self):
         self.finished.set()
@@ -909,7 +1060,7 @@ class Handler(BaseHTTPRequestHandler):
                     self.close_connection = True
                     return
             return self._send(404, {"error": "Unknown companion route", "code": "not_found"})
-        except (BrokenPipeError, ConnectionResetError):
+        except BrokenPipeError, ConnectionResetError:
             pass
         except Exception as error:
             self._error(error)
@@ -929,6 +1080,16 @@ class Handler(BaseHTTPRequestHandler):
                 result = lab.probe(payload)
             elif path == "/v1/setup/motor":
                 result = lab.setup_motor(payload)
+            elif path == "/v1/setup/assembled/start":
+                result = lab.assembled_start(payload)
+            elif path in (
+                "/v1/setup/assembled/observe",
+                "/v1/setup/assembled/accept",
+                "/v1/setup/assembled/finish",
+            ):
+                result = lab.assembled_action(path.rsplit("/", 1)[-1], payload)
+            elif path == "/v1/setup/assembled/cancel":
+                result = lab.stop()
             elif path == "/v1/calibration/start":
                 result = lab.calibration_start(payload)
             elif path == "/v1/calibration/center":
@@ -957,7 +1118,7 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 return self._send(404, {"error": "Unknown companion route", "code": "not_found"})
             self._send(200, result)
-        except (BrokenPipeError, ConnectionResetError):
+        except BrokenPipeError, ConnectionResetError:
             pass
         except Exception as error:
             self._error(error)

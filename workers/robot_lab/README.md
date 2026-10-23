@@ -22,11 +22,18 @@ or `teleoperators/so_leader/`, respecting `HF_LEROBOT_CALIBRATION`.
 Existing calibration files receive timestamped backups when replaced.
 
 Use the app's Connect → Motor IDs → Calibrate → Teleoperate → Record flow.
-Factory motors sharing ID 1 **cannot be distinguished by a USB scan**, even
-when a reply looks stable. The ID wizard therefore requires each selected motor
-to be physically isolated, exactly as the official LeRobot setup procedure does.
-A read-only scan never changes registers or torque. ID setup, calibration, and
-enabling control each require explicit named UI confirmations.
+Factory motors sharing ID 1 **cannot be distinguished by an ordinary USB scan**,
+even when a reply looks stable. The main Motor IDs screen now includes an animated
+joint picker and experimental assembled-arm setup: measured reboot timing separates
+duplicate addresses, then the operator moves each highlighted joint by hand and
+confirms its encoder identity. All motor cables remain connected. The method adapts
+Enigma's MIT-licensed servotools research; firmware/host timing still requires
+hardware acceptance. It reboots servos and changes persistent IDs, never goal
+positions or torque-on commands. Support the arm before starting. Partial setup
+retains a recovery journal and requires fresh calibration before control.
+The official isolated-motor workflow remains an advanced option and retains its
+physical-isolation gate. A read-only scan never changes registers or torque.
+ID setup, calibration, and enabling control require explicit named UI confirmations.
 
 Calibration first disables torque, captures the manually held middle pose, and
 samples every joint's manually swept range. Wrist roll uses the official full

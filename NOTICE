@@ -7,3 +7,9 @@ Third-party source, datasets, robot assets, model weights and runtime dependenci
 retain their original licenses and attribution. Consult their accompanying
 LICENSE, NOTICE, source-provenance records and provider terms. The application
 license does not grant additional rights to those materials.
+
+The assembled-arm motor-ID workflow includes MIT-licensed code adapted from
+Enigma-Incorporated/servotools, commit
+1c65c57587f91085cd32fca3743f3e6f464cfe35.
+The vendored source retains its accompanying license and provenance record.
+https://github.com/Enigma-Incorporated/servotools

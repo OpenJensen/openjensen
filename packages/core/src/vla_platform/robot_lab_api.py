@@ -54,6 +54,11 @@ PROTOCOL = {
     "POST": {
         "probe",
         "setup/motor",
+        "setup/assembled/start",
+        "setup/assembled/observe",
+        "setup/assembled/accept",
+        "setup/assembled/finish",
+        "setup/assembled/cancel",
         "calibration/start",
         "calibration/center",
         "calibration/finish",

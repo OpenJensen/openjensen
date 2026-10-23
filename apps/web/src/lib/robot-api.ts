@@ -16,10 +16,11 @@ export type RobotDataset = { id: string; path: string; episodes: number; frames:
 export type RobotStatus = {
   ok?: boolean; connected?: boolean; label?: string; message?: string; version?: string; platform?: string;
   dependencies?: Record<string, { installed: boolean; version: string | null }>;
-  capabilities?: { probe: boolean; camera: boolean; motor_setup: boolean; calibration: boolean; control: boolean; recording: boolean };
-  session?: { mode: 'idle' | 'calibration' | ControlMode; robot_id: string | null; port: string | null; role: RobotRole | null; positions: JointValues; torque_enabled: boolean; watchdog_seconds: number; error: string | null };
+  capabilities?: { assembled_setup?: boolean; probe: boolean; camera: boolean; motor_setup: boolean; calibration: boolean; control: boolean; recording: boolean };
+  session?: { mode: 'idle' | 'calibration' | 'setup' | ControlMode; robot_id: string | null; port: string | null; role: RobotRole | null; positions: JointValues; torque_enabled: boolean; watchdog_seconds: number; error: string | null };
   calibration?: { phase: 'idle' | 'center' | 'ranges' | 'saved'; mins: JointValues; maxes: JointValues; offsets: JointValues; path: string | null };
   recording?: { active: boolean; dataset_id: string | null; episode_active: boolean; frames: number; episodes: number; fps: number; error: string | null };
+  assembled?: { phase: 'idle' | 'scanning' | 'splitting' | 'ready' | 'observing' | 'review' | 'applying' | 'complete' | 'error' | 'stopped'; ids: number[]; selected_joint: RobotJoint | null; detected_id: number | null; candidate_delta: number | null; mapping: Partial<Record<RobotJoint, number>>; message: string; error: string | null; log: string[]; progress: unknown; calibration_required: boolean };
   calibrations?: { robot_id: string; role: RobotRole; path: string }[];
   datasets?: RobotDataset[];
 };
@@ -55,6 +56,11 @@ export const robotApi = {
   datasets: () => request<{ datasets: RobotDataset[] }>('/datasets'),
   probe: (port: string) => request<RobotProbe>('/probe', { port }, { timeoutMs: 90_000 }),
   assignMotor: (port: string, joint: RobotJoint) => request<MotorAssignment>('/setup/motor', { port, joint, isolated: true, confirm: 'ASSIGN MOTOR ID' }, { timeoutMs: 90_000 }),
+  startAssembled: (port: string) => request<RobotStatus>('/setup/assembled/start', { port, supported: true, confirm: 'START ASSEMBLED SETUP' }),
+  observeAssembled: (joint: RobotJoint) => request<RobotStatus>('/setup/assembled/observe', { joint }),
+  acceptAssembled: (joint: RobotJoint, motor_id: number) => request<RobotStatus>('/setup/assembled/accept', { joint, motor_id }),
+  finishAssembled: () => request<RobotStatus>('/setup/assembled/finish', { confirm: 'SAVE MOTOR IDS' }),
+  cancelAssembled: () => request<RobotStatus>('/setup/assembled/cancel', {}),
   startCalibration: (port: string, robot_id: string, role: RobotRole) => request<RobotStatus>('/calibration/start', { port, robot_id, role, confirm: 'START CALIBRATION' }, { timeoutMs: 45_000 }),
   centerCalibration: () => request<RobotStatus>('/calibration/center', {}),
   finishCalibration: () => request<RobotStatus>('/calibration/finish', { confirm: 'SAVE CALIBRATION' }),
@@ -62,7 +68,7 @@ export const robotApi = {
   startControl: (input: { port: string; robot_id: string; mode: ControlMode; leader_port?: string; leader_id?: string }) => request<RobotStatus>('/control/start', { ...input, confirm: 'ENABLE MOTION' }, { timeoutMs: 45_000 }),
   heartbeat: () => request<RobotStatus>('/control/heartbeat', {}, { timeoutMs: 2_000 }),
   jog: (joint: RobotJoint, delta: number) => request<RobotStatus>('/control/jog', { joint, delta }, { timeoutMs: 4_000 }),
-  stop: (keepalive = false) => request<RobotStatus>('/stop', {}, { timeoutMs: 5_000, keepalive }),
+  stop: (keepalive = false) => request<RobotStatus>('/stop', {}, { timeoutMs: 10_000, keepalive }),
   startRecording: (input: { dataset_id: string; task: string; fps: number; camera_index: number | null }) => request<RobotStatus>('/recording/start', input, { timeoutMs: 90_000 }),
   startEpisode: () => request<RobotStatus>('/recording/episode/start', {}),
   saveEpisode: () => request<RobotStatus>('/recording/episode/save', {}, { timeoutMs: 90_000 }),

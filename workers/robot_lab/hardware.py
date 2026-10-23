@@ -188,13 +188,30 @@ class ServoBus:
     def write_calibration(self, calibration):
         for joint, entry in calibration.items():
             motor_id = IDS[joint]
-            self.write("Lock", motor_id, 0)
-            for register, key in (
-                ("Homing_Offset", "homing_offset"),
-                ("Min_Position_Limit", "range_min"),
-                ("Max_Position_Limit", "range_max"),
-            ):
-                self.write(register, motor_id, entry[key])
+            write_error = None
+            try:
+                self.write("Lock", motor_id, 0)
+                for register, key in (
+                    ("Homing_Offset", "homing_offset"),
+                    ("Min_Position_Limit", "range_min"),
+                    ("Max_Position_Limit", "range_max"),
+                ):
+                    self.write(register, motor_id, entry[key])
+            except Exception as error:
+                write_error = error
+                raise
+            finally:
+                # Lock=1 persists the EEPROM changes. Even a failed/uncertain
+                # unlock or field write must make this bounded re-lock attempt.
+                try:
+                    self.write("Lock", motor_id, 1)
+                except Exception as error:
+                    if write_error is not None:
+                        raise HardwareError(
+                            f"Calibration write failed ({write_error}); EEPROM re-lock "
+                            f"also failed ({error}) for motor {motor_id}"
+                        ) from write_error
+                    raise
 
 
 def probe_bus(bus, ids=range(1, 7), repeats=3):

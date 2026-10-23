@@ -1,0 +1,20 @@
+{
+  "project": "Enigma-Incorporated/servotools",
+  "commit": "1c65c57587f91085cd32fca3743f3e6f464cfe35",
+  "url": "https://github.com/Enigma-Incorporated/servotools",
+  "license": "MIT",
+  "files_sha256": {
+    "bus.py": "e802f62b2e43d773dc0c3a3ec098fb4c46da3e2f7ff044545241d28e3a89bf5a",
+    "registers.py": "a1b68e047ecb720441dc90aad827c945fdaf26622f06d864ab4c165a05f472f9",
+    "config.py": "a6ba80978c728bfc6d51961207acb66acd8aa6ebae746d5b57a30c7a7d6959cc",
+    "LICENSE": "83c543c69591078889dc0ae847f0b11875457392c6d9df9280b5e1fd9340bf5c"
+  },
+  "usage": "Packet framing and read-only parsing constants are vendored unchanged. OpenJensen assembled.py adapts the documented reboot-wake sweep with fail-closed timing measurement, write allowlist, cancellation, journaling and strict six-joint acceptance. Upstream CLI and blind timing fallback are not executed.",
+  "derived_files": {
+    "framing.py": {
+      "sha256": "19c81173347f23948bb6ea9c42a5e9c16e23460b7e913ec05225f43b7aaa0dc9",
+      "source": "bus.py",
+      "changes": "Extracted checksum, packet and find_frame functions without importing optional pyserial; byte framing/parsing algorithms unchanged. Original bus.py is retained unchanged."
+    }
+  }
+}

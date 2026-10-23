@@ -19,7 +19,24 @@ REQUIREMENTS = [
     "pyserial==3.5",
     "feetech-servo-sdk==1.0.0",
 ]
-SOURCE_MODULES = ("dispatch.py", "server.py", "hardware.py", "camera.py", "dataset.py")
+SOURCE_MODULES = (
+    "dispatch.py",
+    "server.py",
+    "hardware.py",
+    "camera.py",
+    "dataset.py",
+    "assembled.py",
+    "assembled_session.py",
+)
+VENDOR_FILES = (
+    "__init__.py",
+    "bus.py",
+    "config.py",
+    "framing.py",
+    "registers.py",
+    "LICENSE",
+    "PROVENANCE.json",
+)
 SERVICE_LABELS = ("com.openjensen.robot-lab", "com.openjensen.robot-lab.tunnel")
 
 
@@ -79,9 +96,20 @@ def main():
         parser.error(
             "Keep at least 10 GiB free space before installing, including offline installs."
         )
-    if any(not (args.source / name).is_file() for name in SOURCE_MODULES):
+    required = [
+        *(Path(name) for name in SOURCE_MODULES),
+        *(Path("_vendor/servotools") / name for name in VENDOR_FILES),
+    ]
+    if (
+        any(
+            not (args.source / name).is_file() or (args.source / name).is_symlink()
+            for name in required
+        )
+        or (args.source / "_vendor").is_symlink()
+        or (args.source / "_vendor/servotools").is_symlink()
+    ):
         parser.error(
-            "--source must contain dispatch.py, server.py, hardware.py, camera.py and dataset.py"
+            "--source must contain all companion modules and the licensed _vendor/servotools source"
         )
     if args.ssh_host and (
         args.ssh_host.startswith("-")
@@ -107,7 +135,7 @@ def main():
     if token_file.exists() or token_file.is_symlink():
         try:
             read_private_token(token_file)
-        except (OSError, ValueError, UnicodeDecodeError):
+        except OSError, ValueError, UnicodeDecodeError:
             parser.error(
                 "The existing token must be an owned private regular file with a valid token."
             )
@@ -164,11 +192,17 @@ def main():
         [str(python), "-c", "import cv2,numpy,serial,scservo_sdk,pyarrow,PIL"], check=True
     )
     source = prefix / "source"
+    if source.is_symlink():
+        raise ValueError("Installed source must not be a symbolic link")
     source.mkdir(exist_ok=True)
-    for name in (*SOURCE_MODULES, "API.md"):
+    for name in (*required, Path("API.md")):
         current = args.source / name
-        if current.is_file():
-            shutil.copy2(current, source / name)
+        if current.is_file() and not current.is_symlink():
+            target = source / name
+            if target.is_symlink() or any(parent.is_symlink() for parent in target.parents):
+                raise ValueError("Installed source must not contain symbolic links")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(current, target)
     data = Path.home() / "Library/Application Support/OpenJensen/robot-lab"
     data.mkdir(parents=True, exist_ok=True, mode=0o700)
     data.chmod(0o700)

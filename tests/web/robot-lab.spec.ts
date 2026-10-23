@@ -7,7 +7,7 @@ const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQ
 const joints = ['shoulder_pan', 'shoulder_lift', 'elbow_flex', 'wrist_flex', 'wrist_roll', 'gripper'];
 const values = (value: number) => Object.fromEntries(joints.map(name => [name, value]));
 function initialStatus(calibrated = false): any {
-  return { ok: true, connected: true, label: 'This Mac', version: '1', platform: 'Darwin', dependencies: { lerobot: { installed: false, version: null }, serial: { installed: true, version: '3.5' }, cv2: { installed: true, version: '4.12.0' }, scservo_sdk: { installed: true, version: '1.0.0' } }, capabilities: { probe: true, camera: true, motor_setup: true, calibration: true, control: true, recording: true }, session: { mode: 'idle', robot_id: null, port: null, role: null, positions: {}, torque_enabled: false, watchdog_seconds: 2, error: null }, calibration: { phase: 'idle', mins: {}, maxes: {}, offsets: {}, path: null }, recording: { active: false, dataset_id: null, episode_active: false, frames: 0, episodes: 0, fps: 10, error: null }, calibrations: calibrated ? [{ robot_id: 'my-so101', role: 'follower', path: 'private-calibration.json' }] : [], datasets: [] };
+  return { ok: true, connected: true, label: 'This Mac', version: '1', platform: 'Darwin', dependencies: { lerobot: { installed: false, version: null }, serial: { installed: true, version: '3.5' }, cv2: { installed: true, version: '4.12.0' }, scservo_sdk: { installed: true, version: '1.0.0' } }, capabilities: { assembled_setup: true, probe: true, camera: true, motor_setup: true, calibration: true, control: true, recording: true }, session: { mode: 'idle', robot_id: null, port: null, role: null, positions: {}, torque_enabled: false, watchdog_seconds: 2, error: null }, calibration: { phase: 'idle', mins: {}, maxes: {}, offsets: {}, path: null }, recording: { active: false, dataset_id: null, episode_active: false, frames: 0, episodes: 0, fps: 10, error: null }, assembled: { phase: 'idle', ids: [], selected_joint: null, detected_id: null, candidate_delta: null, mapping: {}, message: 'Start experimental assembled setup.', error: null, log: [], progress: null, calibration_required: false }, calibrations: calibrated ? [{ robot_id: 'my-so101', role: 'follower', path: 'private-calibration.json' }] : [], datasets: [] };
 }
 async function fixture(page: Page, calibrated = false) {
   const state = { status: initialStatus(calibrated), writes: [] as { path: string; body: any }[], errors: [] as string[], datasetReads: 0 };
@@ -23,9 +23,14 @@ async function fixture(page: Page, calibrated = false) {
       if (action === '/datasets') return route.fulfill({ json: { datasets: state.status.datasets } });
       if (action === '/probe') return route.fulfill({ json: { port, baudrate: 1000000, motors: [{ id: 1, model: 777, stable: true, responses: 3 }], ready: false, expected_ids: [1, 2, 3, 4, 5, 6], warning: 'A response at one ID cannot prove that only one physical motor is connected.' } });
       if (action === '/setup/motor') return route.fulfill({ json: { assigned: { joint: body.joint, id: joints.indexOf(body.joint) + 1, baudrate: 1000000 }, warning: 'Keep other motors disconnected.' } });
-      if (action === '/calibration/start') { state.status.session = { ...state.status.session, mode: 'calibration', port: body.port, robot_id: body.robot_id, role: body.role, positions: values(2048) }; state.status.calibration.phase = 'center'; }
+      if (action === '/setup/assembled/start') { state.status.session = { ...state.status.session, mode: 'setup', port: body.port, torque_enabled: false }; state.status.assembled = { ...state.status.assembled, phase: 'ready', ids: [11,12,13,14,15,16], message: 'Distinct addresses ready. Identify each joint by hand.' }; }
+      else if (action === '/setup/assembled/observe') { state.status.assembled = { ...state.status.assembled, phase: 'observing', selected_joint: body.joint, detected_id: joints.indexOf(body.joint) + 11, candidate_delta: 180, message: 'Joint movement detected.' }; }
+      else if (action === '/setup/assembled/accept') { state.status.assembled.mapping[body.joint] = body.motor_id; state.status.assembled.phase = Object.keys(state.status.assembled.mapping).length === 6 ? 'review' : 'ready'; state.status.assembled.selected_joint = null; state.status.assembled.detected_id = null; }
+      else if (action === '/setup/assembled/finish') { state.status.assembled.phase = 'applying'; state.status.assembled.message = 'Writing and verifying canonical IDs.'; setTimeout(() => { state.status.assembled.phase = 'complete'; state.status.assembled.calibration_required = true; state.status.session.mode = 'idle'; }, 1000); }
+      else if (action === '/setup/assembled/cancel') { state.status.assembled.phase = 'stopped'; state.status.session.mode = 'idle'; }
+      else if (action === '/calibration/start') { state.status.session = { ...state.status.session, mode: 'calibration', port: body.port, robot_id: body.robot_id, role: body.role, positions: values(2048) }; state.status.calibration.phase = 'center'; }
       else if (action === '/calibration/center') { state.status.calibration = { ...state.status.calibration, phase: 'ranges', mins: values(700), maxes: values(3300), offsets: values(0) }; }
-      else if (action === '/calibration/finish') { state.status.calibration.phase = 'saved'; state.status.session.mode = 'idle'; state.status.calibrations = [{ robot_id: 'my-so101', role: 'follower', path: 'private-calibration.json' }]; }
+      else if (action === '/calibration/finish') { state.status.calibration.phase = 'saved'; state.status.assembled.calibration_required = false; state.status.session.mode = 'idle'; state.status.calibrations = [{ robot_id: 'my-so101', role: 'follower', path: 'private-calibration.json' }]; }
       else if (action === '/calibration/cancel' || action === '/stop') { state.status.session.mode = 'idle'; state.status.session.torque_enabled = false; state.status.recording.episode_active = false; }
       else if (action === '/control/start') { state.status.session = { ...state.status.session, mode: body.mode, port: body.port, robot_id: body.robot_id, positions: values(0), torque_enabled: body.mode !== 'handguide' }; }
       else if (action === '/control/heartbeat') { /* Explicitly owned session only. */ }
@@ -76,6 +81,7 @@ test('Robot Lab navigation and device discovery issue no motor commands', async 
 test('motor IDs require a fresh isolation acknowledgement for every motor', async ({ page }) => {
   const state = await fixture(page);
   await tab(page, 'Motor IDs').click();
+  await page.getByText('Advanced: configure one physically isolated motor', { exact: true }).click();
   const assign = page.getByRole('button', { name: 'Assign ID 6', exact: true });
   await expect(assign).toBeDisabled();
   await page.getByRole('checkbox', { name: /Only the gripper motor is connected/ }).check();
@@ -90,6 +96,7 @@ test('calibration center and range save are explicit and use the official compan
   await tab(page, 'Calibrate').click();
   await page.getByRole('button', { name: 'Begin calibration', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Record middle position', exact: true })).toBeEnabled();
+  await expect(page.getByRole('group', { name: 'Measured encoder values', exact: true })).toContainText('2048');
   await page.getByRole('button', { name: 'Record middle position', exact: true }).click();
   await expect(page.getByRole('columnheader', { name: 'Range', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Save calibration', exact: true }).click();
@@ -142,6 +149,7 @@ test('offline companion cannot start hardware actions and does not retry mutatio
   await page.getByRole('button', { name: 'Check connection', exact: true }).click();
   await expect(page.getByText('Mac companion unavailable', { exact: true })).toBeVisible();
   await tab(page, 'Motor IDs').click();
+  await page.getByText('Advanced: configure one physically isolated motor', { exact: true }).click();
   await page.getByRole('checkbox', { name: /Only the gripper motor is connected/ }).check();
   await expect(page.getByRole('button', { name: 'Assign ID 6', exact: true })).toBeDisabled();
   await tab(page, 'Teleoperate').click();
@@ -167,4 +175,109 @@ test('hand guiding is an explicit torque-off session and leader mode needs a sec
   await expect.poll(() => writes(state, '/control/heartbeat').length).toBeGreaterThan(0);
   await page.getByRole('button', { name: 'Stop arm and disable torque', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Start hand guiding', exact: true })).toBeVisible();
+});
+
+
+test('all six illustrated joints work by pointer and keyboard without idle hardware requests', async ({ page }, testInfo) => {
+  const state = await fixture(page);
+  await tab(page, 'Motor IDs').click();
+  const guide = page.getByRole('region', { name: 'SO-101 joint illustration', exact: true });
+  await expect(page.locator('.robot-lab-hero .robot-lab-illustration')).toHaveCount(0);
+  await expect(page.locator('.robot-lab-hero-meta')).toHaveCount(0);
+  await expect(guide.getByText('Illustration only — does not move or read your arm.', { exact: true })).toBeVisible();
+  await expect(guide).toHaveAttribute('data-motion', 'reduced');
+  for (let index = 0; index < joints.length; index++) {
+    await guide.getByRole('group', { name: 'Choose an illustrated joint', exact: true }).getByRole('button').nth(index).click();
+    await expect(guide).toHaveAttribute('data-selected-joint', joints[index]);
+    await expect(guide.getByRole('group', { name: 'Choose an illustrated joint', exact: true }).getByRole('button').nth(index)).toHaveAttribute('aria-pressed', 'true');
+  }
+  const gripper = guide.getByRole('button', { name: 'Joint 6: Gripper', exact: true });
+  await gripper.focus(); await page.keyboard.press('ArrowLeft');
+  await expect(guide).toHaveAttribute('data-selected-joint', 'wrist_roll');
+  await page.keyboard.press('Home'); await expect(guide).toHaveAttribute('data-selected-joint', 'shoulder_pan');
+  await page.keyboard.press('End'); await expect(guide).toHaveAttribute('data-selected-joint', 'gripper');
+  const before = await guide.locator('.so101-guide-finger.moving').getAttribute('points');
+  await guide.getByRole('button', { name: 'Show next pose', exact: true }).click();
+  await expect(guide.locator('.so101-guide-finger.moving')).not.toHaveAttribute('points', before!);
+  await tab(page, 'Calibrate').click();
+  await expect(page.getByRole('region', { name: 'SO-101 joint illustration', exact: true })).toHaveAttribute('data-selected-joint', 'gripper');
+  await expect(page.getByRole('group', { name: 'Measured encoder values', exact: true })).toHaveCount(0);
+  expect(state.writes).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+  await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); window.scrollTo(0,0); });
+  await page.screenshot({ path: testInfo.outputPath('so101-joint-explorer.png'), fullPage: true });
+});
+
+test('offline joint illustration still selects and never invents measurements or sends mutations', async ({ page }) => {
+  const state = await fixture(page);
+  state.status = { ok: false, connected: false, message: 'Companion offline.' };
+  await page.getByRole('button', { name: 'Check connection', exact: true }).click();
+  await expect(page.getByText('Mac companion unavailable', { exact: true })).toBeVisible();
+  await tab(page, 'Motor IDs').click();
+  const guide = page.getByRole('region', { name: 'SO-101 joint illustration', exact: true });
+  await guide.getByRole('button', { name: 'Joint 6: Gripper', exact: true }).click();
+  await expect(guide.getByRole('heading', { name: 'Open and close the gripper', exact: true })).toBeVisible();
+  await guide.getByRole('button', { name: 'Show next pose', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Start assembled setup', exact: true })).toBeDisabled();
+  expect(state.writes).toEqual([]);
+});
+
+test('animation plays pauses and replays without commanding hardware', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  const state = await fixture(page);
+  await tab(page, 'Motor IDs').click();
+  const guide = page.getByRole('region', { name: 'SO-101 joint illustration', exact: true });
+  await expect(guide).toHaveAttribute('data-motion', 'playing');
+  await guide.getByRole('button', { name: 'Pause illustration', exact: true }).click();
+  await expect(guide).toHaveAttribute('data-motion', 'paused');
+  const paused = await guide.locator('.so101-guide-finger.moving').getAttribute('points');
+  await page.waitForTimeout(120);
+  await expect(guide.locator('.so101-guide-finger.moving')).toHaveAttribute('points', paused!);
+  await guide.getByRole('button', { name: 'Replay', exact: true }).click();
+  await expect(guide).toHaveAttribute('data-motion', 'playing');
+  expect(state.writes).toEqual([]);
+});
+
+test('assembled setup prepares explicitly then picks start only encoder observation until mapping is confirmed', async ({ page }, testInfo) => {
+  const state = await fixture(page, true);
+  await tab(page, 'Motor IDs').click();
+  const start = page.getByRole('button', { name: 'Start assembled setup', exact: true });
+  await expect(start).toBeDisabled();
+  const guide = page.getByRole('region', { name: 'SO-101 joint illustration', exact: true });
+  await guide.getByRole('button', { name: 'Joint 6: Gripper', exact: true }).click();
+  expect(state.writes).toEqual([]);
+  await page.getByRole('checkbox', { name: /This is my assembled SO-101 with six STS3215 motors/ }).check();
+  await start.click();
+  expect(writes(state, '/setup/assembled/start')[0].body).toEqual({ port, supported: true, confirm: 'START ASSEMBLED SETUP' });
+  for (let index = 5; index >= 0; index--) {
+    const label = ['Shoulder pan','Shoulder lift','Elbow','Wrist flex','Wrist roll','Gripper'][index];
+    const before = state.writes.length;
+    await guide.getByRole('button', { name: `Joint ${index + 1}: ${label}`, exact: true }).click();
+    await expect(page.getByText(`Movement detected at address ${index + 11}`, { exact: true })).toBeVisible();
+    const selectedWrites = state.writes.slice(before).filter(item => !item.path.endsWith('/control/heartbeat'));
+    expect(selectedWrites.map(item => item.path)).toEqual(['/api/v1/robot-lab/setup/assembled/observe']);
+    expect(writes(state, '/setup/assembled/finish')).toEqual([]);
+    if (index === 5) {
+      await page.getByRole('button', { name: 'Pause illustration', exact: true }).count().then(async count => { if (count) await page.getByRole('button', { name: 'Pause illustration', exact: true }).click(); });
+      await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); window.scrollTo(0,0); });
+      await page.screenshot({ path: testInfo.outputPath('so101-assembled-detection.png'), fullPage: true });
+    }
+    await page.getByRole('button', { name: `Confirm ID ${index + 11} is the ${label.toLowerCase()}`, exact: true }).click();
+    if (index === 5) {
+      const observations = writes(state, '/setup/assembled/observe').length;
+      await guide.getByRole('button', { name: 'Joint 6: Gripper', exact: true }).click();
+      await expect(guide.getByText('Gripper is confirmed at address 16. Pick another unconfirmed joint.', { exact: true })).toBeVisible();
+      expect(writes(state, '/setup/assembled/observe')).toHaveLength(observations);
+    }
+  }
+  await expect(page.getByRole('button', { name: 'Save motor IDs 1–6', exact: true })).toBeEnabled();
+  const heartbeatBeforeSave = writes(state, '/control/heartbeat').length;
+  await page.getByRole('button', { name: 'Save motor IDs 1–6', exact: true }).click();
+  await expect.poll(() => writes(state, '/control/heartbeat').length).toBeGreaterThan(heartbeatBeforeSave);
+  expect(writes(state, '/setup/assembled/accept')).toHaveLength(6);
+  expect(writes(state, '/setup/assembled/finish')[0].body).toEqual({ confirm: 'SAVE MOTOR IDS' });
+  expect(writes(state, '/control/start')).toEqual([]);
+  await expect(page.getByText('Motor setup completed.', { exact: true })).toBeVisible();
+  await tab(page, 'Teleoperate').click();
+  await expect(page.getByRole('button', { name: 'Enable on-screen controls', exact: true })).toBeDisabled();
 });

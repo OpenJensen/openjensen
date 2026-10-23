@@ -49,6 +49,12 @@ class FakeBus:
         if register == "Goal_Position":
             self.raw[JOINTS[motor_id - 1]] = value
 
+    def read(self, register, motor_id):
+        for name, sid, value in reversed(self.writes):
+            if name == register and sid == motor_id:
+                return value
+        return 0
+
     def positions(self):
         return dict(self.raw)
 
@@ -184,12 +190,43 @@ class SafetyTests(unittest.TestCase):
         )
         self.assertEqual(result["assigned"]["id"], 6)
         self.assertIn(("ID", 1, 6), self.buses[-1].writes)
+        self.assertEqual(self.buses[-1].writes[-1], ("Lock", 6, 1))
+        self.assertEqual(self.buses[-1].read("Lock", 6), 1)
         self.assertFalse(
             any(
                 register == "Torque_Enable" and value
                 for register, _, value in self.buses[-1].writes
             )
         )
+
+    def test_stop_cancels_isolated_scan_before_any_id_write(self):
+        def factory(*args):
+            bus = FakeBus(*args)
+            bus.motors = {1: 777}
+            original_ping = bus.ping
+
+            def ping(motor_id):
+                if motor_id == 2:
+                    self.lab.stop()
+                return original_ping(motor_id)
+
+            bus.ping = ping
+            self.buses.append(bus)
+            return bus
+
+        self.lab.bus_factory = factory
+        with self.assertRaisesRegex(RequestError, "cancelled by Stop"):
+            self.lab.setup_motor(
+                {
+                    "port": "/dev/cu.fake",
+                    "joint": "gripper",
+                    "isolated": True,
+                    "confirm": "ASSIGN MOTOR ID",
+                }
+            )
+        self.assertFalse(any(register == "ID" for register, _, _ in self.buses[-1].writes))
+        self.assertFalse(self.buses[-1].opened)
+        self.assertIsNone(self.lab.pending_bus)
 
     def test_start_requires_confirmation_and_calibration(self):
         with self.assertRaises(RequestError):

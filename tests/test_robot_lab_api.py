@@ -286,3 +286,35 @@ def test_recording_save_allows_compression_time_within_browser_deadline(tmp_path
         ("/v1/recording/finish", 80),
         ("/v1/devices", 30),
     ]
+
+
+@pytest.mark.parametrize(
+    "action,payload",
+    [
+        ("start", {"port": "/dev/cu.test", "supported": True, "confirm": "START ASSEMBLED SETUP"}),
+        ("observe", {"joint": "elbow_flex"}),
+        ("accept", {"joint": "elbow_flex", "motor_id": 0}),
+        ("finish", {"confirm": "SAVE MOTOR IDS"}),
+        ("cancel", {}),
+    ],
+)
+def test_assembled_setup_protocol_routes_preserve_body_and_do_not_expose_generic_proxy(
+    tmp_path, action, payload
+):
+    connection(tmp_path)
+    calls = []
+
+    def handler(request):
+        calls.append((request.method, request.url.path, json.loads(request.content)))
+        return httpx.Response(200, json={"ok": True})
+
+    companion = bridge(tmp_path, handler)
+    with browser(tmp_path, companion) as client:
+        route = "/api/v1/robot-lab/setup/assembled/" + action
+        assert client.post(route, json=payload).status_code == 200
+        assert client.get(route).status_code == 405
+        assert (
+            client.post("/api/v1/robot-lab/setup/assembled/arbitrary", json={}).status_code == 404
+        )
+    assert calls == [("POST", "/v1/setup/assembled/" + action, payload)]
+    asyncio.run(companion.close())

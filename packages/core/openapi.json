@@ -8947,6 +8947,101 @@
         ]
       }
     },
+    "/api/v1/robot-lab/setup/assembled/accept": {
+      "post": {
+        "operationId": "robot_lab_post_setup_assembled_accept",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Setup Assembled Accept",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/setup/assembled/cancel": {
+      "post": {
+        "operationId": "robot_lab_post_setup_assembled_cancel",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Setup Assembled Cancel",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/setup/assembled/finish": {
+      "post": {
+        "operationId": "robot_lab_post_setup_assembled_finish",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Setup Assembled Finish",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/setup/assembled/observe": {
+      "post": {
+        "operationId": "robot_lab_post_setup_assembled_observe",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Setup Assembled Observe",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/setup/assembled/start": {
+      "post": {
+        "operationId": "robot_lab_post_setup_assembled_start",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Setup Assembled Start",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
     "/api/v1/robot-lab/setup/motor": {
       "post": {
         "operationId": "robot_lab_post_setup_motor",

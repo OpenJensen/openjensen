@@ -143,3 +143,24 @@
 @media (max-width: 1200px) { .robot-lab-grid { grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; } .robot-lab-main { padding: 22px; } .robot-lab-step { gap: 7px; padding: 11px 9px; } .robot-lab-step small { display: none; } .robot-lab-hero { padding: 26px; grid-template-columns: minmax(0, 1fr) 190px; } .robot-lab-step strong { font-size: 11px; } }
 @media (max-width: 1000px) { .robot-lab-grid { grid-template-columns: minmax(0, 1fr); } .robot-lab-side { grid-template-columns: 1fr 1fr; } .robot-lab-camera { max-height: 220px; } .robot-lab-illustration { height: 160px; } }
 @media (max-width: 650px) { .robot-lab { gap: 16px; } .robot-lab-hero { grid-template-columns: 1fr; padding: 24px; } .robot-lab-hero h2 { max-width: 330px; } .robot-lab-illustration { display: none; } .robot-lab-hero p { font-size: 12px; } .robot-lab-statusbar { align-items: flex-start; padding: 13px; flex-direction: column; gap: 12px; } .robot-lab-status-actions { width: 100%; justify-content: space-between; } .robot-lab-steps { gap: 5px; } .robot-lab-step { flex-direction: column; align-items: center; text-align: center; padding: 11px 2px; gap: 7px; } .robot-lab-step strong { font-size: 9px; } .robot-lab-step-number { width: 22px; height: 22px; font-size: 10px; } .robot-lab-main { padding: 19px 16px; } .robot-lab-panel-heading { margin-bottom: 21px; } .robot-lab-panel-heading h2 { font-size: 18px; } .robot-lab-panel-heading > .robot-lab-mini-label { display: none; } .robot-lab-fields { grid-template-columns: 1fr; } .robot-lab-side { grid-template-columns: 1fr; } .robot-lab-camera { max-height: unset; } .robot-lab-motor-list { grid-template-columns: 1fr 1fr; } .robot-lab-motor-guide { padding: 16px; gap: 12px; } .robot-lab-motor-number { width: 49px; height: 60px; font-size: 30px; } .robot-lab-mode-grid { grid-template-columns: 1fr; } .robot-lab-joint { grid-template-columns: minmax(75px, 1fr) 50px 34px 34px; gap: 6px; padding: 10px; } .robot-lab-joint button { width: 32px; } .robot-lab-dataset-heading { flex-direction: column; } .robot-lab-calibration-steps { padding: 11px; } .robot-lab-calibration-steps span { font-size: 9px; } }
+
+.robot-lab-assembled { display: grid; gap: 18px; border: 1px solid var(--line); background: var(--canvas); border-radius: 10px; padding: 20px; }
+.robot-lab-assembled-heading { display: flex; gap: 16px; justify-content: space-between; align-items: flex-start; }
+.robot-lab-assembled-heading h3 { font-size: 16px; font-weight: 600; margin-top: 6px; letter-spacing: -.3px; }
+.robot-lab-assembled-heading .robot-lab-kicker { font-size: 8px; letter-spacing: 1px; }
+.robot-lab-experimental { border: 1px solid var(--warning); background: var(--warning-bg); color: var(--warning); border-radius: 5px; padding: 3px 6px; font: 8px ui-monospace, monospace; letter-spacing: .5px; }
+.robot-lab-assembled-state { display: grid; gap: 8px; border-left: 2px solid var(--accent); background: var(--surface); padding: 13px; border-radius: 0 7px 7px 0; }
+.robot-lab-assembled-state .robot-lab-mini-label { justify-self: start; }
+.robot-lab-assembled-state p { font-size: 12px; }
+.robot-lab-assembled-state small { font: 10px ui-monospace, monospace; color: var(--muted); }
+.robot-lab-assembled .robot-lab-table .text-button { font-size: 11px; text-align: left; }
+.robot-lab-setup-log { font-size: 10px; color: var(--muted); }
+.robot-lab-setup-log summary { cursor: pointer; }
+.robot-lab-setup-log ol { margin-bottom: 0; padding-left: 18px; }
+@media (max-width: 650px) { .robot-lab-assembled { padding: 15px; } .robot-lab-assembled-heading { gap: 8px; } .robot-lab-assembled-heading h3 { font-size: 14px; } }
+
+.robot-lab-hero.compact { grid-template-columns: minmax(0, 1fr); padding: 17px 24px; gap: 0; }
+.robot-lab-hero.compact h2 { max-width: none; font-size: 22px; letter-spacing: -.6px; margin: 6px 0 5px; }
+.robot-lab-hero.compact p { max-width: none; font-size: 12px; }
+.robot-lab-hero.compact .robot-lab-kicker { font-size: 8px; letter-spacing: 1.1px; }
+@media (max-width: 650px) { .robot-lab-hero.compact { padding: 15px 18px; } .robot-lab-hero.compact h2 { font-size: 18px; } .robot-lab-hero.compact p { font-size: 10px; } }

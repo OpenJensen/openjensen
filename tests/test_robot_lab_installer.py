@@ -42,6 +42,12 @@ def test_reinstall_stops_only_managed_services_before_runtime_mutation(
     source.mkdir()
     for name in installer.SOURCE_MODULES:
         (source / name).write_text("# supplied source module\n")
+    vendor = source / "_vendor/servotools"
+    vendor.mkdir(parents=True)
+    for name in installer.VENDOR_FILES:
+        (vendor / name).write_text("licensed source\n")
+    (vendor / "__pycache__").mkdir()
+    (vendor / "__pycache__/ignored.pyc").touch()
     prefix = tmp_path / "component"
     private = prefix / "private"
     private.mkdir(parents=True)
@@ -102,6 +108,10 @@ def test_reinstall_stops_only_managed_services_before_runtime_mutation(
     assert not any(command[:2] == ["launchctl", "bootstrap"] for command in calls)
     assert token.read_text() == "t" * 48 + "\n" and "t" * 48 not in capsys.readouterr().out
     assert all((prefix / "source" / name).is_file() for name in installer.SOURCE_MODULES)
+    assert all(
+        (prefix / "source/_vendor/servotools" / name).is_file() for name in installer.VENDOR_FILES
+    )
+    assert not (prefix / "source/_vendor/servotools/__pycache__").exists()
     with (home / "Library/LaunchAgents/com.openjensen.robot-lab.plist").open("rb") as stream:
         service = plistlib.load(stream)
     assert service["ProgramArguments"][1].endswith("/source/server.py")
@@ -125,3 +135,37 @@ def test_missing_dispatch_module_fails_before_creating_files_or_stopping_service
     with pytest.raises(SystemExit) as error:
         installer.main()
     assert error.value.code == 2 and not prefix.exists()
+
+
+@pytest.mark.parametrize("failure", ["missing-license", "symlink-module", "symlink-vendor"])
+def test_vendor_sources_are_complete_regular_and_validated_before_any_mutation(
+    tmp_path, monkeypatch, failure
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    for name in installer.SOURCE_MODULES:
+        (source / name).write_text("# source\n")
+    vendor = source / "_vendor/servotools"
+    vendor.mkdir(parents=True)
+    for name in installer.VENDOR_FILES:
+        (vendor / name).write_text("licensed source\n")
+    if failure == "missing-license":
+        (vendor / "LICENSE").unlink()
+    elif failure == "symlink-module":
+        (source / "assembled.py").unlink()
+        (source / "assembled.py").symlink_to(source / "server.py")
+    else:
+        vendor.rename(source / "original-vendor")
+        vendor.symlink_to(source / "original-vendor", target_is_directory=True)
+    prefix = tmp_path / "must-not-exist"
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr("shutil.disk_usage", lambda _: SimpleNamespace(free=100 * 1024**3))
+    monkeypatch.setattr(
+        "subprocess.run", lambda *a, **k: pytest.fail("Invalid vendor source stopped services")
+    )
+    monkeypatch.setattr(
+        sys, "argv", ["install_robot_lab.py", "--source", str(source), "--prefix", str(prefix)]
+    )
+    with pytest.raises(SystemExit):
+        installer.main()
+    assert not prefix.exists()

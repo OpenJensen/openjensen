@@ -63,7 +63,7 @@ Use **Compute** to connect Google Cloud, save Hugging Face access, or add a loca
 
 Open **Robot Lab** to connect the computer beside your SO-101, preview its camera, and move through **Connect → Motor IDs → Calibrate → Teleoperate → Record**. The local hardware companion keeps USB access on that computer while the private OpenJensen workspace manages the workflow.
 
-For new motors, the motor-ID guide asks you to isolate one motor at a time and confirm which joint is connected. The software writes the ID and verifies it before you continue. Reconnect the chain after all six IDs are assigned. During calibration, support the arm, capture its middle pose, then gently move each joint through its usable range and save the measured limits.
+Click a numbered joint to see an animation of the part to move by hand. The animation works offline and does not move the real arm. Experimental assembled-arm setup keeps the cables connected: support the arm, explicitly start automatic address separation, then move and confirm each highlighted joint. Review and save all six IDs before calibration. This uses a measured reboot-timing workaround and can stop if the servo firmware or adapter is incompatible. The standard isolated-motor method remains an advanced option. During calibration, keep the full chain connected, support the arm, capture its middle pose, then gently move each joint through its usable range and save the measured limits.
 
 Enable movement explicitly after calibration. Manual controls use small bounded steps; a leader arm can drive the follower when both profiles are calibrated. Keep the **Stop** button reachable. A lost control heartbeat stops the session. The camera preview shares the recording camera instead of opening a competing connection.
 
