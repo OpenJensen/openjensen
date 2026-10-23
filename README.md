@@ -116,6 +116,10 @@ New project data lives in `.jensen/` by default. Set `JENSEN_DATA_DIR` to choose
 
 The deployment scope is a single-user application on loopback, with an SSH tunnel for remote access. See [security guidance](SECURITY.md) before changing its network exposure.
 
+## Install only the components you use
+
+Core, Robot Lab, Dataset tools, Training and Simulation have separate installation profiles. Run `jensen install list` to see their requirements, `jensen install robot --dry-run` to inspect a plan, and `jensen install robot --check` to check an existing environment. Training and simulation keep their own runtimes; adding USB hardware support does not install a CUDA stack or download models. See [installation profiles](docs/installation-profiles.md) and [SO-101 Robot Lab](docs/so101-robot-lab.md).
+
 ## Development
 
 After installing the pinned dependencies:
