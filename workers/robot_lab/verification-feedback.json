@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-23",
+  "scope": "Robot Lab motor identification status and cancellation feedback",
+  "source_sha256": {
+    "apps/web/src/components/robot-lab.tsx": "87e6bdb51d5d265b3a702ae2a02121253290ceacdfa12c6aee9335dbab14fb89",
+    "tests/web/robot-lab.spec.ts": "1c00d7f18b5ce0bea2d37b67517aa264b57591997bd4316ca83d120cdbc1e03e"
+  },
+  "verification": {
+    "production_webpack_export": "passed",
+    "typescript": "passed",
+    "browser_cases": {
+      "passed": 8,
+      "platforms": [
+        "desktop",
+        "mobile"
+      ],
+      "cases": [
+        "assembled mapping",
+        "wiggle confirmation",
+        "preparation/listening/stopped feedback",
+        "hidden-page stop feedback"
+      ],
+      "notes": "Initial launch lacked source PYTHONPATH; corrected runner environment. Six cases passed on the first executed run; two cancellation assertions initially also matched the Next route announcer. Scoped those assertions to Robot Lab; both reruns passed."
+    },
+    "hardware_commands_sent": false,
+    "physical_state": "User cancelled separation during round 1 with one shared responding address 2; hand identification and calibration remain incomplete."
+  },
+  "evidence_directory": "/home/aayrapetyan/ollamaforvlas/run/robot-lab-feedback-20261023",
+  "cleanup": {
+    "owned_processes": [
+      571265,
+      571745,
+      571955,
+      572289,
+      573203
+    ],
+    "remaining": [],
+    "test_listener_closed": true
+  }
+}

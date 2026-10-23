@@ -32,7 +32,7 @@ async function fixture(page: Page, calibrated = false) {
       else if (action === '/calibration/start') { state.status.session = { ...state.status.session, mode: 'calibration', port: body.port, robot_id: body.robot_id, role: body.role, positions: values(2048) }; state.status.calibration.phase = 'center'; }
       else if (action === '/calibration/center') { state.status.calibration = { ...state.status.calibration, phase: 'ranges', mins: values(700), maxes: values(3300), offsets: values(0) }; }
       else if (action === '/calibration/finish') { state.status.calibration.phase = 'saved'; state.status.assembled.calibration_required = false; state.status.session.mode = 'idle'; state.status.calibrations = [{ robot_id: 'my-so101', role: 'follower', path: 'private-calibration.json' }]; }
-      else if (action === '/calibration/cancel' || action === '/stop') { if (action === '/stop') state.status.session.error = state.stopError; state.status.session.mode = 'idle'; state.status.session.torque_enabled = false; state.status.recording.episode_active = false; }
+      else if (action === '/calibration/cancel' || action === '/stop') { if (state.status.session.mode === 'setup') state.status.assembled.phase = 'stopped'; if (action === '/stop') state.status.session.error = state.stopError; state.status.session.mode = 'idle'; state.status.session.torque_enabled = false; state.status.recording.episode_active = false; }
       else if (action === '/control/start') { state.status.session = { ...state.status.session, mode: body.mode, port: body.port, robot_id: body.robot_id, positions: values(0), torque_enabled: body.mode !== 'handguide' }; }
       else if (action === '/control/heartbeat') { /* Explicitly owned session only. */ }
       else if (action === '/control/jog') { state.status.session.positions[body.joint] += body.delta; }
@@ -380,4 +380,56 @@ test('wiggle identification requires explicit motion then observed-joint confirm
   await expect(pulse).toBeDisabled();
   expect(writes(state, '/control/start')).toHaveLength(0);
   expect(state.errors).toEqual([]);
+});
+
+
+test('motor identification distinguishes preparation, listening and a stopped session', async ({ page }) => {
+  const state = await fixture(page);
+  state.status.assembled = { ...state.status.assembled, phase: 'stopped', ids: [2], progress: 1 };
+  await page.getByRole('button', { name: 'Check connection', exact: true }).click();
+  await tab(page, 'Motor IDs').click();
+  const status = page.getByRole('status', { name: 'Motor identification status', exact: true });
+  await expect(status).toContainText('Movement detection off');
+  await expect(status).toContainText('1/6 addresses found');
+  await page.getByRole('button', { name: 'Joint 6: Gripper', exact: true }).click();
+  expect(writes(state, '/setup/assembled/observe')).toHaveLength(0);
+  await page.getByRole('checkbox', { name: /Six STS3215 motors; arm supported/ }).check();
+  await page.getByRole('button', { name: 'Start assembled setup', exact: true }).click();
+  await expect(status).toContainText('Ready to identify joints');
+  await expect(page.getByText('Experimental assembled setup started.', { exact: true })).toHaveCount(0);
+  state.status.assembled = { ...state.status.assembled, phase: 'splitting', ids: [2], progress: 1 };
+  await expect(status).toContainText('Preparing motor addresses');
+  await expect(status).toContainText('Round 1/12 · 1/6 addresses found. No movement is commanded.');
+  await page.getByRole('button', { name: 'Joint 6: Gripper', exact: true }).click();
+  expect(writes(state, '/setup/assembled/observe')).toHaveLength(0);
+  state.status.assembled = { ...state.status.assembled, phase: 'ready', ids: [11,12,13,14,15,16] };
+  await expect(status).toContainText('Ready to identify joints');
+  await page.getByRole('button', { name: 'Start movement detection', exact: true }).click();
+  await expect(status).toContainText('Listening for hand movement');
+  expect(writes(state, '/setup/assembled/observe')).toHaveLength(1);
+  await page.getByRole('button', { name: 'Stop arm and disable torque', exact: true }).click();
+  await expect(status).toContainText('Movement detection off');
+  await expect(page.getByRole('button', { name: 'Start movement detection', exact: true })).toHaveCount(0);
+  expect(state.errors).toEqual([]);
+});
+
+test('hiding Robot Lab stops setup and visibly explains the cancellation', async ({ page }) => {
+  const state = await fixture(page);
+  await tab(page, 'Motor IDs').click();
+  await page.getByRole('checkbox', { name: /Six STS3215 motors; arm supported/ }).check();
+  await page.getByRole('button', { name: 'Start assembled setup', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Start movement detection', exact: true })).toBeEnabled();
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect.poll(() => writes(state, '/stop').length).toBe(1);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect(page.locator('.robot-lab').getByRole('alert')).toContainText('Robot Lab was hidden');
+  await expect(page.getByRole('status', { name: 'Motor identification status', exact: true })).toContainText('Movement detection off');
+  expect(writes(state, '/setup/assembled/observe')).toHaveLength(0);
+  expect(writes(state, '/setup/assembled/wiggle')).toHaveLength(0);
 });
