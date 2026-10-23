@@ -403,6 +403,11 @@ class AssembledSetup:
         return sorted(ids)
 
     def _reboot(self):
+        if self.unverified_models and not self.verified_so101:
+            raise AssembledError(
+                "Colliding motors could not identify their model. Confirm this is a "
+                "six-STS3215 SO101 before experimental reboots."
+            )
         self._write(254, reg.TORQUE_ENABLE, 0)
         self._sleep(0.03)
         with self.io_lock:
@@ -427,6 +432,21 @@ class AssembledSetup:
     def _boot_verified_off(self):
         self.reboot_cleanup_at = None
         self._publish(reboot_cleanup={"pending": False, "verified_off": True})
+
+    def _boot_inventory(self):
+        """Use saved addresses, never a sweep's uncommitted RAM IDs, next round."""
+        self._reboot()
+        self._sleep(2.0)
+        self._write(254, reg.TORQUE_ENABLE, 0)
+        state = self._scan()
+        if not state:
+            raise AssembledError("Cannot measure reboot wake timing: no responses after reboot")
+        if len(state) > EXPECTED_COUNT:
+            raise AssembledError(
+                "Unexpected motor inventory after reboot; inspect recovery journal"
+            )
+        self._publish(boot_ids=sorted(state))
+        return state
 
     def _measure_edge(self, sid):
         if self.unverified_models and not self.verified_so101:
@@ -561,8 +581,12 @@ class AssembledSetup:
             if len(state) == EXPECTED_COUNT and all(kind == "single" for kind in state.values()):
                 ids = self._verify_six(list(state))
             else:
+                # Previous cancellation or a sweep can leave RAM-only IDs. A
+                # measured reboot must target the actual saved-address group.
+                state = self._boot_inventory()
                 suspect = next((sid for sid, kind in state.items() if kind != "single"), min(state))
                 edge = self._measure_edge(suspect)
+                lead_ms, late_lead, early_lead = 6.0, None, None
                 ids = None
                 for number in range(1, MAX_ROUNDS + 1):
                     self._publish(
@@ -590,10 +614,19 @@ class AssembledSetup:
                     )
                     self._reboot()
                     start = time.monotonic()
-                    self._sleep(max(0, edge - 0.006 - 0.002))
-                    while time.monotonic() - start < edge - 0.006:
+                    target = max(0, edge - lead_ms / 1000)
+                    self._sleep(max(0, target - 0.010))
+                    while time.monotonic() - start < target:
                         self._check()
+                    sent_at = time.monotonic() - start
                     self._send(burst)
+                    self._publish(
+                        sweep_timing={
+                            "lead_ms": lead_ms,
+                            "target_ms": round(target * 1000, 3),
+                            "host_send_ms": round(sent_at * 1000, 3),
+                        }
+                    )
                     self._sleep(0.15)
                     self._write(254, reg.TORQUE_ENABLE, 0)
                     state = self._scan()
@@ -602,11 +635,39 @@ class AssembledSetup:
                             "Unexpected motor inventory after splitting; inspect journal "
                             "before retrying"
                         )
+                    # The first burst catching the entire group means the
+                    # hardware window was late; silence at every fresh address
+                    # means it was early. Bracket only these observable outcomes.
+                    # A partly peeled group keeps the same measured window.
+                    new_ids = set(state).intersection(fresh)
+                    if (
+                        new_ids == {fresh[0]}
+                        and suspect not in state
+                        and state[fresh[0]] != "single"
+                    ):
+                        late_lead = lead_ms
+                        lead_ms = (
+                            (lead_ms + early_lead) / 2
+                            if early_lead is not None
+                            else min(32.0, lead_ms + 4.0)
+                        )
+                    elif not new_ids and suspect in state:
+                        early_lead = lead_ms
+                        lead_ms = (
+                            (late_lead + lead_ms) / 2
+                            if late_lead is not None
+                            else max(0.0, lead_ms - 4.0)
+                        )
+                    self._publish(sweep_ids=sorted(state), next_lead_ms=lead_ms)
                     # Re-lock every independently responding ID before rebooting
                     # again. Keep ambiguous/identical replies out of final acceptance.
                     for sid, kind in sorted(state.items()):
                         if kind == "single":
                             self._rename(sid, sid)
+                    # Only singles can be safely committed individually. Any
+                    # remaining duplicate group reverts on reboot; rescan it
+                    # before selecting the next source address.
+                    state = self._boot_inventory()
                     if len(state) == EXPECTED_COUNT and all(
                         kind == "single" for kind in state.values()
                     ):

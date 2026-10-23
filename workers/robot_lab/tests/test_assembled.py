@@ -269,6 +269,34 @@ class AssembledTests(unittest.TestCase):
         self.assertEqual(self.setup.snapshot()["round"], 12)
         self.assertTrue(self.setup.journal_path.is_file())
 
+    def test_collision_ram_address_is_rescanned_after_reboot_before_next_sweep(self):
+        transport = self.transport
+        original_send = transport.send
+        sources = []
+
+        def send(message):
+            decoded = list(frames(message))
+            if len(message) > 16:
+                source = decoded[0][0]
+                sources.append(source)
+                if len(sources) == 1:
+                    # A late window catches the complete group at the first
+                    # temporary address, but never commits its EEPROM IDs.
+                    target = decoded[1][2][1]
+                    for motor in transport.motors:
+                        if motor["id"] == source:
+                            motor.update(id=target, lock=0)
+                    transport.writes.extend(decoded)
+                    return
+            original_send(message)
+
+        transport.send = send
+        self.assertEqual(len(self.setup.split()), 6)
+        self.assertEqual(sources, [1, 1])
+        self.assertEqual(self.setup.snapshot()["next_lead_ms"], 10.0)
+        self.assertEqual(len(self.setup.snapshot()["boot_ids"]), 6)
+        self.assertTrue(all(motor["id"] == motor["saved"] for motor in transport.motors))
+
     def test_model_mismatch_aborts_before_any_writes(self):
         self.transport = FakeTransport([1, 2, 3, 4, 5, 6])
         self.transport.motors[0]["model"] = 123
