@@ -27,6 +27,7 @@ SOURCE_MODULES = (
     "dataset.py",
     "assembled.py",
     "identify.py",
+    "verification.py",
     "assembled_session.py",
 )
 VENDOR_FILES = (

@@ -36,3 +36,10 @@
 .so101-detection-feedback > button { width: auto; justify-self: start; min-height: 36px; padding: 7px 11px; font-size: 12px; }
 @media (max-width: 650px) { .so101-guide-header { gap: 7px 10px; } .so101-guide-header > span { font-size: 11px; } .so101-guide-header > small { font-size: 10px; } .robot-lab .so101-guide-controls > label { flex-basis: 100%; margin-left: 0; } .so101-guide-marker { width: 29px; height: 29px; min-height: 29px; font-size: 11px; } }
 @media (prefers-reduced-motion: reduce) { .so101-guide * { transition: none !important; animation: none !important; } }
+
+.so101-cad-scene { touch-action: none; cursor: grab; }
+.so101-cad-scene:active { cursor: grabbing; }
+.so101-cad-scene:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.so101-orbit-controls { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.so101-orbit-controls > span { margin-right: auto; color: var(--muted); font-size: 11px; }
+.so101-orbit-controls > button { min-width: 28px; min-height: 36px; font-size: 12px; }

@@ -6,7 +6,7 @@ The app backend forwards `/api/v1/robot-lab/*` to this loopback-only companion's
 ```json
 {"ok":true,"version":"1","platform":"Darwin","dependencies":{"lerobot":{"installed":true,"version":"0.4.4"},"serial":{"installed":true,"version":"3.5"},"cv2":{"installed":true,"version":"4.12.0"},"scservo_sdk":{"installed":true,"version":"1.0.0"}},"capabilities":{"probe":true,"camera":true,"motor_setup":true,"calibration":true,"control":true,"recording":true},"session":{"mode":"idle","robot_id":null,"port":null,"role":null,"positions":{},"torque_enabled":false,"watchdog_seconds":2.0,"error":null},"calibration":{"phase":"idle","mins":{},"maxes":{},"offsets":{},"path":null},"recording":{"active":false,"dataset_id":null,"episode_active":false,"frames":0,"episodes":0,"fps":10,"error":null},"calibrations":[],"datasets":[],"joints":[{"name":"shoulder_pan","id":1,"label":"Shoulder pan","unit":"degrees"}],"setup_order":["gripper","wrist_roll","wrist_flex","elbow_flex","shoulder_lift","shoulder_pan"]}
 ```
-`session.mode`: idle, setup, calibration, manual, leader, handguide. `calibration.phase`: idle, center, ranges, saved. Joint names/IDs fixed shoulder_pan/1, shoulder_lift/2, elbow_flex/3, wrist_flex/4, wrist_roll/5, gripper/6. All .positions/mins/maxes objects keyed by these names. Motion positions are degrees except gripper (percent); calibration positions/ranges are raw encoder ticks. `calibrations` entries `{robot_id,role,path}`; `datasets` entries below.
+`session.mode`: idle, setup, verification, calibration, manual, leader, handguide. `calibration.phase`: idle, center, ranges, saved. Joint names/IDs fixed shoulder_pan/1, shoulder_lift/2, elbow_flex/3, wrist_flex/4, wrist_roll/5, gripper/6. All .positions/mins/maxes objects keyed by these names. Motion positions are degrees except gripper (percent); calibration positions/ranges are raw encoder ticks. `calibrations` entries `{robot_id,role,path}`; `datasets` entries below.
 
 `GET /v1/devices`: `{"ports":[{"device":"/dev/cu.usbmodem...","description":"USB Serial","manufacturer":"...","serial_number":"..."}],"cameras":[{"index":0,"name":"Camera 0","width":640,"height":480}],"camera_error":null}`. Camera inventory does not open devices; width/height are requested defaults until preview verifies them. macOS camera permission is needed for preview/record. `GET /v1/camera.jpg?index=0` returns JPEG; optional width/height set on first open (defaults640x480). No stream held when idle for more than30s. `POST /v1/probe {port,baudrate?:1000000}` returns `{"port":"...","baudrate":1000000,"motors":[{"id":1,"model":777,"stable":true,"responses":3}],"ready":false,"expected_ids":[1,2,3,4,5,6],"warning":"A response at one ID cannot prove that only one physical motor is connected."}`. Read only. All serial ports must be actual locally enumerated devices.
 
@@ -56,3 +56,22 @@ POST `setup/assembled/accept` with `{joint, motor_id, method: "wiggle",
 confirm: "CONFIRM OBSERVED JOINT"}` records the observed joint only after a
 successful, completed wiggle, with a 60-second confirmation window. It does not
 change persistent IDs until the existing six-joint review/finish action.
+
+## Check a saved mapping
+
+`POST /v1/mapping/wiggle {port,joint,supported:true,confirm:"WIGGLE SAVED MOTOR"}`
+requires a completed canonical mapping journal and an idle arm. It reads and
+verifies the current six-address inventory before the existing bounded SRAM-only
+wiggle. It does not reboot, rewrite IDs, modify the setup journal, or require
+calibration. Only this explicit action commands motion; CAD rotation, zoom and
+joint selection are visual controls.
+
+The immediate status contains `session.mode:"verification"` and `verification`
+fields `phase` (idle/checking/wiggling/done/error/stopped), `port`, `joint`,
+`motor_id`, `ticks`, `motion_active`, `error`, and a unique `run_id`. Maintain the
+500 ms heartbeat while active (10-second timeout); Stop and hidden-page cleanup
+cancel verification. The operation closes serial after torque-off cleanup.
+The UI only marks a motion check correct after the operator confirms the joint
+that actually moved. These visual check marks belong to the current page session.
+Completed ID mappings are restored from the private journal on companion restart
+without opening serial hardware.

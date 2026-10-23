@@ -92,6 +92,7 @@ PROTOCOL = {
     "POST": {
         "probe",
         "setup/motor",
+        "mapping/wiggle",
         "setup/assembled/start",
         "setup/assembled/observe",
         "setup/assembled/wiggle",

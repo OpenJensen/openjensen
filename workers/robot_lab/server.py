@@ -36,6 +36,12 @@ from hardware import (
     normalized,
     probe_bus,
 )
+from verification import (
+    MappingVerification,
+    empty_verification,
+    latest_saved_mapping,
+    saved_mapping,
+)
 
 
 class RequestError(ValueError):
@@ -143,6 +149,7 @@ class RobotLab:
         assembled_factory=None,
         movement_detector=None,
         observe_timeout=45,
+        verification_factory=None,
     ):
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -163,6 +170,12 @@ class RobotLab:
         self.calibration_revisions = CalibrationRevisions(self.data_dir)
         self.assembled_session = None
         self.assembled_state = empty_assembled_state()
+        saved = latest_saved_mapping(self.data_dir)
+        if saved:
+            self.assembled_state.update(saved, phase="complete", message="Saved motor IDs 1–6")
+        self.verification_factory = verification_factory
+        self.verification_session = None
+        self.verification_state = empty_verification()
         self.bus_factory = bus_factory
         self.port_provider = port_provider
         self.camera = camera or CameraPool()
@@ -234,6 +247,7 @@ class RobotLab:
             or self.bus is not None
             or self.pending_bus is not None
             or self.assembled_session is not None
+            or self.verification_session is not None
             or self.stopping
         ):
             raise RequestError("Stop the current session before changing hardware setup")
@@ -252,6 +266,7 @@ class RobotLab:
         writer = self.writer
         with self.lifecycle_lock:
             assembled = json.loads(json.dumps(self.assembled_state))
+            copy_verification = json.loads(json.dumps(self.verification_state))
         try:
             assembled["calibration_required"] = self.calibration_revisions.required(
                 assembled["port"]
@@ -271,6 +286,7 @@ class RobotLab:
                 "camera": deps["cv2"]["installed"],
                 "motor_setup": hardware,
                 "assembled_setup": hardware,
+                "mapping_verification": hardware,
                 "calibration": hardware,
                 "control": hardware,
                 "recording": hardware
@@ -283,11 +299,14 @@ class RobotLab:
                 "role": self.role,
                 "positions": dict(self.positions),
                 "torque_enabled": self.torque,
-                "watchdog_seconds": 10.0 if self.mode in {"calibration", "setup"} else 2.0,
+                "watchdog_seconds": 10.0
+                if self.mode in {"calibration", "setup", "verification"}
+                else 2.0,
                 "error": self.error,
             },
             "calibration": json.loads(json.dumps(self.calibration_state)),
             "assembled": assembled,
+            "verification": copy_verification,
             "recording": {
                 "actual_fps": writer.actual_fps if writer else None,
                 "active": writer is not None and not writer.finalized,
@@ -492,6 +511,52 @@ class RobotLab:
             controller.finish()
         else:
             raise RequestError("Unknown assembled setup operation")
+        return self.status()
+
+    def _verification_changed(self, controller, snapshot, terminal):
+        with self.lifecycle_lock:
+            if self.verification_session is not controller:
+                return
+            self.verification_state = snapshot
+            self.torque = bool(snapshot["motion_active"])
+            if terminal:
+                self.verification_session = None
+                self.mode = "idle"
+                self.error = snapshot["error"]
+
+    def mapping_wiggle(self, payload):
+        require(payload, "confirm", "WIGGLE SAVED MOTOR")
+        if payload.get("supported") is not True:
+            raise RequestError("Support the arm with all joints clear of their stops")
+        joint = payload.get("joint")
+        if joint not in JOINTS:
+            raise RequestError("Choose one of the six SO-101 joints")
+        with self.lock:
+            self._idle()
+            port = self._port(payload.get("port"))
+            generation = self.generation
+            if self.torque:
+                raise RequestError("Release motor torque before checking the mapping")
+            saved = saved_mapping(self.data_dir, port)
+            with self.stop_lock, self.lifecycle_lock:
+                if generation != self.generation or self.stopping:
+                    raise RequestError("Motor verification was cancelled before it started")
+                controller = MappingVerification(
+                    port,
+                    joint,
+                    self.data_dir,
+                    self._verification_changed,
+                    engine_factory=self.verification_factory,
+                )
+                self.verification_session = controller
+                self.verification_state = controller.snapshot()
+                self.assembled_state.update(saved, phase="complete")
+                self.generation += 1
+                self.mode, self.port = "verification", port
+                self.robot_id = self.role = None
+                self.torque, self.error = False, None
+                self.heartbeat = time.monotonic()
+                controller.start()
         return self.status()
 
     def calibration_start(self, payload):
@@ -799,6 +864,10 @@ class RobotLab:
         # Invalidate in-flight capture before waiting on any camera/serialization.
         with self.lifecycle_lock:
             self.generation += 1
+            verification = self.verification_session
+            self.verification_session = None
+            if verification is not None:
+                verification.stop_event.set()
             assembled = self.assembled_session
             self.assembled_session = None
             if assembled is not None:
@@ -812,6 +881,15 @@ class RobotLab:
             if self.writer:
                 self.writer.episode_active = False
         errors = []
+        if verification is not None:
+            try:
+                verification.cancel()
+            except Exception as caught:
+                errors.append(str(caught))
+            finally:
+                with self.lifecycle_lock:
+                    self.verification_state = verification.snapshot()
+                    self.torque = bool(self.verification_state["motion_active"])
         if assembled is not None:
             try:
                 assembled.cancel()
@@ -985,7 +1063,7 @@ class RobotLab:
     def _watchdog(self):
         while not self.finished.wait(0.1):
             if self.mode != "idle" and time.monotonic() - self.heartbeat > (
-                10 if self.mode in {"calibration", "setup"} else 2
+                10 if self.mode in {"calibration", "setup", "verification"} else 2
             ):
                 self.stop(
                     "Setup heartbeat timed out; ID work stopped"
@@ -1107,6 +1185,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = lab.probe(payload)
             elif path == "/v1/setup/motor":
                 result = lab.setup_motor(payload)
+            elif path == "/v1/mapping/wiggle":
+                result = lab.mapping_wiggle(payload)
             elif path == "/v1/setup/assembled/start":
                 result = lab.assembled_start(payload)
             elif path in (

@@ -1,5 +1,5 @@
 import { publicPath } from './base-path';
-import { affectedLink, so101Camera, so101Description, visualMatrix, type RobotPose } from './so101-schematic';
+import { affectedLink, so101Camera, so101Description, visualMatrix, type Camera, type RobotPose } from './so101-schematic';
 import type { RobotJoint } from './robot-api';
 
 export type Mesh = { vertices: Float32Array; count: number };
@@ -30,7 +30,7 @@ const vertexSource=`attribute vec3 position;attribute vec3 normal;uniform mat4 m
 const fragmentSource=`precision mediump float;uniform vec3 color;varying vec3 worldNormal;void main(){vec3 n=normalize(worldNormal);float diffuse=max(dot(n,normalize(vec3(0.4,-0.65,0.8))),0.0);float fill=max(dot(n,normalize(vec3(-0.7,0.2,0.4))),0.0);gl_FragColor=vec4(color*(0.48+0.43*diffuse+0.15*fill),1.0);}`;
 function shader(gl: WebGLRenderingContext,type: number,source: string) { const value=gl.createShader(type);if(!value) throw new Error('WebGL shader unavailable.');gl.shaderSource(value,source);gl.compileShader(value);if(!gl.getShaderParameter(value,gl.COMPILE_STATUS)){gl.deleteShader(value);throw new Error('WebGL shader unavailable.');}return value; }
 function rgb(value: string): [number,number,number] { const hex=value.trim().replace('#','');if(/^[0-9a-f]{6}$/i.test(hex))return [parseInt(hex.slice(0,2),16)/255,parseInt(hex.slice(2,4),16)/255,parseInt(hex.slice(4,6),16)/255];const parts=value.match(/[\d.]+/g);return parts&&parts.length>=3?[Number(parts[0])/255,Number(parts[1])/255,Number(parts[2])/255]:[.2,.4,.6]; }
-export type CadRenderer = { render:(pose:RobotPose,selected:RobotJoint)=>void;dispose:()=>void };
+export type CadRenderer = { render:(pose:RobotPose,selected:RobotJoint,view?:Camera)=>void;dispose:()=>void };
 export function createSo101Renderer(canvas: HTMLCanvasElement,meshes: Map<string,Mesh>): CadRenderer {
  const gl=canvas.getContext('webgl',{antialias:true,alpha:false,preserveDrawingBuffer:true});if(!gl) throw new Error('WebGL unavailable.');
  const vertex=shader(gl,gl.VERTEX_SHADER,vertexSource);let fragment:WebGLShader;
@@ -43,11 +43,11 @@ export function createSo101Renderer(canvas: HTMLCanvasElement,meshes: Map<string
  }catch(error){for(const entry of buffers.values())gl.deleteBuffer(entry.buffer);gl.deleteProgram(program);gl.deleteShader(vertex);gl.deleteShader(fragment);throw error;}
  const pos=gl.getAttribLocation(program,'position'),normal=gl.getAttribLocation(program,'normal'),model=gl.getUniformLocation(program,'model'),camera=gl.getUniformLocation(program,'camera'),color=gl.getUniformLocation(program,'color');
  let disposed=false;
- return {render(pose,selected){
+ return {render(pose,selected,view=so101Camera){
   if(disposed||gl.isContextLost())return;
   const ratio=Math.min(window.devicePixelRatio||1,1.5),width=Math.max(1,Math.round(canvas.clientWidth*ratio)),height=Math.max(1,Math.round(canvas.clientHeight*ratio));if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height;}
   const style=getComputedStyle(document.documentElement),background=rgb(style.getPropertyValue('--subtle')),accent=rgb(style.getPropertyValue('--accent')),dark=document.documentElement.dataset.theme==='dark';
-  gl.viewport(0,0,width,height);gl.clearColor(...background,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.useProgram(program);gl.uniformMatrix4fv(camera,false,new Float32Array(so101Camera.matrix));gl.enableVertexAttribArray(pos);gl.enableVertexAttribArray(normal);
+  gl.viewport(0,0,width,height);gl.clearColor(...background,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.useProgram(program);gl.uniformMatrix4fv(camera,false,new Float32Array(view.matrix));gl.enableVertexAttribArray(pos);gl.enableVertexAttribArray(normal);
   const child=so101Description.joints.find(joint=>joint.name===selected)!.child;
   for(const visual of so101Description.visuals){const mesh=buffers.get(visual.mesh)!;gl.bindBuffer(gl.ARRAY_BUFFER,mesh.buffer);gl.vertexAttribPointer(pos,3,gl.FLOAT,false,24,0);gl.vertexAttribPointer(normal,3,gl.FLOAT,false,24,12);gl.uniformMatrix4fv(model,false,new Float32Array(visualMatrix(pose,visual)));
    const base=visual.material==='sts3215'?(dark?[.48,.53,.59]:[.27,.31,.37]):(dark?[.64,.69,.75]:[.83,.86,.9]);

@@ -39,8 +39,9 @@ export function jointPose(selected?: RobotJoint,offsetDegrees=0,reference=refere
  }
  return {links,joints:frames};
 }
-export function cameraForModel(): Camera {
- const target: Vec3=[.12,0,.14],forward=normalize3([-.7,1,-.55]),right=normalize3(cross3(forward,[0,0,1])),up=normalize3(cross3(right,forward)),span=.36;
+export function cameraForModel(yaw=0,pitch=0,zoom=1): Camera {
+ const azimuth=Math.atan2(1,-.7)+yaw*Math.PI/180,elevation=Math.max(-1.35,Math.min(1.35,Math.atan2(-.55,Math.hypot(.7,1))+pitch*Math.PI/180));
+ const target: Vec3=[.12,0,.14],forward=normalize3([Math.cos(azimuth)*Math.cos(elevation),Math.sin(azimuth)*Math.cos(elevation),Math.sin(elevation)]),right=normalize3(cross3(forward,[0,0,1])),up=normalize3(cross3(right,forward)),span=.36/Math.max(.65,Math.min(1.8,zoom));
  const matrix: Mat4=[right[0]*2/(span*600/420),up[0]*2/span,-forward[0]*2,0,right[1]*2/(span*600/420),up[1]*2/span,-forward[1]*2,0,right[2]*2/(span*600/420),up[2]*2/span,-forward[2]*2,0,-dot3(right,target)*2/(span*600/420),-dot3(up,target)*2/span,dot3(forward,target)*2,1];
  return {matrix,right,up,forward,target,span};
 }

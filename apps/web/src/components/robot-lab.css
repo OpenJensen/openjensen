@@ -153,3 +153,7 @@
 .robot-lab-identify-method { display: flex; flex-wrap: wrap; gap: 1rem; padding: .75rem 0; margin: 0; border: 0; border-bottom: 1px solid var(--line); }
 .robot-lab-identify-method legend { font-size: .75rem; font-weight: 600; margin-bottom: .5rem; }
 .robot-lab-identify-method button { font-size: .8rem; }
+
+.robot-lab-mapping-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.robot-lab-mapping-heading > span { color: var(--muted); font-size: 12px; }
+.robot-lab-table button[aria-pressed=true] { font-weight: 600; color: var(--primary); }
