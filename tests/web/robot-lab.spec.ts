@@ -23,11 +23,11 @@ async function fixture(page: Page, calibrated = false) {
       if (action === '/datasets') return route.fulfill({ json: { datasets: state.status.datasets } });
       if (action === '/probe') return route.fulfill({ json: { port, baudrate: 1000000, motors: [{ id: 1, model: 777, stable: true, responses: 3 }], ready: false, expected_ids: [1, 2, 3, 4, 5, 6], warning: 'A response at one ID cannot prove that only one physical motor is connected.' } });
       if (action === '/setup/motor') return route.fulfill({ json: { assigned: { joint: body.joint, id: joints.indexOf(body.joint) + 1, baudrate: 1000000 }, warning: 'Keep other motors disconnected.' } });
-      if (action === '/setup/assembled/start') { state.status.session = { ...state.status.session, mode: 'setup', port: body.port, torque_enabled: false }; state.status.assembled = { ...state.status.assembled, phase: 'ready', ids: [11,12,13,14,15,16], message: 'Distinct addresses ready. Identify each joint by hand.' }; }
+      if (action === '/setup/assembled/start') { state.status.session = { ...state.status.session, mode: 'setup', port: body.port, torque_enabled: false }; state.status.assembled = { ...state.status.assembled, phase: 'ready', port: body.port, ids: [11,12,13,14,15,16], message: 'Distinct addresses ready. Identify each joint by hand.' }; }
       else if (action === '/setup/assembled/wiggle') { state.status.assembled = { ...state.status.assembled, phase: 'wiggling', motion_active: true, wiggle_id: null }; setTimeout(() => { state.status.assembled.phase = 'ready'; state.status.assembled.motion_active = false; state.status.assembled.wiggle_id = body.motor_id; state.status.assembled.wiggle_ticks = 24; }, 150); }
       else if (action === '/setup/assembled/observe') { state.status.assembled = { ...state.status.assembled, phase: 'observing', selected_joint: body.joint, detected_id: joints.indexOf(body.joint) + 11, candidate_delta: 180, message: 'Joint movement detected.' }; }
       else if (action === '/setup/assembled/accept') { state.status.assembled.mapping[body.joint] = body.motor_id; state.status.assembled.phase = Object.keys(state.status.assembled.mapping).length === 6 ? 'review' : 'ready'; state.status.assembled.selected_joint = null; state.status.assembled.detected_id = null; state.status.assembled.wiggle_id = null; }
-      else if (action === '/setup/assembled/finish') { state.status.assembled.phase = 'applying'; state.status.assembled.message = 'Writing and verifying canonical IDs.'; setTimeout(() => { state.status.assembled.phase = 'complete'; state.status.assembled.calibration_required = true; state.status.session.mode = 'idle'; }, 1000); }
+      else if (action === '/setup/assembled/finish') { state.status.assembled.phase = 'applying'; state.status.assembled.message = 'Writing and verifying canonical IDs.'; setTimeout(() => { state.status.assembled.phase = 'complete'; state.status.assembled.mapping = Object.fromEntries(joints.map((name, index) => [name, index + 1])); state.status.assembled.calibration_required = true; state.status.session.mode = 'idle'; }, 1000); }
       else if (action === '/setup/assembled/cancel') { state.status.assembled.phase = 'stopped'; state.status.session.mode = 'idle'; }
       else if (action === '/calibration/start') { state.status.session = { ...state.status.session, mode: 'calibration', port: body.port, robot_id: body.robot_id, role: body.role, positions: values(2048) }; state.status.calibration.phase = 'center'; }
       else if (action === '/calibration/center') { state.status.calibration = { ...state.status.calibration, phase: 'ranges', mins: values(700), maxes: values(3300), offsets: values(0) }; }
@@ -337,6 +337,11 @@ test('assembled setup prepares explicitly then picks start only encoder observat
   expect(writes(state, '/setup/assembled/finish')[0].body).toEqual({ confirm: 'SAVE MOTOR IDS' });
   expect(writes(state, '/control/start')).toEqual([]);
   await expect(page.getByText('IDs saved', { exact: true })).toBeVisible();
+  const saved = page.getByRole('region', { name: 'Saved motor mapping', exact: true });
+  await expect(saved.getByRole('row')).toHaveCount(7);
+  await expect(saved.getByRole('row').filter({ hasText: 'Gripper' })).toContainText('6');
+  await expect(page.getByRole('button', { name: 'Start assembled setup', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Stop arm and disable torque', exact: true })).toHaveCount(0);
   await tab(page, 'Teleoperate').click();
   await expect(page.getByRole('button', { name: 'Enable on-screen controls', exact: true })).toBeDisabled();
   state.status.assembled = { ...state.status.assembled, phase: 'stopped', ids: [3], mapping: {},
@@ -432,4 +437,31 @@ test('hiding Robot Lab stops setup and visibly explains the cancellation', async
   await expect(page.getByRole('status', { name: 'Motor identification status', exact: true })).toContainText('Movement detection off');
   expect(writes(state, '/setup/assembled/observe')).toHaveLength(0);
   expect(writes(state, '/setup/assembled/wiggle')).toHaveLength(0);
+});
+
+
+test('background polling keeps Check connection quiet and idle hardware has no active Stop control', async ({ page }) => {
+  const state = await fixture(page, true);
+  const check = page.getByRole('button', { name: 'Check connection', exact: true });
+  const stop = page.getByRole('button', { name: 'Stop arm and disable torque', exact: true });
+  await expect(stop).toHaveCount(0);
+  let unblock!: () => void, reads = 0;
+  const gate = new Promise<void>(resolve => { unblock = resolve; });
+  await page.route('**/api/v1/robot-lab/status', async route => {
+    reads++;
+    await gate;
+    await route.fulfill({ json: state.status });
+  });
+  await expect.poll(() => reads, { timeout: 10_000 }).toBeGreaterThan(0);
+  await expect(check).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Checking…', exact: true })).toHaveCount(0);
+  await check.click();
+  await expect(page.getByRole('button', { name: 'Checking…', exact: true })).toBeDisabled();
+  unblock();
+  await expect(check).toBeEnabled();
+  await startManual(page);
+  await expect(stop).toBeVisible();
+  await stop.click();
+  await expect(stop).toHaveCount(0);
+  expect(state.errors).toEqual([]);
 });

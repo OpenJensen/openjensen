@@ -35,6 +35,8 @@ export function RobotLab() {
   const [mode, setMode] = useState<ControlMode>('manual');
   const [isolated, setIsolated] = useState(false);
   const [assembledReady, setAssembledReady] = useState(false);
+  const [reidentify, setReidentify] = useState(false);
+  const [checkingConnection, setCheckingConnection] = useState(false);
   const [identifyMethod, setIdentifyMethod] = useState<'hand' | 'wiggle'>('hand');
   const [wiggleReady, setWiggleReady] = useState(false);
   const [wiggleId, setWiggleId] = useState('');
@@ -68,6 +70,7 @@ export function RobotLab() {
   const calibration = state?.calibration;
   const recording = state?.recording;
   const assembled = state?.assembled;
+  const mappingComplete = assembled?.phase === 'complete' && assembled.port === port;
   const active = !!session && session.mode !== 'idle';
   const controlling = !!session && ['manual', 'leader', 'handguide'].includes(session.mode);
   const calibrated = session?.mode !== 'setup' && !assembled?.calibration_required && !!state?.calibrations?.some(item => item.robot_id === robotId && item.role === 'follower');
@@ -96,7 +99,7 @@ export function RobotLab() {
     if (!port) setPort(devices.data.ports[0]?.device ?? '');
     if (!availableCameras.some(camera => camera.index === cameraIndex)) setCameraIndex(availableCameras[0]?.index ?? 0);
   }, [devices.data, port, cameraIndex, availableCameras]);
-  useEffect(() => { setIsolated(false); setAssembledReady(false); setWiggleReady(false); setWiggleId(''); setProbe(null); setAssigned([]); setMotionReady(false); }, [port]);
+  useEffect(() => { setIsolated(false); setAssembledReady(false); setReidentify(false); setWiggleReady(false); setWiggleId(''); setProbe(null); setAssigned([]); setMotionReady(false); }, [port]);
   useEffect(() => { setIsolated(false); }, [motorIndex]);
   useEffect(() => {
     if (!preview || !online) return;
@@ -152,13 +155,17 @@ export function RobotLab() {
     ownedRef.current = false; setOwnsSession(false); setMotionReady(false);
     void perform('Stop requested.', () => robotApi.stop());
   }
-  function refresh() { setError(null); setNotice(null); void status.refetch(); if (online) { void devices.refetch(); void datasets.refetch(); } }
+  async function refresh() {
+    setCheckingConnection(true); setError(null); setNotice(null);
+    try { await Promise.allSettled([status.refetch(), ...(online ? [devices.refetch(), datasets.refetch()] : [])]); }
+    finally { if (mounted.current) setCheckingConnection(false); }
+  }
   function updatePort(value: string) { setPort(value); setProbe(null); }
   const followerPort = <label>Robot USB port<select aria-label="Robot USB port" value={port} disabled={active || busy || !online} onChange={event => updatePort(event.target.value)}><option value="">Select a serial device</option>{devices.data?.ports.map(item => <option key={item.device} value={item.device}>{item.device} · {item.description}</option>)}</select></label>;
   const identity = <div className="robot-lab-fields">{followerPort}<label>Robot name<input aria-label="Robot name" value={robotId} disabled={active || busy} onChange={event => { setRobotId(event.target.value); setMotionReady(false); }} maxLength={64} pattern="[A-Za-z0-9_-]+" /></label></div>;
 
   return <div className="robot-lab">
-    <div className="robot-lab-statusbar"><div className="robot-lab-connection"><span className={`robot-lab-dot${online ? ' online' : ''}`} /><div><strong>{status.isPending ? 'Connecting…' : online ? `${state?.label ?? 'Mac companion'} connected` : 'Mac companion unavailable'}</strong><small>{online ? active ? `${session?.mode === 'setup' ? 'Assembled motor setup' : session?.mode === 'calibration' ? 'Calibration' : session?.mode === 'handguide' ? 'Hand guiding' : session?.mode === 'leader' ? 'Leader teleoperation' : 'Manual control'} · ${session?.robot_id ?? robotId} · ${session?.mode === 'setup' ? 'Motor setup active' : session?.torque_enabled ? 'Torque command: on' : 'Torque command: off'}` : 'Idle' : state?.message ?? status.error?.message ?? 'Check that the local companion is running.'}</small></div></div><div className="robot-lab-status-actions"><button className="text-button" onClick={refresh} disabled={busy || status.isFetching}>{status.isFetching ? 'Checking…' : 'Check connection'}</button><button className="robot-lab-stop" onClick={stop} disabled={!state?.ok && !active} aria-label="Stop arm and disable torque"><span />{pending === 'Stop requested.' ? 'Stopping…' : 'Stop arm'}</button></div></div>
+    <div className="robot-lab-statusbar"><div className="robot-lab-connection"><span className={`robot-lab-dot${online ? ' online' : ''}`} /><div><strong>{status.isPending ? 'Connecting…' : online ? `${state?.label ?? 'Mac companion'} connected` : 'Mac companion unavailable'}</strong><small>{online ? active ? `${session?.mode === 'setup' ? 'Assembled motor setup' : session?.mode === 'calibration' ? 'Calibration' : session?.mode === 'handguide' ? 'Hand guiding' : session?.mode === 'leader' ? 'Leader teleoperation' : 'Manual control'} · ${session?.robot_id ?? robotId} · ${session?.mode === 'setup' ? 'Motor setup active' : session?.torque_enabled ? 'Torque command: on' : 'Torque command: off'}` : 'Idle' : state?.message ?? status.error?.message ?? 'Check that the local companion is running.'}</small></div></div><div className="robot-lab-status-actions"><button className="text-button" onClick={() => void refresh()} disabled={busy || checkingConnection || status.isPending}>{checkingConnection ? 'Checking…' : 'Check connection'}</button>{(active || session?.torque_enabled || session?.error || pending === 'Stop requested.') && <button className="robot-lab-stop" onClick={stop} disabled={!state?.ok && !active} aria-label="Stop arm and disable torque"><span />{pending === 'Stop requested.' ? 'Stopping…' : 'Stop arm'}</button>}</div></div>
     <nav className="robot-lab-steps" aria-label="Robot setup steps">{steps.map((item, index) => <button key={item.title} className={`robot-lab-step${step === index ? ' selected' : ''}`} onClick={() => { setStep(index); setNotice(null); setError(null); }} aria-current={step === index ? 'step' : undefined} disabled={busy}>{item.title}</button>)}</nav>
     {error && <p className="robot-lab-event robot-lab-error" role="alert">{error}</p>}
     {notice && <p className="robot-lab-event" role="status">{notice}</p>}
@@ -176,19 +183,24 @@ export function RobotLab() {
         {probe && <><Notice kind={probe.ready ? 'success' : 'warning'}><strong>{probe.ready ? 'All six motor IDs responded.' : 'Motor setup required'}</strong>{probe.ready ? 'Calibrate before enabling motion.' : `Responding IDs: ${probe.motors.map(motor => motor.id).join(', ') || 'none'}. Factory IDs may be duplicated. Continue to motor setup.`}</Notice>{probe.warning && <p className="robot-lab-subtle">{probe.warning}</p>}</>}
       </div></>}
       {step === 1 && <><Heading title="Motor IDs" /><div className="robot-lab-form">
+        {mappingComplete && !reidentify && <section className="robot-lab-form" aria-label="Saved motor mapping">
+          <Notice kind="success"><strong>IDs saved</strong>All six joint assignments verified after reboot.</Notice>
+          <div className="robot-lab-table-wrap"><table className="robot-lab-table"><thead><tr><th>Joint</th><th>Motor ID</th></tr></thead><tbody>{robotJoints.map(joint => <tr key={joint.name}><td>{joint.label}</td><td>{assembled.mapping[joint.name]}</td></tr>)}</tbody></table></div>
+          <button className="text-button" disabled={busy || active} onClick={() => setReidentify(true)}>Reidentify joints</button>
+        </section>}
         {assembled?.phase !== 'complete' && <div className="so101-detection-feedback" role="status" aria-label="Motor identification status">
           <strong>{!online ? 'Movement detection unavailable' : session?.mode === 'setup' && ['scanning', 'splitting'].includes(assembled?.phase ?? '') ? 'Preparing motor addresses' : assembled?.phase === 'applying' ? 'Saving motor IDs' : assembled?.phase === 'observing' && identifyMethod === 'hand' ? 'Listening for hand movement' : session?.mode === 'setup' && ['ready', 'observing', 'review'].includes(assembled?.phase ?? '') ? 'Ready to identify joints' : assembled?.phase === 'wiggling' ? 'Identifying motor by motion' : 'Movement detection off'}</strong>
           <p>{!online ? 'Connect the Mac companion first.' : session?.mode === 'setup' && ['scanning', 'splitting'].includes(assembled?.phase ?? '') ? `${assembled?.progress ? `Round ${assembled.progress}/12 · ` : ''}${assembled?.ids.length ?? 0}/6 addresses found. No movement is commanded. Keep this page visible until preparation finishes.` : session?.mode === 'setup' && ['ready', 'observing', 'review', 'wiggling', 'applying'].includes(assembled?.phase ?? '') ? assembled?.phase === 'applying' ? 'Keep this page visible while the saved addresses are verified.' : identifyMethod === 'hand' ? assembled?.phase === 'observing' ? `Move only the ${selectedMotor.label.toLowerCase()}, then hold its new position.` : 'Click a joint on the model to start listening for its movement.' : 'Select an address, request a wiggle, then select the joint that moved.' : `${assembled?.ids.length ? `${assembled.ids.length}/6 addresses found. ` : ''}Start assembled setup below. Hand detection and wiggle require six separate motor addresses.`}</p>
         </div>}
         {jointGuide}
         {followerPort}
-        {session?.mode !== 'setup' && <fieldset className="robot-lab-identify-method"><legend>Identification method</legend><button type="button" className={identifyMethod === 'hand' ? 'primary-button' : 'secondary-button'} aria-pressed={identifyMethod === 'hand'} onClick={() => { setIdentifyMethod('hand'); setWiggleReady(false); }}>Move by hand</button><button type="button" className={identifyMethod === 'wiggle' ? 'primary-button' : 'secondary-button'} aria-pressed={identifyMethod === 'wiggle'} onClick={() => setIdentifyMethod('wiggle')}>Wiggle a motor</button></fieldset>}
-        <section className="robot-lab-assembled" aria-label="Experimental assembled setup"><div className="robot-lab-assembled-heading"><h3>Assembled setup</h3><span className="robot-lab-experimental">Experimental</span></div>
+        {(!mappingComplete || reidentify) && session?.mode !== 'setup' && <fieldset className="robot-lab-identify-method"><legend>Identification method</legend><button type="button" className={identifyMethod === 'hand' ? 'primary-button' : 'secondary-button'} aria-pressed={identifyMethod === 'hand'} onClick={() => { setIdentifyMethod('hand'); setWiggleReady(false); }}>Move by hand</button><button type="button" className={identifyMethod === 'wiggle' ? 'primary-button' : 'secondary-button'} aria-pressed={identifyMethod === 'wiggle'} onClick={() => setIdentifyMethod('wiggle')}>Wiggle a motor</button></fieldset>}
+        {(!mappingComplete || reidentify) && <section className="robot-lab-assembled" aria-label="Experimental assembled setup"><div className="robot-lab-assembled-heading"><h3>Assembled setup</h3><span className="robot-lab-experimental">Experimental</span></div>
           {(!assembled || ['idle', 'stopped', 'error', 'complete'].includes(assembled.phase)) && session?.mode !== 'setup' && <div className="robot-lab-form">
             <Notice kind="warning">Support the arm. Keep power, USB and motor cables connected. Experimental setup reboots motors and writes temporary IDs; torque can release.</Notice>
             {probe?.ready && <Notice kind="success">All six expected IDs already respond. You can go straight to calibration.</Notice>}
             <label className="robot-lab-check"><input type="checkbox" checked={assembledReady} disabled={busy || active} onChange={event => setAssembledReady(event.target.checked)} /><span>Six STS3215 motors; arm supported. Allow motor reboots and persistent ID changes.</span></label>
-            <div className="robot-lab-actions"><button className="primary-button" disabled={!canAct || active || !port || !assembledReady || !state?.capabilities?.assembled_setup} onClick={() => { setAssembledReady(false); void perform('Experimental assembled setup started.', () => robotApi.startAssembled(port), ownSession, false); }}>Start assembled setup</button><button className="secondary-button" disabled={!canAct || active || !port} onClick={() => void perform('Motor connection checked.', () => robotApi.probe(port), result => setProbe(result))}>Verify current IDs</button></div>
+            <div className="robot-lab-actions"><button className="primary-button" disabled={!canAct || active || !port || !assembledReady || !state?.capabilities?.assembled_setup} onClick={() => { setAssembledReady(false); setReidentify(false); void perform('Experimental assembled setup started.', () => robotApi.startAssembled(port), ownSession, false); }}>Start assembled setup</button><button className="secondary-button" disabled={!canAct || active || !port} onClick={() => void perform('Motor connection checked.', () => robotApi.probe(port), result => setProbe(result))}>Verify current IDs</button></div>
           </div>}
           {assembled && assembled.phase !== 'idle' && <div className="robot-lab-form">
             <div className={`robot-lab-assembled-state phase-${assembled.phase}`} role="status"><span className="robot-lab-mini-label">{assembled.phase.toUpperCase()}</span><p>{assembled.message}</p>{assembled.ids.length > 0 && <small>{assembled.ids.length} distinct {assembled.ids.length === 1 ? 'address' : 'addresses'}: {assembled.ids.join(', ')}</small>}</div>
@@ -209,7 +221,7 @@ export function RobotLab() {
             {assembled.phase === 'complete' && <Notice kind="success"><strong>IDs saved</strong>Calibration required.<button className="text-button" disabled={busy} onClick={() => setStep(2)}>Continue to calibration →</button></Notice>}
             {assembled.log.length > 0 && <details className="robot-lab-setup-log"><summary>Setup details</summary><ol>{assembled.log.map((entry, index) => <li key={index}>{entry}</li>)}</ol></details>}
           </div>}
-        </section>
+        </section>}
         <details className="robot-lab-advanced-ids"><summary>Advanced: configure one physically isolated motor</summary><div className="robot-lab-form">
 <div className="robot-lab-motor-list">{setupOrder.map((name, index) => { const joint = robotJoints.find(item => item.name === name)!; return <button key={name} className={`robot-lab-motor${motorIndex === index ? ' selected' : ''}${assigned.includes(name) ? ' assigned' : ''}`} onClick={() => setMotorIndex(index)} disabled={busy || active} aria-pressed={motorIndex === index}><b>{assigned.includes(name) ? <Icon name="check" size={12} /> : joint.id}</b><span><strong>{joint.label}</strong><small>{assigned.includes(name) ? 'Assigned this session' : `Motor ID ${joint.id}`}</small></span></button>; })}</div>
         <div className="robot-lab-motor-guide"><span className="robot-lab-motor-number">{selectedMotor.id}</span><div><h3>{selectedMotor.label}</h3><p>Power off the arm. Connect only this motor directly to the controller, with the rest of the chain disconnected. Restore motor power and keep USB connected.</p></div></div>

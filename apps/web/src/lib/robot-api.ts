@@ -20,7 +20,7 @@ export type RobotStatus = {
   session?: { mode: 'idle' | 'calibration' | 'setup' | ControlMode; robot_id: string | null; port: string | null; role: RobotRole | null; positions: JointValues; torque_enabled: boolean; watchdog_seconds: number; error: string | null };
   calibration?: { phase: 'idle' | 'center' | 'ranges' | 'saved'; mins: JointValues; maxes: JointValues; offsets: JointValues; path: string | null };
   recording?: { active: boolean; dataset_id: string | null; episode_active: boolean; frames: number; episodes: number; fps: number; error: string | null };
-  assembled?: { phase: 'idle' | 'scanning' | 'splitting' | 'ready' | 'observing' | 'wiggling' | 'review' | 'applying' | 'complete' | 'error' | 'stopped'; motion_active?: boolean; wiggle_id?: number | null; wiggle_ticks?: number | null; ids: number[]; selected_joint: RobotJoint | null; detected_id: number | null; candidate_delta: number | null; mapping: Partial<Record<RobotJoint, number>>; message: string; error: string | null; log: string[]; progress: unknown; calibration_required: boolean };
+  assembled?: { port?: string | null; phase: 'idle' | 'scanning' | 'splitting' | 'ready' | 'observing' | 'wiggling' | 'review' | 'applying' | 'complete' | 'error' | 'stopped'; motion_active?: boolean; wiggle_id?: number | null; wiggle_ticks?: number | null; ids: number[]; selected_joint: RobotJoint | null; detected_id: number | null; candidate_delta: number | null; mapping: Partial<Record<RobotJoint, number>>; message: string; error: string | null; log: string[]; progress: unknown; calibration_required: boolean };
   calibrations?: { robot_id: string; role: RobotRole; path: string }[];
   datasets?: RobotDataset[];
 };

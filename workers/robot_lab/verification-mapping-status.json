@@ -1,0 +1,48 @@
+{
+  "date": "2026-10-23",
+  "scope": "Saved motor mapping and quiet connection status",
+  "source_sha256": {
+    "apps/web/src/components/robot-lab.tsx": "8757d14b196d82764af04fa4372e5c30a32552ec63d22cdd6f9bc555d4a0517b",
+    "apps/web/src/lib/robot-api.ts": "d283c050834bf15a07a32cdb971f1b01ab32e0d8d9a65e34edc6a2415914409d",
+    "tests/web/robot-lab.spec.ts": "cc81296afd92611d0c7209bb0c78e6dca6828fddd3b79875bd4253645a3f74e7"
+  },
+  "verification": {
+    "production_webpack_export": "passed",
+    "typescript": "passed",
+    "browser_cases": {
+      "passed": 32,
+      "platforms": [
+        "desktop",
+        "mobile"
+      ],
+      "hardware_actions": false
+    },
+    "initial_failure": "Production build caught missing assembled.port TypeScript declaration; corrected to match the existing backend payload, then build and typecheck passed."
+  },
+  "physical_acceptance": {
+    "canonical_mapping": {
+      "shoulder_pan": 1,
+      "shoulder_lift": 2,
+      "elbow_flex": 3,
+      "wrist_flex": 4,
+      "wrist_roll": 5,
+      "gripper": 6
+    },
+    "identification": "All six identified from user-confirmed hand movement; IDs saved and verified after reboot without disconnecting motor cables.",
+    "torque_enabled": false,
+    "calibration": "Cancelled at user request before center/ranges were saved.",
+    "powered_wiggle": "Not physically tested",
+    "camera": "USB camera opens but returns no frame on both current and previous application releases; camera acceptance not claimed."
+  },
+  "evidence_directory": "/home/aayrapetyan/ollamaforvlas/run/robot-lab-mapping-status-20261023",
+  "cleanup": {
+    "owned_processes": [
+      583403,
+      584088,
+      584580,
+      584738
+    ],
+    "remaining": [],
+    "test_listener_closed": true
+  }
+}
