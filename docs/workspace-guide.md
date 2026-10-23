@@ -57,3 +57,16 @@ Open an application job to follow its status and events. For an external rollout
 ## Settings & diagnostics
 
 Use **Compute** to connect Google Cloud, save Hugging Face access, or add a local worker. For local training, select **Check this machine → Add worker**, enable local runs, and save. Use **Workflow settings** to edit recipes and **Diagnostics** to launch project checks. [Local setup](compute-settings.md#local-worker-setup) · [Cloud connection](cloud-connections.md) · [Diagnostics](policy-workflow.md)
+
+
+## Robot Lab
+
+Open **Robot Lab** to connect the computer beside your SO-101, preview its camera, and move through **Connect → Motor IDs → Calibrate → Teleoperate → Record**. The local hardware companion keeps USB access on that computer while the private OpenJensen workspace manages the workflow.
+
+For new motors, the motor-ID guide asks you to isolate one motor at a time and confirm which joint is connected. The software writes the ID and verifies it before you continue. Reconnect the chain after all six IDs are assigned. During calibration, support the arm, capture its middle pose, then gently move each joint through its usable range and save the measured limits.
+
+Enable movement explicitly after calibration. Manual controls use small bounded steps; a leader arm can drive the follower when both profiles are calibrated. Keep the **Stop** button reachable. A lost control heartbeat stops the session. The camera preview shares the recording camera instead of opening a competing connection.
+
+To create a dataset, enter a name and task, select the camera and frame rate, then start an episode. Save or discard each take, finish the dataset, and add it to the selected project. Captures stay local until you choose to add them; they are not automatically uploaded to Hugging Face. A factory arm still needs unique motor IDs before joint control and recording are ready.
+
+Robot Lab hardware APIs and room-camera previews are available only in the private workspace, not through the public gateway. Setup and installation details are in [the SO-101 guide](so101-robot-lab.md).

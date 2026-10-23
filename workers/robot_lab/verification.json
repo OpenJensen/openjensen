@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-23",
+  "scope": "SO-101 companion; fake buses and synthetic dataset only; no physical EEPROM writes or motion",
+  "tests": {
+    "command": "/home/aayrapetyan/ollamaforvlas/data/local-environments/smolvla-cu126/bin/python -m unittest discover -s workers/robot_lab/tests -v",
+    "run": 32,
+    "passed": 31,
+    "skipped": 1,
+    "skip_reason": "official loader requires explicit shared heavy lane",
+    "elapsed_seconds": 2.446
+  },
+  "official_dataset_loader": {
+    "command": "OPENJENSEN_VERIFY_LEROBOT=1 /home/aayrapetyan/ollamaforvlas/data/local-environments/smolvla-cu126/bin/python -m unittest discover -s workers/robot_lab/tests -p test_dataset.py -v",
+    "passed": 6,
+    "lerobot_version": "0.4.4",
+    "evidence": [
+      "two episodes, ten frames",
+      "embedded lossless RGB camera image tensors",
+      "actual state/action values",
+      "task text and task index",
+      "episode offsets",
+      "action delta timestamp stack shape (2,6)"
+    ],
+    "elapsed_seconds": 3.321
+  },
+  "syntax": "python3 -m compileall -q workers/robot_lab passed",
+  "source_sha256": {
+    "camera.py": "b838bd14b548f416776b7543314d59d4224076bf86f3df1a409de5114248d556",
+    "dataset.py": "7d59516b09fa8dd179aebd63fd455c5257f34a3a2cf8bfb944d816e2a4342994",
+    "dispatch.py": "adc124edc5bb8daa14ffb8bcc7099413076e6bde893f394c738fa88786418f1e",
+    "hardware.py": "76e8756fae67cdafdba0eb9d014f8fc395b6f4fb9566998001051e713d073bb2",
+    "server.py": "b1afb4ef6d1302f3af1fcde5bb8a5ef3c179b25cbf2d588d3f954b2fc90494bf"
+  },
+  "quality": {
+    "formatter": "ruff format --target-version py311 workers/robot_lab/*.py workers/robot_lab/tests/*.py",
+    "lint": "ruff check --target-version py311 workers/robot_lab",
+    "result": "passed; import ordering, unused imports, and string line lengths corrected without blanket ignores",
+    "ruff_version": "ruff 0.14.14",
+    "python_compatibility": "Python 3.11 target; official loader environment Python 3.11"
+  }
+}
