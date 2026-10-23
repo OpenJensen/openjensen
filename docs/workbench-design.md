@@ -15,3 +15,20 @@ pnpm test:web
 ```
 
 Check the edited pages in light and dark themes, at desktop and narrow mobile widths, and with keyboard navigation. See [development checks](ci.md) for the full commands.
+
+## Operational interface
+
+OpenJensen is a scientific workbench. Use the shared page header, controls, spacing
+and theme tokens. Feature pages should not add promotional banners, slogans,
+decorative badges, or a second introduction below the page title.
+
+Use short names for operations and measured state. Put the next required instruction
+beside its control; keep technical background in documentation or a disclosure.
+Do not repeat field labels, navigation labels, and instructions as subtitles. Keep
+consequential action details (torque, persistent writes, incomplete recovery) visible
+at the action that needs them.
+
+Robot illustrations must distinguish the model from live telemetry. Use the actual
+mechanism and joint axes; motion previews should be explicit and bounded, with a
+static alternative for reduced motion. Verify them in light and dark themes and at
+mobile widths, alongside keyboard controls.

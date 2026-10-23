@@ -10,7 +10,7 @@ function initialStatus(calibrated = false): any {
   return { ok: true, connected: true, label: 'This Mac', version: '1', platform: 'Darwin', dependencies: { lerobot: { installed: false, version: null }, serial: { installed: true, version: '3.5' }, cv2: { installed: true, version: '4.12.0' }, scservo_sdk: { installed: true, version: '1.0.0' } }, capabilities: { assembled_setup: true, probe: true, camera: true, motor_setup: true, calibration: true, control: true, recording: true }, session: { mode: 'idle', robot_id: null, port: null, role: null, positions: {}, torque_enabled: false, watchdog_seconds: 2, error: null }, calibration: { phase: 'idle', mins: {}, maxes: {}, offsets: {}, path: null }, recording: { active: false, dataset_id: null, episode_active: false, frames: 0, episodes: 0, fps: 10, error: null }, assembled: { phase: 'idle', ids: [], selected_joint: null, detected_id: null, candidate_delta: null, mapping: {}, message: 'Start experimental assembled setup.', error: null, log: [], progress: null, calibration_required: false }, calibrations: calibrated ? [{ robot_id: 'my-so101', role: 'follower', path: 'private-calibration.json' }] : [], datasets: [] };
 }
 async function fixture(page: Page, calibrated = false) {
-  const state = { status: initialStatus(calibrated), writes: [] as { path: string; body: any }[], errors: [] as string[], datasetReads: 0 };
+  const state = { status: initialStatus(calibrated), writes: [] as { path: string; body: any }[], errors: [] as string[], datasetReads: 0, cameraFailure: false, stopError: null as string | null };
   page.on('pageerror', error => state.errors.push(error.message));
   await page.route('**/api/v1/**', async route => {
     const request = route.request(), path = new URL(request.url()).pathname, body = request.method() === 'POST' ? request.postDataJSON() : undefined;
@@ -19,7 +19,7 @@ async function fixture(page: Page, calibrated = false) {
       const action = path.slice('/api/v1/robot-lab'.length);
       if (action === '/status') return route.fulfill({ json: state.status });
       if (action === '/devices') return route.fulfill({ json: { ports: [{ device: port, description: 'SO-101 controller', manufacturer: 'USB serial', serial_number: 'test-1' }, { device: '/dev/cu.usbmodem-leader', description: 'Leader controller', manufacturer: 'USB serial', serial_number: 'test-2' }], cameras: [{ index: 0, name: 'Robot camera', width: 640, height: 480 }], camera_error: null } });
-      if (action === '/camera.jpg') return route.fulfill({ contentType: 'image/png', body: pixel });
+      if (action === '/camera.jpg') return state.cameraFailure ? route.fulfill({ status: 503, json: { detail: 'Camera disconnected.' } }) : route.fulfill({ contentType: 'image/png', body: pixel });
       if (action === '/datasets') return route.fulfill({ json: { datasets: state.status.datasets } });
       if (action === '/probe') return route.fulfill({ json: { port, baudrate: 1000000, motors: [{ id: 1, model: 777, stable: true, responses: 3 }], ready: false, expected_ids: [1, 2, 3, 4, 5, 6], warning: 'A response at one ID cannot prove that only one physical motor is connected.' } });
       if (action === '/setup/motor') return route.fulfill({ json: { assigned: { joint: body.joint, id: joints.indexOf(body.joint) + 1, baudrate: 1000000 }, warning: 'Keep other motors disconnected.' } });
@@ -31,7 +31,7 @@ async function fixture(page: Page, calibrated = false) {
       else if (action === '/calibration/start') { state.status.session = { ...state.status.session, mode: 'calibration', port: body.port, robot_id: body.robot_id, role: body.role, positions: values(2048) }; state.status.calibration.phase = 'center'; }
       else if (action === '/calibration/center') { state.status.calibration = { ...state.status.calibration, phase: 'ranges', mins: values(700), maxes: values(3300), offsets: values(0) }; }
       else if (action === '/calibration/finish') { state.status.calibration.phase = 'saved'; state.status.assembled.calibration_required = false; state.status.session.mode = 'idle'; state.status.calibrations = [{ robot_id: 'my-so101', role: 'follower', path: 'private-calibration.json' }]; }
-      else if (action === '/calibration/cancel' || action === '/stop') { state.status.session.mode = 'idle'; state.status.session.torque_enabled = false; state.status.recording.episode_active = false; }
+      else if (action === '/calibration/cancel' || action === '/stop') { if (action === '/stop') state.status.session.error = state.stopError; state.status.session.mode = 'idle'; state.status.session.torque_enabled = false; state.status.recording.episode_active = false; }
       else if (action === '/control/start') { state.status.session = { ...state.status.session, mode: body.mode, port: body.port, robot_id: body.robot_id, positions: values(0), torque_enabled: body.mode !== 'handguide' }; }
       else if (action === '/control/heartbeat') { /* Explicitly owned session only. */ }
       else if (action === '/control/jog') { state.status.session.positions[body.joint] += body.delta; }
@@ -39,7 +39,7 @@ async function fixture(page: Page, calibrated = false) {
       else if (action === '/recording/episode/start') { state.status.recording.episode_active = true; state.status.recording.frames = 10; }
       else if (action === '/recording/episode/save') { state.status.recording.episode_active = false; state.status.recording.episodes++; state.status.recording.frames = 0; }
       else if (action === '/recording/episode/discard') { state.status.recording.episode_active = false; state.status.recording.frames = 0; }
-      else if (action === '/recording/finish') { state.status.recording.active = false; state.status.datasets = [{ id: state.status.recording.dataset_id, path: 'private-local-dataset', episodes: state.status.recording.episodes, frames: 10, fps: state.status.recording.fps, task: 'Place the block in the tray.', format: 'lerobot', finalized: true }]; }
+      else if (action === '/recording/finish') { const current = state.status.recording; state.status.datasets = [{ id: current.dataset_id, path: 'private-local-dataset', episodes: current.episodes, frames: body.abandon_empty ? 0 : 10, fps: current.fps, task: 'Place the block in the tray.', format: 'lerobot', finalized: !body.abandon_empty, abandoned: !!body.abandon_empty, pending_frames: body.abandon_empty ? current.frames : 0 }]; state.status.recording = { ...current, active: false, episode_active: false, frames: 0 }; }
       else return route.fulfill({ status: 404, json: { detail: `Unexpected robot route ${action}` } });
       return route.fulfill({ json: state.status });
     }
@@ -59,7 +59,7 @@ const tab = (page: Page, title: string) => page.getByRole('navigation', { name: 
 const writes = (state: Awaited<ReturnType<typeof fixture>>, path: string) => state.writes.filter(item => item.path.endsWith(path));
 async function startManual(page: Page) {
   await tab(page, 'Teleoperate').click();
-  await page.getByRole('checkbox', { name: /The arm is secured/ }).check();
+  await page.getByRole('checkbox', { name: /Arm secured; workspace clear/ }).check();
   await page.getByRole('button', { name: 'Enable on-screen controls', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Increase Shoulder pan', exact: true })).toBeEnabled();
 }
@@ -72,6 +72,14 @@ test('Robot Lab navigation and device discovery issue no motor commands', async 
   await expect(page.getByRole('button', { name: 'Enable on-screen controls', exact: true })).not.toBeVisible();
   expect(state.writes).toEqual([]);
   await page.getByRole('button', { name: 'Start preview', exact: true }).click();
+  await expect(page.getByAltText('Live view from the selected robot camera')).toBeVisible();
+  state.cameraFailure = true;
+  await page.getByRole('button', { name: 'Pause preview', exact: true }).click();
+  await page.getByRole('button', { name: 'Start preview', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Retry camera', exact: true })).toBeVisible();
+  await expect(page.locator('.robot-lab-camera-live')).toHaveCount(0);
+  state.cameraFailure = false;
+  await page.getByRole('button', { name: 'Retry camera', exact: true }).click();
   await expect(page.getByAltText('Live view from the selected robot camera')).toBeVisible();
   await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); window.scrollTo(0, 0); });
   await page.screenshot({ path: testInfo.outputPath('robot-lab-connect.png'), fullPage: true });
@@ -143,6 +151,32 @@ test('episode recording saves and finalizes before importing into the selected p
 });
 
 
+test('unsaved recording can be explicitly closed after Stop while retained files stay unfinalized', async ({ page }) => {
+  const state = await fixture(page, true);
+  await startManual(page);
+  await tab(page, 'Record').click();
+  await page.getByLabel('Dataset name', { exact: true }).fill('empty-demo');
+  await page.getByLabel('Task instruction', { exact: true }).fill('Place the block in the tray.');
+  await page.getByRole('button', { name: 'Create recording dataset', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Finish dataset', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Start episode', exact: true }).click();
+  await page.getByRole('button', { name: 'Stop arm and disable torque', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Close unsaved recording', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Close unsaved recording', exact: true }).click();
+  expect(writes(state, '/recording/finish')).toEqual([{ path: '/api/v1/robot-lab/recording/finish', body: { abandon_empty: true, confirm: 'ABANDON EMPTY RECORDING' } }]);
+  const retained = page.getByRole('article').filter({ has: page.getByRole('heading', { name: 'empty-demo', exact: true }) });
+  await expect(retained.getByRole('button', { name: 'Closed · files retained', exact: true })).toBeDisabled();
+  await expect(retained.getByText('10 unsaved frames', { exact: true })).toBeVisible();
+  expect(writes(state, '/import')).toEqual([]);
+  await startManual(page);
+  await tab(page, 'Record').click();
+  await page.getByLabel('Dataset name', { exact: true }).fill('next-demo');
+  await page.getByLabel('Recording frame rate', { exact: true }).selectOption('5');
+  await page.getByRole('button', { name: 'Create recording dataset', exact: true }).click();
+  expect(writes(state, '/recording/start').at(-1)?.body).toEqual({ dataset_id: 'next-demo', task: 'Place the block in the tray.', fps: 5, camera_index: 0 });
+  expect(state.errors).toEqual([]);
+});
+
 test('offline companion cannot start hardware actions and does not retry mutations', async ({ page }) => {
   const state = await fixture(page, true);
   state.status = { connected: false, ok: false, label: 'This Mac', message: 'Companion is offline.' };
@@ -153,7 +187,7 @@ test('offline companion cannot start hardware actions and does not retry mutatio
   await page.getByRole('checkbox', { name: /Only the gripper motor is connected/ }).check();
   await expect(page.getByRole('button', { name: 'Assign ID 6', exact: true })).toBeDisabled();
   await tab(page, 'Teleoperate').click();
-  await page.getByRole('checkbox', { name: /The arm is secured/ }).check();
+  await page.getByRole('checkbox', { name: /Arm secured; workspace clear/ }).check();
   await expect(page.getByRole('button', { name: 'Enable on-screen controls', exact: true })).toBeDisabled();
   expect(state.writes).toEqual([]);
 });
@@ -163,17 +197,20 @@ test('hand guiding is an explicit torque-off session and leader mode needs a sec
   const state = await fixture(page, true);
   await tab(page, 'Teleoperate').click();
   await page.getByRole('button', { name: 'Leader → follower', exact: false }).click();
-  await page.getByRole('checkbox', { name: /The arm is secured/ }).check();
+  await page.getByRole('checkbox', { name: /Arm secured; workspace clear/ }).check();
   await expect(page.getByRole('button', { name: 'Start leader teleoperation', exact: true })).toBeDisabled();
   expect(writes(state, '/control/start')).toEqual([]);
-  await page.getByRole('button', { name: 'Guide by hand', exact: false }).click();
-  await page.getByRole('checkbox', { name: /I’m supporting the arm/ }).check();
+  await page.getByRole('button', { name: 'Hand guiding', exact: false }).click();
+  await page.getByRole('checkbox', { name: /Arm supported/ }).check();
   await page.getByRole('button', { name: 'Start hand guiding', exact: true }).click();
   await expect(page.getByText('Hand guiding is active. Torque is off.', { exact: true })).toBeVisible();
   expect(writes(state, '/control/start')[0].body).toEqual({ port, robot_id: 'my-so101', mode: 'handguide', confirm: 'ENABLE MOTION' });
   expect(state.status.session.torque_enabled).toBe(false);
   await expect.poll(() => writes(state, '/control/heartbeat').length).toBeGreaterThan(0);
+  state.stopError = 'Stop attempted but motor acknowledgement failed. Keep supporting the arm.';
   await page.getByRole('button', { name: 'Stop arm and disable torque', exact: true }).click();
+  await expect(page.locator('.robot-lab').getByRole('alert')).toContainText(state.stopError);
+  await expect(page.getByText('Arm stopped. Torque is disabled.', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Start hand guiding', exact: true })).toBeVisible();
 });
 
@@ -182,9 +219,7 @@ test('all six illustrated joints work by pointer and keyboard without idle hardw
   const state = await fixture(page);
   await tab(page, 'Motor IDs').click();
   const guide = page.getByRole('region', { name: 'SO-101 joint illustration', exact: true });
-  await expect(page.locator('.robot-lab-hero .robot-lab-illustration')).toHaveCount(0);
-  await expect(page.locator('.robot-lab-hero-meta')).toHaveCount(0);
-  await expect(guide.getByText('Illustration only — does not move or read your arm.', { exact: true })).toBeVisible();
+  await expect(guide.getByRole('slider', { name: 'Illustrated joint angle', exact: true })).toBeVisible();
   await expect(guide).toHaveAttribute('data-motion', 'reduced');
   for (let index = 0; index < joints.length; index++) {
     await guide.getByRole('group', { name: 'Choose an illustrated joint', exact: true }).getByRole('button').nth(index).click();
@@ -196,9 +231,10 @@ test('all six illustrated joints work by pointer and keyboard without idle hardw
   await expect(guide).toHaveAttribute('data-selected-joint', 'wrist_roll');
   await page.keyboard.press('Home'); await expect(guide).toHaveAttribute('data-selected-joint', 'shoulder_pan');
   await page.keyboard.press('End'); await expect(guide).toHaveAttribute('data-selected-joint', 'gripper');
-  const before = await guide.locator('.so101-guide-finger.moving').getAttribute('points');
-  await guide.getByRole('button', { name: 'Show next pose', exact: true }).click();
-  await expect(guide.locator('.so101-guide-finger.moving')).not.toHaveAttribute('points', before!);
+  const before = await guide.getAttribute('data-angle');
+  await guide.getByRole('slider', { name: 'Illustrated joint angle', exact: true }).focus();
+  await page.keyboard.press('End');
+  await expect(guide).not.toHaveAttribute('data-angle', before!);
   await tab(page, 'Calibrate').click();
   await expect(page.getByRole('region', { name: 'SO-101 joint illustration', exact: true })).toHaveAttribute('data-selected-joint', 'gripper');
   await expect(page.getByRole('group', { name: 'Measured encoder values', exact: true })).toHaveCount(0);
@@ -216,29 +252,46 @@ test('offline joint illustration still selects and never invents measurements or
   await tab(page, 'Motor IDs').click();
   const guide = page.getByRole('region', { name: 'SO-101 joint illustration', exact: true });
   await guide.getByRole('button', { name: 'Joint 6: Gripper', exact: true }).click();
-  await expect(guide.getByRole('heading', { name: 'Open and close the gripper', exact: true })).toBeVisible();
-  await guide.getByRole('button', { name: 'Show next pose', exact: true }).click();
+  await expect(guide.getByRole('heading', { name: 'Gripper', exact: true })).toBeVisible();
+  await guide.getByRole('slider', { name: 'Illustrated joint angle', exact: true }).focus();
+  await page.keyboard.press('End');
   await expect(page.getByRole('button', { name: 'Start assembled setup', exact: true })).toBeDisabled();
   expect(state.writes).toEqual([]);
 });
 
-test('animation plays pauses and replays without commanding hardware', async ({ page }) => {
+test('motion preview is explicit, pauses, resets and ends without commanding hardware', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.clock.install({ time: new Date('2026-10-23T12:00:00Z') });
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   const state = await fixture(page);
   await tab(page, 'Motor IDs').click();
   const guide = page.getByRole('region', { name: 'SO-101 joint illustration', exact: true });
+  await expect(guide).toHaveAttribute('data-motion', 'static');
+  await expect(guide.locator('canvas')).not.toHaveAttribute('data-renderer', 'loading');
+  await page.clock.pauseAt(new Date(await page.evaluate(() => Date.now() + 1_000)));
+  await guide.getByRole('button', { name: 'Preview motion', exact: true }).click();
   await expect(guide).toHaveAttribute('data-motion', 'playing');
-  await guide.getByRole('button', { name: 'Pause illustration', exact: true }).click();
+  await page.clock.runFor(64);
+  await expect(guide).not.toHaveAttribute('data-angle', '0.00');
+  await guide.getByRole('button', { name: 'Pause motion', exact: true }).click();
   await expect(guide).toHaveAttribute('data-motion', 'paused');
-  const paused = await guide.locator('.so101-guide-finger.moving').getAttribute('points');
-  await page.waitForTimeout(120);
-  await expect(guide.locator('.so101-guide-finger.moving')).toHaveAttribute('points', paused!);
-  await guide.getByRole('button', { name: 'Replay', exact: true }).click();
+  const paused = await guide.getAttribute('data-angle');
+  await page.clock.fastForward(120);
+  await expect(guide).toHaveAttribute('data-angle', paused!);
+  await guide.getByRole('button', { name: 'Reset', exact: true }).click();
+  await expect(guide).toHaveAttribute('data-motion', 'static');
+  await guide.getByRole('button', { name: 'Preview motion', exact: true }).click();
   await expect(guide).toHaveAttribute('data-motion', 'playing');
+  await page.clock.runFor(32);
+  await page.clock.fastForward(2_000);
+  await expect(guide).toHaveAttribute('data-motion', 'static');
+  await guide.getByRole('button', { name: 'Joint 1: Shoulder pan', exact: true }).click();
+  await expect(guide).toHaveAttribute('data-motion', 'static');
   expect(state.writes).toEqual([]);
 });
 
 test('assembled setup prepares explicitly then picks start only encoder observation until mapping is confirmed', async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
   const state = await fixture(page, true);
   await tab(page, 'Motor IDs').click();
   const start = page.getByRole('button', { name: 'Start assembled setup', exact: true });
@@ -246,7 +299,13 @@ test('assembled setup prepares explicitly then picks start only encoder observat
   const guide = page.getByRole('region', { name: 'SO-101 joint illustration', exact: true });
   await guide.getByRole('button', { name: 'Joint 6: Gripper', exact: true }).click();
   expect(state.writes).toEqual([]);
-  await page.getByRole('checkbox', { name: /This is my assembled SO-101 with six STS3215 motors/ }).check();
+  const consent = page.getByRole('checkbox', { name: /Six STS3215 motors; arm supported/ });
+  await consent.check();
+  await page.getByLabel('Robot USB port').selectOption('/dev/cu.usbmodem-leader');
+  await expect(consent).not.toBeChecked();
+  await expect(start).toBeDisabled();
+  await page.getByLabel('Robot USB port').selectOption(port);
+  await consent.check();
   await start.click();
   expect(writes(state, '/setup/assembled/start')[0].body).toEqual({ port, supported: true, confirm: 'START ASSEMBLED SETUP' });
   for (let index = 5; index >= 0; index--) {
@@ -258,7 +317,6 @@ test('assembled setup prepares explicitly then picks start only encoder observat
     expect(selectedWrites.map(item => item.path)).toEqual(['/api/v1/robot-lab/setup/assembled/observe']);
     expect(writes(state, '/setup/assembled/finish')).toEqual([]);
     if (index === 5) {
-      await page.getByRole('button', { name: 'Pause illustration', exact: true }).count().then(async count => { if (count) await page.getByRole('button', { name: 'Pause illustration', exact: true }).click(); });
       await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); window.scrollTo(0,0); });
       await page.screenshot({ path: testInfo.outputPath('so101-assembled-detection.png'), fullPage: true });
     }
@@ -266,7 +324,7 @@ test('assembled setup prepares explicitly then picks start only encoder observat
     if (index === 5) {
       const observations = writes(state, '/setup/assembled/observe').length;
       await guide.getByRole('button', { name: 'Joint 6: Gripper', exact: true }).click();
-      await expect(guide.getByText('Gripper is confirmed at address 16. Pick another unconfirmed joint.', { exact: true })).toBeVisible();
+      await expect(guide.getByText('Gripper is confirmed at address 16. Select the next joint.', { exact: true })).toBeVisible();
       expect(writes(state, '/setup/assembled/observe')).toHaveLength(observations);
     }
   }
@@ -277,7 +335,17 @@ test('assembled setup prepares explicitly then picks start only encoder observat
   expect(writes(state, '/setup/assembled/accept')).toHaveLength(6);
   expect(writes(state, '/setup/assembled/finish')[0].body).toEqual({ confirm: 'SAVE MOTOR IDS' });
   expect(writes(state, '/control/start')).toEqual([]);
-  await expect(page.getByText('Motor setup completed.', { exact: true })).toBeVisible();
+  await expect(page.getByText('IDs saved', { exact: true })).toBeVisible();
   await tab(page, 'Teleoperate').click();
   await expect(page.getByRole('button', { name: 'Enable on-screen controls', exact: true })).toBeDisabled();
+  state.status.assembled = { ...state.status.assembled, phase: 'stopped', ids: [3], mapping: {},
+    message: 'Setup stopped. Partial motor IDs are preserved; restart setup to scan and resume.',
+    log: ['Separating factory IDs: round 8/12', 'Setup stopped with responding ID 3.'] };
+  await page.getByRole('button', { name: 'Check connection', exact: true }).click();
+  await tab(page, 'Motor IDs').click();
+  await expect(page.getByText(state.status.assembled.message, { exact: true })).toBeVisible();
+  await page.getByText('Setup details', { exact: true }).click();
+  await expect(page.getByText('Setup stopped with responding ID 3.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start assembled setup', exact: true })).toBeDisabled();
+  expect(writes(state, '/setup/assembled/start')).toHaveLength(1);
 });

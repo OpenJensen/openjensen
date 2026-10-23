@@ -1,86 +1,40 @@
 'use client';
 
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { robotJoints, type RobotJoint } from '@/lib/robot-api';
-import { projectSo101, schematicAxis, so101Schematic, type Point3 } from '@/lib/so101-schematic';
-import { Icon } from './icon';
+import { add3, jointPose, normalize3, previewRanges, projectJoint, scale3, transformVector } from '@/lib/so101-schematic';
+import { So101CadView } from './so101-cad-view';
 import './so101-joint-guide.css';
 
-const movement: Record<RobotJoint, { title: string; axis: string; direction: string; instruction: string }> = {
-  shoulder_pan: { title: 'Turn the whole arm', axis: 'Vertical axis', direction: 'Left ↔ right around the base', instruction: 'Hold the shoulder assembly and turn it gently left and right above the fixed base.' },
-  shoulder_lift: { title: 'Raise the upper arm', axis: 'Shoulder hinge', direction: 'Upper arm up ↔ down', instruction: 'Support the upper arm. Raise or lower it at the shoulder hinge just above the base; the elbow and wrist move with it.' },
-  elbow_flex: { title: 'Bend the elbow', axis: 'Elbow hinge', direction: 'Forearm bend ↔ straighten', instruction: 'Support the forearm and hold the shoulder still. Bend and straighten the hinge between the upper arm and forearm.' },
-  wrist_flex: { title: 'Tilt the wrist', axis: 'Wrist hinge', direction: 'Gripper tilt up ↔ down', instruction: 'Hold the forearm steady. Tilt the gripper up and down at the wrist hinge, without twisting it.' },
-  wrist_roll: { title: 'Twist the gripper', axis: 'Along the tool', direction: 'Gripper rotate ↔ rotate back', instruction: 'Hold the wrist body. Twist the gripper around the length of the tool, without bending the wrist hinge.' },
-  gripper: { title: 'Open and close the gripper', axis: 'Moving jaw hinge', direction: 'Finger open ↔ close', instruction: 'Hold the gripper body. Gently open and close the moving finger; the other finger stays fixed.' },
-};
-const jointOrder = robotJoints.map(joint => joint.name);
-const pointList = (points: Point3[]) => points.map(point => { const projected = projectSo101(point); return `${projected.x},${projected.y}`; }).join(' ');
+const axes:Record<RobotJoint,string>={shoulder_pan:'Vertical rotation',shoulder_lift:'Shoulder pitch',elbow_flex:'Elbow pitch',wrist_flex:'Wrist pitch',wrist_roll:'Tool rotation',gripper:'Jaw hinge'};
+const markerOffsets:Record<RobotJoint,[number,number]>={shoulder_pan:[-44,25],shoulder_lift:[-42,-2],elbow_flex:[-34,-25],wrist_flex:[0,40],wrist_roll:[10,-40],gripper:[45,-20]};
+const reference=jointPose();
+const names=robotJoints.map(joint=>joint.name);
 
-export function So101JointGuide({ selected, onSelect, calibrationActive = false, detecting = false, setupActive = false, measured, feedback }: {
-  selected: RobotJoint;
-  onSelect: (joint: RobotJoint) => void;
-  calibrationActive?: boolean;
-  detecting?: boolean;
-  setupActive?: boolean;
-  measured?: { value: number; min?: number; max?: number };
-  feedback?: ReactNode;
-}) {
-  const markerId = useId().replaceAll(':', '');
-  const [phase, setPhase] = useState(0);
-  const [playing, setPlaying] = useState(true);
-  const [replay, setReplay] = useState(0);
-  const [reduced, setReduced] = useState(true);
-  const buttons = useRef<Partial<Record<RobotJoint, HTMLButtonElement | null>>>({});
-  const joint = robotJoints.find(item => item.name === selected)!;
-  const description = movement[selected];
-  const pose = so101Schematic(selected, phase);
-  const selectedPoint = projectSo101(pose.joints[selected]);
-  const [axisStart, axisEnd] = schematicAxis(pose, selected);
-  const armPoints = jointOrder.map(name => pose.joints[name]);
-  const toolSegment = selected === 'wrist_roll' || selected === 'gripper';
-
-  useEffect(() => {
-    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const update = () => setReduced(media.matches);
-    update(); media.addEventListener('change', update);
-    return () => media.removeEventListener('change', update);
-  }, []);
-  useEffect(() => { setPhase(0); setPlaying(true); }, [selected]);
-  useEffect(() => {
-    if (!playing || reduced) return;
-    let frame = 0, previous = 0, elapsed = phase / (Math.PI * 2 / 3.6) * 1000;
-    const animate = (now: number) => {
-      if (previous && now - previous >= 32) { elapsed += Math.min(now - previous, 80); previous = now; setPhase(elapsed / 1000 * Math.PI * 2 / 3.6); }
-      else if (!previous) previous = now;
-      frame = requestAnimationFrame(animate);
-    };
-    frame = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(frame);
-  }, [selected, playing, reduced, replay]);
-  function keyboard(event: KeyboardEvent<HTMLButtonElement>, name: RobotJoint) {
-    const index = jointOrder.indexOf(name);
-    const next = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? (index + 1) % 6 : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? (index + 5) % 6 : event.key === 'Home' ? 0 : event.key === 'End' ? 5 : -1;
-    if (next < 0) return;
-    event.preventDefault(); onSelect(jointOrder[next]); buttons.current[jointOrder[next]]?.focus();
-  }
-  return <section className="so101-guide" aria-label="SO-101 joint illustration" data-selected-joint={selected} data-motion={reduced ? 'reduced' : playing ? 'playing' : 'paused'}>
-    <div className="so101-guide-heading"><div><span className="so101-guide-eyebrow">MEET YOUR ASSEMBLED ARM</span><h3>Pick a joint. See its movement.</h3></div><span className="so101-guide-schematic-label">SCHEMATIC</span></div>
-    <p className="so101-guide-caption">{detecting ? 'Illustration only — the pose is not live. Encoder detection is shown separately; selection never commands movement.' : 'Illustration only — does not move or read your arm.'}</p>
-    <div className="so101-guide-visual">
-      <svg viewBox="0 0 520 380" aria-hidden="true"><defs><pattern id={`${markerId}-grid`} width="26" height="26" patternUnits="userSpaceOnUse"><path d="M26 0H0V26" fill="none" stroke="currentColor" strokeWidth=".5" /></pattern><marker id={`${markerId}-arrow`} markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto-start-reverse"><path d="M0 0L6 3L0 6" fill="none" stroke="currentColor" strokeWidth="1" /></marker></defs><rect x="20" y="12" width="480" height="350" fill={`url(#${markerId}-grid)`} className="so101-guide-grid" /><ellipse cx="96" cy="335" rx="69" ry="15" className="so101-guide-shadow" /><path d="M35 318h114v19H35zM49 310h86v9H49z" className="so101-guide-base" /><polyline points={pointList(armPoints)} className="so101-guide-arm-outline" /><polyline points={pointList(armPoints)} className="so101-guide-arm" />
-        {robotJoints.map((item, index) => { if (index === 5) return null; const p = projectSo101(pose.joints[item.name]); return <g key={item.name}><circle cx={p.x} cy={p.y} r={item.name === selected ? 21 : 17} className={item.name === selected ? 'so101-guide-motor selected' : 'so101-guide-motor'} /><circle cx={p.x} cy={p.y} r="5" className="so101-guide-hub" /></g>; })}
-        <polyline points={pointList(pose.palm)} className={`so101-guide-palm${toolSegment ? ' selected' : ''}`} /><polyline points={pointList(pose.fixedFinger)} className={`so101-guide-finger${toolSegment ? ' selected' : ''}`} /><polyline points={pointList(pose.movingFinger)} className={`so101-guide-finger moving${toolSegment ? ' selected' : ''}`} />
-        <line x1={axisStart.x} y1={axisStart.y} x2={axisEnd.x} y2={axisEnd.y} className="so101-guide-axis" markerStart={`url(#${markerId}-arrow)`} markerEnd={`url(#${markerId}-arrow)`} /><circle cx={selectedPoint.x} cy={selectedPoint.y} r="32" className="so101-guide-focus-ring" /><text x="30" y="36" className="so101-guide-view-label">SO-101 · SIMPLIFIED VIEW</text><text x="30" y="360" className="so101-guide-view-label">ILLUSTRATED POSE · NOT TELEMETRY</text>
-      </svg>
-      <div className="so101-guide-markers" role="group" aria-label="Choose an illustrated joint">{robotJoints.map(item => { const p = projectSo101(pose.joints[item.name]); const offset = item.name === 'gripper' ? { x: 18, y: -24 } : item.name === 'wrist_roll' ? { x: 0, y: -28 } : item.name === 'wrist_flex' ? { x: 0, y: 27 } : { x: -28, y: 0 }; return <button key={item.name} ref={element => { buttons.current[item.name] = element; }} type="button" style={{ left: `${(p.x + offset.x) / 520 * 100}%`, top: `${(p.y + offset.y) / 380 * 100}%` }} className={`so101-guide-marker${selected === item.name ? ' selected' : ''}`} aria-label={`Joint ${item.id}: ${item.label}`} aria-pressed={selected === item.name} onClick={() => onSelect(item.name)} onKeyDown={event => keyboard(event, item.name)}>{item.id}</button>; })}</div>
-    </div>
-    <div className="so101-guide-controls"><span><i className="so101-guide-axis-key" />{description.axis}</span><div>{reduced ? <button type="button" onClick={() => { setPlaying(false); setPhase(previous => previous + Math.PI / 2); }}><Icon name="arrow" size={13} />Show next pose</button> : <><button type="button" onClick={() => setPlaying(!playing)} aria-label={playing ? 'Pause illustration' : 'Play illustration'}><span aria-hidden="true">{playing ? 'Ⅱ' : '▷'}</span>{playing ? 'Pause' : 'Play'}</button><button type="button" onClick={() => { setPhase(0); setPlaying(true); setReplay(value => value + 1); }}><span aria-hidden="true">↻</span>Replay</button></>}</div></div>
-    {reduced && <p className="so101-guide-reduced">Reduced motion is on. Use “Show next pose” to compare still positions.</p>}
-    {feedback}
-    <div className="so101-guide-joint-options" role="group" aria-label="Joint names">{robotJoints.map(item => <button key={item.name} type="button" aria-pressed={selected === item.name} onClick={() => onSelect(item.name)}><b>{item.id}</b>{item.label}</button>)}</div>
-    <div className="so101-guide-selected" aria-live="polite" aria-atomic="true"><span className="so101-guide-selected-number">{joint.id}</span><div><span className="so101-guide-selected-name">{joint.label}</span><h4>{description.title}</h4><p>{description.instruction}</p><strong>{description.direction}</strong></div></div>
-    <p className="so101-guide-hand-note">{calibrationActive ? 'During active calibration: keep motor power on and all cables connected. Torque is released; support the arm while moving this joint.' : detecting ? 'During joint identification: keep motor power on and all cables connected. Torque is released. Support the arm, gently move only the highlighted joint, and hold its new position until you confirm.' : setupActive ? 'During assembled setup: keep motor power on and all cables connected. Support the arm; wait for joint identification before moving a joint.' : 'To explore by hand: switch motor power off, support the arm, and move gently. Never force a stiff joint.'}</p>
-    {measured && <div className="so101-guide-measured" role="group" aria-label="Measured encoder values"><span>MEASURED FROM ARM · ENCODER TICKS</span><strong>{Number.isFinite(measured.value) ? measured.value.toFixed(0) : '—'}</strong>{measured.min !== undefined && measured.max !== undefined && <small>Min {measured.min.toFixed(0)} · Max {measured.max.toFixed(0)}</small>}<p>Separate sensor readings; the illustration does not follow this value.</p></div>}
-  </section>;
+export function So101JointGuide({selected,onSelect,calibrationActive=false,detecting=false,setupActive=false,measured,feedback}:{selected:RobotJoint;onSelect:(joint:RobotJoint)=>void;calibrationActive?:boolean;detecting?:boolean;setupActive?:boolean;measured?:{value:number;min?:number;max?:number};feedback?:ReactNode}) {
+ const id=useId().replaceAll(':',''),buttons=useRef<Partial<Record<RobotJoint,HTMLButtonElement|null>>>({});
+ const [angle,setAngle]=useState(0),[playing,setPlaying]=useState(false),[reduced,setReduced]=useState(true),[preview,setPreview]=useState(0);
+ const joint=robotJoints.find(joint=>joint.name===selected)!,pose=useMemo(()=>jointPose(selected,angle),[selected,angle]),frame=pose.joints[selected],pivot=projectJoint(frame.origin),range=previewRanges[selected];
+ const axisA=projectJoint(add3(frame.origin,scale3(frame.axis,-.044))),axisB=projectJoint(add3(frame.origin,scale3(frame.axis,.044)));
+ const x=normalize3(transformVector(frame.matrix,[1,0,0])),y=normalize3(transformVector(frame.matrix,[0,1,0])),radius=selected==='gripper'?.032:.044;
+ const arc=Array.from({length:24},(_,i)=>{const theta=(-65+i*130/23)*Math.PI/180;const p=projectJoint(add3(frame.origin,add3(scale3(x,Math.cos(theta)*radius),scale3(y,Math.sin(theta)*radius))));return `${p.x},${p.y}`;}).join(' ');
+ useEffect(()=>{const media=window.matchMedia('(prefers-reduced-motion: reduce)'),update=()=>{setReduced(media.matches);if(media.matches)setPlaying(false);};update();media.addEventListener('change',update);return()=>media.removeEventListener('change',update);},[]);
+ useEffect(()=>{setPlaying(false);setAngle(0);},[selected]);
+ useEffect(()=>{
+  if(!playing||reduced)return;
+  let frameId=0,started=0;
+  const animate=(now:number)=>{if(!started)started=now;const elapsed=now-started;if(elapsed>=1800){setAngle(0);setPlaying(false);return;}const t=elapsed/1800,weight=Math.sin(t*Math.PI*2);setAngle(weight>=0?weight*range[1]:-weight*range[0]);frameId=requestAnimationFrame(animate);};
+  frameId=requestAnimationFrame(animate);return()=>cancelAnimationFrame(frameId);
+ },[playing,reduced,preview,selected,range]);
+ function keyboard(event:KeyboardEvent<HTMLButtonElement>,name:RobotJoint){const i=names.indexOf(name),next=event.key==='ArrowRight'||event.key==='ArrowDown'?(i+1)%6:event.key==='ArrowLeft'||event.key==='ArrowUp'?(i+5)%6:event.key==='Home'?0:event.key==='End'?5:-1;if(next<0)return;event.preventDefault();onSelect(names[next]);buttons.current[names[next]]?.focus();}
+ return <section className="so101-guide" aria-label="SO-101 joint illustration" data-selected-joint={selected} data-motion={reduced?'reduced':playing?'playing':angle===0?'static':'paused'} data-angle={angle.toFixed(2)}>
+  <header className="so101-guide-header"><h3><span aria-hidden="true">{joint.id}</span>{joint.label}</h3><span>{axes[selected]}</span><small>CAD · not live</small></header>
+  <div className="so101-cad-scene"><So101CadView pose={pose} selected={selected}/><svg className="so101-cad-overlay" viewBox="0 0 600 420" aria-hidden="true"><defs><marker id={`${id}-arrow`} markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto-start-reverse"><path d="M1 1L6 3.5L1 6"/></marker></defs><line className="so101-cad-axis" x1={axisA.x} y1={axisA.y} x2={axisB.x} y2={axisB.y}/><polyline className="so101-cad-rotation" points={arc} markerEnd={`url(#${id}-arrow)`}/><circle className="so101-cad-pivot" cx={pivot.x} cy={pivot.y} r="3"/>{robotJoints.map(item=>{const anchor=projectJoint(reference.joints[item.name].origin),position=projectJoint(pose.joints[item.name].origin),offset=markerOffsets[item.name];return <line className={`so101-cad-leader${item.name===selected?' selected':''}`} key={item.name} x1={anchor.x+offset[0]} y1={anchor.y+offset[1]} x2={position.x} y2={position.y}/>;})}</svg>
+   <div className="so101-guide-markers" role="group" aria-label="Choose an illustrated joint">{robotJoints.map(item=>{const p=projectJoint(reference.joints[item.name].origin),offset=markerOffsets[item.name];return <button key={item.name} ref={element=>{buttons.current[item.name]=element;}} type="button" style={{left:`${(p.x+offset[0])/600*100}%`,top:`${(p.y+offset[1])/420*100}%`}} className={`so101-guide-marker${selected===item.name?' selected':''}`} aria-label={`Joint ${item.id}: ${item.label}`} aria-pressed={selected===item.name} onClick={()=>onSelect(item.name)} onKeyDown={event=>keyboard(event,item.name)}>{item.id}</button>;})}</div>
+  </div>
+  <div className="so101-guide-controls"><button type="button" className="secondary-button" disabled={reduced} title={reduced?'Motion preview is disabled by your reduced-motion setting. Use the angle slider instead.':undefined} aria-label={playing?'Pause motion':'Preview motion'} onClick={()=>{if(playing)setPlaying(false);else{setAngle(0);setPreview(value=>value+1);setPlaying(true);}}}>{playing?'Pause motion':'Preview motion'}</button><button type="button" className="secondary-button" disabled={angle===0&&!playing} onClick={()=>{setPlaying(false);setAngle(0);}}>Reset</button><label><span>Angle</span><input type="range" aria-label="Illustrated joint angle" min={range[0]} max={range[1]} step="1" value={angle} onChange={event=>{setPlaying(false);setAngle(Number(event.target.value));}}/><output>{angle>0?'+':''}{angle.toFixed(0)}°</output></label></div>
+  {(calibrationActive||detecting||setupActive)&&<p className="so101-guide-context">{calibrationActive?'Power on. Support the arm and move the selected joint gently.':detecting?'Power on. Move only this joint gently, hold its new position, then confirm.':setupActive?'Keep power on and support the arm. Wait for identification.':'Keep power on and support the arm. Wait for identification.'}</p>}
+  {feedback}
+  {measured&&<div className="so101-guide-measured" role="group" aria-label="Measured encoder values"><span>Encoder</span><output>{Number.isFinite(measured.value)?measured.value.toFixed(0):'—'} ticks</output>{measured.min!==undefined&&measured.max!==undefined&&<small>Range {measured.min.toFixed(0)}–{measured.max.toFixed(0)}</small>}</div>}
+ </section>;
 }

@@ -1,44 +1,43 @@
 import { expect, test } from '@playwright/test';
-import { so101Schematic, projectSo101 } from '../../apps/web/src/lib/so101-schematic';
+import { jointOrder, jointPose, previewRanges, projectJoint, so101Description, transformPoint, visualMatrix } from '../../apps/web/src/lib/so101-schematic';
+import { parseBinaryStl } from '../../apps/web/src/lib/so101-webgl';
 
-const first = -Math.PI / 2, second = Math.PI / 2;
-
-test('gripper animation keeps the fixed finger and all arm joints still while hinging one jaw', () => {
-  const a = so101Schematic('gripper', first), b = so101Schematic('gripper', second);
-  expect(a.joints).toEqual(b.joints);
-  expect(a.fixedFinger).toEqual(b.fixedFinger);
-  expect(a.movingFinger[0]).toEqual(b.movingFinger[0]);
-  expect(a.movingFinger[1]).not.toEqual(b.movingFinger[1]);
+const source='3a65d2d35e68a8d2f0c2cc176d19b884506543c93ba72980145b80abe276022c';
+test('CAD uses pinned URDF origins, axes and seven articulated links',()=>{
+ expect(so101Description.urdfSha256).toBe(source);
+ expect(so101Description.joints).toHaveLength(6);
+ const zero=Object.fromEntries(jointOrder.map(name=>[name,0])) as Record<typeof jointOrder[number],number>,pose=jointPose(undefined,0,zero);
+ expect(Object.keys(pose.links)).toHaveLength(7);
+ expect(pose.joints.shoulder_pan.origin[0]).toBeCloseTo(.0388353,7);
+ expect(pose.joints.shoulder_pan.origin[2]).toBeCloseTo(.0624,7);
+ expect(pose.joints.shoulder_lift.origin[2]).toBeCloseTo(.1165999515,7);
+ for(const frame of Object.values(pose.joints))expect(Math.hypot(...frame.axis)).toBeCloseTo(1,10);
 });
-
-test('base yaw preserves heights while wrist roll rotates fingers without moving arm pivots', () => {
-  const a = so101Schematic('shoulder_pan', first), b = so101Schematic('shoulder_pan', second);
-  expect(a.axis).toEqual({ x: 0, y: 0, z: 1 });
-  for (const joint of Object.keys(a.joints) as (keyof typeof a.joints)[]) expect(a.joints[joint].z).toBeCloseTo(b.joints[joint].z, 10);
-  expect(a.joints.gripper.y).not.toBeCloseTo(b.joints.gripper.y, 4);
-  const rollA = so101Schematic('wrist_roll', first), rollB = so101Schematic('wrist_roll', second);
-  expect(rollA.joints).toEqual(rollB.joints);
-  expect(rollA.fixedFinger).not.toEqual(rollB.fixedFinger);
+test('gripper changes only the actual hinged jaw link',()=>{
+ const a=jointPose('gripper',-15),b=jointPose('gripper',30),child=so101Description.joints.find(joint=>joint.name==='gripper')!.child;
+ for(const name of Object.keys(a.links)){if(name===child)expect(a.links[name]).not.toEqual(b.links[name]);else expect(a.links[name]).toEqual(b.links[name]);}
+ expect(a.joints.gripper.origin).toEqual(b.joints.gripper.origin);
+ const fixed=so101Description.visuals.filter(part=>part.link==='gripper_link');
+ expect(fixed.length).toBeGreaterThan(0);
+ for(const visual of fixed)expect(visualMatrix(a,visual)).toEqual(visualMatrix(b,visual));
 });
-
-test('pitch hinges only move links downstream of their selected pivot', () => {
-  for (const joint of ['shoulder_lift', 'elbow_flex', 'wrist_flex'] as const) {
-    const a = so101Schematic(joint, first), b = so101Schematic(joint, second);
-    expect(a.joints.shoulder_pan).toEqual(b.joints.shoulder_pan);
-    expect(a.joints[joint]).toEqual(b.joints[joint]);
-    expect(a.joints.gripper).not.toEqual(b.joints.gripper);
-  }
+test('rotation keeps the selected pivot fixed and all upstream links stationary',()=>{
+ for(const selected of jointOrder){
+  const a=jointPose(selected,previewRanges[selected][0]),b=jointPose(selected,previewRanges[selected][1]);
+  expect(a.joints[selected].origin).toEqual(b.joints[selected].origin);expect(a.joints[selected].axis).toEqual(b.joints[selected].axis);
+  const index=jointOrder.indexOf(selected);
+  for(const earlier of jointOrder.slice(0,index)){const link=so101Description.joints.find(joint=>joint.name===earlier)!.child;expect(a.links[link]).toEqual(b.links[link]);}
+  for(const frame of Object.values(a.joints)){const p=projectJoint(frame.origin);expect(p.x).toBeGreaterThan(0);expect(p.x).toBeLessThan(600);expect(p.y).toBeGreaterThan(0);expect(p.y).toBeLessThan(420);}
+ }
 });
-
-test('illustration stays within its view box for every joint motion', () => {
-  for (const joint of ['shoulder_pan', 'shoulder_lift', 'elbow_flex', 'wrist_flex', 'wrist_roll', 'gripper'] as const) {
-    for (let phase = 0; phase < Math.PI * 2; phase += .2) {
-      const pose = so101Schematic(joint, phase);
-      for (const point of [...Object.values(pose.joints), ...pose.fixedFinger, ...pose.movingFinger]) {
-        const pixel = projectSo101(point);
-        expect(pixel.x).toBeGreaterThan(0); expect(pixel.x).toBeLessThan(520);
-        expect(pixel.y).toBeGreaterThan(0); expect(pixel.y).toBeLessThan(380);
-      }
-    }
-  }
+test('binary STL parser preserves normals and vertices and rejects malformed meshes',()=>{
+ const buffer=new ArrayBuffer(134),data=new DataView(buffer);data.setUint32(80,1,true);data.setFloat32(92,1,true);data.setFloat32(108,.1,true);data.setFloat32(124,.2,true);
+ const mesh=parseBinaryStl(buffer);expect(mesh.count).toBe(3);expect(mesh.vertices).toHaveLength(18);expect(mesh.vertices[5]).toBe(1);
+ expect(()=>parseBinaryStl(buffer.slice(0,120))).toThrow('Invalid CAD mesh');
+ data.setFloat32(96,NaN,true);expect(()=>parseBinaryStl(buffer)).toThrow('Non-finite CAD vertex');
+});
+test('URDF visual transforms retain real mesh offsets instead of replacing links with sticks',()=>{
+ const pose=jointPose(),base=so101Description.visuals.find(part=>part.mesh==='base_so101_v2.stl')!;
+ const origin=transformPoint(visualMatrix(pose,base),[0,0,0]);expect(origin[0]).toBeCloseTo(-.00636471,8);expect(origin[2]).toBeCloseTo(-.0024,8);
+ expect(new Set(so101Description.visuals.map(part=>part.mesh)).size).toBe(13);
 });
