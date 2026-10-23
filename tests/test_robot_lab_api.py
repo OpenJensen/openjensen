@@ -318,3 +318,54 @@ def test_assembled_setup_protocol_routes_preserve_body_and_do_not_expose_generic
         )
     assert calls == [("POST", "/v1/setup/assembled/" + action, payload)]
     asyncio.run(companion.close())
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [{}, {"abandon_empty": False}, {"abandon_empty": True, "confirm": "ABANDON EMPTY RECORDING"}],
+)
+def test_recording_finish_preserves_explicit_close_and_legacy_finalize_payloads(tmp_path, payload):
+    connection(tmp_path)
+    calls = []
+
+    def handler(request):
+        calls.append((request.url.path, json.loads(request.content)))
+        return httpx.Response(
+            200,
+            json={
+                "recording": {"active": False},
+                "datasets": [
+                    {"id": "empty-demo", "finalized": False, "abandoned": True, "pending_frames": 3}
+                ],
+            },
+        )
+
+    companion = bridge(tmp_path, handler)
+    with browser(tmp_path, companion) as client:
+        response = client.post("/api/v1/robot-lab/recording/finish", json=payload)
+        assert response.status_code == 200
+        assert response.json()["datasets"][0]["pending_frames"] == 3
+        assert response.json()["datasets"][0]["abandoned"] is True
+    assert calls == [("/v1/recording/finish", payload)]
+    asyncio.run(companion.close())
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"abandon_empty": True},
+        {"abandon_empty": True, "confirm": None},
+        {"abandon_empty": True, "confirm": "yes"},
+        {"abandon_empty": "true"},
+        {"abandon_empty": 1, "confirm": "ABANDON EMPTY RECORDING"},
+        {"abandon_empty": True, "confirm": "ABANDON EMPTY RECORDING", "delete_files": True},
+    ],
+)
+def test_recording_close_requires_strict_explicit_confirmation_before_contacting_companion(
+    tmp_path, payload
+):
+    connection(tmp_path)
+    companion = bridge(tmp_path, lambda _: pytest.fail("Invalid close request reached hardware"))
+    with browser(tmp_path, companion) as client:
+        assert client.post("/api/v1/robot-lab/recording/finish", json=payload).status_code == 422
+    asyncio.run(companion.close())

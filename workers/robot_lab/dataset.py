@@ -136,6 +136,7 @@ class DatasetWriter:
         self.frames = 0
         self.episode_active = False
         self.finalized = False
+        self.abandoned = False
         self.capture_times = deque(maxlen=max(60, fps * 3))
         self.actual_fps = None
         self.episode_capture_fps = []
@@ -153,6 +154,8 @@ class DatasetWriter:
             "task": self.task,
             "format": "lerobot",
             "finalized": self.finalized,
+            "abandoned": self.abandoned,
+            "pending_frames": self.frames if self.abandoned else 0,
             "measured_fps": self.episode_capture_fps,
         }
 
@@ -226,6 +229,8 @@ class DatasetWriter:
             pq.write_table(pa.Table.from_pylist(self.episodes), target)
 
     def start_episode(self):
+        if self.abandoned:
+            raise ValueError("This unsaved recording was closed; create a new dataset")
         if self.finalized or self.episode_active or self.frames:
             raise ValueError("Save or discard the pending episode before starting another")
         self.episode_active = True
@@ -309,6 +314,8 @@ class DatasetWriter:
         )
 
     def save_episode(self):
+        if self.abandoned:
+            raise ValueError("This unsaved recording was closed; its files are preserved")
         import numpy as np
         import pyarrow as pa
         import pyarrow.parquet as pq
@@ -376,6 +383,8 @@ class DatasetWriter:
         self.discard_episode()
 
     def discard_episode(self):
+        if self.abandoned:
+            raise ValueError("This unsaved recording was closed; its files are preserved")
         self.episode_active = False
         # Only this writer's own private pending directory is retired.
         for path in self.pending.iterdir():
@@ -385,7 +394,26 @@ class DatasetWriter:
                 path.unlink()
         self.frames = 0
 
+    def abandon_empty(self):
+        """Retire an explicitly closed unsaved recording without deleting files.
+
+        A caller must separately verify explicit user confirmation. Saved
+        episodes can only be finalized through the normal dataset workflow.
+        Metadata is committed before the caller detaches this writer. If that
+        write fails, collection stays paused and the action can be retried.
+        """
+        if self.finalized or self.abandoned or self.episodes or self.total_frames:
+            raise ValueError("Only a recording with no saved episodes can be closed this way")
+        self.episode_active = False
+        metadata_path = self.root / "openjensen.json"
+        metadata = json.loads(metadata_path.read_text())
+        metadata.update(abandoned=True, pending_frames=self.frames)
+        atomic_json(metadata_path, metadata)
+        self.abandoned = True
+
     def finalize(self):
+        if self.abandoned:
+            raise ValueError("A closed unsaved recording cannot be finalized or imported")
         if self.episode_active or self.frames:
             raise ValueError("Save or discard the current episode before finalizing")
         if not self.episodes:
@@ -402,6 +430,8 @@ def list_datasets(root):
             continue
         try:
             data = json.loads(path.read_text())
+            data.setdefault("abandoned", False)
+            data.setdefault("pending_frames", 0)
             output.append(
                 {
                     key: data.get(key)
@@ -414,6 +444,8 @@ def list_datasets(root):
                         "task",
                         "format",
                         "finalized",
+                        "abandoned",
+                        "pending_frames",
                     )
                 }
             )

@@ -858,7 +858,8 @@ class RobotLab:
             self.recording_error = None
         return self.status()
 
-    def recording_action(self, action):
+    def recording_action(self, action, payload=None):
+        payload = {} if payload is None else payload
         with self.lock:
             writer = self.writer
             if writer is None or writer.finalized:
@@ -874,7 +875,21 @@ class RobotLab:
             elif action == "discard":
                 writer.discard_episode()
             elif action == "finish":
-                writer.finalize()
+                abandon_empty = payload.get("abandon_empty", False)
+                if type(abandon_empty) is not bool:
+                    raise RequestError("abandon_empty must be true or false")
+                if abandon_empty:
+                    require(payload, "confirm", "ABANDON EMPTY RECORDING")
+                    writer.abandon_empty()
+                    # The recording loop rechecks writer identity under this
+                    # lock before publishing a frame, so an in-flight capture
+                    # cannot append to this retired writer after detachment.
+                    self.writer = None
+                    self.camera_index = None
+                    self.next_record = 0.0
+                    self.recording_error = None
+                else:
+                    writer.finalize()
             else:
                 raise RequestError("Unknown recording action")
         return self.status()
@@ -1060,7 +1075,7 @@ class Handler(BaseHTTPRequestHandler):
                     self.close_connection = True
                     return
             return self._send(404, {"error": "Unknown companion route", "code": "not_found"})
-        except BrokenPipeError, ConnectionResetError:
+        except (BrokenPipeError, ConnectionResetError):
             pass
         except Exception as error:
             self._error(error)
@@ -1114,11 +1129,11 @@ class Handler(BaseHTTPRequestHandler):
             ):
                 result = lab.recording_action(path.rsplit("/", 1)[-1])
             elif path == "/v1/recording/finish":
-                result = lab.recording_action("finish")
+                result = lab.recording_action("finish", payload)
             else:
                 return self._send(404, {"error": "Unknown companion route", "code": "not_found"})
             self._send(200, result)
-        except BrokenPipeError, ConnectionResetError:
+        except (BrokenPipeError, ConnectionResetError):
             pass
         except Exception as error:
             self._error(error)

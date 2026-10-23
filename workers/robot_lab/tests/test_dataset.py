@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from dataset import DatasetWriter, dataset_file, manifest, statistics
+from dataset import DatasetWriter, dataset_file, list_datasets, manifest, statistics
 from hardware import JOINTS
 
 AVAILABLE = all(importlib.util.find_spec(name) is not None for name in ("numpy", "PIL", "pyarrow"))
@@ -101,6 +101,72 @@ class DatasetTests(unittest.TestCase):
         self.assertEqual(writer.frames, 0)
         with self.assertRaises(ValueError):
             writer.finalize()
+
+    def test_abandon_unsaved_recording_preserves_pending_camera_data(self):
+        import numpy as np
+
+        writer = DatasetWriter(self.root, "unsaved", "Reach", 20, (2, 3, 3))
+        writer.start_episode()
+        writer.add_frame(
+            dict.fromkeys(JOINTS, 1.0), {}, np.ones((2, 3, 3), dtype=np.uint8), captured_at=0
+        )
+        before = {
+            path.relative_to(writer.root): path.read_bytes()
+            for path in writer.root.rglob("*")
+            if path.is_file() and path.name != "openjensen.json"
+        }
+        writer.abandon_empty()
+        self.assertTrue(writer.abandoned)
+        self.assertFalse(writer.finalized)
+        self.assertFalse(writer.episode_active)
+        self.assertEqual(writer.frames, 1)
+        for relative, contents in before.items():
+            self.assertEqual((writer.root / relative).read_bytes(), contents)
+        summary = next(item for item in list_datasets(self.root) if item["id"] == "unsaved")
+        self.assertTrue(summary["abandoned"])
+        self.assertEqual(summary["pending_frames"], 1)
+        for action in (
+            writer.start_episode,
+            writer.save_episode,
+            writer.discard_episode,
+            writer.finalize,
+        ):
+            with self.assertRaises(ValueError):
+                action()
+        with self.assertRaises(ValueError):
+            manifest(self.root, writer.id)
+        self.assertEqual(
+            (writer.pending / "frames.jsonl").read_bytes(), before[Path(".pending/frames.jsonl")]
+        )
+
+    def test_abandon_rejects_saved_episodes_without_changing_files_or_capture(self):
+        writer = DatasetWriter(self.root, "saved", "Reach", 5)
+        writer.start_episode()
+        for index in range(2):
+            writer.add_frame(dict.fromkeys(JOINTS, 1.0), {}, captured_at=index / 5)
+        writer.save_episode()
+        writer.start_episode()
+        before = {path: path.read_bytes() for path in writer.root.rglob("*") if path.is_file()}
+        with self.assertRaisesRegex(ValueError, "no saved episodes"):
+            writer.abandon_empty()
+        self.assertTrue(writer.episode_active)
+        self.assertFalse(writer.abandoned)
+        for path, contents in before.items():
+            self.assertEqual(path.read_bytes(), contents)
+
+    def test_abandon_metadata_failure_pauses_and_preserves_retryable_writer(self):
+        writer = DatasetWriter(self.root, "retry-abandon", "Reach", 5)
+        writer.start_episode()
+        writer.add_frame(dict.fromkeys(JOINTS, 1.0), {}, captured_at=0)
+        pending = (writer.pending / "frames.jsonl").read_bytes()
+        with patch("dataset.atomic_json", side_effect=OSError("disk unavailable")):
+            with self.assertRaisesRegex(OSError, "disk unavailable"):
+                writer.abandon_empty()
+        self.assertFalse(writer.abandoned)
+        self.assertFalse(writer.episode_active)
+        self.assertEqual((writer.pending / "frames.jsonl").read_bytes(), pending)
+        writer.abandon_empty()
+        self.assertTrue(writer.abandoned)
 
     def test_unsafe_export_paths_and_symlinks_rejected(self):
         writer = self.record(False)

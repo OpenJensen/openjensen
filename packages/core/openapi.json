@@ -8912,6 +8912,61 @@
     "/api/v1/robot-lab/recording/finish": {
       "post": {
         "operationId": "robot_lab_post_recording_finish",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "allOf": [
+                  {
+                    "if": {
+                      "properties": {
+                        "abandon_empty": {
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "abandon_empty"
+                      ]
+                    },
+                    "then": {
+                      "properties": {
+                        "confirm": {
+                          "const": "ABANDON EMPTY RECORDING"
+                        }
+                      },
+                      "required": [
+                        "confirm"
+                      ]
+                    }
+                  }
+                ],
+                "properties": {
+                  "abandon_empty": {
+                    "default": false,
+                    "title": "Abandon Empty",
+                    "type": "boolean"
+                  },
+                  "confirm": {
+                    "anyOf": [
+                      {
+                        "const": "ABANDON EMPTY RECORDING",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Confirm"
+                  }
+                },
+                "title": "RecordingFinishRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
         "responses": {
           "200": {
             "content": {

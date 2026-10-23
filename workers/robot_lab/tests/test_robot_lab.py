@@ -1,6 +1,7 @@
 """No motors are touched: stateful fake-bus safety and wire-format tests."""
 
 import http.client
+import importlib.util
 import json
 import sys
 import tempfile
@@ -11,8 +12,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from dataset import DatasetWriter
 from hardware import IDS, JOINTS, HardwareError, denormalized, normalized
 from server import RequestError, RobotLab, create_server, is_usb_serial
+
+DATASET_AVAILABLE = all(
+    importlib.util.find_spec(name) is not None for name in ("numpy", "PIL", "pyarrow")
+)
 
 CALIBRATION = {
     joint: {
@@ -408,6 +414,99 @@ class SafetyTests(unittest.TestCase):
         self.assertEqual(self.lab.calibration_state["phase"], "idle")
         self.assertEqual(self.lab.mode, "idle")
         self.assertFalse(self.lab.calibration_path("new", "follower").exists())
+
+    @unittest.skipUnless(DATASET_AVAILABLE, "Dataset dependencies required")
+    def test_explicit_close_unsaved_recording_allows_lower_fps_without_deleting_files(self):
+        self.start(mode="handguide")
+        self.lab.recording_start(
+            {"dataset_id": "too-fast", "task": "Reach", "fps": 20, "camera_index": None}
+        )
+        self.lab.recording_action("start")
+        writer = self.lab.writer
+        writer.add_frame(dict.fromkeys(JOINTS, 0.0), {}, captured_at=0)
+        with self.assertRaises(ValueError):
+            writer.add_frame(dict.fromkeys(JOINTS, 0.0), {}, captured_at=0.5)
+        self.lab.recording_error = "Capture fell below requested FPS"
+        pending = (writer.pending / "frames.jsonl").read_bytes()
+        bus_writes = list(self.lab.bus.writes)
+        for payload in ({"abandon_empty": True}, {"abandon_empty": "true"}):
+            with self.assertRaises(RequestError):
+                self.lab.recording_action("finish", payload)
+            self.assertIs(self.lab.writer, writer)
+        with self.assertRaises(ValueError):
+            self.lab.recording_action("finish")
+        self.assertIs(self.lab.writer, writer)
+        with patch("dataset.atomic_json", side_effect=OSError("metadata unavailable")):
+            with self.assertRaises(OSError):
+                self.lab.recording_action(
+                    "finish", {"abandon_empty": True, "confirm": "ABANDON EMPTY RECORDING"}
+                )
+        self.assertIs(self.lab.writer, writer)
+        self.assertEqual((writer.pending / "frames.jsonl").read_bytes(), pending)
+        result = self.lab.recording_action(
+            "finish", {"abandon_empty": True, "confirm": "ABANDON EMPTY RECORDING"}
+        )
+        self.assertFalse(result["recording"]["active"])
+        self.assertIsNone(self.lab.writer)
+        self.assertEqual(self.lab.mode, "handguide")
+        self.assertEqual(self.lab.bus.writes, bus_writes)
+        self.assertEqual((writer.pending / "frames.jsonl").read_bytes(), pending)
+        self.lab.recording_start(
+            {"dataset_id": "lower-fps", "task": "Reach", "fps": 5, "camera_index": None}
+        )
+        self.assertEqual(self.lab.writer.fps, 5)
+        self.assertTrue(writer.root.exists())
+
+    @unittest.skipUnless(DATASET_AVAILABLE, "Dataset dependencies required")
+    def test_unsaved_close_cannot_detach_dataset_with_saved_episode(self):
+        self.start(mode="handguide")
+        self.lab.recording_start(
+            {"dataset_id": "keep-saved", "task": "Reach", "fps": 5, "camera_index": None}
+        )
+        self.lab.recording_action("start")
+        writer = self.lab.writer
+        for index in range(2):
+            writer.add_frame(dict.fromkeys(JOINTS, 0.0), {}, captured_at=index / 5)
+        self.lab.recording_action("save")
+        with self.assertRaises(ValueError):
+            self.lab.recording_action(
+                "finish", {"abandon_empty": True, "confirm": "ABANDON EMPTY RECORDING"}
+            )
+        self.assertIs(self.lab.writer, writer)
+        self.lab.recording_action("finish")
+        self.assertTrue(writer.finalized)
+
+    @unittest.skipUnless(DATASET_AVAILABLE, "Dataset dependencies required")
+    def test_inflight_capture_cannot_append_after_unsaved_writer_is_detached(self):
+        import numpy as np
+
+        self.start(mode="handguide")
+        writer = DatasetWriter(self.lab.datasets_dir, "in-flight", "Reach", 5, (2, 3, 3))
+        self.lab.writer = writer
+        self.lab.camera_index = 0
+        writer.start_episode()
+        entered, release = threading.Event(), threading.Event()
+
+        def read(index):
+            entered.set()
+            release.wait(2)
+            return np.zeros((2, 3, 3), dtype=np.uint8)
+
+        self.lab.camera.read = read
+        worker = threading.Thread(target=self.lab._tick)
+        worker.start()
+        try:
+            self.assertTrue(entered.wait(1))
+            self.lab.recording_action(
+                "finish", {"abandon_empty": True, "confirm": "ABANDON EMPTY RECORDING"}
+            )
+        finally:
+            release.set()
+            worker.join(2)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(writer.frames, 0)
+        self.assertFalse((writer.pending / "frames.jsonl").exists())
+        self.assertTrue(writer.abandoned)
 
     def test_normalization_roundtrip_and_clamped_limits(self):
         for joint in JOINTS:

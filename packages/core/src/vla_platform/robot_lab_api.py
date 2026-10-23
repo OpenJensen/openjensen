@@ -1,11 +1,42 @@
 """Browser-facing Robot Lab API; credentials remain on the operator's server."""
 
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, ConfigDict, StrictBool, ValidationError, model_validator
 
 from vla_platform.robot_lab_bridge import RobotLabError, safe_id, strict_json
 
 router = APIRouter(prefix="/api/v1", tags=["Robot Lab"])
+
+
+class RecordingFinishRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {"abandon_empty": {"const": True}},
+                        "required": ["abandon_empty"],
+                    },
+                    "then": {
+                        "required": ["confirm"],
+                        "properties": {"confirm": {"const": "ABANDON EMPTY RECORDING"}},
+                    },
+                }
+            ],
+        },
+    )
+    abandon_empty: StrictBool = False
+    confirm: Literal["ABANDON EMPTY RECORDING"] | None = None
+
+    @model_validator(mode="after")
+    def require_abandonment_confirmation(self):
+        if self.abandon_empty and self.confirm != "ABANDON EMPTY RECORDING":
+            raise ValueError("Confirm abandoning an empty recording explicitly")
+        return self
 
 
 @router.get("/robot-lab/status")
@@ -31,6 +62,13 @@ async def proxy(path: str, request: Request):
                     raise ValueError
             except ValueError, UnicodeDecodeError, RecursionError:
                 raise HTTPException(422, "Supply a JSON object for this operation") from None
+        if path == "recording/finish":
+            try:
+                RecordingFinishRequest.model_validate(payload)
+            except ValidationError:
+                raise HTTPException(
+                    422, "Confirm abandoning an empty recording explicitly"
+                ) from None
         if len(str(request.url.query)) > 2048:
             raise HTTPException(413, "Robot Lab query is too large")
         image = path == "camera.jpg"
@@ -97,6 +135,18 @@ for method, protocol_paths in PROTOCOL.items():
             methods=[method],
             operation_id=ident,
             name=ident,
+            openapi_extra={
+                "requestBody": {
+                    "required": False,
+                    "content": {
+                        "application/json": {
+                            "schema": RecordingFinishRequest.model_json_schema(),
+                        }
+                    },
+                }
+            }
+            if protocol_path == "recording/finish"
+            else None,
         )
 
 

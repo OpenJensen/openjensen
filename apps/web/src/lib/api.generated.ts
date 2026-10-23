@@ -6435,7 +6435,19 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /**
+                     * Abandon Empty
+                     * @default false
+                     */
+                    abandon_empty?: boolean;
+                    /** Confirm */
+                    confirm?: "ABANDON EMPTY RECORDING" | null;
+                } & unknown;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

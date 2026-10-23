@@ -12,7 +12,7 @@ export type RobotJoint = typeof robotJoints[number]['name'];
 export type RobotRole = 'follower' | 'leader';
 export type ControlMode = 'manual' | 'leader' | 'handguide';
 export type JointValues = Partial<Record<RobotJoint, number>>;
-export type RobotDataset = { id: string; path: string; episodes: number; frames: number; fps: number; task: string; format: string; finalized: boolean };
+export type RobotDataset = { id: string; path: string; episodes: number; frames: number; fps: number; task: string; format: string; finalized: boolean; abandoned?: boolean; pending_frames?: number };
 export type RobotStatus = {
   ok?: boolean; connected?: boolean; label?: string; message?: string; version?: string; platform?: string;
   dependencies?: Record<string, { installed: boolean; version: string | null }>;
@@ -74,6 +74,7 @@ export const robotApi = {
   saveEpisode: () => request<RobotStatus>('/recording/episode/save', {}, { timeoutMs: 90_000 }),
   discardEpisode: () => request<RobotStatus>('/recording/episode/discard', {}),
   finishRecording: () => request<RobotStatus>('/recording/finish', {}, { timeoutMs: 90_000 }),
+  abandonRecording: () => request<RobotStatus>('/recording/finish', { abandon_empty: true, confirm: 'ABANDON EMPTY RECORDING' }, { timeoutMs: 90_000 }),
   cameraUrl: (index: number, stamp: number) => `${apiOrigin}/api/v1/robot-lab/camera.jpg?index=${index}&t=${stamp}`,
 };
 
