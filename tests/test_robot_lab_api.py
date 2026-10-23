@@ -293,6 +293,7 @@ def test_recording_save_allows_compression_time_within_browser_deadline(tmp_path
     [
         ("start", {"port": "/dev/cu.test", "supported": True, "confirm": "START ASSEMBLED SETUP"}),
         ("observe", {"joint": "elbow_flex"}),
+        ("wiggle", {"motor_id": 12, "supported": True, "confirm": "WIGGLE MOTOR"}),
         ("accept", {"joint": "elbow_flex", "motor_id": 0}),
         ("finish", {"confirm": "SAVE MOTOR IDS"}),
         ("cancel", {}),

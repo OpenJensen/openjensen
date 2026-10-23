@@ -26,6 +26,7 @@ SOURCE_MODULES = (
     "camera.py",
     "dataset.py",
     "assembled.py",
+    "identify.py",
     "assembled_session.py",
 )
 VENDOR_FILES = (

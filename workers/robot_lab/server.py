@@ -419,6 +419,7 @@ class RobotLab:
             if self.assembled_session is not controller:
                 return
             self.assembled_state = snapshot
+            self.torque = bool(snapshot.get("motion_active"))
             if terminal:
                 self.assembled_session = None
                 self.mode = "idle"
@@ -473,8 +474,19 @@ class RobotLab:
         # Reads and background-thread publication never hold the global lab lock.
         if action == "observe":
             controller.observe(payload.get("joint"))
+        elif action == "wiggle":
+            require(payload, "confirm", "WIGGLE MOTOR")
+            if payload.get("supported") is not True:
+                raise RequestError("Support the arm and position all joints clear of their stops")
+            controller.wiggle(payload.get("motor_id"))
         elif action == "accept":
-            controller.accept(payload.get("joint"), payload.get("motor_id"))
+            if payload.get("method") == "wiggle":
+                require(payload, "confirm", "CONFIRM OBSERVED JOINT")
+                controller.accept_wiggle(payload.get("joint"), payload.get("motor_id"))
+            elif payload.get("method") in (None, "hand"):
+                controller.accept(payload.get("joint"), payload.get("motor_id"))
+            else:
+                raise RequestError("Choose hand or wiggle identification")
         elif action == "finish":
             require(payload, "confirm", "SAVE MOTOR IDS")
             controller.finish()
@@ -1099,6 +1111,7 @@ class Handler(BaseHTTPRequestHandler):
                 result = lab.assembled_start(payload)
             elif path in (
                 "/v1/setup/assembled/observe",
+                "/v1/setup/assembled/wiggle",
                 "/v1/setup/assembled/accept",
                 "/v1/setup/assembled/finish",
             ):

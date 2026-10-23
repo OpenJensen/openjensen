@@ -149,3 +149,7 @@
 
 .robot-lab-advanced-ids > summary { cursor: pointer; color: var(--muted); font-size: 12px; padding: 8px 0; }
 .robot-lab-advanced-ids > div { padding-top: 12px; }
+
+.robot-lab-identify-method { display: flex; flex-wrap: wrap; gap: 1rem; padding: .75rem 0; margin: 0; border: 0; border-bottom: 1px solid var(--line); }
+.robot-lab-identify-method legend { font-size: .75rem; font-weight: 600; margin-bottom: .5rem; }
+.robot-lab-identify-method button { font-size: .8rem; }

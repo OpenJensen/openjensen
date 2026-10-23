@@ -59,6 +59,12 @@ class Engine:
             self.baseline_read.set()
             return positions
 
+    def identify(self, motor_id, on_motion):
+        self.actions.append(("identify", motor_id))
+        on_motion(True)
+        on_motion(False)
+        return 24
+
     def apply(self, mapping):
         with self.io_lock:
             if self.stop_event.is_set():
@@ -133,6 +139,41 @@ class SessionTests(unittest.TestCase):
         receipt = list((Path(self.temp.name) / "assembled").glob("*.mapping.json"))[0]
         self.assertEqual(json.loads(receipt.read_text())["mapping"], {JOINTS[0]: 10})
 
+    def test_wiggle_requires_a_fresh_completed_action_and_maps_only_after_confirmation(self):
+        session = self.session()
+        with self.assertRaisesRegex(ValueError, "fresh wiggle"):
+            session.accept_wiggle(JOINTS[5], 10)
+        session.wiggle(10)
+        until(lambda: session.snapshot()["wiggle_id"] == 10)
+        self.assertEqual(session.snapshot()["mapping"], {})
+        self.assertFalse(session.snapshot()["motion_active"])
+        with self.assertRaisesRegex(ValueError, "fresh wiggle"):
+            session.accept_wiggle(JOINTS[5], 11)
+        session.wiggle_at = time.monotonic() - 61
+        with self.assertRaisesRegex(ValueError, "fresh wiggle"):
+            session.accept_wiggle(JOINTS[5], 10)
+        session.wiggle_at = time.monotonic()
+        session.accept_wiggle(JOINTS[5], 10)
+        self.assertEqual(session.snapshot()["mapping"], {JOINTS[5]: 10})
+        self.assertIsNone(session.snapshot()["wiggle_id"])
+        with self.assertRaisesRegex(ValueError, "already"):
+            session.wiggle(10)
+
+    def test_no_measurable_wiggle_preserves_hand_identification(self):
+        from identify import IdentificationUnavailable
+
+        session = self.session()
+
+        def unavailable(*args):
+            raise IdentificationUnavailable("No measurable wiggle")
+
+        session.engine.identify = unavailable
+        session.wiggle(10)
+        until(lambda: session.snapshot()["phase"] == "ready")
+        self.assertIsNone(session.snapshot()["wiggle_id"])
+        session.observe(JOINTS[0])
+        self.assertEqual(session.snapshot()["phase"], "observing")
+
     def test_observation_timeout_is_retryable_and_clears_evidence(self):
         session = self.session(observe_timeout=0.1)
         session.observe(JOINTS[0])
@@ -194,6 +235,35 @@ class ServerSetupTests(unittest.TestCase):
     def tearDown(self):
         self.lab.close()
         self.temp.cleanup()
+
+    def test_wiggle_route_requires_explicit_motion_and_observation_confirmations(self):
+        self.start()
+        until(lambda: self.lab.assembled_state["phase"] == "ready")
+        for body in (
+            {"motor_id": 10},
+            {"motor_id": 10, "confirm": "WIGGLE MOTOR", "supported": False},
+        ):
+            with self.assertRaises(RequestError):
+                self.lab.assembled_action("wiggle", body)
+        self.assertEqual(self.lab.assembled_session.engine.actions, ["split"])
+        self.lab.assembled_action(
+            "wiggle", {"motor_id": 10, "confirm": "WIGGLE MOTOR", "supported": True}
+        )
+        until(lambda: self.lab.assembled_state["wiggle_id"] == 10)
+        with self.assertRaises(RequestError):
+            self.lab.assembled_action(
+                "accept", {"joint": JOINTS[5], "motor_id": 10, "method": "wiggle"}
+            )
+        self.lab.assembled_action(
+            "accept",
+            {
+                "joint": JOINTS[5],
+                "motor_id": 10,
+                "method": "wiggle",
+                "confirm": "CONFIRM OBSERVED JOINT",
+            },
+        )
+        self.assertEqual(self.lab.assembled_state["mapping"], {JOINTS[5]: 10})
 
     def start(self, **overrides):
         return self.lab.assembled_start(

@@ -38,3 +38,21 @@ The joint illustration is browser-only. Picking or replaying an illustration bef
 `POST /v1/setup/assembled/finish {confirm:"SAVE MOTOR IDS"}` requires a complete unique mapping, then starts asynchronous canonical renumbering through unused temporary IDs. It re-locks EEPROM and verifies the six addresses, model, lock and torque-off state after a final reboot before reporting complete. Preserve the heartbeat while phase is applying. A new calibration is required after ID setup; previous calibration files remain on disk but cannot authorize movement for the new setup revision.
 
 `POST /v1/setup/assembled/cancel {}` and the normal Stop endpoint cancel the session. An in-flight ID transaction can finish its essential EEPROM re-lock before Stop returns; no subsequent transaction can begin. Bounded failures retain a private journal of discovered addresses, mapping and any uncertain rename. Retrying scans the complete address space instead of assuming factory IDs or flattening the bus. Setup does not erase calibration files or datasets. Simulator tests prove protocol/state behavior, not acceptance on a particular physical arm.
+
+### Joint identification modes
+
+After six independent temporary addresses are verified, `setup/assembled/observe`
+plus `accept` provides passive hand identification. The separate POST
+`setup/assembled/wiggle` accepts `{motor_id, supported: true, confirm: "WIGGLE MOTOR"}`.
+It re-verifies the inventory, requires position mode and released torque, and
+executes one fixed ±24-tick motion on that address with a 10% maximum SRAM torque
+limit. Its position, duration and torque limits cannot be supplied by the client.
+No EEPROM or calibration registers are modified. Cancellation disables torque;
+SRAM settings are restored only after torque-off read-back. Missing movement
+returns to passive identification without manufacturing an address mapping.
+
+The operator must support the arm and keep every joint clear of its stops.
+POST `setup/assembled/accept` with `{joint, motor_id, method: "wiggle",
+confirm: "CONFIRM OBSERVED JOINT"}` records the observed joint only after a
+successful, completed wiggle, with a 60-second confirmation window. It does not
+change persistent IDs until the existing six-joint review/finish action.

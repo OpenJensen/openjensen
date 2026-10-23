@@ -24,8 +24,9 @@ async function fixture(page: Page, calibrated = false) {
       if (action === '/probe') return route.fulfill({ json: { port, baudrate: 1000000, motors: [{ id: 1, model: 777, stable: true, responses: 3 }], ready: false, expected_ids: [1, 2, 3, 4, 5, 6], warning: 'A response at one ID cannot prove that only one physical motor is connected.' } });
       if (action === '/setup/motor') return route.fulfill({ json: { assigned: { joint: body.joint, id: joints.indexOf(body.joint) + 1, baudrate: 1000000 }, warning: 'Keep other motors disconnected.' } });
       if (action === '/setup/assembled/start') { state.status.session = { ...state.status.session, mode: 'setup', port: body.port, torque_enabled: false }; state.status.assembled = { ...state.status.assembled, phase: 'ready', ids: [11,12,13,14,15,16], message: 'Distinct addresses ready. Identify each joint by hand.' }; }
+      else if (action === '/setup/assembled/wiggle') { state.status.assembled = { ...state.status.assembled, phase: 'wiggling', motion_active: true, wiggle_id: null }; setTimeout(() => { state.status.assembled.phase = 'ready'; state.status.assembled.motion_active = false; state.status.assembled.wiggle_id = body.motor_id; state.status.assembled.wiggle_ticks = 24; }, 150); }
       else if (action === '/setup/assembled/observe') { state.status.assembled = { ...state.status.assembled, phase: 'observing', selected_joint: body.joint, detected_id: joints.indexOf(body.joint) + 11, candidate_delta: 180, message: 'Joint movement detected.' }; }
-      else if (action === '/setup/assembled/accept') { state.status.assembled.mapping[body.joint] = body.motor_id; state.status.assembled.phase = Object.keys(state.status.assembled.mapping).length === 6 ? 'review' : 'ready'; state.status.assembled.selected_joint = null; state.status.assembled.detected_id = null; }
+      else if (action === '/setup/assembled/accept') { state.status.assembled.mapping[body.joint] = body.motor_id; state.status.assembled.phase = Object.keys(state.status.assembled.mapping).length === 6 ? 'review' : 'ready'; state.status.assembled.selected_joint = null; state.status.assembled.detected_id = null; state.status.assembled.wiggle_id = null; }
       else if (action === '/setup/assembled/finish') { state.status.assembled.phase = 'applying'; state.status.assembled.message = 'Writing and verifying canonical IDs.'; setTimeout(() => { state.status.assembled.phase = 'complete'; state.status.assembled.calibration_required = true; state.status.session.mode = 'idle'; }, 1000); }
       else if (action === '/setup/assembled/cancel') { state.status.assembled.phase = 'stopped'; state.status.session.mode = 'idle'; }
       else if (action === '/calibration/start') { state.status.session = { ...state.status.session, mode: 'calibration', port: body.port, robot_id: body.robot_id, role: body.role, positions: values(2048) }; state.status.calibration.phase = 'center'; }
@@ -348,4 +349,35 @@ test('assembled setup prepares explicitly then picks start only encoder observat
   await expect(page.getByText('Setup stopped with responding ID 3.', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start assembled setup', exact: true })).toBeDisabled();
   expect(writes(state, '/setup/assembled/start')).toHaveLength(1);
+});
+
+
+test('wiggle identification requires explicit motion then observed-joint confirmation', async ({ page }, testInfo) => {
+  test.setTimeout(60_000);
+  const state = await fixture(page);
+  await tab(page, 'Motor IDs').click();
+  await page.getByRole('button', { name: 'Wiggle a motor', exact: true }).click();
+  expect(state.writes).toEqual([]);
+  await expect(page.getByRole('button', { name: 'Wiggle selected motor', exact: true })).toHaveCount(0);
+  await page.getByRole('checkbox', { name: /Six STS3215 motors; arm supported/ }).check();
+  await page.getByRole('button', { name: 'Start assembled setup', exact: true }).click();
+  const pulse = page.getByRole('button', { name: 'Wiggle selected motor', exact: true });
+  await expect(pulse).toBeDisabled();
+  const guide = page.getByRole('region', { name: 'SO-101 joint illustration', exact: true });
+  await guide.getByRole('button', { name: 'Joint 6: Gripper', exact: true }).click();
+  expect(writes(state, '/setup/assembled/observe')).toHaveLength(0);
+  expect(writes(state, '/setup/assembled/wiggle')).toHaveLength(0);
+  await page.getByRole('checkbox', { name: /Arm supported; every joint clear of its stops/ }).check();
+  await pulse.click();
+  expect(writes(state, '/setup/assembled/wiggle')[0].body).toEqual({ motor_id: 11, supported: true, confirm: 'WIGGLE MOTOR' });
+  const assign = page.getByRole('button', { name: 'Assign address 11 to gripper', exact: true });
+  await expect(assign).toBeVisible();
+  expect(writes(state, '/setup/assembled/accept')).toHaveLength(0);
+  await page.screenshot({path: testInfo.outputPath('wiggle-identification.png'),fullPage:true});
+  await assign.click();
+  expect(writes(state, '/setup/assembled/accept')[0].body).toEqual({ joint: 'gripper', motor_id: 11, method: 'wiggle', confirm: 'CONFIRM OBSERVED JOINT' });
+  await expect(page.getByLabel('Motor address to identify')).toHaveValue('12');
+  await expect(pulse).toBeDisabled();
+  expect(writes(state, '/control/start')).toHaveLength(0);
+  expect(state.errors).toEqual([]);
 });

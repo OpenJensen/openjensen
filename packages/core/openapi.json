@@ -9097,6 +9097,25 @@
         ]
       }
     },
+    "/api/v1/robot-lab/setup/assembled/wiggle": {
+      "post": {
+        "operationId": "robot_lab_post_setup_assembled_wiggle",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Setup Assembled Wiggle",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
     "/api/v1/robot-lab/setup/motor": {
       "post": {
         "operationId": "robot_lab_post_setup_motor",

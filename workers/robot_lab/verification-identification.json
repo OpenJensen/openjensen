@@ -1,0 +1,70 @@
+{
+  "date": "2026-10-23",
+  "baseline_commit": "29960ed3fbcaa1a3cc79afc5b3422cc728c5b300",
+  "recovery_fix_commit": "127db2b",
+  "scope": "Two explicit identification modes and reboot-safe temporary-address separation",
+  "checks": {
+    "production_build_typescript": "passed after final button controls",
+    "browser_full_desktop_mobile": 26,
+    "final_button_controls_desktop_mobile": 2,
+    "core_api_installer_worker_wrapper_passed": 42,
+    "companion": {
+      "run": 92,
+      "passed": 80,
+      "skipped": 12,
+      "skip_scope": "Optional dataset/official-loader dependency lanes in this Xbox environment; all assembled, session and powered-identification tests executed"
+    },
+    "lint": "Pinned Ruff 0.16.9 passed; companion formatting targets Python 3.11",
+    "records": "run/robot-lab-identification-20261023 on Xbox"
+  },
+  "physical_acceptance": {
+    "initial_revision": "29960ed",
+    "initial_result": "12 separation rounds failed; one shared responding address 3, no calibration performed",
+    "new_revision_motor_acceptance": "not performed when this receipt was written",
+    "remaining": [
+      "six independent persistent addresses",
+      "manual joint identification",
+      "bounded powered identification on real hardware",
+      "calibration range capture and save"
+    ]
+  },
+  "limits": {
+    "motion_action": "explicit WIGGLE MOTOR acknowledgement; six distinct reverified STS3215 addresses",
+    "amplitude_encoder_ticks": 24,
+    "maximum_runtime_torque_limit": 100,
+    "torque_limit_full_scale": 1000,
+    "deadline_seconds": 3,
+    "mapping": "explicit observed-joint confirmation within60s after successful measured motion",
+    "persistent_writes": "identification motion changes no EEPROM; final canonical IDs use existing review/finish action"
+  },
+  "source_sha256": {
+    "_vendor/servotools/LICENSE": "83c543c69591078889dc0ae847f0b11875457392c6d9df9280b5e1fd9340bf5c",
+    "_vendor/servotools/PROVENANCE.json": "16b94c419db93784324a04bae09f6e2b3376d853d8b322f114254a282b9e8d2b",
+    "_vendor/servotools/__init__.py": "a67718a7bd21dcd2b2611f4f035cd0e0312b9ed560334893fc1a424760d7e46c",
+    "_vendor/servotools/bus.py": "e802f62b2e43d773dc0c3a3ec098fb4c46da3e2f7ff044545241d28e3a89bf5a",
+    "_vendor/servotools/config.py": "a6ba80978c728bfc6d51961207acb66acd8aa6ebae746d5b57a30c7a7d6959cc",
+    "_vendor/servotools/framing.py": "19c81173347f23948bb6ea9c42a5e9c16e23460b7e913ec05225f43b7aaa0dc9",
+    "_vendor/servotools/registers.py": "a1b68e047ecb720441dc90aad827c945fdaf26622f06d864ab4c165a05f472f9",
+    "assembled.py": "276b7df0945ec54b4506520b17a906a0e025f9f1a709c69dd2a4e74dcc8d9332",
+    "assembled_session.py": "f9eda0fbced4de66ed463b8ccafd264d46c4b24f056a0865a693204a35211317",
+    "camera.py": "b838bd14b548f416776b7543314d59d4224076bf86f3df1a409de5114248d556",
+    "dataset.py": "9154f1b87b9d1e4c99036110d6ed650ed0a44b08aae4e1072bcd60eac22e7c12",
+    "dispatch.py": "adc124edc5bb8daa14ffb8bcc7099413076e6bde893f394c738fa88786418f1e",
+    "hardware.py": "005c837f5021152a77a69f9440245a6a0eb922f1d1e4b369e15b59d931d1fe13",
+    "server.py": "e37ed5b7d03346c0d5b97404d79b9551fd2ea32e8967f0659ef6a903eac15838",
+    "identify.py": "268cd7024701f145382f95737f397ac9eb58e1d0f23a1a8c9e8060c290bd4714"
+  },
+  "application_sha256": {
+    "apps/web/src/components/robot-lab.tsx": "a3630ae21af41fa161e06ca79d2b7fc143e87e8cfbd71b17d3c080e75289c797",
+    "apps/web/src/components/robot-lab.css": "dcfa6413c047e8ea69d577ed9fe351f54d5083eb5abe01c64004d25e62067838",
+    "apps/web/src/lib/robot-api.ts": "577026394dd42f435f4b90cd0f526cb5b64baf6659bd2d1118adcdd662e54bbd",
+    "packages/core/src/vla_platform/robot_lab_api.py": "234d1ed312e0eda487925f498e040a73582611ef6e7197e874ce56d4acdb85b4",
+    "packages/core/openapi.json": "6e089d28135be9ef11c2d81077f8c528e278b6a193b04e4950d9c87ddbd71ce8",
+    "apps/web/src/lib/api.generated.ts": "e2caaccb125151ba4fd52507ebb2011d0e261017878816fe6588a6d793d0194d",
+    "deploy/macos/install_robot_lab.py": "8a389c0209ff93aeca1c392603660443ff5dad23971c2693f64371e3af311da6",
+    "tests/web/robot-lab.spec.ts": "db1df6faff4ed056c17a5396c38081d561f93da1ea2f0ee135df513256f427e5",
+    "workers/robot_lab/tests/test_assembled.py": "d0489525e720508511c473d83258e4f35900d0aef89d64c9404f52f177e284a4",
+    "workers/robot_lab/tests/test_assembled_session.py": "97990cd3b372ef33e358d88c98840f34c52b621465f5f49a8b6bce8d649fd145",
+    "workers/robot_lab/tests/test_identify.py": "443ab42043ecd1e5eb0a94ea3ed6d846278f7aa4c475f040df5d127a7f633624"
+  }
+}

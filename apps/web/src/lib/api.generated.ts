@@ -1504,6 +1504,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/robot-lab/setup/assembled/wiggle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Setup Assembled Wiggle */
+        post: operations["robot_lab_post_setup_assembled_wiggle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/robot-lab/setup/motor": {
         parameters: {
             query?: never;
@@ -6561,6 +6578,26 @@ export interface operations {
         };
     };
     robot_lab_post_setup_assembled_start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_setup_assembled_wiggle: {
         parameters: {
             query?: never;
             header?: never;

@@ -20,7 +20,7 @@ export type RobotStatus = {
   session?: { mode: 'idle' | 'calibration' | 'setup' | ControlMode; robot_id: string | null; port: string | null; role: RobotRole | null; positions: JointValues; torque_enabled: boolean; watchdog_seconds: number; error: string | null };
   calibration?: { phase: 'idle' | 'center' | 'ranges' | 'saved'; mins: JointValues; maxes: JointValues; offsets: JointValues; path: string | null };
   recording?: { active: boolean; dataset_id: string | null; episode_active: boolean; frames: number; episodes: number; fps: number; error: string | null };
-  assembled?: { phase: 'idle' | 'scanning' | 'splitting' | 'ready' | 'observing' | 'review' | 'applying' | 'complete' | 'error' | 'stopped'; ids: number[]; selected_joint: RobotJoint | null; detected_id: number | null; candidate_delta: number | null; mapping: Partial<Record<RobotJoint, number>>; message: string; error: string | null; log: string[]; progress: unknown; calibration_required: boolean };
+  assembled?: { phase: 'idle' | 'scanning' | 'splitting' | 'ready' | 'observing' | 'wiggling' | 'review' | 'applying' | 'complete' | 'error' | 'stopped'; motion_active?: boolean; wiggle_id?: number | null; wiggle_ticks?: number | null; ids: number[]; selected_joint: RobotJoint | null; detected_id: number | null; candidate_delta: number | null; mapping: Partial<Record<RobotJoint, number>>; message: string; error: string | null; log: string[]; progress: unknown; calibration_required: boolean };
   calibrations?: { robot_id: string; role: RobotRole; path: string }[];
   datasets?: RobotDataset[];
 };
@@ -57,6 +57,8 @@ export const robotApi = {
   probe: (port: string) => request<RobotProbe>('/probe', { port }, { timeoutMs: 90_000 }),
   assignMotor: (port: string, joint: RobotJoint) => request<MotorAssignment>('/setup/motor', { port, joint, isolated: true, confirm: 'ASSIGN MOTOR ID' }, { timeoutMs: 90_000 }),
   startAssembled: (port: string) => request<RobotStatus>('/setup/assembled/start', { port, supported: true, confirm: 'START ASSEMBLED SETUP' }),
+  wiggleAssembled: (motor_id: number) => request<RobotStatus>('/setup/assembled/wiggle', { motor_id, supported: true, confirm: 'WIGGLE MOTOR' }),
+  acceptWiggle: (joint: RobotJoint, motor_id: number) => request<RobotStatus>('/setup/assembled/accept', { joint, motor_id, method: 'wiggle', confirm: 'CONFIRM OBSERVED JOINT' }),
   observeAssembled: (joint: RobotJoint) => request<RobotStatus>('/setup/assembled/observe', { joint }),
   acceptAssembled: (joint: RobotJoint, motor_id: number) => request<RobotStatus>('/setup/assembled/accept', { joint, motor_id }),
   finishAssembled: () => request<RobotStatus>('/setup/assembled/finish', { confirm: 'SAVE MOTOR IDS' }),

@@ -1,10 +1,11 @@
-"""Experimental assembled STS3215 identity setup, without position/torque-on commands.
+"""Experimental assembled STS3215 identity setup.
 
 Reboot-wake splitting is adapted from Enigma-Incorporated/servotools, commit
 1c65c57587f91085cd32fca3743f3e6f464cfe35 (MIT; see _vendor/servotools/LICENSE).
 This is not a manufacturer-supported unique-serial addressing mechanism.
-Nothing runs on import/construction. The server supplies physical support and
-write acknowledgements and reserves the port before calling split/apply.
+Nothing runs on import/construction. Split/apply issue no motion commands. The
+separate identify action requires explicit powered-motion acknowledgement. The
+server reserves the port and receives physical-support confirmation first.
 """
 
 from __future__ import annotations
@@ -158,6 +159,7 @@ class AssembledSetup:
         self.bus = None
         self.deadline = None
         self.reboot_cleanup_at = None
+        self.identification_cleanup = False
         self.lock = threading.RLock()
         directory = Path(data_dir) / "assembled"
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -721,6 +723,26 @@ class AssembledSetup:
         self._publish(journal=False, positions=positions)
         return positions
 
+    def identify(self, motor_id, on_motion):
+        """A separate explicit action; split/apply never call this motion path."""
+        from identify import wiggle
+
+        with self.io_lock:
+            self._check()
+            expected = set(self.state["ids"])
+            actual = self._scan()
+            if set(actual) != expected or len(expected) != EXPECTED_COUNT:
+                raise AssembledError("Motor inventory changed; identification motion blocked")
+            self._verify_six(list(expected))
+            if any(self._read(sid, reg.TORQUE_ENABLE) != 0 for sid in expected):
+                raise AssembledError("Release every motor's torque before identification")
+
+            def motion_state(active):
+                self.identification_cleanup = active
+                on_motion(active)
+
+            return wiggle(self.bus, motor_id, expected, self.stop_event, motion_state=motion_state)
+
     def apply(self, mapping):
         self.deadline = time.monotonic() + self.timeout_s
         try:
@@ -813,6 +835,11 @@ class AssembledSetup:
                 return
             cleanup_error = None
             try:
+                if self.identification_cleanup:
+                    # A failed powered-identification cleanup gets another OFF
+                    # attempt, even when no reboot cleanup is pending.
+                    self._write(254, reg.TORQUE_ENABLE, 0, cleanup=True)
+                    self.identification_cleanup = False
                 if self.reboot_cleanup_at is not None:
                     self._wait_for_boot_cleanup(self.reboot_cleanup_at - time.monotonic())
                     try:

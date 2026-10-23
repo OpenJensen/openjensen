@@ -94,6 +94,7 @@ PROTOCOL = {
         "setup/motor",
         "setup/assembled/start",
         "setup/assembled/observe",
+        "setup/assembled/wiggle",
         "setup/assembled/accept",
         "setup/assembled/finish",
         "setup/assembled/cancel",

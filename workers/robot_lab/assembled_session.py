@@ -17,6 +17,7 @@ from pathlib import Path
 
 from dataset import atomic_json
 from hardware import JOINTS
+from identify import IdentificationUnavailable
 
 
 def durable_json(path, value):
@@ -136,6 +137,9 @@ def empty_assembled_state():
         "progress": None,
         "calibration_required": False,
         "experimental": True,
+        "motion_active": False,
+        "wiggle_id": None,
+        "wiggle_ticks": None,
     }
 
 
@@ -169,6 +173,7 @@ class AssembledSession:
         self.observation_event = threading.Event()
         self.observation_token = 0
         self.detected_at = None
+        self.wiggle_at = None
         self.workers = []
         self.operation = "split"
         self.state = {
@@ -193,6 +198,8 @@ class AssembledSession:
     def _publish(self, *, terminal=False, **changes):
         with self.lock:
             if self.stop_event.is_set() and changes.get("phase") != "stopped":
+                if changes == {"motion_active": False}:
+                    self.state["motion_active"] = False
                 return
             self.state.update(changes)
             message = changes.get("message")
@@ -277,6 +284,7 @@ class AssembledSession:
             "scanning",
             "splitting",
             "applying",
+            "wiggling",
             "complete",
             "error",
             "stopped",
@@ -298,9 +306,13 @@ class AssembledSession:
             self.observation_token += 1
             token = self.observation_token
             self.detected_at = None
+            self.wiggle_at = None
             self.operation = "observe"
         self._publish(
             phase="observing",
+            error=None,
+            wiggle_id=None,
+            wiggle_ticks=None,
             selected_joint=joint,
             detected_id=None,
             candidate_delta=None,
@@ -372,6 +384,73 @@ class AssembledSession:
             ):
                 self._fail(error)
 
+    def wiggle(self, motor_id):
+        with self.lock:
+            self._ensure_live()
+            if type(motor_id) is not int or motor_id not in self.state["ids"]:
+                raise ValueError("Select a discovered motor address")
+            if motor_id in self.state["mapping"].values():
+                raise ValueError("This motor already has a confirmed joint")
+            self.observation_event.set()
+            self.observation_token += 1
+            self.detected_at = self.wiggle_at = None
+            self.operation = "wiggle"
+            self._publish(
+                phase="wiggling",
+                error=None,
+                wiggle_id=None,
+                wiggle_ticks=None,
+                detected_id=None,
+                selected_joint=None,
+                message=f"Identifying address {motor_id}; support the arm",
+            )
+        self._thread(lambda: self._wiggle(motor_id))
+
+    def _wiggle(self, motor_id):
+        try:
+            ticks = self.engine.identify(
+                motor_id, lambda active: self._publish(motion_active=active)
+            )
+            with self.lock:
+                if self.stop_event.is_set():
+                    return
+                self.operation = None
+                self.wiggle_at = time.monotonic()
+                self._publish(
+                    phase="ready",
+                    motion_active=False,
+                    wiggle_id=motor_id,
+                    wiggle_ticks=ticks,
+                    message=f"Address {motor_id} motion finished. Select the joint you saw move.",
+                )
+        except IdentificationUnavailable as error:
+            with self.lock:
+                self.operation = None
+                self.wiggle_at = None
+            self._publish(
+                phase="ready",
+                motion_active=False,
+                wiggle_id=None,
+                error=str(error),
+                message=str(error),
+            )
+        except Exception as error:
+            self._fail(error)
+
+    def accept_wiggle(self, joint, motor_id):
+        with self.lock:
+            self._ensure_live()
+            if joint not in JOINTS or joint in self.state["mapping"]:
+                raise ValueError("Choose an unconfirmed joint")
+            if (
+                type(motor_id) is not int
+                or motor_id != self.state["wiggle_id"]
+                or self.wiggle_at is None
+                or time.monotonic() - self.wiggle_at > 60
+            ):
+                raise ValueError("Request a fresh wiggle before confirming its joint")
+            self._accept_mapping(joint, motor_id)
+
     def accept(self, joint, motor_id):
         with self.lock:
             self._ensure_live()
@@ -389,26 +468,31 @@ class AssembledSession:
                 raise ValueError(
                     "Movement evidence is stale. Move the highlighted joint and confirm again."
                 )
-            mapping = {**self.state["mapping"], joint: motor_id}
-            directory = self.data_dir / "assembled"
-            directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-            receipt = directory / (
-                hashlib.sha256(self.port.encode()).hexdigest()[:20] + ".mapping.json"
-            )
-            durable_json(receipt, {"port": self.port, "ids": self.state["ids"], "mapping": mapping})
-            self.observation_event.set()
-            self.observation_token += 1
-            self.operation = None
-            self.detected_at = None
-            self._publish(
-                mapping=mapping,
-                phase="review" if len(mapping) == 6 else "ready",
-                detected_id=None,
-                candidate_delta=None,
-                message=(
-                    "Joint identity confirmed. Review all six mappings before saving motor IDs."
-                ),
-            )
+            self._accept_mapping(joint, motor_id)
+
+    def _accept_mapping(self, joint, motor_id):
+        if motor_id in self.state["mapping"].values():
+            raise ValueError("That motor is already assigned to another joint")
+        mapping = {**self.state["mapping"], joint: motor_id}
+        directory = self.data_dir / "assembled"
+        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        receipt = directory / (
+            hashlib.sha256(self.port.encode()).hexdigest()[:20] + ".mapping.json"
+        )
+        durable_json(receipt, {"port": self.port, "ids": self.state["ids"], "mapping": mapping})
+        self.observation_event.set()
+        self.observation_token += 1
+        self.operation = None
+        self.detected_at = None
+        self._publish(
+            mapping=mapping,
+            wiggle_id=None,
+            wiggle_ticks=None,
+            phase="review" if len(mapping) == 6 else "ready",
+            detected_id=None,
+            candidate_delta=None,
+            message=("Joint identity confirmed. Review all six mappings before saving motor IDs."),
+        )
 
     def finish(self):
         with self.lock:
