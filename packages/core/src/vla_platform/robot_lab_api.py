@@ -29,7 +29,7 @@ async def proxy(path: str, request: Request):
                 payload = strict_json(raw) if raw else {}
                 if not isinstance(payload, dict):
                     raise ValueError
-            except (ValueError, UnicodeDecodeError, RecursionError):
+            except ValueError, UnicodeDecodeError, RecursionError:
                 raise HTTPException(422, "Supply a JSON object for this operation") from None
         if len(str(request.url.query)) > 2048:
             raise HTTPException(413, "Robot Lab query is too large")

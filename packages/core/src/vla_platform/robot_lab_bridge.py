@@ -101,7 +101,7 @@ class RobotLabBridge:
             raise RobotLabError(
                 "Connect the local Robot Lab companion to use the arm and cameras.", 503
             ) from None
-        except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        except OSError, ValueError, TypeError, KeyError, AttributeError:
             raise RobotLabError(
                 "The private Robot Lab connection needs operator setup.", 503
             ) from None
@@ -162,7 +162,7 @@ class RobotLabBridge:
                     return raw, content_type
                 try:
                     body = self.sanitize(strict_json(raw), config)
-                except (ValueError, UnicodeDecodeError, RecursionError):
+                except ValueError, UnicodeDecodeError, RecursionError:
                     raise RobotLabError(
                         "The local companion returned an invalid response."
                     ) from None
@@ -177,7 +177,7 @@ class RobotLabBridge:
                         status = 502
                     raise RobotLabError(detail[:1000], status)
                 return body
-        except (httpx.HTTPError, TimeoutError):
+        except httpx.HTTPError, TimeoutError:
             raise RobotLabError(
                 "The local Robot Lab companion is unavailable. Check its connection on the Mac."
             ) from None
@@ -209,7 +209,7 @@ class RobotLabBridge:
             try:
                 canonical_name(path)
                 key = name_key(path)
-            except (LibraryError, TypeError):
+            except LibraryError, TypeError:
                 raise RobotLabError(
                     "The recording manifest contains an unsafe file path."
                 ) from None
@@ -264,7 +264,7 @@ class RobotLabBridge:
                     raise RobotLabError(
                         "A recording file changed during transfer. Retry the import."
                     )
-        except (httpx.HTTPError, TimeoutError):
+        except httpx.HTTPError, TimeoutError:
             raise RobotLabError(
                 "The recording transfer was interrupted. Retry to resume it."
             ) from None
@@ -279,7 +279,7 @@ class RobotLabBridge:
                 receipt = library.directory(record["id"]) / "robot-lab-import.json"
                 try:
                     saved = json.loads(receipt.read_bytes())
-                except (OSError, ValueError):
+                except OSError, ValueError:
                     continue
                 if saved == {"project_id": project_id, "fingerprint": fingerprint}:
                     existing = record

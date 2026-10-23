@@ -261,7 +261,7 @@ def check_profile(value, root, environment=None, *, runner=subprocess.run, which
             if result["ready"]
             else "Some dependencies, Python version or external tools need setup."
         )
-    except (OSError, subprocess.TimeoutExpired, ValueError, KeyError, TypeError, AttributeError):
+    except OSError, subprocess.TimeoutExpired, ValueError, KeyError, TypeError, AttributeError:
         result["message"] = "The selected interpreter could not report its installed dependencies."
     if value.id == "core":
         versions_ok = False
@@ -279,7 +279,7 @@ def check_profile(value, root, environment=None, *, runner=subprocess.run, which
                 and pnpm.stdout.strip() == "12.6.0"
             )
             result["web_tool_versions"] = {"node": node.stdout.strip(), "pnpm": pnpm.stdout.strip()}
-        except (OSError, ValueError, subprocess.TimeoutExpired):
+        except OSError, ValueError, subprocess.TimeoutExpired:
             result["web_tool_versions"] = {"message": "Node/pnpm versions need setup."}
         result["web_tool_versions_match"] = versions_ok
         result["web_export_available"] = (root / "apps/web/out/index.html").is_file()

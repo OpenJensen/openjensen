@@ -30,5 +30,10 @@
     "Real arm demonstration recording"
   ],
   "preservation": "Stopped-workspace backup verified before deployment; prior release retained. Candidate uses an independent copy of saved workspace data.",
-  "hosted_checks": "Inspect the pull request current-head results separately; these records describe local checks."
+  "hosted_checks": "Inspect the pull request current-head results separately; these records describe local checks.",
+  "ci_alignment": {
+    "formatter": "Ruff 0.16.9 full CI lint and format checks passed across 220 files",
+    "followup_core_tests": "68 proxy/profile/API reference checks passed after formatting",
+    "guide_tests": "Desktop and mobile contextual guide checks passed; guide inventory includes Robot Lab"
+  }
 }
