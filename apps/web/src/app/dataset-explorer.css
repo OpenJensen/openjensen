@@ -145,15 +145,6 @@
   color: var(--muted);
   font-size: 12px;
 }
-.dx-request-error {
-  border: 1px solid var(--line);
-  background: var(--error-bg);
-  color: var(--error);
-  border-radius: 7px;
-  padding: 17px;
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
 .dx-request-error button {
   color: inherit;
   padding: 7px 0 0;

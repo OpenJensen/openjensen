@@ -34,6 +34,22 @@ step. Do not list what an action does not do or what has not been measured; stat
 measured results and leave validation scope to the documentation. Consent text names
 the recipient and any charge once, at the checkbox.
 
+## Shared components
+
+Use the components in `apps/web/src/components/ui/` and the classes in
+`apps/web/src/app/design-system.css` instead of feature-specific copies:
+
+- `Notice` for every message box: a short `title`, the next step as children, raw
+  driver or server output in `details` (collapsed), and `live="alert"` for failures.
+- `StatusBadge` for state labels such as Connected, Not installed or Failed.
+- Buttons: `primary-button` for the one main action in a view, `secondary-button`,
+  `danger-button` for stopping hardware or deleting, and `text-button` for inline
+  link-styled actions.
+
+Older classes such as `error-notice`, `warning-box`, `metadata-badge` and
+`text-link` render with the same styles until their components move to the shared
+markup. Do not add new feature-specific notice, badge or button styles.
+
 Robot illustrations must distinguish the model from live telemetry. Use the actual
 mechanism and joint axes; motion previews should be explicit and bounded, with a
 static alternative for reduced motion. Verify them in light and dark themes and at

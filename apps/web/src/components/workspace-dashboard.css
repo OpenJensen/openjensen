@@ -78,19 +78,6 @@
   flex: 1;
   white-space: nowrap;
 }
-.resource-state {
-  font-size: 10px;
-  border: 1px solid var(--line);
-  padding: 3px 6px;
-  border-radius: 5px;
-  color: var(--muted);
-  background: var(--surface);
-}
-.resource-state.ready {
-  color: var(--success);
-  background: var(--success-bg);
-  border-color: var(--success-bg);
-}
 .dashboard-resource-grid p {
   font-size: 13px;
   font-weight: 600;

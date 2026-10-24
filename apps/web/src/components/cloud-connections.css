@@ -71,38 +71,8 @@
   border: 1px solid var(--line);
   background: var(--subtle);
 }
-.cloud-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  padding: 3px 6px;
-  color: var(--muted);
-  background: var(--subtle);
-  font-size: 10px;
-  line-height: 1.5;
-  white-space: nowrap;
-}
 .cloud-provider-top .cloud-status {
   margin-left: auto;
-}
-.cloud-status-connected {
-  color: var(--success);
-  background: var(--success-bg);
-  border-color: transparent;
-}
-.cloud-status-connected::before {
-  content: '';
-  width: 5px;
-  height: 5px;
-  background: currentColor;
-  border-radius: 50%;
-}
-.cloud-status-error,
-.cloud-status-setup_required {
-  color: var(--warning);
-  background: var(--warning-bg);
 }
 .cloud-provider-details {
   margin: 19px 0 0;
@@ -164,16 +134,6 @@
   color: var(--muted);
   font-size: 12px;
   padding: 20px 0;
-}
-.cloud-connection-error {
-  color: var(--error);
-  background: var(--error-bg);
-  padding: 11px 13px;
-  border-radius: 6px;
-  font-size: 12px;
-  margin: 14px 0;
-  line-height: 1.7;
-  overflow-wrap: anywhere;
 }
 .cloud-feedback {
   margin-top: 15px;

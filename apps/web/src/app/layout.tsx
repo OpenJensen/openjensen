@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import './design-system.css';
 import { themeBootstrapScript } from '@/lib/public-preferences';
 
 export const metadata: Metadata = {
