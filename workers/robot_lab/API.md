@@ -82,6 +82,12 @@ A communication or safety failure during center/range capture closes the session
 restores the previous calibration when the bus permits, and reports calibration
 `phase: "interrupted"`, `interrupted_stage: "center" | "ranges"`, and `error`.
 Starting calibration again is explicit; cancelling normally returns to `idle`.
-Missing read replies receive at most three attempts. Missing configuration-write
+Missing, incomplete or checksum-invalid read replies receive at most three attempts,
+with stale input discarded before each fresh request. Motor-reported faults are
+not retried; persistent errors stop the session. Missing configuration-write
 acknowledgements require an exact register read-back, without replaying the write.
 Motion, torque, ID and baudrate writes do not use this recovery.
+
+Saved-mapping wiggles verify the six canonical addresses directly (stable encoder
+samples, STS3215 model, stored ID and torque-off). They do not repeat address
+separation or scan unused addresses; the completed journal is required first.

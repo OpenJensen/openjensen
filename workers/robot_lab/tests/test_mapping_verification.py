@@ -93,11 +93,49 @@ class MappingTests(unittest.TestCase):
     def test_missing_address_prevents_any_motion_or_journal_change(self):
         del self.chain.motors[3]
         engine = self.engine("/dev/fake", self.temp.name)
-        with self.assertRaisesRegex(AssembledError, "inventory changed"):
+        with self.assertRaisesRegex(AssembledError, "ID 3 does not have stable"):
             engine.check_mapping(6, lambda active: None)
         engine.close()
         self.assertEqual(self.path.read_bytes(), self.original)
         self.assertTrue(all(not bus.writes for bus in self.chain.motors.values()))
+
+    def test_saved_check_avoids_full_bus_scan_under_usb_latency(self):
+        clock = [0.0]
+        exchanges = []
+        original = self.chain.exchange
+
+        def exchange(message, wait, length):
+            clock[0] += 0.025
+            exchanges.append(message[2])
+            return original(message, wait, length)
+
+        self.chain.exchange = exchange
+        engine = self.engine("/dev/fake", self.temp.name)
+        motion_started = []
+        try:
+            with patch("verification.time.monotonic", side_effect=lambda: clock[0]):
+                result = engine.check_mapping(
+                    6, lambda active: motion_started.append(clock[0]) if active else None
+                )
+            self.assertGreaterEqual(result, 4)
+            self.assertEqual(set(exchanges), set(IDS.values()))
+            self.assertLess(motion_started[0], 5)
+            self.assertEqual(self.path.read_bytes(), self.original)
+        finally:
+            engine.close()
+
+    def test_wrong_motor_model_or_enabled_torque_blocks_saved_wiggle(self):
+        for register, value in ((3, 999), (40, 1)):
+            with self.subTest(register=register):
+                self.chain = Chain()
+                self.chain.motors[2].values[register] = value
+                engine = self.engine("/dev/fake", self.temp.name)
+                try:
+                    with self.assertRaises(AssembledError):
+                        engine.check_mapping(6, lambda active: None)
+                    self.assertTrue(all(not bus.writes for bus in self.chain.motors.values()))
+                finally:
+                    engine.close()
 
     def test_unfinished_or_wrong_port_mapping_is_rejected(self):
         record = json.loads(self.original)

@@ -9,7 +9,7 @@ import threading
 import time
 from pathlib import Path
 
-from assembled import AssembledSetup
+from assembled import AssembledCancelled, AssembledError, AssembledSetup
 from hardware import IDS
 
 
@@ -64,12 +64,33 @@ class VerificationEngine(AssembledSetup):
     def _publish(self, journal=False, **updates):
         return super()._publish(journal=False, **updates)
 
+    def _check(self):
+        if self.stop_event.is_set():
+            raise AssembledCancelled("Motor verification stopped")
+        if self.deadline is not None and time.monotonic() >= self.deadline:
+            raise AssembledError("Motor verification timed out; check the USB connection")
+
     def check_mapping(self, motor_id, on_motion):
+        from identify import wiggle
+
         saved_mapping(self.journal_path.parent.parent, self.port)
         self.state["ids"] = list(range(1, 7))
         self.deadline = time.monotonic() + 12
         self._open()
-        return self.identify(motor_id, on_motion)
+        with self.io_lock:
+            # The completed journal fixes the six addresses. Repeating discovery
+            # over 254 addresses can exhaust the USB time budget before motion.
+            # Still validate stable encoder replies, model and stored ID for all
+            # six motors, then require every torque register to be off.
+            ids = self._verify_six(list(IDS.values()))
+            if any(self._read(sid, 40) != 0 for sid in ids):
+                raise AssembledError("Release every motor's torque before verification")
+
+            def motion_state(active):
+                self.identification_cleanup = active
+                on_motion(active)
+
+            return wiggle(self.bus, motor_id, ids, self.stop_event, motion_state=motion_state)
 
 
 class MappingVerification:
