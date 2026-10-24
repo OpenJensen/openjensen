@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { installedModules } from './module-fixtures';
 
@@ -37,6 +38,7 @@ async function openGpuPicker(page: Page, local = false) {
     gpu_memory_mib: 8192,
   };
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (request.method() !== 'GET') {
@@ -306,6 +308,7 @@ async function trainingAdmission(page: Page, { format = 'lerobot_v3', dimensions
     },
   };
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (request.method() === 'POST' && path === '/api/v1/projects/admission/policy-jobs') {

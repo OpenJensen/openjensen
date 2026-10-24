@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { selectProject } from './project-controls';
 
@@ -22,7 +23,8 @@ async function fixture(page: Page) {
   const writes: string[] = [];
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  await page.route('**/api/v1/**', (route) => {
+  await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (request.method() !== 'GET') {

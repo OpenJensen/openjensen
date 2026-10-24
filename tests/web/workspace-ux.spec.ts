@@ -1,9 +1,11 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
 
 async function workspace(page: Page) {
   const mutations: string[] = [];
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (request.method() !== 'GET') {

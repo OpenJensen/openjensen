@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import {
   chooseTransformationModel,
   openTransformationJob,
@@ -137,6 +138,7 @@ async function fixture(page: Page) {
     ],
   };
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const req = route.request(),
       path = new URL(req.url()).pathname;
     if (req.method() === 'POST') {

@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { installedModules } from './module-fixtures';
@@ -179,6 +180,7 @@ async function managedWorkspace(page: Page) {
   const posts: string[] = [];
   const eventRequests: string[] = [];
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const req = route.request(),
       path = new URL(req.url()).pathname;
     if (req.method() !== 'GET') {

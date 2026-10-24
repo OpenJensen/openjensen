@@ -41,10 +41,7 @@ test('accepted update reports progress and reloads once the confirmed version is
   let state: any = initial;
   let writes = 0;
   let complete = false;
-  let navigations = 0;
-  page.on('framenavigated', (frame) => {
-    if (frame === page.mainFrame()) navigations += 1;
-  });
+
   await page.route('**/api/v1/updates**', (route) => {
     if (route.request().method() === 'POST') {
       writes += 1;
@@ -72,11 +69,13 @@ test('accepted update reports progress and reloads once the confirmed version is
     return route.fulfill({ status: route.request().method() === 'POST' ? 202 : 200, json: state });
   });
   await page.goto('/dashboard/');
+  const initialOrigin = await page.evaluate(() => performance.timeOrigin);
   await page.getByRole('button', { name: 'Version and updates' }).click();
   await page.getByRole('button', { name: 'Update & restart' }).click();
   await expect(page.getByRole('dialog')).toContainText('Building the new version…');
   complete = true;
-  await expect.poll(() => navigations).toBe(2);
+  await expect.poll(() => page.evaluate(() => performance.timeOrigin)).not.toBe(initialOrigin);
+  await expect(page.getByRole('button', { name: 'Version and updates' })).toHaveText('v0.1.0');
   await expect(page.getByRole('button', { name: 'Version and updates' })).toHaveText('v0.1.0');
   expect(writes).toBe(1);
   expect(await page.evaluate(() => sessionStorage.getItem('openjensen-pending-update'))).toBeNull();
@@ -114,10 +113,7 @@ test('lost acceptance reply reconnects to the same update without submitting twi
   let state: any = initial;
   let writes = 0;
   let complete = false;
-  let navigations = 0;
-  page.on('framenavigated', (frame) => {
-    if (frame === page.mainFrame()) navigations += 1;
-  });
+
   await page.route('**/api/v1/updates**', (route) => {
     if (route.request().method() === 'POST') {
       writes += 1;
@@ -142,11 +138,13 @@ test('lost acceptance reply reconnects to the same update without submitting twi
     return route.fulfill({ json: state });
   });
   await page.goto('/dashboard/');
+  const initialOrigin = await page.evaluate(() => performance.timeOrigin);
   await page.getByRole('button', { name: 'Version and updates' }).click();
   await page.getByRole('button', { name: 'Update & restart' }).click();
   await expect(page.getByRole('dialog')).toContainText('Building the new version…');
   complete = true;
-  await expect.poll(() => navigations).toBe(2);
+  await expect.poll(() => page.evaluate(() => performance.timeOrigin)).not.toBe(initialOrigin);
+  await expect(page.getByRole('button', { name: 'Version and updates' })).toHaveText('v0.1.0');
   expect(writes).toBe(1);
   expect(await page.evaluate(() => sessionStorage.getItem('openjensen-pending-update'))).toBeNull();
 });

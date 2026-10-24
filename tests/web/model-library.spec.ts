@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { chooseTransformationModel, openTransformationJob, transformationJobs } from './lifecycle-controls';
 import { expect, test, type Page } from '@playwright/test';
 const time = '2026-09-30T12:00:00Z',
@@ -69,6 +70,7 @@ async function fixture(
     },
   });
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request(),
       path = new URL(request.url()).pathname;
     if (request.method() === 'PUT' && path.includes('/model-runs/')) {

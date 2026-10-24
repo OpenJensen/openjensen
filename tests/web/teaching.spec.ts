@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { installedModules } from './module-fixtures';
@@ -28,6 +29,7 @@ async function teaching(page: Page, connected = true) {
     fault: null,
   };
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request(),
       path = new URL(request.url()).pathname;
     if (request.method() === 'GET' && path === '/api/v1/datasets') return route.fulfill({ json: [] });

@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { createHash } from 'node:crypto';
@@ -176,6 +177,7 @@ async function fixture(page: Page) {
     catalogGate: null as ReturnType<typeof deferred> | null,
   };
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const req = route.request(),
       path = new URL(req.url()).pathname,
       project = path.split('/')[4];
