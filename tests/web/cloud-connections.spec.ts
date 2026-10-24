@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
 import type { LocalWorkerDiscovery, PolicyOptions } from '../../apps/web/src/lib/api';
 import { installedModules } from './module-fixtures';
@@ -174,6 +175,7 @@ async function mockWorkspace(
   // Every application request is intercepted. These tests cannot authenticate
   // with a provider, alter real cloud configuration, or provision compute.
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (request.method() !== 'GET') mutations.push(`${request.method()} ${path}`);

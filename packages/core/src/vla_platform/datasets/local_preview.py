@@ -85,8 +85,21 @@ class PreviewLimits:
             raise PreviewError("invalid_limits", "timeout_seconds must be finite and in (0, 30]")
 
 
-def reader_python() -> Path:
+def reader_python(data_dir: Path | None = None) -> Path:
     """Source-checkout default; installed applications must configure an explicit path."""
+    from vla_platform.environment import getenv
+    from vla_platform.settings import workspace_directory
+
+    if configured := getenv("JENSEN_CPU_READER_PYTHON"):
+        return Path(configured)
+    managed = (data_dir or workspace_directory()) / "module-environments/datasets"
+    candidate = managed / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    if (managed / ".openjensen-installed.json").is_file() and candidate.is_file():
+        return candidate
+    previous = (data_dir or workspace_directory()) / "local-environments/dataset-reader"
+    candidate = previous / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    if candidate.is_file():
+        return candidate
     root = Path(__file__).resolve().parents[5]
     return (
         root

@@ -37,7 +37,7 @@ def checkout(tmp_path):
 
 def test_catalog_explains_feature_and_python_boundaries():
     values = {item["id"]: item for item in public_profiles()}
-    assert set(values) == {"core", "robot", "datasets", "training", "simulation"}
+    assert set(values) == {"core", "robot", "datasets", "training", "decision", "simulation"}
     assert values["robot"]["python"] == values["core"]["python"] == "3.14.7"
     assert values["training"]["python"] == "3.11"
     assert "torch" not in values["robot"]["distributions"]
@@ -67,7 +67,7 @@ def test_dry_run_and_list_never_create_environments_or_run_commands(checkout, mo
         "subprocess.run", lambda *args, **kwargs: pytest.fail("dry-run ran a process")
     )
     listing = CliRunner().invoke(app, ["list"])
-    assert listing.exit_code == 0 and len(json.loads(listing.stdout)["profiles"]) == 5
+    assert listing.exit_code == 0 and len(json.loads(listing.stdout)["profiles"]) == 6
     result = CliRunner().invoke(app, ["robot", "--dry-run", "--source", str(checkout)])
     assert result.exit_code == 0, result.output
     value = json.loads(result.stdout)

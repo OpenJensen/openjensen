@@ -8,6 +8,7 @@ import { useWorkbenchState } from '@/components/workspace-state';
 import { WorkspaceContext } from '@/components/workspace-context';
 import { Icon } from '@/components/icon';
 import { WorkspaceShell } from '@/components/workspace-shell';
+import { ApplicationUpdates } from '@/components/application-updates';
 import { ProjectMenu } from '@/components/project-menu';
 import { ErrorNotice } from '@/components/workspace-ui';
 import { publicPath } from '@/lib/base-path';
@@ -50,6 +51,7 @@ function Workbench({ children }: { children: ReactNode }) {
   return (
     <WorkspaceContext.Provider value={state}>
       <WorkspaceShell
+        headerActions={<ApplicationUpdates />}
         showGuideShortcut={false}
         onHomeNavigate={() => navigateStage('dashboard')}
         breadcrumb={

@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
 
 const fakeToken = 'hf_BrowserFixtureTokenNotARealCredential1234567890';
@@ -15,6 +16,7 @@ async function settings(page: Page, reject = false) {
   let status: typeof blank | typeof configured = blank;
   const requests: { method: string; body: unknown }[] = [];
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request();
     const path = new URL(request.url()).pathname.replace('/api/v1', '');
     let value: unknown;

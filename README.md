@@ -142,3 +142,5 @@ Workers keep separate environments and checks. Do not hand-edit generated API ty
 ## License
 
 Project code is licensed under [Apache License 2.0](LICENSE); see [NOTICE](NOTICE). Third-party code, model weights, datasets and assets retain their own terms and attribution. Check their source terms before reuse or redistribution.
+
+[Versions and update channels](docs/versioning.md) distinguish the installed package, source commit and published release.

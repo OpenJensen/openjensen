@@ -32,6 +32,8 @@ export default defineConfig({
       name: 'desktop',
       testMatch: [
         'workspace-routes.spec.ts',
+        'application-updates.spec.ts',
+        'modules.spec.ts',
         'project-menu.spec.ts',
         'model-library.spec.ts',
         'dataset-submission.spec.ts',
@@ -63,6 +65,8 @@ export default defineConfig({
       name: 'mobile',
       testMatch: [
         'workspace-routes.spec.ts',
+        'application-updates.spec.ts',
+        'modules.spec.ts',
         'project-menu.spec.ts',
         'model-library.spec.ts',
         'dataset-submission.spec.ts',

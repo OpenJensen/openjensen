@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { chooseTransformationModel, selectedQuantizationModel } from './lifecycle-controls';
 import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
@@ -751,6 +752,7 @@ async function mockTrainingWorkspace(
   // Every application API call is intercepted, including all writes. These
   // tests cannot submit compute work even if a new request path is introduced.
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname;
@@ -1513,6 +1515,7 @@ test('dataset intake waits for a confirmed project and preserves its draft durin
   let projectError = false;
   const submitted: { projectId: string; body: unknown }[] = [];
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname;

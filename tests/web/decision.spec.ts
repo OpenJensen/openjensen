@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { installedModules } from './module-fixtures';
 
@@ -5,6 +6,7 @@ async function lab(page: Page, configured = true) {
   const posts: any[] = [];
   const controls = { fail: false, slow: false };
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const req = route.request(),
       path = new URL(req.url()).pathname;
     if (path === '/api/v1/decision/score') {

@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { selectProject } from './project-controls';
 import { createServer } from 'node:http';
 import { expect, test, type Page } from '@playwright/test';
@@ -77,6 +78,7 @@ async function fixture(page: Page) {
     tasks: { isaac: 'RUNNING', vla: 'STARTING' },
   };
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const req = route.request(),
       url = new URL(req.url()),
       path = url.pathname;

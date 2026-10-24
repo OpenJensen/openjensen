@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { chooseTransformationModel, openTransformationJob, transformationJobs } from './lifecycle-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { installedModules } from './module-fixtures';
@@ -98,6 +99,7 @@ async function workspace(
     },
   ];
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (request.method() === 'POST' && path.endsWith('/policy-jobs')) {

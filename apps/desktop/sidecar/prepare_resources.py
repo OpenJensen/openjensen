@@ -15,6 +15,7 @@ from sidecar_resources import (
     file_identity,
     load_resources,
 )
+from vla_platform import __version__
 
 
 def prepare(web: Path, output: Path, build_id: str) -> Path:
@@ -67,7 +68,7 @@ def prepare(web: Path, output: Path, build_id: str) -> Path:
                 raise ValueError("Static source changed while copying")
     manifest = {
         "schema_version": 1,
-        "app_version": "0.1.0",
+        "app_version": __version__,
         "build_id": build_id,
         "files": inventory,
     }

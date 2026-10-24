@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { waitForJob } from './job-waiter';
 import { expect, test, type Page } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
@@ -155,7 +156,8 @@ test('saved Hugging Face inspections reopen without a new inspection request', a
     request: { source: 'huggingface', repo_id: 'our/robot-data', revision: 'a'.repeat(40) },
     result: profile,
   };
-  await page.route('**/api/v1/**', (route) => {
+  await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request(),
       path = new URL(request.url()).pathname;
     if (request.method() !== 'GET') {
@@ -275,7 +277,8 @@ for (const available of [true, false]) {
     }
     const episode = { episode_index: 7, frame_count: 5, duration_seconds: 1, tasks: ['Pick up'] };
     const requests: string[] = [];
-    await page.route('**/api/v1/**', (route) => {
+    await page.route('**/api/v1/**', async (route) => {
+      if (await fulfillApplicationUpdateRead(route)) return;
       const path = new URL(route.request().url()).pathname;
       if (path === '/api/v1/fixture-preview.mp4') return route.fallback();
       if (path === '/api/v1/projects')
@@ -398,7 +401,8 @@ test('dashboard uses the current project library scope, and inspection is reache
     created_at: time,
     profile: { ...profile, repo_id: `our/data-${index}` },
   }));
-  await page.route('**/api/v1/**', (route) => {
+  await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname;
@@ -558,7 +562,8 @@ async function importRecoveryFixture(page: Page) {
     },
   };
   const state = { entries: [entry], revision: 0, deletes: [] as string[], saves: [] as any[] };
-  await page.route('**/api/v1/**', (route) => {
+  await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname;

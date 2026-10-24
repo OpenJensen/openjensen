@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { selectProject } from './project-controls';
 
@@ -13,7 +14,8 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin') 
   const state = { status: initialStatus(calibrated), writes: [] as { path: string; body: any }[], errors: [] as string[], datasetReads: 0, cameraFailure: false, stopError: null as string | null, centerError: null as string | null, portsConnected: true, middleInProgress: false, encoderLag: false, jogDelay: 0, jogStaleResponse: false, robotDatasetReads: 0, heartbeatFailures: 0, statusFailures: false, dropCalibrationReply: false };
   if (hostPlatform === 'Linux') { state.status.platform = 'Linux'; state.status.label = 'Linux robot computer'; }
   page.on('pageerror', error => state.errors.push(error.message));
-  await page.route('**/api/v1/**', async route => {
+  await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request(), path = new URL(request.url()).pathname, body = request.method() === 'POST' ? request.postDataJSON() : undefined;
     if (request.method() === 'POST') state.writes.push({ path, body });
     if (path.startsWith('/api/v1/robot-lab/')) {

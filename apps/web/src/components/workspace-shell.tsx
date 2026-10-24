@@ -8,6 +8,7 @@ import { publicPath } from '@/lib/base-path';
 
 type WorkspaceShellProps = {
   navigation: ReactNode;
+  headerActions?: ReactNode;
   children: ReactNode;
   breadcrumb: ReactNode;
   sidebarLabel?: string;
@@ -22,6 +23,7 @@ type WorkspaceShellProps = {
 // accessibility, and appearance controls evolve together.
 export function WorkspaceShell({
   navigation,
+  headerActions,
   children,
   breadcrumb,
   sidebarLabel = 'Workspace navigation',
@@ -73,6 +75,7 @@ export function WorkspaceShell({
         <header className="topbar">
           <div className="breadcrumb">{breadcrumb}</div>
           <div className="topbar-actions">
+            {headerActions}
             {showGuideShortcut && (
               <a className="mobile-guide-link" href={publicPath('/guide/')} aria-label="Workspace guide">
                 <Icon name="book" size={18} />

@@ -38,6 +38,15 @@ the service. Back up the whole stopped workspace before an upgrade. For rollback
 use the preserved release/runtime with a restored copy of its pre-upgrade
 workspace. Changing `current` alone cannot reverse a database migration.
 
+## Browser updates
+
+Record the exact source commit in each archived release as
+`.openjensen-build.json` with `{"commit":"FULL_40_CHARACTER_SHA","channel":"main"}`.
+Existing `.openjensen-release.json` receipts containing `commit` are also supported.
+The header displays the package version, this commit and upstream main separately.
+Configure [confirmed browser updates](../../docs/upgrading.md#confirmed-browser-updates)
+to build, back up and restart this service from a private browser session.
+
 ## Connect through SSH
 
 Replace `xbox-360` with the configured SSH host alias:

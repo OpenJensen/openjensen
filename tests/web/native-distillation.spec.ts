@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { chooseTransformationModel, openTransformationJob, transformationJobs } from './lifecycle-controls';
 import { selectProject } from './project-controls';
 import { startStudent, cancelStudent } from '../../apps/web/src/lib/native-distillation';
@@ -81,6 +82,7 @@ async function fixture(page: Page) {
     cancelGate: null as Promise<void> | null,
   };
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const req = route.request(),
       path = new URL(req.url()).pathname;
     if (path === '/api/v1/projects')

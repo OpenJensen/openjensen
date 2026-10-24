@@ -488,7 +488,7 @@ class DatasetLibrary:
         return contained(self.directory(value["id"]), value.get("source_directory", "source"))
 
     async def worker(self, payload, timeout=300):
-        executable = getenv("JENSEN_CPU_READER_PYTHON") or str(reader_python())
+        executable = getenv("JENSEN_CPU_READER_PYTHON") or str(reader_python(self.root.parent))
         async with self.worker_limit:
             try:
                 process = await asyncio.create_subprocess_exec(

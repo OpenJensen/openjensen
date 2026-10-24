@@ -19,7 +19,7 @@ from vla_platform.install_profiles import (
 
 def install(
     name: Annotated[
-        str, typer.Argument(help="list, core, robot, datasets, training or simulation")
+        str, typer.Argument(help="list, core, robot, datasets, training, decision or simulation")
     ] = "list",
     check: Annotated[
         bool, typer.Option(help="Read installed package metadata; change nothing.")

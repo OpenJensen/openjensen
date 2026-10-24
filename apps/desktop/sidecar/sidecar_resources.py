@@ -8,6 +8,8 @@ import stat
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
+from vla_platform import __version__
+
 MAX_MANIFEST = 4 * 1024**2
 MAX_FILES = 10000
 MAX_STATIC_BYTES = 512 * 1024**2
@@ -90,7 +92,7 @@ def load_resources(root: Path) -> Resources:
         or manifest["schema_version"] != 1
         or not isinstance(manifest["build_id"], str)
         or not re.fullmatch(r"[a-f0-9]{40}", manifest["build_id"])
-        or manifest["app_version"] != "0.1.0"
+        or manifest["app_version"] != __version__
         or not isinstance(manifest["files"], dict)
         or not 1 <= len(manifest["files"]) <= MAX_FILES
         or "index.html" not in manifest["files"]

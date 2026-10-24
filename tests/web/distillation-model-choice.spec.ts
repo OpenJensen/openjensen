@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { chooseTransformationModel, openTransformationJob, transformationJobs } from './lifecycle-controls';
 import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
@@ -105,6 +106,7 @@ async function fixture(
 ) {
   const state = { jobs: initialJobs, workers, mutations: [] as string[] };
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request(),
       path = new URL(request.url()).pathname;
     if (request.method() !== 'GET') {

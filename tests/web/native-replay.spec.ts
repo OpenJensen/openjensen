@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { selectProject } from './project-controls';
 import { startReplay, cancelReplay } from '../../apps/web/src/lib/native-replay';
 import { expect, test, type Page } from '@playwright/test';
@@ -74,6 +75,7 @@ async function fixture(page: Page) {
     workers: [runtime] as Record<string, unknown>[],
   };
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const req = route.request(),
       path = new URL(req.url()).pathname;
     if (path === '/api/v1/projects')

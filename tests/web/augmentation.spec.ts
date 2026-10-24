@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { installedModules } from './module-fixtures';
 
@@ -128,6 +129,7 @@ async function mockWorkspace(
   // Intercept all application requests, including every write. The browser
   // suite cannot invoke a model or upload media to a real provider.
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request();
     const path = new URL(request.url()).pathname;
     const submissionPath = `/api/v1/projects/${projectId}/submissions/`;

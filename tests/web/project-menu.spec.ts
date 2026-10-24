@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { openCreateProject, selectProject } from './project-controls';
 
@@ -12,6 +13,7 @@ async function fixture(page: Page, empty = false) {
   const writes: unknown[] = [];
   const control = { fail: false, held: null as Promise<void> | null };
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (request.method() === 'POST') {
