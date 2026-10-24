@@ -32,6 +32,7 @@ from hardware import (
     JOINTS,
     HardwareError,
     ServoBus,
+    check_selected_motors,
     denormalized,
     normalized,
     probe_bus,
@@ -124,7 +125,7 @@ def valid_calibration(value):
 
 
 def validate_raw(raw, calibration=None):
-    if set(raw) != set(JOINTS) or any(
+    if set(raw) != set(calibration if calibration is not None else JOINTS) or any(
         isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 4095
         for value in raw.values()
     ):
@@ -295,6 +296,7 @@ class RobotLab:
                 "calibration": hardware,
                 "control": hardware,
                 "move_to_middle": hardware,
+                "partial_control": hardware,
                 "recording": hardware
                 and all(deps[key]["installed"] for key in ("pyarrow", "PIL", "numpy")),
             },
@@ -304,6 +306,8 @@ class RobotLab:
                 "port": self.port,
                 "role": self.role,
                 "positions": dict(self.positions),
+                "active_joints": list(self.calibration)
+                if self.mode in {"manual", "leader", "handguide"} else [],
                 "targets": dict(self.action) if self.mode in {"manual", "leader"} else {},
                 "torque_enabled": self.torque,
                 "centering": {
@@ -730,6 +734,16 @@ class RobotLab:
         mode = payload.get("mode")
         if mode not in ("manual", "leader", "handguide"):
             raise RequestError("Choose manual, leader or handguide mode")
+        selection = payload.get("joints", list(JOINTS))
+        if (
+            not isinstance(selection, list) or not selection
+            or any(not isinstance(j, str) or j not in JOINTS for j in selection)
+            or len(set(selection)) != len(selection)
+        ):
+            raise RequestError("Select at least one distinct SO-101 joint")
+        joints = tuple(j for j in JOINTS if j in selection)
+        if mode != "manual" and joints != JOINTS:
+            raise RequestError("Selected-motor control is available only in joint control")
         to_middle = payload.get("move_to_middle", False)
         if type(to_middle) is not bool or (to_middle and mode != "manual"):
             raise RequestError("Move to recorded middle is available only for joint control")
@@ -738,10 +752,12 @@ class RobotLab:
             port = self._port(payload.get("port"))
             robot_id = safe_slug(payload.get("robot_id"))
             calibration = self.load_calibration(robot_id, "follower", port)
+            calibration = {j: calibration[j] for j in joints}
             if to_middle:
                 middle_targets(calibration)
             generation = self.generation
             leader, bus = None, self.bus_factory(port)
+            bus.joints = joints
             with self.stop_lock, self.lifecycle_lock:
                 if generation != self.generation:
                     bus.close()
@@ -749,7 +765,10 @@ class RobotLab:
                 self.pending_bus = bus
             try:
                 with bus.lock:
-                    bus.check_six()
+                    if joints == JOINTS:
+                        bus.check_six()
+                    else:
+                        check_selected_motors(bus, joints)
                     if generation != self.generation:
                         raise RequestError("Session cancelled by Stop")
                     # Never rewrite saved EEPROM calibration when starting motion.
@@ -762,7 +781,7 @@ class RobotLab:
                     raw = validate_raw(bus.positions(), calibration)
                     if any(
                         not calibration[j]["range_min"] <= raw[j] <= calibration[j]["range_max"]
-                        for j in JOINTS
+                        for j in joints
                     ):
                         raise RequestError(
                             "A joint is outside its saved calibration range; reposition with "
@@ -791,7 +810,8 @@ class RobotLab:
                             validate_raw(leader.positions(), leader_calibration)
                         self.leader_calibration = leader_calibration
                     if mode != "handguide":
-                        for joint, motor_id in IDS.items():
+                        for joint in joints:
+                            motor_id = IDS[joint]
                             if generation != self.generation:
                                 raise RequestError("Session cancelled by Stop")
                             bus.write("Lock", motor_id, 0)
@@ -815,13 +835,15 @@ class RobotLab:
                                         )
                         # Sample again after configuration, immediately before holding.
                         raw = validate_raw(bus.positions(), calibration)
-                        for joint, motor_id in IDS.items():
+                        for joint in joints:
+                            motor_id = IDS[joint]
                             if generation != self.generation:
                                 raise RequestError("Session cancelled by Stop")
                             bus.write("Goal_Position", motor_id, raw[joint])
                             if bus.read("Goal_Position", motor_id) != raw[joint]:
                                 raise HardwareError(f"{joint} hold target read-back did not match")
-                        for motor_id in IDS.values():
+                        for joint in joints:
+                            motor_id = IDS[joint]
                             if generation != self.generation:
                                 raise RequestError("Session cancelled by Stop")
                             bus.write("Torque_Enable", motor_id, 1)
@@ -865,7 +887,7 @@ class RobotLab:
                 raise RequestError("Wait for movement to the recorded middle to finish")
             joint, delta = payload.get("joint"), payload.get("delta")
             if (
-                joint not in JOINTS
+                joint not in self.calibration
                 or isinstance(delta, bool)
                 or not isinstance(delta, (int, float))
                 or not math.isfinite(delta)
@@ -975,6 +997,8 @@ class RobotLab:
         with self.lock:
             if self.mode not in ("manual", "leader", "handguide"):
                 raise RequestError("Connect a calibrated arm in Teleoperate before recording")
+            if set(self.calibration) != set(JOINTS):
+                raise RequestError("Dataset recording requires all six joints")
             if self.middle_motion is not None:
                 raise RequestError("Wait for movement to the recorded middle before recording")
             if self.writer and not self.writer.finalized:
@@ -1006,6 +1030,8 @@ class RobotLab:
             if writer is None or writer.finalized:
                 raise RequestError("Create a dataset first")
             if action == "start":
+                if set(self.calibration) != set(JOINTS):
+                    raise RequestError("Dataset recording requires all six joints")
                 if self.middle_motion is not None:
                     raise RequestError("Wait for movement to the recorded middle before recording")
                 if self.mode not in ("manual", "leader", "handguide"):
@@ -1083,7 +1109,7 @@ class RobotLab:
                             self.commanded_raw[joint] = target
                             self.action[joint] = normalized(joint, target, self.calibration)
                     if motion.progress == 1 and all(
-                        abs(raw[j] - motion.targets[j]) <= 8 for j in JOINTS
+                        abs(raw[j] - motion.targets[j]) <= 8 for j in motion.targets
                     ):
                         with self.lifecycle_lock:
                             if generation == self.generation:

@@ -112,3 +112,5 @@ greater than 5 degrees (5 percent for the gripper). The app never expands calibr
 limits or raises torque limits to complete a move.
 
 Manual jogs advance the previous requested target, not the measured encoder position. Pending targets cannot exceed 5° (5% for the gripper) ahead of the measured position. A measured tracking error over that threshold stops motion. `session.targets` exposes requested normalized joint values alongside measured `session.positions`.
+
+Manual `/control/start` accepts an optional nonempty `joints` array of unique canonical names. Omitted means all six. In a selected-motor session, startup probing, calibration read-back, torque commands, encoder reads, jogs and Stop address only those selected IDs. Excluded joints are absent from `session.positions` and listed selection is in `session.active_joints`. Selected IDs must respond reliably; their disappearance remains fatal. Hand guiding, leader mode and dataset recording require all six. The UI holds the current pose for partial selection and retains automatic middle movement when all six are selected.

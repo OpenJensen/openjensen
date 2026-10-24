@@ -75,6 +75,8 @@ def denormalized(joint: str, value: float, calibration: dict) -> int:
 class ServoBus:
     """Each instance owns one port; callers serialize all access through .lock."""
 
+    joints = JOINTS
+
     def __init__(self, port: str, baudrate: int = 1_000_000):
         import scservo_sdk as sdk
 
@@ -251,15 +253,15 @@ class ServoBus:
     def positions(self):
         with self.lock:
             return {
-                joint: self.read("Present_Position", motor_id) for joint, motor_id in IDS.items()
+                joint: self.read("Present_Position", IDS[joint]) for joint in self.joints
             }
 
     def disable(self):
         # Attempt every motor even if a previous one has disconnected.
         errors = []
-        for motor_id in IDS.values():
+        for joint in self.joints:
             try:
-                self.write("Torque_Enable", motor_id, 0)
+                self.write("Torque_Enable", IDS[joint], 0)
             except Exception as error:
                 errors.append(str(error))
         if errors:
@@ -275,13 +277,13 @@ class ServoBus:
     def read_calibration(self):
         return {
             joint: {
-                "id": motor_id,
+                "id": IDS[joint],
                 "drive_mode": 0,
-                "homing_offset": self.read("Homing_Offset", motor_id),
-                "range_min": self.read("Min_Position_Limit", motor_id),
-                "range_max": self.read("Max_Position_Limit", motor_id),
+                "homing_offset": self.read("Homing_Offset", IDS[joint]),
+                "range_min": self.read("Min_Position_Limit", IDS[joint]),
+                "range_max": self.read("Max_Position_Limit", IDS[joint]),
             }
-            for joint, motor_id in IDS.items()
+            for joint in self.joints
         }
 
     def write_calibration(self, calibration):
@@ -338,3 +340,15 @@ def probe_bus(bus, ids=range(1, 7), repeats=3):
         "expected_ids": list(IDS.values()),
         "warning": ISOLATION_WARNING,
     }
+
+
+def check_selected_motors(bus, joints):
+    expected = {IDS[j] for j in joints}
+    result = probe_bus(bus, sorted(expected))
+    reliable = {
+        motor["id"] for motor in result["motors"]
+        if motor["stable"] and motor["model"] == 777
+    }
+    if reliable != expected:
+        missing = ", ".join(str(i) for i in sorted(expected - reliable))
+        raise HardwareError(f"Selected motor IDs {missing} did not respond reliably")

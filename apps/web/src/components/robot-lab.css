@@ -158,3 +158,10 @@
 .robot-lab-mapping-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .robot-lab-mapping-heading > span { color: var(--muted); font-size: 12px; }
 .robot-lab-table button[aria-pressed=true] { font-weight: 600; color: var(--primary); }
+
+.robot-lab-motor-selection { margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 7px; }
+.robot-lab-motor-selection legend { padding: 0 5px; font-size: 11px; font-weight: 600; }
+.robot-lab-motor-selection > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.robot-lab-motor-selection label { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.robot-lab-motor-selection input { width: 14px; height: 14px; min-height: 0; }
+.robot-lab-motor-selection small { display: block; color: var(--muted); margin-top: 10px; font-size: 10px; }

@@ -3,20 +3,20 @@
 import math
 import time
 
-from hardware import JOINTS, HardwareError
+from hardware import HardwareError
 
 MIDDLE_TICKS = 2047
 TICKS_PER_DEGREE = 4095 / 360
 
 
 def middle_targets(calibration):
-    for joint in JOINTS:
+    for joint in calibration:
         entry = calibration[joint]
         if not entry["range_min"] + 8 <= MIDDLE_TICKS <= entry["range_max"] - 8:
             raise ValueError(
                 f"Recorded middle for {joint.replace('_', ' ')} is outside its usable range"
             )
-    return dict.fromkeys(JOINTS, MIDDLE_TICKS)
+    return dict.fromkeys(calibration, MIDDLE_TICKS)
 
 
 def tracking_tolerance(joint, calibration):
@@ -44,7 +44,7 @@ def jog_target(joint, delta, raw, commanded, calibration):
 
 
 def check_tracking(raw, commanded, calibration):
-    for joint in JOINTS:
+    for joint in commanded:
         tolerance = tracking_tolerance(joint, calibration)
         if abs(raw[joint] - commanded[joint]) > tolerance:
             raise HardwareError(
@@ -64,9 +64,9 @@ class MiddleMotion:
             j: (calibration[j]["range_max"] - calibration[j]["range_min"]) * 0.04
             if j == "gripper"
             else 4 * TICKS_PER_DEGREE
-            for j in JOINTS
+            for j in self.initial
         }
-        self.duration = max(abs(self.targets[j] - initial[j]) / rates[j] for j in JOINTS)
+        self.duration = max(abs(self.targets[j] - initial[j]) / rates[j] for j in self.initial)
         self.elapsed = 0.0
         self.last_time = time.monotonic()
         self.deadline = self.last_time + self.duration + 10
@@ -81,5 +81,5 @@ class MiddleMotion:
         self.progress = min(1.0, self.elapsed / self.duration) if self.duration else 1.0
         return {
             j: round(self.initial[j] + (self.targets[j] - self.initial[j]) * self.progress)
-            for j in JOINTS
+            for j in self.initial
         }

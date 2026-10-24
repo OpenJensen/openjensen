@@ -1,0 +1,48 @@
+{
+  "date": "2026-10-24",
+  "base_commit": "202f264487e1844efd55b202534c2a7c95f4f513",
+  "scope": "Explicit selected-motor manual sessions, scoped reads and torque cleanup, with full-arm calibration and dataset requirements retained",
+  "source_sha256": {
+    "apps/web/src/components/robot-lab.css": "4de3aeafe2ebc118700ba8893fc1c2d11994e7303c723b5d50c6627c62f3b834",
+    "apps/web/src/components/robot-lab.tsx": "994fda597c6184aafcb42d1cd291bdf169149d8c00bd7f31b42c18117f921670",
+    "apps/web/src/lib/robot-api.ts": "5b238deb7a64128459d3ed8f50f843e23008af13aa7ce0003061ab50277b4229",
+    "tests/web/robot-lab.spec.ts": "692b142d52d7f37359f60beb577bb7913d2855a14ff2074eeb045e54ab0b2710",
+    "workers/robot_lab/API.md": "0bff333f087887e2f76a568b455a6264383c88c60609527dbba3a94d95d43d26",
+    "workers/robot_lab/hardware.py": "bfc34e50153428e1c4e4cac509b28df09790381b34d551ac2bdbb31759dadc3c",
+    "workers/robot_lab/motion.py": "a4c38a32c0ece78c7e7569a37d6c2ee471666645244a624d732f47f3d71200bf",
+    "workers/robot_lab/server.py": "17d723e25ad8430064c690fff017a00886a18859285407ad7b5d5f92e4981c08",
+    "workers/robot_lab/tests/test_hardware_transport.py": "8413f15e458d755f1671ebd5bafb045b4d5c3edb42eab4a3c3451c38b19d9307",
+    "workers/robot_lab/tests/test_robot_lab.py": "4b423949db946591010cb9f1a09375fafcedcf5ac21d0d85117302217ce4d3cd"
+  },
+  "verification": {
+    "ruff": "passed",
+    "companion": {
+      "run": 144,
+      "passed": 132,
+      "skipped": 12,
+      "skip_reason": "Optional dataset dependencies absent in Xbox test environment"
+    },
+    "api_installer_wrapper": {
+      "passed": 43
+    },
+    "production_export": "passed",
+    "typescript": "passed",
+    "desktop_mobile_browser": {
+      "passed": 46
+    }
+  },
+  "hardware_acceptance": "Pending: macOS USB inventory currently lacks controller and external camera; no powered test performed. Prior calibrated motor IDs and calibration retained.",
+  "evidence_directory": "/home/aayrapetyan/ollamaforvlas/run/robot-lab-selected-motors-20261024",
+  "cleanup": {
+    "owned_pids": [
+      193189,
+      193155,
+      193541,
+      193318,
+      194010,
+      193981
+    ],
+    "remaining": [],
+    "temporary_listener_18865": "absent"
+  }
+}

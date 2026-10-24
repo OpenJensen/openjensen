@@ -1,6 +1,7 @@
 """Packet loss recovery uses a fake SDK; no serial ports are opened."""
 
 import sys
+import threading
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -43,6 +44,20 @@ class TransportTests(unittest.TestCase):
         self.sleep = patch("hardware.time.sleep")
         self.sleep.start()
         self.addCleanup(self.sleep.stop)
+
+    def test_selected_bus_reads_and_stop_only_address_selected_ids(self):
+        self.bus.joints = ("shoulder_pan", "elbow_flex")
+        self.bus.lock = threading.RLock()
+        self.bus.read = Mock(return_value=2047)
+        self.bus.write = Mock()
+        self.assertEqual(set(self.bus.positions()), set(self.bus.joints))
+        self.assertEqual(set(self.bus.read_calibration()), set(self.bus.joints))
+        self.assertEqual({call.args[1] for call in self.bus.read.call_args_list}, {1, 3})
+        self.bus.disable()
+        self.assertEqual(self.bus.write.call_args_list, [
+            unittest.mock.call("Torque_Enable", 1, 0),
+            unittest.mock.call("Torque_Enable", 3, 0),
+        ])
 
     def test_missing_read_reply_is_retried_then_decoded(self):
         read = self.bus.packet.read2ByteTxRx

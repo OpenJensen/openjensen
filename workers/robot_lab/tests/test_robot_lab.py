@@ -33,6 +33,8 @@ CALIBRATION = {
 
 
 class FakeBus:
+    joints = JOINTS
+
     def __init__(self, port="fake", baudrate=1_000_000):
         self.lock = threading.RLock()
         self.port = self
@@ -62,17 +64,17 @@ class FakeBus:
         return 0
 
     def positions(self):
-        return dict(self.raw)
+        return {j: self.raw[j] for j in self.joints if j in self.raw}
 
     def read_calibration(self):
-        return self.calibration
+        return {j: self.calibration[j] for j in self.joints}
 
     def write_calibration(self, value):
         self.calibration = json.loads(json.dumps(value))
 
     def disable(self):
-        for motor_id in IDS.values():
-            self.write("Torque_Enable", motor_id, 0)
+        for joint in self.joints:
+            self.write("Torque_Enable", IDS[joint], 0)
 
     def check_six(self):
         if self.motors != dict.fromkeys(IDS.values(), 777):
@@ -420,6 +422,64 @@ class SafetyTests(unittest.TestCase):
             )
         )
         self.assertFalse(self.lab.torque)
+
+    def test_selected_motors_control_never_addresses_excluded_joints(self):
+        selected = ["shoulder_pan", "shoulder_lift", "elbow_flex"]
+        def factory(*args):
+            bus = FakeBus(*args)
+            bus.motors = {i: 777 for i in (1, 2, 3)}
+            self.buses.append(bus)
+            return bus
+        self.lab.bus_factory = factory
+        result = self.start(joints=selected)
+        bus = self.buses[-1]
+        self.assertEqual(result["session"]["active_joints"], selected)
+        self.assertEqual(set(result["session"]["positions"]), set(selected))
+        self.lab.jog({"joint": "elbow_flex", "delta": -1})
+        self.lab._tick()
+        with self.assertRaisesRegex(RequestError, "valid joint"):
+            self.lab.jog({"joint": "gripper", "delta": -1})
+        with self.assertRaisesRegex(RequestError, "all six joints"):
+            self.lab.recording_start({})
+        self.lab.stop()
+        self.assertTrue(all(motor_id in (1, 2, 3) for _, motor_id, _ in bus.writes))
+        self.assertEqual(bus.writes[-3:], [("Torque_Enable", i, 0) for i in (1, 2, 3)])
+
+    def test_single_elbow_can_move_to_middle_and_stop(self):
+        self.start(joints=["elbow_flex"], move_to_middle=True)
+        self.lab._tick()
+        self.assertIsNone(self.lab.middle_motion)
+        self.lab.stop()
+        self.assertTrue(all(i == 3 for _, i, _ in self.buses[-1].writes))
+
+    def test_partial_selection_is_validated_before_serial_open(self):
+        for selection in ([], ["elbow_flex", "elbow_flex"], ["missing"], "elbow_flex", [1]):
+            with self.assertRaises(RequestError):
+                self.start(joints=selection)
+        with self.assertRaisesRegex(RequestError, "only in joint control"):
+            self.start(joints=["elbow_flex"], mode="handguide")
+        self.assertEqual(self.buses, [])
+
+    def test_selected_motor_disappearance_remains_a_hardware_failure(self):
+        self.start(joints=["elbow_flex"])
+        bus = self.buses[-1]
+        bus.raw.pop("elbow_flex")
+        with self.assertRaises(HardwareError):
+            self.lab._tick()
+        self.lab.stop()
+        self.assertEqual(bus.writes[-1], ("Torque_Enable", 3, 0))
+
+    def test_missing_selected_motor_aborts_without_enabling_other_motors(self):
+        def factory(*args):
+            bus = FakeBus(*args)
+            bus.motors.pop(3)
+            self.buses.append(bus)
+            return bus
+        self.lab.bus_factory = factory
+        with self.assertRaisesRegex(HardwareError, "Selected motor IDs 3"):
+            self.start(joints=["elbow_flex"])
+        self.assertFalse(any(r == "Torque_Enable" and v for r, _, v in self.buses[-1].writes))
+        self.assertTrue(all(i == 3 for _, i, _ in self.buses[-1].writes))
 
     def test_jog_bounds_and_rate_limit(self):
         self.start()
