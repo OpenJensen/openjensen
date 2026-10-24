@@ -79,12 +79,12 @@ export function WorkspaceDashboard({
   return (
     <div className="workspace-dashboard">
       <div className="dashboard-collections">
-        <button className="dashboard-collection" aria-label="My models" onClick={onModels}>
+        <button className="dashboard-collection" aria-label="Models" onClick={onModels}>
           <span className="dashboard-collection-icon">
             <Icon name="box" size={25} />
           </span>
           <div>
-            <h3>My models</h3>
+            <h3>Models</h3>
             <p>
               {modelsError
                 ? 'Some models unavailable'
@@ -95,12 +95,12 @@ export function WorkspaceDashboard({
           </div>
           <Icon name="arrow" size={20} />
         </button>
-        <button className="dashboard-collection" aria-label="My datasets" onClick={onDatasets}>
+        <button className="dashboard-collection" aria-label="Datasets" onClick={onDatasets}>
           <span className="dashboard-collection-icon">
             <Icon name="database" size={25} />
           </span>
           <div>
-            <h3>My datasets</h3>
+            <h3>Datasets</h3>
             <p>
               {!projectId
                 ? 'Select a project'
@@ -161,7 +161,7 @@ export function WorkspaceDashboard({
                       : 'Check this machine or install the training environment.')))}
             </small>
             <button className="text-link" onClick={onSettings}>
-              {compute.data?.local.enabled ? 'Manage local runs' : 'Configure local runs'} →
+              {compute.data?.local.enabled ? 'Manage local runs' : 'Configure local runs'}
             </button>
           </article>
           <article>
@@ -190,7 +190,7 @@ export function WorkspaceDashboard({
                 : (cloud?.message ?? 'Connect Google Cloud to train on a larger GPU.')}
             </small>
             <button className="text-link" onClick={onSettings}>
-              Manage cloud resources →
+              Manage cloud resources
             </button>
           </article>
           <article>
@@ -214,7 +214,7 @@ export function WorkspaceDashboard({
                 : 'Public datasets work without a token. Add one for private or gated models.'}
             </small>
             <button className="text-link" onClick={onSettings}>
-              Manage connection →
+              Manage connection
             </button>
           </article>
         </div>
@@ -233,7 +233,7 @@ export function WorkspaceDashboard({
         <div className="dashboard-section-heading">
           <h2>Recent datasets</h2>
           <button className="text-link" onClick={onDatasets}>
-            View datasets →
+            View datasets
           </button>
         </div>
         {!projectId ? (

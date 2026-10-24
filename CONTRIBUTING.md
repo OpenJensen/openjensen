@@ -1,4 +1,4 @@
-# Contributing to OPEN JENSEN
+# Contributing to OpenJensen
 
 Use [GitHub issues](https://github.com/OpenJensen/openjensen/issues) for reproducible bugs and bounded proposals. Include the source revision, OS, relevant tool versions, steps, expected behavior and redacted error output. Follow [security reporting](SECURITY.md) for sensitive concerns.
 

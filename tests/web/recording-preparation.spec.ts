@@ -467,7 +467,7 @@ for (const outcome of ['ack', 'error'])
     await selectEpisodes(page);
     await submit(page).click();
     await expect.poll(() => s.posts.length).toBe(1);
-    await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+    await page.getByRole('link', { name: 'Datasets', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Checking dataset…', exact: true })).toBeDisabled();
     await page.getByRole('link', { name: 'Teaching', exact: true }).click();
     await expect(submit(page)).toBeDisabled();
@@ -500,7 +500,7 @@ test('single-group result remains inspectable with explicit training limitation'
   await expect(panel(page).getByRole('button', { name: 'Train on this dataset' })).toBeDisabled();
   await expect(panel(page).getByText(/one lineage group/)).toBeVisible();
   await panel(page).getByRole('button', { name: 'View this dataset' }).click();
-  await expect(page.getByRole('heading', { name: 'Dataset', exact: true, level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Datasets', exact: true, level: 1 })).toBeVisible();
   expect(s.posts).toEqual([]);
 });
 test('two-group exact training handoff refuses omitted history and preserves later manual choice', async ({ page }) => {
@@ -664,7 +664,7 @@ test('unsupported durable endpoint refuses recording POST and preserves exact re
   await expect(submit(page)).toBeDisabled();
   expect(s.posts).toEqual([]);
 });
-for (const destination of ['Dataset', 'Open Jensen workspace home'])
+for (const destination of ['Datasets', 'OpenJensen workspace home'])
   test(`${destination} navigation during fresh recording catalog check prevents POST`, async ({ page }) => {
     const s = await fixture(page);
     await selectEpisodes(page);
@@ -676,7 +676,7 @@ for (const destination of ['Dataset', 'Open Jensen workspace home'])
     gate.release();
     const notice = page.getByText('Selection changed; preparation was not submitted.', { exact: true });
     await expect(notice).toHaveCount(1);
-    if (destination !== 'Dataset') await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+    if (destination !== 'Datasets') await page.getByRole('link', { name: 'Datasets', exact: true }).click();
     await expect(notice).toBeVisible();
     expect(s.posts).toEqual([]);
   });
@@ -689,12 +689,12 @@ test('generic Dataset recovers a recording key and Recording recovers a generic 
   await selectEpisodes(page);
   await submit(page).click();
   await expect(checkSaved(page)).toBeEnabled();
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await page.getByRole('button', { name: 'Check saved request', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Check saved request', exact: true })).toHaveCount(0);
   expect(s.posts).toHaveLength(1);
   // A genuinely different generic request is only admitted after the first key was resolved.
-  await page.getByRole('button', { name: '← Back to library', exact: true }).click();
+  await page.getByRole('button', { name: '← Back to datasets', exact: true }).click();
   s.nextId = 'generic-intake';
   await page.getByLabel('Dataset repository', { exact: true }).fill('owned/recorded');
   await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
@@ -728,14 +728,14 @@ for (const kind of ['generic', 'recording'])
       { recipe: recipe() },
     );
     await page.reload();
-    await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+    await page.getByRole('link', { name: 'Datasets', exact: true }).click();
     const value = job('active-intake', 'alpha', true, 'running');
     if (kind === 'generic') value.request = { source: 'huggingface', repo_id: 'owned/data', revision: 'main' };
     s.jobs.push(value);
     const review = page.getByRole('button', { name: 'Refresh job history', exact: true }),
       allow = page.getByRole('button', { name: 'I reviewed the jobs; allow a new request', exact: true });
     await review.click();
-    await expect(page.getByText(/Dataset intake active-intake is still running/)).toBeVisible();
+    await expect(page.getByText(/Dataset import active-intake is still running/)).toBeVisible();
     await expect(allow).toBeDisabled();
     s.jobs = [];
     s.failHistory = true;
@@ -760,7 +760,7 @@ test('Dataset retry of an unresolved recording request fences navigation during 
   await selectEpisodes(page);
   await submit(page).click();
   await expect(checkSaved(page)).toBeEnabled();
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   const gate = deferred();
   s.catalogGate = gate;
   await page.getByRole('button', { name: 'Retry same request', exact: true }).click();
@@ -777,7 +777,7 @@ test('delayed legacy history response cannot authorize recovery after project na
   const s = await fixture(page);
   await page.evaluate(() => sessionStorage.setItem('firebird:job-attempt:dataset.inspect.recordings:alpha', '{'));
   await page.reload();
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   const gate = deferred();
   let started = false;
   await page.route('**/api/v1/projects/alpha/jobs', async (route) => {
@@ -815,7 +815,7 @@ test('remount preserves newer cancellation receipt instead of replacing it with 
     .poll(() => page.evaluate(() => JSON.parse(sessionStorage.getItem('firebird:recording-receipt:alpha')!).status))
     .toBe('cancelled');
   await panel(page).getByLabel('Saved recording preparation', { exact: true }).selectOption('other-saved');
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await page.getByRole('link', { name: 'Teaching', exact: true }).click();
   await expect(panel(page).getByText(/Job new-preparation accepted · cancelled/)).toBeVisible();
   await expect(panel(page).getByText(/Job new-preparation accepted · queued/)).toHaveCount(0);

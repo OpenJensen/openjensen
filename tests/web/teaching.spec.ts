@@ -377,7 +377,7 @@ test('optional intelligence requires consent and never dispatches a control comm
   const fixture = await intelligence(page);
   await page.reload();
   await page.getByRole('link', { name: 'Teaching', exact: true }).click();
-  const ask = page.getByRole('button', { name: 'Ask Jev for a review suggestion' });
+  const ask = page.getByRole('button', { name: 'Suggest what to review' });
   await expect(ask).toBeDisabled();
   await consentAdvice(page);
   await ask.dblclick();
@@ -403,7 +403,7 @@ test('camera advice displays captured scope and never sends browser pixels', asy
   await page.reload();
   await page.getByRole('link', { name: 'Teaching', exact: true }).click();
   await consentAdvice(page);
-  await page.getByRole('button', { name: 'Ask Mk1.5 about the camera' }).click();
+  await page.getByRole('button', { name: 'Ask about the camera image' }).click();
   await expect(page.getByRole('article', { name: 'Intelligence suggestion' })).toContainText('captured frame 1');
   expect(Object.keys(fixture.posts[0].body).sort()).toEqual([
     'consent',
@@ -441,9 +441,9 @@ test('ambiguous intelligence failure never retries and requires renewed consent'
   await page.reload();
   await page.getByRole('link', { name: 'Teaching', exact: true }).click();
   await consentAdvice(page);
-  await page.getByRole('button', { name: 'Ask Jev for a review suggestion' }).click();
+  await page.getByRole('button', { name: 'Suggest what to review' }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'provider deadline expired' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Ask Jev for a review suggestion' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Suggest what to review' })).toBeDisabled();
   expect(fixture.posts.filter((p) => p.path.endsWith('/decision'))).toHaveLength(1);
   await expect(page.getByRole('article', { name: 'Intelligence suggestion' })).toHaveCount(0);
 });
@@ -454,7 +454,7 @@ test('explicit intelligence cancel preserves request identity and withholds late
   await page.reload();
   await page.getByRole('link', { name: 'Teaching', exact: true }).click();
   await consentAdvice(page);
-  await page.getByRole('button', { name: 'Ask Jev for a review suggestion' }).click();
+  await page.getByRole('button', { name: 'Suggest what to review' }).click();
   await expect.poll(() => fixture.posts.filter((p) => p.path.endsWith('/decision')).length).toBe(1);
   await page.getByRole('button', { name: 'Cancel intelligence request' }).click();
   await expect.poll(() => fixture.posts.filter((p) => p.path.endsWith('/cancel')).length).toBe(1);
@@ -470,7 +470,7 @@ test('revision change cancels advice and cannot promote a late response', async 
   await page.reload();
   await page.getByRole('link', { name: 'Teaching', exact: true }).click();
   await consentAdvice(page);
-  await page.getByRole('button', { name: 'Ask Jev for a review suggestion' }).click();
+  await page.getByRole('button', { name: 'Suggest what to review' }).click();
   await expect.poll(() => fixture.posts.length).toBe(1);
   fixture.changes.revision = 3;
   await expect.poll(() => fixture.posts.filter((p) => p.path.endsWith('/cancel')).length).toBe(1);

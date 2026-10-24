@@ -243,7 +243,7 @@ test('late intake acknowledgement records the job without replacing later stage 
       page.evaluate(() => Object.keys(sessionStorage).filter((key) => key.startsWith('firebird:submission:')).length),
     )
     .toBe(0);
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await expect(page.getByLabel('Dataset repository')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Waiting to inspect' })).not.toBeVisible();
   expect(state.writes).toHaveLength(1);

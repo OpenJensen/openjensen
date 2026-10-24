@@ -85,7 +85,7 @@ test('theme bootstrap matches canonical-first preference reads and survives deni
 test('public labels preserve exact legacy wire and artifact values', () => {
   const reply = { message: 'Experimental Firebird prompt; not a reproduction of the upstream benchmark.' };
   expect(publicMessage(reply.message)).toBe(
-    'Experimental OPEN JENSEN prompt; not a reproduction of the upstream benchmark.',
+    'Experimental OpenJensen prompt; not a reproduction of the upstream benchmark.',
   );
   expect(reply.message).toContain('Experimental Firebird prompt;');
   expect(publicMessage('Historical Firebird results at the original source')).toBe(
@@ -95,7 +95,7 @@ test('public labels preserve exact legacy wire and artifact values', () => {
     format: 'native_quantized',
     metadata: { format: 'firebird_quant', precision: 'int8' },
   } as PolicyArtifact;
-  expect(modelFormat(artifact)).toContain('OPEN JENSEN Quant');
+  expect(modelFormat(artifact)).toContain('OpenJensen Quant');
   expect(artifact.metadata!.format).toBe('firebird_quant');
   expect(publicFormatLabel('safetensors')).toBe('safetensors');
 });

@@ -56,7 +56,7 @@ function connected(provider: Provider, config: NonNullable<Connection['config']>
 }
 
 async function openCompute(page: Page) {
-  await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
+  await page.getByRole('link', { name: 'Settings', exact: true }).click();
   await page.getByRole('button', { name: 'Compute', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Google Cloud', exact: true })).toBeVisible();
 }

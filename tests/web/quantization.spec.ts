@@ -753,7 +753,7 @@ for (const stage of ['Evaluate', 'Run']) {
     await expect(
       page.getByRole('button', { name: stage === 'Evaluate' ? 'Start evaluation' : 'Reload and run', exact: true }),
     ).toBeDisabled();
-    await page.getByRole('button', { name: 'Go to quantization', exact: true }).click();
+    await page.getByRole('button', { name: 'Open Quantize', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Quantization jobs', exact: true })).toBeVisible();
     await chooseTransformationModel(page, 'quantization', 'Choose LoRA checkpoint · recent-100');
     await expectSelectedPolicy(page, 'recent-100');

@@ -95,7 +95,7 @@ export class DatasetUploadError extends Error {
     readonly uploadId: string | null,
   ) {
     super(
-      `${message} ${uploadId ? 'Open the saved upload in My datasets to review or discard unfinished files. A completed import may already be saved.' : 'Refresh My datasets before choosing the files again; an upload may already have been created.'} No upload was retried automatically.`,
+      `${message} ${uploadId ? 'Open the saved upload in Datasets to review or discard unfinished files. A completed import may already be saved.' : 'Refresh Datasets before choosing the files again; an upload may already have been created.'} No upload was retried automatically.`,
     );
     this.name = 'DatasetUploadError';
   }

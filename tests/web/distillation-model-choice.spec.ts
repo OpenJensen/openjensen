@@ -183,7 +183,7 @@ test('manual stage navigation and project switches return to history without a d
   const state = await fixture(page);
   await chooseTransformationModel(page, 'distillation', 'Choose Saved ACT teacher · teacher');
   await expect(panel(page)).toBeVisible();
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await openDistill(page);
   await expect(panel(page)).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Distillation jobs', exact: true })).toBeVisible();

@@ -46,7 +46,7 @@ export function DatasetLibrary({
   return (
     <section className="dataset-library" aria-labelledby="dataset-library-title">
       <div className="library-heading">
-        <h2 id="dataset-library-title">My datasets</h2>
+        <h2 id="dataset-library-title">Saved datasets</h2>
         <div className="workbench-actions">
           {!!datasets.data?.length && (
             <label className="library-search">
@@ -94,8 +94,8 @@ export function DatasetLibrary({
       ) : !entries.length ? (
         <div className="dataset-empty">
           <Icon name="database" size={32} />
-          <h3>{search ? 'No matching datasets' : 'Your dataset collection starts here'}</h3>
-          <p>{search ? 'Try a different name.' : 'Imported and inspected datasets appear here, ready to revisit.'}</p>
+          <h3>{search ? 'No matching datasets' : 'No saved datasets yet'}</h3>
+          <p>{search ? 'Try a different name.' : 'Import a dataset above to inspect it here.'}</p>
         </div>
       ) : (
         <div className="dataset-library-grid">

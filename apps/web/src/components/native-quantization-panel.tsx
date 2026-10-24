@@ -467,7 +467,7 @@ export function NativeQuantizationPanel({
             <div className="native-result-actions">
               {downloads.map((item) => (
                 <button type="button" key={item.id} className="secondary-button" onClick={() => onModel(item.id)}>
-                  View {item.label} in My models
+                  View {item.label} in Models
                 </button>
               ))}
             </div>
