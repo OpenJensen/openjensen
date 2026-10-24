@@ -38,12 +38,33 @@ ID setup, calibration, and enabling control require explicit named UI confirmati
 Calibration first disables torque, captures the manually held middle pose, and
 samples every joint's manually swept range. Wrist roll uses the official full
 0–4095 range. Encoder errors/wraps abort the session, attempting to restore the
-previous motor calibration. Motion requires all six STS3215 models at IDs 1–6
-and a saved calibration matching EEPROM. Enabling motion first writes all six
-current positions as targets, limits speed and acceleration, then enables torque.
-Manual jogs are capped at 2 degrees (gripper 2 percentage points), rate limited,
-and constrained to measured joint limits. Leader control requires a separately
-connected, calibrated leader arm. Handguide mode leaves torque off.
+previous motor calibration. Powered control reuses the upstream LeRobot v0.4.4 SO follower configuration
+and `send_action` methods in [lerobot_control.py](lerobot_control.py), with
+[license](LEROBOT-LICENSE) and [provenance](LEROBOT-PROVENANCE.json). No local
+Torch/training installation is needed to execute these copied controller methods.
+Motor setup uses Return_Delay_Time=0, Maximum_Acceleration=254,
+Acceleration=254, and the official P/I/D gains 16/0/32. A prior companion's
+Goal_Velocity=100 cap is explicitly reset to zero/default. Only the gripper gets
+the upstream 500/250/25 torque/current/overload protection; arm current and torque
+limits are not raised beyond their saved hardware settings. The volatile torque
+limit is restored from the saved maximum (gripper 500), matching servo power-on
+behavior and clearing a possible interrupted 10% identification limit. Read-back
+must match before any selected motor is enabled.
+
+Sliders, steps, middle positioning and leader tracking send full calibrated
+position goals using the SDK's GroupSyncWrite, following LeRobot's default
+`max_relative_target=None`. The former four-degrees/second intermediate goals,
+two-degree leader clipping and immediate five-degree tracking abort are removed.
+Full targets may produce faster motion and a stronger response while a loaded
+joint is behind its requested position. Keep the entire path clear. Encoder lag
+is not proof of mechanical damage or an automatic stop condition.
+
+Calibration matching, current-pose hold before enabling, selected-motor scope,
+calibrated position limits, hardware/communication faults and explicit Enable/Stop
+remain enforced by the companion. Its upstream configuration context defers
+re-enabling torque until all settings and hold targets have been verified.
+Handguide mode remains torque-off. Software settings cannot repair a weak or
+incorrect power supply, voltage drop, a tight joint or an unsuitable servo variant.
 
 The software watchdog disables torque after a 2-second browser heartbeat loss
 (10 seconds during calibration). Stop/shutdown attempt every motor and close

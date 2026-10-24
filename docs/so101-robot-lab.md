@@ -43,7 +43,7 @@ This is a timing workaround, not a documented unique-serial addressing feature. 
 
 **Calibrate** first verifies all six IDs and disables torque. Support the arm, capture the middle pose, move the joints gently through their usable ranges, then save. Saved calibration uses the official LeRobot JSON structure and namespace. Range validation rejects incomplete or invalid measurements; cancel preserves the previous calibration. The guide does not command automatic sweeps.
 
-**Teleoperate** requires a saved calibration. Manual jogs are small and bounded; leader mode requires a separate calibrated leader controller. Hand-guide mode leaves torque disabled and can record passive demonstrations. Enabling motion is an explicit UI action. Manual control initially holds the current pose; in leader mode the follower immediately begins tracking the leader with bounded targets. The session stops on serial errors, an expired browser heartbeat or **Stop**. Disabling torque can let the arm fall; support it and keep the motor power switch accessible.
+**Teleoperate** requires a saved calibration. Joint control uses LeRobot SO101 configuration and direct calibrated position targets; leader mode requires a separate calibrated leader controller. Hand-guide mode leaves torque disabled and can record passive demonstrations. Enabling motion is an explicit UI action. Manual control initially holds the current pose; in leader mode the follower immediately tracks the leader using full calibrated targets. Sliders, steps and movement to the recorded middle send full requested positions and may move faster than earlier versions. Keep the entire path clear. The session stops on serial errors, an expired browser heartbeat or **Stop**. Disabling torque can let the arm fall; support it and keep the motor power switch accessible.
 
 **Record** captures calibrated states, actual commanded actions and the selected camera into a local LeRobot v3 dataset. Enter a task and dataset name, start an episode, then save or discard that take. Finish before importing the dataset into the selected project. No automatic Hugging Face upload occurs. Capture errors remain visible; partial episodes are not reported as successful demonstrations. If a recording has no saved episodes, **Close unsaved recording** stops capture and preserves its unsaved files. Create a new dataset with a different name to retry at a lower frame rate. Closed recordings cannot be imported as finalized datasets. Monitor disk space during long captures.
 
@@ -52,3 +52,23 @@ This is a timing workaround, not a documented unique-serial addressing feature. 
 The token stays under the companion installation directory. Linux service logs use `journalctl --user -u openjensen-robot-lab.service`; restart with `systemctl --user restart openjensen-robot-lab.service`. macOS logs stay under the installation directory. Restart with `launchctl kickstart -k gui/$(id -u)/com.openjensen.robot-lab`; use the same command with `com.openjensen.robot-lab.tunnel` for the SSH connection. Stop a service with `launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/<label>.plist`. Stopping or uninstalling the runtime must not delete captured datasets or calibrations.
 
 Companion API details are in [the protocol](../workers/robot_lab/API.md). Automated tests use injected fake buses and cameras; real-arm motion, ID changes and calibration require a connected, prepared arm and are separate from contract/browser test success.
+
+
+## LeRobot control profile
+
+The companion reuses the Apache-2.0-licensed LeRobot v0.4.4 SO follower setup and
+position-action methods. It uses the stock acceleration/PID settings and batched
+position packets, with no relative-target clipping. The former custom slow
+trajectories, speed cap and five-degree lag abort are removed. Gripper protection,
+calibration limits, explicit enable and the control heartbeat remain in place.
+The status response identifies the active profile; an older companion is labeled
+as an earlier profile in the control screen.
+
+Normal control also restores the volatile torque ceiling from the saved motor
+maximum, so an interrupted low-torque identification cannot silently leave the
+arm limited to 10%. This follows the manufacturer's [power-on register behavior](https://docs.waveshare.com/Memory_Map_Explanation/ST_Servo_Memory_Map_Explanation).
+Physical motor torque has not been measured by the software checks.
+If a shoulder or elbow still needs support, verify the actual servo variant and
+its matching motor power supply, cable voltage drop and joint binding. Do not
+choose a higher supply voltage without checking the motor variant. Hardware
+acceptance requires a connected arm with the operator present.

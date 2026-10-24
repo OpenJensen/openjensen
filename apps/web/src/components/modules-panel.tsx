@@ -155,7 +155,7 @@ export function ModulesPanel() {
                   Add module
                 </button>
               )}
-              {item.managed && <span className="module-muted">Managed by server</StatusBadge>}
+              {item.managed && <span className="module-muted">Managed by server</span>}
             </div>
             {!item.configured && (
               <details>

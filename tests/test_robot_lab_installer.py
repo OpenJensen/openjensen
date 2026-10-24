@@ -42,7 +42,7 @@ def test_reinstall_stops_only_managed_services_before_runtime_mutation(
     home = tmp_path / "home with $dollars and %percent"
     source = tmp_path / "source"
     source.mkdir()
-    for name in installer.SOURCE_MODULES:
+    for name in (*installer.SOURCE_MODULES, *installer.SUPPORT_FILES):
         (source / name).write_text("# supplied source module\n")
     vendor = source / "_vendor/servotools"
     vendor.mkdir(parents=True)
@@ -166,7 +166,7 @@ def test_vendor_sources_are_complete_regular_and_validated_before_any_mutation(
 ):
     source = tmp_path / "source"
     source.mkdir()
-    for name in installer.SOURCE_MODULES:
+    for name in (*installer.SOURCE_MODULES, *installer.SUPPORT_FILES):
         (source / name).write_text("# source\n")
     vendor = source / "_vendor/servotools"
     vendor.mkdir(parents=True)
