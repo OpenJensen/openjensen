@@ -10,8 +10,9 @@ const values = (value: number) => Object.fromEntries(joints.map(name => [name, v
 function initialStatus(calibrated = false): any {
   return { ok: true, connected: true, label: 'This Mac', version: '1', platform: 'Darwin', dependencies: { lerobot: { installed: false, version: null }, serial: { installed: true, version: '3.5' }, cv2: { installed: true, version: '4.12.0' }, scservo_sdk: { installed: true, version: '1.0.0' } }, capabilities: { large_joint_steps: true, arm_readiness: true, middle_tolerance: true, joint_sliders: true, calibration_persistence: true, partial_control: true, move_to_middle: true, mapping_verification: true, assembled_setup: true, probe: true, camera: true, motor_setup: true, calibration: true, control: true, recording: true }, session: { mode: 'idle', robot_id: null, port: null, role: null, positions: {}, torque_enabled: false, watchdog_seconds: 2, error: null }, calibration: { phase: 'idle', mins: {}, maxes: {}, offsets: {}, path: null }, recording: { active: false, dataset_id: null, episode_active: false, frames: 0, episodes: 0, fps: 10, error: null }, assembled: { phase: 'idle', ids: [], selected_joint: null, detected_id: null, candidate_delta: null, mapping: {}, message: 'Start experimental assembled setup.', error: null, log: [], progress: null, calibration_required: false }, calibrations: calibrated ? [{ robot_id: 'my-so101', role: 'follower', path: 'private-calibration.json' }] : [], datasets: [] };
 }
-async function fixture(page: Page, calibrated = false) {
+async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin') {
   const state = { status: initialStatus(calibrated), writes: [] as { path: string; body: any }[], errors: [] as string[], datasetReads: 0, cameraFailure: false, stopError: null as string | null, centerError: null as string | null, portsConnected: true, middleInProgress: false, encoderLag: false, jogDelay: 0, jogStaleResponse: false, robotDatasetReads: 0, heartbeatFailures: 0, statusFailures: false, dropCalibrationReply: false };
+  if (hostPlatform === 'Linux') { state.status.platform = 'Linux'; state.status.label = 'Linux robot computer'; }
   page.on('pageerror', error => state.errors.push(error.message));
   await page.route('**/api/v1/**', async (route) => {
     if (await fulfillApplicationUpdateRead(route)) return;
@@ -20,7 +21,7 @@ async function fixture(page: Page, calibrated = false) {
     if (path.startsWith('/api/v1/robot-lab/')) {
       const action = path.slice('/api/v1/robot-lab'.length);
       if (action === '/status') return state.statusFailures ? route.abort('failed') : route.fulfill({ json: state.status });
-      if (action === '/devices') return route.fulfill({ json: { ports: state.portsConnected ? [{ device: port, description: 'SO-101 controller', manufacturer: 'USB serial', serial_number: 'test-1' }, { device: '/dev/cu.usbmodem-leader', description: 'Leader controller', manufacturer: 'USB serial', serial_number: 'test-2' }] : [], cameras: [{ index: 0, name: 'Robot camera', width: 640, height: 480 }], camera_error: null } });
+      if (action === '/devices') return route.fulfill({ json: { ports: state.portsConnected ? [{ device: hostPlatform === 'Linux' ? '/dev/ttyACM0' : port, description: 'SO-101 controller', manufacturer: 'USB serial', serial_number: 'test-1' }, { device: '/dev/cu.usbmodem-leader', description: 'Leader controller', manufacturer: 'USB serial', serial_number: 'test-2' }] : [], cameras: [{ index: 0, name: 'Robot camera', width: 640, height: 480 }], camera_error: null } });
       if (action === '/camera.jpg') return state.cameraFailure ? route.fulfill({ status: 503, json: { detail: 'Camera disconnected.' } }) : route.fulfill({ contentType: 'image/png', body: pixel });
       if (action === '/datasets') { state.robotDatasetReads++; return route.fulfill({ json: { datasets: state.status.datasets } }); }
       if (action === '/probe') return route.fulfill({ json: { port, baudrate: 1000000, motors: [{ id: 1, model: 777, stable: true, responses: 3 }], ready: false, expected_ids: [1, 2, 3, 4, 5, 6], warning: 'A response at one ID cannot prove that only one physical motor is connected.' } });
@@ -72,7 +73,7 @@ async function fixture(page: Page, calibrated = false) {
   });
   await page.goto('/robot-lab/');
   await expect(page.getByRole('heading', { level: 1, name: 'Robot Lab', exact: true })).toBeVisible();
-  await expect(page.getByLabel('Robot USB port')).toHaveValue(port);
+  await expect(page.getByLabel('Robot USB port')).toHaveValue(hostPlatform === 'Linux' ? '/dev/ttyACM0' : port);
   return state;
 }
 const tab = (page: Page, title: string) => page.getByRole('navigation', { name: 'Robot setup steps' }).getByRole('button', { name: new RegExp(title) });
@@ -232,7 +233,7 @@ test('offline companion cannot start hardware actions and does not retry mutatio
   const state = await fixture(page, true);
   state.status = { connected: false, ok: false, label: 'This Mac', message: 'Companion is offline.' };
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
-  await expect(page.getByText('Mac companion unavailable', { exact: true })).toBeVisible();
+  await expect(page.getByText('Robot companion unavailable', { exact: true })).toBeVisible();
   await tab(page, 'Motor IDs').click();
   await page.getByText('Advanced: configure one physically isolated motor', { exact: true }).click();
   await page.getByRole('checkbox', { name: /Only the gripper motor is connected/ }).check();
@@ -299,7 +300,7 @@ test('offline joint illustration still selects and never invents measurements or
   const state = await fixture(page);
   state.status = { ok: false, connected: false, message: 'Companion offline.' };
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
-  await expect(page.getByText('Mac companion unavailable', { exact: true })).toBeVisible();
+  await expect(page.getByText('Robot companion unavailable', { exact: true })).toBeVisible();
   await tab(page, 'Motor IDs').click();
   const guide = page.getByRole('region', { name: 'SO-101 joint illustration', exact: true });
   await guide.getByRole('button', { name: 'Joint 6: Gripper', exact: true }).click();
@@ -751,7 +752,7 @@ test('calibration survives page reload, hidden tab and a temporary web disconnec
     document.dispatchEvent(new Event('visibilitychange'));
   });
   state.statusFailures = true;
-  await expect(page.getByText('Reconnecting… Calibration continues on your Mac. Captured values are retained.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Reconnecting… Calibration continues on the robot computer. Captured values are retained.', { exact: true })).toBeVisible();
   await expect(save).toBeVisible();
   await expect(save).toBeDisabled();
   state.statusFailures = false;
@@ -1036,4 +1037,18 @@ test('large joint steps are hidden when the connected companion does not support
   await startManual(page);
   await expect(page.getByLabel('Joint step size').locator('option')).toHaveText(['0.5° / %','1° / %','2° / %']);
   expect(writes(state,'/control/jog')).toEqual([]);
+});
+
+
+test('Linux companion discovers USB and camera without motor commands', async ({ page }) => {
+  const state = await fixture(page, false, 'Linux');
+  await expect(page.getByText('Linux robot computer connected', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Robot USB port')).toHaveValue('/dev/ttyACM0');
+  await tab(page, 'Record').click();
+  await expect(page.getByRole('heading', { name: 'Datasets on the robot computer', exact: true })).toBeVisible();
+  state.cameraFailure = true;
+  await page.getByRole('button', { name: 'Start preview', exact: true }).click();
+  await expect(page.getByText('Camera could not open. Check camera permissions on the robot computer or close another app using it.', { exact: true })).toBeVisible();
+  expect(state.writes).toEqual([]);
+  expect(state.errors).toEqual([]);
 });
