@@ -240,7 +240,7 @@ def test_upstream_change_requires_new_confirmation(tmp_path, deployment, monkeyp
         )
 
 
-@pytest.mark.parametrize("failure", [None, "migration", "startup", "start"])
+@pytest.mark.parametrize("failure", [None, "migration", "startup", "start", "records"])
 def test_workspace_activation_and_full_rollback(deployment, monkeypatch, failure):
     root, config, _ = deployment
     release = root / "releases/new"
@@ -284,6 +284,8 @@ def test_workspace_activation_and_full_rollback(deployment, monkeypatch, failure
             raise RuntimeError("Startup fixture failure")
 
     monkeypatch.setattr(runner, "health", healthy)
+    snapshots = iter([{"preserved"}, {"lost"} if failure == "records" else {"preserved"}])
+    monkeypatch.setattr(runner, "project_ids", lambda _: next(snapshots))
     ident = "a" * 32
     if failure:
         with pytest.raises(RuntimeError):
@@ -300,7 +302,11 @@ def test_workspace_activation_and_full_rollback(deployment, monkeypatch, failure
     assert (root / "current").resolve() == (root / "releases/old" if failure else release)
     state = json.loads((root / "run/application-update.json").read_text())
     assert state["phase"] == (
-        "rolled_back" if failure in {"startup", "start"} else "failed" if failure else "complete"
+        "rolled_back"
+        if failure in {"startup", "start", "records"}
+        else "failed"
+        if failure
+        else "complete"
     )
     assert events[-1] == "start"
 

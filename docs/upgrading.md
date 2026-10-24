@@ -84,7 +84,7 @@ A confirmed update blocks new writes, refuses active jobs or Robot Lab sessions,
 fetches the exact confirmed main commit and builds a separate application release.
 It then stops the API, takes a complete workspace backup, validates migrations on a
 copy, activates that copy and the new release, restarts the service and verifies
-its reported commit. The browser reconnects and reloads when that version is ready.
+its reported commit and preserved project identities. The browser reconnects and reloads when that version is ready.
 A failed migration or startup retains/restores the previous release **and its
 original workspace**, including configuration, datasets and model references.
 
@@ -97,7 +97,8 @@ backups/releases only after checking live runtime dependencies. A recovery-requi
 status blocks further writes and needs server administration; preserve all copies
 before restoring as described above.
 
-Update administration is private to the loopback/SSH workspace. The public gateway
+Install the public gateway from the same release before enabling updates on an
+older deployment. Update administration is private to the loopback/SSH workspace. The public gateway
 blocks these routes, including encoded paths. Source-only installations show
 version/update information but need the manual procedure above or a configured
 managed deployment. Containers must be rebuilt by their deployment manager; frozen

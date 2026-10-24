@@ -214,6 +214,14 @@ def health(config, commit):
     raise RuntimeError("The selected application did not become healthy.")
 
 
+def project_ids(config):
+    with urlopen(f"http://127.0.0.1:{config['port']}/api/v1/projects", timeout=10) as response:
+        values = json.load(response)
+    if not isinstance(values, list):
+        raise ValueError("Could not verify workspace projects.")
+    return {value["id"] for value in values}
+
+
 def update(config, target, installed, operation):
     import fcntl
 
@@ -259,6 +267,7 @@ def update(config, target, installed, operation):
             ) as response:
                 if json.load(response) != {"idle": True}:
                     raise ValueError("The server is no longer idle.")
+            preserved_projects = project_ids(config)
             phase("backing_up", "Stopping the server and backing up the workspace…")
             service(config, "stop")
             stopped = True
@@ -279,6 +288,8 @@ def update(config, target, installed, operation):
             service(config, "start")
             stopped = False
             health(config, target)
+            if project_ids(config) != preserved_projects:
+                raise RuntimeError("Workspace project verification failed.")
             phase("complete", "Update installed. Reconnecting to the new version…")
         except Exception:
             import traceback
