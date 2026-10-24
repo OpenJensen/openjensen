@@ -4,7 +4,7 @@ Run this on the Linux computer physically connected to the SO-101 controller and
 The installer runs with system Python 3.10+ and creates the Python 3.14.7 hardware runtime using [uv](https://docs.astral.sh/uv/). From the repository root:
 
 ```sh
-python3 deploy/linux/install_robot_lab.py --source workers/robot_lab --ssh-host xbox-360
+python3 deploy/linux/install_robot_lab.py --source workers/robot_lab --ssh-host application-server
 ```
 
 The shared installer creates a private runtime in `~/.local/share/jensen/robot-lab`,
@@ -18,7 +18,7 @@ and `--arrow-site-packages` reuse compatible existing dependencies just as on ma
 its token and data, and stops only these managed services before replacing code.
 
 The companion binds to `127.0.0.1:18101`. `--ssh-host` requires an already authorized
-SSH alias and creates a private reverse bridge to Xbox plus a local workspace
+SSH alias and creates a private reverse bridge to the application server plus a local workspace
 forward at [localhost:18096](http://127.0.0.1:18096/robot-lab/). Follow the
 [connection-file setup](../../docs/so101-robot-lab.md) on the application host; the
 private companion token stays out of the browser. Only one companion can own the

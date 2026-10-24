@@ -56,7 +56,7 @@ updates that server for all its users; it does not install software on the brows
 computer. Checking never installs anything. There is no unattended update timer.
 
 Automatic installation supports macOS/Linux **Supervisor deployments** using the
-[release-directory layout](../deploy/xbox/README.md): `current` points into
+[release-directory layout](../deploy/linux-server/README.md): `current` points into
 `releases/`, with a separate `data/`, `run/`, `private/` and `supervisord.conf`.
 The service must load its code and web files from `current`, and read
 `JENSEN_DATA_DIR` (or the legacy alias) from the persistent `data/` directory.

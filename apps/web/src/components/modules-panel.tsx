@@ -220,7 +220,7 @@ export function ModulesPanel() {
               )}
             </div>
             {item.ready ? (
-              <span className="cloud-status cloud-status-connected">Installed</span>
+              <StatusBadge tone="success">Installed</StatusBadge>
             ) : (
               <button
                 className="secondary-button"
@@ -251,7 +251,7 @@ export function ModulesPanel() {
               Cancel training setup
             </button>
           ) : training.data?.status === 'succeeded' ? (
-            <span className="cloud-status cloud-status-connected">Installed</span>
+            <StatusBadge tone="success">Installed</StatusBadge>
           ) : (
             <button
               className="secondary-button"

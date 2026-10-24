@@ -13,7 +13,7 @@ python3 deploy/macos/install_robot_lab.py --source workers/robot_lab --ssh-host 
 python3 deploy/linux/install_robot_lab.py --source workers/robot_lab --ssh-host application-server
 ```
 
-On macOS, the installer creates an isolated runtime under `~/.local/share/jensen/robot-lab`, private data under `~/Library/Application Support/OpenJensen/robot-lab`, and two user LaunchAgents: `com.openjensen.robot-lab` and `com.openjensen.robot-lab.tunnel`. The companion listens only on 127.0.0.1:18101; the private SSH tunnel exposes it only on Xbox loopback and opens the private workspace at http://127.0.0.1:18096/. The operator must already have authorized SSH access to that host.
+On macOS, the installer creates an isolated runtime under `~/.local/share/jensen/robot-lab`, private data under `~/Library/Application Support/OpenJensen/robot-lab`, and two user LaunchAgents: `com.openjensen.robot-lab` and `com.openjensen.robot-lab.tunnel`. The companion listens only on 127.0.0.1:18101; the private SSH tunnel exposes it only on the application server loopback and opens the private workspace at http://127.0.0.1:18096/. The operator must already have authorized SSH access to that host.
 
 On Linux, the same isolated hardware runtime uses systemd user services and private capture data under `~/.local/share/OpenJensen/robot-lab` (or `$XDG_DATA_HOME/OpenJensen/robot-lab`). See [Linux installation and operations](../deploy/linux/README.md) for device permissions, headless setup and service commands. The companion supports USB serial adapters and V4L2 cameras; it excludes metadata-only camera nodes without starting capture. Stop the previous computer's SSH tunnel before switching the bridge to another computer.
 

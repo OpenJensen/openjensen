@@ -4,19 +4,15 @@ OpenJensen has two identifiers: a package version and an exact source commit. Th
 version button in the header shows both, the server being controlled, upstream
 `main`, and the latest published GitHub release.
 
-As of 2026-10-24:
-
 | Identifier | Value |
 | --- | --- |
-| Latest published release | [`v0.0.1`](https://github.com/OpenJensen/openjensen/releases/tag/v0.0.1), published 2026-10-04 |
+| Latest published release | [GitHub releases](https://github.com/OpenJensen/openjensen/releases/latest) |
 | Current core, web and desktop package version | `0.1.1` |
 | Current development build | The commit displayed by the running server |
 
 A package containing `0.1.1` is not evidence that a `v0.1.1` release exists.
 Source builds between releases are identified by their commit. Release tags are
-immutable. The next planned release is `v0.1.1`. Publish it after the updater, module installer
-and remaining Robot Lab changes are integrated and the final commit passes CI.
-No `v0.1.0` release was published.
+immutable. [Version 0.1.1](releases/0.1.1.md) follows v0.0.1; no v0.1.0 release was published.
 
 ## Release policy
 

@@ -85,7 +85,7 @@ Dataset readers become available after successful dependency verification.
 
 These actions install on the **server**, even from another device's browser.
 For an arm connected to a Mac, install and pair the Mac companion on that Mac;
-installing Robot Lab dependencies on Xbox does not install a remote service or
+installing Robot Lab dependencies on the application server does not install a remote service or
 change USB/motor settings. Simulation/Teaching require the external Isaac runtime
 and scene configuration. Augmentation needs provider credentials; Decision needs
 model files and license acceptance. The UI links to setup without claiming those
