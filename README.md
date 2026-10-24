@@ -129,6 +129,7 @@ uv run --frozen pytest -q
 uv run --frozen ruff check packages/core scripts tests
 uv run --frozen ruff format --check packages/core scripts tests
 pnpm check:web
+pnpm format:check
 pnpm build:web
 pnpm exec playwright install chromium
 pnpm test:web

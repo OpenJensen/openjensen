@@ -18,6 +18,7 @@ uv run --no-sync python scripts/export_openapi.py
 pnpm generate:client
 git diff --exit-code -- packages/core/openapi.json apps/web/src/lib/api.generated.ts
 pnpm check:web
+pnpm format:check
 pnpm build:web
 pnpm exec playwright install --with-deps --only-shell chromium
 pnpm test:web --retries=0

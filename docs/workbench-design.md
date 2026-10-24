@@ -8,6 +8,7 @@
 From the repository root, run:
 
 ```sh
+pnpm format
 pnpm check:web
 pnpm build:web
 pnpm exec playwright install chromium
