@@ -28,6 +28,11 @@ Do not repeat field labels, navigation labels, and instructions as subtitles. Ke
 consequential action details (torque, persistent writes, incomplete recovery) visible
 at the action that needs them.
 
+Write status and error messages as one short sentence: what happened, then the next
+step. Do not list what an action does not do or what has not been measured; state
+measured results and leave validation scope to the documentation. Consent text names
+the recipient and any charge once, at the checkbox.
+
 Robot illustrations must distinguish the model from live telemetry. Use the actual
 mechanism and joint axes; motion previews should be explicit and bounded, with a
 static alternative for reduced motion. Verify them in light and dark themes and at
