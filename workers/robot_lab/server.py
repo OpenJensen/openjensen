@@ -22,6 +22,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from assembled_session import AssembledSession, CalibrationRevisions, empty_assembled_state
+from calibration_draft import CalibrationDraft, file_hash
 from camera import CameraPool
 from dataset import DatasetWriter, atomic_json, dataset_file, list_datasets, manifest, safe_slug
 from dispatch import MainThreadDispatcher
@@ -204,6 +205,23 @@ class RobotLab:
             "offsets": {},
             "path": None,
         }
+        self.calibration_draft = CalibrationDraft(self.data_dir)
+        self.calibration_profile_hash = None
+        try:
+            draft = self.calibration_draft.read()
+            if draft:
+                self.calibration_state = dict(
+                    draft["state"],
+                    phase="interrupted",
+                    interrupted_stage=draft["state"]["phase"],
+                    recoverable=True,
+                    error="Calibration checkpoint recovered on the Mac",
+                    robot_id=draft["robot_id"],
+                    role=draft["role"],
+                    port=draft["port"],
+                )
+        except (ValueError, KeyError, TypeError, OSError) as error:
+            self.calibration_state["error"] = f"Calibration checkpoint needs inspection: {error}"
         self.heartbeat = time.monotonic()
         self.last_jog = 0.0
         self.writer = None
@@ -294,6 +312,7 @@ class RobotLab:
                 "assembled_setup": hardware,
                 "mapping_verification": hardware,
                 "calibration": hardware,
+                "calibration_persistence": hardware,
                 "control": hardware,
                 "move_to_middle": hardware,
                 "partial_control": hardware,
@@ -307,16 +326,17 @@ class RobotLab:
                 "role": self.role,
                 "positions": dict(self.positions),
                 "active_joints": list(self.calibration)
-                if self.mode in {"manual", "leader", "handguide"} else [],
+                if self.mode in {"manual", "leader", "handguide"}
+                else [],
                 "targets": dict(self.action) if self.mode in {"manual", "leader"} else {},
                 "torque_enabled": self.torque,
                 "centering": {
                     "active": middle_motion is not None,
                     "progress": middle_motion.progress if middle_motion else 1.0,
                 },
-                "watchdog_seconds": 10.0
-                if self.mode in {"calibration", "setup", "verification"}
-                else 2.0,
+                "watchdog_seconds": None
+                if self.mode == "calibration"
+                else (10.0 if self.mode in {"setup", "verification"} else 2.0),
                 "error": self.error,
             },
             "calibration": json.loads(json.dumps(self.calibration_state)),
@@ -574,8 +594,133 @@ class RobotLab:
                 controller.start()
         return self.status()
 
+    def _checkpoint_calibration(self, *, force=False):
+        if self.original_calibration is None or self.calibration_state["phase"] not in {
+            "center",
+            "ranges",
+        }:
+            return
+        self.calibration_draft.write(
+            {
+                "version": 1,
+                "robot_id": self.robot_id,
+                "role": self.role,
+                "port": self.port,
+                "profile_hash": self.calibration_profile_hash,
+                "original": self.original_calibration,
+                "state": json.loads(json.dumps(self.calibration_state)),
+            },
+            force=force,
+        )
+
+    def calibration_cancel(self):
+        self.stop()
+        with self.lock:
+            self.calibration_draft.archive("cancelled")
+            self.calibration_state = {
+                "phase": "idle",
+                "mins": {},
+                "maxes": {},
+                "offsets": {},
+                "path": None,
+            }
+            self.error = None
+        return self.status()
+
+    def _calibration_resume(self):
+        with self.lock:
+            self._idle()
+            draft = self.calibration_draft.read()
+            if draft is None:
+                raise RequestError("No captured calibration to resume")
+            robot_id, role = draft["robot_id"], draft["role"]
+            path = self.calibration_path(robot_id, role)
+            if file_hash(path) != draft["profile_hash"]:
+                raise RequestError(
+                    "Saved calibration changed after capture; inspect before resuming"
+                )
+            port = self._port(draft["port"])
+            state = dict(draft["state"], path=str(path))
+            expected = draft["original"]
+            temporary = (
+                {
+                    j: dict(
+                        expected[j], homing_offset=state["offsets"][j], range_min=0, range_max=4095
+                    )
+                    for j in JOINTS
+                }
+                if state["phase"] == "ranges"
+                else expected
+            )
+            generation = self.generation
+            bus = self.bus_factory(port)
+            with self.stop_lock, self.lifecycle_lock:
+                if generation != self.generation:
+                    bus.close()
+                    raise RequestError("Resume cancelled by Stop")
+                self.pending_bus = bus
+            known_configuration = False
+            try:
+                with bus.lock:
+                    bus.check_six()
+                    current = bus.read_calibration()
+                    if current not in (expected, temporary):
+                        raise RequestError(
+                            "Motor configuration changed; captured calibration cannot be resumed"
+                        )
+                    known_configuration = True
+                    with self.lifecycle_lock:
+                        if generation != self.generation:
+                            raise RequestError("Resume cancelled by Stop")
+                        self.original_calibration = expected
+                    bus.disable()
+                    if generation != self.generation:
+                        raise RequestError("Resume cancelled by Stop")
+                    if current != temporary:
+                        bus.write_calibration(temporary)
+                    if bus.read_calibration() != temporary:
+                        raise HardwareError(
+                            "Captured calibration settings did not verify; motion remains off"
+                        )
+                    for motor_id in IDS.values():
+                        if generation != self.generation:
+                            raise RequestError("Resume cancelled by Stop")
+                        bus.write("Lock", motor_id, 0)
+                        bus.write("Operating_Mode", motor_id, 0)
+                    raw = validate_raw(bus.positions())
+            except Exception:
+                try:
+                    with bus.lock:
+                        bus.disable()
+                        if known_configuration and generation == self.generation:
+                            bus.write_calibration(expected)
+                finally:
+                    bus.close()
+                    if self.pending_bus is bus:
+                        self.pending_bus = None
+                        self.original_calibration = None
+                raise
+            with self.stop_lock, self.lifecycle_lock:
+                if generation != self.generation:
+                    bus.close()
+                    raise RequestError("Resume cancelled by Stop")
+                self.bus, self.pending_bus = bus, None
+                self.mode, self.port, self.robot_id, self.role = "calibration", port, robot_id, role
+                self.generation += 1
+                self.original_calibration = expected
+                self.calibration_profile_hash = draft["profile_hash"]
+                self.calibration_state = state
+                self.positions, self.torque, self.error = raw, False, None
+                self.heartbeat = time.monotonic()
+        return self.status()
+
     def calibration_start(self, payload):
         require(payload, "confirm", "START CALIBRATION")
+        resume = payload.get("resume", False)
+        if type(resume) is not bool:
+            raise RequestError("Resume must be a boolean")
+        if resume:
+            return self._calibration_resume()
         with self.lock:
             self._idle()
             robot_id = safe_slug(payload.get("robot_id"))
@@ -620,6 +765,8 @@ class RobotLab:
                 self.generation += 1
                 self.mode, self.port, self.robot_id, self.role = "calibration", port, robot_id, role
                 self.original_calibration = original
+                self.calibration_profile_hash = file_hash(path)
+                self.calibration_draft.archive("restarted")
                 self.calibration_state = {
                     "phase": "center",
                     "mins": {},
@@ -627,7 +774,9 @@ class RobotLab:
                     "offsets": {},
                     "path": str(path),
                 }
+                self.torque = False
                 self.heartbeat, self.error = time.monotonic(), None
+                self._checkpoint_calibration(force=True)
         return self.status()
 
     def calibration_center(self, payload):
@@ -670,6 +819,7 @@ class RobotLab:
                 self.calibration_state.update(
                     phase="ranges", offsets=offsets, mins=dict(raw), maxes=dict(raw)
                 )
+                self._checkpoint_calibration(force=True)
                 self.heartbeat = time.monotonic()
         return self.status()
 
@@ -726,6 +876,7 @@ class RobotLab:
                     )
                     self.original_calibration = None
                     state["phase"] = "saved"
+                    self.calibration_draft.archive("saved")
         self.stop()
         return self.status()
 
@@ -736,7 +887,8 @@ class RobotLab:
             raise RequestError("Choose manual, leader or handguide mode")
         selection = payload.get("joints", list(JOINTS))
         if (
-            not isinstance(selection, list) or not selection
+            not isinstance(selection, list)
+            or not selection
             or any(not isinstance(j, str) or j not in JOINTS for j in selection)
             or len(set(selection)) != len(selection)
         ):
@@ -968,6 +1120,11 @@ class RobotLab:
             try:
                 with device.lock:
                     if getattr(device, "opened", True):
+                        if device is bus:
+                            try:
+                                self._checkpoint_calibration(force=True)
+                            except Exception as caught:
+                                errors.append(f"Calibration checkpoint failed: {caught}")
                         device.disable()
                         if device is bus and self.original_calibration is not None:
                             device.write_calibration(self.original_calibration)
@@ -983,6 +1140,12 @@ class RobotLab:
                 + "; ".join(errors)
             )
         if self.calibration_state["phase"] in ("center", "ranges"):
+            self.calibration_state.update(
+                recoverable=self.calibration_draft.path.exists(),
+                robot_id=self.robot_id,
+                role=self.role,
+                port=self.port,
+            )
             if reason or errors:
                 self.calibration_state.update(
                     interrupted_stage=self.calibration_state["phase"],
@@ -1091,6 +1254,7 @@ class RobotLab:
                         self.calibration_state["maxes"][joint] = max(
                             self.calibration_state["maxes"][joint], position
                         )
+                    self._checkpoint_calibration()
                 return
             positions = {
                 joint: normalized(joint, value, self.calibration) for joint, value in raw.items()
@@ -1159,8 +1323,10 @@ class RobotLab:
 
     def _watchdog(self):
         while not self.finished.wait(0.1):
-            if self.mode != "idle" and time.monotonic() - self.heartbeat > (
-                10 if self.mode in {"calibration", "setup", "verification"} else 2
+            # Calibration is unpowered and owned by this Mac process. Browser
+            # connectivity must not discard a captured middle or joint ranges.
+            if self.mode not in {"idle", "calibration"} and time.monotonic() - self.heartbeat > (
+                10 if self.mode in {"setup", "verification"} else 2
             ):
                 self.stop(
                     "Setup heartbeat timed out; ID work stopped"
@@ -1301,7 +1467,9 @@ class Handler(BaseHTTPRequestHandler):
                 result = lab.calibration_center(payload)
             elif path == "/v1/calibration/finish":
                 result = lab.calibration_finish(payload)
-            elif path in ("/v1/calibration/cancel", "/v1/control/stop", "/v1/stop"):
+            elif path == "/v1/calibration/cancel":
+                result = lab.calibration_cancel()
+            elif path in ("/v1/control/stop", "/v1/stop"):
                 result = lab.stop()
             elif path == "/v1/control/start":
                 result = lab.control_start(payload)

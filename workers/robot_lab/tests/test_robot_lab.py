@@ -425,11 +425,13 @@ class SafetyTests(unittest.TestCase):
 
     def test_selected_motors_control_never_addresses_excluded_joints(self):
         selected = ["shoulder_pan", "shoulder_lift", "elbow_flex"]
+
         def factory(*args):
             bus = FakeBus(*args)
             bus.motors = {i: 777 for i in (1, 2, 3)}
             self.buses.append(bus)
             return bus
+
         self.lab.bus_factory = factory
         result = self.start(joints=selected)
         bus = self.buses[-1]
@@ -475,6 +477,7 @@ class SafetyTests(unittest.TestCase):
             bus.motors.pop(3)
             self.buses.append(bus)
             return bus
+
         self.lab.bus_factory = factory
         with self.assertRaisesRegex(HardwareError, "Selected motor IDs 3"):
             self.start(joints=["elbow_flex"])
@@ -628,6 +631,117 @@ class SafetyTests(unittest.TestCase):
             self.lab._tick()
         self.assertAlmostEqual(self.lab.next_record, 100.2)
         self.assertEqual(times, [100.03, 100.14])
+
+    def begin_calibration_ranges(self):
+        self.lab.calibration_start(
+            {
+                "port": "/dev/cu.fake",
+                "robot_id": "test",
+                "role": "follower",
+                "confirm": "START CALIBRATION",
+            }
+        )
+        self.lab.calibration_center({})
+        self.lab.bus.raw["shoulder_pan"] = 1500
+        self.lab._tick()
+
+    def test_calibration_continues_with_expired_browser_heartbeat_and_never_powers_motors(self):
+        self.begin_calibration_ranges()
+        self.lab.heartbeat = time.monotonic() - 600
+        thread = threading.Thread(target=self.lab._watchdog, daemon=True)
+        thread.start()
+        time.sleep(0.25)
+        self.lab.finished.set()
+        thread.join(1)
+        self.assertEqual(self.lab.mode, "calibration")
+        self.assertTrue(self.lab.bus.opened)
+        self.assertIsNone(self.lab.status()["session"]["watchdog_seconds"])
+        self.assertEqual(self.lab.calibration_state["mins"]["shoulder_pan"], 1500)
+        self.assertFalse(any(r == "Torque_Enable" and v for r, _, v in self.lab.bus.writes))
+
+    def test_captured_ranges_resume_after_stop_without_repeating_middle(self):
+        self.begin_calibration_ranges()
+        before = json.loads(json.dumps(self.lab.calibration_state))
+        original_file = self.lab.calibration_path("test", "follower").read_bytes()
+        self.lab.stop("Cable disconnected")
+        self.assertTrue(self.lab.calibration_state["recoverable"])
+        self.assertEqual(self.buses[-1].calibration, CALIBRATION)
+        self.lab.calibration_start({"resume": True, "confirm": "START CALIBRATION"})
+        self.assertEqual(self.lab.mode, "calibration")
+        self.assertEqual(self.lab.calibration_state["phase"], "ranges")
+        for key in ("mins", "maxes", "offsets"):
+            self.assertEqual(self.lab.calibration_state[key], before[key])
+        self.assertEqual(self.lab.calibration_path("test", "follower").read_bytes(), original_file)
+        self.assertFalse(any(r == "Torque_Enable" and v for r, _, v in self.buses[-1].writes))
+
+    def test_process_restart_recovers_calibration_checkpoint_without_automatic_hardware_access(
+        self,
+    ):
+        self.begin_calibration_ranges()
+        self.lab.close()
+        count = len(self.buses)
+        recovered = RobotLab(
+            self.root / "data",
+            bus_factory=self.lab.bus_factory,
+            camera=FakeCamera(),
+            port_provider=self.lab.port_provider,
+            start_threads=False,
+        )
+        recovered.calibration_root = self.lab.calibration_root
+        try:
+            self.assertEqual(len(self.buses), count)
+            self.assertEqual(recovered.mode, "idle")
+            self.assertTrue(recovered.calibration_state["recoverable"])
+            self.assertEqual(recovered.calibration_state["mins"]["shoulder_pan"], 1500)
+            recovered.calibration_start({"resume": True, "confirm": "START CALIBRATION"})
+            self.assertEqual(recovered.calibration_state["phase"], "ranges")
+        finally:
+            recovered.close()
+
+    def test_resume_refuses_changed_profile_before_opening_serial(self):
+        self.begin_calibration_ranges()
+        self.lab.stop("Paused")
+        path = self.lab.calibration_path("test", "follower")
+        path.write_text(path.read_text() + " ")
+        count = len(self.buses)
+        with self.assertRaisesRegex(RequestError, "Saved calibration changed"):
+            self.lab.calibration_start({"resume": True, "confirm": "START CALIBRATION"})
+        self.assertEqual(len(self.buses), count)
+
+    def test_resume_never_overwrites_an_unrecognized_motor_configuration(self):
+        self.begin_calibration_ranges()
+        self.lab.stop("Paused")
+        original_factory = self.lab.bus_factory
+
+        def factory(*args):
+            bus = original_factory(*args)
+            bus.calibration["elbow_flex"]["homing_offset"] = 42
+            return bus
+
+        self.lab.bus_factory = factory
+        with self.assertRaisesRegex(RequestError, "Motor configuration changed"):
+            self.lab.calibration_start({"resume": True, "confirm": "START CALIBRATION"})
+        self.assertEqual(self.buses[-1].calibration["elbow_flex"]["homing_offset"], 42)
+        self.assertTrue(all(r == "Torque_Enable" and not v for r, _, v in self.buses[-1].writes))
+
+    def test_checkpoint_write_failure_does_not_prevent_torque_release_and_restoration(self):
+        self.begin_calibration_ranges()
+        bus = self.lab.bus
+        with patch.object(self.lab.calibration_draft, "write", side_effect=OSError("Disk failure")):
+            self.lab.stop("Stop requested")
+        self.assertFalse(bus.opened)
+        self.assertEqual(bus.calibration, CALIBRATION)
+        self.assertEqual(bus.writes[-6:], [("Torque_Enable", i, 0) for i in IDS.values()])
+        self.assertIn("checkpoint failed", self.lab.error)
+
+    def test_cancel_archives_checkpoint_and_leaves_saved_calibration_untouched(self):
+        self.begin_calibration_ranges()
+        before = self.lab.calibration_path("test", "follower").read_bytes()
+        self.lab.calibration_cancel()
+        self.assertIsNone(self.lab.calibration_draft.read())
+        self.assertEqual(self.lab.calibration_state["phase"], "idle")
+        self.assertTrue(list((self.lab.data_dir / "calibration-history").glob("*-cancelled.json")))
+        self.assertEqual(self.lab.calibration_path("test", "follower").read_bytes(), before)
 
     def test_invalid_calibration_reading_aborts(self):
         self.lab.calibration_start(

@@ -25,6 +25,7 @@ SOURCE_MODULES = (
     "hardware.py",
     "motion.py",
     "camera.py",
+    "calibration_draft.py",
     "dataset.py",
     "assembled.py",
     "identify.py",

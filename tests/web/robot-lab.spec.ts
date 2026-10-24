@@ -7,17 +7,17 @@ const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQ
 const joints = ['shoulder_pan', 'shoulder_lift', 'elbow_flex', 'wrist_flex', 'wrist_roll', 'gripper'];
 const values = (value: number) => Object.fromEntries(joints.map(name => [name, value]));
 function initialStatus(calibrated = false): any {
-  return { ok: true, connected: true, label: 'This Mac', version: '1', platform: 'Darwin', dependencies: { lerobot: { installed: false, version: null }, serial: { installed: true, version: '3.5' }, cv2: { installed: true, version: '4.12.0' }, scservo_sdk: { installed: true, version: '1.0.0' } }, capabilities: { partial_control: true, move_to_middle: true, mapping_verification: true, assembled_setup: true, probe: true, camera: true, motor_setup: true, calibration: true, control: true, recording: true }, session: { mode: 'idle', robot_id: null, port: null, role: null, positions: {}, torque_enabled: false, watchdog_seconds: 2, error: null }, calibration: { phase: 'idle', mins: {}, maxes: {}, offsets: {}, path: null }, recording: { active: false, dataset_id: null, episode_active: false, frames: 0, episodes: 0, fps: 10, error: null }, assembled: { phase: 'idle', ids: [], selected_joint: null, detected_id: null, candidate_delta: null, mapping: {}, message: 'Start experimental assembled setup.', error: null, log: [], progress: null, calibration_required: false }, calibrations: calibrated ? [{ robot_id: 'my-so101', role: 'follower', path: 'private-calibration.json' }] : [], datasets: [] };
+  return { ok: true, connected: true, label: 'This Mac', version: '1', platform: 'Darwin', dependencies: { lerobot: { installed: false, version: null }, serial: { installed: true, version: '3.5' }, cv2: { installed: true, version: '4.12.0' }, scservo_sdk: { installed: true, version: '1.0.0' } }, capabilities: { calibration_persistence: true, partial_control: true, move_to_middle: true, mapping_verification: true, assembled_setup: true, probe: true, camera: true, motor_setup: true, calibration: true, control: true, recording: true }, session: { mode: 'idle', robot_id: null, port: null, role: null, positions: {}, torque_enabled: false, watchdog_seconds: 2, error: null }, calibration: { phase: 'idle', mins: {}, maxes: {}, offsets: {}, path: null }, recording: { active: false, dataset_id: null, episode_active: false, frames: 0, episodes: 0, fps: 10, error: null }, assembled: { phase: 'idle', ids: [], selected_joint: null, detected_id: null, candidate_delta: null, mapping: {}, message: 'Start experimental assembled setup.', error: null, log: [], progress: null, calibration_required: false }, calibrations: calibrated ? [{ robot_id: 'my-so101', role: 'follower', path: 'private-calibration.json' }] : [], datasets: [] };
 }
 async function fixture(page: Page, calibrated = false) {
-  const state = { status: initialStatus(calibrated), writes: [] as { path: string; body: any }[], errors: [] as string[], datasetReads: 0, cameraFailure: false, stopError: null as string | null, centerError: null as string | null, portsConnected: true, middleInProgress: false, encoderLag: false, jogDelay: 0, jogStaleResponse: false, robotDatasetReads: 0 };
+  const state = { status: initialStatus(calibrated), writes: [] as { path: string; body: any }[], errors: [] as string[], datasetReads: 0, cameraFailure: false, stopError: null as string | null, centerError: null as string | null, portsConnected: true, middleInProgress: false, encoderLag: false, jogDelay: 0, jogStaleResponse: false, robotDatasetReads: 0, heartbeatFailures: 0, statusFailures: false, dropCalibrationReply: false };
   page.on('pageerror', error => state.errors.push(error.message));
   await page.route('**/api/v1/**', async route => {
     const request = route.request(), path = new URL(request.url()).pathname, body = request.method() === 'POST' ? request.postDataJSON() : undefined;
     if (request.method() === 'POST') state.writes.push({ path, body });
     if (path.startsWith('/api/v1/robot-lab/')) {
       const action = path.slice('/api/v1/robot-lab'.length);
-      if (action === '/status') return route.fulfill({ json: state.status });
+      if (action === '/status') return state.statusFailures ? route.abort('failed') : route.fulfill({ json: state.status });
       if (action === '/devices') return route.fulfill({ json: { ports: state.portsConnected ? [{ device: port, description: 'SO-101 controller', manufacturer: 'USB serial', serial_number: 'test-1' }, { device: '/dev/cu.usbmodem-leader', description: 'Leader controller', manufacturer: 'USB serial', serial_number: 'test-2' }] : [], cameras: [{ index: 0, name: 'Robot camera', width: 640, height: 480 }], camera_error: null } });
       if (action === '/camera.jpg') return state.cameraFailure ? route.fulfill({ status: 503, json: { detail: 'Camera disconnected.' } }) : route.fulfill({ contentType: 'image/png', body: pixel });
       if (action === '/datasets') { state.robotDatasetReads++; return route.fulfill({ json: { datasets: state.status.datasets } }); }
@@ -35,7 +35,7 @@ async function fixture(page: Page, calibrated = false) {
       else if (action === '/setup/assembled/accept') { state.status.assembled.mapping[body.joint] = body.motor_id; state.status.assembled.phase = Object.keys(state.status.assembled.mapping).length === 6 ? 'review' : 'ready'; state.status.assembled.selected_joint = null; state.status.assembled.detected_id = null; state.status.assembled.wiggle_id = null; }
       else if (action === '/setup/assembled/finish') { state.status.assembled.phase = 'applying'; state.status.assembled.message = 'Writing and verifying canonical IDs.'; setTimeout(() => { state.status.assembled.phase = 'complete'; state.status.assembled.mapping = Object.fromEntries(joints.map((name, index) => [name, index + 1])); state.status.assembled.calibration_required = true; state.status.session.mode = 'idle'; }, 1000); }
       else if (action === '/setup/assembled/cancel') { state.status.assembled.phase = 'stopped'; state.status.session.mode = 'idle'; }
-      else if (action === '/calibration/start') { state.status.session = { ...state.status.session, mode: 'calibration', port: body.port, robot_id: body.robot_id, role: body.role, positions: values(2048) }; state.status.calibration = { ...state.status.calibration, phase: 'center', error: null, interrupted_stage: undefined }; state.status.session.error = null; }
+      else if (action === '/calibration/start') { state.status.session = { ...state.status.session, mode: 'calibration', port: body.port, robot_id: body.robot_id, role: body.role, positions: values(2048) }; state.status.calibration = { ...state.status.calibration, phase: body.resume ? state.status.calibration.interrupted_stage ?? 'ranges' : 'center', recoverable: false, error: null, interrupted_stage: undefined }; state.status.session.error = null; }
       else if (action === '/calibration/center') {
         if (state.centerError) {
           state.status.session.mode = 'idle'; state.status.session.error = state.centerError;
@@ -46,7 +46,7 @@ async function fixture(page: Page, calibrated = false) {
       else if (action === '/calibration/finish') { state.status.calibration.phase = 'saved'; state.status.assembled.calibration_required = false; state.status.session.mode = 'idle'; state.status.calibrations = [{ robot_id: 'my-so101', role: 'follower', path: 'private-calibration.json' }]; }
       else if (action === '/calibration/cancel' || action === '/stop') { if (state.status.session.mode === 'setup') state.status.assembled.phase = 'stopped'; if (state.status.session.mode === 'verification') state.status.verification.phase = 'stopped'; if (action === '/stop') state.status.session.error = state.stopError; state.status.session.mode = 'idle'; state.status.session.torque_enabled = false; state.status.recording.episode_active = false; }
       else if (action === '/control/start') { state.status.session = { ...state.status.session, mode: body.mode, active_joints: body.joints ?? joints, port: body.port, robot_id: body.robot_id, positions: values(0), targets: values(0), torque_enabled: body.mode !== 'handguide', centering: { active: !!body.move_to_middle && state.middleInProgress, progress: 0.25 } }; }
-      else if (action === '/control/heartbeat') { /* Explicitly owned session only. */ }
+      else if (action === '/control/heartbeat') { if (state.heartbeatFailures > 0) { state.heartbeatFailures--; return route.abort('failed'); } }
       else if (action === '/control/jog') { const before = structuredClone(state.status); if (state.jogDelay) await new Promise(resolve => setTimeout(resolve, state.jogDelay)); if (state.jogStaleResponse) return route.fulfill({ json: before }); if (!state.encoderLag) state.status.session.positions[body.joint] += body.delta; state.status.session.targets[body.joint] += body.delta; }
       else if (action === '/recording/start') { state.status.recording = { active: true, dataset_id: body.dataset_id, episode_active: false, frames: 0, episodes: 0, fps: body.fps, error: null }; }
       else if (action === '/recording/episode/start') { state.status.recording.episode_active = true; state.status.recording.frames = 10; }
@@ -54,6 +54,7 @@ async function fixture(page: Page, calibrated = false) {
       else if (action === '/recording/episode/discard') { state.status.recording.episode_active = false; state.status.recording.frames = 0; }
       else if (action === '/recording/finish') { const current = state.status.recording; state.status.datasets = [{ id: current.dataset_id, path: 'private-local-dataset', episodes: current.episodes, frames: body.abandon_empty ? 0 : 10, fps: current.fps, task: 'Place the block in the tray.', format: 'lerobot', finalized: !body.abandon_empty, abandoned: !!body.abandon_empty, pending_frames: body.abandon_empty ? current.frames : 0 }]; state.status.recording = { ...current, active: false, episode_active: false, frames: 0 }; }
       else return route.fulfill({ status: 404, json: { detail: `Unexpected robot route ${action}` } });
+      if (state.dropCalibrationReply && ['/calibration/center', '/calibration/finish'].includes(action)) return route.abort('failed');
       return route.fulfill({ json: state.status });
     }
     if (path.includes('/robot-lab/datasets/') && path.endsWith('/import')) return route.fulfill({ json: { id: 'library-entry', project_id: path.split('/')[4], status: 'ready' } });
@@ -719,4 +720,82 @@ test('Stop remains available during a joint request and a late reply cannot rest
   await expect(page.getByRole('button', { name: 'Increase Elbow', exact: true })).toHaveCount(0);
   expect(writes(state, '/stop')).toHaveLength(1);
   expect(state.errors).toEqual([]);
+});
+
+
+test('calibration survives page reload, hidden tab and a temporary web disconnection', async ({ page }, testInfo) => {
+  const state = await fixture(page);
+  await tab(page, 'Calibrate').click();
+  await page.getByRole('button', { name: 'Begin calibration', exact: true }).click();
+  await page.getByRole('button', { name: 'Record middle position', exact: true }).click();
+  state.status.calibration.mins = values(777);
+  await page.reload();
+  const save = page.getByRole('button', { name: 'Save calibration', exact: true });
+  await expect(save).toBeEnabled();
+  await expect(page.getByRole('region', { name: 'Calibrate', exact: true })).toContainText('777');
+  expect(writes(state, '/calibration/start')).toHaveLength(1);
+  expect(writes(state, '/calibration/center')).toHaveLength(1);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  expect(writes(state, '/stop')).toHaveLength(0);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  state.statusFailures = true;
+  await expect(page.getByText('Reconnecting… Calibration continues on your Mac. Captured values are retained.', { exact: true })).toBeVisible();
+  await expect(save).toBeVisible();
+  await expect(save).toBeDisabled();
+  state.statusFailures = false;
+  await expect(save).toBeEnabled();
+  await page.getByRole('link', { name: 'Guide', exact: true }).filter({ visible: true }).first().click();
+  await expect(page).toHaveURL(/\/guide\/(?:#robot-lab)?$/);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/robot-lab\/?$/);
+  await expect(save).toBeEnabled();
+  expect(writes(state, '/stop')).toHaveLength(0);
+  expect(writes(state, '/control/heartbeat')).toHaveLength(0);
+  await page.screenshot({ path: testInfo.outputPath('calibration-reconnected.png'), fullPage: true });
+});
+
+test('calibration can resume a Mac checkpoint without repeating middle capture', async ({ page }) => {
+  const state = await fixture(page);
+  state.status.calibration = { ...state.status.calibration, phase: 'interrupted', interrupted_stage: 'ranges', recoverable: true, port, robot_id: 'my-so101', role: 'follower', mins: values(777), maxes: values(3000), offsets: values(10) };
+  await tab(page, 'Calibrate').click();
+  await page.getByRole('button', { name: 'Resume captured calibration', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Save calibration', exact: true })).toBeEnabled();
+  expect(writes(state, '/calibration/start')[0].body).toEqual({ resume: true, confirm: 'START CALIBRATION' });
+  expect(writes(state, '/calibration/center')).toHaveLength(0);
+  await expect(page.getByRole('region', { name: 'Calibrate', exact: true })).toContainText('777');
+});
+
+test('one failed heartbeat is retried and does not abandon powered-session ownership', async ({ page }) => {
+  const state = await fixture(page, true);
+  await startManual(page);
+  const before = writes(state, '/control/heartbeat').length;
+  state.heartbeatFailures = 1;
+  await expect.poll(() => state.heartbeatFailures).toBe(0);
+  await expect.poll(() => writes(state, '/control/heartbeat').length).toBeGreaterThan(before + 1);
+  await expect(page.getByRole('button', { name: 'Increase Elbow', exact: true })).toBeEnabled();
+  expect(writes(state, '/stop')).toHaveLength(0);
+  await expect(page.locator('.robot-lab').getByText(/Connection lost:/)).toHaveCount(0);
+});
+
+
+test('lost calibration replies reconcile the completed stage without replaying motor writes', async ({ page }) => {
+  const state = await fixture(page);
+  await tab(page, 'Calibrate').click();
+  await page.getByRole('button', { name: 'Begin calibration', exact: true }).click();
+  state.dropCalibrationReply = true;
+  await page.getByRole('button', { name: 'Record middle position', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Save calibration', exact: true })).toBeEnabled();
+  await expect(page.getByRole('alert', { name: 'Calibration error' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Save calibration', exact: true }).click();
+  await expect(page.getByText('my-so101 · follower', { exact: true })).toBeVisible();
+  await expect(page.getByRole('alert', { name: 'Calibration error' })).toHaveCount(0);
+  expect(writes(state, '/calibration/center')).toHaveLength(1);
+  expect(writes(state, '/calibration/finish')).toHaveLength(1);
+  expect(writes(state, '/stop')).toHaveLength(0);
 });

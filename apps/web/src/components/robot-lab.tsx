@@ -60,19 +60,25 @@ export function RobotLab() {
   const [recordCamera, setRecordCamera] = useState(true);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [awaitingCalibration, setAwaitingCalibration] = useState<'ranges' | 'saved' | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [ownsSession, setOwnsSession] = useState(false);
   const [imported, setImported] = useState<{ dataset: string; projectId: string } | null>(null);
   const ownedRef = useRef(false);
+  const localCalibrationRef = useRef(false);
+  const lastConnectedState = useRef<RobotStatus | undefined>(undefined);
+  const [reconnecting, setReconnecting] = useState(false);
   const epoch = useRef(0);
   const mounted = useRef(true);
   const status = useQuery({ queryKey: statusKey, queryFn: robotApi.status, retry: false, refetchInterval: ownsSession ? 600 : 3_000, refetchOnWindowFocus: true });
-  const state = status.data;
-  const online = !!state?.ok && state.connected !== false && !status.isError;
+  if (status.data?.ok && status.data.connected !== false && !status.isError) lastConnectedState.current = status.data;
+  const state = status.isError || status.data?.connected === false ? lastConnectedState.current ?? status.data : status.data;
+  const online = !!status.data?.ok && status.data.connected !== false && !status.isError;
   const devices = useQuery({ queryKey: ['robot-lab', 'devices'], queryFn: robotApi.devices, enabled: online, retry: false, staleTime: 30_000, refetchInterval: state?.session?.mode === 'idle' ? 5_000 : false });
   const datasets = useQuery({ queryKey: ['robot-lab', 'datasets'], queryFn: robotApi.datasets, enabled: online, retry: false, refetchInterval: 10_000 });
   const session = state?.session;
   const calibration = state?.calibration;
+  localCalibrationRef.current = session?.mode === 'calibration' && !!state?.capabilities?.calibration_persistence;
   const calibrationStage = calibration?.phase === 'interrupted' ? calibration.interrupted_stage : calibration?.phase;
   const calibrationError = step === 2 ? error || calibration?.error || session?.error : null;
   const recording = state?.recording;
@@ -86,7 +92,7 @@ export function RobotLab() {
   const selectedMotor = robotJoints.find(item => item.name === setupOrder[motorIndex])!;
   const availableCameras = devices.data?.cameras ?? [];
   const busy = !!pending;
-  const canAct = online && !busy;
+  const canAct = online && !busy && !reconnecting;
   const portConnected = online && !!port && !devices.isError && !!devices.data?.ports.some(item => item.device === port);
   const leaderConnected = online && !!leaderPort && !devices.isError && !!devices.data?.ports.some(item => item.device === leaderPort);
   const canUseArm = canAct && portConnected;
@@ -104,7 +110,7 @@ export function RobotLab() {
       if (typeof saved.leaderPort === 'string') setLeaderPort(saved.leaderPort);
       if (typeof saved.leaderId === 'string') setLeaderId(saved.leaderId);
     } catch { /* Preferences are optional. */ }
-    return () => { mounted.current = false; if (ownedRef.current) void robotApi.stop(true).catch(() => undefined); };
+    return () => { mounted.current = false; if (ownedRef.current && !localCalibrationRef.current) void robotApi.stop(true).catch(() => undefined); };
   }, []);
   useEffect(() => {
     if (!devices.data) return;
@@ -115,6 +121,22 @@ export function RobotLab() {
   useEffect(() => { setIsolated(false); }, [motorIndex]);
   useEffect(() => { if (!portConnected) { setVerificationReady(false); setMotionReady(false); setAssembledReady(false); setIsolated(false); setProbe(null); } }, [portConnected]);
   useEffect(() => {
+    if (online && session?.mode === 'calibration' && state?.capabilities?.calibration_persistence && !ownedRef.current) {
+      ownedRef.current = true; setOwnsSession(true); setStep(2);
+      if (session.port) setPort(session.port);
+      if (session.robot_id) setRobotId(session.robot_id);
+      if (session.role) setRole(session.role);
+      setError(null); setNotice(null); setReconnecting(false);
+    }
+  }, [online, session?.mode, session?.port, session?.robot_id, session?.role, state?.capabilities?.calibration_persistence]);
+  useEffect(() => {
+    if (awaitingCalibration && online && calibration?.phase === awaitingCalibration && !calibration.error && !session?.error) {
+      setError(null); setAwaitingCalibration(null);
+      setNotice(awaitingCalibration === 'saved' ? 'Calibration saved. The arm is ready for controlled motion.' : 'Center recorded. Move each joint through its comfortable range.');
+      if (awaitingCalibration === 'saved') { ownedRef.current = false; setOwnsSession(false); }
+    }
+  }, [awaitingCalibration, online, calibration?.phase, calibration?.error, session?.error]);
+  useEffect(() => {
     if (!preview || !online) return;
     setCameraError(false); setPreviewStamp(Date.now());
     const timer = setInterval(() => setPreviewStamp(Date.now()), 700);
@@ -124,17 +146,18 @@ export function RobotLab() {
     if (!ownsSession) return;
     let stopped = false, inFlight = false;
     const heartbeat = async () => {
-      if (inFlight || stopped) return;
+      if (localCalibrationRef.current || inFlight || stopped) return;
       inFlight = true;
       try {
         const next = await robotApi.heartbeat();
+        if (!stopped && mounted.current) setReconnecting(false);
         if (!stopped && mounted.current && next.session?.mode === 'idle') { ownedRef.current = false; setOwnsSession(false); client.setQueryData(statusKey, next); }
-      } catch (failure) {
-        if (!stopped && mounted.current) { ownedRef.current = false; setOwnsSession(false); setError(`Connection lost: ${readable(failure)} The companion stops the arm when its heartbeat expires.`); void client.invalidateQueries({ queryKey: statusKey }); }
+      } catch {
+        if (!stopped && mounted.current) { setReconnecting(true); void client.invalidateQueries({ queryKey: statusKey }); }
       } finally { inFlight = false; }
     };
     const timer = setInterval(() => void heartbeat(), 500);
-    const hide = () => { if (document.visibilityState === 'hidden' && ownedRef.current) { ownedRef.current = false; setOwnsSession(false); setNotice(null); setError('Robot Lab was hidden; stopping the session. Keep this page visible during setup or control.'); void robotApi.stop(true).then(next => { if (mounted.current) client.setQueryData(statusKey, next); }).catch(() => undefined); } };
+    const hide = () => { if (document.visibilityState === 'hidden' && ownedRef.current && !localCalibrationRef.current) { ownedRef.current = false; setOwnsSession(false); setNotice(null); setError('Robot Lab was hidden; stopping the session. Keep this page visible during setup or control.'); void robotApi.stop(true).then(next => { if (mounted.current) client.setQueryData(statusKey, next); }).catch(() => undefined); } };
     document.addEventListener('visibilitychange', hide);
     return () => { stopped = true; clearInterval(timer); document.removeEventListener('visibilitychange', hide); };
   }, [ownsSession, client]);
@@ -159,9 +182,9 @@ export function RobotLab() {
     {partialSelection && <small>Selected motors hold their current pose. Recording requires all six.</small>}
   </fieldset>;
   function remember() { try { localStorage.setItem('openjensen.robot-lab.preferences', JSON.stringify({ port, robotId, leaderPort, leaderId })); } catch { /* Preferences are optional. */ } }
-  async function perform<T>(label: string, action: () => Promise<T>, done?: (result: T) => void, announce = true) {
+  async function perform<T>(label: string, action: () => Promise<T>, done?: (result: T) => void, announce = true, calibrationTarget?: 'ranges' | 'saved') {
     const token = ++epoch.current;
-    setPending(label); setError(null); setNotice(null);
+    setPending(label); setError(null); setNotice(null); setAwaitingCalibration(null);
     try {
       const result = await action();
       if (!mounted.current || token !== epoch.current) return;
@@ -170,7 +193,7 @@ export function RobotLab() {
       setNotice(announce ? label : null);
       void client.invalidateQueries({ queryKey: ['robot-lab', 'datasets'] });
       void client.invalidateQueries({ queryKey: statusKey });
-    } catch (failure) { if (mounted.current && token === epoch.current) { setError(readable(failure)); void client.invalidateQueries({ queryKey: statusKey }); } }
+    } catch (failure) { if (mounted.current && token === epoch.current) { setAwaitingCalibration(calibrationTarget ?? null); setError(readable(failure)); void client.invalidateQueries({ queryKey: statusKey }); } }
     finally { if (mounted.current && token === epoch.current) setPending(null); }
   }
   async function jog(joint: RobotJoint, delta: number) {
@@ -195,9 +218,9 @@ export function RobotLab() {
       if (mounted.current) setJogging(false);
     }
   }
-  function ownSession() { ownedRef.current = true; setOwnsSession(true); remember(); }
+  function ownSession() { setReconnecting(false); ownedRef.current = true; setOwnsSession(true); remember(); }
   function stop() {
-    ownedRef.current = false; setOwnsSession(false); setMotionReady(false); setVerificationReady(false);
+    ownedRef.current = false; setOwnsSession(false); setReconnecting(false); setMotionReady(false); setVerificationReady(false);
     void perform('Stop requested.', () => robotApi.stop());
   }
   async function refresh() {
@@ -213,6 +236,7 @@ export function RobotLab() {
     <div className="robot-lab-statusbar"><div className="robot-lab-connection"><span className={`robot-lab-dot${online ? ' online' : ''}`} /><div><strong>{status.isPending ? 'Connecting…' : online ? `${state?.label ?? 'Mac companion'} connected` : 'Mac companion unavailable'}</strong><small>{online ? active ? `${session?.mode === 'verification' ? 'Mapping check' : session?.mode === 'setup' ? 'Assembled motor setup' : session?.mode === 'calibration' ? 'Calibration' : session?.mode === 'handguide' ? 'Hand guiding' : session?.mode === 'leader' ? 'Leader teleoperation' : 'Manual control'} · ${session?.robot_id ?? robotId} · ${session?.mode === 'setup' ? 'Motor setup active' : session?.torque_enabled ? 'Torque command: on' : 'Torque command: off'}` : usbStatus : state?.message ?? status.error?.message ?? 'Check that the local companion is running.'}</small></div></div><div className="robot-lab-status-actions"><button className="text-button" onClick={() => void refresh()} disabled={busy || checkingConnection || status.isPending}>{checkingConnection ? 'Checking…' : 'Check connection'}</button>{(active || session?.torque_enabled || session?.error || pending === 'Stop requested.') && <button className="robot-lab-stop" onClick={stop} disabled={!state?.ok && !active} aria-label="Stop arm and disable torque"><span />{pending === 'Stop requested.' ? 'Stopping…' : 'Stop arm'}</button>}</div></div>
     <nav className="robot-lab-steps" aria-label="Robot setup steps">{steps.map((item, index) => <button key={item.title} className={`robot-lab-step${step === index ? ' selected' : ''}`} onClick={() => { setStep(index); setNotice(null); setError(null); }} aria-current={step === index ? 'step' : undefined} disabled={busy}>{item.title}</button>)}</nav>
     {step !== 2 && (session?.error || error) && <p className="robot-lab-event robot-lab-error" role="alert">{session?.error || error}</p>}
+    {(reconnecting || (!online && localCalibrationRef.current)) && <p className="robot-lab-event robot-lab-warning" role="status">{localCalibrationRef.current ? 'Reconnecting… Calibration continues on your Mac. Captured values are retained.' : 'Reconnecting… Motion controls are paused; the motor watchdog remains active.'}</p>}
     {notice && <p className="robot-lab-event" role="status">{notice}</p>}
     {recording?.error && <p className="robot-lab-event robot-lab-error" role="alert">{recording.error}</p>}
     <div className="robot-lab-grid"><section className="robot-lab-main" aria-label={steps[step].title}>
@@ -289,14 +313,15 @@ export function RobotLab() {
         </div></details>
       </div></>}
       {step === 2 && <><Heading title="Calibration" /><div className="robot-lab-form">
+        {localCalibrationRef.current && <p className="robot-lab-subtle">Calibration runs locally with torque off. You can leave this page and return to continue.</p>}
         {jointGuide}
         {identity}<label>Arm role<select value={role} aria-label="Calibration arm role" onChange={event => setRole(event.target.value as RobotRole)} disabled={active || busy}><option value="follower">Follower / single arm</option><option value="leader">Leader arm</option></select></label>
         <div className="robot-lab-calibration-steps"><span className={calibration?.phase === 'idle' || calibration?.phase === 'saved' ? 'current' : ''}>1. Prepare</span><Icon name="arrow" size={12} /><span className={calibrationStage === 'center' ? 'current' : ''}>2. Middle position</span><Icon name="arrow" size={12} /><span className={calibrationStage === 'ranges' ? 'current' : ''}>3. Joint ranges</span></div>
         {calibrationError && <p className="robot-lab-error" role="alert" aria-label="Calibration error">{calibrationError}</p>}
-        {calibration?.phase === 'interrupted' && <Notice kind="warning"><strong>Calibration interrupted</strong><p>{calibration.interrupted_stage === 'center' ? 'Middle position was not saved.' : 'Joint ranges were not saved.'} Restart calibration to continue.</p></Notice>}
-        {session?.mode !== 'calibration' && <><Notice>Support the arm. Calibration releases torque; all six motors must be connected and assigned IDs.</Notice><button className="primary-button" disabled={!canUseArm || active || !/^[A-Za-z0-9_-]+$/.test(robotId) || !state?.capabilities?.calibration} onClick={() => void perform('Calibration started. Position each joint near its middle.', () => robotApi.startCalibration(port, robotId, role), ownSession)}>{calibration?.phase === 'interrupted' ? 'Restart calibration' : 'Begin calibration'}</button></>}
-        {session?.mode === 'calibration' && calibration?.phase === 'center' && <><Notice>Position each joint at mid-travel, with the gripper half open. Support the arm and record the center.</Notice><RangeTable positions={session.positions} calibration /><div className="robot-lab-actions"><button className="primary-button" disabled={!canAct || !ownsSession} onClick={() => void perform('Center recorded. Move each joint through its comfortable range.', robotApi.centerCalibration)}>{pending === 'Center recorded. Move each joint through its comfortable range.' ? 'Recording middle position…' : 'Record middle position'}</button><button className="secondary-button" disabled={!canAct} onClick={() => void perform('Calibration cancelled.', robotApi.cancelCalibration, () => { ownedRef.current = false; setOwnsSession(false); })}>Cancel calibration</button></div></>}
-        {session?.mode === 'calibration' && calibration?.phase === 'ranges' && <><Notice>Move each joint through its usable range without forcing it. Wrist roll uses its full encoder range.</Notice><RangeTable positions={session.positions} mins={calibration.mins} maxes={calibration.maxes} calibration /><div className="robot-lab-actions"><button className="primary-button" disabled={!canAct || !ownsSession} onClick={() => void perform('Calibration saved. The arm is ready for controlled motion.', robotApi.finishCalibration, () => { ownedRef.current = false; setOwnsSession(false); })}>Save calibration</button><button className="secondary-button" disabled={!canAct} onClick={() => void perform('Calibration cancelled.', robotApi.cancelCalibration, () => { ownedRef.current = false; setOwnsSession(false); })}>Cancel calibration</button></div></>}
+        {calibration?.recoverable ? <Notice kind="warning"><strong>Calibration paused</strong><p>{calibration.interrupted_stage === 'center' || calibration.phase === 'idle' && !Object.keys(calibration.offsets).length ? 'Preparation is saved on this Mac.' : 'Captured middle and ranges are saved on this Mac.'}</p><button className="primary-button" disabled={!canUseArm || active} onClick={() => void perform('Captured calibration resumed. Torque remains off.', robotApi.resumeCalibration, ownSession)}>Resume captured calibration</button></Notice> : calibration?.phase === 'interrupted' && <Notice kind="warning"><strong>Calibration interrupted</strong><p>{calibration.interrupted_stage === 'center' ? 'Middle position was not saved.' : 'Joint ranges were not saved.'} Restart calibration to continue.</p></Notice>}
+        {session?.mode !== 'calibration' && <><Notice>Support the arm. Calibration releases torque; all six motors must be connected and assigned IDs.</Notice><button className="primary-button" disabled={!canUseArm || active || !/^[A-Za-z0-9_-]+$/.test(robotId) || !state?.capabilities?.calibration} onClick={() => void perform('Calibration started. Position each joint near its middle.', () => robotApi.startCalibration(port, robotId, role), ownSession)}>{calibration?.recoverable ? 'Start a new calibration' : calibration?.phase === 'interrupted' ? 'Restart calibration' : 'Begin calibration'}</button></>}
+        {session?.mode === 'calibration' && calibration?.phase === 'center' && <><Notice>Position each joint at mid-travel, with the gripper half open. Support the arm and record the center.</Notice><RangeTable positions={session.positions} calibration /><div className="robot-lab-actions"><button className="primary-button" disabled={!canAct || !ownsSession} onClick={() => void perform('Center recorded. Move each joint through its comfortable range.', robotApi.centerCalibration, undefined, true, 'ranges')}>{pending === 'Center recorded. Move each joint through its comfortable range.' ? 'Recording middle position…' : 'Record middle position'}</button><button className="secondary-button" disabled={!canAct} onClick={() => void perform('Calibration cancelled.', robotApi.cancelCalibration, () => { ownedRef.current = false; setOwnsSession(false); })}>Cancel calibration</button></div></>}
+        {session?.mode === 'calibration' && calibration?.phase === 'ranges' && <><Notice>Move each joint through its usable range without forcing it. Wrist roll uses its full encoder range.</Notice><RangeTable positions={session.positions} mins={calibration.mins} maxes={calibration.maxes} calibration /><div className="robot-lab-actions"><button className="primary-button" disabled={!canAct || !ownsSession} onClick={() => void perform('Calibration saved. The arm is ready for controlled motion.', robotApi.finishCalibration, () => { ownedRef.current = false; setOwnsSession(false); }, true, 'saved')}>Save calibration</button><button className="secondary-button" disabled={!canAct} onClick={() => void perform('Calibration cancelled.', robotApi.cancelCalibration, () => { ownedRef.current = false; setOwnsSession(false); })}>Cancel calibration</button></div></>}
         {state?.calibrations?.length ? <Notice kind="success"><strong>Saved calibrations</strong>{state.calibrations.map(item => <div key={`${item.role}:${item.robot_id}`}>{item.robot_id} · {item.role}</div>)}<button className="text-button" onClick={() => setStep(3)} disabled={active || busy}>Continue to teleoperation →</button></Notice> : null}
       </div></>}
       {step === 3 && <><Heading title="Teleoperation" /><div className="robot-lab-form">

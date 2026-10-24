@@ -16,9 +16,9 @@ export type RobotDataset = { id: string; path: string; episodes: number; frames:
 export type RobotStatus = {
   ok?: boolean; connected?: boolean; label?: string; message?: string; version?: string; platform?: string;
   dependencies?: Record<string, { installed: boolean; version: string | null }>;
-  capabilities?: { partial_control?: boolean; move_to_middle?: boolean; assembled_setup?: boolean; mapping_verification?: boolean; probe: boolean; camera: boolean; motor_setup: boolean; calibration: boolean; control: boolean; recording: boolean };
-  session?: { mode: 'idle' | 'calibration' | 'setup' | 'verification' | ControlMode; robot_id: string | null; port: string | null; role: RobotRole | null; positions: JointValues; active_joints?: RobotJoint[]; targets?: JointValues; torque_enabled: boolean; centering?: { active: boolean; progress: number }; watchdog_seconds: number; error: string | null };
-  calibration?: { phase: 'idle' | 'center' | 'ranges' | 'saved' | 'interrupted'; interrupted_stage?: 'center' | 'ranges'; error?: string | null; mins: JointValues; maxes: JointValues; offsets: JointValues; path: string | null };
+  capabilities?: { calibration_persistence?: boolean; partial_control?: boolean; move_to_middle?: boolean; assembled_setup?: boolean; mapping_verification?: boolean; probe: boolean; camera: boolean; motor_setup: boolean; calibration: boolean; control: boolean; recording: boolean };
+  session?: { mode: 'idle' | 'calibration' | 'setup' | 'verification' | ControlMode; robot_id: string | null; port: string | null; role: RobotRole | null; positions: JointValues; active_joints?: RobotJoint[]; targets?: JointValues; torque_enabled: boolean; centering?: { active: boolean; progress: number }; watchdog_seconds: number | null; error: string | null };
+  calibration?: { phase: 'idle' | 'center' | 'ranges' | 'saved' | 'interrupted'; recoverable?: boolean; robot_id?: string; role?: RobotRole; port?: string; interrupted_stage?: 'center' | 'ranges'; error?: string | null; mins: JointValues; maxes: JointValues; offsets: JointValues; path: string | null };
   recording?: { active: boolean; dataset_id: string | null; episode_active: boolean; frames: number; episodes: number; fps: number; error: string | null };
   assembled?: { port?: string | null; phase: 'idle' | 'scanning' | 'splitting' | 'ready' | 'observing' | 'wiggling' | 'review' | 'applying' | 'complete' | 'error' | 'stopped'; motion_active?: boolean; wiggle_id?: number | null; wiggle_ticks?: number | null; ids: number[]; selected_joint: RobotJoint | null; detected_id: number | null; candidate_delta: number | null; mapping: Partial<Record<RobotJoint, number>>; message: string; error: string | null; log: string[]; progress: unknown; calibration_required: boolean };
   verification?: { phase: 'idle' | 'checking' | 'wiggling' | 'done' | 'error' | 'stopped'; port: string | null; joint: RobotJoint | null; motor_id: number | null; ticks: number | null; motion_active: boolean; error: string | null; run_id: string | null };
@@ -66,6 +66,7 @@ export const robotApi = {
   finishAssembled: () => request<RobotStatus>('/setup/assembled/finish', { confirm: 'SAVE MOTOR IDS' }),
   cancelAssembled: () => request<RobotStatus>('/setup/assembled/cancel', {}),
   startCalibration: (port: string, robot_id: string, role: RobotRole) => request<RobotStatus>('/calibration/start', { port, robot_id, role, confirm: 'START CALIBRATION' }, { timeoutMs: 45_000 }),
+  resumeCalibration: () => request<RobotStatus>('/calibration/start', { resume: true, confirm: 'START CALIBRATION' }, { timeoutMs: 45_000 }),
   centerCalibration: () => request<RobotStatus>('/calibration/center', {}),
   finishCalibration: () => request<RobotStatus>('/calibration/finish', { confirm: 'SAVE CALIBRATION' }),
   cancelCalibration: () => request<RobotStatus>('/calibration/cancel', {}),
