@@ -242,12 +242,12 @@ export const api = {
   applicationUpdates: () => request<ApplicationUpdateStatus>('/updates'),
   checkApplicationUpdates: (refresh = false) =>
     request<ApplicationUpdateStatus>(`/updates/check?refresh=${refresh}`, undefined, 30_000),
-  applyApplicationUpdate: (target: string) =>
+  applyApplicationUpdate: (target: string, operationId: string) =>
     request<ApplicationUpdateStatus>(
       '/updates/apply',
       {
         method: 'POST',
-        body: JSON.stringify({ target_commit: target, confirmation: 'update-and-restart' }),
+        body: JSON.stringify({ target_commit: target, confirmation: 'update-and-restart', operation_id: operationId }),
       },
       30_000,
     ),

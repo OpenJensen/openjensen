@@ -365,3 +365,18 @@ def test_supervisor_start_failure_can_stop_a_fatal_service_for_rollback(deployme
         lambda *_args, **_kwargs: SimpleNamespace(stdout="firebird FATAL fixture"),
     )
     runner.service(deployment[1], "stop")
+
+
+def test_replayed_confirmation_returns_original_operation(tmp_path, deployment, monkeypatch):
+    calls = []
+    monkeypatch.setattr(subprocess, "Popen", lambda *_args, **_kwargs: calls.append(True))
+    _, client = app_client(tmp_path, deployment, monkeypatch)
+    payload = dict(target_commit=NEW, confirmation="update-and-restart", operation_id="b" * 32)
+    with client:
+        first = client.post("/api/v1/updates/apply", json=payload)
+        second = client.post("/api/v1/updates/apply", json=payload)
+        assert first.status_code == second.status_code == 202
+        assert first.json()["operation"]["id"] == second.json()["operation"]["id"] == "b" * 32
+        assert calls == [True]
+        payload["target_commit"] = LATER
+        assert client.post("/api/v1/updates/apply", json=payload).status_code == 409

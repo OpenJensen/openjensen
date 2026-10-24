@@ -33,6 +33,7 @@ class UpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     target_commit: str = Field(pattern=r"^[0-9a-f]{40}$")
     confirmation: Literal["update-and-restart"]
+    operation_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
 
 
 class UpdateOperation(BaseModel):
@@ -265,7 +266,7 @@ class ApplicationUpdates:
                     "The available version changed. Check for updates and confirm again."
                 )
             state = dict(
-                id=uuid4().hex,
+                id=payload.operation_id or uuid4().hex,
                 phase="queued",
                 target_commit=payload.target_commit,
                 message="Preparing update…",

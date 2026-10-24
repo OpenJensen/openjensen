@@ -111,7 +111,9 @@ def prepare_release(config, target, operation):
         archive.unlink(missing_ok=True)
     env = dict(
         os.environ,
-        PATH=config["node_bin"] + os.pathsep + os.environ.get("PATH", ""),
+        PATH=os.pathsep.join(
+            [config["node_bin"], str(Path(config["pnpm"]).parent), os.environ.get("PATH", "")]
+        ),
         UV_PROJECT_ENVIRONMENT=str(release / ".venv"),
     )
     # Worker environments and model weights are deliberately outside this update.

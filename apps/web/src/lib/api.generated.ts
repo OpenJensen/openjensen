@@ -4068,6 +4068,8 @@ export interface components {
              * @constant
              */
             confirmation: "update-and-restart";
+            /** Operation Id */
+            operation_id?: string | null;
             /** Target Commit */
             target_commit: string;
         };

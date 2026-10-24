@@ -48,10 +48,18 @@ test('accepted update reports progress and reloads once the confirmed version is
   await page.route('**/api/v1/updates**', (route) => {
     if (route.request().method() === 'POST') {
       writes += 1;
-      expect(route.request().postDataJSON()).toEqual({ target_commit: target, confirmation: 'update-and-restart' });
+      expect(route.request().postDataJSON()).toMatchObject({
+        target_commit: target,
+        confirmation: 'update-and-restart',
+      });
       state = {
         ...initial,
-        operation: { id: 'accepted', phase: 'building', target_commit: target, message: 'Building the new version…' },
+        operation: {
+          id: route.request().postDataJSON().operation_id,
+          phase: 'building',
+          target_commit: target,
+          message: 'Building the new version…',
+        },
       };
     }
     if (complete)
@@ -100,4 +108,45 @@ test('development builds are identified without offering a downgrade to main', a
   await page.getByRole('button', { name: 'Version and updates' }).click();
   await expect(page.getByRole('dialog')).toContainText('ahead of upstream main');
   await expect(page.getByRole('button', { name: 'Update & restart' })).toHaveCount(0);
+});
+
+test('lost acceptance reply reconnects to the same update without submitting twice', async ({ page }) => {
+  let state: any = initial;
+  let writes = 0;
+  let complete = false;
+  let navigations = 0;
+  page.on('framenavigated', (frame) => {
+    if (frame === page.mainFrame()) navigations += 1;
+  });
+  await page.route('**/api/v1/updates**', (route) => {
+    if (route.request().method() === 'POST') {
+      writes += 1;
+      state = {
+        ...initial,
+        operation: {
+          id: route.request().postDataJSON().operation_id,
+          phase: 'building',
+          target_commit: target,
+          message: 'Building the new version…',
+        },
+      };
+      return route.abort('connectionreset');
+    }
+    if (complete)
+      state = {
+        ...state,
+        installed: { ...initial.installed, commit: target },
+        state: 'current',
+        operation: { ...state.operation, phase: 'complete' },
+      };
+    return route.fulfill({ json: state });
+  });
+  await page.goto('/dashboard/');
+  await page.getByRole('button', { name: 'Version and updates' }).click();
+  await page.getByRole('button', { name: 'Update & restart' }).click();
+  await expect(page.getByRole('dialog')).toContainText('Building the new version…');
+  complete = true;
+  await expect.poll(() => navigations).toBe(2);
+  expect(writes).toBe(1);
+  expect(await page.evaluate(() => sessionStorage.getItem('openjensen-pending-update'))).toBeNull();
 });

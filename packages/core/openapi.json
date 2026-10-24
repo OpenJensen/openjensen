@@ -5585,6 +5585,18 @@
             "title": "Confirmation",
             "type": "string"
           },
+          "operation_id": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{32}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation Id"
+          },
           "target_commit": {
             "pattern": "^[0-9a-f]{40}$",
             "title": "Target Commit",

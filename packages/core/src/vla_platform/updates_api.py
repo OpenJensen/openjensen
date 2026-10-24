@@ -45,8 +45,8 @@ async def require_idle(request):
     if (
         request.app.state.active_writes
         or active
-        or execution.tasks
-        or execution._accepting
+        or any(not task.done() for task in execution.tasks.values())
+        or any(not task.done() for task in execution._accepting)
         or execution.cloud_cleanup_pending
         or setup
         and setup.state.status == "running"
@@ -77,6 +77,11 @@ async def readiness(request: Request):
 @router.post("/apply", response_model=UpdateStatus, status_code=202)
 async def apply(payload: UpdateRequest, request: Request, updates: UpdatesDep):
     try:
+        previous = updates.operation()
+        if payload.operation_id and previous and previous.id == payload.operation_id:
+            if previous.target_commit != payload.target_commit:
+                raise UpdateError("This confirmation already belongs to a different update.")
+            return updates.status()
         # Refresh the comparison before accepting the exact revision the user reviewed.
         if updates.pending:
             raise UpdateError("An update is already in progress.")

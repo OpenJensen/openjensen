@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, type ApplicationUpdateStatus } from '@/lib/api';
+import { api, ApiError, type ApplicationUpdateStatus } from '@/lib/api';
 import './application-updates.css';
 
 const active = new Set(['queued', 'building', 'backing_up', 'validating', 'restarting']);
@@ -11,6 +11,7 @@ const pendingKey = 'openjensen-pending-update';
 export function ApplicationUpdates() {
   const client = useQueryClient();
   const dialog = useRef<HTMLDialogElement>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,11 +51,14 @@ export function ApplicationUpdates() {
 
   useEffect(() => {
     if (!pending || !operation || operation.id !== pending) return;
+    if (active.has(operation.phase)) setError(null);
     if (operation.phase === 'complete' && value?.installed.commit === operation.target_commit) {
       sessionStorage.removeItem(pendingKey);
+      sessionStorage.removeItem(pendingKey + '-target');
       window.location.reload();
     } else if (['failed', 'rolled_back', 'recovery_required'].includes(operation.phase)) {
       sessionStorage.removeItem(pendingKey);
+      sessionStorage.removeItem(pendingKey + '-target');
       setPending(null);
     }
   }, [operation, pending, value?.installed.commit]);
@@ -63,19 +67,42 @@ export function ApplicationUpdates() {
     client.setQueryData(['application-updates'], next);
   }
 
-  async function apply() {
-    if (!value?.upstream_commit) return;
+  async function refresh() {
+    setRefreshing(true);
+    setError(null);
+    try {
+      updateCache(await api.checkApplicationUpdates(true));
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Could not check updates.');
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  async function apply(retry = false) {
+    const target = retry ? sessionStorage.getItem(pendingKey + '-target') : value?.upstream_commit;
+    if (!target) return;
+    const operationId =
+      retry && pending
+        ? pending
+        : Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('');
+    sessionStorage.setItem(pendingKey, operationId);
+    sessionStorage.setItem(pendingKey + '-target', target);
+    setPending(operationId);
     setConfirming(true);
     setError(null);
     try {
-      const next = await api.applyApplicationUpdate(value.upstream_commit);
+      const next = await api.applyApplicationUpdate(target, operationId);
       updateCache(next);
-      if (next.operation) {
-        sessionStorage.setItem(pendingKey, next.operation.id);
-        setPending(next.operation.id);
-      }
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'Could not start the update.');
+      if (failure instanceof ApiError && failure.status < 500) {
+        sessionStorage.removeItem(pendingKey);
+        sessionStorage.removeItem(pendingKey + '-target');
+        setPending(null);
+        setError(failure.message);
+      } else {
+        setError('Connection interrupted. Checking whether this update was accepted.');
+      }
       void status.refetch();
     } finally {
       setConfirming(false);
@@ -92,7 +119,13 @@ export function ApplicationUpdates() {
         aria-label="Version and updates"
         onClick={() => setOpen(true)}
       >
-        {busy ? 'Updating…' : available ? 'Update available' : `v${value?.installed.version ?? '…'}`}
+        {busy
+          ? pending && operation?.id !== pending && !confirming
+            ? 'Checking update…'
+            : 'Updating…'
+          : available
+            ? 'Update available'
+            : `v${value?.installed.version ?? '…'}`}
       </button>
       <dialog
         ref={dialog}
@@ -156,7 +189,7 @@ export function ApplicationUpdates() {
             ? 'Server restarting or disconnected. Reconnecting…'
             : operation && (busy || ['failed', 'rolled_back', 'recovery_required'].includes(operation.phase))
               ? operation.message
-              : check.isFetching
+              : check.isFetching || refreshing
                 ? 'Checking upstream main…'
                 : value?.message}
         </p>
@@ -181,17 +214,16 @@ export function ApplicationUpdates() {
           </p>
         )}
         <footer>
+          {pending && operation?.id !== pending && !confirming && (
+            <button type="button" className="secondary-button" onClick={() => void apply(true)}>
+              Retry request
+            </button>
+          )}
           <button
             type="button"
             className="secondary-button"
-            disabled={busy || check.isFetching}
-            onClick={() => {
-              setError(null);
-              void api
-                .checkApplicationUpdates(true)
-                .then(updateCache)
-                .catch((failure: Error) => setError(failure.message));
-            }}
+            disabled={busy || check.isFetching || refreshing}
+            onClick={() => void refresh()}
           >
             Check for updates
           </button>
