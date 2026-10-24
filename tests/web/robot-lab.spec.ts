@@ -7,7 +7,7 @@ const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQ
 const joints = ['shoulder_pan', 'shoulder_lift', 'elbow_flex', 'wrist_flex', 'wrist_roll', 'gripper'];
 const values = (value: number) => Object.fromEntries(joints.map(name => [name, value]));
 function initialStatus(calibrated = false): any {
-  return { ok: true, connected: true, label: 'This Mac', version: '1', platform: 'Darwin', dependencies: { lerobot: { installed: false, version: null }, serial: { installed: true, version: '3.5' }, cv2: { installed: true, version: '4.12.0' }, scservo_sdk: { installed: true, version: '1.0.0' } }, capabilities: { middle_tolerance: true, joint_sliders: true, calibration_persistence: true, partial_control: true, move_to_middle: true, mapping_verification: true, assembled_setup: true, probe: true, camera: true, motor_setup: true, calibration: true, control: true, recording: true }, session: { mode: 'idle', robot_id: null, port: null, role: null, positions: {}, torque_enabled: false, watchdog_seconds: 2, error: null }, calibration: { phase: 'idle', mins: {}, maxes: {}, offsets: {}, path: null }, recording: { active: false, dataset_id: null, episode_active: false, frames: 0, episodes: 0, fps: 10, error: null }, assembled: { phase: 'idle', ids: [], selected_joint: null, detected_id: null, candidate_delta: null, mapping: {}, message: 'Start experimental assembled setup.', error: null, log: [], progress: null, calibration_required: false }, calibrations: calibrated ? [{ robot_id: 'my-so101', role: 'follower', path: 'private-calibration.json' }] : [], datasets: [] };
+  return { ok: true, connected: true, label: 'This Mac', version: '1', platform: 'Darwin', dependencies: { lerobot: { installed: false, version: null }, serial: { installed: true, version: '3.5' }, cv2: { installed: true, version: '4.12.0' }, scservo_sdk: { installed: true, version: '1.0.0' } }, capabilities: { large_joint_steps: true, arm_readiness: true, middle_tolerance: true, joint_sliders: true, calibration_persistence: true, partial_control: true, move_to_middle: true, mapping_verification: true, assembled_setup: true, probe: true, camera: true, motor_setup: true, calibration: true, control: true, recording: true }, session: { mode: 'idle', robot_id: null, port: null, role: null, positions: {}, torque_enabled: false, watchdog_seconds: 2, error: null }, calibration: { phase: 'idle', mins: {}, maxes: {}, offsets: {}, path: null }, recording: { active: false, dataset_id: null, episode_active: false, frames: 0, episodes: 0, fps: 10, error: null }, assembled: { phase: 'idle', ids: [], selected_joint: null, detected_id: null, candidate_delta: null, mapping: {}, message: 'Start experimental assembled setup.', error: null, log: [], progress: null, calibration_required: false }, calibrations: calibrated ? [{ robot_id: 'my-so101', role: 'follower', path: 'private-calibration.json' }] : [], datasets: [] };
 }
 async function fixture(page: Page, calibrated = false) {
   const state = { status: initialStatus(calibrated), writes: [] as { path: string; body: any }[], errors: [] as string[], datasetReads: 0, cameraFailure: false, stopError: null as string | null, centerError: null as string | null, portsConnected: true, middleInProgress: false, encoderLag: false, jogDelay: 0, jogStaleResponse: false, robotDatasetReads: 0, heartbeatFailures: 0, statusFailures: false, dropCalibrationReply: false };
@@ -23,7 +23,11 @@ async function fixture(page: Page, calibrated = false) {
       if (action === '/datasets') { state.robotDatasetReads++; return route.fulfill({ json: { datasets: state.status.datasets } }); }
       if (action === '/probe') return route.fulfill({ json: { port, baudrate: 1000000, motors: [{ id: 1, model: 777, stable: true, responses: 3 }], ready: false, expected_ids: [1, 2, 3, 4, 5, 6], warning: 'A response at one ID cannot prove that only one physical motor is connected.' } });
       if (action === '/setup/motor') return route.fulfill({ json: { assigned: { joint: body.joint, id: joints.indexOf(body.joint) + 1, baudrate: 1000000 }, warning: 'Keep other motors disconnected.' } });
-      if (action === '/mapping/wiggle') {
+      if (action === '/mapping/confirm') {
+        const checks = state.status.mapping_checks?.checks ?? {};
+        state.status.mapping_checks = { port, revision: 'fixture-revision', error: null, checks: { ...checks, [body.joint]: { run_id: body.run_id, correct: body.correct, checked_at: Date.now() / 1000 } } };
+      }
+      else if (action === '/mapping/wiggle') {
         const verification = { phase: 'checking', port: body.port, joint: body.joint, motor_id: joints.indexOf(body.joint) + 1, ticks: null, motion_active: false, error: null, run_id: String(state.writes.length) };
         state.status.verification = verification;
         state.status.session.mode = 'verification';
@@ -47,7 +51,7 @@ async function fixture(page: Page, calibrated = false) {
       else if (action === '/calibration/cancel' || action === '/stop') { if (state.status.session.mode === 'setup') state.status.assembled.phase = 'stopped'; if (state.status.session.mode === 'verification') state.status.verification.phase = 'stopped'; if (action === '/stop') state.status.session.error = state.stopError; state.status.session.mode = 'idle'; state.status.session.torque_enabled = false; state.status.recording.episode_active = false; }
       else if (action === '/control/start') { state.status.session = { ...state.status.session, mode: body.mode, active_joints: body.joints ?? joints, port: body.port, robot_id: body.robot_id, positions: values(0), targets: values(0), slider_targets: values(0), joint_limits: Object.fromEntries((body.joints ?? joints).map((j: string) => [j, { min: j === 'gripper' ? 0.3 : -100, max: j === 'gripper' ? 99.7 : 100 }])), torque_enabled: body.mode !== 'handguide', centering: { active: !!body.move_to_middle && state.middleInProgress, progress: 0.25, tolerance: body.middle_tolerance ?? 2 } }; }
       else if (action === '/control/heartbeat') { if (state.heartbeatFailures > 0) { state.heartbeatFailures--; return route.abort('failed'); } }
-      else if (action === '/control/jog') { const before = structuredClone(state.status); if (state.jogDelay) await new Promise(resolve => setTimeout(resolve, state.jogDelay)); if (state.jogStaleResponse) return route.fulfill({ json: before }); if (body.target !== undefined) { state.status.session.slider_targets[body.joint] = body.target; } else { if (!state.encoderLag) state.status.session.positions[body.joint] += body.delta; state.status.session.targets[body.joint] += body.delta; state.status.session.slider_targets[body.joint] = state.status.session.targets[body.joint]; } }
+      else if (action === '/control/jog') { const before = structuredClone(state.status); if (state.jogDelay) await new Promise(resolve => setTimeout(resolve, state.jogDelay)); if (state.jogStaleResponse) return route.fulfill({ json: before }); if (body.target !== undefined) { state.status.session.slider_targets[body.joint] = body.target; } else if (Math.abs(body.delta) > 2) { const limits = state.status.session.joint_limits[body.joint]; state.status.session.slider_targets[body.joint] = Math.max(limits.min, Math.min(limits.max, state.status.session.slider_targets[body.joint] + body.delta)); } else { if (!state.encoderLag) state.status.session.positions[body.joint] += body.delta; state.status.session.targets[body.joint] += body.delta; state.status.session.slider_targets[body.joint] = state.status.session.targets[body.joint]; } }
       else if (action === '/recording/start') { state.status.recording = { active: true, dataset_id: body.dataset_id, episode_active: false, frames: 0, episodes: 0, fps: body.fps, error: null }; }
       else if (action === '/recording/episode/start') { state.status.recording.episode_active = true; state.status.recording.frames = 10; }
       else if (action === '/recording/episode/save') { state.status.recording.episode_active = false; state.status.recording.episodes++; state.status.recording.frames = 0; }
@@ -123,7 +127,7 @@ test('calibration center and range save are explicit and use the official compan
   await page.getByRole('button', { name: 'Record middle position', exact: true }).click();
   await expect(page.getByRole('columnheader', { name: 'Range', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Save calibration', exact: true }).click();
-  await expect(page.getByText('my-so101 · follower', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Selected arm calibration')).toContainText('my-so101 · follower');
   expect(writes(state, '/calibration/start')[0].body).toEqual({ port, robot_id: 'my-so101', role: 'follower', confirm: 'START CALIBRATION' });
   expect(writes(state, '/calibration/center')[0].body).toEqual({});
   expect(writes(state, '/calibration/finish')[0].body).toEqual({ confirm: 'SAVE CALIBRATION' });
@@ -225,7 +229,7 @@ test('unsaved recording can be explicitly closed after Stop while retained files
 test('offline companion cannot start hardware actions and does not retry mutations', async ({ page }) => {
   const state = await fixture(page, true);
   state.status = { connected: false, ok: false, label: 'This Mac', message: 'Companion is offline.' };
-  await page.getByRole('button', { name: 'Check connection', exact: true }).click();
+  await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
   await expect(page.getByText('Mac companion unavailable', { exact: true })).toBeVisible();
   await tab(page, 'Motor IDs').click();
   await page.getByText('Advanced: configure one physically isolated motor', { exact: true }).click();
@@ -292,7 +296,7 @@ test('all six illustrated joints work by pointer and keyboard without idle hardw
 test('offline joint illustration still selects and never invents measurements or sends mutations', async ({ page }) => {
   const state = await fixture(page);
   state.status = { ok: false, connected: false, message: 'Companion offline.' };
-  await page.getByRole('button', { name: 'Check connection', exact: true }).click();
+  await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
   await expect(page.getByText('Mac companion unavailable', { exact: true })).toBeVisible();
   await tab(page, 'Motor IDs').click();
   const guide = page.getByRole('region', { name: 'SO-101 joint illustration', exact: true });
@@ -391,7 +395,7 @@ test('assembled setup prepares explicitly then picks start only encoder observat
   state.status.assembled = { ...state.status.assembled, phase: 'stopped', ids: [3], mapping: {},
     message: 'Setup stopped. Partial motor IDs are preserved; restart setup to scan and resume.',
     log: ['Separating factory IDs: round 8/12', 'Setup stopped with responding ID 3.'] };
-  await page.getByRole('button', { name: 'Check connection', exact: true }).click();
+  await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
   await tab(page, 'Motor IDs').click();
   await expect(page.getByText(state.status.assembled.message, { exact: true })).toBeVisible();
   await page.getByText('Setup details', { exact: true }).click();
@@ -435,7 +439,7 @@ test('wiggle identification requires explicit motion then observed-joint confirm
 test('motor identification distinguishes preparation, listening and a stopped session', async ({ page }) => {
   const state = await fixture(page);
   state.status.assembled = { ...state.status.assembled, phase: 'stopped', ids: [2], progress: 1 };
-  await page.getByRole('button', { name: 'Check connection', exact: true }).click();
+  await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
   await tab(page, 'Motor IDs').click();
   const status = page.getByRole('status', { name: 'Motor identification status', exact: true });
   await expect(status).toContainText('Movement detection off');
@@ -484,9 +488,9 @@ test('hiding Robot Lab stops setup and visibly explains the cancellation', async
 });
 
 
-test('background polling keeps Check connection quiet and idle hardware has no active Stop control', async ({ page }) => {
+test('background polling keeps device refresh quiet and idle hardware has no active Stop control', async ({ page }) => {
   const state = await fixture(page, true);
-  const check = page.getByRole('button', { name: 'Check connection', exact: true });
+  const check = page.getByRole('button', { name: 'Refresh devices', exact: true });
   const stop = page.getByRole('button', { name: 'Stop arm and disable torque', exact: true });
   await expect(stop).toHaveCount(0);
   let unblock!: () => void, reads = 0;
@@ -498,9 +502,9 @@ test('background polling keeps Check connection quiet and idle hardware has no a
   });
   await expect.poll(() => reads, { timeout: 10_000 }).toBeGreaterThan(0);
   await expect(check).toBeEnabled();
-  await expect(page.getByRole('button', { name: 'Checking…', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Refreshing…', exact: true })).toHaveCount(0);
   await check.click();
-  await expect(page.getByRole('button', { name: 'Checking…', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Refreshing…', exact: true })).toBeDisabled();
   unblock();
   await expect(check).toBeEnabled();
   await startManual(page);
@@ -513,7 +517,7 @@ test('background polling keeps Check connection quiet and idle hardware has no a
 async function savedMapping(page: Page) {
   const state = await fixture(page);
   state.status.assembled = { ...state.status.assembled, port, phase: 'complete', ids: [1,2,3,4,5,6], mapping: Object.fromEntries(joints.map((name,index) => [name,index+1])), calibration_required: true };
-  await page.getByRole('button', { name: 'Check connection', exact: true }).click();
+  await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
   await tab(page, 'Motor IDs').click();
   await expect(page.getByRole('heading', { name: 'Saved IDs', exact: true })).toBeVisible();
   return state;
@@ -549,7 +553,7 @@ test('mapping mismatch and cancellation never claim a successful check', async (
   const wiggle = page.getByRole('button', {name:'Wiggle gripper · ID 6',exact:true});
   await wiggle.click();
   await page.getByRole('button', {name:'Wrong joint',exact:true}).click();
-  await expect(page.getByText('Mismatch',{exact:true})).toBeVisible();
+  await expect(page.getByRole('cell', {name:'Mismatch',exact:true})).toBeVisible();
   await expect(page.getByText('0/6 motion checks',{exact:true})).toBeVisible();
   await wiggle.click();
   await page.getByRole('button', {name:'Stop arm and disable torque',exact:true}).click();
@@ -587,7 +591,7 @@ test('USB disconnect disables remembered motor controls and reconnect requires f
   await acknowledge.check();
   await expect(wiggle).toBeEnabled();
   state.portsConnected = false;
-  await page.getByRole('button', {name:'Check connection',exact:true}).click();
+  await page.getByRole('button', {name:'Refresh devices',exact:true}).click();
   await expect(page.getByText('Robot USB disconnected',{exact:true})).toBeVisible();
   await expect(wiggle).toBeDisabled();
   await expect(acknowledge).not.toBeChecked();
@@ -599,12 +603,12 @@ test('USB disconnect disables remembered motor controls and reconnect requires f
   await expect(page.getByRole('button',{name:'Begin calibration',exact:true})).toBeDisabled();
   state.status.calibrations = [{robot_id:'my-so101',role:'follower',path:'saved.json'}];
   state.status.assembled.calibration_required = false;
-  await page.getByRole('button', {name:'Check connection',exact:true}).click();
+  await page.getByRole('button', {name:'Refresh devices',exact:true}).click();
   await tab(page, 'Teleoperate').click();
   await page.getByRole('checkbox',{name:/Arm secured; workspace clear/}).check();
   await expect(page.getByRole('button',{name:'Enable & move to recorded middle',exact:true})).toBeDisabled();
   await tab(page, 'Connect').click();
-  await expect(page.getByRole('button',{name:'Check motor connection',exact:true})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Scan motor IDs',exact:true})).toBeDisabled();
   await tab(page, 'Motor IDs').click();
   state.portsConnected = true;
   // Idle inventory polling notices USB return without refreshing or starting a session.
@@ -793,7 +797,7 @@ test('lost calibration replies reconcile the completed stage without replaying m
   await expect(page.getByRole('button', { name: 'Save calibration', exact: true })).toBeEnabled();
   await expect(page.getByRole('alert', { name: 'Calibration error' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Save calibration', exact: true }).click();
-  await expect(page.getByText('my-so101 · follower', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Selected arm calibration')).toContainText('my-so101 · follower');
   await expect(page.getByRole('alert', { name: 'Calibration error' })).toHaveCount(0);
   expect(writes(state, '/calibration/center')).toHaveLength(1);
   expect(writes(state, '/calibration/finish')).toHaveLength(1);
@@ -906,4 +910,128 @@ test('middle tolerance defaults to two and five is explicit, fixed during motion
   expect(writes(state, '/control/start')).toHaveLength(1);
   expect(state.errors).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath('middle-tolerance.png'), fullPage: true });
+});
+
+
+test('readiness separates USB, motor responses, mapping and selected calibration without automatic motor work', async ({ page }, testInfo) => {
+  const state = await fixture(page, true);
+  const readiness = page.getByRole('region', { name: 'Arm readiness', exact: true });
+  await expect(readiness).toContainText('Not scanned');
+  await expect(readiness).toContainText('Not identified');
+  await expect(readiness).toContainText('Saved · not checked');
+  await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
+  expect(state.writes).toEqual([]);
+  await readiness.getByRole('button', { name: 'Scan arm', exact: true }).click();
+  await expect(readiness).toContainText('1/6 responding');
+  const results = page.getByRole('region', { name: 'Motor scan results' });
+  await expect(results.getByRole('row')).toHaveCount(7);
+  await expect(results.getByText('No response', { exact: true })).toHaveCount(5);
+  expect(writes(state, '/probe')[0].body).toEqual({ port, robot_id: 'my-so101', role: 'follower' });
+  expect(writes(state, '/mapping/wiggle')).toEqual([]);
+  await readiness.getByRole('button', { name: /Physical mapping/ }).click();
+  await expect(page.getByRole('button', { name: 'Start assembled setup', exact: true })).toBeDisabled();
+  await readiness.getByRole('button', { name: /Calibration/ }).click();
+  await expect(page.getByLabel('Selected arm calibration')).toContainText('Saved · not checked');
+  await page.getByLabel('Robot name').fill('different-arm');
+  await expect(page.getByLabel('Selected arm calibration')).toContainText('Not saved');
+  expect(writes(state, '/calibration/start')).toEqual([]);
+  expect(writes(state, '/control/start')).toEqual([]);
+  await page.screenshot({path:testInfo.outputPath('readiness-selected-arm.png'),fullPage:true});
+});
+
+test('saved physical confirmations survive reload and guide the next unchecked joint without wiggling it', async ({ page }) => {
+  const state = await savedMapping(page);
+  await page.getByRole('checkbox', { name: /Arm supported; joints clear/ }).check();
+  await page.getByRole('button', { name: 'Wiggle gripper · ID 6', exact: true }).click();
+  await page.getByRole('button', { name: 'Correct joint', exact: true }).click();
+  await expect(page.getByText('1/6 motion checks', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Wiggle wrist roll · ID 5', exact: true })).toBeVisible();
+  expect(writes(state, '/mapping/wiggle')).toHaveLength(1);
+  expect(writes(state, '/mapping/confirm')[0].body).toMatchObject({port, joint:'gripper', correct:true, confirm:'CONFIRM PHYSICAL JOINT'});
+  await page.reload();
+  await tab(page, 'Motor IDs').click();
+  await expect(page.getByText('1/6 motion checks', { exact: true })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: /Arm supported; joints clear/ })).not.toBeChecked();
+  expect(writes(state, '/mapping/wiggle')).toHaveLength(1);
+});
+
+test('readiness never turns an invalid or stale profile green and shows hardware mismatch', async ({ page }, testInfo) => {
+  const state = await fixture(page, true);
+  const readiness = page.getByRole('region', { name: 'Arm readiness' });
+  state.status.calibrations[0] = {...state.status.calibrations[0], valid:false, error:'Missing joint ranges'};
+  await page.getByRole('button', {name:'Refresh devices',exact:true}).click();
+  await expect(readiness).toContainText('Invalid profile');
+  await tab(page, 'Teleoperate').click();
+  await page.getByRole('checkbox', {name:/Arm secured; workspace clear/}).check();
+  await expect(page.getByRole('button', {name:'Enable & move to recorded middle',exact:true})).toBeDisabled();
+  state.status.calibrations[0] = {...state.status.calibrations[0],valid:true,setup_port:port,setup_fresh:false};
+  await page.getByRole('button', {name:'Refresh devices',exact:true}).click();
+  await expect(readiness).toContainText('Recalibration needed');
+  state.status.calibrations[0].setup_fresh = true;
+  await page.getByRole('button', {name:'Refresh devices',exact:true}).click();
+  await page.route('**/api/v1/robot-lab/probe', route => route.fulfill({json:{port,baudrate:1000000,ready:true,expected_ids:[1,2,3,4,5,6],motors:joints.map((_,i)=>({id:i+1,model:777,stable:true,responses:3})),profile:{robot_id:'my-so101',role:'follower',state:'mismatch',joints:{shoulder_lift:false}}}}));
+  await readiness.getByRole('button',{name:'Scan arm',exact:true}).click();
+  await expect(readiness).toContainText('Settings differ');
+  await page.screenshot({path:testInfo.outputPath('readiness-mismatch.png'),fullPage:true});
+  state.status.calibrations = [];
+  await page.getByRole('button',{name:'Refresh devices',exact:true}).click();
+  await expect(readiness).toContainText('Not saved');
+  await expect(page.getByRole('button',{name:'Enable & move to recorded middle',exact:true})).toBeDisabled();
+  expect(writes(state,'/control/start')).toEqual([]);
+});
+
+
+test('calibration ranges indicate which joints still need movement before saving', async ({ page }) => {
+  const state = await fixture(page);
+  await tab(page, 'Calibrate').click();
+  await page.getByRole('button',{name:'Begin calibration',exact:true}).click();
+  await page.getByRole('button',{name:'Record middle position',exact:true}).click();
+  state.status.calibration.mins = values(2047);
+  state.status.calibration.maxes = values(2047);
+  await page.getByRole('button',{name:'Refresh devices',exact:true}).click();
+  await expect(page.getByText('0/5 ranges detected · wrist roll automatic',{exact:true})).toBeVisible();
+  await expect(page.getByRole('cell',{name:'Move joint',exact:true})).toHaveCount(5);
+  await expect(page.getByRole('button',{name:'Save calibration',exact:true})).toBeDisabled();
+  state.status.calibration.mins = values(700);
+  state.status.calibration.maxes = values(3300);
+  await page.getByRole('button',{name:'Refresh devices',exact:true}).click();
+  await expect(page.getByText('5/5 ranges detected · wrist roll automatic',{exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Save calibration',exact:true})).toBeEnabled();
+  expect(writes(state,'/calibration/finish')).toEqual([]);
+});
+
+
+test('large joint steps offer five and ten and update only the requested destination without refreshing', async ({ page }, testInfo) => {
+  const state = await fixture(page, true);
+  await startManual(page);
+  const selector = page.getByLabel('Joint step size');
+  await expect(selector.locator('option')).toHaveText(['0.5° / %', '1° / %', '2° / %', '5° / %', '10° / %']);
+  await selector.selectOption('5');
+  await page.getByRole('button', {name:'Increase Elbow',exact:true}).click();
+  await expect(page.getByLabel('Elbow target', {exact:true})).toHaveText('→ 5.0°');
+  await expect(page.getByLabel('Elbow position', {exact:true})).toHaveText('0.0°');
+  await selector.selectOption('10');
+  await page.getByRole('button', {name:'Increase Elbow',exact:true}).click();
+  await expect(page.getByLabel('Elbow target', {exact:true})).toHaveText('→ 15.0°');
+  await page.getByRole('button', {name:'Decrease Elbow',exact:true}).click();
+  await expect(page.getByLabel('Elbow target', {exact:true})).toHaveText('→ 5.0°');
+  await page.getByRole('button', {name:'Increase Gripper',exact:true}).click();
+  await expect(page.getByLabel('Gripper target', {exact:true})).toHaveText('→ 10.0%');
+  expect(writes(state,'/control/jog').map(write=>write.body)).toEqual([
+    {joint:'elbow_flex',delta:5},{joint:'elbow_flex',delta:10},{joint:'elbow_flex',delta:-10},{joint:'gripper',delta:10},
+  ]);
+  await expect(selector).toHaveValue('10');
+  await page.screenshot({path:testInfo.outputPath('large-joint-steps.png'),fullPage:true});
+  await page.getByRole('button', {name:'Stop & release motors',exact:true}).click();
+  await expect(page.getByRole('button', {name:'Increase Elbow',exact:true})).toHaveCount(0);
+  expect(state.errors).toEqual([]);
+});
+
+test('large joint steps are hidden when the connected companion does not support them', async ({ page }) => {
+  const state = await fixture(page, true);
+  state.status.capabilities.large_joint_steps = false;
+  await page.getByRole('button', {name:'Refresh devices',exact:true}).click();
+  await startManual(page);
+  await expect(page.getByLabel('Joint step size').locator('option')).toHaveText(['0.5° / %','1° / %','2° / %']);
+  expect(writes(state,'/control/jog')).toEqual([]);
 });

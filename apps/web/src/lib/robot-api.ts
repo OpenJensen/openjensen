@@ -16,17 +16,18 @@ export type RobotDataset = { id: string; path: string; episodes: number; frames:
 export type RobotStatus = {
   ok?: boolean; connected?: boolean; label?: string; message?: string; version?: string; platform?: string;
   dependencies?: Record<string, { installed: boolean; version: string | null }>;
-  capabilities?: { joint_sliders?: boolean; calibration_persistence?: boolean; partial_control?: boolean; move_to_middle?: boolean; middle_tolerance?: boolean; assembled_setup?: boolean; mapping_verification?: boolean; probe: boolean; camera: boolean; motor_setup: boolean; calibration: boolean; control: boolean; recording: boolean };
+  capabilities?: { large_joint_steps?: boolean; arm_readiness?: boolean; joint_sliders?: boolean; calibration_persistence?: boolean; partial_control?: boolean; move_to_middle?: boolean; middle_tolerance?: boolean; assembled_setup?: boolean; mapping_verification?: boolean; probe: boolean; camera: boolean; motor_setup: boolean; calibration: boolean; control: boolean; recording: boolean };
   session?: { mode: 'idle' | 'calibration' | 'setup' | 'verification' | ControlMode; robot_id: string | null; port: string | null; role: RobotRole | null; positions: JointValues; active_joints?: RobotJoint[]; targets?: JointValues; slider_targets?: JointValues; joint_limits?: Partial<Record<RobotJoint, { min: number; max: number }>>; torque_enabled: boolean; centering?: { active: boolean; progress: number; tolerance?: number }; watchdog_seconds: number | null; error: string | null };
   calibration?: { phase: 'idle' | 'center' | 'ranges' | 'saved' | 'interrupted'; recoverable?: boolean; robot_id?: string; role?: RobotRole; port?: string; interrupted_stage?: 'center' | 'ranges'; error?: string | null; mins: JointValues; maxes: JointValues; offsets: JointValues; path: string | null };
   recording?: { active: boolean; dataset_id: string | null; episode_active: boolean; frames: number; episodes: number; fps: number; error: string | null };
   assembled?: { port?: string | null; phase: 'idle' | 'scanning' | 'splitting' | 'ready' | 'observing' | 'wiggling' | 'review' | 'applying' | 'complete' | 'error' | 'stopped'; motion_active?: boolean; wiggle_id?: number | null; wiggle_ticks?: number | null; ids: number[]; selected_joint: RobotJoint | null; detected_id: number | null; candidate_delta: number | null; mapping: Partial<Record<RobotJoint, number>>; message: string; error: string | null; log: string[]; progress: unknown; calibration_required: boolean };
   verification?: { phase: 'idle' | 'checking' | 'wiggling' | 'done' | 'error' | 'stopped'; port: string | null; joint: RobotJoint | null; motor_id: number | null; ticks: number | null; motion_active: boolean; error: string | null; run_id: string | null };
-  calibrations?: { robot_id: string; role: RobotRole; path: string }[];
+  mapping_checks?: { port: string | null; revision: string | null; checks: Partial<Record<RobotJoint, { run_id: string; correct: boolean; checked_at: number }>>; error: string | null };
+  calibrations?: { robot_id: string; role: RobotRole; path: string; valid?: boolean; setup_port?: string; setup_fresh?: boolean; sha256?: string; error?: string | null }[];
   datasets?: RobotDataset[];
 };
 export type RobotDevices = { ports: { device: string; description: string; manufacturer: string | null; serial_number: string | null }[]; cameras: { index: number; name: string; width: number; height: number }[]; camera_error: string | null };
-export type RobotProbe = { port: string; baudrate: number; motors: { id: number; model: number; stable: boolean; responses: number }[]; ready: boolean; expected_ids: number[]; warning: string | null };
+export type RobotProbe = { checked_at?: number; profile?: { robot_id: string; role: RobotRole; sha256?: string; state: 'missing' | 'invalid' | 'stale' | 'unavailable' | 'matched' | 'mismatch'; joints: Partial<Record<RobotJoint, boolean>>; error?: string | null }; port: string; baudrate: number; motors: { id: number; model: number; stable: boolean; responses: number }[]; ready: boolean; expected_ids: number[]; warning: string | null };
 export type MotorAssignment = { assigned: { joint: RobotJoint; id: number; baudrate: number }; warning: string | null };
 
 async function request<T>(path: string, body?: unknown, options: { timeoutMs?: number; keepalive?: boolean } = {}): Promise<T> {
@@ -55,9 +56,10 @@ export const robotApi = {
   status: () => request<RobotStatus>('/status'),
   devices: () => request<RobotDevices>('/devices', undefined, { timeoutMs: 30_000 }),
   datasets: () => request<{ datasets: RobotDataset[] }>('/datasets'),
-  probe: (port: string) => request<RobotProbe>('/probe', { port }, { timeoutMs: 90_000 }),
+  probe: (port: string, robot_id?: string, role: RobotRole = 'follower') => request<RobotProbe>('/probe', { port, ...(robot_id ? { robot_id, role } : {}) }, { timeoutMs: 90_000 }),
   assignMotor: (port: string, joint: RobotJoint) => request<MotorAssignment>('/setup/motor', { port, joint, isolated: true, confirm: 'ASSIGN MOTOR ID' }, { timeoutMs: 90_000 }),
   wiggleSaved: (port: string, joint: RobotJoint) => request<RobotStatus>('/mapping/wiggle', { port, joint, supported: true, confirm: 'WIGGLE SAVED MOTOR' }),
+  confirmMapping: (port: string, joint: RobotJoint, run_id: string, correct: boolean) => request<RobotStatus>('/mapping/confirm', { port, joint, run_id, correct, confirm: 'CONFIRM PHYSICAL JOINT' }),
   startAssembled: (port: string) => request<RobotStatus>('/setup/assembled/start', { port, supported: true, confirm: 'START ASSEMBLED SETUP' }),
   wiggleAssembled: (motor_id: number) => request<RobotStatus>('/setup/assembled/wiggle', { motor_id, supported: true, confirm: 'WIGGLE MOTOR' }),
   acceptWiggle: (joint: RobotJoint, motor_id: number) => request<RobotStatus>('/setup/assembled/accept', { joint, motor_id, method: 'wiggle', confirm: 'CONFIRM OBSERVED JOINT' }),

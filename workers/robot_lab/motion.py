@@ -24,7 +24,7 @@ def tracking_tolerance(joint, calibration):
     return span * 0.05 if joint == "gripper" else 5 * TICKS_PER_DEGREE
 
 
-def jog_target(joint, delta, raw, commanded, calibration):
+def step_target(joint, delta, commanded, calibration):
     entry = calibration[joint]
     scale = (
         (entry["range_max"] - entry["range_min"]) / 100 if joint == "gripper" else TICKS_PER_DEGREE
@@ -33,6 +33,11 @@ def jog_target(joint, delta, raw, commanded, calibration):
     # Truncate magnitude so quantization never exceeds the requested step.
     target = commanded[joint] + math.trunc(delta * scale)
     target = max(entry["range_min"] + 8, min(entry["range_max"] - 8, target))
+    return target
+
+
+def jog_target(joint, delta, raw, commanded, calibration):
+    target = step_target(joint, delta, commanded, calibration)
     if abs(target - raw[joint]) > tracking_tolerance(joint, calibration):
         raise ValueError(
             f"{joint.replace('_', ' ').capitalize()} has not reached its target; "
@@ -115,12 +120,12 @@ class MiddleMotion(PositionMotion):
 
 
 class JointMotion(PositionMotion):
-    def __init__(self, joint, initial, target, calibration):
+    def __init__(self, joint, initial, target, calibration, *, label=None):
         super().__init__(
             {joint: initial},
             {joint: target},
             calibration,
-            f"{joint.replace('_', ' ').capitalize()} slider movement",
+            label or f"{joint.replace('_', ' ').capitalize()} slider movement",
         )
 
 

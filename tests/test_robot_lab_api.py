@@ -370,3 +370,31 @@ def test_recording_close_requires_strict_explicit_confirmation_before_contacting
     with browser(tmp_path, companion) as client:
         assert client.post("/api/v1/robot-lab/recording/finish", json=payload).status_code == 422
     asyncio.run(companion.close())
+
+
+def test_mapping_observation_route_preserves_run_identity_without_exposing_credentials(tmp_path):
+    connection(tmp_path)
+    observed = []
+
+    def handler(request):
+        assert request.headers["authorization"] == "Bearer " + TOKEN
+        observed.append((request.url.path, json.loads(request.content)))
+        return httpx.Response(
+            200, json={"mapping_checks": {"checks": {"gripper": {"correct": True}}}}
+        )
+
+    companion = bridge(tmp_path, handler)
+    payload = {
+        "port": "/dev/cu.usbmodem123",
+        "joint": "gripper",
+        "run_id": "completed-run",
+        "correct": True,
+        "confirm": "CONFIRM PHYSICAL JOINT",
+    }
+    with browser(tmp_path, companion) as client:
+        response = client.post("/api/v1/robot-lab/mapping/confirm", json=payload)
+        assert response.status_code == 200
+        assert observed == [("/v1/mapping/confirm", payload)]
+        assert TOKEN not in response.text
+        assert response.headers["cache-control"] == "no-store"
+    asyncio.run(companion.close())

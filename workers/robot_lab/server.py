@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.metadata
 import importlib.util
 import json
@@ -45,8 +46,10 @@ from motion import (
     control_limits,
     jog_target,
     middle_targets,
+    step_target,
 )
 from verification import (
+    MappingChecks,
     MappingVerification,
     empty_verification,
     latest_saved_mapping,
@@ -187,6 +190,8 @@ class RobotLab:
         self.verification_factory = verification_factory
         self.verification_session = None
         self.verification_state = empty_verification()
+        self.mapping_checks = MappingChecks(self.data_dir)
+        self.verification_revision = None
         self.bus_factory = bus_factory
         self.port_provider = port_provider
         self.camera = camera or CameraPool()
@@ -284,6 +289,33 @@ class RobotLab:
         ):
             raise RequestError("Stop the current session before changing hardware setup")
 
+    def profile_info(self, robot_id, role, port=None):
+        path = self.calibration_path(robot_id, role)
+        result = {
+            "robot_id": robot_id,
+            "role": role,
+            "path": str(path),
+            "valid": False,
+            "setup_port": port,
+            "setup_fresh": False,
+            "sha256": None,
+            "error": None,
+        }
+        try:
+            if path.is_symlink() or not path.is_file() or path.stat().st_size > 65536:
+                raise ValueError("No valid saved calibration")
+            raw = path.read_bytes()
+            valid_calibration(json.loads(raw))
+            result.update(
+                valid=True,
+                sha256=hashlib.sha256(raw).hexdigest(),
+                setup_fresh=not port
+                or self.calibration_revisions.fresh(port, robot_id, role, path),
+            )
+        except (OSError, ValueError, TypeError, KeyError, AttributeError) as error:
+            result["error"] = str(error)
+        return result
+
     def status(self):
         # Snapshot only; polling never opens a camera or touches the motors.
         deps = dependencies()
@@ -294,7 +326,13 @@ class RobotLab:
             ("leader", "teleoperators/so_leader/*.json"),
         ):
             for path in self.calibration_root.glob(pattern):
-                calibrations.append({"robot_id": path.stem, "role": role, "path": str(path)})
+                try:
+                    safe_slug(path.stem)
+                except ValueError:
+                    continue
+                calibrations.append(
+                    self.profile_info(path.stem, role, self.assembled_state.get("port"))
+                )
         writer = self.writer
         with self.lifecycle_lock:
             assembled = json.loads(json.dumps(self.assembled_state))
@@ -321,6 +359,7 @@ class RobotLab:
                 "motor_setup": hardware,
                 "assembled_setup": hardware,
                 "mapping_verification": hardware,
+                "arm_readiness": hardware,
                 "calibration": hardware,
                 "calibration_persistence": hardware,
                 "control": hardware,
@@ -328,6 +367,7 @@ class RobotLab:
                 "middle_tolerance": hardware,
                 "partial_control": hardware,
                 "joint_sliders": hardware,
+                "large_joint_steps": hardware,
                 "recording": hardware
                 and all(deps[key]["installed"] for key in ("pyarrow", "PIL", "numpy")),
             },
@@ -364,6 +404,7 @@ class RobotLab:
             "calibration": json.loads(json.dumps(self.calibration_state)),
             "assembled": assembled,
             "verification": copy_verification,
+            "mapping_checks": self.mapping_checks.snapshot(assembled.get("port")),
             "recording": {
                 "actual_fps": writer.actual_fps if writer else None,
                 "active": writer is not None and not writer.finalized,
@@ -403,10 +444,46 @@ class RobotLab:
             baud = payload.get("baudrate", 1_000_000)
             if baud not in BAUDRATES:
                 raise RequestError("Unsupported STS3215 baudrate")
+            if payload.get("robot_id") is not None:
+                self.calibration_path(payload["robot_id"], payload.get("role", "follower"))
             bus = self.bus_factory(port, baud)
             try:
                 with bus.lock:
-                    return {"port": port, "baudrate": baud, **probe_bus(bus)}
+                    result = {
+                        "port": port,
+                        "baudrate": baud,
+                        "checked_at": time.time(),
+                        **probe_bus(bus),
+                    }
+                    if payload.get("robot_id") is not None:
+                        robot_id, role = payload["robot_id"], payload.get("role", "follower")
+                        info = self.profile_info(robot_id, role, port)
+                        profile = {
+                            "robot_id": robot_id,
+                            "role": role,
+                            "sha256": info["sha256"],
+                            "state": "missing"
+                            if not self.calibration_path(robot_id, role).exists()
+                            else "invalid"
+                            if not info["valid"]
+                            else "stale"
+                            if not info["setup_fresh"]
+                            else "unavailable",
+                            "joints": {},
+                            "error": info["error"],
+                        }
+                        if result["ready"] and info["valid"] and info["setup_fresh"]:
+                            try:
+                                saved = self.load_calibration(robot_id, role, port)
+                                actual = bus.read_calibration()
+                                profile["joints"] = {j: actual.get(j) == saved[j] for j in JOINTS}
+                                profile["state"] = (
+                                    "matched" if all(profile["joints"].values()) else "mismatch"
+                                )
+                            except (ValueError, OSError, HardwareError) as error:
+                                profile["error"] = str(error)
+                        result["profile"] = profile
+                    return result
             finally:
                 # Probe is read only: closing must never write torque registers.
                 bus.close()
@@ -595,6 +672,7 @@ class RobotLab:
             if self.torque:
                 raise RequestError("Release motor torque before checking the mapping")
             saved = saved_mapping(self.data_dir, port)
+            revision = self.mapping_checks.revision(port)
             with self.stop_lock, self.lifecycle_lock:
                 if generation != self.generation or self.stopping:
                     raise RequestError("Motor verification was cancelled before it started")
@@ -607,6 +685,7 @@ class RobotLab:
                 )
                 self.verification_session = controller
                 self.verification_state = controller.snapshot()
+                self.verification_revision = revision
                 self.assembled_state.update(saved, phase="complete")
                 self.generation += 1
                 self.mode, self.port = "verification", port
@@ -614,6 +693,23 @@ class RobotLab:
                 self.torque, self.error = False, None
                 self.heartbeat = time.monotonic()
                 controller.start()
+        return self.status()
+
+    def mapping_confirm(self, payload):
+        require(payload, "confirm", "CONFIRM PHYSICAL JOINT")
+        if type(payload.get("correct")) is not bool:
+            raise RequestError("Choose correct joint or wrong joint")
+        with self.lock, self.lifecycle_lock:
+            self._idle()
+            observed = self.verification_state
+            if (
+                observed["phase"] != "done"
+                or observed["motion_active"]
+                or observed["error"]
+                or any(payload.get(key) != observed[key] for key in ("port", "joint", "run_id"))
+            ):
+                raise RequestError("Confirm a completed motion check for this joint")
+            self.mapping_checks.record(observed, self.verification_revision, payload["correct"])
         return self.status()
 
     def _checkpoint_calibration(self, *, force=False):
@@ -1089,8 +1185,10 @@ class RobotLab:
                 limits = control_limits(self.calibration)[joint]
                 if not limits["min"] <= value <= limits["max"]:
                     raise RequestError("Slider target is outside the calibrated joint limits")
-            elif not 0 < abs(value) <= 2:
-                raise RequestError("Jog one valid joint by at most 2 degrees (gripper 2 percent)")
+            elif not 0 < abs(value) <= 10:
+                raise RequestError(
+                    "Step one valid joint by at most 10 degrees (gripper 10 percent)"
+                )
             elif time.monotonic() - self.last_jog < 0.1:
                 raise RequestError("Wait at least 100 ms between jog commands")
             if time.monotonic() - self.heartbeat > 2:
@@ -1105,16 +1203,32 @@ class RobotLab:
                 check_tracking(raw, self.commanded_raw, self.calibration)
                 if generation != self.generation:
                     raise RequestError("Session has stopped")
-                if absolute:
-                    target = denormalized(joint, value, self.calibration)
+                if absolute or abs(value) > 2:
+                    if absolute:
+                        target = denormalized(joint, value, self.calibration)
+                    else:
+                        # Advance the requested final target so repeated large
+                        # steps do not reset to a lagging encoder or intermediate
+                        # command. The trajectory still bounds every motor write.
+                        previous = self.joint_motions.get(joint)
+                        base = previous.targets[joint] if previous else self.commanded_raw[joint]
+                        target = step_target(joint, value, {joint: base}, self.calibration)
                     entry = self.calibration[joint]
                     target = max(entry["range_min"] + 8, min(entry["range_max"] - 8, target))
                     with self.lifecycle_lock:
                         if generation != self.generation:
                             raise RequestError("Session has stopped")
                         self.joint_motions[joint] = JointMotion(
-                            joint, self.commanded_raw[joint], target, self.calibration
+                            joint,
+                            self.commanded_raw[joint],
+                            target,
+                            self.calibration,
+                            label=None
+                            if absolute
+                            else f"{joint.replace('_', ' ').capitalize()} step movement",
                         )
+                        if not absolute:
+                            self.last_jog = time.monotonic()
                 else:
                     target = jog_target(joint, value, raw, self.commanded_raw, self.calibration)
                     self.joint_motions.pop(joint, None)
@@ -1528,6 +1642,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = lab.probe(payload)
             elif path == "/v1/setup/motor":
                 result = lab.setup_motor(payload)
+            elif path == "/v1/mapping/confirm":
+                result = lab.mapping_confirm(payload)
             elif path == "/v1/mapping/wiggle":
                 result = lab.mapping_wiggle(payload)
             elif path == "/v1/setup/assembled/start":
