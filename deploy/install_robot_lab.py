@@ -23,6 +23,7 @@ SOURCE_MODULES = (
     "dispatch.py",
     "server.py",
     "hardware.py",
+    "lerobot_control.py",
     "motion.py",
     "camera.py",
     "calibration_draft.py",
@@ -32,6 +33,7 @@ SOURCE_MODULES = (
     "verification.py",
     "assembled_session.py",
 )
+SUPPORT_FILES = ("LEROBOT-LICENSE", "LEROBOT-PROVENANCE.json")
 VENDOR_FILES = (
     "__init__.py",
     "bus.py",
@@ -315,7 +317,7 @@ def main():
             "Keep at least 10 GiB free space before installing, including offline installs."
         )
     required = [
-        *(Path(name) for name in SOURCE_MODULES),
+        *(Path(name) for name in (*SOURCE_MODULES, *SUPPORT_FILES)),
         *(Path("_vendor/servotools") / name for name in VENDOR_FILES),
     ]
     if (
@@ -327,7 +329,8 @@ def main():
         or (args.source / "_vendor/servotools").is_symlink()
     ):
         parser.error(
-            "--source must contain all companion modules and the licensed _vendor/servotools source"
+            "--source must contain all companion modules, LeRobot license/provenance "
+            "and licensed _vendor/servotools source"
         )
     if args.ssh_host and (
         args.ssh_host.startswith("-")

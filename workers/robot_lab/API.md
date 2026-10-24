@@ -160,3 +160,12 @@ and five-degree tracking guard. The 100 ms request spacing, Stop cancellation,
 heartbeat watchdog, tracking checks, partial-joint selection and intermediate
 action values used for recording remain unchanged. This selector sets distance
 per click; it does not raise motor speed, torque or tracking tolerances.
+
+
+`controller` reports the pinned LeRobot SO101 position profile (`upstream`,
+`target_mode:"direct_position"`, `max_relative_target:null`, acceleration=254,
+maximum_acceleration=254, goal_velocity=0). `capabilities.lerobot_position_control`
+identifies this behavior. Control goals are full calibrated positions and are
+periodically resent as batched position packets. Encoder lag alone does not
+trigger the former five-degree abort. Hardware/serial errors, invalid encoder
+values, Stop and heartbeat expiry still stop control.
