@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { installedModules } from './module-fixtures';
 
 async function lab(page: Page, configured = true) {
   const posts: any[] = [];
@@ -12,7 +13,7 @@ async function lab(page: Page, configured = true) {
       await route.fulfill({ json: { selected_id: 'criterion-1', revision: '5afb8eeff127621fea2d66fc63f56798ada12eda', request_sha256: 'a'.repeat(64), scores: posts.at(-1).criteria.map((item: any) => ({ id: item.id, logit: 0, relative_weight: .5, tokens: 12 })), timing_ms: { load: 123, score: 10 } } }); return;
     }
     const replies: Record<string, unknown> = {
-      '/api/v1/health': { status: 'ok', version: 'test' }, '/api/v1/capabilities': [],
+      '/api/v1/health': { status: 'ok', version: 'test' }, '/api/v1/capabilities': [], '/api/v1/modules': installedModules,
       '/api/v1/projects': [],
       '/api/v1/decision/status': { configured, available: configured, busy: false, message: configured ? 'Configured to attempt local scoring; quality is experimental.' : 'The operator must configure the local scorer and accept its license.' },
     };

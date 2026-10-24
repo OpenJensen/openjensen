@@ -89,10 +89,6 @@ svg { flex-shrink: 0; }
 .sidebar-link { display: flex; align-items: center; gap: 10px; text-decoration: none; font-size: 12px; color: var(--muted); }
 .sidebar-link:hover { color: var(--ink); }
 .sidebar-link > svg + svg { margin-left: auto; }
-.workspace-identity { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--line); padding-top: 18px; margin-top: 20px; }
-.workspace-avatar { width: 31px; height: 31px; display: grid; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; font-size: 12px; color: var(--muted); }
-.workspace-identity strong { display: block; font-size: 12px; font-weight: 500; }
-.workspace-identity div > span { display: block; color: var(--muted); font-size: 11px; margin-top: 1px; }
 .main-shell { min-width: 0; margin: 8px 8px 8px 0; background: var(--canvas); border: 1px solid var(--line); border-radius: 15px; }
 .topbar { min-height: 68px; background: var(--surface); border-radius: 15px 15px 0 0; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 0 29px; }
 .breadcrumb { display: flex; align-items: center; gap: 12px; min-width: 0; font-size: 13px; }

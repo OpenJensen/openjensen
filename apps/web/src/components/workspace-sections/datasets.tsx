@@ -161,11 +161,11 @@ function JobDetail({ job, projectId, history }: { job: DatasetJob; projectId: st
 export default function DatasetsSection() {
   const { activeStage, datasetView, setDatasetView, selectedJob, sortedJobs, projectId, intakeSelection, workflowNavigation, selectedJobId, workflowProjectId, project, projects, importLibrary, capabilities, setSelectedJobId, openDataset, selectedLibrary, setImportLibrary, setIntakeSelection, jobs, navigateStage, startTrainingOnDataset } = useWorkspace();
   return <>
-        <div className="dataset-view" hidden={activeStage !== 0}>
+        <div className="dataset-view" hidden={activeStage !== 'datasets'}>
           <div className="dataset-sources" hidden={datasetView !== 'sources'}>
             <div className="intake-column"><IntakeForm key={`${projectId}-${intakeSelection}`} navigationToken={`${workflowNavigation}:${activeStage}:${datasetView}:${selectedJobId}`} project={workflowProjectId ? project : undefined} readinessMessage={projects.isPending ? 'Loading projects before importing a dataset.' : projects.isError ? 'Project list unavailable. Retry projects to continue.' : 'Create or select a project to import a dataset.'} initialLibrary={importLibrary} localAvailable={capabilities.data?.some(item => item.operation === 'dataset.inspect.local' && (item.status === 'available' || item.status === 'untested')) ?? false} onCreated={job => { setSelectedJobId(job.id); setDatasetView('inspection'); }} /></div>
             <div className="dataset-choice-divider"><span>or</span></div>
-            <DatasetLibrary active={activeStage === 0 && datasetView === 'sources'} projectId={workflowProjectId} onOpen={openDataset} />
+            <DatasetLibrary active={activeStage === 'datasets' && datasetView === 'sources'} projectId={workflowProjectId} onOpen={openDataset} />
           </div>
           {datasetView === 'labels' && selectedLibrary?.project_id === workflowProjectId && <><div className="dataset-back-navigation"><button type="button" className="text-link" onClick={() => setDatasetView('sources')}>← Back to library</button></div><DatasetLabeling key={selectedLibrary.id} entry={selectedLibrary} onInspect={() => { setImportLibrary(selectedLibrary); setIntakeSelection(value=>value+1); setDatasetView('sources'); }} /></>}
           <div className="inspection-view" hidden={datasetView !== 'inspection'}>
@@ -176,8 +176,8 @@ export default function DatasetsSection() {
               {selectedJobId && !selectedJob && !jobs.isPending && <p className="warning-box" role="alert">Selected inspection {selectedJobId} is unavailable in this project. Another dataset has not been substituted. Refresh or choose a source explicitly.</p>}
               {selectedJob && <>
                 <JobDetail key={selectedJob.id} job={selectedJob} projectId={projectId} history={sortedJobs.length > 1 && <div className="history-control"><label htmlFor="inspection-history">History</label><select id="inspection-history" value={selectedJob.id} onChange={event => setSelectedJobId(event.target.value)}>{sortedJobs.map(job => <option key={job.id} value={job.id}>{job.request.repo_id || 'Local dataset'} · {displayDate(job.created_at)} · {job.status}</option>)}</select></div>} />
-                {selectedJob.result && !selectedJob.request.library_id && <DatasetExplorer key={`explorer-${selectedJob.id}`} job={selectedJob} active={activeStage === 0 && datasetView === 'inspection'} />}
-                {selectedJob.status === 'succeeded' && (selectedJob.result?.source === 'huggingface' || selectedJob.result?.snapshot) && <div className="dataset-train-action">{isAugmentationSource(selectedJob) && <button className="secondary-button" onClick={() => navigateStage(8)}><Icon name="spark" size={16} />Augment this dataset</button>}<button className="primary-button" onClick={() => startTrainingOnDataset(selectedJob.id)}>Train on this dataset <Icon name="arrow" size={16} /></button></div>}
+                {selectedJob.result && !selectedJob.request.library_id && <DatasetExplorer key={`explorer-${selectedJob.id}`} job={selectedJob} active={activeStage === 'datasets' && datasetView === 'inspection'} />}
+                {selectedJob.status === 'succeeded' && (selectedJob.result?.source === 'huggingface' || selectedJob.result?.snapshot) && <div className="dataset-train-action">{isAugmentationSource(selectedJob) && <button className="secondary-button" onClick={() => navigateStage('augmentation')}><Icon name="spark" size={16} />Augment this dataset</button>}<button className="primary-button" onClick={() => startTrainingOnDataset(selectedJob.id)}>Train on this dataset <Icon name="arrow" size={16} /></button></div>}
               </>}
             </section>
           </div>

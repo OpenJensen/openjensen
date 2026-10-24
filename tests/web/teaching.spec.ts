@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { createHash } from 'node:crypto';
+import { installedModules } from './module-fixtures';
 
 async function teaching(page: Page, connected = true) {
   const commands: any[] = [];
@@ -36,7 +37,7 @@ async function teaching(page: Page, connected = true) {
       '/api/v1/teaching/intelligence/settings': { saved: false, revision: null, voice_model: null, message: 'Not saved' },
       '/api/v1/teaching/voice/status': { broker_reachable: changes.voiceConfigured, configuration_present: changes.voiceConfigured, dependencies_present: changes.voiceConfigured, message: 'Fixture configuration only' },
       '/api/v1/health': { status: 'ok', version: 'test' },
-      '/api/v1/capabilities': [],
+      '/api/v1/capabilities': [], '/api/v1/modules': installedModules,
       '/api/v1/projects': [{ id: 'teaching', name: 'Teaching test', created_at: '2026-09-27T00:00:00Z' }],
       '/api/v1/projects/teaching/jobs': [],
       '/api/v1/projects/teaching/recordings/options': { configured: false, runtime_verified: false, configuration_sha256: null, max_episodes: 100, max_source_bytes: 8589934592, setup_message: 'Recording preparation is not configured in this fixture.' },

@@ -38,9 +38,10 @@ export function WorkspaceShell({
       <div className="sidebar-content">{navigation}</div>
       <div className="sidebar-bottom">
         {sidebarFooter}
-        <a className="sidebar-link" href={publicPath('/guide/')}><Icon name="book" size={18} /> Guide</a>
-        <a className="sidebar-link" href={apiReferenceUrl}><Icon name="book" size={18} /> API reference</a>
-        <div className="workspace-identity"><span className="workspace-avatar">OJ</span><div><strong>Local workspace</strong></div></div>
+        <div className="sidebar-links">
+          <a className="sidebar-link" href={publicPath('/guide/')}><Icon name="book" size={16} /> Guide</a>
+          <a className="sidebar-link" href={apiReferenceUrl}><Icon name="external" size={16} /> API reference</a>
+        </div>
       </div>
     </aside>
     <div className="main-shell">

@@ -73,6 +73,7 @@ export type Project = components['schemas']['Project'];
 export type Job = components['schemas']['Job'];
 export type DatasetProfile = components['schemas']['DatasetProfile'];
 export type Capability = components['schemas']['Capability'];
+export type WorkspaceModule = components['schemas']['WorkspaceModule'];
 export type IntakeRequest = Omit<components['schemas']['IntakeRequest'], 'snapshot_for_training'> & { snapshot_for_training?: boolean };
 export type DatasetJob = Job & { kind: 'dataset.inspect'; request: IntakeRequest; result?: DatasetProfile | null };
 export type AugmentationRequest = components['schemas']['AugmentationRequest'];
@@ -194,6 +195,7 @@ export const api = {
   }),
   health: () => request<{ status: string; version: string }>('/health'),
   capabilities: () => request<Capability[]>('/capabilities'),
+  modules: () => request<WorkspaceModule[]>('/modules'),
   projects: () => request<Project[]>('/projects'),
   createProject: (name: string) => request<Project>('/projects', {
     method: 'POST', body: JSON.stringify({ name }),

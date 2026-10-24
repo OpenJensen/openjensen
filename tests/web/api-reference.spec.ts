@@ -642,6 +642,7 @@ async function mockTrainingWorkspace(page: Page, {
       const responses: Record<string, unknown> = {
         '/api/v1/health': { status: 'ok', version: 'browser-fixture' },
         '/api/v1/capabilities': [],
+        '/api/v1/modules': [],
         '/api/v1/datasets': [],
         '/api/v1/compute-settings/local/setup': { status: 'idle', stage: '', message: '', id: null, runtime_id: null, started_at: null, finished_at: null },
         '/api/v1/projects': [{ id: trainingProject, name: 'Training review', created_at: trainingTimestamp }],

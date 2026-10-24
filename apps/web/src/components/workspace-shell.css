@@ -9,7 +9,7 @@
 .grouped-navigation .stage-button { min-height: 39px; font-size: 13px; padding-block: 7px; }
 .grouped-navigation .stage-button.selected { box-shadow: none; }
 .sidebar-bottom { padding-top: 20px; }
-.workspace-identity { margin-top: 16px; padding-top: 14px; }
+.sidebar-links { display: flex; gap: 18px; border-top: 1px solid var(--line); padding-top: 16px; }
 .workflow-choices { margin-bottom: 28px; min-width: 0; }
 .workflow-section-heading { margin-bottom: 15px; }
 .workflow-section-heading h2 { font-size: 17px; font-weight: 600; letter-spacing: -.3px; }
@@ -67,7 +67,6 @@
 .page-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; }
 .page-guide { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; text-decoration: none; }
 .page-guide:hover { color: var(--ink); }
-.sidebar-bottom > .sidebar-link + .sidebar-link { margin-top: 12px; }
 .mobile-guide-link { display: none; color: var(--muted); }
 .mode-card { gap: 6px; padding: 16px 18px; }
 .mode-card-top { margin-bottom: 4px; }

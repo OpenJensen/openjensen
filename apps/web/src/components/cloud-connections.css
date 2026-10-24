@@ -33,7 +33,8 @@
 .cloud-workers-heading > span { color: var(--muted); font-size: 11px; }
 .cloud-auth-note { color: var(--muted); font-size: 11px; line-height: 1.7; margin: 0; }
 .cloud-worker-list { display: grid; gap: 9px; }
-.cloud-worker-list > div { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 13px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); font-size: 11px; }
+.modules-list { list-style: none; padding: 0; margin: 0; }
+.cloud-worker-list > div, .modules-list > li { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 13px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); font-size: 11px; }
 .cloud-worker-list strong { font-size: 12px; font-weight: 500; color: var(--ink); }
 .cloud-worker-list .cloud-status { margin-left: auto; }
 .cloud-worker-setup { margin-top: 18px; color: var(--muted); font-size: 11px; line-height: 1.8; }

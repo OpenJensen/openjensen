@@ -13,8 +13,8 @@ export default function EvaluationSection() {
       {simulation.isError && <p role="alert">Isaac profile availability could not be loaded.</p>}
       {jobs.isError && <p role="alert">Saved workflow history could not be refreshed; previously received records may be stale.</p>}
       <div className="native-result-actions">
-        {(replayConfigured || replayHistory) && <button className="text-link" onClick={() => { navigateStage(5); chooseRun('replay', 'handoff'); }}>Open observation replay</button>}
-        {(simulationConfigured || simulationHistory) && <button className="text-link" onClick={() => { navigateStage(5); chooseRun('native', 'handoff'); }}>Open native Isaac Run</button>}
+        {(replayConfigured || replayHistory) && <button className="text-link" onClick={() => { navigateStage('simulation'); chooseRun('replay', 'handoff'); }}>Open observation replay</button>}
+        {(simulationConfigured || simulationHistory) && <button className="text-link" onClick={() => { navigateStage('simulation'); chooseRun('native', 'handoff'); }}>Open native Isaac Run</button>}
       </div>
     </section>
     <EngineWorkflowSection />

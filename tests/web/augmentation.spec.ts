@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { installedModules } from './module-fixtures';
 
 const projectId = 'augmentation-fixture';
 const timestamp = '2026-09-26T12:00:00Z';
@@ -115,7 +116,7 @@ async function mockWorkspace(page: Page, config: { configured?: boolean; empty?:
       }
       const responses: Record<string, unknown> = {
         '/api/v1/health': { status: 'ok', version: 'browser-fixture' },
-        '/api/v1/capabilities': [], '/api/v1/datasets': [],
+        '/api/v1/capabilities': [], '/api/v1/modules': installedModules, '/api/v1/datasets': [],
         '/api/v1/projects': [{ id: projectId, name: 'Augmentation review', created_at: timestamp }],
         [`/api/v1/projects/${projectId}/jobs`]: jobs,
         '/api/v1/augmentation-options': {

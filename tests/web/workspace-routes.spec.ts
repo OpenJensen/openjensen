@@ -59,6 +59,35 @@ test('home opens the dashboard and every section supports a direct visit and ref
   expect(errors).toEqual([]);
 });
 
+test('the sidebar lists installed modules and Settings shows how to add the rest', async ({ page }) => {
+  const { writes, errors } = await fixture(page);
+  await page.route('**/api/v1/modules', route => route.fulfill({ json: [
+    { id: 'robot-lab', name: 'Robot Lab', installed: true, setup: 'Install the robot profile.' },
+    { id: 'teaching', name: 'Teaching', installed: false, setup: 'Set JENSEN_TEACHING_URL.' },
+    { id: 'augmentation', name: 'Augmentation', installed: false, setup: 'Connect Google Cloud.' },
+    { id: 'decision-lab', name: 'Decision lab', installed: false, setup: 'Configure the scorer.' },
+    { id: 'cloud-runs', name: 'Cloud runs', installed: false, setup: 'Set JENSEN_CLOUD_RUNS_DIR.' },
+  ] }));
+  await page.goto('/dashboard/');
+  const nav = page.getByRole('navigation', { name: 'Policy lifecycle' });
+  await expect(nav.getByRole('group', { name: 'Robot' }).getByRole('link')).toHaveText(['Robot Lab']);
+  await expect(nav.getByRole('group', { name: 'Data' }).getByRole('link')).toHaveText(['Dataset']);
+  for (const name of ['Teaching', 'Augmentation', 'Decision lab', 'Cloud runs']) {
+    await expect(nav.getByRole('link', { name, exact: true })).toHaveCount(0);
+  }
+  await nav.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
+  await page.getByRole('button', { name: 'Modules', exact: true }).click();
+  const modules = page.getByRole('region', { name: 'Modules' }).getByRole('listitem');
+  await expect(modules).toHaveCount(5);
+  await expect(modules.filter({ hasText: 'Robot Lab' })).toContainText('Installed');
+  await expect(modules.filter({ hasText: 'Teaching' })).toContainText('Set JENSEN_TEACHING_URL.Not installed');
+  // An uninstalled module stays reachable by URL and is listed while open.
+  await page.goto('/teaching/');
+  await expect(nav.getByRole('link', { name: 'Teaching', exact: true })).toHaveAttribute('aria-current', 'page');
+  expect(writes).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
 test('sidebar links, Back and Forward preserve project, theme and unfinished dataset input', async ({ page }) => {
   const { writes, errors } = await fixture(page);
   await page.goto('/datasets/');
@@ -94,7 +123,10 @@ test('section links can open in a new tab and unknown pages remain 404s', async 
   test.skip(testInfo.project.name === 'mobile', 'Desktop modifier-click behavior');
   const { writes, errors } = await fixture(page);
   await page.goto('/datasets/');
-  const link = page.getByRole('navigation', { name: 'Policy lifecycle' }).getByRole('link', { name: 'Fine-tune', exact: true });
+  const nav = page.getByRole('navigation', { name: 'Policy lifecycle' });
+  // Installed modules join the sidebar once listed; click after it settles.
+  await expect(nav).toHaveAttribute('aria-busy', 'false');
+  const link = nav.getByRole('link', { name: 'Fine-tune', exact: true });
   const [other] = await Promise.all([
     context.waitForEvent('page'),
     link.click({ modifiers: ['ControlOrMeta'] }),

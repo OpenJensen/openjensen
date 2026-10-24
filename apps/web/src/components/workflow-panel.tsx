@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CloudConnectionsPanel } from "@/components/cloud-connections";
+import { ModulesPanel } from "@/components/modules-panel";
 import { QuantizationCompression, QuantizationCompute } from "@/components/quantization-settings";
 import { QuantizationComparison } from "@/components/quantization-comparison";
 import { ModelVersionPicker } from "@/components/model-version-picker";
@@ -25,6 +26,8 @@ import {
   type PolicyRequest,
   type PolicyArtifact,
 } from "@/lib/api";
+
+export type SettingsTab = "compute" | "modules" | "settings" | "diagnostics";
 
 type Preferences = {
   mode: "engine" | "libero";
@@ -145,8 +148,8 @@ export function WorkflowPanel({
 }: {
   projectId: string;
   stage: string;
-  tab: "compute" | "settings" | "diagnostics";
-  onTabChange: (tab: "compute" | "settings" | "diagnostics") => void;
+  tab: SettingsTab;
+  onTabChange: (tab: SettingsTab) => void;
   onOpenQuantize: () => void;
   preferredArtifactId?: string;
   preferredJobId?: string;
@@ -411,9 +414,10 @@ export function WorkflowPanel({
                       : null;
   if (stage === "settings")
     return (
-      <section className={`panel ${tab === "compute" ? "compute-settings-panel" : "workflow-panel"}`}>
+      <section className={`panel ${tab === "compute" || tab === "modules" ? "compute-settings-panel" : "workflow-panel"}`}>
         <div className="section-tabs settings-tabs">
           <button className={`section-tab ${tab === "compute" ? "active" : ""}`} onClick={() => setTab("compute")}>Compute</button>
+          <button className={`section-tab ${tab === "modules" ? "active" : ""}`} onClick={() => setTab("modules")}>Modules</button>
           <button
             className={`section-tab ${tab === "settings" ? "active" : ""}`}
             onClick={() => setTab("settings")}
@@ -428,7 +432,7 @@ export function WorkflowPanel({
           </button>
         </div>
         {tab === "settings" && preferencesBlocker && <p className="warning-box" role="status">{preferencesBlocker}</p>}
-        {tab === "compute" ? <CloudConnectionsPanel /> : tab === "settings" ? (
+        {tab === "compute" ? <CloudConnectionsPanel /> : tab === "modules" ? <ModulesPanel /> : tab === "settings" ? (
           <fieldset className="workflow-fields workflow-controls" disabled={!ready}>
             <legend className="visually-hidden">Project workflow settings</legend>
             <h2>Compression defaults</h2>

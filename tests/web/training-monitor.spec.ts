@@ -3,6 +3,7 @@ import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { gradientAccumulationAvailable, type TrainingModel } from '../../apps/web/src/lib/training-models';
+import { installedModules } from './module-fixtures';
 
 const projectId = 'training-monitor-fixture';
 const revision = 'a'.repeat(40);
@@ -135,7 +136,7 @@ async function workspace(page: Page, mode: 'running' | 'preparing' | 'failed' | 
         return;
       }
       const replies: Record<string, unknown> = {
-        '/api/v1/health': { status: 'ok', version: 'training-fixture' }, '/api/v1/capabilities': [],
+        '/api/v1/health': { status: 'ok', version: 'training-fixture' }, '/api/v1/capabilities': [], '/api/v1/modules': installedModules,
         '/api/v1/simulation-options': { profiles: [] },
         '/api/v1/jobs/dataset/cover': { cameras:[],repo_id:dataset.result.repo_id,revision:dataset.result.revision,episode_index:0 },
         '/api/v1/projects': [{ id: projectId, name: 'Training visibility', created_at: timestamp() }],
