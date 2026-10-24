@@ -1,6 +1,7 @@
 'use client';
 
 import { Icon } from '@/components/icon';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { useWorkspace } from '@/components/workspace-context';
 import { workspaceRoutes } from '@/lib/workspace-routes';
 import './cloud-connections.css';
@@ -26,9 +27,9 @@ export function ModulesPanel() {
             <Icon name={workspaceRoutes[item.id].icon} size={18} />
             <strong>{item.name}</strong>
             {!item.installed && <span>{item.setup}</span>}
-            <span className={`cloud-status${item.installed ? ' cloud-status-connected' : ''}`}>
+            <StatusBadge tone={item.installed ? 'success' : 'neutral'}>
               {item.installed ? 'Installed' : 'Not installed'}
-            </span>
+            </StatusBadge>
           </li>
         ))}
       </ul>

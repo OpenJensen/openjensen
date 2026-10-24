@@ -164,6 +164,9 @@
   display: grid;
   gap: 9px;
 }
+.modules-list .status-badge {
+  margin-left: auto;
+}
 .modules-list {
   list-style: none;
   padding: 0;
