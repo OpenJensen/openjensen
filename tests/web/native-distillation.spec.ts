@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { chooseTransformationModel, openTransformationJob, transformationJobs } from './lifecycle-controls';
 import { selectProject } from './project-controls';
 import { startStudent, cancelStudent } from '../../apps/web/src/lib/native-distillation';
@@ -81,6 +82,7 @@ async function fixture(page: Page) {
     cancelGate: null as Promise<void> | null,
   };
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const req = route.request(),
       path = new URL(req.url()).pathname;
     if (path === '/api/v1/projects')
@@ -249,7 +251,7 @@ for (const outcome of ['lost', 'wrong-teacher'])
     await submit(page).click();
     await expect(page.getByText(/request outcome is unverified/).first()).toBeVisible();
     expect(state.posts).toHaveLength(1);
-    await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+    await page.getByRole('link', { name: 'Datasets', exact: true }).click();
     await page.getByRole('link', { name: 'Distill', exact: true }).click();
     await page.reload();
     await page.getByRole('link', { name: 'Distill', exact: true }).click();
@@ -510,7 +512,7 @@ test('journal cleanup failure after navigation preserves recovery guidance', asy
   });
   await submit(page).click();
   await expect.poll(() => state.posts.length).toBe(1);
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   release();
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { journalCleanupFailures?: number }).journalCleanupFailures))
@@ -714,7 +716,7 @@ test('cancellation outcome survives stage navigation and reload without another 
   });
   await confirmCancellation(page);
   await expect(cancellationRecovery(page)).toContainText('Cancellation outcome is unverified for student-001');
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await reopenCancellationLane(page);
   await expect(cancellationRecovery(page)).toContainText('student-001');
   await page.reload();
@@ -751,7 +753,7 @@ for (const method of ['getItem', 'setItem'] as const)
     await confirmCancellation(page);
     await expect(page.getByText(/Cancellation recovery storage is unavailable/)).toBeVisible();
     await expect(page.getByRole('button', { name: 'Cancel selected distillation', exact: true })).toBeDisabled();
-    await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+    await page.getByRole('link', { name: 'Datasets', exact: true }).click();
     await reopenCancellationLane(page);
     await openTransformationJob(page, 'distillation', 'student-001');
     await expect(page.getByText(/Cancellation recovery storage is unavailable/)).toBeVisible();
@@ -831,7 +833,7 @@ test('validated cancellation acknowledgment survives a newly denied storage read
   ).toBeVisible();
   await expect(page.getByText(/Cancellation recovery storage is unavailable/)).toBeVisible();
   await expect(cancellationRecovery(page)).toContainText('student-001');
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await reopenCancellationLane(page);
   await openTransformationJob(page, 'distillation', 'student-001');
   await expect(
@@ -888,7 +890,7 @@ test('late cancellation receipt survives unmount without replacing a manual save
   });
   await confirmCancellation(page);
   await expect.poll(() => state.cancel.length).toBe(1);
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await reopenCancellationLane(page);
   await openTransformationJob(page, 'distillation', 'student-002');
   release();

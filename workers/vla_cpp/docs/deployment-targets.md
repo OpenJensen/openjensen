@@ -6,7 +6,7 @@ building or running the configured benchmark:
 | Target key | Build backend | Artifact |
 | --- | --- | --- |
 | `mac_cpu` | CPU | GGUF |
-| `rtx_3070` | CUDA | GGUF |
+| `cuda_gpu` | CUDA | GGUF |
 | `gcloud_gpu` | CUDA | GGUF |
 
 For `gcloud_gpu`, set `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_REGION` and

@@ -21,12 +21,12 @@ test('prefixed export loads bundles, library media, API and docs without escapin
   await page.addInitScript((id) => localStorage.setItem('firebird.project', id), project.id);
   await page.goto(`${prefix}/`);
   await expect(page).toHaveURL(new RegExp(`${prefix}/dashboard/$`));
-  await expect(page.getByRole('link', { name: 'Open Jensen workspace home' })).toHaveAttribute(
+  await expect(page.getByRole('link', { name: 'OpenJensen workspace home' })).toHaveAttribute(
     'href',
     `${prefix}/dashboard/`,
   );
   await expect(page.getByRole('link', { name: 'Fine-tune', exact: true })).toBeVisible();
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`${prefix}/datasets/$`));
   expect((await page.request.post(`${origin}${prefix}/api/v1/projects/${project.id}/datasets/example`)).status()).toBe(
     202,
@@ -50,7 +50,7 @@ test('prefixed export loads bundles, library media, API and docs without escapin
   await expect(page.getByText('External rollout monitoring is not configured.', { exact: false })).toBeVisible();
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Cloud runs', exact: true, level: 1 })).toBeVisible();
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   const teachingState = page.waitForResponse(
     (response) => new URL(response.url()).pathname === `${prefix}/api/v1/teaching/state`,
   );

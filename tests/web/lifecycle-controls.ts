@@ -40,7 +40,7 @@ export async function transformationJobs(page: Page, operation: 'distillation' |
     name: `${operation === 'distillation' ? 'Distillation' : 'Quantization'} jobs`,
     exact: true,
   });
-  const back = page.getByRole('button', { name: /^(← )?(Back to jobs|All quantization jobs|Back to models)$/ });
+  const back = page.getByRole('button', { name: /^(← )?(Back to jobs|Back to models)$/ });
   // Navigation may still be committing the destination when the helper starts.
   await expect.poll(async () => (await history.isVisible()) || (await back.isVisible())).toBe(true);
   if (!(await history.isVisible())) await back.click();

@@ -9,7 +9,7 @@ import { guideSectionId } from '@/lib/guide-section';
 import './guide.css';
 
 export const metadata: Metadata = {
-  title: 'Open Jensen · Workspace guide',
+  title: 'OpenJensen · Workspace guide',
   description: 'A short guide to every part of the robotics workspace.',
 };
 

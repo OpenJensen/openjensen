@@ -1,0 +1,212 @@
+/*
+ * Shared workbench components. Pages use these instead of feature-specific copies:
+ * one notice, one status badge and one set of buttons. Older class names are listed
+ * beside the canonical ones until their components move to the shared markup.
+ */
+
+/* Type scale for titles inside pages; the page title (h1) keeps its own size. */
+:root {
+  --text-section: 17px;
+  --text-subsection: 14px;
+}
+
+/* Notices: a short title, the next step, and raw output collapsed in Details. */
+.notice,
+.error-notice,
+.warning-box,
+.cloud-connection-error,
+.training-stale-notice,
+.training-error-detail,
+.dx-request-error,
+.robot-lab-info,
+.robot-lab-warning,
+.robot-lab-success,
+.robot-lab-error {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--subtle);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.notice-title {
+  font-weight: 600;
+}
+.notice-body > p {
+  margin: 0;
+}
+/* A leading bold phrase reads as the notice title. */
+.notice-body > strong:first-child {
+  display: block;
+}
+.notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+.notice-details summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+}
+.notice-details pre {
+  max-height: 220px;
+  overflow: auto;
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  font:
+    12px/1.5 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  white-space: pre-wrap;
+}
+.notice-info,
+.robot-lab-info {
+  border-color: color-mix(in srgb, var(--accent) 25%, var(--line));
+}
+.notice-success,
+.robot-lab-success {
+  border-color: color-mix(in srgb, var(--success) 30%, var(--line));
+  background: var(--success-bg);
+}
+.notice-warning,
+.warning-box,
+.training-stale-notice,
+.robot-lab-warning {
+  border-color: color-mix(in srgb, var(--warning) 35%, var(--line));
+  background: var(--warning-bg);
+}
+.notice-danger,
+.error-notice,
+.cloud-connection-error,
+.training-error-detail,
+.dx-request-error,
+.robot-lab-error {
+  border-color: color-mix(in srgb, var(--error) 35%, var(--line));
+  background: var(--error-bg);
+}
+.notice-success .notice-title {
+  color: var(--success);
+}
+.notice-warning .notice-title {
+  color: var(--warning);
+}
+.notice-danger .notice-title {
+  color: var(--error);
+}
+
+/* Status badges: one shape for every state label. */
+.status-badge,
+.metadata-badge,
+.resource-state,
+.cloud-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--subtle);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.status-badge-info {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+  color: var(--accent);
+}
+.status-badge-success,
+.resource-state.ready,
+.cloud-status-connected {
+  border-color: transparent;
+  background: var(--success-bg);
+  color: var(--success);
+}
+.status-badge-warning,
+.cloud-status-setup_required {
+  border-color: transparent;
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.status-badge-danger,
+.cloud-status-error {
+  border-color: transparent;
+  background: var(--error-bg);
+  color: var(--error);
+}
+.status-badge-success::before,
+.status-badge-danger::before,
+.resource-state.ready::before,
+.cloud-status-connected::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* Buttons: primary (one per view), secondary, danger, and a link-styled action. */
+.danger-button {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid color-mix(in srgb, var(--error) 45%, var(--line));
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--error);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.danger-button:hover:not(:disabled) {
+  background: var(--error-bg);
+}
+.text-button,
+.text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.text-button:hover:not(:disabled),
+.text-link:hover:not(:disabled) {
+  text-decoration-color: currentColor;
+}
+:is(.text-button, .text-link, .danger-button):disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+/* Measurements line up: fixed-width digits wherever values are compared. */
+table,
+dl,
+input,
+output,
+time,
+.status-badge {
+  font-variant-numeric: tabular-nums;
+}

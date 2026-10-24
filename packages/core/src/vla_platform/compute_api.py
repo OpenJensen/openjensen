@@ -93,8 +93,12 @@ async def local_setup_status(setup: LocalSetupDep) -> LocalSetupState:
 
 @router.post("/local/setup", response_model=LocalSetupState, status_code=202)
 async def start_local_setup(
-    setup: LocalSetupDep, payload: LocalSetupRequest | None = None
+    request: Request, setup: LocalSetupDep, payload: LocalSetupRequest | None = None
 ) -> LocalSetupState:
+    if request.app.state.module_installations.pending or getattr(
+        request.app.state, "module_install_reserving", False
+    ):
+        raise HTTPException(409, "Wait for module dependency installation to finish.")
     try:
         return await setup.start()
     except (ValueError, OSError) as exc:

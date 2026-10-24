@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { selectProject } from './project-controls';
 
@@ -13,7 +14,8 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin') 
   const state = { status: initialStatus(calibrated), writes: [] as { path: string; body: any }[], errors: [] as string[], datasetReads: 0, cameraFailure: false, stopError: null as string | null, centerError: null as string | null, portsConnected: true, middleInProgress: false, encoderLag: false, jogDelay: 0, jogStaleResponse: false, robotDatasetReads: 0, heartbeatFailures: 0, statusFailures: false, dropCalibrationReply: false };
   if (hostPlatform === 'Linux') { state.status.platform = 'Linux'; state.status.label = 'Linux robot computer'; }
   page.on('pageerror', error => state.errors.push(error.message));
-  await page.route('**/api/v1/**', async route => {
+  await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request(), path = new URL(request.url()).pathname, body = request.method() === 'POST' ? request.postDataJSON() : undefined;
     if (request.method() === 'POST') state.writes.push({ path, body });
     if (path.startsWith('/api/v1/robot-lab/')) {
@@ -929,9 +931,9 @@ test('readiness separates USB, motor responses, mapping and selected calibration
   await expect(results.getByText('No response', { exact: true })).toHaveCount(5);
   expect(writes(state, '/probe')[0].body).toEqual({ port, robot_id: 'my-so101', role: 'follower' });
   expect(writes(state, '/mapping/wiggle')).toEqual([]);
-  await readiness.getByRole('button', { name: /Physical mapping/ }).click();
+  await readiness.getByRole('button', { name: /Motor IDs/ }).click();
   await expect(page.getByRole('button', { name: 'Start assembled setup', exact: true })).toBeDisabled();
-  await readiness.getByRole('button', { name: /Calibration/ }).click();
+  await readiness.getByRole('button', { name: /Calibrate/ }).click();
   await expect(page.getByLabel('Selected arm calibration')).toContainText('Saved · not checked');
   await page.getByLabel('Robot name').fill('different-arm');
   await expect(page.getByLabel('Selected arm calibration')).toContainText('Not saved');

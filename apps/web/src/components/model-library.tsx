@@ -161,7 +161,7 @@ export function ModelWorkflowPicker({
     >
       <div className="model-section-heading">
         <div>
-          <h2>{action === 'distill' ? 'Choose a teacher from My models' : 'Choose a model to quantize'}</h2>
+          <h2>{action === 'distill' ? 'Choose a teacher model' : 'Choose a model to quantize'}</h2>
           <p>
             {action === 'distill'
               ? 'The student learns from this exact saved teacher.'
@@ -169,7 +169,7 @@ export function ModelWorkflowPicker({
           </p>
         </div>
         <button type="button" className="text-link" onClick={onLibrary}>
-          My models →
+          Open Models
         </button>
       </div>
       {!projectId ? (
@@ -193,9 +193,9 @@ export function ModelWorkflowPicker({
       ) : !models.length ? (
         <div className="model-empty">
           <h3>No saved models in this project yet</h3>
-          <p>Train or import a model first. Its checkpoints and derived versions will appear in My models.</p>
+          <p>Train or import a model first. Its checkpoints and derived versions will appear in Models.</p>
           <button type="button" className="secondary-button" onClick={onLibrary}>
-            Open My models
+            Open Models
           </button>
         </div>
       ) : action === 'quantize' ? (
@@ -223,7 +223,7 @@ export function ModelWorkflowPicker({
                     Latest checkpoint · {modelFormat(latest)} · Run {latest.job_id.slice(0, 8)}
                   </small>
                 </span>
-                <span className="model-overview-action">{issue ?? 'Open model →'}</span>
+                <span className="model-overview-action">{issue ?? 'Open model'}</span>
               </button>
             );
           })}
@@ -546,7 +546,7 @@ export function ModelLibrary({
     return (
       <article className="model-detail" aria-label="Model details" data-model-id={artifact.id}>
         <button type="button" className="text-link" onClick={() => setSelected(null)}>
-          ← All my models
+          ← Back to models
         </button>
         <header className="model-detail-heading">
           <div>
@@ -652,10 +652,10 @@ export function ModelLibrary({
     );
   }
   return (
-    <section className="model-library" aria-label="My models collection">
+    <section className="model-library" aria-label="Models collection">
       <div className="model-section-heading">
         <div>
-          <h2>Your saved models</h2>
+          <h2>Saved models</h2>
           <p>Checkpoints, imported policies and derived versions, with their recorded history.</p>
         </div>
         <div className="model-library-create">
@@ -698,7 +698,7 @@ export function ModelLibrary({
       {!projects.length && <p role="status">Create a project to train or import your first model.</p>}
       {!pending && !failed && projects.length > 0 && !rows.length && (
         <div className="model-empty">
-          <h3>Your models will live here</h3>
+          <h3>No models yet</h3>
           <p>Train a model on your dataset, or import an existing policy.</p>
         </div>
       )}
@@ -738,7 +738,7 @@ export function ModelLibrary({
                       <span className="model-card-footer">
                         {size(artifact.file_bytes)} ·{' '}
                         {modelLineage(artifact, row.artifacts, row.jobs).length > 1 ? 'Derived model' : 'Saved version'}
-                        <span>View history →</span>
+                        <span>View history</span>
                       </span>
                       <small>Model {artifact.id}</small>
                     </button>

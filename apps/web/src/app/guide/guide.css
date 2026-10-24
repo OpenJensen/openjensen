@@ -19,7 +19,7 @@
   scroll-margin-top: 24px;
 }
 .guide-sections h2 {
-  font-size: 18px;
+  font-size: var(--text-section);
   font-weight: 600;
   margin-bottom: 10px;
 }

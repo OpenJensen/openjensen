@@ -128,6 +128,9 @@ export type Project = components['schemas']['Project'];
 export type Job = components['schemas']['Job'];
 export type DatasetProfile = components['schemas']['DatasetProfile'];
 export type Capability = components['schemas']['Capability'];
+export type ModuleInstallationStatus = components['schemas']['ModuleInstallationStatus'];
+export type InstallOperation = components['schemas']['InstallOperation'];
+export type InstallableProfile = components['schemas']['InstallRequest']['profile'];
 export type WorkspaceModule = components['schemas']['WorkspaceModule'];
 export type IntakeRequest = Omit<components['schemas']['IntakeRequest'], 'snapshot_for_training'> & {
   snapshot_for_training?: boolean;
@@ -236,7 +239,21 @@ export const augmentationClipUrl = (jobId: string, index: number, original = fal
 export const augmentationDownloadUrl = (jobId: string) =>
   `${apiOrigin}/api/v1/jobs/${encodeURIComponent(jobId)}/augmentation/download`;
 
+export type ApplicationUpdateStatus = components['schemas']['UpdateStatus'];
+
 export const api = {
+  applicationUpdates: () => request<ApplicationUpdateStatus>('/updates'),
+  checkApplicationUpdates: (refresh = false) =>
+    request<ApplicationUpdateStatus>(`/updates/check?refresh=${refresh}`, undefined, 30_000),
+  applyApplicationUpdate: (target: string, operationId: string) =>
+    request<ApplicationUpdateStatus>(
+      '/updates/apply',
+      {
+        method: 'POST',
+        body: JSON.stringify({ target_commit: target, confirmation: 'update-and-restart', operation_id: operationId }),
+      },
+      30_000,
+    ),
   huggingFaceStatus: () => request<HuggingFaceConnectionStatus>('/huggingface-connection'),
   saveHuggingFaceToken: (token: string) =>
     request<HuggingFaceConnectionStatus>(
@@ -298,6 +315,20 @@ export const api = {
   health: () => request<{ status: string; version: string }>('/health'),
   capabilities: () => request<Capability[]>('/capabilities'),
   modules: () => request<WorkspaceModule[]>('/modules'),
+  setModuleEnabled: (id: WorkspaceModule['id'], enabled: boolean) =>
+    request<{ enabled: boolean }>(`/modules/${id}`, { method: 'PUT', body: JSON.stringify({ enabled }) }),
+  moduleInstallations: () => request<ModuleInstallationStatus>('/module-installations', undefined, 60_000),
+  installModule: (profile: InstallableProfile, operationId: string) =>
+    request<InstallOperation>(
+      '/module-installations',
+      {
+        method: 'POST',
+        body: JSON.stringify({ profile, operation_id: operationId }),
+      },
+      60_000,
+    ),
+  cancelModuleInstallation: () =>
+    request<InstallOperation | null>('/module-installations/cancel', { method: 'POST' }, 20_000),
   projects: () => request<Project[]>('/projects'),
   createProject: (name: string) =>
     request<Project>('/projects', {

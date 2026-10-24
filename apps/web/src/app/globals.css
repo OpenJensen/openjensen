@@ -461,7 +461,7 @@ h1 {
 }
 .panel-title h2,
 .activity-heading h2 {
-  font-size: 15px;
+  font-size: var(--text-section);
   font-weight: 550;
   letter-spacing: -0.2px;
 }
@@ -638,7 +638,7 @@ input::placeholder {
   margin-bottom: 19px;
 }
 .empty-state h3 {
-  font-size: 15px;
+  font-size: var(--text-subsection);
   font-weight: 500;
   letter-spacing: -0.2px;
 }
@@ -694,16 +694,6 @@ input::placeholder {
   color: var(--muted);
   font-size: 11px;
 }
-.error-notice {
-  margin-top: 12px;
-  background: var(--error-bg);
-  color: var(--error);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 11px 13px;
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
 .connection-notice {
   display: flex;
   align-items: center;
@@ -713,15 +703,6 @@ input::placeholder {
 }
 .connection-notice .error-notice {
   margin: 0;
-}
-.text-button {
-  padding: 5px;
-  border: 0;
-  background: transparent;
-  color: var(--ink);
-  font-size: 12px;
-  text-decoration: underline;
-  text-underline-offset: 3px;
 }
 .loading-note,
 .muted {
@@ -857,22 +838,10 @@ input::placeholder {
   margin: 25px 0 12px;
 }
 .result-heading h3 {
-  font-size: 18px;
+  font-size: var(--text-section);
   font-weight: 550;
   letter-spacing: -0.4px;
   margin-top: 4px;
-}
-.metadata-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--muted);
-  border: 1px solid var(--line);
-  background: var(--subtle);
-  border-radius: 5px;
-  padding: 4px 7px;
-  font-size: 10px;
-  white-space: nowrap;
 }
 .result-explainer {
   color: var(--muted);
@@ -941,14 +910,6 @@ input::placeholder {
   text-align: right;
   overflow-wrap: anywhere;
   min-width: 0;
-}
-.warning-box {
-  border: 1px solid var(--line);
-  background: var(--warning-bg);
-  color: var(--warning);
-  border-radius: 7px;
-  padding: 14px;
-  margin: 22px 0;
 }
 .warning-box h4 {
   font-size: 11px;
@@ -1038,14 +999,6 @@ input::placeholder {
   margin: 0;
   overflow-wrap: anywhere;
 }
-.text-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--muted);
-  font-size: 11px;
-  text-underline-offset: 3px;
-}
 .planned-panel {
   display: flex;
   flex-direction: column;
@@ -1070,7 +1023,7 @@ input::placeholder {
   margin-bottom: 15px;
 }
 .planned-panel h2 {
-  font-size: 22px;
+  font-size: var(--text-section);
   font-weight: 550;
   letter-spacing: -0.5px;
 }
@@ -1261,7 +1214,7 @@ input::placeholder {
     margin: 32px 0;
   }
   .planned-panel h2 {
-    font-size: 20px;
+    font-size: var(--text-section);
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1283,7 +1236,7 @@ input::placeholder {
 }
 .workflow-panel h2 {
   margin-bottom: 0.5rem;
-  font-size: 18px;
+  font-size: var(--text-section);
   font-weight: 550;
 }
 .workflow-panel .section-tabs {
@@ -1627,7 +1580,7 @@ input::placeholder {
   margin-bottom: 10px;
 }
 .endpoint-description h3 {
-  font-size: 14px;
+  font-size: var(--text-subsection);
   font-weight: 550;
 }
 .endpoint-detail-grid {
@@ -1764,7 +1717,7 @@ input::placeholder {
 }
 .reference-state h2,
 .reference-state h3 {
-  font-size: 15px;
+  font-size: var(--text-subsection);
   font-weight: 550;
 }
 .reference-state p {
@@ -2011,7 +1964,7 @@ input::placeholder {
   padding: 15px;
 }
 .starter-copy h3 {
-  font-size: 14px;
+  font-size: var(--text-subsection);
   font-weight: 550;
   letter-spacing: -0.2px;
 }
@@ -2058,7 +2011,7 @@ input::placeholder {
   margin-top: 22px;
 }
 .inspection-overview .result-heading h3 {
-  font-size: 23px;
+  font-size: var(--text-section);
   overflow-wrap: anywhere;
 }
 .inspection-overview .metric-grid {
@@ -2185,7 +2138,7 @@ input::placeholder {
   margin-top: 18px;
 }
 .inspection-overview .result-heading h3 {
-  font-size: 18px;
+  font-size: var(--text-section);
 }
 .inspection-overview .inspection-provenance {
   margin-bottom: 0;
@@ -2462,13 +2415,13 @@ input::placeholder {
   margin-top: 20px;
 }
 .panel h2 {
-  font-size: 20px;
+  font-size: var(--text-section);
   font-weight: 650;
   letter-spacing: -0.45px;
   line-height: 1.4;
 }
 .panel h3 {
-  font-size: 16px;
+  font-size: var(--text-subsection);
   font-weight: 600;
   letter-spacing: -0.2px;
 }
@@ -2484,7 +2437,7 @@ input::placeholder {
 }
 .panel-title h2,
 .activity-heading h2 {
-  font-size: 17px;
+  font-size: var(--text-section);
   font-weight: 600;
 }
 .panel-title p,
@@ -2524,7 +2477,7 @@ input::placeholder {
   padding: 18px;
 }
 .starter-copy h3 {
-  font-size: 16px;
+  font-size: var(--text-subsection);
 }
 .starter-copy p,
 .starter-meta,
@@ -2549,17 +2502,6 @@ input::placeholder {
 .secondary-button {
   background: var(--surface);
   border-color: var(--line-strong);
-}
-.text-link {
-  font-size: 12px;
-  line-height: 1.6;
-}
-button.text-link {
-  background: transparent;
-  border: 0;
-  padding: 8px 0;
-  text-align: left;
-  text-decoration: underline;
 }
 .theme-toggle {
   border-radius: 9px;
@@ -2603,12 +2545,6 @@ input[type='file']::file-selector-button {
   background: var(--subtle);
   font: inherit;
   cursor: pointer;
-}
-.warning-box {
-  font-size: 13px;
-  line-height: 1.7;
-  border-color: color-mix(in srgb, var(--warning) 22%, var(--line));
-  margin-block: 16px;
 }
 .run-modes {
   padding: 0;
@@ -2969,7 +2905,7 @@ input[type='file']::file-selector-button {
     padding: 14px;
   }
   .starter-copy h3 {
-    font-size: 14px;
+    font-size: var(--text-subsection);
   }
   :where(.panel, .native-simulation-history)
     :where(input:not([type='checkbox']):not([type='radio']), select, textarea) {

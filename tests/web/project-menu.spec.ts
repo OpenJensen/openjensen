@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { openCreateProject, selectProject } from './project-controls';
 
@@ -12,6 +13,7 @@ async function fixture(page: Page, empty = false) {
   const writes: unknown[] = [];
   const control = { fail: false, held: null as Promise<void> | null };
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (request.method() === 'POST') {
@@ -68,7 +70,7 @@ test('project switching and keyboard navigation preserve scope without creating 
   await expect(menu(page)).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Dashboard', exact: true })).toBeFocused();
   await current(page).click();
-  await page.getByRole('heading', { name: 'Dataset', exact: true, level: 1 }).click();
+  await page.getByRole('heading', { name: 'Datasets', exact: true, level: 1 }).click();
   await expect(menu(page)).toHaveCount(0);
   expect(writes).toEqual([]);
 });

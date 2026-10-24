@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import {
   chooseTransformationModel,
   openTransformationJob,
@@ -137,6 +138,7 @@ async function fixture(page: Page) {
     ],
   };
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const req = route.request(),
       path = new URL(req.url()).pathname;
     if (req.method() === 'POST') {
@@ -638,7 +640,7 @@ test('uncertain quantization survives stage navigation and reload until fresh hi
   await choosePolicy(page, 'act-export');
   await submit(page).click();
   await expect(page.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toBeVisible();
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await page.getByRole('button', { name: 'Review request', exact: true }).click();
   await expect(submit(page)).toBeDisabled();
@@ -812,7 +814,7 @@ test('journal cleanup after navigation exposes recovery instead of a permanent p
   });
   await submit(page).click();
   await expect.poll(() => state.posts.length).toBe(1);
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await page.getByRole('button', { name: 'Review request', exact: true }).click();
   await expect(page.getByText('Submitting one local quantization job…', { exact: true })).toBeVisible();

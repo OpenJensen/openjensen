@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { selectProject } from './project-controls';
 import { createServer } from 'node:http';
 import { expect, test, type Page } from '@playwright/test';
@@ -77,6 +78,7 @@ async function fixture(page: Page) {
     tasks: { isaac: 'RUNNING', vla: 'STARTING' },
   };
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const req = route.request(),
       url = new URL(req.url()),
       path = url.pathname;
@@ -597,8 +599,8 @@ for (const width of [320, 390])
   }) => {
     await page.setViewportSize({ width, height: 844 });
     const state = await fixture(page);
-    await page.getByRole('link', { name: 'Dataset', exact: true }).click();
-    const heading = page.getByRole('heading', { name: 'Dataset', exact: true });
+    await page.getByRole('link', { name: 'Datasets', exact: true }).click();
+    const heading = page.getByRole('heading', { name: 'Datasets', exact: true });
     const bounds = await heading.boundingBox();
     // The grouped navigation exposes all destinations; the stage heading and
     // introduction must still fit in the first screen without scrolling.
@@ -615,12 +617,12 @@ for (const width of [320, 390])
     await page.keyboard.press('Tab');
     await expect(page.getByRole('link', { name: 'Decision lab', exact: true })).toBeFocused();
     await page.keyboard.press('Tab');
-    await expect(navigation.getByRole('link', { name: 'My models', exact: true })).toBeFocused();
+    await expect(navigation.getByRole('link', { name: 'Models', exact: true })).toBeFocused();
     await page.keyboard.press('Tab');
     const cloud = page.getByRole('link', { name: 'Cloud runs', exact: true });
     await expect(cloud).toBeFocused();
     await page.keyboard.press('Tab');
-    await expect(page.getByRole('link', { name: 'Settings & diagnostics', exact: true })).toBeFocused();
+    await expect(page.getByRole('link', { name: 'Settings', exact: true })).toBeFocused();
     await page.keyboard.press('Shift+Tab');
     await expect(cloud).toBeFocused();
     const buttonBounds = await cloud.boundingBox();
@@ -731,7 +733,7 @@ async function openNativeAgain(page: Page, reload = false) {
   if (reload) {
     await page.reload();
     await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
-  } else await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  } else await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await page.getByRole('link', { name: 'Run', exact: true }).click();
   await page.getByRole('button', { name: '3D simulation', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Native Isaac simulation', exact: true })).toBeVisible();
@@ -1142,7 +1144,7 @@ for (const both of [false, true])
       'Original native launch',
     );
     await page.getByRole('button', { name: 'Check inference', exact: true }).click();
-    await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+    await page.getByRole('link', { name: 'Datasets', exact: true }).click();
     await page.getByRole('link', { name: 'Run', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Check inference', exact: true })).toHaveAttribute(
       'aria-pressed',

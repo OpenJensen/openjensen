@@ -298,7 +298,7 @@ def main():
         "--arrow-site-packages", type=Path, help="Reuse an existing compatible PyArrow"
     )
     parser.add_argument(
-        "--ssh-host", help="Private Xbox SSH alias for automatic local/reverse tunnel"
+        "--ssh-host", help="Private application-server SSH alias for automatic local/reverse tunnel"
     )
     parser.add_argument(
         "--data-dir", type=Path, help="Private captures and recovery data directory"

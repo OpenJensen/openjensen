@@ -1,6 +1,6 @@
 # Compute settings
 
-Open **Settings & diagnostics → Compute**. Preferences are saved in the workspace's `compute-settings.json`.
+Open **Settings → Compute**. Preferences are saved in the workspace's `compute-settings.json`.
 
 You can inspect datasets before configuring compute. Install or connect workers
 only when choosing a training/inference/simulation workflow. A successful

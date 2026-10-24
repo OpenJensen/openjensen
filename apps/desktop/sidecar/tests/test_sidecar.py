@@ -9,6 +9,7 @@ import subprocess
 import sys
 
 import pytest
+from vla_platform import __version__
 
 SIDE = pathlib.Path(__file__).resolve().parents[1]
 ROOT = SIDE.parents[2]
@@ -33,7 +34,12 @@ def resource_tree(path):
             "sha256": hashlib.sha256((web / "index.html").read_bytes()).hexdigest(),
         }
     }
-    manifest = {"schema_version": 1, "build_id": "a" * 40, "app_version": "0.1.0", "files": files}
+    manifest = {
+        "schema_version": 1,
+        "build_id": "a" * 40,
+        "app_version": __version__,
+        "files": files,
+    }
     (path / "resources.json").write_text(json.dumps(manifest))
     return manifest
 

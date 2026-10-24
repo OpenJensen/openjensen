@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { chooseTransformationModel, openTransformationJob, transformationJobs } from './lifecycle-controls';
 import { expect, test, type Page } from '@playwright/test';
 const time = '2026-09-30T12:00:00Z',
@@ -69,6 +70,7 @@ async function fixture(
     },
   });
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request(),
       path = new URL(request.url()).pathname;
     if (request.method() === 'PUT' && path.includes('/model-runs/')) {
@@ -144,7 +146,7 @@ async function fixture(
 }
 async function openLibrary(page: Page) {
   await page.getByRole('link', { name: 'Dashboard', exact: true }).click();
-  await page.getByRole('link', { name: 'My models', exact: true }).click();
+  await page.getByRole('link', { name: 'Models', exact: true }).click();
 }
 test('collection shows model versions and their full recorded training and student history', async ({
   page,
@@ -189,7 +191,7 @@ test('empty collections cannot start work on nonexistent models', async ({ page 
   await expect(page.getByText('No saved models in this project yet')).toBeVisible();
   await expect(page.getByRole('button', { name: 'ACT', exact: true })).toHaveCount(0);
   await openLibrary(page);
-  await expect(page.getByText('Your models will live here')).toBeVisible();
+  await expect(page.getByText('No models yet', { exact: true })).toBeVisible();
   expect(state.mutations).toEqual([]);
 });
 test('cross-project continuation selects the model owner and exact model', async ({ page }) => {
@@ -328,7 +330,7 @@ test('distilled and quantized models share the model collection and reopen their
     .click();
   await openTransformationJob(page, 'distillation', 'run-student');
   await expect(page.getByRole('group', { name: 'Distillation setup', exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: 'View Saved student in My models', exact: true }).click();
+  await page.getByRole('button', { name: 'View Saved student in Models', exact: true }).click();
   await expect(page.getByRole('article', { name: 'Model details', exact: true })).toHaveAttribute(
     'data-model-id',
     'student',
@@ -347,7 +349,7 @@ test('distilled and quantized models share the model collection and reopen their
   ).toBeVisible();
   await openTransformationJob(page, 'quantization', 'run-packed');
   await expect(page.getByRole('group', { name: 'ACT quantization setup', exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: 'View Saved packed in My models', exact: true }).click();
+  await page.getByRole('button', { name: 'View Saved packed in Models', exact: true }).click();
   await expect(page.getByRole('article', { name: 'Model details', exact: true })).toHaveAttribute(
     'data-model-id',
     'packed',

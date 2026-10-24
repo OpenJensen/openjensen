@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import {
   chooseTransformationModel,
   transformationJobs,
@@ -278,6 +279,7 @@ async function workspace(
     });
   }
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (request.method() === 'POST' && path === `/api/v1/projects/${projectId}/policy-jobs`) {
@@ -629,7 +631,7 @@ test('empty history offers an explicit new job and repeated dataset shortcuts op
   await expect(page.getByRole('button', { name: 'Start a new fine-tuning', exact: true })).toBeEnabled();
   await expect(page.getByRole('navigation', { name: 'Training setup' })).toHaveCount(0);
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+    await page.getByRole('link', { name: 'Datasets', exact: true }).click();
     await page.getByRole('button', { name: 'Open dataset fixture/robot', exact: true }).click();
     await page.getByRole('button', { name: 'Train on this dataset', exact: true }).click();
     await expect(page.getByRole('navigation', { name: 'Training setup' })).toBeVisible();
@@ -642,7 +644,7 @@ test('empty history offers an explicit new job and repeated dataset shortcuts op
 
 test('local training copies open the jobs-first wizard and retain native model admission', async ({ page }) => {
   const { submitted, unexpected } = await workspace(page, 'local-snapshot', false);
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await page.getByRole('button', { name: 'Open dataset Local dataset', exact: true }).click();
   await page.getByRole('button', { name: 'Train on this dataset', exact: true }).click();
   await expect(page.getByRole('checkbox', { name: 'Local dataset', exact: true })).toBeChecked();
@@ -667,7 +669,7 @@ test('local training copies open the jobs-first wizard and retain native model a
 
 test('metadata-only local inspections stay removable but cannot be added or submitted', async ({ page }) => {
   const { submitted, unexpected } = await workspace(page, 'local-unprepared', false);
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await page.getByRole('button', { name: 'Open dataset Local dataset', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Train on this dataset', exact: true })).toHaveCount(0);
   await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
@@ -1192,7 +1194,7 @@ for (const fault of ['lost', 'wrong-project', 'changed-budget', 'redirect'] as c
     await expect(recovery.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toHaveCount(0);
     await page
       .getByRole('navigation', { name: 'Policy lifecycle' })
-      .getByRole('link', { name: 'Dataset', exact: true })
+      .getByRole('link', { name: 'Datasets', exact: true })
       .click();
     await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
     await expect(recovery).toBeVisible();
@@ -1395,7 +1397,7 @@ test('ACT export retains acknowledged job while history is stale and prevents an
   await expect(page.getByRole('region', { name: 'ACT export status' })).toContainText('acknowledged-export');
   await expect(page.getByRole('region', { name: 'ACT export status' })).toContainText('queued');
   await expect(page.getByRole('button', { name: 'Exporting ACT policy…', exact: true })).toBeDisabled();
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await reopenExport(page);
   await expect(page.getByRole('region', { name: 'ACT export status' })).toContainText('acknowledged-export');
   await expect(page.getByRole('button', { name: 'Exporting ACT policy…', exact: true })).toBeDisabled();
@@ -1420,7 +1422,7 @@ test('ACT export unmount during submission preserves pending identity and late a
   try {
     await exportButton(page).click();
     await expect.poll(() => state.submitted.length).toBe(1);
-    await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+    await page.getByRole('link', { name: 'Datasets', exact: true }).click();
     await reopenExport(page);
     await expect(page.getByRole('button', { name: 'Exporting ACT policy…', exact: true })).toBeDisabled();
     release();
@@ -1480,7 +1482,7 @@ test('ACT export cannot POST when its pending journal cannot be written', async 
   await exportButton(page).click();
   await expect(page.getByRole('region', { name: 'ACT inference export' })).toContainText('storage is unavailable');
   await expect(exportButton(page)).toBeDisabled();
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await reopenExport(page);
   await expect(exportButton(page)).toBeDisabled();
   expect(state.submitted).toHaveLength(0);
@@ -1517,7 +1519,7 @@ for (const failure of ['receipt-write', 'cleanup', 'unmounted-cleanup'] as const
       await exportButton(page).click();
       await expect.poll(() => state.submitted.length).toBe(1);
       if (failure === 'unmounted-cleanup') {
-        await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+        await page.getByRole('link', { name: 'Datasets', exact: true }).click();
         release();
         await reopenExport(page);
       }

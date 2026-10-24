@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { createHash } from 'node:crypto';
@@ -206,6 +207,7 @@ async function fixture(page: Page, initial: any[] = []) {
     startGate: null as ReturnType<typeof deferred> | null,
   };
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request(),
       path = new URL(request.url()).pathname,
       project = path.split('/')[4];
@@ -417,7 +419,7 @@ test('completed reconciliation retains minimal accepted identity when history an
   s.failStatus = true;
   await check(page).click();
   await expect(managed(page).getByLabel('Saved teaching session', { exact: true })).toHaveValue('capture-a');
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await enterManaged(page);
   await expect(managed(page).getByText(/Request accepted as job capture-a/)).toBeVisible();
   await chooseSaved(page);

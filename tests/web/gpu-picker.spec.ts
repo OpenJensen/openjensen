@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { installedModules } from './module-fixtures';
 
@@ -25,8 +26,8 @@ async function openGpuPicker(page: Page, local = false) {
     training_model_ids: ['smolvla', 'pi05'],
   }));
   const localRuntime = {
-    id: 'local-3070',
-    label: 'Robotics lab RTX 3070',
+    id: 'local-4060',
+    label: 'Robotics lab RTX 4060',
     provider: 'local',
     execution: 'native',
     enabled: true,
@@ -37,6 +38,7 @@ async function openGpuPicker(page: Page, local = false) {
     gpu_memory_mib: 8192,
   };
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (request.method() !== 'GET') {
@@ -246,9 +248,9 @@ for (const theme of ['Light', 'Dark']) {
     const screenshot = testInfo.outputPath(`gpu-picker-${theme.toLowerCase()}-320.png`);
     await page.screenshot({ path: screenshot, fullPage: true });
     await testInfo.attach(`gpu-picker-${theme.toLowerCase()}-320`, { path: screenshot, contentType: 'image/png' });
-    await menu.getByRole('option', { name: 'Robotics lab RTX 3070', exact: true }).click();
-    await expect(picker).toHaveAttribute('value', 'local-3070');
-    await expect(picker).toContainText('Robotics lab RTX 3070');
+    await menu.getByRole('option', { name: 'Robotics lab RTX 4060', exact: true }).click();
+    await expect(picker).toHaveAttribute('value', 'local-4060');
+    await expect(picker).toContainText('Robotics lab RTX 4060');
     expect(writes).toEqual([]);
     expect(unexpected).toEqual([]);
   });
@@ -306,6 +308,7 @@ async function trainingAdmission(page: Page, { format = 'lerobot_v3', dimensions
     },
   };
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (request.method() === 'POST' && path === '/api/v1/projects/admission/policy-jobs') {

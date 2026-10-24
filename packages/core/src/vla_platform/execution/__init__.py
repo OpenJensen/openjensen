@@ -266,12 +266,15 @@ class Execution:
             path = library.resolve(intake.library_id, job.project_id)
             local_root = library.root
             intake = intake.model_copy(update={"path": str(path), "library_id": None})
+        from vla_platform.datasets.local_preview import reader_python
+
         request_path.write_text(
             WorkerRequest(
                 intake=intake,
                 snapshot_store=str(self.settings.data_dir / "dataset-snapshots"),
                 local_root=str(local_root) if local_root else None,
-                reader_python=getenv("JENSEN_CPU_READER_PYTHON"),
+                reader_python=getenv("JENSEN_CPU_READER_PYTHON")
+                or str(reader_python(self.settings.data_dir)),
             ).model_dump_json(),
             encoding="utf-8",
         )

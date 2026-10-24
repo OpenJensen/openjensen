@@ -93,7 +93,7 @@ def test_reinstall_stops_only_managed_services_before_runtime_mutation(
             "--arrow-site-packages",
             str(arrow),
             "--ssh-host",
-            "xbox-360",
+            "gpu-server",
             "--no-start",
         ],
     )
@@ -228,7 +228,7 @@ def test_linux_service_enable_and_tunnel_removal(tmp_path, monkeypatch):
         tmp_path / "data",
         tmp_path / "logs",
     ]
-    installer.install_linux_services(*arguments, "xbox-360", False, "/bin/systemctl")
+    installer.install_linux_services(*arguments, "application-server", False, "/bin/systemctl")
     assert calls[-1] == ["/bin/systemctl", "--user", "enable", "--now", *installer.LINUX_SERVICES]
     installer.install_linux_services(*arguments, None, False, "/bin/systemctl")
     assert ["/bin/systemctl", "--user", "disable", installer.LINUX_SERVICES[1]] in calls
@@ -281,7 +281,7 @@ def test_generated_linux_units_pass_native_systemd_validation(tmp_path, monkeypa
         tmp_path / "token",
         tmp_path / "data",
         tmp_path / "logs",
-        "xbox-360",
+        "application-server",
         True,
         None,
     )

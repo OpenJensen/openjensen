@@ -2,7 +2,7 @@
 
 ## Configure the host
 
-Install SkyPilot 0.13 with GCP support and Google Cloud CLI on the API host. Run `gcloud auth application-default login` and connect the project/region in **Settings & diagnostics → Compute**. Save Hugging Face access there when the selected model needs it, and accept that model's access terms on the Hub.
+Install SkyPilot 0.13 with GCP support and Google Cloud CLI on the API host. Run `gcloud auth application-default login` and connect the project/region in **Settings → Compute**. Save Hugging Face access there when the selected model needs it, and accept that model's access terms on the Hub.
 
 Use the separate pinned environments for SmolVLA (Python 3.11), native LeRobot models (Python 3.12), and Psi-Zero (Python 3.11). Follow [worker setup](../workers/smolvla_qlora/docs/training/smolvla-qlora.md) and [model-specific inputs](native-training.md).
 

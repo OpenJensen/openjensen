@@ -4,7 +4,6 @@
   "status": "planned_not_executed",
   "description": "Experiment inputs only; not accepted by firebird-finetune. Every model requires a native benchmark adapter and resolved runtime before execution.",
   "target_suite": "libero_spatial",
-  "protocol": "https://github.com/sobhanb-eth/firebird-hackathon-prep/blob/a9a56ea105d061012abb79fe937d4237af2bf33e/docs/idea/18_multimodel-quantization-benchmark.md",
   "candidate_classes": [
     {
       "id": "C0",

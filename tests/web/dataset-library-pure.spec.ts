@@ -59,7 +59,7 @@ test('upload failure retains its server identity and never retries or finishes',
   }
   expect(failure).toBeInstanceOf(DatasetUploadError);
   expect((failure as DatasetUploadError).uploadId).toBe(id);
-  expect((failure as Error).message).toContain('Open the saved upload in My datasets');
+  expect((failure as Error).message).toContain('Open the saved upload in Datasets');
   expect(started).toEqual([id]);
   expect(calls.map((call) => call.method)).toEqual(['POST', 'PUT']);
   expect(calls.some((call) => call.url.endsWith('/finish'))).toBe(false);
@@ -73,7 +73,7 @@ test('lost upload creation acknowledgement tells the user to inspect the collect
   };
   await expect(
     datasetLibrary.upload('project-one', [new File(['fixture'], 'records.csv')], () => {}),
-  ).rejects.toMatchObject({ uploadId: null, message: expect.stringContaining('Refresh My datasets') });
+  ).rejects.toMatchObject({ uploadId: null, message: expect.stringContaining('Refresh Datasets') });
   expect(calls).toBe(1);
 });
 

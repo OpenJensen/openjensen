@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { installedModules } from './module-fixtures';
 
@@ -128,6 +129,7 @@ async function mockWorkspace(
   // Intercept all application requests, including every write. The browser
   // suite cannot invoke a model or upload media to a real provider.
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request();
     const path = new URL(request.url()).pathname;
     const submissionPath = `/api/v1/projects/${projectId}/submissions/`;
@@ -360,7 +362,7 @@ test('running augmentation persists across tab changes, polls for completion and
   const { submitted, unexpected, jobs, cancelled } = await mockWorkspace(page);
   await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Cancel augmentation', exact: true })).toBeVisible();
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await page.getByRole('link', { name: 'Augmentation', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Cancel augmentation', exact: true })).toBeVisible();
   jobs[0].status = 'succeeded';
@@ -560,7 +562,7 @@ test('dataset handoff only offers supported video sources and preserves the sele
     }),
   );
   await page.reload();
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await page.getByRole('button', { name: 'Open dataset inspected-video', exact: true }).click();
   await page.getByText('Advanced', { exact: true }).click();
   const history = page.getByRole('combobox', { name: 'History', exact: true });
@@ -574,7 +576,7 @@ test('dataset handoff only offers supported video sources and preserves the sele
   if (!(await history.isVisible())) await page.getByText('Advanced', { exact: true }).click();
   await history.selectOption('failed-inspection');
   await expect(augment).toHaveCount(0);
-  await page.getByRole('button', { name: '← Back to library', exact: true }).click();
+  await page.getByRole('button', { name: '← Back to datasets', exact: true }).click();
   await page.getByRole('button', { name: 'Open dataset second-video', exact: true }).click();
   await expect(augment).toBeVisible();
   await augment.click();

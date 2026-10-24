@@ -303,7 +303,7 @@ export function WorkflowPanel({
             };
       if (evaluation && evaluationSuite === 'libero_spatial') {
         if (!preferences.parityProfile.trim() || !preferences.parityRmse.trim() || !preferences.parityMaxError.trim())
-          throw new Error('Set your approved floating-policy parity profile and tolerances in Settings & diagnostics.');
+          throw new Error('Set your approved floating-policy parity profile and tolerances in Settings.');
         const rmse = Number(preferences.parityRmse);
         const maximum = Number(preferences.parityMaxError);
         if (!Number.isFinite(rmse) || !Number.isFinite(maximum) || rmse < 0 || maximum < 0)
@@ -775,7 +775,7 @@ export function WorkflowPanel({
       return (
         <section className="panel workflow-panel workflow-job-detail">
           <button className="text-link" onClick={backToHistory}>
-            ← All {historyTitle.toLowerCase()}
+            ← Back to jobs
           </button>
           <p role="status">{jobs.isPending ? 'Loading job…' : 'This job is unavailable.'}</p>
         </section>
@@ -793,7 +793,7 @@ export function WorkflowPanel({
       <article className="panel workflow-panel workflow-job-detail" aria-label={`${stage} job details`}>
         <div className="workflow-view-navigation">
           <button className="text-link" onClick={backToHistory}>
-            ← All {historyTitle.toLowerCase()}
+            ← Back to jobs
           </button>
           <button className="secondary-button" onClick={openNew} disabled={!ready}>
             {newLabel}
@@ -941,7 +941,7 @@ export function WorkflowPanel({
               .filter((item) => item.job_id === selected.id)
               .map((item) => (
                 <button type="button" className="secondary-button" key={item.id} onClick={() => onModel(item.id)}>
-                  View {item.label} in My models
+                  View {item.label} in Models
                 </button>
               ))}
           <h3>Output</h3>
@@ -1056,7 +1056,7 @@ export function WorkflowPanel({
     <section className="panel workflow-panel workflow-new-job">
       <div className="workflow-view-navigation">
         <button className="text-link" type="button" disabled={mutation.isPending} onClick={backToHistory}>
-          {modelRunId ? '← Back to models' : `← All ${historyTitle.toLowerCase()}`}
+          {modelRunId ? '← Back to models' : '← Back to jobs'}
         </button>
       </div>
       {preferencesBlocker && (
@@ -1172,7 +1172,7 @@ export function WorkflowPanel({
                   <div className="workflow-storage-note" role="status">
                     <p>Quantize a SmolVLA checkpoint first.</p>
                     <button type="button" className="text-link" onClick={onOpenQuantize}>
-                      Go to quantization
+                      Open Quantize
                     </button>
                   </div>
                 )}

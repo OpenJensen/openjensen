@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { chooseTransformationModel, openTransformationJob, transformationJobs } from './lifecycle-controls';
 import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
@@ -105,6 +106,7 @@ async function fixture(
 ) {
   const state = { jobs: initialJobs, workers, mutations: [] as string[] };
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request(),
       path = new URL(request.url()).pathname;
     if (request.method() !== 'GET') {
@@ -183,7 +185,7 @@ test('manual stage navigation and project switches return to history without a d
   const state = await fixture(page);
   await chooseTransformationModel(page, 'distillation', 'Choose Saved ACT teacher · teacher');
   await expect(panel(page)).toBeVisible();
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await openDistill(page);
   await expect(panel(page)).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Distillation jobs', exact: true })).toBeVisible();

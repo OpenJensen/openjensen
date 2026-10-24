@@ -16,7 +16,8 @@ import pytest
 from starlette.testclient import TestClient
 
 SPEC = importlib.util.spec_from_file_location(
-    "firebird_public_gateway", Path(__file__).resolve().parents[1] / "deploy/xbox/public_gateway.py"
+    "firebird_public_gateway",
+    Path(__file__).resolve().parents[1] / "deploy/linux-server/public_gateway.py",
 )
 gateway = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = gateway
@@ -370,7 +371,9 @@ def test_proxy_response_streams_each_chunk_before_requesting_next_and_closes(con
     assert stream.closed
 
 
-@pytest.mark.skipif(os.name != "posix", reason="Xbox gateway configuration uses POSIX permissions")
+@pytest.mark.skipif(
+    os.name != "posix", reason="Public gateway configuration uses POSIX permissions"
+)
 def test_config_requires_private_file_and_rejects_arbitrary_preview_origin(config, tmp_path):
     path = tmp_path / "gateway.json"
     path.write_text(json.dumps(config[1]))
@@ -452,6 +455,12 @@ else:
 @pytest.mark.parametrize(
     "path",
     [
+        "/api/v1/module-installations",
+        "/api/v1/module-installations/cancel",
+        "/api/v1/%256dodule-installations",
+        "/api/v1/updates",
+        "/api/v1/updates/apply",
+        "/api/v1/%2575pdates/apply",
         "/api/v1/robot-lab/status",
         "/api/v1/robot-lab/camera.jpg",
         "/api/v1/robot-lab/control/start",
@@ -472,3 +481,17 @@ def test_robot_hardware_never_reaches_public_upstream(config, method, path):
         response = client.request(method, "/firebird" + path)
         assert response.status_code == 403
         assert "private workspace" in response.text
+
+
+@pytest.mark.parametrize("method", ["PUT", "POST", "DELETE"])
+@pytest.mark.parametrize("path", ["/modules/teaching", "/%256dodules/robot-lab"])
+def test_public_gateway_cannot_enable_modules(config, method, path):
+    def forbidden(_request):
+        raise AssertionError("Module management must remain private")
+
+    with TestClient(
+        gateway.PublicGateway(config[0], transport=httpx.MockTransport(forbidden)),
+        base_url=ORIGIN,
+        headers={"Authorization": AUTH, "Origin": ORIGIN},
+    ) as client:
+        assert client.request(method, "/firebird/api/v1" + path).status_code == 403

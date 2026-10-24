@@ -37,7 +37,7 @@
   font-weight: 650;
 }
 .native-simulation .simulation-step-heading h3 {
-  font-size: 16px;
+  font-size: var(--text-subsection);
   line-height: 1.5;
   font-weight: 650;
 }
@@ -261,7 +261,7 @@
 }
 .native-workflow .native-form-section > h3,
 .native-workflow .simulation-step > h3 {
-  font-size: 14px;
+  font-size: var(--text-subsection);
   font-weight: 600;
 }
 .native-workflow .simulation-setup {

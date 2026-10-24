@@ -17,6 +17,7 @@ from starlette.background import BackgroundTask
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from vla_platform import __version__
+from vla_platform.application_updates import ApplicationUpdates
 from vla_platform.augmentation.contracts import AugmentationOptions, AugmentationRequest
 from vla_platform.capabilities import registry
 from vla_platform.cloud_api import router as cloud_connections_router
@@ -49,7 +50,9 @@ from vla_platform.lifecycle.contracts import (
 )
 from vla_platform.lifecycle.model_names import ModelRunName
 from vla_platform.lifecycle.training_catalog import public_training_models
+from vla_platform.module_installations import ModuleInstallations
 from vla_platform.modules import WorkspaceModule, workspace_modules
+from vla_platform.modules_api import router as modules_router
 from vla_platform.projects import Projects
 from vla_platform.recordings_api import router as recordings_router
 from vla_platform.robot_lab_api import router as robot_lab_router
@@ -68,6 +71,7 @@ from vla_platform.submissions import (
 from vla_platform.teaching_api import router as teaching_router
 from vla_platform.teaching_sessions.config import TeachingError
 from vla_platform.teaching_sessions_api import router as teaching_sessions_router
+from vla_platform.updates_api import router as updates_router
 
 LOCAL_ORIGINS = {
     "http://127.0.0.1:3000",
@@ -118,12 +122,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise RuntimeError("Another application already owns this workspace") from exc
         storage = Storage(settings.data_dir)
         execution = Execution(storage, settings)
-        explorer = DatasetExplorer(cover_cache=settings.data_dir / "dataset-cover-cache")
+        explorer = DatasetExplorer(
+            cover_cache=settings.data_dir / "dataset-cover-cache", data_dir=settings.data_dir
+        )
         initialized = False
         try:
             await storage.initialize()
             initialized = True
             await execution.reconcile()
+            app.state.module_installations = ModuleInstallations(settings.data_dir)
+            app.state.application_updates = ApplicationUpdates(data_dir=settings.data_dir)
             app.state.projects, app.state.execution = Projects(storage), execution
             app.state.explorer = explorer
             app.state.dataset_library = DatasetLibrary(settings.data_dir)
@@ -135,6 +143,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             try:
                 if initialized:
                     try:
+                        if hasattr(app.state, "module_installations"):
+                            await app.state.module_installations.close()
+                        if hasattr(app.state, "application_updates"):
+                            await app.state.application_updates.close()
                         if hasattr(app.state, "robot_lab"):
                             await app.state.robot_lab.close()
                         if hasattr(app.state, "dataset_library"):
@@ -162,6 +174,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         redoc_url=None,
     )
 
+    app.state.active_writes = 0
+
     @app.exception_handler(TeachingError)
     async def teaching_error(_request: Request, exc: TeachingError):
         return JSONResponse({"detail": str(exc)}, status_code=exc.status)
@@ -183,6 +197,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(recordings_router)
     app.include_router(dataset_library_router)
     app.include_router(robot_lab_router)
+    app.include_router(updates_router)
+    app.include_router(modules_router)
 
     @app.exception_handler(LibraryError)
     async def dataset_library_error(_request: Request, exc: LibraryError):
@@ -209,8 +225,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             response = JSONResponse(
                 {"detail": "Origin is not allowed for the local application"}, status_code=403
             )
+        elif (
+            request.method not in {"GET", "HEAD", "OPTIONS"}
+            and not request.url.path.startswith("/api/v1/updates")
+            and hasattr(app.state, "application_updates")
+            and app.state.application_updates.pending
+        ):
+            response = JSONResponse(
+                {"detail": "A server update is in progress. Wait for it to finish."},
+                status_code=503,
+            )
         else:
-            response = await call_next(request)
+            tracked = request.method not in {
+                "GET",
+                "HEAD",
+                "OPTIONS",
+            } and not request.url.path.startswith("/api/v1/updates")
+            if tracked:
+                app.state.active_writes += 1
+            try:
+                response = await call_next(request)
+            finally:
+                if tracked:
+                    app.state.active_writes -= 1
         if request.url.path.startswith("/api/v1/"):
             # Include handled errors: a cached failure must not hide a later job state.
             response.headers["Cache-Control"] = "no-store"
@@ -254,7 +291,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def cloud_runs(response: Response) -> CloudRunsFeed:
         """Read bounded operator snapshots; never connect to or control a cloud host."""
         response.headers["Cache-Control"] = "no-store"
-        return await asyncio.to_thread(read_cloud_runs, settings.cloud_runs_dir)
+        directory = settings.cloud_runs_dir or (
+            settings.data_dir / "cloud-runs"
+            if (settings.data_dir / "cloud-runs").is_dir()
+            else None
+        )
+        return await asyncio.to_thread(read_cloud_runs, directory)
 
     @app.get("/api/v1/modules", response_model=list[WorkspaceModule])
     async def modules(request: Request) -> list[WorkspaceModule]:

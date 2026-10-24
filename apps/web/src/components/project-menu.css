@@ -146,7 +146,7 @@
 }
 .project-create-dialog h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--text-section);
   font-weight: 600;
   letter-spacing: -0.3px;
 }

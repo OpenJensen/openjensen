@@ -1,3 +1,4 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { chooseTransformationModel, selectedQuantizationModel } from './lifecycle-controls';
 import { selectProject } from './project-controls';
 import { expect, test, type Page } from '@playwright/test';
@@ -87,7 +88,7 @@ test('theme selection survives home/reference navigation and direct reloads', as
   await page.reload();
   await expect(page.getByRole('button', { name: 'Dark', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: 'Light', exact: true }).click();
-  await page.getByRole('link', { name: 'OPEN JENSEN workspace home' }).click();
+  await page.getByRole('link', { name: 'OpenJensen workspace home' }).click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole('button', { name: 'Light', exact: true })).toHaveAttribute('aria-pressed', 'true');
   expect(await page.evaluate(() => localStorage.getItem('jensen.theme'))).toBe('light');
@@ -360,7 +361,7 @@ test('reports malformed schemas without crashing the shared page', async ({ page
   await page.goto('/docs/');
   await expect(page.getByText(/invalid OpenAPI document/i)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Retry loading schema' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'OPEN JENSEN workspace home' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'OpenJensen workspace home' })).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -383,7 +384,7 @@ test('shared workspace shell preserves training, defaults, and separate diagnost
   await expect(page.getByRole('region', { name: 'Fine-tuning jobs', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start a new fine-tuning', exact: true })).toBeDisabled();
   await expect(page.getByRole('navigation', { name: 'Training setup' })).toHaveCount(0);
-  await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
+  await page.getByRole('link', { name: 'Settings', exact: true }).click();
   await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
   await expect(page.getByLabel('Quantization recipe')).toHaveValue('Q8_0');
   await expect(page.getByLabel('Also quantize vision to Q8 (experimental)')).not.toBeChecked();
@@ -546,7 +547,7 @@ test('dataset inspection auto-loads camera previews only after opening and stays
   await expect.poll(() => previews).toEqual(['index', '0', '1']);
   await expect(page.getByText('policy-review', { exact: true })).toHaveCount(0);
   await expectNoPageOverflow(page);
-  await page.getByRole('button', { name: '← Back to library', exact: true }).click();
+  await page.getByRole('button', { name: '← Back to datasets', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Import a dataset', exact: true })).toBeVisible();
   expect(previews).toEqual(['index', '0', '1']);
   expect(errors).toEqual([]);
@@ -558,7 +559,7 @@ const modelRevision = 'c'.repeat(40);
 const localTrainingRuntimes = [
   { id: 'cpu', label: 'CPU worker', device: 'cpu', training: false, simulation: false },
   { id: 'inference', label: 'Inference-only GPU', device: 'cuda', training: false, simulation: true },
-  { id: 'gpu-3070', label: 'RTX 3070 workstation', device: 'cuda', training: true, simulation: true },
+  { id: 'gpu-4060', label: 'RTX 4060 workstation', device: 'cuda', training: true, simulation: true },
   { id: 'gpu-4090', label: 'RTX 4090 workstation', device: 'cuda', training: true, simulation: true },
 ];
 const trainingRuntimes: Record<string, any>[] = [
@@ -751,6 +752,7 @@ async function mockTrainingWorkspace(
   // Every application API call is intercepted, including all writes. These
   // tests cannot submit compute work even if a new request path is introduced.
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname;
@@ -1493,7 +1495,7 @@ test('an explicitly enabled local GPU can be selected without adding provider co
     .getByRole('button', { name: 'Compute', exact: true })
     .click();
   const gpu = page.getByRole('combobox', { name: 'GPU', exact: true });
-  await expectGpuChoices(page, ['L4', 'T4', 'A100', 'A100-80GB', 'RTX 3070 workstation', 'RTX 4090 workstation']);
+  await expectGpuChoices(page, ['L4', 'T4', 'A100', 'A100-80GB', 'RTX 4060 workstation', 'RTX 4090 workstation']);
   await chooseGpu(page, 'gpu-4090', 'RTX 4090 workstation');
   await expect(gpu).toHaveAttribute('value', 'gpu-4090');
   await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();
@@ -1513,6 +1515,7 @@ test('dataset intake waits for a confirmed project and preserves its draft durin
   let projectError = false;
   const submitted: { projectId: string; body: unknown }[] = [];
   await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname;
@@ -1724,7 +1727,7 @@ test('blank dataset revision uses latest and reused inspections keep one history
   await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
   await expect(page.getByRole('heading', { name: repoId, exact: true })).toBeVisible();
   await expect.poll(() => previews).toEqual(['index', 'episode']);
-  await page.getByRole('button', { name: '← Back to library', exact: true }).click();
+  await page.getByRole('button', { name: '← Back to datasets', exact: true }).click();
   await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
   await expect(page.getByRole('heading', { name: repoId, exact: true })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Dataset views' })).toHaveCount(0);
@@ -1967,7 +1970,7 @@ test('quantization submits Q4 only after an explicit experimental choice', async
   await page.goto('/datasets/');
   await submitQuantization(1);
   expect(requests[0].candidates).toEqual([{ language: 'Q8_0', vision: null }]);
-  await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
+  await page.getByRole('link', { name: 'Settings', exact: true }).click();
   await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
   const compare = page.getByLabel('Compare Q8 and Q4 (experimental)');
   await expect(compare).not.toBeChecked();
@@ -1977,7 +1980,7 @@ test('quantization submits Q4 only after an explicit experimental choice', async
     { language: 'Q8_0', vision: null },
     { language: 'Q4_0', vision: null },
   ]);
-  await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
+  await page.getByRole('link', { name: 'Settings', exact: true }).click();
   await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
   const restoredCompare = page.getByLabel('Compare Q8 and Q4 (experimental)');
   // Settings remounts; wait until its saved preference has been restored.
@@ -2026,7 +2029,7 @@ test('Spatial settings require explicit task and parity choices in the submitted
   });
   await page.goto('/datasets/');
   try {
-    await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
+    await page.getByRole('link', { name: 'Settings', exact: true }).click();
     await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
     await expect(page.getByLabel('Task suite')).toBeDisabled();
     await expect(page.getByLabel('Quantization recipe')).toBeDisabled();
@@ -2047,7 +2050,7 @@ test('Spatial settings require explicit task and parity choices in the submitted
   } finally {
     releaseProjects();
   }
-  await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
+  await page.getByRole('link', { name: 'Settings', exact: true }).click();
   await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
   await page.getByLabel('Task suite').selectOption('libero_spatial');
   await expect(page.getByLabel('Spatial task IDs')).toHaveValue('0,1,2,3,4,5,6,7,8,9');
@@ -2081,7 +2084,7 @@ test('Spatial settings require explicit task and parity choices in the submitted
     );
   });
   await page.reload();
-  await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
+  await page.getByRole('link', { name: 'Settings', exact: true }).click();
   await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
   await expect(page.getByRole('combobox', { name: 'Protocol', exact: true })).toHaveValue('libero');
   await expect(page.getByLabel('Episode step limit')).toHaveValue('280');
@@ -2168,7 +2171,7 @@ test('restored workflow preferences and submitted requests stay isolated when sw
     );
   });
   await page.goto('/datasets/');
-  await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
+  await page.getByRole('link', { name: 'Settings', exact: true }).click();
   await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
   await expect(page.getByLabel('Spatial task IDs')).toHaveValue('0,2');
   await expect(page.getByLabel('Episode step limit')).toHaveValue('280');
@@ -2227,7 +2230,7 @@ for (const state of ['empty', 'error'] as const) {
       ),
     );
     await page.goto('/datasets/');
-    await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
+    await page.getByRole('link', { name: 'Settings', exact: true }).click();
     await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
     await expect(page.getByLabel('Task suite')).toBeDisabled();
     await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
@@ -2272,7 +2275,7 @@ for (const storage of ['invalid JSON', 'unavailable'] as const) {
       }
     }, storage);
     await page.goto('/datasets/');
-    await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
+    await page.getByRole('link', { name: 'Settings', exact: true }).click();
     await page.getByRole('button', { name: 'Workflow settings', exact: true }).click();
     await expect(page.getByLabel('Quantization recipe')).toHaveValue('Q8_0');
     await page.getByLabel('Quantization recipe').selectOption('Q4_0');

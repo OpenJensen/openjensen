@@ -1,20 +1,21 @@
+import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { selectProject } from './project-controls';
 
 const destinations = [
   ['dashboard', 'Dashboard'],
-  ['datasets', 'Dataset'],
+  ['datasets', 'Datasets'],
   ['training', 'Fine-tune'],
   ['distillation', 'Distill'],
   ['quantization', 'Quantize'],
   ['evaluation', 'Evaluate'],
   ['simulation', 'Run'],
-  ['settings', 'Settings & diagnostics'],
+  ['settings', 'Settings'],
   ['cloud-runs', 'Cloud runs'],
   ['augmentation', 'Augmentation'],
   ['teaching', 'Teaching'],
   ['decision-lab', 'Decision lab'],
-  ['models', 'My models'],
+  ['models', 'Models'],
   ['robot-lab', 'Robot Lab'],
 ] as const;
 
@@ -22,7 +23,8 @@ async function fixture(page: Page) {
   const writes: string[] = [];
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  await page.route('**/api/v1/**', (route) => {
+  await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (request.method() !== 'GET') {
@@ -51,7 +53,7 @@ test('home opens the dashboard and every section supports a direct visit and ref
   // The server must redirect before hydration, so an immediate sidebar click
   // cannot be overwritten by a later client-side dashboard redirect.
   expect(home?.url()).toMatch(/\/dashboard\/$/);
-  await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
+  await page.getByRole('link', { name: 'Settings', exact: true }).click();
   await expect(page).toHaveURL(/\/settings\/$/);
   await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Run diagnostics', exact: true })).toBeVisible();
@@ -64,7 +66,7 @@ test('home opens the dashboard and every section supports a direct visit and ref
       .getByRole('link', { name: title, exact: true });
     await expect(link).toHaveAttribute('href', `/${path}/`);
     await expect(link).toHaveAttribute('aria-current', 'page');
-    await expect(page).toHaveTitle(`Open Jensen · ${title}`);
+    await expect(page).toHaveTitle(`OpenJensen · ${title}`);
     await page.reload();
     await expect(link).toHaveAttribute('aria-current', 'page');
     await expect(page.getByRole('heading', { name: title, level: 1, exact: true })).toBeVisible();
@@ -89,16 +91,19 @@ test('the sidebar lists installed modules and Settings shows how to add the rest
   await page.goto('/dashboard/');
   const nav = page.getByRole('navigation', { name: 'Policy lifecycle' });
   await expect(nav.getByRole('group', { name: 'Robot' }).getByRole('link')).toHaveText(['Robot Lab']);
-  await expect(nav.getByRole('group', { name: 'Data' }).getByRole('link')).toHaveText(['Dataset']);
+  await expect(nav.getByRole('group', { name: 'Data' }).getByRole('link')).toHaveText(['Datasets']);
   for (const name of ['Teaching', 'Augmentation', 'Decision lab', 'Cloud runs']) {
     await expect(nav.getByRole('link', { name, exact: true })).toHaveCount(0);
   }
-  await nav.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
+  await nav.getByRole('link', { name: 'Settings', exact: true }).click();
   await page.getByRole('button', { name: 'Modules', exact: true }).click();
-  const modules = page.getByRole('region', { name: 'Modules' }).getByRole('listitem');
+  const modules = page.getByRole('list', { name: 'Workspace modules' }).getByRole('listitem');
   await expect(modules).toHaveCount(5);
-  await expect(modules.filter({ hasText: 'Robot Lab' })).toContainText('Installed');
-  await expect(modules.filter({ hasText: 'Teaching' })).toContainText('Set JENSEN_TEACHING_URL.Not installed');
+  await expect(modules.filter({ hasText: 'Robot Lab' })).toContainText('Added');
+  const teaching = modules.filter({ hasText: 'Teaching' });
+  await expect(teaching).toContainText('Available');
+  await teaching.getByText('Setup required', { exact: true }).click();
+  await expect(teaching).toContainText('Set JENSEN_TEACHING_URL.');
   // An uninstalled module stays reachable by URL and is listed while open.
   await page.goto('/teaching/');
   await expect(nav.getByRole('link', { name: 'Teaching', exact: true })).toHaveAttribute('aria-current', 'page');
@@ -119,7 +124,7 @@ test('sidebar links, Back and Forward preserve project, theme and unfinished dat
   const nav = page.getByRole('navigation', { name: 'Policy lifecycle' });
   await nav.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   await expect(page).toHaveURL(/\/training\/$/);
-  await nav.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
+  await nav.getByRole('link', { name: 'Settings', exact: true }).click();
   await expect(page).toHaveURL(/\/settings\/$/);
   await page.goBack();
   await expect(page).toHaveURL(/\/training\/$/);
@@ -148,7 +153,8 @@ test('section links can open in a new tab and unknown pages remain 404s', async 
   await expect(nav).toHaveAttribute('aria-busy', 'false');
   const link = nav.getByRole('link', { name: 'Fine-tune', exact: true });
   const [other] = await Promise.all([context.waitForEvent('page'), link.click({ modifiers: ['ControlOrMeta'] })]);
-  await expect(other).toHaveURL(/\/training\/$/);
+  // A second tab loads the full export; allow for a busy machine running parallel suites.
+  await expect(other).toHaveURL(/\/training\/$/, { timeout: 15_000 });
   await expect(other.getByRole('heading', { name: 'Fine-tune', level: 1, exact: true })).toBeVisible();
   await expect(page).toHaveURL(/\/datasets\/$/);
   await other.close();

@@ -44,7 +44,7 @@ fn payload() -> Payload {
 }
 
 fn event() -> serde_json::Value {
-    serde_json::json!({"schema_version":1,"event":"ready","nonce":"0123456789abcdef0123456789abcdef","host":"127.0.0.1","port":23456,"build_id":"b".repeat(40),"app_version":"0.1.0","resources_sha256":"a".repeat(64),"workspace_id":"c".repeat(64)})
+    serde_json::json!({"schema_version":1,"event":"ready","nonce":"0123456789abcdef0123456789abcdef","host":"127.0.0.1","port":23456,"build_id":"b".repeat(40),"app_version":env!("CARGO_PKG_VERSION"),"resources_sha256":"a".repeat(64),"workspace_id":"c".repeat(64)})
 }
 
 #[test]
@@ -370,7 +370,7 @@ fn payload_pin_verifies_fixed_executable_and_manifest_before_admission() {
         fs::create_dir_all(&resources).unwrap();
         let executable = folder.join(executable_name);
         fs::write(&executable, b"fixed bundled executable").unwrap();
-        let manifest = serde_json::to_vec(&serde_json::json!({"schema_version":1,"build_id":"b".repeat(40),"app_version":"0.1.0","files":{"index.html":{"bytes":0,"sha256":"a".repeat(64)}}})).unwrap();
+        let manifest = serde_json::to_vec(&serde_json::json!({"schema_version":1,"build_id":"b".repeat(40),"app_version":env!("CARGO_PKG_VERSION"),"files":{"index.html":{"bytes":0,"sha256":"a".repeat(64)}}})).unwrap();
         fs::write(resources.join("resources.json"), &manifest).unwrap();
         use std::os::unix::fs::PermissionsExt;
         let mut entries = serde_json::Map::new();
