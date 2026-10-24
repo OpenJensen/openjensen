@@ -1,0 +1,57 @@
+{
+  "date": "2026-10-24",
+  "scope": "Calibration packet-loss handling, encoder baseline and explicit interrupted state",
+  "base_commit": "f4635855c75666d02b032a9afd086c50ce6edb31",
+  "source_sha256": {
+    "apps/web/src/components/robot-lab.tsx": "9d03e6c515c6b766208a6ac38e09dbb892e1df82490309be6966b4dd81bd07fa",
+    "apps/web/src/lib/robot-api.ts": "6d11d91b0cbf9980bee88ce9aee8625c5ea0669fd578f2fc03a318b2ad529d87",
+    "tests/web/robot-lab.spec.ts": "3dbe3537bd8a5c792f23b6331dd3f91e984fd63c3b66911edfbaee64aa2b2a3b",
+    "workers/robot_lab/API.md": "2731fda9455bd42d75bb6a38d9305a37f7def49743536e3cdc2e663d07bcdc30",
+    "workers/robot_lab/hardware.py": "aba4e9fb328bfd1a74aebaa0f253e75370c88edf0b7f28ba08716792e263d2b6",
+    "workers/robot_lab/server.py": "7758fdff48b5606fb9a86c59b7a93bc22e700eb5cdbeae5fb5b8e8b4afa056c5",
+    "workers/robot_lab/tests/test_robot_lab.py": "2db0eee572c4b5e64897b34f7a83de4146ab9aaaf7b9e6e7fbfcb5c6f96f8133",
+    "workers/robot_lab/tests/test_hardware_transport.py": "807ef069931b6f8f56ccee6007a1ecaff17cfb7f507474558c5a307215851e0a"
+  },
+  "verification": {
+    "production_export": "passed",
+    "typescript": "passed",
+    "ruff": "passed for changed Python sources",
+    "companion": {
+      "run": 109,
+      "passed": 97,
+      "skipped": 12,
+      "skip_reason": "Optional NumPy/Pillow/PyArrow dataset checks unavailable in Xbox test environment"
+    },
+    "api_installer_wrapper": {
+      "passed": 42
+    },
+    "browser": {
+      "initial_passed": 38,
+      "initial_failed": 2,
+      "focused_rerun_passed": 4,
+      "distinct_cases_verified": 40,
+      "platforms": [
+        "desktop",
+        "mobile"
+      ],
+      "initial_failures": "Camera failure was injected before clicking Pause, allowing a polling response to change the button to Retry during the click. Test now pauses and observes Start before injecting failure. Both camera cases and interruption cases passed on the focused rerun."
+    }
+  },
+  "hardware_acceptance": "No motor commands or calibration writes sent. Physical center/range acceptance remains pending; Mac currently sees no USB serial controller or external USB camera. Saved mapping is retained.",
+  "evidence_directory": "/home/aayrapetyan/ollamaforvlas/run/robot-lab-calibration-20261024",
+  "cleanup": {
+    "owned_pids": [
+      10106,
+      10579,
+      14371,
+      11868,
+      11793,
+      11036,
+      11319,
+      10353,
+      10073
+    ],
+    "remaining": [],
+    "test_listener_closed": true
+  }
+}

@@ -386,6 +386,86 @@ class SafetyTests(unittest.TestCase):
         original = self.lab.original_calibration
         self.lab.stop("Invalid range")
         self.assertEqual(self.buses[-1].calibration, original)
+        self.assertEqual(self.lab.calibration_state["phase"], "interrupted")
+        self.assertEqual(self.lab.calibration_state["interrupted_stage"], "ranges")
+        self.assertEqual(self.lab.calibration_state["error"], "Invalid range")
+
+    def test_center_resets_position_baseline_after_offset_change(self):
+        self.lab.calibration_start(
+            {
+                "port": "/dev/cu.fake",
+                "robot_id": "new",
+                "role": "follower",
+                "confirm": "START CALIBRATION",
+            }
+        )
+        self.lab.positions = dict.fromkeys(JOINTS, 4094)
+        bus = self.lab.bus
+        with patch.object(
+            bus, "positions", side_effect=[dict.fromkeys(JOINTS, 4094), dict.fromkeys(JOINTS, 2047)]
+        ):
+            self.lab.calibration_center({})
+        self.assertEqual(self.lab.positions, dict.fromkeys(JOINTS, 2047))
+        self.lab._tick()
+        self.assertEqual(self.lab.calibration_state["phase"], "ranges")
+        bus.raw["shoulder_pan"] = 4095
+        with self.assertRaisesRegex(HardwareError, "implausible jump"):
+            self.lab._tick()
+
+    def test_http_center_failure_preserves_interruption_and_allows_restart(self):
+        payload = {
+            "port": "/dev/cu.fake",
+            "robot_id": "new",
+            "role": "follower",
+            "confirm": "START CALIBRATION",
+        }
+        self.lab.calibration_start(payload)
+        bus = self.lab.bus
+        original = self.lab.original_calibration
+
+        def fail_center(register, motor_id, value):
+            if register == "Homing_Offset":
+                raise HardwareError("Motor 1 write Homing_Offset failed: No status packet")
+
+        bus.on_write = fail_center
+        server = create_server(self.lab, "test-token-" + "a" * 32, port=0)
+        thread = threading.Thread(target=server.serve_forever)
+        thread.start()
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+        try:
+            connection.request(
+                "POST",
+                "/v1/calibration/center",
+                "{}",
+                {
+                    "Authorization": "Bearer test-token-" + "a" * 32,
+                    "Content-Type": "application/json",
+                },
+            )
+            response = connection.getresponse()
+            self.assertEqual(response.status, 409)
+            self.assertIn("Homing_Offset", json.loads(response.read())["error"])
+        finally:
+            connection.close()
+            server.shutdown()
+            server.server_close()
+            thread.join(2)
+        self.assertFalse(bus.opened)
+        self.assertEqual(bus.calibration, original)
+        self.assertFalse(any(r == "Torque_Enable" and v for r, _, v in bus.writes))
+        self.assertFalse(self.lab.calibration_path("new", "follower").exists())
+        state = self.lab.status()
+        self.assertEqual(state["session"]["mode"], "idle")
+        self.assertEqual(state["calibration"]["phase"], "interrupted")
+        self.assertEqual(state["calibration"]["interrupted_stage"], "center")
+        self.assertIn("Homing_Offset", state["calibration"]["error"])
+        self.lab.stop()
+        self.assertEqual(self.lab.status()["calibration"]["phase"], "interrupted")
+        self.lab.calibration_start(payload)
+        self.assertEqual(self.lab.calibration_state["phase"], "center")
+        self.assertNotIn("error", self.lab.calibration_state)
+        self.assertIsNone(self.lab.error)
+        self.lab.stop()
         self.assertEqual(self.lab.calibration_state["phase"], "idle")
 
     def test_stop_during_center_capture_cannot_resurrect_calibration_phase(self):
@@ -405,7 +485,7 @@ class SafetyTests(unittest.TestCase):
             reads.append(True)
             result = original_positions()
             if len(reads) == 2:
-                self.lab.stop("Cancelled while capturing center")
+                self.lab.stop()
             return result
 
         bus.positions = positions

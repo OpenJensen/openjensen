@@ -75,3 +75,13 @@ The UI only marks a motion check correct after the operator confirms the joint
 that actually moved. These visual check marks belong to the current page session.
 Completed ID mappings are restored from the private journal on companion restart
 without opening serial hardware.
+
+### Interrupted calibration
+
+A communication or safety failure during center/range capture closes the session,
+restores the previous calibration when the bus permits, and reports calibration
+`phase: "interrupted"`, `interrupted_stage: "center" | "ranges"`, and `error`.
+Starting calibration again is explicit; cancelling normally returns to `idle`.
+Missing read replies receive at most three attempts. Missing configuration-write
+acknowledgements require an exact register read-back, without replaying the write.
+Motion, torque, ID and baudrate writes do not use this recovery.

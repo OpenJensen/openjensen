@@ -645,6 +645,9 @@ class RobotLab:
             with self.stop_lock, self.lifecycle_lock:
                 if generation != self.generation:
                     raise RequestError("Calibration has stopped")
+                # Homing changes the encoder coordinate system. Do not compare
+                # the first range sample against the pre-offset position.
+                self.positions = dict(raw)
                 self.calibration_state.update(
                     phase="ranges", offsets=offsets, mins=dict(raw), maxes=dict(raw)
                 )
@@ -912,14 +915,21 @@ class RobotLab:
             finally:
                 device.close()
         self.original_calibration = None
-        if self.calibration_state["phase"] in ("center", "ranges"):
-            self.calibration_state["phase"] = "idle"
         if errors:
             self.error = (
                 ((reason + ". ") if reason else "")
                 + "Stop attempted but motor acknowledgement failed. Cut motor power if needed. "
                 + "; ".join(errors)
             )
+        if self.calibration_state["phase"] in ("center", "ranges"):
+            if reason or errors:
+                self.calibration_state.update(
+                    interrupted_stage=self.calibration_state["phase"],
+                    phase="interrupted",
+                    error=self.error,
+                )
+            else:
+                self.calibration_state["phase"] = "idle"
         return self.status()
 
     def recording_start(self, payload):

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 import threading
+import time
 
 JOINTS = ("shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper")
 IDS = {name: index + 1 for index, name in enumerate(JOINTS)}
@@ -126,8 +127,14 @@ class ServoBus:
     def read(self, register: str, motor_id: int):
         address, size = REGISTERS[register]
         method = self.packet.read1ByteTxRx if size == 1 else self.packet.read2ByteTxRx
-        value, result, error = method(self.port, motor_id, address)
-        self._check(result, error, motor_id)
+        # Reads are safe to repeat. Keep missing-packet recovery bounded; a
+        # corrupt packet or a motor-reported fault must still stop the session.
+        for attempt in range(3):
+            value, result, error = method(self.port, motor_id, address)
+            if result != self.sdk.COMM_RX_TIMEOUT or error or attempt == 2:
+                break
+            time.sleep(0.005)
+        self._check(result, error, motor_id, f"read {register}")
         if register == "Homing_Offset":
             return decode_sign(int(value), 11)
         if register == "Present_Position":
@@ -136,18 +143,47 @@ class ServoBus:
 
     def write(self, register: str, motor_id: int, value: int):
         address, size = REGISTERS[register]
+        requested = int(value)
         if register == "Homing_Offset":
             value = encode_sign(value)
         method = self.packet.write1ByteTxRx if size == 1 else self.packet.write2ByteTxRx
         result, error = method(self.port, motor_id, address, int(value))
-        self._check(result, error, motor_id)
+        if (
+            result == self.sdk.COMM_RX_TIMEOUT
+            and not error
+            and register
+            in {
+                "Homing_Offset",
+                "Min_Position_Limit",
+                "Max_Position_Limit",
+                "Operating_Mode",
+                "Lock",
+            }
+        ):
+            # A lost acknowledgement does not mean the write failed. Verify
+            # configuration without replaying a write or any motion command.
+            time.sleep(0.01)
+            try:
+                actual = self.read(register, motor_id)
+            except HardwareError as caught:
+                raise HardwareError(
+                    f"Motor {motor_id} write {register} acknowledgement missing; "
+                    f"read-back failed: {caught}"
+                ) from caught
+            if actual == requested:
+                return
+            raise HardwareError(
+                f"Motor {motor_id} write {register} acknowledgement missing; "
+                f"read-back was {actual}, expected {requested}"
+            )
+        self._check(result, error, motor_id, f"write {register}")
 
-    def _check(self, result, error, motor_id):
+    def _check(self, result, error, motor_id, operation):
         if result != self.sdk.COMM_SUCCESS or error:
             reason = (
                 self.packet.getTxRxResult(result) if result else self.packet.getRxPacketError(error)
             )
-            raise HardwareError(f"Motor {motor_id} communication failed: {reason}")
+            raise HardwareError(f"Motor {motor_id} {operation} failed: {reason}")
 
     def positions(self):
         with self.lock:

@@ -10,7 +10,7 @@ function initialStatus(calibrated = false): any {
   return { ok: true, connected: true, label: 'This Mac', version: '1', platform: 'Darwin', dependencies: { lerobot: { installed: false, version: null }, serial: { installed: true, version: '3.5' }, cv2: { installed: true, version: '4.12.0' }, scservo_sdk: { installed: true, version: '1.0.0' } }, capabilities: { mapping_verification: true, assembled_setup: true, probe: true, camera: true, motor_setup: true, calibration: true, control: true, recording: true }, session: { mode: 'idle', robot_id: null, port: null, role: null, positions: {}, torque_enabled: false, watchdog_seconds: 2, error: null }, calibration: { phase: 'idle', mins: {}, maxes: {}, offsets: {}, path: null }, recording: { active: false, dataset_id: null, episode_active: false, frames: 0, episodes: 0, fps: 10, error: null }, assembled: { phase: 'idle', ids: [], selected_joint: null, detected_id: null, candidate_delta: null, mapping: {}, message: 'Start experimental assembled setup.', error: null, log: [], progress: null, calibration_required: false }, calibrations: calibrated ? [{ robot_id: 'my-so101', role: 'follower', path: 'private-calibration.json' }] : [], datasets: [] };
 }
 async function fixture(page: Page, calibrated = false) {
-  const state = { status: initialStatus(calibrated), writes: [] as { path: string; body: any }[], errors: [] as string[], datasetReads: 0, cameraFailure: false, stopError: null as string | null };
+  const state = { status: initialStatus(calibrated), writes: [] as { path: string; body: any }[], errors: [] as string[], datasetReads: 0, cameraFailure: false, stopError: null as string | null, centerError: null as string | null };
   page.on('pageerror', error => state.errors.push(error.message));
   await page.route('**/api/v1/**', async route => {
     const request = route.request(), path = new URL(request.url()).pathname, body = request.method() === 'POST' ? request.postDataJSON() : undefined;
@@ -35,8 +35,14 @@ async function fixture(page: Page, calibrated = false) {
       else if (action === '/setup/assembled/accept') { state.status.assembled.mapping[body.joint] = body.motor_id; state.status.assembled.phase = Object.keys(state.status.assembled.mapping).length === 6 ? 'review' : 'ready'; state.status.assembled.selected_joint = null; state.status.assembled.detected_id = null; state.status.assembled.wiggle_id = null; }
       else if (action === '/setup/assembled/finish') { state.status.assembled.phase = 'applying'; state.status.assembled.message = 'Writing and verifying canonical IDs.'; setTimeout(() => { state.status.assembled.phase = 'complete'; state.status.assembled.mapping = Object.fromEntries(joints.map((name, index) => [name, index + 1])); state.status.assembled.calibration_required = true; state.status.session.mode = 'idle'; }, 1000); }
       else if (action === '/setup/assembled/cancel') { state.status.assembled.phase = 'stopped'; state.status.session.mode = 'idle'; }
-      else if (action === '/calibration/start') { state.status.session = { ...state.status.session, mode: 'calibration', port: body.port, robot_id: body.robot_id, role: body.role, positions: values(2048) }; state.status.calibration.phase = 'center'; }
-      else if (action === '/calibration/center') { state.status.calibration = { ...state.status.calibration, phase: 'ranges', mins: values(700), maxes: values(3300), offsets: values(0) }; }
+      else if (action === '/calibration/start') { state.status.session = { ...state.status.session, mode: 'calibration', port: body.port, robot_id: body.robot_id, role: body.role, positions: values(2048) }; state.status.calibration = { ...state.status.calibration, phase: 'center', error: null, interrupted_stage: undefined }; state.status.session.error = null; }
+      else if (action === '/calibration/center') {
+        if (state.centerError) {
+          state.status.session.mode = 'idle'; state.status.session.error = state.centerError;
+          state.status.calibration = { ...state.status.calibration, phase: 'interrupted', interrupted_stage: 'center', error: state.centerError };
+          return route.fulfill({ status: 409, json: { detail: state.centerError } });
+        }
+        state.status.calibration = { ...state.status.calibration, phase: 'ranges', mins: values(700), maxes: values(3300), offsets: values(0) }; }
       else if (action === '/calibration/finish') { state.status.calibration.phase = 'saved'; state.status.assembled.calibration_required = false; state.status.session.mode = 'idle'; state.status.calibrations = [{ robot_id: 'my-so101', role: 'follower', path: 'private-calibration.json' }]; }
       else if (action === '/calibration/cancel' || action === '/stop') { if (state.status.session.mode === 'setup') state.status.assembled.phase = 'stopped'; if (state.status.session.mode === 'verification') state.status.verification.phase = 'stopped'; if (action === '/stop') state.status.session.error = state.stopError; state.status.session.mode = 'idle'; state.status.session.torque_enabled = false; state.status.recording.episode_active = false; }
       else if (action === '/control/start') { state.status.session = { ...state.status.session, mode: body.mode, port: body.port, robot_id: body.robot_id, positions: values(0), torque_enabled: body.mode !== 'handguide' }; }
@@ -80,8 +86,9 @@ test('Robot Lab navigation and device discovery issue no motor commands', async 
   expect(state.writes).toEqual([]);
   await page.getByRole('button', { name: 'Start preview', exact: true }).click();
   await expect(page.getByAltText('Live view from the selected robot camera')).toBeVisible();
-  state.cameraFailure = true;
   await page.getByRole('button', { name: 'Pause preview', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Start preview', exact: true })).toBeVisible();
+  state.cameraFailure = true;
   await page.getByRole('button', { name: 'Start preview', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Retry camera', exact: true })).toBeVisible();
   await expect(page.locator('.robot-lab-camera-live')).toHaveCount(0);
@@ -120,6 +127,31 @@ test('calibration center and range save are explicit and use the official compan
   expect(writes(state, '/calibration/center')[0].body).toEqual({});
   expect(writes(state, '/calibration/finish')[0].body).toEqual({ confirm: 'SAVE CALIBRATION' });
   expect(writes(state, '/control/start')).toEqual([]);
+});
+
+test('failed center capture stays at the interrupted stage and requires an explicit restart', async ({ page }, testInfo) => {
+  const state = await fixture(page);
+  await tab(page, 'Calibrate').click();
+  await page.getByRole('button', { name: 'Begin calibration', exact: true }).click();
+  state.centerError = 'Motor 1 write Homing_Offset acknowledgement missing; read-back failed.';
+  await page.getByRole('button', { name: 'Record middle position', exact: true }).click();
+  await expect(page.getByText('Calibration interrupted', { exact: true })).toBeVisible();
+  await expect(page.getByText('Middle position was not saved. Restart calibration to continue.', { exact: true })).toBeVisible();
+  await expect(page.locator('.robot-lab-calibration-steps .current')).toHaveText('2. Middle position');
+  await expect(page.getByRole('button', { name: 'Begin calibration', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Save calibration', exact: true })).toHaveCount(0);
+  expect(writes(state, '/calibration/center')).toHaveLength(1);
+  expect(writes(state, '/calibration/finish')).toHaveLength(0);
+  await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); window.scrollTo(0, 0); });
+  await page.screenshot({ path: testInfo.outputPath('calibration-interrupted.png'), fullPage: true });
+  state.centerError = null;
+  await page.getByRole('button', { name: 'Restart calibration', exact: true }).click();
+  await expect(page.getByText('Calibration interrupted', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Record middle position', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Save calibration', exact: true })).toBeVisible();
+  expect(writes(state, '/calibration/start')).toHaveLength(2);
+  expect(writes(state, '/control/start')).toEqual([]);
+  expect(state.errors).toEqual([]);
 });
 
 test('manual control is explicit, jogs are bounded, and navigating away stops the arm', async ({ page }) => {
