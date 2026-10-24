@@ -14,7 +14,7 @@ import { publicPath } from '@/lib/base-path';
 import { WorkbenchDisclosure } from './workbench-disclosure';
 
 class JournalUnavailable extends Error {
-  constructor() { super('Browser session storage is unavailable. Restore it and reload, then inspect recorded jobs before submitting again.'); }
+  constructor() { super('Browser storage is unavailable. Enable it and reload before submitting again.'); }
 }
 
 function ActionTrace({ values, name, unit }: { values: number[]; name: string; unit: string }) {
@@ -42,7 +42,7 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, preferredJob
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
     try { if (!client.getQueryData(attemptKey)) client.setQueryData(attemptKey, storedAttempt('policy.run.replay', projectId)); setJournalReady(true); }
-    catch { setError('Browser session storage is unavailable. Enable it before submitting a recoverable job.'); }
+    catch { setError('Enable browser storage before submitting.'); }
   }, [client, projectId]);
   const runtimes = (options.data?.runtimes ?? []).filter(replayRuntime);
   const runtime = runtimeId ? runtimes.find(item => item.id === runtimeId) : runtimes[0];
@@ -128,8 +128,8 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, preferredJob
     {selected && <article className="native-simulation-result" aria-label="Observation replay details" data-job-id={selected.id}>
       <div className="native-result-header"><h3>CPU observation replay</h3><span className={`status status-${selected.status}`}>{selected.status}</span></div><p className="native-result-summary">{isActive(selected) ? selected.stage ?? selected.status : 'Recorded job'} · {selected.id}</p>
       {selected.error && <p role="alert">{selected.error}</p>}
-      {report && <><p>{report.observation_source.kind === 'generated_fixture' ? 'Generated sample observations · CPU replay' : 'Dataset observations · CPU replay'}</p><dl className="cloud-run-facts"><div><dt>Observations</dt><dd>{report.observations}</dd></div><div><dt>Predictions per observation</dt><dd>{report.action_shape[0]} × {report.action_shape[1]}</dd></div><div><dt>Reset repeatability</dt><dd>Exact repeat</dd></div></dl><p>Reset reproduced the same action chunk. This does not measure task success, action accuracy, GPU performance or calibration.</p></>}
-      {selected.status === 'succeeded' && !report && <p role="alert">The replay results are incomplete. Check the saved job details before using the output.</p>}
+      {report && <><p>{report.observation_source.kind === 'generated_fixture' ? 'Generated sample observations · CPU replay' : 'Dataset observations · CPU replay'}</p><dl className="cloud-run-facts"><div><dt>Observations</dt><dd>{report.observations}</dd></div><div><dt>Predictions per observation</dt><dd>{report.action_shape[0]} × {report.action_shape[1]}</dd></div><div><dt>Reset repeatability</dt><dd>Exact repeat</dd></div></dl><p>Reset reproduced the same action chunk.</p></>}
+      {selected.status === 'succeeded' && !report && <p role="alert">The replay results are incomplete.</p>}
       {preview.isError && <p role="alert">Saved action preview unavailable. {preview.error.message}</p>}
       {report && preview.isPending && output && <p role="status">Loading the saved action record…</p>}
       {observed && preview.data && !preview.isError && <section aria-label="Predicted action chunks"><label className="distillation-history">Recorded observation<select aria-label="Recorded observation" value={observationIndex} onChange={event => setObservationIndex(Number(event.target.value))}>{preview.data.records.map((row, index) => <option key={`${row.episode_index}:${row.frame_index}`} value={index}>Episode {row.episode_index} · frame {row.frame_index}</option>)}</select></label><p>Saved processor output coordinates. Each chart has its own vertical scale.</p><div className="replay-action-grid">{preview.data.coordinate_names.map((name, index) => <ActionTrace key={`${index}-${name}`} name={name} unit={preview.data!.units[index]} values={observed.actions.map(action => action[index])} />)}</div></section>}
@@ -139,7 +139,7 @@ export function NativeReplayPanel({ projectId, preferredArtifactId, preferredJob
       <WorkbenchDisclosure title="Replay activity and provenance">{events.isError && <p role="alert">Activity is unavailable.</p>}<pre className="cloud-log-tail">{events.data?.map(item => `${item.timestamp} · ${item.stage} · ${item.message}`).join('\n') || 'No recorded activity yet.'}</pre>{result && <pre className="cloud-log-tail">{JSON.stringify(result.reports, null, 2)}</pre>}</WorkbenchDisclosure>
     </article>}
     {history.length > 0 && <label className="distillation-history">Saved replay<select aria-label="Saved replay" value={selected?.id ?? ''} onChange={event => selectJob(event.target.value)}><option value="">Choose a recorded replay</option>{history.map(item => <option key={item.id} value={item.id}>{item.id.slice(0, 8)} · {item.status}</option>)}</select></label>}
-    {jobs.isError && <p role="alert">Job updates are unavailable; displayed status may be stale.</p>}{options.isError && <p role="alert">Worker options are unavailable.</p>}{artifacts.isError && <p role="alert">Saved policies are unavailable.</p>}{error && <p role="alert">{error}</p>}
+    {jobs.isError && <p role="alert">Job updates are unavailable; status may be out of date.</p>}{options.isError && <p role="alert">Worker options are unavailable.</p>}{artifacts.isError && <p role="alert">Saved policies are unavailable.</p>}{error && <p role="alert">{error}</p>}
     {journalReady && attempt.data?.state === 'pending' && <p role="status">{attempt.data.message}</p>}
     {attempt.data?.state === 'uncertain' && <div className="warning-box"><p>{attempt.data.message}</p><button className="secondary-button" disabled={!reviewed || jobs.isError} onClick={() => { try { saveAttempt(null); setReviewed(false); setError(''); } catch { setJournalReady(false); setError('Browser session storage is unavailable.'); } }}>I checked replay jobs; allow a new request</button></div>}
     <NativePreparation key={selected ? 'another' : 'first'} title="Prepare another replay" hasResult={!!selected}>

@@ -25,7 +25,7 @@ async function request<T>(path: string, body?: object, beforePost?: () => void):
     if (!response.ok) throw new Error(typeof value.detail === "string" ? value.detail : "Teaching request failed.");
     return value;
   } catch (error) {
-    if (controller.signal.aborted) throw new Error(body ? "No response arrived. The request outcome is unverified; inspect the executor before retrying." : "Teaching connection timed out.");
+    if (controller.signal.aborted) throw new Error(body ? "No response. Check the executor before retrying." : "Teaching connection timed out.");
     throw error;
   } finally { clearTimeout(timeout); }
 }
@@ -67,7 +67,7 @@ function TeachingControls({ transport }: { transport?: TeachingTransport }) {
       const current = await requestFor<Connection>("/state");
       if (!mounted.current) throw new Error("Teaching controls changed before the command was sent.");
       if (!current.connected || !current.state) throw new Error("Teaching executor is disconnected.");
-      if (!state?.session_id || current.state.session_id !== state.session_id) { void connection.refetch(); throw new Error("The simulator session changed. Review its state before issuing another command."); }
+      if (!state?.session_id || current.state.session_id !== state.session_id) { void connection.refetch(); throw new Error("The simulator session changed. Review it before sending another command."); }
       return requestFor<Receipt>("/commands", { command_id: crypto.randomUUID(), session_id: current.state.session_id, episode_id: current.state.episode_id, expected_revision: current.state.revision, operation, arguments: args }, () => { if (!mounted.current) throw new Error("Teaching controls changed before the command was sent."); });
     },
     onSuccess: result => { if (mounted.current) { setReceiptExpired(false); setReceiptId(result.command_id); void connection.refetch(); } },
@@ -171,13 +171,13 @@ function TeachingControls({ transport }: { transport?: TeachingTransport }) {
     </div>
     {command.error && <p role="alert">{command.error.message}</p>}
     {receipt.data && <p role="status">Command: {receipt.data.status}{receipt.data.error ? ` · ${receipt.data.error}` : ""}</p>}
-    {receiptExpired && <p role="alert">No final acknowledgement arrived. Execution is unverified; inspect the executor before retrying.</p>}
-    {receipt.error && <p role="alert">Command acknowledgement unavailable. Execution is not confirmed.</p>}
+    {receiptExpired && <p role="alert">No acknowledgement received. Check the executor before retrying.</p>}
+    {receipt.error && <p role="alert">Command status unavailable.</p>}
     {state && <dl className="dataset-facts"><div><dt>Session</dt><dd>{state.session_id}</dd></div><div><dt>Executor mode</dt><dd>{state.mode}</dd></div><div><dt>Recorded steps</dt><dd>{state.steps}</dd></div><div><dt>Simulation time</dt><dd>{state.sim_time?.toFixed(2)} s</dd></div><div><dt>Outcome</dt><dd>{state.outcome || "Unverified"}</dd></div></dl>}
-    {transport ? <p role="status">Voice and optional advice are not connected to this managed session. Manual teaching services remain separate. Finishing an episode does not publish the capture; use Stop and publish when the session is complete.</p> : <TeachingIntelligence context={state?.session_id ? { session_id: state.session_id, episode_id: state.episode_id, revision: state.revision } : null} online={!!online} />}
+    {transport ? <p role="status">Voice and advice are unavailable in managed sessions. Use Stop and publish to save the recordings.</p> : <TeachingIntelligence context={state?.session_id ? { session_id: state.session_id, episode_id: state.episode_id, revision: state.revision } : null} online={!!online} />}
     {!transport && <section className="teaching-voice" aria-labelledby="teaching-voice-title">
       <h3 id="teaching-voice-title">Voice</h3>
-      <p>Connecting sends microphone audio through LiveKit/OpenRouter for up to five minutes. Provider charges may apply.</p>
+      <p>Streams your microphone through LiveKit/OpenRouter for up to 5 minutes. Provider charges apply.</p>
       <div className="workbench-actions"><button className="primary-button" disabled={!online || !(voiceReadiness.isSuccess && voiceReadiness.data?.broker_reachable && voiceReadiness.data.configuration_present && voiceReadiness.data.dependencies_present) || voiceState !== "Disconnected"} onClick={() => void join()}>Connect voice</button>{voiceState !== "Disconnected" && <button className="secondary-button" onClick={() => void leave()}>Disconnect microphone</button>}</div>
       <p role="status">{voiceState} · Voice agent {agentPresent ? "present in room" : "not observed"}</p>{voiceError && <p role="alert">{voiceError}</p>}
       <div ref={media} aria-label="Teaching room media" />

@@ -200,7 +200,7 @@ export function TrainingMonitor({ run, projectId, active, artifacts, preferredCh
         </li>)}
       </ol>
       {telemetry.isPending && <p className="training-monitor-note" role="status">Loading run telemetry…</p>}
-      {legacy && <p className="training-stale-notice" role="status">Showing saved activity from the running application. Detailed telemetry becomes available after the application is restarted once active runs finish.</p>}
+      {legacy && <p className="training-stale-notice" role="status">Detailed telemetry appears after the app restarts.</p>}
       {legacyEvents.error && legacy && <p className="error-notice" role="alert">Saved activity is unavailable: {legacyEvents.error.message}</p>}
       {telemetry.error && !legacy && <div className="error-notice" role="alert">Run telemetry is unavailable: {telemetry.error.message} <button type="button" className="text-button" onClick={() => void telemetry.refetch()}>Retry telemetry</button></div>}
       {run.error && <p className="error-notice" role="alert">{conciseRunError(run.error)}</p>}
@@ -210,7 +210,7 @@ export function TrainingMonitor({ run, projectId, active, artifacts, preferredCh
         <strong>{percent !== null ? `${percent.toLocaleString(undefined, { maximumFractionDigits: 1 })}%` : "—"}</strong>
       </div>
       <progress className="training-progress" aria-label="Training step progress" max="100" {...(percent !== null ? { value: percent } : {})} />
-      <p className="training-monitor-note">Progress counts completed optimizer steps. Setup, validation and checkpoint checks can take additional time.</p>
+      <p className="training-monitor-note">Progress counts optimizer steps; setup and checkpoints take extra time.</p>
       {stale && <p className="training-stale-notice" role="status">No new training metric for {duration((now - lastMetricTime) / 1000)}. Last reported values are shown; the run may still be preparing data, validating, or saving.</p>}
       <dl className="training-metrics">
         <div><dt>Training loss</dt><dd>{metric(latestTraining?.train_loss)}</dd><small>{latestTraining ? `Step ${latestTraining.step.toLocaleString()}` : "Awaiting a metric"}</small></div>
@@ -221,7 +221,7 @@ export function TrainingMonitor({ run, projectId, active, artifacts, preferredCh
       </dl>
       <div className="training-chart-heading"><h4>Loss over time</h4><span>{latest ? latest.timestamp ? `Last metric ${time(latest.timestamp)}` : "Metric timestamp unavailable" : "No metrics yet"}</span></div>
       <LossChart metrics={metrics} />
-      {data?.metrics_truncated && <p className="training-monitor-note">Showing the most recent recorded metrics. Earlier samples remain in the run files.</p>}
+      {data?.metrics_truncated && <p className="training-monitor-note">Showing recent metrics.</p>}
       {lastCheckpoint !== null && <p className="training-latest-checkpoint">Latest checkpoint: step {lastCheckpoint.toLocaleString()}</p>}
       {!!savedCheckpoints.length && onQuantize && <section className="training-checkpoint-actions" aria-label="Use a trained checkpoint">
         <div><h4>Use a trained checkpoint</h4><p>{chosenCheckpoint?.metadata?.architecture === "act" ? "Create a separate ACT inference package while preserving the training checkpoint." : chosenCheckpoint && isCloudArtifact(chosenCheckpoint) ? "Saved on Google Cloud. Quantization runs from the cloud copy." : "Choose a saved step to create a compressed policy."}</p></div>
@@ -233,7 +233,7 @@ export function TrainingMonitor({ run, projectId, active, artifacts, preferredCh
           projectId={projectId} checkpoint={chosenCheckpoint} runtimes={exportRuntimes}
           jobs={exportJobs} artifacts={exportArtifacts} active={active} onNativeQuantize={onNativeQuantize} onNativeDistill={onNativeDistill}
         /> : <><button type="button" className="primary-button" disabled={!chosenCheckpoint || !!checkpointIssue} onClick={() => chosenCheckpoint && onQuantize(chosenCheckpoint.id)}>Quantize checkpoint</button>
-        {!chosenCheckpoint && <p className="training-monitor-note" role="status">The requested checkpoint is unavailable. Choose another saved checkpoint explicitly to continue.</p>}
+        {!chosenCheckpoint && <p className="training-monitor-note" role="status">This checkpoint is unavailable. Choose another.</p>}
         {checkpointIssue && <p className="training-monitor-note" role="status">{checkpointIssue}</p>}</>}
       </section>}
       <details className="training-monitor-disclosure training-details" onToggle={event => setDetailsOpen(event.currentTarget.open)}>
@@ -258,7 +258,6 @@ export function TrainingMonitor({ run, projectId, active, artifacts, preferredCh
         </>}
       </details>
       <details className="training-monitor-disclosure training-reproducibility"><summary>Run configuration <span>Recipe, revisions and compute</span></summary>
-        <p className="training-monitor-note">Saved settings for this run include the model, dataset snapshot, compute target and checkpoint history.</p>
         {!!Object.keys(reproducibility).length && <>
           <dl className="training-reproducibility-facts">
             <div><dt>Model</dt><dd>{description(model.repository ?? recipe.model_id)}</dd></div>

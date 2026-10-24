@@ -196,7 +196,7 @@ async function intelligence(page: Page, options: { fail?: boolean; hold?: boolea
 }
 
 async function consentAdvice(page: Page) {
-  await page.getByLabel('Question for intelligence').fill('What should I review?');
+  await page.getByLabel('Question', { exact: true }).fill('What should I review?');
   await page.getByRole('checkbox', { name: /I consent to sending/ }).check();
 }
 
@@ -213,7 +213,7 @@ test('optional intelligence requires consent and never dispatches a control comm
   expect(base.commands).toEqual([]);
   await expect(page.getByRole('checkbox', { name: /I consent to sending/ })).not.toBeChecked();
   fixture.changes.revision = 3;
-  await expect(page.getByText('Historical suggestion · context changed')).toBeVisible();
+  await expect(page.getByText('Earlier suggestion · session changed')).toBeVisible();
 });
 
 test('camera advice displays captured scope and never sends browser pixels', async ({ page }) => {
@@ -222,7 +222,7 @@ test('camera advice displays captured scope and never sends browser pixels', asy
   await consentAdvice(page);await page.getByRole('button', { name: 'Ask Mk1.5 about the camera' }).click();
   await expect(page.getByRole('article', { name: 'Intelligence suggestion' })).toContainText('captured frame 1');
   expect(Object.keys(fixture.posts[0].body).sort()).toEqual(['consent', 'episode_id', 'expected_revision', 'prompt', 'request_id', 'session_id']);
-  await expect(page.getByText(/not a live observation, calibrated confidence/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Suggestion', exact: true })).toBeVisible();
 });
 
 test('private intelligence settings clear password without browser persistence or provider verification', async ({ page }) => {
@@ -233,7 +233,7 @@ test('private intelligence settings clear password without browser persistence o
   await page.getByLabel('Voice chat model', { exact: true }).fill('provider/chat');
   await page.getByRole('button', { name: 'Save private settings' }).click();
   await expect(page.getByLabel('OpenRouter API key')).toHaveValue('');
-  await expect(page.getByText('Saved voice model: provider/chat. Provider access is unverified.')).toBeVisible();
+  await expect(page.getByText('Saved voice model: provider/chat.')).toBeVisible();
   expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toContain('fixture-private-key');
   expect(fixture.posts.map(p => p.path)).toEqual(['/api/v1/teaching/intelligence/settings']);
 });
@@ -269,7 +269,7 @@ test('revision change cancels advice and cannot promote a late response', async 
   fixture.changes.revision = 3;
   await expect.poll(() => fixture.posts.filter(p => p.path.endsWith('/cancel')).length).toBe(1);
   fixture.release();
-  await expect(page.getByRole('alert').filter({ hasText: 'Teaching context changed' })).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: 'The session changed' })).toBeVisible();
   await expect(page.getByRole('article', { name: 'Intelligence suggestion' })).toHaveCount(0);
 });
 

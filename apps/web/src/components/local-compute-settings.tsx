@@ -100,7 +100,7 @@ export function LocalComputeSettingsPanel() {
           </div>)}
           {!!issues.length && <ul className="local-discovery-issues">{issues.map((issue) => <li key={issue}>{issue}</li>)}</ul>}
           {discovery.candidates.some(candidate => candidate.setup_supported) && <p className="local-compute-note">Setup installs several GB of dependencies. Models and datasets download when you start a run.</p>}
-          <p className="local-compute-note">This setup supports SmolVLA fine-tuning. ACT export, distillation, quantization and replay use separate local CPU workers. Other GPU training routes currently require at least 16 GB.</p>
+          <p className="local-compute-note">Supports SmolVLA fine-tuning. Other GPU training needs at least 16 GB.</p>
         </div>}
         {setup.data && setup.data.status !== "idle" && <div className="local-setup-progress" role="status">
           <p>{setup.data.status === "running" ? setup.data.stage : setup.data.message}</p>

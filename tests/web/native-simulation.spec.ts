@@ -83,7 +83,7 @@ test('native Run preserves engine navigation and fails closed when profiles are 
   await expect(page.getByRole('radiogroup', { name: 'Policy source', exact: true })).toHaveCount(0);
   expect(state.posts).toEqual([]);
   await page.getByRole('link', { name: 'Evaluate', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Evaluation purpose' })).toContainText('scored ACT / Isaac evaluation is not configured');
+  await expect(page.getByRole('region', { name: 'Evaluation purpose' })).toContainText('Replay and Isaac rollouts do not measure task success.');
 });
 
 test('native import sends exact TAR bytes once and does not start a GPU run', async ({ page }) => {
@@ -92,7 +92,7 @@ test('native import sends exact TAR bytes once and does not start a GPU run', as
   await page.getByRole('radio', { name: 'Import package', exact: true }).check();
   await page.getByLabel('Native policy TAR', { exact: true }).setInputFiles({ name: 'synthetic-policy.tar', mimeType: 'application/x-tar', buffer: bytes });
   await page.getByRole('button', { name: 'Upload and validate policy' }).dblclick();
-  await expect(page.getByRole('article', { name: 'Native simulation job details' })).toContainText('The native package is saved');
+  await expect(page.getByRole('article', { name: 'Native simulation job details' })).toContainText('Package saved and checked.');
   expect(state.uploaded).toEqual(bytes); expect(state.posts).toHaveLength(1);
   await page.getByText('Prepare another run', { exact: true }).click();
   await expect(page.getByRole('radiogroup', { name: 'Native policy', exact: true }).locator('input:checked')).toHaveCount(0);
@@ -326,7 +326,7 @@ test('failed activity refresh visibly marks cached worker states stale while det
   await expect(log).toBeHidden();
   await page.route('**/api/v1/jobs/stale-progress/events', route => route.fulfill({ status: 503, json: { detail: 'Generated activity outage' } }));
   await page.getByRole('button', { name: 'Refresh simulation jobs' }).click();
-  await expect(page.getByRole('article', { name: 'Native simulation job details' }).getByRole('alert')).toHaveText('Activity updates are unavailable. Worker states and event history may be stale.');
+  await expect(page.getByRole('article', { name: 'Native simulation job details' }).getByRole('alert')).toHaveText('Activity updates are unavailable; status may be out of date.');
   await expect(workers).toHaveText('Last observed: Isaac: RUNNING · VLA: STARTING');
   await expect(log).toBeHidden();
   await page.getByText('Activity and technical details', { exact: true }).click();
@@ -627,7 +627,7 @@ for (const failure of ['pending-write', 'receipt-write', 'cleanup'] as const) te
     Storage.prototype.removeItem = function(key) { if (which === 'cleanup' && key.includes('job-attempt:policy.run.simulation:')) throw new Error('Generated cleanup failure'); return remove.call(this, key); };
   }, failure);
   await prepareExplicitRun(page); await page.getByRole('button', { name: 'Start experimental simulation' }).click();
-  await expect(page.locator('.native-simulation').getByRole('alert')).toContainText('Browser session storage is unavailable');
+  await expect(page.locator('.native-simulation').getByRole('alert')).toContainText(/browser storage/i);
   if (failure !== 'pending-write') await expect(page.getByRole('article', { name: 'Native simulation job details' })).toHaveAttribute('data-job-id', 'submitted');
   expect(state.posts).toHaveLength(failure === 'pending-write' ? 0 : 1);
   await openNativeAgain(page);

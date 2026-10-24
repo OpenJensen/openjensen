@@ -128,7 +128,7 @@ for (const fault of ['missing', 'manifest', 'model', 'foreign'] as const) test(`
   else if (fault === 'model') state.artifacts[index].metadata = { ...state.artifacts[index].metadata, model_id: `sha256:${'e'.repeat(64)}` };
   else state.artifacts[index].project_id = 'beta';
   await state.continueButton.click(); await page.getByRole('button', { name: 'Refresh simulation jobs', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Package from quantization', exact: true })).toContainText('missing or its recorded identity changed');
+  await expect(page.getByRole('region', { name: 'Package from quantization', exact: true })).toContainText('This package is missing or has changed.');
   await page.getByRole('radio', { name: packedProfile.label, exact: true }).check();
   await expect(page.getByRole('radiogroup', { name: 'Native policy', exact: true }).locator('input:checked')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Start experimental simulation', exact: true })).toBeDisabled();
@@ -139,7 +139,7 @@ test('late simulation package cannot override a manual policy or restore paid co
   const state = await simulationContinuationFixture(page);
   state.artifacts.splice(state.artifacts.findIndex(item => item.id === state.target.id), 1);
   await state.continueButton.click(); await page.getByRole('button', { name: 'Refresh simulation jobs', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Package from quantization', exact: true })).toContainText('missing or its recorded identity changed');
+  await expect(page.getByRole('region', { name: 'Package from quantization', exact: true })).toContainText('This package is missing or has changed.');
   await page.getByRole('radio', { name: packedProfile.label, exact: true }).check();
   const policies = page.getByRole('radiogroup', { name: 'Native policy', exact: true });
   await policies.locator(`input[value="${state.first.id}"]`).check();
@@ -161,7 +161,7 @@ test('a changed handed-off manifest clears consent and blocks the previously sel
   await expect(page.getByRole('button', { name: 'Start experimental simulation', exact: true })).toBeEnabled();
   state.artifacts.find(item => item.id === state.target.id)!.manifest_sha256 = 'e'.repeat(64);
   await page.getByRole('button', { name: 'Refresh simulation jobs', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Package from quantization', exact: true })).toContainText('missing or its recorded identity changed');
+  await expect(page.getByRole('region', { name: 'Package from quantization', exact: true })).toContainText('This package is missing or has changed.');
   await expect(page.getByRole('radiogroup', { name: 'Native policy', exact: true }).locator('input:checked')).toHaveCount(0);
   await expect(consent).not.toBeChecked(); await expect(consent).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Start experimental simulation', exact: true })).toBeDisabled();
@@ -267,7 +267,7 @@ test('explicit Distill to Quantize to Replay carries exact artifacts without sub
   await page.getByRole('button', { name: 'Refresh replay jobs', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Predicted action chunks' }).getByRole('img')).toHaveCount(6);
   await expect(page.getByRole('link', { name: 'Download replay record', exact: true })).toHaveAttribute('href', /replay%3Arecord\/download$/);
-  await expect(page.getByText(/does not measure task success/)).toBeVisible(); expect(state.mutations).toHaveLength(3);
+  await expect(page.getByText(/Reset reproduced the same action chunk/)).toBeVisible(); expect(state.mutations).toHaveLength(3);
 });
 
 for (const target of ['quantization', 'replay'] as const) test(`late ${target} handoff artifact cannot replace a manual selection`, async ({ page }) => {
@@ -441,7 +441,7 @@ test('Evaluate reports unavailable scoring and only offers configured observatio
   await expect(purpose.getByRole('status')).toBeVisible();
   await expect(purpose.getByRole('status')).toContainText('No engine evaluation target is configured.');
   await expect(purpose.getByRole('status')).toContainText('No LIBERO evaluation target is configured.');
-  await expect(purpose).toContainText('scored ACT / Isaac evaluation is not configured');
+  await expect(purpose).toContainText('Replay and Isaac rollouts do not measure task success.');
   await expect(purpose.getByRole('button', { name: 'Open native Isaac Run' })).toHaveCount(0);
   await purpose.getByRole('button', { name: 'Open observation replay' }).click();
   await expect(page.getByRole('button', { name: 'Replay observations', exact: true })).toHaveAttribute('aria-pressed', 'true'); expect(state.mutations).toHaveLength(0);
@@ -452,7 +452,7 @@ test('query failures keep Evaluate availability unknown and do not choose an ini
   await page.getByRole('link', { name: 'Evaluate', exact: true }).click();
   const purpose = page.getByRole('region', { name: 'Evaluation purpose' });
   await expect(purpose.locator('details')).not.toHaveAttribute('open');
-  await expect(purpose.getByRole('alert').filter({ hasText: 'Availability is unknown.' })).toBeVisible();
+  await expect(purpose.getByRole('alert').filter({ hasText: 'Evaluation targets could not be loaded.' })).toBeVisible();
   await expect(purpose.getByRole('alert').filter({ hasText: 'Isaac profile availability' })).toBeVisible();
   await expect(purpose).not.toContainText('No LIBERO evaluation target is configured.');
   await expect(purpose.getByRole('button', { name: 'Open observation replay' })).toHaveCount(0);
@@ -609,7 +609,7 @@ for (const failedRead of ['profiles', 'history'] as const) test(`Evaluate keeps 
   await page.getByRole('link', { name: 'Evaluate', exact: true }).click();
   const purpose = page.getByRole('region', { name: 'Evaluation purpose' });
   await expect(purpose.locator('details')).not.toHaveAttribute('open');
-  await expect(purpose.getByRole('alert')).toHaveText(failedRead === 'profiles' ? 'Isaac profile availability could not be loaded.' : 'Saved workflow history could not be refreshed; previously received records may be stale.');
+  await expect(purpose.getByRole('alert')).toHaveText(failedRead === 'profiles' ? 'Isaac profile availability could not be loaded.' : 'Workflow history could not be refreshed; it may be out of date.');
   await expect(purpose.getByRole('alert')).toBeVisible();
   expect(state.mutations).toEqual([]);
 });

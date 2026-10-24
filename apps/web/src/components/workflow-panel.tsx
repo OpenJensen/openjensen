@@ -657,7 +657,7 @@ export function WorkflowPanel({
                 </select>
               </label>
               <details className="workflow-advanced"><summary>Protocol details</summary><p className="muted">{preferences.mode === "engine"
-                ? `Checks loading, finite actions, prediction latency and memory with ${preferences.warmup} warmups and ${preferences.repetitions} repetitions. Task success is not measured.`
+                ? `Checks loading, finite actions, prediction latency and memory with ${preferences.warmup} warmups and ${preferences.repetitions} repetitions.`
                 : preferences.suite === "libero_spatial"
                   ? `Evaluates LIBERO Spatial tasks ${preferences.taskIds} with initial states ${preferences.searchStates}, seed 42 and the full 280-step horizon. The policy must include pinned Spatial assets and approved parity limits.`
                   : `Evaluates LIBERO Object task ${preferences.task} with initial states ${preferences.searchStates}, seed 42 and up to ${preferences.steps} steps. The policy must declare LIBERO Object compatibility.`}</p></details>

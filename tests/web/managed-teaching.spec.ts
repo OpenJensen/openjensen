@@ -86,7 +86,7 @@ async function fixture(page: Page, initial: any[] = []) {
 }
 async function reviewStart(page: Page) {
   await managed(page).getByLabel('Teaching profile', { exact: true }).selectOption('local-isaac');
-  await managed(page).getByRole('checkbox', { name: /Start this configured session/ }).check();
+  await managed(page).getByRole('checkbox', { name: /Start this session/ }).check();
   await expect(start(page)).toBeEnabled();
 }
 async function chooseSaved(page: Page, id = 'capture-a') { await managed(page).getByLabel('Saved teaching session', { exact: true }).selectOption(id); }
@@ -120,8 +120,8 @@ test('completed reconciliation retains minimal accepted identity when history an
   const saved = job('capture-a', 'alpha', 'succeeded'); s.bindings.set(s.posts[0].key, saved); s.jobs = [saved]; s.failHistory = true; s.failStatus = true;
   await check(page).click(); await expect(managed(page).getByLabel('Saved teaching session', { exact: true })).toHaveValue('capture-a');
   await page.getByRole('link', { name: 'Dataset', exact: true }).click(); await enterManaged(page);
-  await expect(managed(page).getByText(/Acknowledgement retained for job capture-a/)).toBeVisible(); await chooseSaved(page);
-  await expect(managed(page).getByText(/selected session is unavailable or changed/)).toBeVisible();
+  await expect(managed(page).getByText(/Request accepted as job capture-a/)).toBeVisible(); await chooseSaved(page);
+  await expect(managed(page).getByText(/This session is unavailable or has changed/)).toBeVisible();
   await expect(managed(page).getByRole('button', { name: 'Review for dataset preparation', exact: true })).toHaveCount(0); await expect(managed(page).getByRole('region', { name: 'Teaching controls', exact: true })).toHaveCount(0); expect(s.posts).toHaveLength(1);
 });
 test('denied durable journal storage prevents the first start request', async ({ page }) => {
@@ -145,13 +145,13 @@ test('late start acknowledgement never moves a different project or stops a sess
 test('stop ambiguity and remount retain saved stopping state without claiming publication or reposting', async ({ page }) => {
   const s = await fixture(page, [job()]); await chooseSaved(page); s.lostStop = true;
   await managed(page).getByRole('button', { name: 'Stop and publish', exact: true }).click(); expect(s.posts).toEqual([]);
-  await managed(page).getByRole('button', { name: 'Confirm stop and publish', exact: true }).click(); await expect(managed(page).getByText(/Stop outcome is not confirmed/)).toBeVisible();
-  await page.reload(); await enterManaged(page); await chooseSaved(page); await expect(managed(page).getByText(/Recordings are not confirmed saved yet/)).toBeVisible();
+  await managed(page).getByRole('button', { name: 'Confirm stop and publish', exact: true }).click(); await expect(managed(page).getByText(/Stop not confirmed/)).toBeVisible();
+  await page.reload(); await enterManaged(page); await chooseSaved(page); await expect(managed(page).getByText('Stopping and saving recordings…', { exact: true })).toBeVisible();
   await expect(managed(page).getByRole('button', { name: 'Review for dataset preparation', exact: true })).toHaveCount(0); expect(s.posts).toEqual([{ path: '/api/v1/projects/alpha/teaching/sessions/capture-a/stop', body: {}, key: '' }]);
 });
 test('interrupted history is visible but never offers controls or published handoff', async ({ page }) => {
   const s = await fixture(page, [job('capture-a', 'alpha', 'interrupted')]); await chooseSaved(page);
-  await expect(managed(page).getByText(/Capture publication is not confirmed/)).toBeVisible(); await expect(managed(page).getByRole('region', { name: 'Teaching controls', exact: true })).toHaveCount(0); expect(s.posts).toEqual([]);
+  await expect(managed(page).getByText(/Recordings were not published/)).toBeVisible(); await expect(managed(page).getByRole('region', { name: 'Teaching controls', exact: true })).toHaveCount(0); expect(s.posts).toEqual([]);
 });
 test('verified publication requires a separate exact recording selection and preparation consent', async ({ page }) => {
   const s = await fixture(page, [job('capture-a', 'alpha', 'succeeded')]); await chooseSaved(page);
@@ -160,7 +160,7 @@ test('verified publication requires a separate exact recording selection and pre
   await expect(recordings(page).getByRole('checkbox', { checked: true })).toHaveCount(0); expect(s.posts).toEqual([]);
   await notice.getByRole('button', { name: 'Select these recorded episodes', exact: true }).click();
   await expect(recordings(page).getByRole('checkbox', { name: `Episode ${hex('1', 32)} · 3 frames · outcome unknown`, exact: true })).toBeChecked();
-  const consent = recordings(page).getByRole('checkbox', { name: /I reviewed these exact/ }); await expect(consent).not.toBeChecked(); await expect(recordings(page).getByRole('button', { name: 'Prepare selected recordings', exact: true })).toBeDisabled(); expect(s.posts).toEqual([]);
+  const consent = recordings(page).getByRole('checkbox', { name: /I reviewed these episodes/ }); await expect(consent).not.toBeChecked(); await expect(recordings(page).getByRole('button', { name: 'Prepare selected recordings', exact: true })).toBeDisabled(); expect(s.posts).toEqual([]);
   await consent.check(); await recordings(page).getByRole('button', { name: 'Prepare selected recordings', exact: true }).click();
   await expect(recordings(page).getByText(/This dataset has one lineage group/)).toBeVisible(); await expect(recordings(page).getByRole('button', { name: 'Train on this dataset', exact: true })).toBeDisabled();
   expect(s.posts).toHaveLength(1); expect(s.posts[0].path).toBe('/api/v1/projects/alpha/intakes'); expect(s.posts[0].body.recordings.captures).toEqual([{ session_id: hex('b', 32), session_sha256: hex('c'), episodes: [{ episode_id: hex('1', 32), receipt_sha256: hex('2') }] }]);

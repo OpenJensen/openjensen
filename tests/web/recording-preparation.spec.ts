@@ -16,7 +16,7 @@ function job(id: string, project = 'alpha', two = true, status = 'succeeded'): a
 }
 const panel = (page: Page) => page.getByRole('region', { name: 'Recording dataset preparation', exact: true });
 const submit = (page: Page) => panel(page).getByRole('button', { name: 'Prepare selected recordings', exact: true });
-const refresh = (page: Page) => panel(page).getByRole('button', { name: 'Refresh recordings and jobs', exact: true });
+const refresh = (page: Page) => panel(page).getByRole('button', { name: 'Refresh', exact: true });
 const recovery = (page: Page) => panel(page).getByRole('complementary', { name: 'Request recovery' });
 const checkSaved = (page: Page) => recovery(page).getByRole('button', { name: 'Check saved request', exact: true });
 const retrySaved = (page: Page) => recovery(page).getByRole('button', { name: 'Retry same request', exact: true });
@@ -75,7 +75,7 @@ async function fixture(page: Page) {
 async function selectEpisodes(page: Page, two = true) {
   await panel(page).getByRole('checkbox', { name: `Episode ${hex('d', 32)} · 12 frames · outcome unknown`, exact: true }).check();
   if (two) await panel(page).getByRole('checkbox', { name: `Episode ${hex('e', 32)} · 12 frames · outcome unknown`, exact: true }).check();
-  await panel(page).getByRole('checkbox', { name: /I reviewed these exact/ }).check();
+  await panel(page).getByRole('checkbox', { name: /I reviewed these episodes/ }).check();
 }
 async function openSaved(page: Page, state: Awaited<ReturnType<typeof fixture>>, value = job('saved-recording')) {
   state.jobs.push(value); await refresh(page).click(); await panel(page).getByLabel('Saved recording preparation', { exact: true }).selectOption(value.id);
@@ -119,20 +119,20 @@ for (const failure of ['first pending write', 'journal read']) test(`${failure} 
   const s = await fixture(page); await selectEpisodes(page); await storageFault(page, 'firebird:submission:v1:', failure === 'journal read' ? 'getItem' : 'setItem');
   const reads = s.lookupReads; await submit(page).click(); await expect(panel(page).getByText(/Intake recovery is unavailable/)).toBeVisible(); await expect(submit(page)).toBeDisabled(); expect(s.posts).toEqual([]); expect(s.lookupReads).toBe(reads);
   await page.evaluate(() => (window as any).__restoreRecordingStorage()); await page.reload(); await page.getByRole('link', { name: 'Teaching', exact: true }).click();
-  await expect(submit(page)).toBeDisabled(); await panel(page).getByRole('checkbox', { name: /I reviewed these exact/ }).check(); await expect(submit(page)).toBeEnabled();
+  await expect(submit(page)).toBeDisabled(); await panel(page).getByRole('checkbox', { name: /I reviewed these episodes/ }).check(); await expect(submit(page)).toBeEnabled();
 });
 test('known accepted ID stays visible when first receipt persistence fails and history is unavailable', async ({ page }) => {
-  const s = await fixture(page); await selectEpisodes(page); await storageFault(page, 'recording-receipt', 'setItem'); s.failHistory = true; await submit(page).click(); await expect(panel(page).getByText(/Retained acknowledgement: job new-preparation/)).toBeVisible(); await expect(submit(page)).toBeDisabled(); expect(s.posts).toHaveLength(1);
+  const s = await fixture(page); await selectEpisodes(page); await storageFault(page, 'recording-receipt', 'setItem'); s.failHistory = true; await submit(page).click(); await expect(panel(page).getByText(/Job new-preparation accepted/)).toBeVisible(); await expect(submit(page)).toBeDisabled(); expect(s.posts).toHaveLength(1);
 });
 for (const outcome of ['ack', 'error']) test(`remounted recording controller cannot replace a still-pending ${outcome} with another key`, async ({ page }) => {
   const s = await fixture(page), first = deferred(); s.gate = first; s.lost = outcome === 'error'; s.nextId = 'old-job'; await selectEpisodes(page); await submit(page).click(); await expect.poll(() => s.posts.length).toBe(1);
   await page.getByRole('link', { name: 'Dataset', exact: true }).click(); await expect(page.getByRole('button', { name: 'Checking dataset…', exact: true })).toBeDisabled();
   await page.getByRole('link', { name: 'Teaching', exact: true }).click(); await expect(submit(page)).toBeDisabled(); await expect(checkSaved(page)).toBeDisabled(); await expect(ack(page)).toHaveCount(0);
-  first.release(); if (outcome === 'ack') await expect(panel(page).getByText(/Retained acknowledgement: job old-job/)).toBeVisible(); else await expect(checkSaved(page)).toBeEnabled();
+  first.release(); if (outcome === 'ack') await expect(panel(page).getByText(/Job old-job accepted/)).toBeVisible(); else await expect(checkSaved(page)).toBeEnabled();
   expect(s.posts).toHaveLength(1); expect(new Set(s.keys).size).toBe(1);
 });
 test('late accepted job never replaces a manual saved selection', async ({ page }) => {
-  const s = await fixture(page), gate = deferred(); s.gate = gate; const saved = job('manual-job'); s.jobs.push(saved); await refresh(page).click(); await selectEpisodes(page); await submit(page).click(); await expect.poll(() => s.posts.length).toBe(1); await panel(page).getByLabel('Saved recording preparation', { exact: true }).selectOption(saved.id); gate.release(); await expect(panel(page).getByText(/Retained acknowledgement: job new-preparation/)).toBeVisible(); await expect(panel(page).getByRole('article')).toHaveAttribute('data-job-id', saved.id);
+  const s = await fixture(page), gate = deferred(); s.gate = gate; const saved = job('manual-job'); s.jobs.push(saved); await refresh(page).click(); await selectEpisodes(page); await submit(page).click(); await expect.poll(() => s.posts.length).toBe(1); await panel(page).getByLabel('Saved recording preparation', { exact: true }).selectOption(saved.id); gate.release(); await expect(panel(page).getByText(/Job new-preparation accepted/)).toBeVisible(); await expect(panel(page).getByRole('article')).toHaveAttribute('data-job-id', saved.id);
 });
 test('single-group result remains inspectable with explicit training limitation', async ({ page }) => {
   const s = await fixture(page); await openSaved(page, s, job('one-group', 'alpha', false)); await expect(panel(page).getByRole('button', { name: 'Train on this dataset' })).toBeDisabled(); await expect(panel(page).getByText(/one lineage group/)).toBeVisible(); await panel(page).getByRole('button', { name: 'View this dataset' }).click(); await expect(page.getByRole('heading', { name: 'Dataset', exact: true, level: 1 })).toBeVisible(); expect(s.posts).toEqual([]);
@@ -174,7 +174,7 @@ for (const action of ['submit', 'cancel'] as const) test(`post-ACK storage read 
   await expect.poll(() => s.posts.length).toBe(1); s.failHistory = true;
   await storageFault(page, action === 'submit' ? 'firebird:submission:v1:' : 'recording-preparation', 'getItem'); gate.release();
   if (action === 'submit') { await expect(recovery(page).getByText(/Accepted job: new-preparation/)).toBeVisible(); await expect(panel(page).getByText(/Intake recovery is unavailable/)).toBeVisible(); }
-  else { await expect(panel(page).getByText(/Retained acknowledgement: job cancel-target · cancelled/)).toBeVisible(); await expect(panel(page).getByText('Recording session recovery is not ready. No preparation or cancellation can be submitted.')).toBeVisible(); }
+  else { await expect(panel(page).getByText(/Job cancel-target accepted · cancelled/)).toBeVisible(); await expect(panel(page).getByText('Recording session recovery is not ready. No preparation or cancellation can be submitted.')).toBeVisible(); }
   await expect(submit(page)).toBeDisabled(); expect(s.posts).toHaveLength(1);
 });
 
@@ -203,7 +203,7 @@ test('generic Dataset recovers a recording key and Recording recovers a generic 
   // A genuinely different generic request is only admitted after the first key was resolved.
   await page.getByRole('button', { name: '← Back to library', exact: true }).click(); s.nextId = 'generic-intake'; await page.getByLabel('Dataset repository', { exact: true }).fill('owned/recorded'); await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click(); await expect.poll(() => s.posts.length).toBe(2);
   await expect(page.getByRole('button', { name: 'Check saved request', exact: true })).toBeEnabled();
-  await page.getByRole('link', { name: 'Teaching', exact: true }).click(); await checkSaved(page).click(); await expect(panel(page).getByText(/Recovered dataset intake generic-intake/)).toBeVisible(); expect(s.posts).toHaveLength(2);
+  await page.getByRole('link', { name: 'Teaching', exact: true }).click(); await checkSaved(page).click(); await expect(panel(page).getByText(/Recovered dataset import generic-intake/)).toBeVisible(); expect(s.posts).toHaveLength(2);
 });
 for (const kind of ['generic', 'recording']) test(`legacy recording recovery on Dataset rejects active ${kind} intake and failed history`, async ({ page }) => {
   const s = await fixture(page);
@@ -245,6 +245,6 @@ test('remount preserves newer cancellation receipt instead of replacing it with 
   await expect.poll(() => page.evaluate(() => JSON.parse(sessionStorage.getItem('firebird:recording-receipt:alpha')!).status)).toBe('cancelled');
   await panel(page).getByLabel('Saved recording preparation', { exact: true }).selectOption('other-saved');
   await page.getByRole('link', { name: 'Dataset', exact: true }).click(); await page.getByRole('link', { name: 'Teaching', exact: true }).click();
-  await expect(panel(page).getByText(/Retained acknowledgement: job new-preparation · cancelled/)).toBeVisible();
-  await expect(panel(page).getByText(/Retained acknowledgement: job new-preparation · queued/)).toHaveCount(0); expect(s.posts).toHaveLength(2);
+  await expect(panel(page).getByText(/Job new-preparation accepted · cancelled/)).toBeVisible();
+  await expect(panel(page).getByText(/Job new-preparation accepted · queued/)).toHaveCount(0); expect(s.posts).toHaveLength(2);
 });

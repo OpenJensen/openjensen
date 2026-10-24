@@ -93,13 +93,13 @@ test('completed generated evidence has scoped metrics and missing report never i
   await refresh(page); await expect(page.getByText('Generated sample observations · offline imitation')).toBeVisible();
   await expect(page.getByRole('article', { name: 'Distillation job details' }).locator('.native-result-summary')).toHaveText('Recorded job · student-001');
   await expect(page.getByRole('link', { name: 'Download tested student package' })).toHaveAttribute('href', /student-001%3Adistilled\/download$/);
-  await expect(page.getByRole('article', { name: 'Distillation job details' }).getByText(/These metrics measure teacher imitation\. Task success, speed, calibration and simulation performance have not been measured/)).toBeVisible();
+  await expect(page.getByRole('article', { name: 'Distillation job details' }).getByText(/These metrics measure teacher imitation only\./)).toBeVisible();
   const widths = await page.evaluate(() => ({ inner: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth })); expect(widths.scroll).toBeLessThanOrEqual(widths.inner + 1);
   await page.screenshot({ path: testInfo.outputPath('distillation-result.png'), fullPage: true });
   saved.result.reports[0].dataset_kind = 'lerobot'; await refresh(page);
   await expect(page.getByText('Generated sample observations · offline imitation')).toHaveCount(0);
-  await expect(panel(page).getByRole('alert')).toContainText('Complete distillation measurements are unavailable');
-  saved.result.reports = []; await refresh(page); await expect(panel(page).getByRole('alert')).toContainText('Complete distillation measurements are unavailable');
+  await expect(panel(page).getByRole('alert')).toContainText('Distillation measurements are incomplete');
+  saved.result.reports = []; await refresh(page); await expect(panel(page).getByRole('alert')).toContainText('Distillation measurements are incomplete');
 });
 
 

@@ -103,12 +103,12 @@ export function ManagedTeachingPanel({ projectId, onPublishedCapture }: {
       const fresh = await readManagedStatus(projectId, job.id, job.request);
       if (!live(version) || selectedRef.current !== job.id) return;
       if (!active(fresh.job)) { cacheStatus(fresh); return; }
-      client.setQueryData<StopState>(key, { pending: true, uncertain: false, message: 'Stop requested. Waiting for finalized recordings to be saved.' });
+      client.setQueryData<StopState>(key, { pending: true, uncertain: false, message: 'Stop requested. Saving recordings…' });
       const result = await stopManagedSession(projectId, job.id, job.request);
       cacheStatus(result);
-      client.setQueryData<StopState>(key, { pending: false, uncertain: false, message: active(result.job) ? 'Stop acknowledged; finalized recordings are still being checked and saved.' : 'Session ended. Review the saved result.' });
+      client.setQueryData<StopState>(key, { pending: false, uncertain: false, message: active(result.job) ? 'Stop acknowledged. Saving recordings…' : 'Session ended. Review the saved result.' });
     } catch (cause) {
-      client.setQueryData<StopState>(key, { pending: false, uncertain: true, message: 'Stop outcome is not confirmed. Check the saved session before repeating Stop for this job.' });
+      client.setQueryData<StopState>(key, { pending: false, uncertain: true, message: 'Stop not confirmed. Check the session before trying again.' });
       if (live(version)) setError(message(cause));
     } finally { working.current = false; if (mounted.current) { setBusy(false); setConfirmStop(false); } }
   }
@@ -125,36 +125,36 @@ export function ManagedTeachingPanel({ projectId, onPublishedCapture }: {
     finally { working.current = false; if (mounted.current) setBusy(false); }
   }
   return <section className="panel teaching-panel" aria-label="Managed teaching sessions">
-    <div className="cloud-heading"><div><h2>Record a teaching session</h2><p>Start one configured local Isaac session, teach with its controls, then stop and publish finalized recordings.</p></div><button type="button" className="secondary-button" disabled={!projectId || busy || history.isFetching} onClick={() => void refresh()}>Refresh teaching sessions</button></div>
-    {!projectId && <p role="status">Select a project to see its configured teaching profiles.</p>}
+    <div className="cloud-heading"><h2>Record a teaching session</h2><button type="button" className="secondary-button" disabled={!projectId || busy || history.isFetching} onClick={() => void refresh()}>Refresh teaching sessions</button></div>
+    {!projectId && <p role="status">Select a project to see its teaching profiles.</p>}
     {profiles.data && <p role="status">{profiles.data.message}</p>}
     {profiles.error && <p role="alert">Teaching profiles could not be checked. Starting is disabled.</p>}
     {history.error && <p role="alert">Saved teaching sessions could not be checked. Starting is disabled.</p>}
-    {accepted && retainedOnly && <p role="status">Acknowledgement retained for job {accepted.id} ({accepted.status}). Select this job to check its current session and publication; the saved request does not include the latest session status.</p>}
+    {accepted && retainedOnly && <p role="status">Request accepted as job {accepted.id} ({accepted.status}). Select it below to follow it.</p>}
     <form className="workbench-form" onSubmit={event => { event.preventDefault(); if (ready) void submit('start'); }}>
       <div className="workbench-field"><label htmlFor={`teaching-profile-${projectId}`}>Teaching profile</label><select id={`teaching-profile-${projectId}`} value={profileId} disabled={!profiles.data?.available || busy || submission.busy || !!submission.attempt} onChange={event => { edit(); setProfileId(event.target.value); }}><option value="">Choose a configured profile</option>{profiles.data?.profiles.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}</select></div>
       <div className="workbench-field"><label htmlFor={`teaching-time-${projectId}`}>Session time limit (seconds)</label><input id={`teaching-time-${projectId}`} inputMode="numeric" value={seconds} disabled={busy || submission.busy || !!submission.attempt} onChange={event => { edit(); setSeconds(event.target.value); }} /></div>
-      {profile && <p>Maximum {profile.max_seconds} seconds · capture limit {(profile.max_capture_bytes / 1024 ** 2).toFixed(0)} MiB. Runtime readiness is checked after starting. Stop and publish before the deadline; a timeout does not publish an active capture.</p>}
-      <label className="native-confirm"><input type="checkbox" checked={consent} disabled={busy || submission.busy || !!submission.attempt} onChange={event => setConsent(event.target.checked)} />Start this configured session and record simulator observations. This does not start training or verify task success.</label>
+      {profile && <p>Up to {profile.max_seconds} s · {(profile.max_capture_bytes / 1024 ** 2).toFixed(0)} MiB. Stop and publish before the time limit, or the recording is not published.</p>}
+      <label className="native-confirm"><input type="checkbox" checked={consent} disabled={busy || submission.busy || !!submission.attempt} onChange={event => setConsent(event.target.checked)} />Start this session and record simulator observations.</label>
       <button type="submit" className="primary-button" disabled={!ready}>Start teaching session</button>
     </form>
     {knownActive && <p role="status">A saved teaching session is {knownActive.status}: {knownActive.id}. Select it below to inspect or stop it.</p>}
     {submission.error && <p role="alert">{submission.error}</p>}
-    {submission.attempt && <div className="warning-box"><p>{submission.attempt.message}</p>{identity ? <><p>Saved profile {String(identity.body.profile_id)} · {String(identity.body.timeout_seconds)} seconds. Recovery retains this exact request.</p><button type="button" className="secondary-button" disabled={busy || submission.busy} onClick={() => void submit('check')}>Check saved teaching request</button>{submission.canRetry && <button type="button" className="secondary-button" disabled={busy || submission.busy} onClick={() => void submit('retry')}>Retry same teaching request</button>}</> : <button type="button" className="secondary-button" disabled={!reviewed || busy || history.isError || !!knownActive} onClick={() => void acknowledgeLegacy()}>I reviewed teaching jobs; clear legacy recovery</button>}</div>}
+    {submission.attempt && <div className="warning-box"><p>{submission.attempt.message}</p>{identity ? <><p>Saved profile {String(identity.body.profile_id)} · {String(identity.body.timeout_seconds)} seconds.</p><button type="button" className="secondary-button" disabled={busy || submission.busy} onClick={() => void submit('check')}>Check saved teaching request</button>{submission.canRetry && <button type="button" className="secondary-button" disabled={busy || submission.busy} onClick={() => void submit('retry')}>Retry same teaching request</button>}</> : <button type="button" className="secondary-button" disabled={!reviewed || busy || history.isError || !!knownActive} onClick={() => void acknowledgeLegacy()}>I reviewed teaching jobs; clear legacy recovery</button>}</div>}
     <div className="workbench-field"><label htmlFor={`teaching-saved-${projectId}`}>Saved teaching session</label><select id={`teaching-saved-${projectId}`} value={selectedId} onChange={event => choose(event.target.value)}><option value="">Choose a saved session</option>{jobs.map(job => <option key={job.id} value={job.id}>{job.id} · {job.status}</option>)}</select></div>
     {selectedId && selected.isPending && <p role="status">Checking selected session…</p>}
-    {selectedId && selected.error && <p role="alert">The selected session is unavailable or changed. No other session was selected.</p>}
+    {selectedId && selected.error && <p role="alert">This session is unavailable or has changed.</p>}
     {error && <p role="alert">{error}</p>}
     {status && <section aria-label="Selected managed session">
       <p>Job {status.job.id} · {status.job.status} · {status.job.stage ?? 'waiting'}</p>
       {status.job.error && <p role="alert">{status.job.error}</p>}
       {active(status.job) && stopState.message && <p role={stopState.uncertain ? 'alert' : 'status'}>{stopState.message}</p>}
-      {active(status.job) && status.stop_requested && <p role="status">Stopping this session and saving its finalized recordings. Recordings are not confirmed saved yet.</p>}
+      {active(status.job) && status.stop_requested && <p role="status">Stopping and saving recordings…</p>}
       {transport && <TeachingPanel transport={transport} />}
       {active(status.job) && !status.stop_requested && <div className="workbench-actions"><button type="button" className="secondary-button" disabled={busy || stopState.pending} onClick={() => setConfirmStop(true)}>Stop and publish</button></div>}
-      {confirmStop && active(status.job) && <div className="warning-box"><p>Stop only session {status.job.id}, await its process cleanup and verify finalized captures before publication? Unmounting this panel alone does not stop it.</p><button type="button" className="primary-button" disabled={busy} onClick={() => void stopAndPublish()}>Confirm stop and publish</button><button type="button" className="text-link" disabled={busy} onClick={() => setConfirmStop(false)}>Keep session running</button></div>}
-      {status.job.status === 'succeeded' && <><p>Capture {publishedCapture(status.job).session_id} published with {publishedCapture(status.job).episodes.length} finalized episodes. Simulator coordinates are preserved; physical calibration and task success are unverified.</p><button type="button" className="primary-button" disabled={busy} onClick={() => void reviewCapture()}>Review for dataset preparation</button></>}
-      {['failed', 'cancelled', 'interrupted'].includes(status.job.status) && <p>Capture publication is not confirmed. Review the saved error and session details before continuing.</p>}
+      {confirmStop && active(status.job) && <div className="warning-box"><p>Stop session {status.job.id} and publish its recordings?</p><button type="button" className="primary-button" disabled={busy} onClick={() => void stopAndPublish()}>Confirm stop and publish</button><button type="button" className="text-link" disabled={busy} onClick={() => setConfirmStop(false)}>Keep session running</button></div>}
+      {status.job.status === 'succeeded' && <><p>Capture {publishedCapture(status.job).session_id} published with {publishedCapture(status.job).episodes.length} episodes.</p><button type="button" className="primary-button" disabled={busy} onClick={() => void reviewCapture()}>Review for dataset preparation</button></>}
+      {['failed', 'cancelled', 'interrupted'].includes(status.job.status) && <p>Recordings were not published. Review the error above.</p>}
     </section>}
   </section>;
 }

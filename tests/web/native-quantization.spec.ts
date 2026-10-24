@@ -133,7 +133,7 @@ test('completed candidate shows measured storage and drift separately from exact
   await page.getByText('Action differences', { exact: true }).focus(); await page.keyboard.press('Enter');
   await expect(page.getByRole('region', { name: 'FP32 action differences', exact: true })).toBeVisible();
   await expect(measured).toContainText('Exact agreement with the packed candidate'); await expect(measured).toContainText('0.0948200');
-  await expect(measured).toContainText('Physical units, model quality, GPU memory and latency have not been measured');
+  await expect(measured).toContainText("Differences use the saved processor's output coordinates.");
   await expect(page.getByRole('link', { name: 'Download INT8 package' })).toHaveCount(1);
   await expect(page.getByRole('link', { name: 'Download INT8 package' })).toHaveAttribute('href', '/api/v1/projects/alpha/artifacts/packed-result/download');
   await expect(page.getByRole('group',{name:'ACT quantization setup',exact:true})).toHaveCount(0);
@@ -324,7 +324,7 @@ test('an acknowledged job remains visible when clearing its recovery journal fai
   });
   const state = await fixture(page); await choosePolicy(page, 'act-export'); await submit(page).click();
   await expect(page.getByRole('article', { name: 'ACT quantization job details' })).toHaveAttribute('data-job-id', 'submitted');
-  await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true }).getByRole('alert')).toContainText('Browser session storage is unavailable');
+  await expect(page.getByRole('region', { name: 'Native ACT quantization', exact: true }).getByRole('alert')).toContainText(/browser storage/i);
   await expect(page.getByText('Submitting one local quantization job…', { exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => (window as unknown as { journalRemovals: number }).journalRemovals)).toBe(1);
   await chooseTransformationModel(page,'quantization','Choose Generated act-export · act-export'); await expect(submit(page)).toBeDisabled(); expect(state.posts).toHaveLength(1);
@@ -341,7 +341,7 @@ test('journal cleanup after navigation exposes recovery instead of a permanent p
   await page.getByRole('link', { name: 'Dataset', exact: true }).click(); await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await page.getByRole('button', { name: 'Review request', exact: true }).click();
   await expect(page.getByText('Submitting one local quantization job…', { exact: true })).toBeVisible(); release();
-  await expect(page.getByText(/Browser session storage is unavailable/)).toBeVisible();
+  await expect(page.getByText(/browser storage/i)).toBeVisible();
   await expect(page.getByText('Submitting one local quantization job…', { exact: true })).toHaveCount(0);
   const allow = page.getByRole('button', { name: 'I checked the jobs; allow a new request' }); await expect(allow).toBeDisabled();
   await refresh(page); await expect(allow).toBeEnabled(); await openTransformationJob(page, 'quantization', 'submitted');
@@ -440,6 +440,6 @@ test('8-step packed report displays its full prediction dimensions without quali
   await expect(page.getByRole('region', { name: 'Measured ACT quantization results' })).toBeVisible();
   await page.getByText('Action differences', { exact: true }).click();
   await expect(page.getByRole('table')).toHaveAccessibleName('Difference from FP32 across each full 8 × 6 action chunk');
-  await expect(page.getByText('Task quality, calibration, speed and GPU memory savings have not been measured.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Task quality and speed are not measured here.', { exact: true })).toBeVisible();
   expect(state.posts).toEqual([]);
 });

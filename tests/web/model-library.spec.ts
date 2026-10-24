@@ -93,7 +93,7 @@ test('opening training preserves the exact checkpoint and never replaces a missi
   await page.getByRole('button', { name: 'Open this checkpoint’s training run and export →' }).click();
   await expect(page.getByLabel('Checkpoint', { exact: true })).toHaveValue('teacher');
   state.models = [later];
-  await expect(page.getByText('The requested checkpoint is unavailable. Choose another saved checkpoint explicitly to continue.')).toBeVisible({ timeout: 10000 });
+  await expect(page.getByText('This checkpoint is unavailable. Choose another.')).toBeVisible({ timeout: 10000 });
   await expect(page.getByRole('button', { name: 'Quantize checkpoint', exact: true })).toBeDisabled();
   expect(state.mutations).toEqual([]);
 });

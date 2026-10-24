@@ -130,7 +130,7 @@ test('dashboard reports a failed local probe instead of successful resource chec
   await page.getByRole('button',{name:'Check resources',exact:true}).click();
   await expect(local.getByText('Check failed',{exact:true})).toBeVisible();
   await expect(page.getByRole('region',{name:'Resources & connections'}).getByRole('alert')).toContainText('Local GPU probe failed');
-  await expect(page.getByText('Resource checks completed.',{exact:false})).toHaveCount(0);
+  await expect(page.getByText('Resources checked.',{exact:true})).toHaveCount(0);
 });
 
 for (const available of [true, false]) {
@@ -253,7 +253,7 @@ test('dashboard resource checks stay in the same position on a fresh visit and a
     expect(Math.abs(initial.y - heading.y)).toBeLessThan(2);
   }
   await button.click();
-  await expect(page.getByText('Resource checks completed.', { exact: false })).toBeVisible();
+  await expect(page.getByText('Resources checked.', { exact: true })).toBeVisible();
   const after = await position();
   expect(Math.abs(after.x - before.x)).toBeLessThan(1);
   expect(Math.abs(after.y - before.y)).toBeLessThan(1);
@@ -277,9 +277,8 @@ test('immutable training copy keeps its checkbox aligned and explains storage an
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
   await help.focus();
   await expect(tooltip).toBeVisible();
-  await expect(tooltip).toContainText('app host’s data directory, inside dataset-snapshots/');
-  await expect(tooltip).toContainText('all declared frames, robot states, actions and camera videos');
-  await expect(tooltip).toContainText('different whole demonstrations for training and validation');
+  await expect(tooltip).toContainText('app host’s dataset-snapshots/ folder');
+    await expect(tooltip).toContainText('Needs at least two complete episodes.');
   await expect(option).not.toBeChecked();
   const input = (await option.boundingBox())!, label = (await option.locator('..').boundingBox())!;
   expect(Math.abs(input.y + input.height / 2 - label.y - label.height / 2)).toBeLessThan(1);
@@ -354,7 +353,7 @@ test('unfinished uploads are visible and explicit discard targets only that proj
   await expect(page.getByRole('button',{name:'Open dataset Saved local data',exact:true})).toBeVisible();
   state.entries.push({id:'c'.repeat(32),project_id:project,name:'Damaged record',source:'local',status:'unavailable',created_at:'',can_discard:false,error:'Record damaged.'});
   await page.getByRole('button',{name:'Refresh datasets',exact:true}).click();await page.getByRole('button',{name:'Open dataset Damaged record',exact:true}).click();
-  await expect(page.getByRole('button',{name:'Discard unfinished upload',exact:true})).toHaveCount(0);await expect(page.getByRole('alert').filter({hasText:'files have been preserved'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Discard unfinished upload',exact:true})).toHaveCount(0);await expect(page.getByRole('alert').filter({hasText:'files are preserved'})).toBeVisible();
 });
 
 test('unknown-owner records are workspace repair notices with no project or discard action',async({page})=>{

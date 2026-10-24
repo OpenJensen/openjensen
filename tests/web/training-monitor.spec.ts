@@ -445,7 +445,7 @@ test('submits explicit reproducible training settings supported by the worker', 
 test('an older running application keeps observed progress and activity without retrying unsupported telemetry', async ({ page }) => {
   await page.clock.install();
   const { monitor, telemetryRequests, unexpected } = await workspace(page, 'legacy');
-  await expect(monitor.getByText(/Detailed telemetry becomes available after the application is restarted once active runs finish./)).toBeVisible();
+  await expect(monitor.getByText('Detailed telemetry appears after the app restarts.', { exact: true })).toBeVisible();
   await expect(monitor.getByRole('progressbar')).toHaveAttribute('value', '25');
   await expect(monitor.getByLabel('Persisted training activity')).toHaveCount(0);
   await expect(monitor.getByText('Latest checkpoint: step 20', { exact: true })).toBeVisible();
@@ -491,7 +491,7 @@ test('diagnostics summarizes a stopped run and opens repeated events only on req
 test('ACT checkpoint exports inference-only package through local registered runtime', async ({ page }) => {
   const { monitor, submitted, unexpected } = await workspace(page, 'running', true, 'local');
   await expect(monitor.getByRole('button', { name: 'Quantize checkpoint' })).toHaveCount(0);
-  await expect(monitor.getByText('This does not establish robot task success', { exact: false })).toBeVisible();
+  await expect(monitor.getByText('Removes the training-only VAE and keeps FP32 weights.', { exact: true })).toBeVisible();
   await monitor.getByRole('button', { name: 'Export ACT inference package' }).click();
   await expect(monitor.getByRole('link', { name: 'Download ACT inference package' })).toHaveAttribute('href', /artifacts\/inference-export\/download$/);
   expect(submitted).toEqual([{ operation: 'policy.export', runtime_id: 'act-cpu', artifact_id: 'checkpoint-artifact', training_method: 'full', timeout_seconds: 600 }]);
@@ -502,7 +502,7 @@ test('ACT checkpoint exports inference-only package through local registered run
 for (const mode of ['remote', 'unconfigured'] as const) test(`ACT export refuses ${mode} checkpoint without a job`, async ({ page }) => {
   const { monitor, submitted } = await workspace(page, 'running', true, mode);
   await expect(monitor.getByRole('button', { name: mode === 'remote' ? 'Download checkpoint and export' : 'Export ACT inference package' })).toBeDisabled();
-  await expect(monitor.getByText(mode === 'remote' ? 'Wait for the completed ACT checkpoint after its reload check.' : 'Ask the app operator to configure the local ACT export worker.', { exact: false })).toBeVisible();
+  await expect(monitor.getByText(mode === 'remote' ? 'Only the final ACT checkpoint can be exported.' : 'Ask the app operator to configure the local ACT export worker.', { exact: false })).toBeVisible();
   expect(submitted).toEqual([]);
 });
 
@@ -518,7 +518,7 @@ test('ACT export failure stays visible without a download or quality claim', asy
 test('ACT export refuses local lineage without a verified complete snapshot', async ({ page }) => {
   const { monitor, submitted } = await workspace(page, 'running', true, 'local-dataset');
   await expect(monitor.getByRole('button', { name: 'Export ACT inference package' })).toBeDisabled();
-  await expect(monitor.getByText('Export needs a Hugging Face source history or a complete local LeRobot v3 training copy with matching snapshot identity and successful reload checks.')).toBeVisible();
+  await expect(monitor.getByText('Export needs a Hugging Face source or a complete local LeRobot v3 training copy.')).toBeVisible();
   expect(submitted).toEqual([]);
 });
 
@@ -558,7 +558,7 @@ for (const fault of ['snapshot-identity', 'manifest', 'incomplete', 'not-reloade
   if (fault === 'format') metadata.dataset.format = 'lerobot_v2';
   await page.reload(); await reopenExport(page);
   await expect(state.monitor.getByRole('button', { name: 'Export ACT inference package', exact: true })).toBeDisabled();
-  await expect(state.monitor.getByText('Export needs a Hugging Face source history or a complete local LeRobot v3 training copy with matching snapshot identity and successful reload checks.')).toBeVisible();
+  await expect(state.monitor.getByText('Export needs a Hugging Face source or a complete local LeRobot v3 training copy.')).toBeVisible();
   expect(state.submitted).toEqual([]);
 });
 
@@ -570,9 +570,9 @@ test('completed cloud ACT checkpoint explicitly downloads and exports with separ
   await expect(checkpoint.locator('option').first()).toContainText('Reload-verified bundle');
   await checkpoint.selectOption('periodic-same-step');
   await expect(monitor.getByRole('button', { name: 'Download checkpoint and export' })).toBeDisabled();
-  await expect(monitor.getByText('Wait for the completed ACT checkpoint after its reload check.', { exact: false })).toBeVisible();
+  await expect(monitor.getByText('Only the final ACT checkpoint can be exported.', { exact: false })).toBeVisible();
   await checkpoint.selectOption('checkpoint-artifact');
-  await expect(monitor.getByText('It does not start a cloud GPU.', { exact: false })).toBeVisible();
+  await expect(monitor.getByText("exports it on this computer's CPU", { exact: false })).toBeVisible();
   await monitor.getByRole('button', { name: 'Download checkpoint and export' }).click();
   await expect(monitor.getByRole('link', { name: 'Download ACT inference package' })).toBeVisible();
   expect(submitted).toEqual([{ operation: 'policy.export', runtime_id: 'act-cpu', artifact_id: 'checkpoint-artifact', training_method: 'full', timeout_seconds: 600 }]);
@@ -714,7 +714,7 @@ test('legacy training recovery requires fresh history and explicit acknowledgeme
   await page.reload();
   await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   const recovery = page.getByRole('region', { name: 'Training submission recovery' });
-  await expect(recovery).toContainText('no server request key');
+  await expect(recovery).toContainText('no server key');
   const acknowledge = recovery.getByRole('button', { name: 'I checked the jobs; allow a new request' });
   await expect(acknowledge).toBeDisabled();
   await expect(recovery.getByRole('button', { name: 'Retry same request' })).toHaveCount(0);
@@ -942,7 +942,7 @@ test('ACT export failed history refresh cannot clear uncertainty', async ({ page
   await expect(page.getByRole('region', { name: 'ACT export recovery' })).toContainText('unverified');
   await page.route(`**/api/v1/projects/${projectId}/jobs`, route => route.fulfill({ status: 503, json: { detail: 'History unavailable' } }));
   await page.getByRole('button', { name: 'Refresh export jobs', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'ACT inference export' })).toContainText('job updates are unavailable');
+  await expect(page.getByRole('region', { name: 'ACT inference export' })).toContainText('Export updates are unavailable');
   await expect(page.getByRole('button', { name: 'I checked the export jobs; allow a new request' })).toBeDisabled();
   expect(state.submitted).toHaveLength(1);
 });
@@ -1008,7 +1008,7 @@ test('ACT export ignores another project receipt and download ancestry', async (
 test('ACT export corrupt stored receipt blocks submission without claiming acceptance', async ({ page }) => {
   await page.addInitScript(project => sessionStorage.setItem(`firebird:act-export-receipt:${project}:checkpoint-artifact`, '{broken'), projectId);
   const state = await exportRecoveryFixture(page);
-  await expect(page.getByRole('region', { name: 'ACT inference export' })).toContainText('saved export request is unreadable');
+  await expect(page.getByRole('region', { name: 'ACT inference export' })).toContainText('storage is unavailable or unreadable');
   await expect(exportButton(page)).toBeDisabled();
   await expect(page.getByRole('region', { name: 'ACT export status' })).toHaveCount(0);
   expect(state.submitted).toHaveLength(0);
@@ -1159,7 +1159,7 @@ for (const fault of ['remote', 'incompatible', 'unrecorded', 'manifest', 'pendin
   await page.reload(); await reopenExport(page);
   const card = exportedPackage(page, item.id);
   await expect(card.getByRole('button', { name: 'Quantize this package' })).toBeDisabled();
-  await expect(card.getByRole('status')).toContainText(fault === 'pending' ? 'Wait for this export' : fault === 'unrecorded' || fault === 'manifest' ? 'not recorded in the completed export result' : 'not a supported local ACT');
+  await expect(card.getByRole('status')).toContainText(fault === 'pending' ? 'Wait for this export' : fault === 'unrecorded' || fault === 'manifest' ? 'not in the export result' : 'not a supported local ACT');
   await expect(card.getByRole('link', { name: 'Download ACT inference package' })).toBeVisible();
   expect(state.submitted).toEqual([]);
 });
@@ -1322,14 +1322,14 @@ for (const location of ['metadata', 'checkpoint'] as const) for (const field of 
   await page.getByRole('link', { name: 'Distill', exact: true }).click();
   await chooseTransformationModel(page,'distillation',`Choose ACT inference export · ${state.packages[0].id}`);
   await expect(teacherChoices(page).locator(`input[value="${guarded.id}"]`)).toHaveCount(0);
-  await expect(page.getByText('Some ACT packages are excluded because their model format, timing or simulator details are incomplete or unsupported. Refresh or export a complete inference package.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Some ACT packages are hidden because they are incomplete or unsupported.', { exact: true })).toBeVisible();
   await expect(teacherChoices(page).locator(`input[value="${legacy.id}"]`)).toHaveCount(1);
   await expect(teacherChoices(page).locator('input:checked')).toHaveValue(legacy.id);
   await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
   await page.getByRole('link', { name: 'Quantize', exact: true }).click();
   await chooseTransformationModel(page,'quantization',`Choose ACT inference export · ${state.packages[0].id}`);
   await expect(quantizationModelOption(page, guarded.id)).toHaveCount(0);
-  await expect(page.getByText('Some ACT packages are excluded because their model format, timing or simulator details are incomplete or unsupported. Refresh or export a complete inference package.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Some ACT packages are hidden because they are incomplete or unsupported.', { exact: true })).toBeVisible();
   await expect(quantizationModelOption(page, legacy.id)).toHaveCount(1);
   await expect(selectedQuantizationModel(page)).toHaveValue(legacy.id);
   await expect(page.getByRole('button', { name: 'Create ACT quantized package', exact: true })).toBeEnabled();
@@ -1358,7 +1358,7 @@ test('complete simulator-bound export keeps exact Distill and Quantize handoffs 
   await exportedPackage(page, item.id).getByRole('button', { name: 'Quantize this package' }).click();
   await expect(selectedQuantizationModel(page)).toHaveValue(item.id);
   await expect(page.getByText('Inherited action timing: plans 32 actions and applies 8 per update.', { exact: false })).toBeVisible();
-  await expect(page.getByText(/A compatible Run profile and separate rollout consent are still required/)).toBeVisible();
+  await expect(page.getByText(/This package carries a simulator control contract, which packing preserves\./)).toBeVisible();
   expect(item.metadata).toEqual(original);
   expect(state.submitted).toEqual([]);
   expect(state.unexpected).toEqual([]);

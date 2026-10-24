@@ -81,7 +81,7 @@ function ModelStep({ step, jobs }: { step: LineageStep; jobs: Job[] }) {
       </dl>
       {affected && <div className="model-episode-splits"><h4>Data used in this step</h4>{splits.partitions.length ? <dl className="model-facts">{splits.partitions.map(part => <div key={part.name}><dt>{part.name === 'train' ? 'Training' : part.name === 'final' ? 'Final held-out' : part.name === 'test' ? 'Test' : 'Validation'} episodes</dt><dd>{part.ids.length} · {part.ids.join(', ') || 'None'}</dd></div>)}{splits.outside !== null && <div><dt>Outside recorded partitions</dt><dd>{splits.outside.length} · {splits.outside.join(', ') || 'None'}</dd></div>}</dl> : <p>{telemetry.isPending && job?.kind === 'policy.finetune' ? 'Loading training details…' : 'Exact episode membership was not recorded.'}</p>}
       {recipe.excluded_episodes !== undefined && <p>Explicitly excluded episodes: {description(recipe.excluded_episodes)}</p>}
-      {telemetry.isError && <p role="alert">Training details could not be loaded. The saved settings are shown; episode splits and reported hardware are unavailable.</p>}
+      {telemetry.isError && <p role="alert">Training details could not be loaded; showing saved settings only.</p>}
       </div>}
       <details className="model-record-details"><summary>Model configuration</summary><pre>{JSON.stringify({ request: job?.request ?? null, resolved_recipe: Object.keys(recipe).length ? recipe : null, metadata: step.artifact?.metadata ?? null, manifest_sha256: step.artifact?.manifest_sha256 ?? null }, null, 2)}</pre></details>
     </div>
@@ -126,9 +126,9 @@ export function ModelLibrary({ projects, currentProjectId, onAction, onTrain, on
     <div className="model-library-toolbar"><label>Find a model<input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Name, dataset, model ID…" /></label><label>Show<select value={scope} onChange={event => setScope(event.target.value)}><option value="all">All projects</option><option value="current">Current project</option></select></label><button type="button" className="secondary-button" onClick={refresh}>Refresh models</button></div>
     {failed && <p className="warning-box" role="alert">Some model records could not be loaded. Refresh to see their latest history.</p>}
     {pending && <p role="status">Loading your models…</p>}
-    {selected && !pending && !chosen && <p role="status">The selected model is unavailable in these records. Refresh the collection or select another model explicitly.</p>}
+    {selected && !pending && !chosen && <p role="status">This model is unavailable. Refresh or choose another.</p>}
     {!projects.length && <p role="status">Create a project to train or import your first model.</p>}
-    {!pending && !failed && projects.length > 0 && !rows.length && <div className="model-empty"><h3>Your models will live here</h3><p>Train a model on your dataset, or import an existing policy. Every saved checkpoint, distilled student and quantized version will keep a link to its source model and run.</p></div>}
+    {!pending && !failed && projects.length > 0 && !rows.length && <div className="model-empty"><h3>Your models will live here</h3><p>Train a model on your dataset, or import an existing policy.</p></div>}
     {!!rows.length && !filtered.length && <p role="status">No models match this search.</p>}
     <div className="model-run-list">{modelRunGroups(filtered.map(row => row.artifact)).map(group => {
       const first = filtered.find(row => row.artifact.id === group.models[0].id && row.project.id === group.models[0].project_id)!;

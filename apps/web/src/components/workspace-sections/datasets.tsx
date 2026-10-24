@@ -122,9 +122,8 @@ function IntakeForm({ project, readinessMessage, localAvailable, onCreated, navi
         <div className="training-copy-option">
           <label htmlFor="snapshot-for-training"><input id="snapshot-for-training" type="checkbox" checked={snapshotForTraining} aria-describedby="training-copy-help" onChange={event => setSnapshotForTraining(event.target.checked)} /> Prepare immutable training copy</label>
           <TrainingHelp label="immutable training copy" id="training-copy-help" wide>
-            <p>Creates a separate, verified dataset in the app host’s data directory, inside dataset-snapshots/. The app host is the machine running Open Jensen. Your original files stay unchanged.</p>
-            <p>An episode is one recorded demonstration. Complete episodes contain all declared frames, robot states, actions and camera videos, with consistent metadata. Recording completeness and task success are separate checks.</p>
-            <p>At least two episodes are required to use different whole demonstrations for training and validation. Saved runs use the fixed copy and verify its file hashes, so later edits to the source cannot silently change their training data. Leave this off for inspection only.</p>
+            <p>Copies and verifies the dataset in the app host’s <code>dataset-snapshots/</code> folder, so later edits to the source can’t change saved training runs. Your original files stay unchanged.</p>
+            <p>Needs at least two complete episodes. Leave this off to inspect only.</p>
           </TrainingHelp>
         </div>
       </>}

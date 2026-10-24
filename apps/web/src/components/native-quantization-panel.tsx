@@ -14,7 +14,7 @@ import { quantizedSimulationHandoff, simulationHandoffProfiles, type SimulationH
 import { availableNativeQuantizer, nativeTransformIssue, nativeTransformMetadata, cancelNativeQuantization, nativeQuantizationInput, nativeQuantizationOf, measuredNativeReport, replayableNativeOutput, object, startNativeQuantization, UncertainQuantization, type NativeQuantizationRuntime, type PackedArtifact } from '@/lib/native-quantization';
 
 class QuantizationJournalUnavailable extends Error {
-  constructor() { super('Browser session storage is unavailable. Restore it and reload, then inspect recorded jobs before submitting again.'); }
+  constructor() { super('Browser storage is unavailable. Enable it and reload before submitting again.'); }
 }
 
 export function NativeQuantizationPanel({ projectId, preferredArtifactId, preferredJobId, onJobSelected, onPrepare, onReplay, onPrepareSimulation, onBack, onBackToModels, modelRunId, onModel }: { projectId: string; preferredArtifactId?: string; preferredJobId?: string; onJobSelected?: (id: string) => void; onPrepare: () => void; onReplay?: (artifactId: string) => void; onPrepareSimulation?: (source: SimulationHandoff) => void; onBack: () => void; onBackToModels?: () => void; modelRunId?: string; onModel?: (artifactId: string) => void }) {
@@ -54,7 +54,7 @@ export function NativeQuantizationPanel({ projectId, preferredArtifactId, prefer
     try {
       if (!client.getQueryData<PolicyJobAttempt>(['native-quantization-attempt', projectId])) client.setQueryData<PolicyJobAttempt>(['native-quantization-attempt', projectId], storedAttempt('policy.quantize', projectId));
       setJournalReady(true);
-    } catch { setError('Browser session storage is unavailable. Enable it before submitting a job so uncertain requests can be recovered after a reload.'); }
+    } catch { setError('Enable browser storage before submitting, so requests can be recovered after a reload.'); }
   }, [client, projectId]);
   useEffect(() => {
     if (preference.current.id !== preferredArtifactId) preference.current = { id: preferredArtifactId, consumed: false };
@@ -121,7 +121,7 @@ export function NativeQuantizationPanel({ projectId, preferredArtifactId, prefer
   return <section className="panel native-simulation native-quantization native-workflow" aria-label="Native ACT quantization">
     <div className="workflow-view-navigation"><button type="button" className="text-link" onClick={!jobId && modelRunId && onBackToModels ? onBackToModels : onBack}>{!jobId && modelRunId ? '← Back to models' : '← Back to jobs'}</button></div>
     <div className="native-workflow-toolbar"><span className="native-model-badge">ACT · INT8 / INT4</span><button className="text-link" aria-label="Refresh ACT quantization jobs" disabled={!projectId || jobs.isFetching} onClick={() => void refresh()}>Refresh</button></div>
-    {jobId && !selected && <p role="status">{jobs.isPending ? 'Loading job…' : 'This quantization job is unavailable. No replacement has been selected.'}</p>}
+    {jobId && !selected && <p role="status">{jobs.isPending ? 'Loading job…' : 'This quantization job is unavailable.'}</p>}
     {selected && <article className="native-simulation-result" aria-label="ACT quantization job details" data-job-id={selected.id}>
       <div className="native-result-header"><h3>INT{nativeQuantizationOf(selected)?.bits} candidate</h3><span className={`status status-${selected.status}`}>{selected.status}</span></div>
       <p className="native-result-summary">{isActive(selected) ? selected.stage ?? selected.status : 'Recorded job'} · {selected.id}</p>
@@ -130,17 +130,17 @@ export function NativeQuantizationPanel({ projectId, preferredArtifactId, prefer
           <h4>Stored bytes and action drift</h4>
           <dl className="cloud-run-facts"><div><dt>Source FP32 weights</dt><dd>{measured.source_weight_bytes.toLocaleString()} bytes</dd></div><div><dt>Packed weights</dt><dd>{measured.packed_weight_bytes.toLocaleString()} bytes</dd></div><div><dt>Inference payload</dt><dd>{measured.policy_package_bytes.toLocaleString()} bytes</dd></div><div><dt>Fresh packed CPU reload</dt><dd>Exact agreement with the packed candidate</dd></div></dl>
           <QuantizationComparison job={selected} reports={reports} />
-          <p>Generated observations only. Exact reload does not mean unchanged FP32 actions.</p>
-          <WorkbenchDisclosure title="Action differences"><p>Payload size excludes the outer download envelope. These observations are not held-out robotics evaluation.</p><div className="native-quantization-drift" role="region" aria-label="FP32 action differences" tabIndex={0}><table><caption>Difference from FP32 across each full {measured.prediction_horizon} × 6 action chunk</caption><thead><tr><th>Fixture seed</th><th>Raw RMSE</th><th>Raw maximum</th><th>Postprocessed RMSE</th><th>Postprocessed maximum</th></tr></thead><tbody>{measured.drift_from_fp32.map((row, index) => <tr key={`${row.input_sha256}-${index}`}><th scope="row">{row.seed}</th><td>{row.raw.rmse.toPrecision(6)}</td><td>{row.raw.maximum_absolute_difference.toPrecision(6)}</td><td>{row.postprocessed.rmse.toPrecision(6)}</td><td>{row.postprocessed.maximum_absolute_difference.toPrecision(6)}</td></tr>)}</tbody></table></div>
-          <p>Postprocessed differences use saved processor output coordinates. Physical units, model quality, GPU memory and latency have not been measured.</p></WorkbenchDisclosure>
-        </section> : <p role="alert">The quantization results are incomplete. Reload accuracy and model quality cannot be assessed from the job status alone.</p>)}
+          <p>Generated observations only.</p>
+          <WorkbenchDisclosure title="Action differences"><p>Payload size excludes the download wrapper.</p><div className="native-quantization-drift" role="region" aria-label="FP32 action differences" tabIndex={0}><table><caption>Difference from FP32 across each full {measured.prediction_horizon} × 6 action chunk</caption><thead><tr><th>Fixture seed</th><th>Raw RMSE</th><th>Raw maximum</th><th>Postprocessed RMSE</th><th>Postprocessed maximum</th></tr></thead><tbody>{measured.drift_from_fp32.map((row, index) => <tr key={`${row.input_sha256}-${index}`}><th scope="row">{row.seed}</th><td>{row.raw.rmse.toPrecision(6)}</td><td>{row.raw.maximum_absolute_difference.toPrecision(6)}</td><td>{row.postprocessed.rmse.toPrecision(6)}</td><td>{row.postprocessed.maximum_absolute_difference.toPrecision(6)}</td></tr>)}</tbody></table></div>
+          <p>Differences use the saved processor's output coordinates.</p></WorkbenchDisclosure>
+        </section> : <p role="alert">The quantization results are incomplete.</p>)}
 
-      {selected.status === 'succeeded' && <><p>Task quality, calibration, speed and GPU memory savings have not been measured.</p>{downloads.map(item => {
+      {selected.status === 'succeeded' && <><p>Task quality and speed are not measured here.</p>{downloads.map(item => {
         const handoff = quantizedSimulationHandoff(item, selected, measured ?? null);
         const compatible = simulation.data ? simulationHandoffProfiles(item, simulation.data.profiles) : [];
         return <div key={item.id} data-artifact-id={item.id}>
           <div className="native-result-actions">{onReplay && replayableNativeOutput(item, selected, measured ?? null) && <button className="primary-button" onClick={() => onReplay(item.id)}>Replay recorded observations</button>}{onPrepareSimulation && handoff && <button className="secondary-button" disabled={!simulation.isSuccess || simulation.isError || jobs.isError || !compatible.length} onClick={() => onPrepareSimulation(handoff)}>Prepare simulation</button>}<a className="secondary-button" href={artifactDownloadUrl(projectId, item.id)}>Download INT{nativeQuantizationOf(selected)?.bits} package</a></div>
-          {onPrepareSimulation && handoff && <p className="field-help" role="status">{simulation.isError ? 'Simulation profile availability is unknown. Open Run to refresh its configuration.' : simulation.isPending ? 'Checking configured simulation profiles…' : compatible.length ? 'Continue with this exact package, then choose a profile and review paid rollout consent. Nothing starts here.' : 'No packed ACT simulation profile is configured. Observation replay and download remain available.'}</p>}
+          {onPrepareSimulation && handoff && <p className="field-help" role="status">{simulation.isError ? 'Simulation profile availability is unknown. Open Run to refresh its configuration.' : simulation.isPending ? 'Checking configured simulation profiles…' : compatible.length ? 'Continue with this package, then choose a profile and review consent.' : 'No packed ACT simulation profile is configured. Replay and download still work.'}</p>}
         </div>;
       })}</>}
       {isActive(selected) && <><progress aria-label="ACT quantization in progress" /><button className="secondary-button" disabled={pending !== null || jobs.isError} onClick={() => setConfirmCancel(selected.id)}>Cancel selected ACT quantization</button></>}
@@ -166,9 +166,9 @@ export function NativeQuantizationPanel({ projectId, preferredArtifactId, prefer
       </div> : <>
         <fieldset disabled={!editable} className="native-simulation-form"><legend className="visually-hidden">ACT quantization setup</legend>
           {modelRunId ? <ModelVersionPicker runId={modelRunId} projectId={projectId} artifacts={artifacts.data ?? []} jobs={jobs.data ?? []} value={artifactId} onChange={chooseArtifact} label="Policy" /> : <WorkflowChoiceGrid name="act-policy" label="Policy" value={input?.id ?? ''} onChange={chooseArtifact} options={inputs.map(item => ({ value: item.id, label: item.label, meta: item.id.slice(0, 8), icon: 'layers' }))} emptyMessage="No ACT inference policies. Import or export a complete policy first." />}
-          {excludedInputs && <p role="status">Some ACT packages are excluded because their model format, timing or simulator details are incomplete or unsupported. Refresh or export a complete inference package.</p>}
+          {excludedInputs && <p role="status">Some ACT packages are hidden because they are incomplete or unsupported.</p>}
           {inputSemantics && <p className="field-help">Inherited action timing: plans {inputSemantics.prediction_horizon} actions and applies {inputSemantics.execution_horizon} per update. Packing keeps the saved timing; the server checks the policy before starting.</p>}
-          {inputSemantics?.control_contract && <p role="status">This package carries a simulator control contract. Packing must preserve it. A compatible Run profile and separate rollout consent are still required; calibration and task success remain unverified.</p>}
+          {inputSemantics?.control_contract && <p role="status">This package carries a simulator control contract, which packing preserves.</p>}
           {(runtimes.length > 1 || !runtime) && <WorkflowChoiceGrid name="act-worker" label="Compute" value={runtime?.id ?? ''} onChange={setRuntimeId} options={runtimes.map(item => ({ value: item.id, label: item.label, icon: 'sliders' }))} />}
           <WorkflowChoiceGrid name="act-precision" label="Compression" value={String(bits)} onChange={value => setBits(value === '4' ? 4 : 8)} options={[{ value: '8', label: '8-bit', description: 'Balanced', icon: 'compress' }, { value: '4', label: '4-bit', description: 'Smaller package', icon: 'compress' }]} />
           <label className="simulation-timeout">Timeout (seconds)<input aria-label="Quantization timeout (seconds)" type="number" min="30" max="600" step="1" value={timeout} onChange={event => setTimeoutValue(event.target.value)} /></label>

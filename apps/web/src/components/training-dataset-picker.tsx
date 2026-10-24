@@ -109,7 +109,7 @@ export function TrainingDatasetPicker(props: Props) {
     <p className="training-picker-summary" role="status">{selectedIds.length} {selectedIds.length === 1 ? 'dataset' : 'datasets'} selected · Combine up to 8 compatible datasets</p>
     {open && <dialog ref={dialog} className="training-dataset-dialog" aria-labelledby={`${id}-title`} aria-describedby={`${id}-description`}
       onCancel={event => { event.preventDefault(); closeBrowser(); }} onClose={closeBrowser}>
-      <header><div><h2 id={`${id}-title`}>Choose datasets</h2><p id={`${id}-description`}>Saved datasets in this project. Select up to 8 compatible datasets for this job.</p></div>
+      <header><div><h2 id={`${id}-title`}>Choose datasets</h2><p id={`${id}-description`}>Select up to 8 compatible datasets.</p></div>
         <button type="button" className="text-button" aria-label="Close dataset browser" onClick={closeBrowser}>×</button></header>
       <label className="training-picker-search"><Icon name="search" size={18} /><span className="visually-hidden">Search datasets for training</span>
         <input ref={searchInput} type="search" value={search} placeholder="Search by name, source or format…" onChange={event => setSearch(event.target.value)} /></label>

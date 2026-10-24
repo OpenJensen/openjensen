@@ -132,7 +132,7 @@ test('unreadable recovery is surfaced before model choice and still blocks submi
   await expect(overview(page).getByRole('alert')).toContainText('Saved request status could not be read.');
   await expect(panel(page)).toHaveCount(0);
   await page.getByRole('button', { name: 'Review request', exact: true }).click();
-  await expect(panel(page).getByRole('alert')).toContainText('Browser session storage is unavailable.');
+  await expect(panel(page).getByRole('alert')).toContainText(/browser storage/i);
   await expect(page.getByRole('button', { name: 'Train ACT256 student', exact: true })).toBeDisabled();
   expect(state.mutations).toEqual([]);
 });

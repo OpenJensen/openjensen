@@ -734,16 +734,16 @@ export function TrainingPanel({
         <h2>{attempt?.state === 'pending' && !submission.error ? 'Starting training' : 'Check your training request'}</h2>
         <p role={attempt?.state === 'pending' ? 'status' : 'alert'}>{submission.error || attempt?.message}</p>
         {attempt?.state === 'uncertain' && <>
-          <p>New submissions are paused. Navigating away does not cancel the original request.</p>
+          <p>New submissions are paused until this request is resolved.</p>
           {keyedAttempt ? <>
-            <p>The saved request keeps its original dataset, model and settings. Checking it does not start training.</p>
+            <p>Checking the saved request does not start training.</p>
             <div className="training-recovery-actions">
               <button type="button" className="secondary-button" disabled={!submission.available || submission.busy} onClick={() => void recoverSubmission()}>Check saved request</button>
               <button type="button" className="secondary-button" disabled={!submission.canRetry || submission.busy} onClick={() => void recoverSubmission(true)}>Retry same request</button>
             </div>
-            <p className="training-recovery-note">Retry sends the same saved recipe and key only after the server confirms it has no matching job. It does not use later edits to this form.</p>
+            <p className="training-recovery-note">Retry resends the saved recipe only if the server has no matching job.</p>
           </> : <>
-            <p>This older browser record has no server request key. Refresh and inspect recorded jobs before explicitly allowing a new request.</p>
+            <p>This older request has no server key. Check recorded jobs before allowing a new request.</p>
             <div className="training-recovery-actions">
               <button type="button" className="secondary-button" disabled={jobs.isFetching} onClick={() => { showHistory(); void reviewHistory(); }}>Refresh training jobs</button>
               <button type="button" className="secondary-button" disabled={!submission.available || historyReviewed !== attempt || jobs.isError || mutation.isPending} onClick={() => {
@@ -1138,7 +1138,7 @@ export function TrainingPanel({
                   <legend>Learning settings</legend>
                 <div className="training-fields">
                   <label>
-                    <span className="training-field-name">Steps<TrainingHelp label="Steps">Completed optimizer updates when supported; learning-rate schedules and save/validation intervals use the same step count.</TrainingHelp></span>
+                    <span className="training-field-name">Steps<TrainingHelp label="Steps">Optimizer updates. Learning-rate schedules and checkpoint intervals use the same count.</TrainingHelp></span>
                     <input aria-label="Steps"
                       type="number"
                       min="2"
@@ -1202,7 +1202,7 @@ export function TrainingPanel({
                 </div>
                 </fieldset>
                 {timing && <fieldset className="training-temporal" aria-label="Action timing" aria-describedby="training-timing-help">
-                  <legend><span className="training-field-name">Action timing<TrainingHelp label="Action timing" id="training-timing-help">Prediction is how many future actions the model learns together. Execution is how many are used before the next observation. One observation at a time, using consecutive frames; existing checkpoints are not reshaped. This does not establish a safe robot control rate.</TrainingHelp></span></legend>
+                  <legend><span className="training-field-name">Action timing<TrainingHelp label="Action timing" id="training-timing-help">Prediction: future actions learned together. Execution: actions used before the next observation. Existing checkpoints keep their shape.</TrainingHelp></span></legend>
                   <div className="training-temporal-fields">
                     <label htmlFor="training-prediction"><span className="training-field-name">Prediction horizon<TrainingHelp label="Prediction horizon" id="training-prediction-help">Actions predicted together.</TrainingHelp></span><input id="training-prediction" aria-label="Prediction horizon" type="number" min="1" max="1024" step="1" value={effectiveTiming!.prediction} disabled={busy} aria-invalid={!!timingIssue} aria-describedby="training-timing-help training-prediction-help" onChange={event => updateTiming({ enabled: true, prediction: Number(event.target.value) })} /></label>
                     <label htmlFor="training-execution"><span className="training-field-name">Execution horizon<TrainingHelp label="Execution horizon" id="training-execution-help">Actions used before observing again.</TrainingHelp></span><input id="training-execution" aria-label="Execution horizon" type="number" min="1" max={effectiveTiming!.prediction >= 1 ? effectiveTiming!.prediction : 1024} step="1" value={effectiveTiming!.execution} disabled={busy} aria-invalid={!!timingIssue} aria-describedby="training-timing-help training-execution-help" onChange={event => updateTiming({ enabled: true, execution: Number(event.target.value) })} /></label>

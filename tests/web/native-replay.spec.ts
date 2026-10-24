@@ -84,7 +84,7 @@ test('saved full action chunks render without a simulation quality claim', async
   await expect(page.getByRole('region', { name: 'Predicted action chunks' }).getByRole('img')).toHaveCount(6);
   await page.getByLabel('Recorded observation', { exact: true }).selectOption('1');
   await expect(page.getByRole('link', { name: 'Download replay record' })).toHaveAttribute('href', /replay-001%3Aoperation\/download$/);
-  await expect(page.getByText(/does not measure task success/)).toBeVisible();
+  await expect(page.getByText(/Reset reproduced the same action chunk/)).toBeVisible();
   await page.getByRole('button', { name: 'Dark', exact: true }).click();
   const width = await page.evaluate(() => [document.documentElement.clientWidth, document.documentElement.scrollWidth]); expect(width[1]).toBeLessThanOrEqual(width[0] + 1);
   await page.screenshot({ path: testInfo.outputPath('replay-actions-dark.png'), fullPage: true });
@@ -504,6 +504,6 @@ test('8-step replay shows all predicted actions and chart endpoints without exec
   await expect(charts.getByText(/actions 1–8$/)).toHaveCount(6);
   const points = await charts.locator('polyline').first().getAttribute('points');
   expect(points?.split(' ')).toHaveLength(8); expect(points?.split(' ').at(-1)?.split(',')[0]).toBe('256');
-  await expect(page.getByText(/does not measure task success/)).toBeVisible();
+  await expect(page.getByText(/Reset reproduced the same action chunk/)).toBeVisible();
   expect(state.posts).toHaveLength(1);
 });

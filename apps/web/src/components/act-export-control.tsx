@@ -11,7 +11,7 @@ import { storeAttempt, type PolicyJobAttempt } from "@/lib/policy-job-attempt";
 import { UncertainPolicyJob } from "@/lib/policy-job-mutation";
 
 class ExportJournalUnavailable extends Error {
-  constructor() { super("Browser session storage is unavailable or its saved export request is unreadable. Restore it and reload, then inspect recorded export jobs before submitting again."); }
+  constructor() { super("Browser storage is unavailable or unreadable. Enable it and reload before submitting again."); }
 }
 
 export function ActExportControl({ projectId, checkpoint, runtimes, jobs, artifacts, active, onNativeQuantize, onNativeDistill }: {
@@ -74,10 +74,10 @@ export function ActExportControl({ projectId, checkpoint, runtimes, jobs, artifa
     typeof snapshot.manifest_sha256 === "string" && /^[a-f0-9]{64}$/.test(snapshot.manifest_sha256) &&
     snapshot.id === `sha256:${snapshot.manifest_sha256}` && checkpoint.metadata?.reload_verified === true;
   const issue = !projectId || checkpoint.project_id !== projectId ? "Select a ready project to export." : cloud && (sourceJob?.status !== "succeeded" || checkpoint.metadata?.reload_verified !== true)
-    ? "Wait for the completed ACT checkpoint after its reload check. Intermediate saves cannot be exported."
+    ? "Only the final ACT checkpoint can be exported."
     : checkpoint.format !== "training_checkpoint" || checkpoint.metadata?.training_backend !== "lerobot" || checkpoint.metadata?.method !== "full"
       ? "This export requires a complete native ACT training checkpoint."
-      : dataset?.source !== "huggingface" && !localSnapshot ? "Export needs a Hugging Face source history or a complete local LeRobot v3 training copy with matching snapshot identity and successful reload checks."
+      : dataset?.source !== "huggingface" && !localSnapshot ? "Export needs a Hugging Face source or a complete local LeRobot v3 training copy."
       : !runtime ? "Ask the app operator to configure the local ACT export worker." : null;
   const journalReady = readyContext === context && !storageError.data;
   const submitting = journalReady && attempt.data?.state === "pending";
@@ -130,8 +130,8 @@ export function ActExportControl({ projectId, checkpoint, runtimes, jobs, artifa
     try { saveAttempt(null); setReviewedAttempt(null); setError(""); } catch (cause) { setError((cause as Error).message); }
   }
   return <section aria-label="ACT inference export">
-    {cloud && <p className="training-monitor-note">This action downloads the completed checkpoint to this computer (up to 4 GiB), verifies a separate local copy, then exports on CPU. It does not start a cloud GPU. The original cloud checkpoint is preserved.</p>}
-    <p className="training-monitor-note">Remove the training-only VAE and keep FP32 weights. Each export checks complete synthetic action chunks in fresh CPU processes. This does not establish robot task success, calibration, GPU fit, or faster inference.</p>
+    {cloud && <p className="training-monitor-note">Downloads the checkpoint (up to 4 GiB) and exports it on this computer's CPU. The cloud checkpoint is kept.</p>}
+    <p className="training-monitor-note">Removes the training-only VAE and keeps FP32 weights.</p>
     {available.length > 1 && <label>Export computer<select value={runtime?.id ?? ""} disabled={!ready} onChange={event => setSelectedRuntime(event.target.value)}>{available.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>}
     <button type="button" className="primary-button" disabled={!ready} onClick={() => void submit()}>{submitting || pending ? "Exporting ACT policy…" : cloud ? "Download checkpoint and export" : "Export ACT inference package"}</button>
     <button type="button" className="text-link" disabled={!active || history.isFetching} onClick={() => void refresh()}>Refresh export jobs</button>
@@ -139,7 +139,7 @@ export function ActExportControl({ projectId, checkpoint, runtimes, jobs, artifa
     {latest && <section aria-label="ACT export status"><p role="status">Export {latest.status} · {latest.id}. {pending ? pending.stage === "downloading" ? "Downloading and checking the checkpoint." : "Preparing or checking the CPU export." : "Recorded export job."}</p></section>}
     {latest?.status === "failed" && <p role="alert">Export failed: {latest.error ?? "See the recorded job for details."}</p>}
     {latest && ["cancelled", "interrupted"].includes(latest.status) && <p role="status">Export {latest.status}. No completed package is ready from this attempt.</p>}
-    {history.isError && <p role="alert">Export job updates are unavailable. Previously received status may be stale.</p>}
+    {history.isError && <p role="alert">Export updates are unavailable; status may be out of date.</p>}
     {(storageError.data || error) && <p role="alert">{storageError.data || error}</p>}
     {submitting && <p role="status">{attempt.data?.message}</p>}
     {attempt.data?.state === "uncertain" && <section aria-label="ACT export recovery" className="warning-box"><p>{attempt.data.message} Further submissions are paused.</p>{recoveryPending && <p role="status">Recorded export {recoveryPending.id} for checkpoint {"artifact_id" in recoveryPending.request ? recoveryPending.request.artifact_id : "unknown"} is {recoveryPending.status}. Wait for active project exports to finish before clearing this recovery record.</p>}<button className="secondary-button" disabled={!active || !journalReady || !!pending || !!recoveryPending || history.isError || reviewedAttempt !== attempt.data} onClick={acknowledge}>I checked the export jobs; allow a new request</button></section>}
@@ -148,7 +148,7 @@ export function ActExportControl({ projectId, checkpoint, runtimes, jobs, artifa
       const outputs = exportJob?.result && "artifacts" in exportJob.result ? exportJob.result.artifacts ?? [] : [];
       const recordedOutput = outputs.some(output => output.id === item.id && output.project_id === projectId && output.job_id === item.job_id && output.format === "inference_export" && output.manifest_sha256 === item.manifest_sha256);
       const sourceIssue = exportJob?.status !== "succeeded" ? "Wait for this export to finish and appear in recorded history."
-        : !recordedOutput ? "This package is not recorded in the completed export result. Refresh the export jobs before continuing."
+        : !recordedOutput ? "This package is not in the export result. Refresh export jobs."
         : null;
       const metadataIssue = nativeTransformIssue(item);
       const quantizeIssue = sourceIssue ?? metadataIssue ?? (!nativeQuantizationInput(item, projectId) ? "This package is not a supported local ACT inference input for quantization."
@@ -161,7 +161,7 @@ export function ActExportControl({ projectId, checkpoint, runtimes, jobs, artifa
       return <section key={item.id} aria-label={`ACT inference package ${item.id}`}>
         <p className="training-monitor-note">ACT FP32 inference package · Export {item.job_id.slice(0, 8)}</p>
         {onNativeDistill && !metadataIssue && <p className="training-monitor-note">Train a smaller ACT student, or quantize this package directly. Saved action timing is retained.</p>}
-        {!metadataIssue && hasSimulatorControlContract(item) && <p className="training-monitor-note">The simulator control contract must be retained. Distillation requires the original dataset snapshot; Run still needs its own compatibility checks and explicit consent.</p>}
+        {!metadataIssue && hasSimulatorControlContract(item) && <p className="training-monitor-note">Distillation needs the original dataset snapshot.</p>}
         <div className="native-result-actions">
           {onNativeDistill && <button type="button" className="secondary-button" disabled={!active || !!distillIssue} onClick={() => { if (active && !distillIssue) onNativeDistill(item.id); }}>Use as ACT teacher</button>}
           <a className="text-link" href={artifactDownloadUrl(projectId, item.id)}>Download ACT inference package</a>

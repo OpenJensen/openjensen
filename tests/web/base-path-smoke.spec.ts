@@ -53,7 +53,7 @@ test('prefixed export loads bundles, library media, API and docs without escapin
   await page.locator('.page-heading .page-guide').click();
   await expect(page).toHaveURL(new RegExp(`${prefix}/guide/#teaching$`));
   await expect(page.getByRole('heading', { name: 'Workspace guide', exact: true })).toBeVisible();
-  await expect(page.locator('.guide-sections > section')).toHaveCount(13);
+  await expect(page.locator('.guide-sections > section')).toHaveCount(14);
   await page.reload();
   await expect(page.locator('#teaching')).toContainText('Start recording');
   await page.getByRole('link', { name: 'API reference', exact: true }).first().click();

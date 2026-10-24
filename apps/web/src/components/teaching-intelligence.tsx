@@ -23,7 +23,7 @@ export async function intelligenceRequest<T>(path: string, method = "GET", body?
     if (!response.ok) throw new Error(typeof value.detail === "string" ? value.detail : "Intelligence request unavailable.");
     return value;
   } catch (error) {
-    if (controller.signal.aborted) throw new Error("Request stopped or timed out. Completion and billing are unverified; no automatic retry was made.");
+    if (controller.signal.aborted) throw new Error("Request stopped or timed out. It was not retried.");
     throw error;
   } finally { clearTimeout(timeout); }
 }
@@ -56,7 +56,7 @@ export function TeachingIntelligence({ context, online }: { context: Context | n
     if (active.current) {
       const attempt = active.current; active.current = null;
       void cancel(attempt).catch(() => {});
-      setPending(false); setError("Teaching context changed or disconnected. The request was cancelled; completion and billing remain unverified.");
+      setPending(false); setError("The session changed, so the request was cancelled.");
     }
   }, [identity, online]);
   useEffect(() => {
@@ -93,42 +93,40 @@ export function TeachingIntelligence({ context, online }: { context: Context | n
   async function stop() {
     const attempt = active.current; if (!attempt) return;
     active.current = null; setPending(false); setConsent(false);
-    setError("Cancellation requested. Completion and provider billing remain unverified.");
-    try { await cancel(attempt); } catch { if (alive.current) setError("Cancellation could not be confirmed. The worker deadline remains in effect; billing is unverified."); }
+    setError("Cancellation requested.");
+    try { await cancel(attempt); } catch { if (alive.current) setError("Cancellation could not be confirmed; the request times out on its own."); }
   }
   const ready = readiness.isSuccess && readiness.data?.broker_reachable && readiness.data.configured && !readiness.data.busy;
   const old = !!result && (!online || contextKey(result.proposal.receipt.context) !== identity);
   return <section aria-labelledby="teaching-intelligence-title" className="panel teaching-advice">
-    <div className="teaching-advice-heading"><h3 id="teaching-intelligence-title">Advice</h3><span className="metadata-badge">{ready ? "Configured · access unverified" : "Not ready"}</span></div>
+    <div className="teaching-advice-heading"><h3 id="teaching-intelligence-title">Advice</h3><span className="metadata-badge">{ready ? "Configured" : "Not ready"}</span></div>
     {!ready && <p role="status">{readiness.isPending ? "Checking intelligence broker…" : readiness.data?.busy ? "The intelligence broker is busy." : "Connect the advice broker and configure OpenRouter."}</p>}
     <details className="teaching-services"><summary>Configure optional services</summary><div className="teaching-services-body">
-      <p>Save a private OpenRouter key on this application host. Saving does not contact a provider or configure LiveKit, Google Cloud, or a running voice agent.</p>
       <form className="workbench-form" onSubmit={event => { event.preventDefault(); void save(); }}>
         <div className="workbench-field-grid">
           <div className="workbench-field"><label htmlFor="teaching-openrouter-key">OpenRouter API key</label><input id="teaching-openrouter-key" type="password" autoComplete="off" value={key} maxLength={4096} onChange={event => setKey(event.target.value)} disabled={saving} /></div>
           <div className="workbench-field"><label htmlFor="teaching-voice-model">Voice chat model</label><input id="teaching-voice-model" placeholder="provider/model" value={model} maxLength={192} onChange={event => setModel(event.target.value)} disabled={saving} /></div>
         </div>
-        <p className="field-help">Choose an explicit OpenRouter chat model for voice. Jev is a decision model, not the voice chat model.</p>
         <div className="workbench-actions"><button className="secondary-button" disabled={saving || key.length < 16 || !model.includes("/")}>Save private settings</button>
           {saved.data?.saved && <button type="button" className="secondary-button" disabled={saving} onClick={() => void save(true)}>Remove saved settings</button>}
         </div>
       </form>
-      <p>{saved.data?.saved ? `Saved voice model: ${saved.data.voice_model}. Provider access is unverified.` : "No app-managed credentials saved."}</p>
+      <p>{saved.data?.saved ? `Saved voice model: ${saved.data.voice_model}.` : "No saved settings."}</p>
       {configurationMessage && <p role="status">{configurationMessage}</p>}
       {saved.isError && <p role="alert">Saved settings could not be checked.</p>}
-      <p className="field-help">The operator must explicitly point the separate broker and voice agent at <code>teaching-intelligence.json</code> in the application data directory using <code>JENSEN_TEACHING_INTELLIGENCE_FILE</code>. Existing environment credentials take precedence. Restart the voice agent after changing its model.</p>
-      {saved.data?.saved && readiness.data?.configuration_revision !== saved.data.revision && <p role="status">The broker has not confirmed loading this saved revision. It may use its own environment or require configuration.</p>}
+      <p className="field-help">The broker and voice agent read these settings through <code>JENSEN_TEACHING_INTELLIGENCE_FILE</code>.</p>
+      {saved.data?.saved && readiness.data?.configuration_revision !== saved.data.revision && <p role="status">The broker has not loaded these settings yet.</p>}
     </div></details>
     <div className="workbench-form teaching-advice-form">
-      <div className="workbench-field"><label htmlFor="teaching-advice-question">Question for intelligence</label><input id="teaching-advice-question" value={question} maxLength={512} onChange={event => setQuestion(event.target.value)} disabled={pending} placeholder="What should I review before recording?" /></div>
-      <label className="workbench-check"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} disabled={!online || !ready || pending} /><span>I consent to sending this instruction and session context to OpenRouter; camera questions also send one image. Provider charges may apply.</span></label>
+      <div className="workbench-field"><label htmlFor="teaching-advice-question">Question</label><input id="teaching-advice-question" value={question} maxLength={512} onChange={event => setQuestion(event.target.value)} disabled={pending} placeholder="What should I review before recording?" /></div>
+      <label className="workbench-check"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} disabled={!online || !ready || pending} /><span>I consent to sending this question and session context to OpenRouter, plus one frame for camera questions. Provider charges apply.</span></label>
       <div className="workbench-actions">
       <button className="secondary-button" disabled={!online || !ready || !consent || !question.trim() || pending} onClick={() => void ask("decision")}>Ask Jev for a review suggestion</button>
       <button className="secondary-button" disabled={!online || !ready || !consent || !question.trim() || pending} onClick={() => void ask("perception")}>Ask Mk1.5 about the camera</button>
       {pending && <button className="secondary-button" onClick={() => void stop()}>Cancel intelligence request</button>}
       </div>
     </div>
-    {pending && <p role="status">Waiting for a bounded advisory response…</p>}{error && <p role="alert">{error}</p>}
-    {result && <article aria-label="Intelligence suggestion"><h4>{old ? "Historical suggestion · context changed" : "Captured suggestion · generated advice"}</h4><p>{result.kind === "decision" ? result.choices.find(item => item.id === result.proposal.choice)?.description : result.proposal.summary}</p><p className="field-help">{result.proposal.receipt.returned_model} · revision {result.proposal.receipt.context.revision}{result.proposal.receipt.frame ? ` · captured frame ${result.proposal.receipt.frame.step}` : ""}. This is not a live observation, calibrated confidence, or task-success measurement.</p><details><summary>Request receipt</summary><dl className="dataset-facts"><div><dt>Request</dt><dd>{result.request_id}</dd></div><div><dt>Response time</dt><dd>{result.proposal.receipt.elapsed_seconds.toFixed(2)} s</dd></div><div><dt>Provider-reported cost</dt><dd>{result.proposal.receipt.reported_cost_usd === null ? "Not reported" : `$${result.proposal.receipt.reported_cost_usd}`}</dd></div></dl></details></article>}
+    {pending && <p role="status">Waiting for a response…</p>}{error && <p role="alert">{error}</p>}
+    {result && <article aria-label="Intelligence suggestion"><h4>{old ? "Earlier suggestion · session changed" : "Suggestion"}</h4><p>{result.kind === "decision" ? result.choices.find(item => item.id === result.proposal.choice)?.description : result.proposal.summary}</p><p className="field-help">{result.proposal.receipt.returned_model} · revision {result.proposal.receipt.context.revision}{result.proposal.receipt.frame ? ` · captured frame ${result.proposal.receipt.frame.step}` : ""}.</p><details><summary>Request receipt</summary><dl className="dataset-facts"><div><dt>Request</dt><dd>{result.request_id}</dd></div><div><dt>Response time</dt><dd>{result.proposal.receipt.elapsed_seconds.toFixed(2)} s</dd></div><div><dt>Provider-reported cost</dt><dd>{result.proposal.receipt.reported_cost_usd === null ? "Not reported" : `$${result.proposal.receipt.reported_cost_usd}`}</dd></div></dl></details></article>}
   </section>;
 }
