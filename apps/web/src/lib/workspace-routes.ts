@@ -3,7 +3,17 @@ import type { WorkspaceModule } from '@/lib/api';
 import { basePath } from '@/lib/base-path';
 
 export type ModuleId = WorkspaceModule['id'];
-export type StageId = 'dashboard' | 'datasets' | 'training' | 'distillation' | 'quantization' | 'evaluation' | 'simulation' | 'models' | 'settings' | ModuleId;
+export type StageId =
+  | 'dashboard'
+  | 'datasets'
+  | 'training'
+  | 'distillation'
+  | 'quantization'
+  | 'evaluation'
+  | 'simulation'
+  | 'models'
+  | 'settings'
+  | ModuleId;
 export type WorkspaceRoute = { name: string; icon: IconName; path: string; module?: true };
 
 // Route keys match the URL segment. Optional modules use the same id as
@@ -37,9 +47,11 @@ export const navigationGroups: { name?: string; items: StageId[] }[] = [
 ];
 
 export function workspaceStage(pathname: string): StageId {
-  const local = basePath && (pathname === basePath || pathname.startsWith(`${basePath}/`))
-    ? pathname.slice(basePath.length) : pathname;
+  const local =
+    basePath && (pathname === basePath || pathname.startsWith(`${basePath}/`))
+      ? pathname.slice(basePath.length)
+      : pathname;
   const path = `${local.replace(/\/+$/, '')}/`;
-  const match = (Object.keys(workspaceRoutes) as StageId[]).find(id => workspaceRoutes[id].path === path);
+  const match = (Object.keys(workspaceRoutes) as StageId[]).find((id) => workspaceRoutes[id].path === path);
   return match ?? 'dashboard';
 }

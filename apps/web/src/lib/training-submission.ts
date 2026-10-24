@@ -8,25 +8,58 @@ export async function startTraining(project: string, body: PolicyRequest, method
 }
 
 /** Validate POST or saved-key lookup against the persisted original recipe. */
-export function trainingReceipt(value: unknown, project: string, originalBody: unknown, methods: readonly string[] = ['lora', 'qlora', 'full']): Job {
-  if (!record(originalBody) || originalBody.operation !== 'policy.finetune' || typeof originalBody.runtime_id !== 'string') throw new UncertainPolicyJob();
+export function trainingReceipt(
+  value: unknown,
+  project: string,
+  originalBody: unknown,
+  methods: readonly string[] = ['lora', 'qlora', 'full'],
+): Job {
+  if (
+    !record(originalBody) ||
+    originalBody.operation !== 'policy.finetune' ||
+    typeof originalBody.runtime_id !== 'string'
+  )
+    throw new UncertainPolicyJob();
   const body = originalBody as PolicyRequest;
-  if (!record(value) || typeof value.id !== 'string' || !value.id || value.project_id !== project ||
-      value.kind !== 'policy.finetune' || typeof value.status !== 'string' || !['queued', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted'].includes(value.status) ||
-      !record(value.request) || ![value.created_at, value.updated_at].every(date => typeof date === 'string' && Number.isFinite(Date.parse(date)))) throw new UncertainPolicyJob();
+  if (
+    !record(value) ||
+    typeof value.id !== 'string' ||
+    !value.id ||
+    value.project_id !== project ||
+    value.kind !== 'policy.finetune' ||
+    typeof value.status !== 'string' ||
+    !['queued', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted'].includes(value.status) ||
+    !record(value.request) ||
+    ![value.created_at, value.updated_at].every((date) => typeof date === 'string' && Number.isFinite(Date.parse(date)))
+  )
+    throw new UncertainPolicyJob();
   const request = value.request;
-  if (typeof request.dataset_job_id !== 'string' || !request.dataset_job_id || typeof request.training_method !== 'string' ||
-      !methods.includes(request.training_method) || (request.training !== null && !record(request.training))) throw new UncertainPolicyJob();
+  if (
+    typeof request.dataset_job_id !== 'string' ||
+    !request.dataset_job_id ||
+    typeof request.training_method !== 'string' ||
+    !methods.includes(request.training_method) ||
+    (request.training !== null && !record(request.training))
+  )
+    throw new UncertainPolicyJob();
   for (const key of ['operation', 'runtime_id', 'artifact_id', 'resume_job_id', 'timeout_seconds'] as const) {
     if (!sameJson(request[key] ?? null, body[key] ?? null)) throw new UncertainPolicyJob();
   }
   // Resume restores checkpoint-owned dataset/method/recipe. A new run must
   // retain every submitted setting; only the catalog-owned subdirectory may resolve.
   if (!body.resume_job_id && !body.artifact_id) {
-    for (const key of ['dataset_job_ids', 'dataset_camera_mappings'] as const) if (!sameJson(request[key] ?? null, body[key] ?? null)) throw new UncertainPolicyJob();
-    if (request.dataset_job_id !== body.dataset_job_id || request.training_method !== body.training_method || !record(request.training) || !body.training) throw new UncertainPolicyJob();
+    for (const key of ['dataset_job_ids', 'dataset_camera_mappings'] as const)
+      if (!sameJson(request[key] ?? null, body[key] ?? null)) throw new UncertainPolicyJob();
+    if (
+      request.dataset_job_id !== body.dataset_job_id ||
+      request.training_method !== body.training_method ||
+      !record(request.training) ||
+      !body.training
+    )
+      throw new UncertainPolicyJob();
     for (const [key, expected] of Object.entries(body.training)) {
-      if (key !== 'checkpoint_subdirectory' && !sameJson(request.training[key], expected)) throw new UncertainPolicyJob();
+      if (key !== 'checkpoint_subdirectory' && !sameJson(request.training[key], expected))
+        throw new UncertainPolicyJob();
     }
   }
   return value as unknown as Job;

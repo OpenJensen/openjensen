@@ -39,30 +39,54 @@ export type Endpoint = { id: string; method: string; path: string; operation: Op
 export function parseDocument(value: unknown): OpenApiDocument {
   if (!value || typeof value !== 'object') throw new Error('The API returned an invalid OpenAPI document.');
   const doc = value as OpenApiDocument;
-  if (typeof doc.openapi !== 'string' || !doc.openapi.startsWith('3.') ||
-      !doc.info || typeof doc.info.title !== 'string' || typeof doc.info.version !== 'string' ||
-      !doc.paths || typeof doc.paths !== 'object' || Array.isArray(doc.paths)) {
+  if (
+    typeof doc.openapi !== 'string' ||
+    !doc.openapi.startsWith('3.') ||
+    !doc.info ||
+    typeof doc.info.title !== 'string' ||
+    typeof doc.info.version !== 'string' ||
+    !doc.paths ||
+    typeof doc.paths !== 'object' ||
+    Array.isArray(doc.paths)
+  ) {
     throw new Error('The API returned an invalid OpenAPI document.');
   }
   return doc;
 }
 
 export function endpointsFor(doc: OpenApiDocument): Endpoint[] {
-  return Object.entries(doc.paths).flatMap(([path, item]) => httpMethods.flatMap(method => {
-    const operation = item[method] as Operation | undefined;
-    if (!operation || typeof operation !== 'object') return [];
-    const parameters = new Map<string, Parameter>();
-    for (const parameter of [...(item.parameters ?? []), ...(operation.parameters ?? [])]) {
-      parameters.set(`${parameter.in}:${parameter.name}`, parameter);
-    }
-    return [{ id: `endpoint-${method}-${encodeURIComponent(path)}`, method: method.toUpperCase(), path, operation, parameters: [...parameters.values()] }];
-  }));
+  return Object.entries(doc.paths).flatMap(([path, item]) =>
+    httpMethods.flatMap((method) => {
+      const operation = item[method] as Operation | undefined;
+      if (!operation || typeof operation !== 'object') return [];
+      const parameters = new Map<string, Parameter>();
+      for (const parameter of [...(item.parameters ?? []), ...(operation.parameters ?? [])]) {
+        parameters.set(`${parameter.in}:${parameter.name}`, parameter);
+      }
+      return [
+        {
+          id: `endpoint-${method}-${encodeURIComponent(path)}`,
+          method: method.toUpperCase(),
+          path,
+          operation,
+          parameters: [...parameters.values()],
+        },
+      ];
+    }),
+  );
 }
 
 export function filterEndpoints(endpoints: Endpoint[], search: string, method: string): Endpoint[] {
   const terms = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  return endpoints.filter(endpoint => (method === 'ALL' || endpoint.method === method) &&
-    terms.every(term => `${endpoint.method} ${endpoint.path} ${endpoint.operation.summary ?? ''} ${endpoint.operation.description ?? ''} ${endpoint.operation.operationId ?? ''} ${endpoint.operation.tags?.join(' ') ?? ''}`.toLowerCase().includes(term)));
+  return endpoints.filter(
+    (endpoint) =>
+      (method === 'ALL' || endpoint.method === method) &&
+      terms.every((term) =>
+        `${endpoint.method} ${endpoint.path} ${endpoint.operation.summary ?? ''} ${endpoint.operation.description ?? ''} ${endpoint.operation.operationId ?? ''} ${endpoint.operation.tags?.join(' ') ?? ''}`
+          .toLowerCase()
+          .includes(term),
+      ),
+  );
 }
 
 export function referenceName(ref: string): string {
@@ -75,9 +99,9 @@ export function schemaType(schema: Schema): string {
   if (alternatives) return alternatives.map(schemaType).join(' | ');
   if (schema.allOf) return schema.allOf.map(schemaType).join(' & ');
   if (schema.const !== undefined) return JSON.stringify(schema.const);
-  if (schema.enum) return schema.enum.map(value => JSON.stringify(value)).join(' | ');
+  if (schema.enum) return schema.enum.map((value) => JSON.stringify(value)).join(' | ');
   if (schema.type === 'array') return `array<${schemaType(schema.items ?? {})}>`;
-  return Array.isArray(schema.type) ? schema.type.join(' | ') : schema.type ?? 'any';
+  return Array.isArray(schema.type) ? schema.type.join(' | ') : (schema.type ?? 'any');
 }
 
 export function shellQuote(value: string): string {
@@ -85,7 +109,9 @@ export function shellQuote(value: string): string {
 }
 
 export function curlExample(endpoint: Endpoint, origin: string): string {
-  const url = new URL(endpoint.path.replace(/^\/+/, ''), `${origin.replace(/\/+$/, '')}/`).href.replace(/%7B/gi, '{').replace(/%7D/gi, '}');
+  const url = new URL(endpoint.path.replace(/^\/+/, ''), `${origin.replace(/\/+$/, '')}/`).href
+    .replace(/%7B/gi, '{')
+    .replace(/%7D/gi, '}');
   const lines = [`curl --request ${endpoint.method} ${shellQuote(url)}`, `  --header 'Accept: application/json'`];
   // The reference never fabricates request bodies: payloads come from a local file
   // written against the schema shown alongside the example.

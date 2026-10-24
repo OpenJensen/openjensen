@@ -1,36 +1,48 @@
 import { expect, test } from '@playwright/test';
 import { getenv } from '../../apps/web/src/lib/environment';
 
-const origin = `http://127.0.0.1:${getenv('JENSEN_PREFIX_SMOKE_PORT',process.env,'18766')}`;
+const origin = `http://127.0.0.1:${getenv('JENSEN_PREFIX_SMOKE_PORT', process.env, '18766')}`;
 const prefix = (process.env.NEXT_PUBLIC_BASE_PATH ?? '/jensen').replace(/\/+$/, '');
 
 test('prefixed export loads bundles, library media, API and docs without escaping its mount', async ({ page }) => {
   const escaped: string[] = [];
   const failures: string[] = [];
-  page.on('request', request => {
+  page.on('request', (request) => {
     const url = new URL(request.url());
     if (url.origin === origin && !url.pathname.startsWith(`${prefix}/`)) escaped.push(url.pathname);
   });
-  page.on('response', response => {
-    if (response.url().startsWith(origin) && response.status() >= 400) failures.push(`${response.status()} ${response.url()}`);
+  page.on('response', (response) => {
+    if (response.url().startsWith(origin) && response.status() >= 400)
+      failures.push(`${response.status()} ${response.url()}`);
   });
-  const project = await (await page.request.post(`${origin}${prefix}/api/v1/projects`, {data:{name:'Prefix import check'}})).json();
-  await page.addInitScript(id=>localStorage.setItem('firebird.project',id),project.id);
+  const project = await (
+    await page.request.post(`${origin}${prefix}/api/v1/projects`, { data: { name: 'Prefix import check' } })
+  ).json();
+  await page.addInitScript((id) => localStorage.setItem('firebird.project', id), project.id);
   await page.goto(`${prefix}/`);
   await expect(page).toHaveURL(new RegExp(`${prefix}/dashboard/$`));
-  await expect(page.getByRole('link', { name: 'Open Jensen workspace home' })).toHaveAttribute('href', `${prefix}/dashboard/`);
+  await expect(page.getByRole('link', { name: 'Open Jensen workspace home' })).toHaveAttribute(
+    'href',
+    `${prefix}/dashboard/`,
+  );
   await expect(page.getByRole('link', { name: 'Fine-tune', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Dataset', exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`${prefix}/datasets/$`));
-  expect((await page.request.post(`${origin}${prefix}/api/v1/projects/${project.id}/datasets/example`)).status()).toBe(202);
-  await page.getByRole('button', {name:'Open dataset Robot labeling playground',exact:true}).click();
-  const poster = page.getByRole('region',{name:'Dataset labeling'}).getByRole('img');
+  expect((await page.request.post(`${origin}${prefix}/api/v1/projects/${project.id}/datasets/example`)).status()).toBe(
+    202,
+  );
+  await page.getByRole('button', { name: 'Open dataset Robot labeling playground', exact: true }).click();
+  const poster = page.getByRole('region', { name: 'Dataset labeling' }).getByRole('img');
   await expect(poster).toBeVisible();
-  await expect(poster).toHaveAttribute('src',new RegExp(`^${prefix}/api/v1/datasets/`));
-  await expect.poll(()=>poster.evaluate(node=>(node as HTMLImageElement).complete&&(node as HTMLImageElement).naturalWidth>0)).toBe(true);
-  const download=page.getByRole('link',{name:'Export dataset'});
-  await expect(download).toHaveAttribute('href',new RegExp(`^${prefix}/api/v1/datasets/`));
-  expect((await page.request.get(origin+(await download.getAttribute('href')))).status()).toBe(200);
+  await expect(poster).toHaveAttribute('src', new RegExp(`^${prefix}/api/v1/datasets/`));
+  await expect
+    .poll(() =>
+      poster.evaluate((node) => (node as HTMLImageElement).complete && (node as HTMLImageElement).naturalWidth > 0),
+    )
+    .toBe(true);
+  const download = page.getByRole('link', { name: 'Export dataset' });
+  await expect(download).toHaveAttribute('href', new RegExp(`^${prefix}/api/v1/datasets/`));
+  expect((await page.request.get(origin + (await download.getAttribute('href')))).status()).toBe(200);
   await expect.poll(() => page.locator('.connection-notice').count()).toBe(0);
   await page.getByRole('link', { name: 'Cloud runs', exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`${prefix}/cloud-runs/$`));
@@ -39,13 +51,17 @@ test('prefixed export loads bundles, library media, API and docs without escapin
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Cloud runs', exact: true, level: 1 })).toBeVisible();
   await page.getByRole('link', { name: 'Dataset', exact: true }).click();
-  const teachingState = page.waitForResponse(response => new URL(response.url()).pathname === `${prefix}/api/v1/teaching/state`);
+  const teachingState = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === `${prefix}/api/v1/teaching/state`,
+  );
   await page.getByRole('link', { name: 'Teaching', exact: true }).click();
   expect((await teachingState).status()).toBe(200);
   await expect(page.getByRole('heading', { name: 'Teaching', exact: true, level: 1 })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start recording', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Connect voice', exact: true })).toBeDisabled();
-  const decisionState = page.waitForResponse(response => new URL(response.url()).pathname === `${prefix}/api/v1/decision/status`);
+  const decisionState = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === `${prefix}/api/v1/decision/status`,
+  );
   await page.getByRole('link', { name: 'Decision lab', exact: true }).click();
   expect((await decisionState).status()).toBe(200);
   await expect(page.getByRole('region', { name: 'Decision advisory', exact: true })).toBeVisible();
@@ -60,7 +76,10 @@ test('prefixed export loads bundles, library media, API and docs without escapin
   await expect(page).toHaveURL(new RegExp(`${prefix}/docs/$`));
   await expect(page.getByRole('heading', { name: 'API reference', exact: true })).toBeVisible();
   await expect(page.getByText(origin + prefix + '/api/v1', { exact: true })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'OpenAPI JSON', exact: true })).toHaveAttribute('href', `${prefix}/openapi.json`);
+  await expect(page.getByRole('link', { name: 'OpenAPI JSON', exact: true })).toHaveAttribute(
+    'href',
+    `${prefix}/openapi.json`,
+  );
   await expect(page.locator('.reference-endpoint')).not.toHaveCount(0);
   await page.locator('.reference-endpoint > summary').first().click();
   await expect(page.locator('.reference-example .reference-code').first()).toContainText(`${origin}${prefix}/`);

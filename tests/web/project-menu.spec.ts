@@ -2,21 +2,25 @@ import { expect, test, type Page } from '@playwright/test';
 import { openCreateProject, selectProject } from './project-controls';
 
 async function fixture(page: Page, empty = false) {
-  const projects = empty ? [] : [
-    { id: 'alpha', name: 'Robotics examples', created_at: '2026-10-06T00:00:00Z' },
-    { id: 'beta', name: 'PushT benchmark', created_at: '2026-10-06T00:00:00Z' },
-    { id: 'gamma', name: 'Psi-Zero validation', created_at: '2026-10-06T00:00:00Z' },
-  ];
+  const projects = empty
+    ? []
+    : [
+        { id: 'alpha', name: 'Robotics examples', created_at: '2026-10-06T00:00:00Z' },
+        { id: 'beta', name: 'PushT benchmark', created_at: '2026-10-06T00:00:00Z' },
+        { id: 'gamma', name: 'Psi-Zero validation', created_at: '2026-10-06T00:00:00Z' },
+      ];
   const writes: unknown[] = [];
   const control = { fail: false, held: null as Promise<void> | null };
-  await page.route('**/api/v1/**', async route => {
+  await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (request.method() === 'POST') {
       writes.push({ path, body: request.postDataJSON() });
-      if (path !== '/api/v1/projects') return route.fulfill({ status: 405, json: { detail: 'No jobs permitted in project fixture.' } });
+      if (path !== '/api/v1/projects')
+        return route.fulfill({ status: 405, json: { detail: 'No jobs permitted in project fixture.' } });
       if (control.held) await control.held;
-      if (control.fail) return route.fulfill({ status: 503, json: { detail: 'Project service is temporarily unavailable.' } });
+      if (control.fail)
+        return route.fulfill({ status: 503, json: { detail: 'Project service is temporarily unavailable.' } });
       const created = { id: 'created-project', name: request.postDataJSON().name, created_at: '2026-10-06T00:00:00Z' };
       projects.push(created);
       return route.fulfill({ status: 201, json: created });
@@ -39,7 +43,10 @@ test('project switching and keyboard navigation preserve scope without creating 
   await expect(current(page)).toContainText('Robotics examples');
   await expect(page.getByRole('textbox', { name: 'Project name', exact: true })).toHaveCount(0);
   await current(page).click();
-  await expect(menu(page).getByRole('menuitemradio', { name: 'Robotics examples', exact: true })).toHaveAttribute('aria-checked', 'true');
+  await expect(menu(page).getByRole('menuitemradio', { name: 'Robotics examples', exact: true })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
   await expect(menu(page).getByRole('menuitem', { name: 'Create project…', exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('project-menu.png') });
   await page.keyboard.press('Escape');
@@ -66,7 +73,9 @@ test('project switching and keyboard navigation preserve scope without creating 
   expect(writes).toEqual([]);
 });
 
-test('creating from an empty menu focuses the name field and restores the new project after reload', async ({ page }) => {
+test('creating from an empty menu focuses the name field and restores the new project after reload', async ({
+  page,
+}) => {
   const { writes } = await fixture(page, true);
   await expect(current(page)).toContainText('Select or create a project');
   await openCreateProject(page);
@@ -97,7 +106,9 @@ test('a failed creation retains the draft and pending retries block duplicate su
   await expect(current(page)).toHaveAttribute('data-project-id', 'alpha');
   control.fail = false;
   let release!: () => void;
-  control.held = new Promise<void>(resolve => { release = resolve; });
+  control.held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   try {
     await dialog(page).getByRole('button', { name: 'Create project', exact: true }).click();
     await expect(dialog(page).getByRole('status')).toHaveText('Creating project…');
@@ -107,7 +118,8 @@ test('a failed creation retains the draft and pending retries block duplicate su
     await expect(dialog(page).getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled();
     expect(writes).toHaveLength(2);
   } finally {
-    release(); control.held = null;
+    release();
+    control.held = null;
   }
   await expect(dialog(page)).toHaveCount(0);
   await expect(current(page)).toHaveAttribute('data-project-id', 'created-project');
@@ -129,7 +141,9 @@ test('long names and creation fit a narrow dark screen without clipping the menu
   await page.screenshot({ path: testInfo.outputPath('project-menu-dark-mobile.png') });
   await menu(page).getByRole('menuitem', { name: 'Create project…', exact: true }).click();
   await expect(dialog(page).getByLabel('Project name', { exact: true })).toBeFocused();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),
+  ).toBe(true);
   await page.keyboard.press('Escape');
   await expect(current(page)).toBeFocused();
   expect(writes).toEqual([]);

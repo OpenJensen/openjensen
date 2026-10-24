@@ -1,6 +1,12 @@
 import { expect, test } from '@playwright/test';
 import {
-  curlExample, endpointsFor, filterEndpoints, parseDocument, referenceName, schemaType, shellQuote,
+  curlExample,
+  endpointsFor,
+  filterEndpoints,
+  parseDocument,
+  referenceName,
+  schemaType,
+  shellQuote,
   type OpenApiDocument,
 } from '../../apps/web/src/lib/openapi';
 
@@ -11,20 +17,33 @@ const document: OpenApiDocument = {
     '/api/v1/widgets/{id}': {
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
       get: {
-        summary: 'Read a widget', operationId: 'read_widget', tags: ['Inventory'],
+        summary: 'Read a widget',
+        operationId: 'read_widget',
+        tags: ['Inventory'],
         description: 'Includes metadata and ownership.',
         responses: { '200': { description: 'Found' } },
       },
-      post: { summary: 'Update widget', requestBody: { content: { 'application/json': { schema: { type: 'object' } } } } },
+      post: {
+        summary: 'Update widget',
+        requestBody: { content: { 'application/json': { schema: { type: 'object' } } } },
+      },
     },
   },
 };
 
 test('accepts OpenAPI 3 documents and rejects unusable schema envelopes', () => {
   expect(parseDocument(document)).toEqual(document);
-  for (const invalid of [null, [], 'schema', {}, { ...document, openapi: '2.0' },
-    { ...document, info: null }, { ...document, info: { title: 'Missing version' } },
-    { ...document, paths: [] }, { ...document, paths: null }]) {
+  for (const invalid of [
+    null,
+    [],
+    'schema',
+    {},
+    { ...document, openapi: '2.0' },
+    { ...document, info: null },
+    { ...document, info: { title: 'Missing version' } },
+    { ...document, paths: [] },
+    { ...document, paths: null },
+  ]) {
     expect(() => parseDocument(invalid)).toThrow(/invalid OpenAPI document/);
   }
 });
@@ -32,10 +51,14 @@ test('accepts OpenAPI 3 documents and rejects unusable schema envelopes', () => 
 test('discovers all HTTP methods while ignoring path-level metadata', () => {
   const methods = ['get', 'post', 'put', 'patch', 'delete', 'options', 'head', 'trace'];
   const schema = structuredClone(document);
-  schema.paths['/new'] = { summary: 'Metadata', servers: [], ...Object.fromEntries(methods.map(method => [method, {}])) };
-  const endpoints = endpointsFor(schema).filter(endpoint => endpoint.path === '/new');
-  expect(endpoints.map(endpoint => endpoint.method)).toEqual(methods.map(method => method.toUpperCase()));
-  expect(new Set(endpoints.map(endpoint => endpoint.id)).size).toBe(methods.length);
+  schema.paths['/new'] = {
+    summary: 'Metadata',
+    servers: [],
+    ...Object.fromEntries(methods.map((method) => [method, {}])),
+  };
+  const endpoints = endpointsFor(schema).filter((endpoint) => endpoint.path === '/new');
+  expect(endpoints.map((endpoint) => endpoint.method)).toEqual(methods.map((method) => method.toUpperCase()));
+  expect(new Set(endpoints.map((endpoint) => endpoint.id)).size).toBe(methods.length);
 });
 
 test('inherits path parameters and overrides them by both location and name', () => {
@@ -97,7 +120,6 @@ test('shell quoting preserves apostrophes and blocks command substitution', () =
   expect(shellQuote("a'b")).toBe("'a'\"'\"'b'");
   expect(shellQuote('$(touch sentinel); `id`')).toBe("'$(touch sentinel); `id`'");
 });
-
 
 test('cURL examples preserve a deployed API prefix', () => {
   const command = curlExample(endpointsFor(document)[0], 'https://example.test/firebird');

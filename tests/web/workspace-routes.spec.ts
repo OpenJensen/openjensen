@@ -2,28 +2,40 @@ import { expect, test, type Page } from '@playwright/test';
 import { selectProject } from './project-controls';
 
 const destinations = [
-  ['dashboard', 'Dashboard'], ['datasets', 'Dataset'], ['training', 'Fine-tune'],
-  ['distillation', 'Distill'], ['quantization', 'Quantize'], ['evaluation', 'Evaluate'],
-  ['simulation', 'Run'], ['settings', 'Settings & diagnostics'], ['cloud-runs', 'Cloud runs'],
-  ['augmentation', 'Augmentation'], ['teaching', 'Teaching'], ['decision-lab', 'Decision lab'],
-  ['models', 'My models'], ['robot-lab', 'Robot Lab'],
+  ['dashboard', 'Dashboard'],
+  ['datasets', 'Dataset'],
+  ['training', 'Fine-tune'],
+  ['distillation', 'Distill'],
+  ['quantization', 'Quantize'],
+  ['evaluation', 'Evaluate'],
+  ['simulation', 'Run'],
+  ['settings', 'Settings & diagnostics'],
+  ['cloud-runs', 'Cloud runs'],
+  ['augmentation', 'Augmentation'],
+  ['teaching', 'Teaching'],
+  ['decision-lab', 'Decision lab'],
+  ['models', 'My models'],
+  ['robot-lab', 'Robot Lab'],
 ] as const;
 
 async function fixture(page: Page) {
   const writes: string[] = [];
   const errors: string[] = [];
-  page.on('pageerror', error => errors.push(error.message));
-  await page.route('**/api/v1/**', route => {
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.route('**/api/v1/**', (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (request.method() !== 'GET') {
       writes.push(path);
       return route.fulfill({ status: 405, json: { detail: 'Navigation must not submit work' } });
     }
-    if (path === '/api/v1/projects') return route.fulfill({ json: [
-      { id: 'routes-a', name: 'Route project A', created_at: '2026-10-07T08:00:00Z' },
-      { id: 'routes-b', name: 'Route project B', created_at: '2026-10-07T08:00:00Z' },
-    ] });
+    if (path === '/api/v1/projects')
+      return route.fulfill({
+        json: [
+          { id: 'routes-a', name: 'Route project A', created_at: '2026-10-07T08:00:00Z' },
+          { id: 'routes-b', name: 'Route project B', created_at: '2026-10-07T08:00:00Z' },
+        ],
+      });
     if (path.endsWith('/jobs') || path.endsWith('/artifacts') || path === '/api/v1/datasets') {
       return route.fulfill({ json: [] });
     }
@@ -47,7 +59,9 @@ test('home opens the dashboard and every section supports a direct visit and ref
     const response = await page.goto(`/${path}/`);
     expect(response?.status()).toBe(200);
     await expect(page.getByRole('heading', { name: title, level: 1, exact: true })).toBeVisible();
-    const link = page.getByRole('navigation', { name: 'Policy lifecycle' }).getByRole('link', { name: title, exact: true });
+    const link = page
+      .getByRole('navigation', { name: 'Policy lifecycle' })
+      .getByRole('link', { name: title, exact: true });
     await expect(link).toHaveAttribute('href', `/${path}/`);
     await expect(link).toHaveAttribute('aria-current', 'page');
     await expect(page).toHaveTitle(`Open Jensen · ${title}`);
@@ -61,13 +75,17 @@ test('home opens the dashboard and every section supports a direct visit and ref
 
 test('the sidebar lists installed modules and Settings shows how to add the rest', async ({ page }) => {
   const { writes, errors } = await fixture(page);
-  await page.route('**/api/v1/modules', route => route.fulfill({ json: [
-    { id: 'robot-lab', name: 'Robot Lab', installed: true, setup: 'Install the robot profile.' },
-    { id: 'teaching', name: 'Teaching', installed: false, setup: 'Set JENSEN_TEACHING_URL.' },
-    { id: 'augmentation', name: 'Augmentation', installed: false, setup: 'Connect Google Cloud.' },
-    { id: 'decision-lab', name: 'Decision lab', installed: false, setup: 'Configure the scorer.' },
-    { id: 'cloud-runs', name: 'Cloud runs', installed: false, setup: 'Set JENSEN_CLOUD_RUNS_DIR.' },
-  ] }));
+  await page.route('**/api/v1/modules', (route) =>
+    route.fulfill({
+      json: [
+        { id: 'robot-lab', name: 'Robot Lab', installed: true, setup: 'Install the robot profile.' },
+        { id: 'teaching', name: 'Teaching', installed: false, setup: 'Set JENSEN_TEACHING_URL.' },
+        { id: 'augmentation', name: 'Augmentation', installed: false, setup: 'Connect Google Cloud.' },
+        { id: 'decision-lab', name: 'Decision lab', installed: false, setup: 'Configure the scorer.' },
+        { id: 'cloud-runs', name: 'Cloud runs', installed: false, setup: 'Set JENSEN_CLOUD_RUNS_DIR.' },
+      ],
+    }),
+  );
   await page.goto('/dashboard/');
   const nav = page.getByRole('navigation', { name: 'Policy lifecycle' });
   await expect(nav.getByRole('group', { name: 'Robot' }).getByRole('link')).toHaveText(['Robot Lab']);
@@ -95,7 +113,9 @@ test('sidebar links, Back and Forward preserve project, theme and unfinished dat
   await page.getByRole('button', { name: 'Dark', exact: true }).click();
   const repository = page.getByRole('textbox', { name: 'Dataset repository', exact: true });
   await repository.fill('our/unfinished-dataset');
-  await page.evaluate(() => { (window as any).__routeDocument = 'same document'; });
+  await page.evaluate(() => {
+    (window as any).__routeDocument = 'same document';
+  });
   const nav = page.getByRole('navigation', { name: 'Policy lifecycle' });
   await nav.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   await expect(page).toHaveURL(/\/training\/$/);
@@ -127,10 +147,7 @@ test('section links can open in a new tab and unknown pages remain 404s', async 
   // Installed modules join the sidebar once listed; click after it settles.
   await expect(nav).toHaveAttribute('aria-busy', 'false');
   const link = nav.getByRole('link', { name: 'Fine-tune', exact: true });
-  const [other] = await Promise.all([
-    context.waitForEvent('page'),
-    link.click({ modifiers: ['ControlOrMeta'] }),
-  ]);
+  const [other] = await Promise.all([context.waitForEvent('page'), link.click({ modifiers: ['ControlOrMeta'] })]);
   await expect(other).toHaveURL(/\/training\/$/);
   await expect(other.getByRole('heading', { name: 'Fine-tune', level: 1, exact: true })).toBeVisible();
   await expect(page).toHaveURL(/\/datasets\/$/);

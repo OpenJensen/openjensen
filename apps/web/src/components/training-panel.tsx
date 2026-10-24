@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import { useEffect, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   api,
   isActive,
@@ -10,37 +10,66 @@ import {
   type DatasetProfile,
   type Job,
   type PolicyRequest,
-} from "@/lib/api";
-import { datasetLibrary, isProjectDataset } from "@/lib/dataset-library";
-import { TrainingDatasetPicker } from "./training-dataset-picker";
-import { readPublicPreference, writePublicPreference } from "@/lib/public-preferences";
-import { gradientAccumulationAvailable, groupedTrainingModels, trainingModels, type TrainingModel } from "@/lib/training-models";
-import { checkpointStep, trainingRunModelLabel } from "@/lib/checkpoints";
-import { CameraPlayer } from "@/components/dataset-explorer";
-import { Icon } from "@/components/icon";
-import { WorkflowChoiceGrid } from "@/components/workflow-choice-grid";
-import { GpuPicker } from "@/components/gpu-picker";
-import { TrainingMonitor } from "@/components/training-monitor";
-import { JobHistory, type JobHistoryEntry } from "@/components/job-history";
-import { trainingReceipt } from "@/lib/training-submission";
-import { submissionOf, useDurableSubmission } from "@/lib/durable-submission";
-import { type PolicyJobAttempt } from "@/lib/policy-job-attempt";
-import { checkpointTiming, defaultTemporal, restoreTemporal, temporalFamily, temporalIssue, temporalRecipe, type TemporalDrafts } from "@/lib/training-temporal";
-import { useTrainingBatch } from "@/lib/training-batch";
-import { combinationCameraMapping, datasetCombinationIssue } from "@/lib/dataset-combination";
-import { trainingMemory } from "@/lib/training-memory";
-import { TrainingHelp } from "./training-help";
-import "./training-panel.css";
+} from '@/lib/api';
+import { datasetLibrary, isProjectDataset } from '@/lib/dataset-library';
+import { TrainingDatasetPicker } from './training-dataset-picker';
+import { readPublicPreference, writePublicPreference } from '@/lib/public-preferences';
+import {
+  gradientAccumulationAvailable,
+  groupedTrainingModels,
+  trainingModels,
+  type TrainingModel,
+} from '@/lib/training-models';
+import { checkpointStep, trainingRunModelLabel } from '@/lib/checkpoints';
+import { CameraPlayer } from '@/components/dataset-explorer';
+import { Icon } from '@/components/icon';
+import { WorkflowChoiceGrid } from '@/components/workflow-choice-grid';
+import { GpuPicker } from '@/components/gpu-picker';
+import { TrainingMonitor } from '@/components/training-monitor';
+import { JobHistory, type JobHistoryEntry } from '@/components/job-history';
+import { trainingReceipt } from '@/lib/training-submission';
+import { submissionOf, useDurableSubmission } from '@/lib/durable-submission';
+import { type PolicyJobAttempt } from '@/lib/policy-job-attempt';
+import {
+  checkpointTiming,
+  defaultTemporal,
+  restoreTemporal,
+  temporalFamily,
+  temporalIssue,
+  temporalRecipe,
+  type TemporalDrafts,
+} from '@/lib/training-temporal';
+import { useTrainingBatch } from '@/lib/training-batch';
+import { combinationCameraMapping, datasetCombinationIssue } from '@/lib/dataset-combination';
+import { trainingMemory } from '@/lib/training-memory';
+import { TrainingHelp } from './training-help';
+import './training-panel.css';
 
-const steps = ["Dataset", "Model", "Compute"];
+const steps = ['Dataset', 'Model', 'Compute'];
 function validTrainingHistory(value: unknown, project: string): value is Job[] {
-  return Array.isArray(value) && value.every(item => item && typeof item === 'object' && !Array.isArray(item)
-    && typeof item.id === 'string' && item.id.length > 0 && item.project_id === project
-    && typeof item.kind === 'string' && item.kind.length > 0
-    && typeof item.status === 'string' && ['queued', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted'].includes(item.status)
-    && typeof item.created_at === 'string' && Number.isFinite(Date.parse(item.created_at))
-    && typeof item.updated_at === 'string' && Number.isFinite(Date.parse(item.updated_at))
-    && item.request && typeof item.request === 'object' && !Array.isArray(item.request));
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item) =>
+        item &&
+        typeof item === 'object' &&
+        !Array.isArray(item) &&
+        typeof item.id === 'string' &&
+        item.id.length > 0 &&
+        item.project_id === project &&
+        typeof item.kind === 'string' &&
+        item.kind.length > 0 &&
+        typeof item.status === 'string' &&
+        ['queued', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted'].includes(item.status) &&
+        typeof item.created_at === 'string' &&
+        Number.isFinite(Date.parse(item.created_at)) &&
+        typeof item.updated_at === 'string' &&
+        Number.isFinite(Date.parse(item.updated_at)) &&
+        item.request &&
+        typeof item.request === 'object' &&
+        !Array.isArray(item.request),
+    )
+  );
 }
 type Recipe = {
   trainingSteps: number;
@@ -69,28 +98,50 @@ const defaults: Recipe = {
 type InspectedDataset = DatasetJob & { result: DatasetProfile };
 
 function positiveInteger(value: unknown): value is number {
-  return typeof value === "number" && Number.isInteger(value) && value > 0;
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
 }
 
 function savedRecipe(saved: Record<string, unknown>): Recipe {
-  const version = typeof saved.trainingDefaultsVersion === "number" ? saved.trainingDefaultsVersion : 0;
-  const trainingSteps = positiveInteger(saved.trainingSteps) && !(version < 2 && saved.trainingSteps === 1000)
-    ? saved.trainingSteps : defaults.trainingSteps;
-  const batchSize = positiveInteger(saved.batchSize) && !(version < 2 && saved.batchSize === 1)
-    ? saved.batchSize : defaults.batchSize;
+  const version = typeof saved.trainingDefaultsVersion === 'number' ? saved.trainingDefaultsVersion : 0;
+  const trainingSteps =
+    positiveInteger(saved.trainingSteps) && !(version < 2 && saved.trainingSteps === 1000)
+      ? saved.trainingSteps
+      : defaults.trainingSteps;
+  const batchSize =
+    positiveInteger(saved.batchSize) && !(version < 2 && saved.batchSize === 1) ? saved.batchSize : defaults.batchSize;
   // The old five-step value shipped as a default. Other interval choices remain
   // exact until the user edits the new checkpoint-count control.
-  const interval = version < 3
-    ? positiveInteger(saved.checkpointEvery) && saved.checkpointEvery !== 5 ? saved.checkpointEvery : null
-    : positiveInteger(saved.checkpointIntervalOverride) ? saved.checkpointIntervalOverride : null;
-  const checkpointCount = interval ? Math.ceil(trainingSteps / interval)
-    : version >= 3 && positiveInteger(saved.checkpointCount) ? saved.checkpointCount : defaults.checkpointCount;
+  const interval =
+    version < 3
+      ? positiveInteger(saved.checkpointEvery) && saved.checkpointEvery !== 5
+        ? saved.checkpointEvery
+        : null
+      : positiveInteger(saved.checkpointIntervalOverride)
+        ? saved.checkpointIntervalOverride
+        : null;
+  const checkpointCount = interval
+    ? Math.ceil(trainingSteps / interval)
+    : version >= 3 && positiveInteger(saved.checkpointCount)
+      ? saved.checkpointCount
+      : defaults.checkpointCount;
   return {
-    trainingSteps, batchSize, checkpointCount, checkpointIntervalOverride: interval,
-    seed: typeof saved.seed === "number" && Number.isInteger(saved.seed) && saved.seed >= 0 ? saved.seed : defaults.seed,
-    learningRate: typeof saved.learningRate === "number" && Number.isFinite(saved.learningRate) && saved.learningRate > 0 ? saved.learningRate : defaults.learningRate,
-    gradientAccumulation: positiveInteger(saved.gradientAccumulation) ? saved.gradientAccumulation : defaults.gradientAccumulation,
-    validationFraction: typeof saved.validationFraction === "number" && saved.validationFraction > 0 && saved.validationFraction < 1 ? saved.validationFraction : defaults.validationFraction,
+    trainingSteps,
+    batchSize,
+    checkpointCount,
+    checkpointIntervalOverride: interval,
+    seed:
+      typeof saved.seed === 'number' && Number.isInteger(saved.seed) && saved.seed >= 0 ? saved.seed : defaults.seed,
+    learningRate:
+      typeof saved.learningRate === 'number' && Number.isFinite(saved.learningRate) && saved.learningRate > 0
+        ? saved.learningRate
+        : defaults.learningRate,
+    gradientAccumulation: positiveInteger(saved.gradientAccumulation)
+      ? saved.gradientAccumulation
+      : defaults.gradientAccumulation,
+    validationFraction:
+      typeof saved.validationFraction === 'number' && saved.validationFraction > 0 && saved.validationFraction < 1
+        ? saved.validationFraction
+        : defaults.validationFraction,
     evalEvery: positiveInteger(saved.evalEvery) ? saved.evalEvery : defaults.evalEvery,
   };
 }
@@ -100,30 +151,26 @@ function cameras(profile?: DatasetProfile) {
     .filter(
       ([, feature]) =>
         feature &&
-        typeof feature === "object" &&
-        "dtype" in feature &&
-        ["image", "video"].includes(String(feature.dtype)),
+        typeof feature === 'object' &&
+        'dtype' in feature &&
+        ['image', 'video'].includes(String(feature.dtype)),
     )
     .map(([key]) => key);
 }
 function datasetIssue(profile: DatasetProfile) {
-  if (profile.source === "local" && !profile.snapshot)
-    return "Prepare an immutable training copy when importing this local dataset.";
-  if (profile.source === "huggingface" && !/^[0-9a-f]{40}$/i.test(profile.revision))
-    return "Inspect an immutable dataset revision before training.";
-  if (profile.total_episodes < 2)
-    return "At least two episodes are needed for training and validation.";
-  if (!cameras(profile).length) return "No image or video camera was found.";
-  for (const key of ["observation.state" in profile.features ? "observation.state" : "states", "action"]) {
+  if (profile.source === 'local' && !profile.snapshot)
+    return 'Prepare an immutable training copy when importing this local dataset.';
+  if (profile.source === 'huggingface' && !/^[0-9a-f]{40}$/i.test(profile.revision))
+    return 'Inspect an immutable dataset revision before training.';
+  if (profile.total_episodes < 2) return 'At least two episodes are needed for training and validation.';
+  if (!cameras(profile).length) return 'No image or video camera was found.';
+  for (const key of ['observation.state' in profile.features ? 'observation.state' : 'states', 'action']) {
     const feature = profile.features[key];
-    const shape =
-      feature && typeof feature === "object" && "shape" in feature
-        ? feature.shape
-        : undefined;
+    const shape = feature && typeof feature === 'object' && 'shape' in feature ? feature.shape : undefined;
     if (
       !Array.isArray(shape) ||
       shape.length !== 1 ||
-      typeof shape[0] !== "number" ||
+      typeof shape[0] !== 'number' ||
       !Number.isInteger(shape[0]) ||
       shape[0] < 1
     )
@@ -137,40 +184,55 @@ function number(value: number) {
 // Mirrors the reviewed adapters in native_profiles.py and psi_profile.py. The
 // server remains authoritative; camera/dimension limits are model-specific.
 const dimensionLimits: Record<string, number> = {
-  smolvla: 32, psi0: 36, eo1: 32, evo1: 24, gr00t_n17: 132,
-  pi0: 32, pi05: 32, pi0_fast: 32, wall_x: 20, xvla: 20,
+  smolvla: 32,
+  psi0: 36,
+  eo1: 32,
+  evo1: 24,
+  gr00t_n17: 132,
+  pi0: 32,
+  pi05: 32,
+  pi0_fast: 32,
+  wall_x: 20,
+  xvla: 20,
 };
-function modelDatasetIssue(model: TrainingModel | undefined, profile: DatasetProfile | undefined, cameraKeys: string[]) {
+function modelDatasetIssue(
+  model: TrainingModel | undefined,
+  profile: DatasetProfile | undefined,
+  cameraKeys: string[],
+) {
   if (!model || !profile) return null;
-  if (profile.source === "local" && model.backend !== "lerobot")
-    return "Local snapshots currently support native LeRobot models, including ACT.";
-  if (model.id === "psi0" && profile.format !== "lerobot_v2")
-    return "Psi-Zero currently needs a LeRobot v2 dataset. Choose a v2 inspection or another model.";
-  if (model.backend === "lerobot" && profile.format !== "lerobot_v3")
+  if (profile.source === 'local' && model.backend !== 'lerobot')
+    return 'Local snapshots currently support native LeRobot models, including ACT.';
+  if (model.id === 'psi0' && profile.format !== 'lerobot_v2')
+    return 'Psi-Zero currently needs a LeRobot v2 dataset. Choose a v2 inspection or another model.';
+  if (model.backend === 'lerobot' && profile.format !== 'lerobot_v3')
     return `${model.label} currently needs a LeRobot v3 dataset. Choose a v3 inspection or another model.`;
   if (model.required_cameras && cameraKeys.length !== model.required_cameras)
-    return `${model.label} requires ${model.required_cameras} selected camera${model.required_cameras === 1 ? "" : "s"}. Change the camera selection in Dataset.`;
-  if (model.id === "evo1" && cameraKeys.length > 3)
-    return "EVO-1 supports at most three selected cameras. Change the camera selection in Dataset.";
-  if (model.id !== "psi0" && !("observation.state" in profile.features))
+    return `${model.label} requires ${model.required_cameras} selected camera${model.required_cameras === 1 ? '' : 's'}. Change the camera selection in Dataset.`;
+  if (model.id === 'evo1' && cameraKeys.length > 3)
+    return 'EVO-1 supports at most three selected cameras. Change the camera selection in Dataset.';
+  if (model.id !== 'psi0' && !('observation.state' in profile.features))
     return `${model.label} requires an observation.state feature.`;
   const maximum = dimensionLimits[model.id];
   if (maximum) {
-    const state = "observation.state" in profile.features ? "observation.state" : "states";
-    for (const key of [state, "action"]) {
+    const state = 'observation.state' in profile.features ? 'observation.state' : 'states';
+    for (const key of [state, 'action']) {
       const feature = profile.features[key] as { shape?: number[] } | undefined;
-      if ((feature?.shape?.[0] ?? 0) > maximum)
-        return `${model.label} supports at most ${maximum} ${key} dimensions.`;
+      if ((feature?.shape?.[0] ?? 0) > maximum) return `${model.label} supports at most ${maximum} ${key} dimensions.`;
     }
   }
   return null;
 }
 function modelStatusLabel(model: TrainingModel, supported: boolean): string | null {
   switch (model.status) {
-    case "connect_account": return "Connect Google Cloud";
-    case "setup_required": return "Setup required";
-    case "coming_soon": return "Coming soon";
-    default: return supported ? null : "Compute unavailable";
+    case 'connect_account':
+      return 'Connect Google Cloud';
+    case 'setup_required':
+      return 'Setup required';
+    case 'coming_soon':
+      return 'Coming soon';
+    default:
+      return supported ? null : 'Compute unavailable';
   }
 }
 
@@ -204,44 +266,55 @@ export function TrainingPanel({
   active?: boolean;
 }) {
   const client = useQueryClient();
-  const [view, setView] = useState<"jobs" | "new" | "run">(startNew ? "new" : "jobs");
+  const [view, setView] = useState<'jobs' | 'new' | 'run'>(startNew ? 'new' : 'jobs');
   const [step, setStep] = useState(0);
-  const [datasetId, setDatasetId] = useState(startNew?.datasetId ?? preferredDatasetId ?? "");
+  const [datasetId, setDatasetId] = useState(startNew?.datasetId ?? preferredDatasetId ?? '');
   const [extraDatasetIds, setExtraDatasetIds] = useState<string[]>([]);
   const [cameraMappings, setCameraMappings] = useState<Record<string, Record<string, string>>>({});
   const [modelIds, setModelIds] = useState<string[]>([]);
   const batch = useTrainingBatch(projectId);
-  const [cameraSelections, setCameraSelections] = useState<
-    Record<string, string[]>
-  >({});
+  const [cameraSelections, setCameraSelections] = useState<Record<string, string[]>>({});
   const [previewEpisode, setPreviewEpisode] = useState<{
     datasetId: string;
     index: number;
   } | null>(null);
-  const [modelId, setModelId] = useState("");
+  const [modelId, setModelId] = useState('');
   const [modelBatchSizes, setModelBatchSizes] = useState<Record<string, number>>({});
-  const [runtimeId, setRuntimeId] = useState("");
-  const [method, setMethod] = useState("");
-  const [resumeId, setResumeId] = useState("");
+  const [runtimeId, setRuntimeId] = useState('');
+  const [method, setMethod] = useState('');
+  const [resumeId, setResumeId] = useState('');
   const [recipe, setRecipe] = useState(defaults);
   const [temporalDrafts, setTemporalDrafts] = useState<TemporalDrafts>({});
   const [loaded, setLoaded] = useState(false);
-  const [selectedRunId, setSelectedRunId] = useState("");
+  const [selectedRunId, setSelectedRunId] = useState('');
   const submission = useDurableSubmission({ project: projectId, operation: 'policy.finetune' });
   const attempt = submission.attempt;
   const keyedAttempt = submissionOf(attempt);
   const [historyReviewed, setHistoryReviewed] = useState<PolicyJobAttempt>(null);
-  const mounted = useRef(true), selectionGeneration = useRef(0), currentAttempt = useRef(attempt);
+  const mounted = useRef(true),
+    selectionGeneration = useRef(0),
+    currentAttempt = useRef(attempt);
   currentAttempt.current = attempt;
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   function chooseRun(id: string) {
     selectionGeneration.current += 1;
     setSelectedRunId(id);
-    setView("run");
+    setView('run');
   }
-  function showHistory() { selectionGeneration.current += 1; setView("jobs"); }
+  function showHistory() {
+    selectionGeneration.current += 1;
+    setView('jobs');
+  }
   function retainJob(job: Job, generation: number) {
-    client.setQueryData<Job[]>(["jobs", projectId], previous => [job, ...(previous ?? []).filter(item => item.id !== job.id)]);
+    client.setQueryData<Job[]>(['jobs', projectId], (previous) => [
+      job,
+      ...(previous ?? []).filter((item) => item.id !== job.id),
+    ]);
     if (mounted.current && generation === selectionGeneration.current) chooseRun(job.id);
   }
   const validateReceipt = (value: unknown, body: unknown) => trainingReceipt(value, projectId, body);
@@ -253,36 +326,36 @@ export function TrainingPanel({
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (!active) return;
-    window.scrollTo({ top: 0, behavior: "instant" });
+    window.scrollTo({ top: 0, behavior: 'instant' });
     headingRef.current?.focus({ preventScroll: true });
   }, [step, active, view]);
   const options = useQuery({
-    queryKey: ["policy-options"],
+    queryKey: ['policy-options'],
     queryFn: api.policyOptions,
     enabled: active,
     refetchInterval: active ? 15000 : false,
   });
   const jobs = useQuery({
-    queryKey: ["jobs", projectId],
+    queryKey: ['jobs', projectId],
     queryFn: async () => {
       const history = await api.jobs(projectId);
-      if (!validTrainingHistory(history, projectId)) throw new Error('Training history is malformed or contains another project. Recovery remains paused.');
+      if (!validTrainingHistory(history, projectId))
+        throw new Error('Training history is malformed or contains another project. Recovery remains paused.');
       return history;
     },
     enabled: active && !!projectId,
     retry: false,
-    refetchInterval: (query) =>
-      active ? (query.state.data?.some(isActive) ? 1000 : 5000) : false,
+    refetchInterval: (query) => (active ? (query.state.data?.some(isActive) ? 1000 : 5000) : false),
   });
   const library = useQuery({
-    queryKey: ["datasets", projectId],
+    queryKey: ['datasets', projectId],
     queryFn: ({ signal }) => datasetLibrary.list(projectId, signal),
     enabled: active && !!projectId,
     retry: false,
     refetchInterval: active ? 5000 : false,
   });
   const artifacts = useQuery({
-    queryKey: ["artifacts", projectId],
+    queryKey: ['artifacts', projectId],
     queryFn: () => api.artifacts(projectId),
     enabled: active && !!projectId,
     refetchInterval: active ? 5000 : false,
@@ -291,22 +364,36 @@ export function TrainingPanel({
     const expected = attempt;
     if (!expected || expected.state !== 'uncertain' || submissionOf(expected)) return;
     // Cancel an older in-flight read so it cannot count as this explicit review.
-    await client.cancelQueries({ queryKey: ["jobs", projectId], exact: true });
+    await client.cancelQueries({ queryKey: ['jobs', projectId], exact: true });
     const result = await jobs.refetch();
-    if (mounted.current && currentAttempt.current === expected && result.isSuccess && !result.isError && validTrainingHistory(result.data, projectId)) setHistoryReviewed(expected);
+    if (
+      mounted.current &&
+      currentAttempt.current === expected &&
+      result.isSuccess &&
+      !result.isError &&
+      validTrainingHistory(result.data, projectId)
+    )
+      setHistoryReviewed(expected);
   }
   useEffect(() => {
-    if (!projectId) { setLoaded(false); return; }
+    if (!projectId) {
+      setLoaded(false);
+      return;
+    }
     try {
-      const saved = JSON.parse(
-        readPublicPreference(localStorage,`workflow.${projectId}`) ?? "{}",
-      );
+      const saved = JSON.parse(readPublicPreference(localStorage, `workflow.${projectId}`) ?? '{}');
       const restored = savedRecipe(saved);
       setRecipe(restored);
       setTemporalDrafts(restoreTemporal(saved.trainingTemporalByModel));
-      setModelId(typeof saved.trainingModelId === "string" ? saved.trainingModelId : "");
-      const batches = saved.modelBatchSizes && typeof saved.modelBatchSizes === "object"
-        ? Object.fromEntries(Object.entries(saved.modelBatchSizes).filter((entry): entry is [string, number] => positiveInteger(entry[1]))) : {};
+      setModelId(typeof saved.trainingModelId === 'string' ? saved.trainingModelId : '');
+      const batches =
+        saved.modelBatchSizes && typeof saved.modelBatchSizes === 'object'
+          ? Object.fromEntries(
+              Object.entries(saved.modelBatchSizes).filter((entry): entry is [string, number] =>
+                positiveInteger(entry[1]),
+              ),
+            )
+          : {};
       setModelBatchSizes({ smolvla: restored.batchSize, ...batches });
     } catch {
       setRecipe(defaults);
@@ -317,12 +404,19 @@ export function TrainingPanel({
   useEffect(() => {
     if (!loaded || !projectId) return;
     try {
-      const saved = JSON.parse(
-        readPublicPreference(localStorage,`workflow.${projectId}`) ?? "{}",
-      );
-      writePublicPreference(localStorage,
+      const saved = JSON.parse(readPublicPreference(localStorage, `workflow.${projectId}`) ?? '{}');
+      writePublicPreference(
+        localStorage,
         `workflow.${projectId}`,
-        JSON.stringify({ ...saved, ...recipe, trainingTemporalByModel: temporalDrafts, modelBatchSizes, trainingModelId: modelId, checkpointEvery: undefined, trainingDefaultsVersion: 3 }),
+        JSON.stringify({
+          ...saved,
+          ...recipe,
+          trainingTemporalByModel: temporalDrafts,
+          modelBatchSizes,
+          trainingModelId: modelId,
+          checkpointEvery: undefined,
+          trainingDefaultsVersion: 3,
+        }),
       );
     } catch {
       /* This session remains usable without browser storage. */
@@ -330,20 +424,22 @@ export function TrainingPanel({
   }, [projectId, recipe, temporalDrafts, modelId, modelBatchSizes, loaded]);
   function update<K extends keyof Recipe>(key: K, value: Recipe[K]) {
     setRecipe((old) => ({ ...old, [key]: value }));
-    if (key === "batchSize" && typeof value === "number" && modelId) setModelBatchSizes(previous => ({ ...previous, [modelId]: value }));
+    if (key === 'batchSize' && typeof value === 'number' && modelId)
+      setModelBatchSizes((previous) => ({ ...previous, [modelId]: value }));
   }
 
-  const trainingRuns = [...(jobs.data ?? []), ...(submission.receipt && !(jobs.data ?? []).some(job => job.id === submission.receipt?.id) ? [submission.receipt] : [])]
-    .filter((job) => job.project_id === projectId && job.kind === "policy.finetune")
+  const trainingRuns = [
+    ...(jobs.data ?? []),
+    ...(submission.receipt && !(jobs.data ?? []).some((job) => job.id === submission.receipt?.id)
+      ? [submission.receipt]
+      : []),
+  ]
+    .filter((job) => job.project_id === projectId && job.kind === 'policy.finetune')
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
   // Completed artifacts have reached the recipe's final step and cannot resume.
-  const resumableRuns = trainingRuns.filter((job) =>
-    ["failed", "interrupted", "cancelled"].includes(job.status),
-  );
+  const resumableRuns = trainingRuns.filter((job) => ['failed', 'interrupted', 'cancelled'].includes(job.status));
   const checkpoints = (artifacts.data ?? []).filter(
-    (item) =>
-      item.format === "training_checkpoint" &&
-      resumableRuns.some((job) => job.id === item.job_id),
+    (item) => item.format === 'training_checkpoint' && resumableRuns.some((job) => job.id === item.job_id),
   );
   const resumeOptions = [
     ...checkpoints.map((item) => ({
@@ -361,15 +457,11 @@ export function TrainingPanel({
   ];
   const resume = resumeOptions.find((item) => item.id === resumeId);
   const prior = trainingRuns.find((job) => job.id === resume?.jobId);
-  const priorRequest =
-    prior?.request && "training_method" in prior.request
-      ? prior.request
-      : undefined;
+  const priorRequest = prior?.request && 'training_method' in prior.request ? prior.request : undefined;
   const allInspections = (jobs.data ?? [])
     .filter(isDatasetJob)
     .filter(
-      (job): job is InspectedDataset =>
-        job.project_id === projectId && job.status === "succeeded" && !!job.result,
+      (job): job is InspectedDataset => job.project_id === projectId && job.status === 'succeeded' && !!job.result,
     )
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
   // Keep the selected inspection's exact ID, while avoiding repeated cards for the same snapshot.
@@ -391,9 +483,7 @@ export function TrainingPanel({
   const cameraOptions = cameras(dataset?.result);
   const selectedCameras =
     dataset && cameraSelections[dataset.id] !== undefined
-      ? cameraOptions.filter((key) =>
-          cameraSelections[dataset.id].includes(key),
-        )
+      ? cameraOptions.filter((key) => cameraSelections[dataset.id].includes(key))
       : cameraOptions;
   function toggleCamera(key: string) {
     if (!dataset) return;
@@ -401,19 +491,42 @@ export function TrainingPanel({
       ...previous,
       [dataset.id]: selectedCameras.includes(key)
         ? selectedCameras.filter((value) => value !== key)
-        : cameraOptions.filter(
-            (value) => value === key || selectedCameras.includes(value),
-          ),
+        : cameraOptions.filter((value) => value === key || selectedCameras.includes(value)),
     }));
   }
-  const selectedDatasets = dataset ? [dataset, ...extraDatasetIds.map(id => datasets.find(item => item.id === id)).filter((item): item is InspectedDataset => !!item && item.id !== dataset.id)] : [];
-  const mappings = Object.fromEntries(selectedDatasets.map((item, index) => [item.id, index === 0
-    ? Object.fromEntries(selectedCameras.map(key => [key, key]))
-    : Object.fromEntries(selectedCameras.map(key => [key, cameraMappings[item.id]?.[key] ?? combinationCameraMapping(dataset!.result, item.result, selectedCameras)[key] ?? ""]))]));
-  const mixtureIssue = resumeId ? null
-    : extraDatasetIds.some(id => !datasets.some(item => item.id === id)) ? "A selected dataset is unavailable. Refresh or select it again explicitly."
-    : selectedDatasets.length > 8 ? "Select up to eight datasets."
-    : selectedDatasets.slice(1).map(item => datasetCombinationIssue(dataset!.result, item.result, selectedCameras, mappings[item.id])).find(Boolean) ?? null;
+  const selectedDatasets = dataset
+    ? [
+        dataset,
+        ...extraDatasetIds
+          .map((id) => datasets.find((item) => item.id === id))
+          .filter((item): item is InspectedDataset => !!item && item.id !== dataset.id),
+      ]
+    : [];
+  const mappings = Object.fromEntries(
+    selectedDatasets.map((item, index) => [
+      item.id,
+      index === 0
+        ? Object.fromEntries(selectedCameras.map((key) => [key, key]))
+        : Object.fromEntries(
+            selectedCameras.map((key) => [
+              key,
+              cameraMappings[item.id]?.[key] ??
+                combinationCameraMapping(dataset!.result, item.result, selectedCameras)[key] ??
+                '',
+            ]),
+          ),
+    ]),
+  );
+  const mixtureIssue = resumeId
+    ? null
+    : extraDatasetIds.some((id) => !datasets.some((item) => item.id === id))
+      ? 'A selected dataset is unavailable. Refresh or select it again explicitly.'
+      : selectedDatasets.length > 8
+        ? 'Select up to eight datasets.'
+        : (selectedDatasets
+            .slice(1)
+            .map((item) => datasetCombinationIssue(dataset!.result, item.result, selectedCameras, mappings[item.id]))
+            .find(Boolean) ?? null);
   const mergedModels = new Map(trainingModels.map((item) => [item.id, item]));
   for (const item of options.data?.training_models ?? [])
     mergedModels.set(item.id, {
@@ -423,133 +536,166 @@ export function TrainingPanel({
     } as TrainingModel);
   const models = [...mergedModels.values()];
   const runtimes = options.data?.runtimes ?? [];
-  const cloudGpuMemory: Record<string, number> = { L4: 24, T4: 16, A100: 40, "A100-80GB": 80 };
+  const cloudGpuMemory: Record<string, number> = { L4: 24, T4: 16, A100: 40, 'A100-80GB': 80 };
   const runtimeMemory = (item: (typeof runtimes)[number]) =>
-    item.gpu_memory_mib ? item.gpu_memory_mib / 1024 : cloudGpuMemory[item.accelerator ?? ""] ?? 0;
+    item.gpu_memory_mib ? item.gpu_memory_mib / 1024 : (cloudGpuMemory[item.accelerator ?? ''] ?? 0);
   const hasAdapter = (runtime: (typeof runtimes)[number], item: TrainingModel) =>
-    item.status !== "coming_soon" && !!item.model_revision && runtime.training && runtime.device === "cuda" &&
+    item.status !== 'coming_soon' &&
+    !!item.model_revision &&
+    runtime.training &&
+    runtime.device === 'cuda' &&
     (!item.minimum_gpu_memory_gb || runtimeMemory(runtime) >= item.minimum_gpu_memory_gb) &&
-    (runtime.training_model_ids ?? ["smolvla"]).includes(item.id) &&
+    (runtime.training_model_ids ?? ['smolvla']).includes(item.id) &&
     // The bundled on-demand SmolVLA adapter remains usable before preflight.
     // Older API catalogs describe that state with an empty runtime_ids list.
-    (item.id === "smolvla" || !item.runtime_ids || item.runtime_ids.includes(runtime.id));
-  const modelSupported = (item: TrainingModel) => item.status !== "coming_soon" &&
-    ((item.id === "smolvla" && !!item.model_revision) || runtimes.some(runtime => hasAdapter(runtime, item)));
+    (item.id === 'smolvla' || !item.runtime_ids || item.runtime_ids.includes(runtime.id));
+  const modelSupported = (item: TrainingModel) =>
+    item.status !== 'coming_soon' &&
+    ((item.id === 'smolvla' && !!item.model_revision) || runtimes.some((runtime) => hasAdapter(runtime, item)));
   let originalTraining = priorRequest?.training;
   let ancestorRequest = priorRequest;
   const visitedRuns = new Set<string>();
   while (!originalTraining && ancestorRequest) {
     const linkedJobId =
-      ancestorRequest.resume_job_id ??
-      checkpoints.find((item) => item.id === ancestorRequest?.artifact_id)
-        ?.job_id;
+      ancestorRequest.resume_job_id ?? checkpoints.find((item) => item.id === ancestorRequest?.artifact_id)?.job_id;
     if (!linkedJobId || visitedRuns.has(linkedJobId)) break;
     visitedRuns.add(linkedJobId);
-    const linkedRequest = trainingRuns.find(
-      (job) => job.id === linkedJobId,
-    )?.request;
-    ancestorRequest =
-      linkedRequest && "training_method" in linkedRequest
-        ? linkedRequest
-        : undefined;
+    const linkedRequest = trainingRuns.find((job) => job.id === linkedJobId)?.request;
+    ancestorRequest = linkedRequest && 'training_method' in linkedRequest ? linkedRequest : undefined;
     originalTraining = ancestorRequest?.training;
   }
-  const originalModel = models.find(
-    (item) => item.model_id === originalTraining?.model_id,
-  );
+  const originalModel = models.find((item) => item.model_id === originalTraining?.model_id);
   const model = resumeId
-    ? (originalModel ??
-      (!originalTraining?.model_id
-        ? models.find((item) => item.id === "smolvla")
-        : undefined))
+    ? (originalModel ?? (!originalTraining?.model_id ? models.find((item) => item.id === 'smolvla') : undefined))
     : models.find((item) => item.id === modelId);
-  const selectedModels = resumeId ? model ? [model] : [] : models.filter(item => (modelIds.length ? modelIds : model ? [model.id] : []).includes(item.id));
-  const methodFor = (item: TrainingModel) => item.methods.includes(method) ? method : item.methods.includes(options.data?.default_training_method ?? "") ? options.data!.default_training_method : item.methods[0];
-  const batchFor = (item: TrainingModel) => item.id === model?.id ? recipe.batchSize : modelBatchSizes[item.id] ?? (item.id === "smolvla" ? 64 : item.id === "psi0" ? 2 : 4);
+  const selectedModels = resumeId
+    ? model
+      ? [model]
+      : []
+    : models.filter((item) => (modelIds.length ? modelIds : model ? [model.id] : []).includes(item.id));
+  const methodFor = (item: TrainingModel) =>
+    item.methods.includes(method)
+      ? method
+      : item.methods.includes(options.data?.default_training_method ?? '')
+        ? options.data!.default_training_method
+        : item.methods[0];
+  const batchFor = (item: TrainingModel) =>
+    item.id === model?.id
+      ? recipe.batchSize
+      : (modelBatchSizes[item.id] ?? (item.id === 'smolvla' ? 64 : item.id === 'psi0' ? 2 : 4));
   const timingFamily = temporalFamily(model?.id);
-  const timing = timingFamily ? temporalDrafts[timingFamily] ?? defaultTemporal(timingFamily) : null;
+  const timing = timingFamily ? (temporalDrafts[timingFamily] ?? defaultTemporal(timingFamily)) : null;
   const timingIssue = !resumeId && timing ? temporalIssue(timing) : null;
-  const effectiveTiming = timingFamily && timing ? timing.enabled ? timing : defaultTemporal(timingFamily) : null;
+  const effectiveTiming = timingFamily && timing ? (timing.enabled ? timing : defaultTemporal(timingFamily)) : null;
   function updateTiming(change: Partial<NonNullable<typeof timing>>) {
-    if (timingFamily && timing) setTemporalDrafts(previous => ({ ...previous, [timingFamily]: { ...timing, ...change } }));
+    if (timingFamily && timing)
+      setTemporalDrafts((previous) => ({ ...previous, [timingFamily]: { ...timing, ...change } }));
   }
-  const availableMethods = (options.data?.training_methods ?? []).filter(
-    (item) => model?.methods.includes(item.id),
-  );
+  const availableMethods = (options.data?.training_methods ?? []).filter((item) => model?.methods.includes(item.id));
   const trainingMethod =
     availableMethods.find((item) => item.id === method)?.id ??
-    availableMethods.find(
-      (item) => item.id === options.data?.default_training_method,
-    )?.id ??
+    availableMethods.find((item) => item.id === options.data?.default_training_method)?.id ??
     availableMethods[0]?.id;
   const supportsModel = (item: (typeof runtimes)[number]) =>
-    selectedModels.every(model => model.id !== "smolvla" || methodFor(model) !== "full" || (model.native_full_runtime_ids ?? []).includes(item.id)) &&
+    selectedModels.every(
+      (model) =>
+        model.id !== 'smolvla' ||
+        methodFor(model) !== 'full' ||
+        (model.native_full_runtime_ids ?? []).includes(item.id),
+    ) &&
     item.enabled !== false &&
-    selectedModels.length > 0 && selectedModels.every(model => hasAdapter(item, model));
-  const gpuChoices = ["L4", "T4", "A100", "A100-80GB"].filter(gpu => selectedModels.every(item => cloudGpuMemory[gpu] >= (item.id === "smolvla" && methodFor(item) === "full" ? 24 : item.minimum_gpu_memory_gb ?? 0)));
-  const defaultGpu = options.data?.compute?.gcp?.default_gpu ?? "A100";
-  const localRuntimes = selectedModels.length <= 1 && options.data?.compute?.local.enabled
-    ? runtimes.filter((item) => (item.provider ?? "local") === "local" && item.training && item.device === "cuda" && item.enabled !== false &&
-      (!model?.minimum_gpu_memory_gb || runtimeMemory(item) >= model.minimum_gpu_memory_gb))
-    : [];
-  const selectedGpu = gpuChoices.includes(runtimeId) || localRuntimes.some(item => item.id === runtimeId) ? runtimeId
-    : gpuChoices.includes(defaultGpu) ? defaultGpu : gpuChoices[0] ?? localRuntimes[0]?.id ?? "";
+    selectedModels.length > 0 &&
+    selectedModels.every((model) => hasAdapter(item, model));
+  const gpuChoices = ['L4', 'T4', 'A100', 'A100-80GB'].filter((gpu) =>
+    selectedModels.every(
+      (item) =>
+        cloudGpuMemory[gpu] >=
+        (item.id === 'smolvla' && methodFor(item) === 'full' ? 24 : (item.minimum_gpu_memory_gb ?? 0)),
+    ),
+  );
+  const defaultGpu = options.data?.compute?.gcp?.default_gpu ?? 'A100';
+  const localRuntimes =
+    selectedModels.length <= 1 && options.data?.compute?.local.enabled
+      ? runtimes.filter(
+          (item) =>
+            (item.provider ?? 'local') === 'local' &&
+            item.training &&
+            item.device === 'cuda' &&
+            item.enabled !== false &&
+            (!model?.minimum_gpu_memory_gb || runtimeMemory(item) >= model.minimum_gpu_memory_gb),
+        )
+      : [];
+  const selectedGpu =
+    gpuChoices.includes(runtimeId) || localRuntimes.some((item) => item.id === runtimeId)
+      ? runtimeId
+      : gpuChoices.includes(defaultGpu)
+        ? defaultGpu
+        : (gpuChoices[0] ?? localRuntimes[0]?.id ?? '');
   const chosenRuntime = gpuChoices.includes(selectedGpu)
-    ? runtimes.find((item) => item.execution === "skypilot" && item.accelerator === selectedGpu)
+    ? runtimes.find((item) => item.execution === 'skypilot' && item.accelerator === selectedGpu)
     : localRuntimes.find((item) => item.id === selectedGpu);
   const runtime = chosenRuntime && supportsModel(chosenRuntime) ? chosenRuntime : undefined;
   const needsAccount = !chosenRuntime;
-  const priorDataset = allInspections.find(
-    (job) => job.id === priorRequest?.dataset_job_id,
-  );
+  const priorDataset = allInspections.find((job) => job.id === priorRequest?.dataset_job_id);
   const activeDataset = resumeId ? priorDataset : dataset;
-  const activeMethod = resumeId
-    ? priorRequest?.training_method
-    : trainingMethod;
+  const activeMethod = resumeId ? priorRequest?.training_method : trainingMethod;
   const accumulationSupported = gradientAccumulationAvailable(model, runtime?.id, activeMethod);
-  const accumulationIssue = !resumeId && recipe.gradientAccumulation !== 1 && !accumulationSupported
-    ? `Accumulation ${recipe.gradientAccumulation} is not supported by the selected model, method and compute target. Choose a supported configuration or explicitly use accumulation 1.` : null;
+  const accumulationIssue =
+    !resumeId && recipe.gradientAccumulation !== 1 && !accumulationSupported
+      ? `Accumulation ${recipe.gradientAccumulation} is not supported by the selected model, method and compute target. Choose a supported configuration or explicitly use accumulation 1.`
+      : null;
   const nominalBatch = recipe.batchSize * recipe.gradientAccumulation;
   const trainingBudget = `${number(recipe.trainingSteps)} ${accumulationSupported ? 'optimizer updates' : 'steps'} · batch ${recipe.batchSize}`;
   const displayedModelId = model?.id;
-  const stepComplete = [
-    !!activeDataset && !datasetIssue(activeDataset.result),
-    !!model && !!activeMethod,
-    !!runtime,
-  ];
+  const stepComplete = [!!activeDataset && !datasetIssue(activeDataset.result), !!model && !!activeMethod, !!runtime];
   const activeCameraKeys = resumeId
     ? Array.isArray(originalTraining?.camera_keys)
-      ? originalTraining.camera_keys.filter(
-          (key): key is string => typeof key === "string",
-        )
-      : [String(originalTraining?.camera_key ?? "observation.images.front")]
+      ? originalTraining.camera_keys.filter((key): key is string => typeof key === 'string')
+      : [String(originalTraining?.camera_key ?? 'observation.images.front')]
     : selectedCameras;
-  const modelIssue = !resumeId ? selectedModels.map(item => modelDatasetIssue(item.id === "smolvla" && methodFor(item) === "full" ? {...item, backend: "lerobot"} : item, activeDataset?.result, activeCameraKeys) || (selectedDatasets.length > 1 && item.backend === "psi0" ? "Psi-Zero does not support combined datasets." : null)).find(Boolean) ?? null : null;
-  const batchIssue = selectedModels.length > 1 && selectedModels.some(item => recipe.gradientAccumulation !== 1 && !gradientAccumulationAvailable(item, runtime?.id, methodFor(item))) ? "At least one selected model requires gradient accumulation 1." : null;
+  const modelIssue = !resumeId
+    ? (selectedModels
+        .map(
+          (item) =>
+            modelDatasetIssue(
+              item.id === 'smolvla' && methodFor(item) === 'full' ? { ...item, backend: 'lerobot' } : item,
+              activeDataset?.result,
+              activeCameraKeys,
+            ) ||
+            (selectedDatasets.length > 1 && item.backend === 'psi0'
+              ? 'Psi-Zero does not support combined datasets.'
+              : null),
+        )
+        .find(Boolean) ?? null)
+    : null;
+  const batchIssue =
+    selectedModels.length > 1 &&
+    selectedModels.some(
+      (item) => recipe.gradientAccumulation !== 1 && !gradientAccumulationAvailable(item, runtime?.id, methodFor(item)),
+    )
+      ? 'At least one selected model requires gradient accumulation 1.'
+      : null;
   const episodes = useQuery({
-    queryKey: ["training-episodes", activeDataset?.id],
+    queryKey: ['training-episodes', activeDataset?.id],
     queryFn: () => api.episodes(activeDataset!.id, 0, 6),
-    enabled:
-      active && view === "new" && step === 0 &&
-      !!activeDataset &&
-      activeDataset.result.source === "huggingface",
+    enabled: active && view === 'new' && step === 0 && !!activeDataset && activeDataset.result.source === 'huggingface',
     retry: false,
     staleTime: 60000,
   });
   const episodeIndex =
-    previewEpisode?.datasetId === activeDataset?.id
-      ? previewEpisode?.index
-      : episodes.data?.episodes[0]?.episode_index;
+    previewEpisode?.datasetId === activeDataset?.id ? previewEpisode?.index : episodes.data?.episodes[0]?.episode_index;
   const preview = useQuery({
-    queryKey: ["training-preview", activeDataset?.id, episodeIndex],
+    queryKey: ['training-preview', activeDataset?.id, episodeIndex],
     queryFn: () => api.episode(activeDataset!.id, episodeIndex!),
-    enabled: active && view === "new" && step === 0 && !!activeDataset && episodeIndex !== undefined,
+    enabled: active && view === 'new' && step === 0 && !!activeDataset && episodeIndex !== undefined,
     retry: false,
     staleTime: 60000,
   });
   const checkpointCount = recipe.checkpointIntervalOverride
-    ? Math.ceil(recipe.trainingSteps / recipe.checkpointIntervalOverride) : recipe.checkpointCount;
-  const checkpointInterval = recipe.checkpointIntervalOverride ?? Math.ceil(recipe.trainingSteps / recipe.checkpointCount);
+    ? Math.ceil(recipe.trainingSteps / recipe.checkpointIntervalOverride)
+    : recipe.checkpointCount;
+  const checkpointInterval =
+    recipe.checkpointIntervalOverride ?? Math.ceil(recipe.trainingSteps / recipe.checkpointCount);
   const recipeValid =
     Number.isInteger(recipe.trainingSteps) &&
     recipe.trainingSteps >= 2 &&
@@ -557,57 +703,62 @@ export function TrainingPanel({
     recipe.batchSize >= 1 &&
     positiveInteger(recipe.checkpointCount) &&
     positiveInteger(checkpointInterval) &&
-    Number.isInteger(recipe.seed) && recipe.seed >= 0 && recipe.seed <= 2147483647 &&
-    Number.isFinite(recipe.learningRate) && recipe.learningRate > 0 &&
+    Number.isInteger(recipe.seed) &&
+    recipe.seed >= 0 &&
+    recipe.seed <= 2147483647 &&
+    Number.isFinite(recipe.learningRate) &&
+    recipe.learningRate > 0 &&
     positiveInteger(recipe.gradientAccumulation) &&
-    Number.isFinite(recipe.validationFraction) && recipe.validationFraction > 0 && recipe.validationFraction < 1 &&
+    Number.isFinite(recipe.validationFraction) &&
+    recipe.validationFraction > 0 &&
+    recipe.validationFraction < 1 &&
     positiveInteger(recipe.evalEvery);
   const blocked = !projectId
-    ? "Select a project."
+    ? 'Select a project.'
     : !submission.hydrated
-      ? "Loading saved request…"
-    : !submission.available
-      ? "Browser recovery storage is unavailable. Restore it before starting a job."
-    : attempt
-      ? "Inspect the earlier training request before submitting another job."
-    : !batch.hydrated || !batch.available || batch.journal
-      ? "Resolve the saved multi-model plan before starting another job."
-    : !resumeId && selectedModels.some(item => item.status === "coming_soon")
-      ? "A selected model is coming soon. Choose an available model before training."
-    : !resumeId && modelIds.some(id => !models.some(item => item.id === id))
-      ? "A selected model is unavailable. Select your models again."
-    : !loaded || options.isPending || jobs.isPending
-      ? "Loading…"
-      : options.isError || jobs.isError
-        ? "Couldn’t load training options."
-        : resumeId && !priorRequest
-          ? "The original training recipe is unavailable."
-          : !activeDataset
-            ? "Select a dataset."
-            : !resumeId && datasetIssue(activeDataset.result)
-              ? datasetIssue(activeDataset.result)
-              : !resumeId && !selectedCameras.length
-                ? "Select at least one camera."
-                : !model || !activeMethod
-                  ? "Select a model and method."
-                  : mixtureIssue || modelIssue || batchIssue
-                    ? mixtureIssue || modelIssue || batchIssue
-                  : !runtime
-                    ? "Choose an available GPU."
-                    : accumulationIssue
-                      ? accumulationIssue
-                    : timingIssue
-                      ? timingIssue
-                    : !resumeId && !recipeValid
-                      ? "Check training settings."
-                      : null;
+      ? 'Loading saved request…'
+      : !submission.available
+        ? 'Browser recovery storage is unavailable. Restore it before starting a job.'
+        : attempt
+          ? 'Inspect the earlier training request before submitting another job.'
+          : !batch.hydrated || !batch.available || batch.journal
+            ? 'Resolve the saved multi-model plan before starting another job.'
+            : !resumeId && selectedModels.some((item) => item.status === 'coming_soon')
+              ? 'A selected model is coming soon. Choose an available model before training.'
+              : !resumeId && modelIds.some((id) => !models.some((item) => item.id === id))
+                ? 'A selected model is unavailable. Select your models again.'
+                : !loaded || options.isPending || jobs.isPending
+                  ? 'Loading…'
+                  : options.isError || jobs.isError
+                    ? 'Couldn’t load training options.'
+                    : resumeId && !priorRequest
+                      ? 'The original training recipe is unavailable.'
+                      : !activeDataset
+                        ? 'Select a dataset.'
+                        : !resumeId && datasetIssue(activeDataset.result)
+                          ? datasetIssue(activeDataset.result)
+                          : !resumeId && !selectedCameras.length
+                            ? 'Select at least one camera.'
+                            : !model || !activeMethod
+                              ? 'Select a model and method.'
+                              : mixtureIssue || modelIssue || batchIssue
+                                ? mixtureIssue || modelIssue || batchIssue
+                                : !runtime
+                                  ? 'Choose an available GPU.'
+                                  : accumulationIssue
+                                    ? accumulationIssue
+                                    : timingIssue
+                                      ? timingIssue
+                                      : !resumeId && !recipeValid
+                                        ? 'Check training settings.'
+                                        : null;
   const mutation = useMutation({
     retry: false,
     mutationFn: async () => {
       if (blocked || !runtime || !activeDataset || !model || !activeMethod)
-        throw new Error(blocked ?? "Complete the training setup first.");
+        throw new Error(blocked ?? 'Complete the training setup first.');
       const body: PolicyRequest = {
-        operation: "policy.finetune",
+        operation: 'policy.finetune',
         runtime_id: runtime.id,
         dataset_job_id: activeDataset.id,
         training_method: activeMethod,
@@ -615,15 +766,13 @@ export function TrainingPanel({
       };
       if (resumeId) {
         body.training = null;
-        if (resumeId.startsWith("job:")) body.resume_job_id = resumeId.slice(4);
+        if (resumeId.startsWith('job:')) body.resume_job_id = resumeId.slice(4);
         else body.artifact_id = resumeId;
       } else {
         body.training = {
           model_id: model.model_id,
           model_revision: model.model_revision,
-          ...(model.checkpoint_subdirectory
-            ? { checkpoint_subdirectory: model.checkpoint_subdirectory }
-            : {}),
+          ...(model.checkpoint_subdirectory ? { checkpoint_subdirectory: model.checkpoint_subdirectory } : {}),
           camera_key: selectedCameras[0],
           camera_keys: selectedCameras,
           steps: recipe.trainingSteps,
@@ -639,14 +788,42 @@ export function TrainingPanel({
         };
       }
       if (!resumeId && selectedDatasets.length > 1) {
-        body.dataset_job_ids = selectedDatasets.map(item => item.id);
+        body.dataset_job_ids = selectedDatasets.map((item) => item.id);
         body.dataset_camera_mappings = mappings;
       }
       const generation = selectionGeneration.current;
       setHistoryReviewed(null);
       if (!resumeId && selectedModels.length > 1) {
-        const shared = Object.fromEntries(Object.entries(body.training!).filter(([key]) => !["prediction_horizon", "execution_horizon", "observation_history", "frame_stride", "chunk_size", "checkpoint_subdirectory"].includes(key)));
-        const bodies = selectedModels.map(item => ({ ...body, training_method: methodFor(item), training: { ...shared, model_id: item.model_id, model_revision: item.model_revision, ...(item.checkpoint_subdirectory ? { checkpoint_subdirectory: item.checkpoint_subdirectory } : {}), batch_size: batchFor(item), ...temporalRecipe(temporalFamily(item.id), temporalFamily(item.id) ? temporalDrafts[temporalFamily(item.id)!] ?? defaultTemporal(temporalFamily(item.id)!) : null) } }));
+        const shared = Object.fromEntries(
+          Object.entries(body.training!).filter(
+            ([key]) =>
+              ![
+                'prediction_horizon',
+                'execution_horizon',
+                'observation_history',
+                'frame_stride',
+                'chunk_size',
+                'checkpoint_subdirectory',
+              ].includes(key),
+          ),
+        );
+        const bodies = selectedModels.map((item) => ({
+          ...body,
+          training_method: methodFor(item),
+          training: {
+            ...shared,
+            model_id: item.model_id,
+            model_revision: item.model_revision,
+            ...(item.checkpoint_subdirectory ? { checkpoint_subdirectory: item.checkpoint_subdirectory } : {}),
+            batch_size: batchFor(item),
+            ...temporalRecipe(
+              temporalFamily(item.id),
+              temporalFamily(item.id)
+                ? (temporalDrafts[temporalFamily(item.id)!] ?? defaultTemporal(temporalFamily(item.id)!))
+                : null,
+            ),
+          },
+        }));
         const accepted = await batch.start(bodies);
         if (mounted.current && generation === selectionGeneration.current) showHistory();
         return accepted[0] ?? null;
@@ -664,27 +841,38 @@ export function TrainingPanel({
   const cancel = useMutation({
     mutationFn: (jobId: string) => api.cancel(jobId),
     onSuccess: () => {
-      void client.invalidateQueries({ queryKey: ["jobs", projectId] });
+      void client.invalidateQueries({ queryKey: ['jobs', projectId] });
     },
   });
   const submittedRun = mutation.data
-    ? trainingRuns.find((job) => job.id === mutation.data?.id) ?? mutation.data
+    ? (trainingRuns.find((job) => job.id === mutation.data?.id) ?? mutation.data)
     : undefined;
   const runStarting = !!submittedRun && isActive(submittedRun);
   const busy = batch.busy || !!batch.journal || mutation.isPending || submission.busy || runStarting || !!attempt;
-  const startLabel = mutation.isPending ? "Starting…"
-    : runStarting ? (submittedRun?.stage === "preparing" || submittedRun?.status === "queued" ? "Preparing GPU…" : "Training…")
-    : resumeId ? "Resume fine-tuning" : selectedModels.length > 1 ? `Start ${selectedModels.length} training jobs` : "Start fine-tuning";
+  const startLabel = mutation.isPending
+    ? 'Starting…'
+    : runStarting
+      ? submittedRun?.stage === 'preparing' || submittedRun?.status === 'queued'
+        ? 'Preparing GPU…'
+        : 'Training…'
+      : resumeId
+        ? 'Resume fine-tuning'
+        : selectedModels.length > 1
+          ? `Start ${selectedModels.length} training jobs`
+          : 'Start fine-tuning';
   const summaryModel = resumeId
-    ? String(model?.label ?? originalTraining?.model_id ?? "Original model")
-    : (model?.label ?? "Choose a model");
+    ? String(model?.label ?? originalTraining?.model_id ?? 'Original model')
+    : (model?.label ?? 'Choose a model');
 
   function openNew(dataset?: string) {
     selectionGeneration.current += 1;
-    if (dataset) { setDatasetId(dataset); setExtraDatasetIds([]); }
-    setResumeId("");
+    if (dataset) {
+      setDatasetId(dataset);
+      setExtraDatasetIds([]);
+    }
+    setResumeId('');
     mutation.reset();
-    setView("new");
+    setView('new');
   }
   useEffect(() => {
     if (startNew) {
@@ -705,576 +893,1080 @@ export function TrainingPanel({
     if (preferredRunId) chooseRun(preferredRunId);
   }, [preferredRunId]);
 
-  const historyEntries: JobHistoryEntry[] = trainingRuns.map(job => {
-    const request = "training_method" in job.request ? job.request : undefined;
+  const historyEntries: JobHistoryEntry[] = trainingRuns.map((job) => {
+    const request = 'training_method' in job.request ? job.request : undefined;
     const recordedModel = trainingRunModelLabel(job, models, artifacts.data ?? [], trainingRuns);
-    const dataset = allInspections.find(item => item.id === request?.dataset_job_id);
+    const dataset = allInspections.find((item) => item.id === request?.dataset_job_id);
     const targetSteps = positiveInteger(request?.training?.steps) ? request.training.steps : null;
-    const savedSteps = (artifacts.data ?? []).filter(item => item.job_id === job.id)
-      .map(checkpointStep).filter((value): value is number => value !== null);
-    const reportedSteps = job.result && "reports" in job.result
-      ? (job.result.reports ?? []).map(report => report.steps).filter(positiveInteger) : [];
-    const completedSteps = reportedSteps.length ? Math.max(...reportedSteps)
-      : job.status === "succeeded" ? targetSteps : null;
-    const progress = completedSteps !== null ? `${number(completedSteps)} steps completed`
-      : savedSteps.length ? `Saved step ${number(Math.max(...savedSteps))}${targetSteps ? ` / ${number(targetSteps)}` : ""}`
-        : targetSteps ? `${number(targetSteps)} steps planned` : undefined;
+    const savedSteps = (artifacts.data ?? [])
+      .filter((item) => item.job_id === job.id)
+      .map(checkpointStep)
+      .filter((value): value is number => value !== null);
+    const reportedSteps =
+      job.result && 'reports' in job.result
+        ? (job.result.reports ?? []).map((report) => report.steps).filter(positiveInteger)
+        : [];
+    const completedSteps = reportedSteps.length
+      ? Math.max(...reportedSteps)
+      : job.status === 'succeeded'
+        ? targetSteps
+        : null;
+    const progress =
+      completedSteps !== null
+        ? `${number(completedSteps)} steps completed`
+        : savedSteps.length
+          ? `Saved step ${number(Math.max(...savedSteps))}${targetSteps ? ` / ${number(targetSteps)}` : ''}`
+          : targetSteps
+            ? `${number(targetSteps)} steps planned`
+            : undefined;
     return {
       id: job.id,
-      title: [recordedModel ?? "Fine-tuning", request?.training_method.toUpperCase()].filter(Boolean).join(" · "),
-      subtitle: dataset?.result.repo_id ?? (dataset ? "Local dataset" : "Dataset not recorded"),
-      status: job.status, createdAt: job.created_at, progress,
+      title: [recordedModel ?? 'Fine-tuning', request?.training_method.toUpperCase()].filter(Boolean).join(' · '),
+      subtitle: dataset?.result.repo_id ?? (dataset ? 'Local dataset' : 'Dataset not recorded'),
+      status: job.status,
+      createdAt: job.created_at,
+      progress,
     };
   });
 
   return (
     <>
-      {(batch.journal || batch.error) && <section className="warning-box training-recovery" aria-label="Multi-model submission recovery"><h2>Independent training jobs</h2>{batch.error && <p role="alert">{batch.error}</p>}{batch.journal && <><ul>{batch.journal.entries.map(entry => <li key={entry.key}>{String(entry.body.training?.model_id)} · {entry.state}{entry.job && <button type="button" className="text-button" onClick={() => chooseRun(entry.job!.id)}>Open job</button>}</li>)}</ul><div className="training-recovery-actions"><button type="button" className="secondary-button" disabled={batch.busy} onClick={() => void batch.check()}>Check saved jobs</button><button type="button" className="secondary-button" disabled={batch.busy || !batch.canContinue} onClick={() => void batch.continue()}>Continue saved plan</button><button type="button" className="text-button" disabled={batch.busy || batch.journal.entries.some(item => ["pending", "unknown"].includes(item.state))} onClick={batch.dismiss}>Dismiss unsubmitted recipes</button></div></>}</section>}
-      {(attempt || (!submission.available && submission.error)) && <section className="warning-box training-recovery" aria-label="Training submission recovery">
-        <h2>{attempt?.state === 'pending' && !submission.error ? 'Starting training' : 'Check your training request'}</h2>
-        <p role={attempt?.state === 'pending' ? 'status' : 'alert'}>{submission.error || attempt?.message}</p>
-        {attempt?.state === 'uncertain' && <>
-          <p>New submissions are paused until this request is resolved.</p>
-          {keyedAttempt ? <>
-            <p>Checking the saved request does not start training.</p>
-            <div className="training-recovery-actions">
-              <button type="button" className="secondary-button" disabled={!submission.available || submission.busy} onClick={() => void recoverSubmission()}>Check saved request</button>
-              <button type="button" className="secondary-button" disabled={!submission.canRetry || submission.busy} onClick={() => void recoverSubmission(true)}>Retry same request</button>
-            </div>
-            <p className="training-recovery-note">Retry resends the saved recipe only if the server has no matching job.</p>
-          </> : <>
-            <p>This older request has no server key. Check recorded jobs before allowing a new request.</p>
-            <div className="training-recovery-actions">
-              <button type="button" className="secondary-button" disabled={jobs.isFetching} onClick={() => { showHistory(); void reviewHistory(); }}>Refresh training jobs</button>
-              <button type="button" className="secondary-button" disabled={!submission.available || historyReviewed !== attempt || jobs.isError || mutation.isPending} onClick={() => {
-                if (submission.clearLegacy(attempt)) { setHistoryReviewed(null); mutation.reset(); }
-              }}>I checked the jobs; allow a new request</button>
-            </div>
-            {jobs.isError && <p role="alert">Training history could not refresh. {jobs.error.message}</p>}
-          </>}
-        </>}
-        {submission.receipt && <div className="training-recovery-actions"><button type="button" className="secondary-button" onClick={() => chooseRun(submission.receipt!.id)}>View saved request {submission.receipt.id}</button></div>}
-      </section>}
-      {view === "jobs" && <JobHistory title="Fine-tuning jobs" newLabel="Start a new fine-tuning"
-        entries={historyEntries} onNew={() => openNew()}
-        onSelect={chooseRun}
-        loading={!!projectId && jobs.isPending} error={jobs.error}
-        emptyMessage="No fine-tuning jobs yet." disabled={!projectId || mutation.isPending} />}
-      {view === "new" && <>
-      <div className="training-view-toolbar">
-        <button type="button" className="text-button training-back" onClick={showHistory}><Icon name="arrow" size={14} />Back to jobs</button>
-      </div>
-      <form
-        className="training-workspace"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (step === 2 && !blocked && !busy) mutation.mutate();
-        }}
-      >
-        <nav className="training-nav" aria-label="Training setup">
-          {steps.map((label, index) => (
-            <button
-              type="button"
-              key={label}
-              aria-label={label}
-              aria-current={step === index ? "step" : undefined}
-              onClick={() => setStep(index)}
-            >
-              <span>
-                {index < step && stepComplete[index] ? (
-                  <Icon name="check" size={13} />
-                ) : (
-                  index + 1
-                )}
-              </span>
-              {label}
-            </button>
-          ))}
-        </nav>
-
-        {step === 0 && (
-          <section aria-labelledby="training-data-title">
-            <div className="training-heading">
-              <h2 id="training-data-title" ref={headingRef} tabIndex={-1}>
-                Dataset
-              </h2>
-              <button
-                type="button"
-                className="text-button"
-                onClick={onChooseDataset}
-              >
-                <Icon name="plus" size={14} /> Import
-              </button>
-            </div>
-            {!resumeId && datasetId && datasetId !== "__none__" && !dataset && !jobs.isPending && <p className="warning-box" role="alert">Selected dataset {datasetId} is unavailable in this project. Another dataset has not been substituted. Refresh or select a dataset explicitly.</p>}
-            {jobs.isPending && projectId ? (
-              <p role="status">Loading datasets…</p>
-            ) : (
-              <TrainingDatasetPicker
-                datasets={datasets}
-                library={(library.data ?? []).filter(entry => isProjectDataset(entry, projectId))}
-                selectedIds={resumeId ? activeDataset ? [activeDataset.id] : [] : selectedDatasets.map(item => item.id)}
-                disabled={!!resumeId || busy}
-                libraryLoading={library.isPending}
-                libraryError={library.error?.message}
-                onRetryLibrary={() => { void library.refetch(); }}
-                issue={(job, ids) => {
-                  const selected = ids.includes(job.id);
-                  const reference = datasets.find(item => item.id === ids[0]);
-                  const views = reference && cameraSelections[reference.id] !== undefined
-                    ? cameras(reference.result).filter(key => cameraSelections[reference.id].includes(key))
-                    : cameras(reference?.result);
-                  return datasetIssue(job.result) ?? (!selected && reference
-                    ? ids.length >= 8 ? "Select up to eight datasets per training job."
-                      : datasetCombinationIssue(reference.result, job.result, views)
-                    : null);
-                }}
-                onChange={ids => {
-                  const reference = datasets.find(item => item.id === ids[0]);
-                  const views = reference && cameraSelections[reference.id] !== undefined
-                    ? cameras(reference.result).filter(key => cameraSelections[reference.id].includes(key))
-                    : cameras(reference?.result);
-                  setCameraMappings(previous => Object.fromEntries(ids.slice(1).map(id => {
-                    const candidate = datasets.find(item => item.id === id)!;
-                    return [id, reference?.id === dataset?.id && previous[id] ? previous[id]
-                      : combinationCameraMapping(reference!.result, candidate.result, views)];
-                  })));
-                  setDatasetId(ids[0] ?? "__none__");
-                  setExtraDatasetIds(ids.slice(1));
-                  mutation.reset();
-                }}
-                onImport={onChooseDataset}
-              />
-            )}
-            {!resumeId && selectedDatasets.slice(1).map(item => <fieldset key={item.id} className="training-camera-mapping"><legend>Camera mapping · {item.result.repo_id}</legend>{selectedCameras.map(key => <label key={key}>{key.replace(/^observation\.images\./, "")}<select aria-label={`${item.result.repo_id}: ${key}`} value={mappings[item.id][key]} disabled={busy} onChange={event => setCameraMappings(previous => ({ ...previous, [item.id]: { ...previous[item.id], [key]: event.target.value } }))}><option value="">Choose matching camera</option>{cameras(item.result).map(source => <option key={source} value={source}>{source.replace(/^observation\.images\./, "")}</option>)}</select></label>)}</fieldset>)}
-            {mixtureIssue && <p className="error-notice" role="alert">{mixtureIssue}</p>}
-            {activeDataset && (
-              <>
-                <div className="training-data-facts">
-                  <span>
-                    {number(activeDataset.result.total_episodes)} episodes
-                  </span>
-                  <span>
-                    {number(activeDataset.result.total_frames)} frames
-                  </span>
-                  <span>{activeDataset.result.fps} fps</span>
-                  <span>
-                    {cameras(activeDataset.result).length}{" "}
-                    {cameras(activeDataset.result).length === 1
-                      ? "camera"
-                      : "cameras"}
-                  </span>
-                  <span>{activeDataset.result.robot_type}</span>
-                </div>
-                <div className="training-heading training-camera-heading">
-                  <h3>Cameras</h3>
-                  {episodes.data && episodes.data.episodes.length > 1 && (
-                    <label className="training-episode-picker">
-                      <span className="visually-hidden">Preview episode</span>
-                      <select
-                        value={episodeIndex ?? ""}
-                        onChange={(event) =>
-                          setPreviewEpisode({
-                            datasetId: activeDataset.id,
-                            index: Number(event.target.value),
-                          })
-                        }
-                      >
-                        {episodes.data.episodes.map((item) => (
-                          <option
-                            key={item.episode_index}
-                            value={item.episode_index}
-                          >
-                            Episode {item.episode_index}
-                          </option>
-                        ))}
-                      </select>
-                      <svg className="training-select-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
-                    </label>
-                  )}
-                </div>
-                {preview.data?.cameras.length ? (
-                  <CameraPlayer
-                    key={`${activeDataset.id}-${episodeIndex}`}
-                    preview={preview.data}
-                    active={step === 0}
-                    selection={{
-                      keys: activeCameraKeys,
-                      onToggle: toggleCamera,
-                      disabled: !!resumeId || busy,
-                    }}
-                  />
-                ) : (
-                  <fieldset className="training-camera-fallback">
-                    <legend className="visually-hidden">
-                      Training cameras
-                    </legend>
-                    {cameras(activeDataset.result).map((key) => (
-                      <label key={key}>
-                        <span className="training-camera-placeholder">
-                          <Icon name="play" size={22} />
-                          <small>
-                            {episodes.isFetching || preview.isFetching
-                              ? "Loading preview…"
-                              : "Preview unavailable"}
-                          </small>
-                        </span>
-                        <span>
-                          <input
-                            type="checkbox"
-                            aria-label={key}
-                            checked={activeCameraKeys.includes(key)}
-                            disabled={!!resumeId || busy}
-                            onChange={() => toggleCamera(key)}
-                          />
-                          {key.replace(/^observation\.images\./, "")}
-                        </span>
-                      </label>
-                    ))}
-                  </fieldset>
-                )}
-                {!!preview.data?.cameras.length &&
-                  cameras(activeDataset.result)
-                    .filter(
-                      (key) =>
-                        !preview.data.cameras.some((item) => item.key === key),
-                    )
-                    .map((key) => (
-                      <label key={key} className="training-extra-camera">
-                        <input
-                          type="checkbox"
-                          aria-label={key}
-                          checked={activeCameraKeys.includes(key)}
-                          disabled={!!resumeId || busy}
-                          onChange={() => toggleCamera(key)}
-                        />
-                        {key.replace(/^observation\.images\./, "")}
-                        <small>Preview unavailable</small>
-                      </label>
-                    ))}
-                {(episodes.isError || preview.isError) && (
-                  <button
-                    type="button"
-                    className="text-button"
-                    onClick={() => {
-                      void episodes.refetch();
-                      if (episodeIndex !== undefined) void preview.refetch();
-                    }}
-                  >
-                    Retry preview
-                  </button>
-                )}
-              </>
-            )}
-            <div className="training-footer">
-              <span>
-                {activeDataset && !activeCameraKeys.length
-                  ? "Select at least one camera."
-                  : ""}
-              </span>
-              <button
-                type="button"
-                className="primary-button"
-                disabled={
-                  !activeDataset ||
-                  !activeCameraKeys.length ||
-                  (!resumeId && (!!datasetIssue(activeDataset.result) || !!mixtureIssue))
-                }
-                onClick={() => setStep(1)}
-              >
-                Next <Icon name="arrow" size={15} />
-              </button>
-            </div>
-          </section>
-        )}
-
-        {step === 1 && (
-          <section aria-labelledby="training-model-title">
-            <div className="training-heading">
-              <h2 id="training-model-title" ref={headingRef} tabIndex={-1}>
-                Base model
-              </h2>
-              <span className="training-model-selection-count" aria-live="polite">
-                {selectedModels.length} {selectedModels.length === 1 ? "model" : "models"} selected
-              </span>
-            </div>
-            <fieldset className="training-model-groups">
-              <legend className="visually-hidden">Base model</legend>
-              {groupedTrainingModels(models).map(group => <section className="training-model-group" key={group.id} aria-labelledby={`training-family-${group.id}`}>
-                <h3 id={`training-family-${group.id}`}>
-                  {group.label}
-                  <span className="training-model-family-count" aria-hidden="true">{group.models.length}</span>
-                </h3>
-                <div className="training-model-grid">
-              {group.models.map((item) => {
-                const statusLabel = modelStatusLabel(item, modelSupported(item));
-                const memory = item.minimum_gpu_memory_gb ?? item.suggested_gpu_memory_gb;
-                return (
-                <label
-                  key={item.id}
-                  className={`training-model-tile model-${item.id}${!modelSupported(item) ? " unavailable" : ""}`}
-                  title={`${item.model_id} · ${item.description}`}
+      {(batch.journal || batch.error) && (
+        <section className="warning-box training-recovery" aria-label="Multi-model submission recovery">
+          <h2>Independent training jobs</h2>
+          {batch.error && <p role="alert">{batch.error}</p>}
+          {batch.journal && (
+            <>
+              <ul>
+                {batch.journal.entries.map((entry) => (
+                  <li key={entry.key}>
+                    {String(entry.body.training?.model_id)} · {entry.state}
+                    {entry.job && (
+                      <button type="button" className="text-button" onClick={() => chooseRun(entry.job!.id)}>
+                        Open job
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <div className="training-recovery-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={batch.busy}
+                  onClick={() => void batch.check()}
                 >
-                  <input
-                    type="checkbox"
-                    name="training-model"
-                    aria-label={item.label}
-                    checked={selectedModels.some(model => model.id === item.id)}
-                    disabled={!!resumeId || busy || !modelSupported(item)}
-                    onChange={() => {
-                      if (displayedModelId) setModelBatchSizes(previous => ({ ...previous, [displayedModelId]: recipe.batchSize }));
-                      const selected = selectedModels.map(model => model.id);
-                      const next = selected.includes(item.id) ? selected.filter(id => id !== item.id) : [...selected, item.id];
-                      const editId = next.includes(item.id) ? item.id : next[0] ?? "";
-                      setRecipe(previous => ({ ...previous, batchSize: modelBatchSizes[editId] ?? (editId === "smolvla" ? defaults.batchSize : editId === "psi0" ? 2 : 4) }));
-                      setModelIds(next);
-                      setModelId(next.includes(item.id) ? item.id : next[0] ?? "");
-                      setRuntimeId("");
-                      mutation.reset();
-                    }}
-                  />
-                  <span className="training-model-copy">
-                    <span>
-                      <strong>{item.label}</strong>
-                      {statusLabel && (
-                        <small className="training-model-status">
-                          {statusLabel}
-                        </small>
-                      )}
-                    </span>
-                    <span className="training-model-memory">
-                      {typeof memory === "number" && Number.isFinite(memory) && memory > 0
-                        ? <>GPU budget · <strong>{number(memory)} GB+</strong></>
-                        : <strong>GPU budget not verified</strong>}
-                    </span>
-                  </span>
-                </label>
-                );
-              })}
-                </div>
-              </section>)}
-            </fieldset>
-            {selectedModels.length > 1 && <p className="training-selection-note">{selectedModels.length} independent jobs · one cloud GPU per model</p>}
-            {model && <div className="training-method-choices"><div className="training-edit-model">{selectedModels.length > 1 && selectedModels.map(item => <button type="button" key={item.id} aria-pressed={model.id === item.id} className="secondary-button" disabled={busy} onClick={() => { setModelBatchSizes(previous => ({ ...previous, [model.id]: recipe.batchSize })); setModelId(item.id); setRecipe(previous => ({ ...previous, batchSize: batchFor(item) })); }}>Settings for {item.label}</button>)}</div>
-              <WorkflowChoiceGrid name="training-method" label="Training method" value={activeMethod ?? ""} disabled={!!resumeId || busy}
-                options={availableMethods.map(item => ({ value: item.id, label: item.label,
-                  meta: item.id === "lora" ? "Adapters" : item.id === "qlora" ? "Quantized adapters" : item.id === "full" ? "Trainable weights" : undefined,
-                  icon: item.id === "lora" ? "sliders" : "layers" }))}
-                onChange={setMethod} />
-            </div>}
-            {modelIssue && <p className="error-notice" role="alert">{modelIssue}</p>}
-            <div className="training-footer">
-              <button
-                type="button"
-                className="text-button"
-                onClick={() => setStep(0)}
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                className="primary-button"
-                disabled={!model || !activeMethod || !activeDataset || !!modelIssue}
-                onClick={() => setStep(2)}
-              >
-                Next <Icon name="arrow" size={15} />
-              </button>
-            </div>
-          </section>
-        )}
-
-        {step === 2 && (
-          <section aria-labelledby="training-compute-title">
-            <div className="training-heading">
-              <h2 id="training-compute-title" ref={headingRef} tabIndex={-1}>
-                Compute
-              </h2>
-
-            </div>
-            <section className="training-recipe-review" aria-label="Training recipe review">
-              <div className="training-recipe-title"><span>{resumeId ? 'Resume saved training' : 'Your training recipe'}</span><strong>{selectedModels.length > 1 && !resumeId ? `${selectedModels.length} independent jobs · 1 GPU each` : `${summaryModel} · ${activeMethod?.toUpperCase()}`}</strong></div>
-              <dl>
-                <div><dt>Dataset</dt><dd>{activeDataset?.result.repo_id ?? (activeDataset ? 'Local training snapshot' : 'Choose a dataset')}{activeDataset && <small className="training-recipe-identity" title={activeDataset.result.snapshot?.manifest_sha256 ?? activeDataset.result.revision}>{activeDataset.result.snapshot ? 'Snapshot' : 'Pinned revision'} {(activeDataset.result.snapshot?.manifest_sha256 ?? activeDataset.result.revision).slice(0, 12)}</small>}</dd></div>
-                <div><dt>Observations</dt><dd>{activeCameraKeys.length} {activeCameraKeys.length === 1 ? 'camera' : 'cameras'}{activeDataset ? ` · ${number(resumeId ? activeDataset.result.total_episodes : selectedDatasets.reduce((sum, item) => sum + item.result.total_episodes, 0))} episodes` : ''}</dd></div>
-                <div><dt>Training budget</dt><dd>{resumeId ? 'Saved recipe' : selectedModels.length > 1 ? `${number(recipe.trainingSteps)} steps per job` : trainingBudget}</dd></div>
-                {(resumeId || selectedModels.length <= 1) && <div><dt>Action timing</dt><dd>{resumeId ? checkpointTiming(originalTraining) : effectiveTiming ? `Predict ${effectiveTiming.prediction} · execute ${effectiveTiming.execution}${timing?.enabled ? '' : ' · default'}` : 'Model-owned settings'}</dd></div>}
-              </dl>
-              {!resumeId && selectedModels.map(item => {
-                const family = temporalFamily(item.id);
-                const draft = family ? temporalDrafts[family] ?? defaultTemporal(family) : null;
-                const modelTiming = family ? draft?.enabled ? draft : defaultTemporal(family) : null;
-                const estimate = trainingMemory(item, methodFor(item), batchFor(item), activeCameraKeys, activeDataset?.result, modelTiming?.prediction);
-                return <div className="training-memory-estimate" key={item.id}>
-                  <strong>{item.label}</strong>
-                  <span>{selectedModels.length > 1 ? `${methodFor(item).toUpperCase()} · batch ${batchFor(item)} · ` : ""}{estimate ? `≈ ${estimate.gb} GB GPU memory` : "Memory estimate unavailable"}<TrainingHelp label={`${item.label} memory estimate`}>{estimate?.source ?? "This model has no verified catalog memory budget."}</TrainingHelp></span>
-                  {selectedModels.length > 1 && <small>{modelTiming ? `Predict ${modelTiming.prediction} · execute ${modelTiming.execution}${draft?.enabled ? '' : ' · default'}` : 'Model-owned action timing'}</small>}
-                  {estimate && <small>{estimate.recommended ? `Suggested GPU: ${estimate.recommended}` : "No listed GPU meets this estimate. Try a smaller batch."}</small>}
-                </div>;
-              })}
-              {!resumeId && selectedDatasets.length > 1 && <div className="training-mixture-recipe"><strong>Combined training set</strong>{selectedDatasets.map(item => <span key={item.id}>{item.result.repo_id} · {item.result.revision.slice(0, 12)}</span>)}</div>}
-              {resumeId && <p>Dataset, model and timing stay bound to the saved checkpoint.</p>}
-              {accumulationIssue && <><p role="alert">{accumulationIssue}</p><button type="button" className="secondary-button" disabled={busy} onClick={() => update("gradientAccumulation", 1)}>Use accumulation 1</button></>}
-            </section>
-            <GpuPicker
-              value={selectedGpu}
-              onChange={setRuntimeId}
-              disabled={busy}
-              choices={[
-                ...gpuChoices.map((gpu) => ({ id: gpu, label: gpu === "A100-80GB" ? "A100" : gpu, memory: `${cloudGpuMemory[gpu]} GB` })),
-                ...localRuntimes.map((item) => ({ id: item.id, label: item.label,
-                  memory: item.gpu_memory_mib ? `${number(item.gpu_memory_mib / 1024)} GB` : undefined })),
-              ]}
-            />
-            <details className="training-disclosure">
-              <summary>
-                Advanced settings
-              </summary>
-              {resumeId ? (
-                <div className="training-saved-recipe"><p>Original recipe preserved.</p><p>{checkpointTiming(originalTraining)}</p><p>Resume loads the saved architecture and processors. Start a new run to request different horizons.</p></div>
+                  Check saved jobs
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={batch.busy || !batch.canContinue}
+                  onClick={() => void batch.continue()}
+                >
+                  Continue saved plan
+                </button>
+                <button
+                  type="button"
+                  className="text-button"
+                  disabled={
+                    batch.busy || batch.journal.entries.some((item) => ['pending', 'unknown'].includes(item.state))
+                  }
+                  onClick={batch.dismiss}
+                >
+                  Dismiss unsubmitted recipes
+                </button>
+              </div>
+            </>
+          )}
+        </section>
+      )}
+      {(attempt || (!submission.available && submission.error)) && (
+        <section className="warning-box training-recovery" aria-label="Training submission recovery">
+          <h2>
+            {attempt?.state === 'pending' && !submission.error ? 'Starting training' : 'Check your training request'}
+          </h2>
+          <p role={attempt?.state === 'pending' ? 'status' : 'alert'}>{submission.error || attempt?.message}</p>
+          {attempt?.state === 'uncertain' && (
+            <>
+              <p>New submissions are paused until this request is resolved.</p>
+              {keyedAttempt ? (
+                <>
+                  <p>Checking the saved request does not start training.</p>
+                  <div className="training-recovery-actions">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={!submission.available || submission.busy}
+                      onClick={() => void recoverSubmission()}
+                    >
+                      Check saved request
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={!submission.canRetry || submission.busy}
+                      onClick={() => void recoverSubmission(true)}
+                    >
+                      Retry same request
+                    </button>
+                  </div>
+                  <p className="training-recovery-note">
+                    Retry resends the saved recipe only if the server has no matching job.
+                  </p>
+                </>
               ) : (
                 <>
-                <div className="training-settings-actions"><button type="button" className="text-button" disabled={busy} onClick={() => { setRecipe({ ...defaults, batchSize: model?.id === "smolvla" ? defaults.batchSize : model?.id === "psi0" ? 2 : 4 }); setModelBatchSizes({}); setTemporalDrafts({}); }}>Reset settings</button></div>
-                <fieldset className="training-hyperparameters">
-                  <legend>Learning settings</legend>
-                <div className="training-fields">
-                  <label>
-                    <span className="training-field-name">Steps<TrainingHelp label="Steps">Optimizer updates. Learning-rate schedules and checkpoint intervals use the same count.</TrainingHelp></span>
-                    <input aria-label="Steps"
-                      type="number"
-                      min="2"
-                      step="1"
-                      value={recipe.trainingSteps}
-                      disabled={busy}
-                      onChange={(event) =>
-                        update("trainingSteps", Number(event.target.value))
+                  <p>This older request has no server key. Check recorded jobs before allowing a new request.</p>
+                  <div className="training-recovery-actions">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={jobs.isFetching}
+                      onClick={() => {
+                        showHistory();
+                        void reviewHistory();
+                      }}
+                    >
+                      Refresh training jobs
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={
+                        !submission.available || historyReviewed !== attempt || jobs.isError || mutation.isPending
                       }
-                    />
-                  </label>
-                  <label>
-                    <span className="training-field-name">Batch size<TrainingHelp label="Batch size">Examples in each GPU microbatch. Larger batches generally need more GPU memory.</TrainingHelp></span>
-                    <input aria-label="Batch size"
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={recipe.batchSize}
-                      disabled={busy}
-                      onChange={(event) =>
-                        update("batchSize", Number(event.target.value))
-                      }
-                    />
-                  </label>
-                  <label>
-                    <span className="training-field-name">Learning rate<TrainingHelp label="Learning rate">Size of each optimizer update.</TrainingHelp></span>
-                    <input aria-label="Learning rate" type="number" min="0.000000001" step="any" value={recipe.learningRate} disabled={busy}
-                      onChange={event => update("learningRate", Number(event.target.value))} />
-                  </label>
-                  <label>
-                    <span className="training-field-name">Gradient accumulation<TrainingHelp label="Gradient accumulation" id="training-accumulation-help">{accumulationSupported ? `Nominal effective batch: ${number(nominalBatch)} examples (${recipe.batchSize} × ${recipe.gradientAccumulation} × 1 GPU). Short final windows contain fewer examples.` : "Only accumulation 1 is available for this model, method and compute target."}</TrainingHelp></span>
-                    <input type="number" min="1" step="1" aria-label="Gradient accumulation" aria-describedby="training-accumulation-help" value={recipe.gradientAccumulation} disabled={busy || !accumulationSupported}
-                      onChange={event => update("gradientAccumulation", Number(event.target.value))} />
-
-                  </label>
-                  <label>
-                    <span className="training-field-name">Random seed<TrainingHelp label="Random seed">Controls episode splitting and training randomness.</TrainingHelp></span>
-                    <input aria-label="Random seed" type="number" min="0" max="2147483647" step="1" value={recipe.seed} disabled={busy}
-                      onChange={event => update("seed", Number(event.target.value))} />
-
-                  </label>
-                  <label>
-                    <span className="training-field-name">Validation fraction<TrainingHelp label="Validation fraction">Fraction of separate episodes held out for validation.</TrainingHelp></span>
-                    <input aria-label="Validation fraction" type="number" min="0.01" max="0.99" step="any" value={recipe.validationFraction} disabled={busy}
-                      onChange={event => update("validationFraction", Number(event.target.value))} />
-
-                  </label>
-                  <label>
-                    <span className="training-field-name">Validate every (steps)<TrainingHelp label="Validate every (steps)">Optimizer updates between held-out validation checks.</TrainingHelp></span>
-                    <input aria-label="Validate every (steps)" type="number" min="1" step="1" value={recipe.evalEvery} disabled={busy}
-                      onChange={event => update("evalEvery", Number(event.target.value))} />
-                  </label>
-                  <label>
-                  <span className="training-field-name">Checkpoints<TrainingHelp label="Checkpoints" id="training-checkpoint-help">{`Every ${number(checkpointInterval)} steps, including the final checkpoint. ${runtime?.execution === "skypilot" ? "Saved on Google Cloud." : "Saved on the selected compute storage."}`}</TrainingHelp></span>
-                    <input type="number" min="1" step="1" value={checkpointCount} disabled={busy}
-                      aria-label="Checkpoints"
-                      aria-describedby="training-checkpoint-help"
-                      onChange={(event) => setRecipe(previous => ({ ...previous, checkpointCount: Number(event.target.value), checkpointIntervalOverride: null }))} />
-
-                  </label>
-                </div>
-                </fieldset>
-                {timing && <fieldset className="training-temporal" aria-label="Action timing" aria-describedby="training-timing-help">
-                  <legend><span className="training-field-name">Action timing<TrainingHelp label="Action timing" id="training-timing-help">Prediction: future actions learned together. Execution: actions used before the next observation. Existing checkpoints keep their shape.</TrainingHelp></span></legend>
-                  <div className="training-temporal-fields">
-                    <label htmlFor="training-prediction"><span className="training-field-name">Prediction horizon<TrainingHelp label="Prediction horizon" id="training-prediction-help">Actions predicted together.</TrainingHelp></span><input id="training-prediction" aria-label="Prediction horizon" type="number" min="1" max="1024" step="1" value={effectiveTiming!.prediction} disabled={busy} aria-invalid={!!timingIssue} aria-describedby="training-timing-help training-prediction-help" onChange={event => updateTiming({ enabled: true, prediction: Number(event.target.value) })} /></label>
-                    <label htmlFor="training-execution"><span className="training-field-name">Execution horizon<TrainingHelp label="Execution horizon" id="training-execution-help">Actions used before observing again.</TrainingHelp></span><input id="training-execution" aria-label="Execution horizon" type="number" min="1" max={effectiveTiming!.prediction >= 1 ? effectiveTiming!.prediction : 1024} step="1" value={effectiveTiming!.execution} disabled={busy} aria-invalid={!!timingIssue} aria-describedby="training-timing-help training-execution-help" onChange={event => updateTiming({ enabled: true, execution: Number(event.target.value) })} /></label>
+                      onClick={() => {
+                        if (submission.clearLegacy(attempt)) {
+                          setHistoryReviewed(null);
+                          mutation.reset();
+                        }
+                      }}
+                    >
+                      I checked the jobs; allow a new request
+                    </button>
                   </div>
-                  {timingIssue && <p className="error-notice" role="alert">{timingIssue}</p>}
-
-                </fieldset>}
-                {!timing && <p className="training-native-timing">Action timing follows this model’s native configuration.</p>}
+                  {jobs.isError && <p role="alert">Training history could not refresh. {jobs.error.message}</p>}
                 </>
               )}
-            </details>
-            <div className="training-footer">
-              <button
-                type="button"
-                className="text-button"
-                onClick={() => setStep(1)}
-              >
-                Back
+            </>
+          )}
+          {submission.receipt && (
+            <div className="training-recovery-actions">
+              <button type="button" className="secondary-button" onClick={() => chooseRun(submission.receipt!.id)}>
+                View saved request {submission.receipt.id}
               </button>
-              <span className="training-launch">
-                {needsAccount
-                  ? <button type="button" className="text-button" onClick={onComputeSettings}>Connect account</button>
-                  : <span role="status">{runStarting ? "" : blocked}</span>}
-                <button
-                  type="submit"
-                  className="primary-button"
-                  disabled={!!blocked || busy}
-                >
-                  {startLabel}
-                  <Icon name="arrow" size={15} />
-                </button>
-              </span>
             </div>
-          </section>
-        )}
-
-        {submission.error && submission.available && !attempt && <p className="error-notice" role="alert">{submission.error}</p>}
-        {[options.error, jobs.error, artifacts.error, mutation.error]
-          .filter(Boolean)
-          .map((error, index) => (
-            <p className="error-notice" role="alert" key={index}>
-              {error?.message}
-            </p>
-          ))}
-        {(options.isError || jobs.isError) && (
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => {
-              void options.refetch();
-              void jobs.refetch();
+          )}
+        </section>
+      )}
+      {view === 'jobs' && (
+        <JobHistory
+          title="Fine-tuning jobs"
+          newLabel="Start a new fine-tuning"
+          entries={historyEntries}
+          onNew={() => openNew()}
+          onSelect={chooseRun}
+          loading={!!projectId && jobs.isPending}
+          error={jobs.error}
+          emptyMessage="No fine-tuning jobs yet."
+          disabled={!projectId || mutation.isPending}
+        />
+      )}
+      {view === 'new' && (
+        <>
+          <div className="training-view-toolbar">
+            <button type="button" className="text-button training-back" onClick={showHistory}>
+              <Icon name="arrow" size={14} />
+              Back to jobs
+            </button>
+          </div>
+          <form
+            className="training-workspace"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (step === 2 && !blocked && !busy) mutation.mutate();
             }}
           >
-            Retry
-          </button>
-        )}
-      </form>
-      </>}
+            <nav className="training-nav" aria-label="Training setup">
+              {steps.map((label, index) => (
+                <button
+                  type="button"
+                  key={label}
+                  aria-label={label}
+                  aria-current={step === index ? 'step' : undefined}
+                  onClick={() => setStep(index)}
+                >
+                  <span>{index < step && stepComplete[index] ? <Icon name="check" size={13} /> : index + 1}</span>
+                  {label}
+                </button>
+              ))}
+            </nav>
 
-      {view === "run" && (
-        <section
-          className="training-activity training-job-detail"
-          aria-label="Fine-tuning job"
-        >
-          <button type="button" className="text-button training-back" onClick={showHistory}><Icon name="arrow" size={14} />Back to jobs</button>
+            {step === 0 && (
+              <section aria-labelledby="training-data-title">
+                <div className="training-heading">
+                  <h2 id="training-data-title" ref={headingRef} tabIndex={-1}>
+                    Dataset
+                  </h2>
+                  <button type="button" className="text-button" onClick={onChooseDataset}>
+                    <Icon name="plus" size={14} /> Import
+                  </button>
+                </div>
+                {!resumeId && datasetId && datasetId !== '__none__' && !dataset && !jobs.isPending && (
+                  <p className="warning-box" role="alert">
+                    Selected dataset {datasetId} is unavailable in this project. Another dataset has not been
+                    substituted. Refresh or select a dataset explicitly.
+                  </p>
+                )}
+                {jobs.isPending && projectId ? (
+                  <p role="status">Loading datasets…</p>
+                ) : (
+                  <TrainingDatasetPicker
+                    datasets={datasets}
+                    library={(library.data ?? []).filter((entry) => isProjectDataset(entry, projectId))}
+                    selectedIds={
+                      resumeId ? (activeDataset ? [activeDataset.id] : []) : selectedDatasets.map((item) => item.id)
+                    }
+                    disabled={!!resumeId || busy}
+                    libraryLoading={library.isPending}
+                    libraryError={library.error?.message}
+                    onRetryLibrary={() => {
+                      void library.refetch();
+                    }}
+                    issue={(job, ids) => {
+                      const selected = ids.includes(job.id);
+                      const reference = datasets.find((item) => item.id === ids[0]);
+                      const views =
+                        reference && cameraSelections[reference.id] !== undefined
+                          ? cameras(reference.result).filter((key) => cameraSelections[reference.id].includes(key))
+                          : cameras(reference?.result);
+                      return (
+                        datasetIssue(job.result) ??
+                        (!selected && reference
+                          ? ids.length >= 8
+                            ? 'Select up to eight datasets per training job.'
+                            : datasetCombinationIssue(reference.result, job.result, views)
+                          : null)
+                      );
+                    }}
+                    onChange={(ids) => {
+                      const reference = datasets.find((item) => item.id === ids[0]);
+                      const views =
+                        reference && cameraSelections[reference.id] !== undefined
+                          ? cameras(reference.result).filter((key) => cameraSelections[reference.id].includes(key))
+                          : cameras(reference?.result);
+                      setCameraMappings((previous) =>
+                        Object.fromEntries(
+                          ids.slice(1).map((id) => {
+                            const candidate = datasets.find((item) => item.id === id)!;
+                            return [
+                              id,
+                              reference?.id === dataset?.id && previous[id]
+                                ? previous[id]
+                                : combinationCameraMapping(reference!.result, candidate.result, views),
+                            ];
+                          }),
+                        ),
+                      );
+                      setDatasetId(ids[0] ?? '__none__');
+                      setExtraDatasetIds(ids.slice(1));
+                      mutation.reset();
+                    }}
+                    onImport={onChooseDataset}
+                  />
+                )}
+                {!resumeId &&
+                  selectedDatasets.slice(1).map((item) => (
+                    <fieldset key={item.id} className="training-camera-mapping">
+                      <legend>Camera mapping · {item.result.repo_id}</legend>
+                      {selectedCameras.map((key) => (
+                        <label key={key}>
+                          {key.replace(/^observation\.images\./, '')}
+                          <select
+                            aria-label={`${item.result.repo_id}: ${key}`}
+                            value={mappings[item.id][key]}
+                            disabled={busy}
+                            onChange={(event) =>
+                              setCameraMappings((previous) => ({
+                                ...previous,
+                                [item.id]: { ...previous[item.id], [key]: event.target.value },
+                              }))
+                            }
+                          >
+                            <option value="">Choose matching camera</option>
+                            {cameras(item.result).map((source) => (
+                              <option key={source} value={source}>
+                                {source.replace(/^observation\.images\./, '')}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ))}
+                    </fieldset>
+                  ))}
+                {mixtureIssue && (
+                  <p className="error-notice" role="alert">
+                    {mixtureIssue}
+                  </p>
+                )}
+                {activeDataset && (
+                  <>
+                    <div className="training-data-facts">
+                      <span>{number(activeDataset.result.total_episodes)} episodes</span>
+                      <span>{number(activeDataset.result.total_frames)} frames</span>
+                      <span>{activeDataset.result.fps} fps</span>
+                      <span>
+                        {cameras(activeDataset.result).length}{' '}
+                        {cameras(activeDataset.result).length === 1 ? 'camera' : 'cameras'}
+                      </span>
+                      <span>{activeDataset.result.robot_type}</span>
+                    </div>
+                    <div className="training-heading training-camera-heading">
+                      <h3>Cameras</h3>
+                      {episodes.data && episodes.data.episodes.length > 1 && (
+                        <label className="training-episode-picker">
+                          <span className="visually-hidden">Preview episode</span>
+                          <select
+                            value={episodeIndex ?? ''}
+                            onChange={(event) =>
+                              setPreviewEpisode({
+                                datasetId: activeDataset.id,
+                                index: Number(event.target.value),
+                              })
+                            }
+                          >
+                            {episodes.data.episodes.map((item) => (
+                              <option key={item.episode_index} value={item.episode_index}>
+                                Episode {item.episode_index}
+                              </option>
+                            ))}
+                          </select>
+                          <svg
+                            className="training-select-arrow"
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.6"
+                            aria-hidden="true"
+                          >
+                            <path d="m6 9 6 6 6-6" />
+                          </svg>
+                        </label>
+                      )}
+                    </div>
+                    {preview.data?.cameras.length ? (
+                      <CameraPlayer
+                        key={`${activeDataset.id}-${episodeIndex}`}
+                        preview={preview.data}
+                        active={step === 0}
+                        selection={{
+                          keys: activeCameraKeys,
+                          onToggle: toggleCamera,
+                          disabled: !!resumeId || busy,
+                        }}
+                      />
+                    ) : (
+                      <fieldset className="training-camera-fallback">
+                        <legend className="visually-hidden">Training cameras</legend>
+                        {cameras(activeDataset.result).map((key) => (
+                          <label key={key}>
+                            <span className="training-camera-placeholder">
+                              <Icon name="play" size={22} />
+                              <small>
+                                {episodes.isFetching || preview.isFetching ? 'Loading preview…' : 'Preview unavailable'}
+                              </small>
+                            </span>
+                            <span>
+                              <input
+                                type="checkbox"
+                                aria-label={key}
+                                checked={activeCameraKeys.includes(key)}
+                                disabled={!!resumeId || busy}
+                                onChange={() => toggleCamera(key)}
+                              />
+                              {key.replace(/^observation\.images\./, '')}
+                            </span>
+                          </label>
+                        ))}
+                      </fieldset>
+                    )}
+                    {!!preview.data?.cameras.length &&
+                      cameras(activeDataset.result)
+                        .filter((key) => !preview.data.cameras.some((item) => item.key === key))
+                        .map((key) => (
+                          <label key={key} className="training-extra-camera">
+                            <input
+                              type="checkbox"
+                              aria-label={key}
+                              checked={activeCameraKeys.includes(key)}
+                              disabled={!!resumeId || busy}
+                              onChange={() => toggleCamera(key)}
+                            />
+                            {key.replace(/^observation\.images\./, '')}
+                            <small>Preview unavailable</small>
+                          </label>
+                        ))}
+                    {(episodes.isError || preview.isError) && (
+                      <button
+                        type="button"
+                        className="text-button"
+                        onClick={() => {
+                          void episodes.refetch();
+                          if (episodeIndex !== undefined) void preview.refetch();
+                        }}
+                      >
+                        Retry preview
+                      </button>
+                    )}
+                  </>
+                )}
+                <div className="training-footer">
+                  <span>{activeDataset && !activeCameraKeys.length ? 'Select at least one camera.' : ''}</span>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={
+                      !activeDataset ||
+                      !activeCameraKeys.length ||
+                      (!resumeId && (!!datasetIssue(activeDataset.result) || !!mixtureIssue))
+                    }
+                    onClick={() => setStep(1)}
+                  >
+                    Next <Icon name="arrow" size={15} />
+                  </button>
+                </div>
+              </section>
+            )}
+
+            {step === 1 && (
+              <section aria-labelledby="training-model-title">
+                <div className="training-heading">
+                  <h2 id="training-model-title" ref={headingRef} tabIndex={-1}>
+                    Base model
+                  </h2>
+                  <span className="training-model-selection-count" aria-live="polite">
+                    {selectedModels.length} {selectedModels.length === 1 ? 'model' : 'models'} selected
+                  </span>
+                </div>
+                <fieldset className="training-model-groups">
+                  <legend className="visually-hidden">Base model</legend>
+                  {groupedTrainingModels(models).map((group) => (
+                    <section
+                      className="training-model-group"
+                      key={group.id}
+                      aria-labelledby={`training-family-${group.id}`}
+                    >
+                      <h3 id={`training-family-${group.id}`}>
+                        {group.label}
+                        <span className="training-model-family-count" aria-hidden="true">
+                          {group.models.length}
+                        </span>
+                      </h3>
+                      <div className="training-model-grid">
+                        {group.models.map((item) => {
+                          const statusLabel = modelStatusLabel(item, modelSupported(item));
+                          const memory = item.minimum_gpu_memory_gb ?? item.suggested_gpu_memory_gb;
+                          return (
+                            <label
+                              key={item.id}
+                              className={`training-model-tile model-${item.id}${!modelSupported(item) ? ' unavailable' : ''}`}
+                              title={`${item.model_id} · ${item.description}`}
+                            >
+                              <input
+                                type="checkbox"
+                                name="training-model"
+                                aria-label={item.label}
+                                checked={selectedModels.some((model) => model.id === item.id)}
+                                disabled={!!resumeId || busy || !modelSupported(item)}
+                                onChange={() => {
+                                  if (displayedModelId)
+                                    setModelBatchSizes((previous) => ({
+                                      ...previous,
+                                      [displayedModelId]: recipe.batchSize,
+                                    }));
+                                  const selected = selectedModels.map((model) => model.id);
+                                  const next = selected.includes(item.id)
+                                    ? selected.filter((id) => id !== item.id)
+                                    : [...selected, item.id];
+                                  const editId = next.includes(item.id) ? item.id : (next[0] ?? '');
+                                  setRecipe((previous) => ({
+                                    ...previous,
+                                    batchSize:
+                                      modelBatchSizes[editId] ??
+                                      (editId === 'smolvla' ? defaults.batchSize : editId === 'psi0' ? 2 : 4),
+                                  }));
+                                  setModelIds(next);
+                                  setModelId(next.includes(item.id) ? item.id : (next[0] ?? ''));
+                                  setRuntimeId('');
+                                  mutation.reset();
+                                }}
+                              />
+                              <span className="training-model-copy">
+                                <span>
+                                  <strong>{item.label}</strong>
+                                  {statusLabel && <small className="training-model-status">{statusLabel}</small>}
+                                </span>
+                                <span className="training-model-memory">
+                                  {typeof memory === 'number' && Number.isFinite(memory) && memory > 0 ? (
+                                    <>
+                                      GPU budget · <strong>{number(memory)} GB+</strong>
+                                    </>
+                                  ) : (
+                                    <strong>GPU budget not verified</strong>
+                                  )}
+                                </span>
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ))}
+                </fieldset>
+                {selectedModels.length > 1 && (
+                  <p className="training-selection-note">
+                    {selectedModels.length} independent jobs · one cloud GPU per model
+                  </p>
+                )}
+                {model && (
+                  <div className="training-method-choices">
+                    <div className="training-edit-model">
+                      {selectedModels.length > 1 &&
+                        selectedModels.map((item) => (
+                          <button
+                            type="button"
+                            key={item.id}
+                            aria-pressed={model.id === item.id}
+                            className="secondary-button"
+                            disabled={busy}
+                            onClick={() => {
+                              setModelBatchSizes((previous) => ({ ...previous, [model.id]: recipe.batchSize }));
+                              setModelId(item.id);
+                              setRecipe((previous) => ({ ...previous, batchSize: batchFor(item) }));
+                            }}
+                          >
+                            Settings for {item.label}
+                          </button>
+                        ))}
+                    </div>
+                    <WorkflowChoiceGrid
+                      name="training-method"
+                      label="Training method"
+                      value={activeMethod ?? ''}
+                      disabled={!!resumeId || busy}
+                      options={availableMethods.map((item) => ({
+                        value: item.id,
+                        label: item.label,
+                        meta:
+                          item.id === 'lora'
+                            ? 'Adapters'
+                            : item.id === 'qlora'
+                              ? 'Quantized adapters'
+                              : item.id === 'full'
+                                ? 'Trainable weights'
+                                : undefined,
+                        icon: item.id === 'lora' ? 'sliders' : 'layers',
+                      }))}
+                      onChange={setMethod}
+                    />
+                  </div>
+                )}
+                {modelIssue && (
+                  <p className="error-notice" role="alert">
+                    {modelIssue}
+                  </p>
+                )}
+                <div className="training-footer">
+                  <button type="button" className="text-button" onClick={() => setStep(0)}>
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={!model || !activeMethod || !activeDataset || !!modelIssue}
+                    onClick={() => setStep(2)}
+                  >
+                    Next <Icon name="arrow" size={15} />
+                  </button>
+                </div>
+              </section>
+            )}
+
+            {step === 2 && (
+              <section aria-labelledby="training-compute-title">
+                <div className="training-heading">
+                  <h2 id="training-compute-title" ref={headingRef} tabIndex={-1}>
+                    Compute
+                  </h2>
+                </div>
+                <section className="training-recipe-review" aria-label="Training recipe review">
+                  <div className="training-recipe-title">
+                    <span>{resumeId ? 'Resume saved training' : 'Your training recipe'}</span>
+                    <strong>
+                      {selectedModels.length > 1 && !resumeId
+                        ? `${selectedModels.length} independent jobs · 1 GPU each`
+                        : `${summaryModel} · ${activeMethod?.toUpperCase()}`}
+                    </strong>
+                  </div>
+                  <dl>
+                    <div>
+                      <dt>Dataset</dt>
+                      <dd>
+                        {activeDataset?.result.repo_id ??
+                          (activeDataset ? 'Local training snapshot' : 'Choose a dataset')}
+                        {activeDataset && (
+                          <small
+                            className="training-recipe-identity"
+                            title={activeDataset.result.snapshot?.manifest_sha256 ?? activeDataset.result.revision}
+                          >
+                            {activeDataset.result.snapshot ? 'Snapshot' : 'Pinned revision'}{' '}
+                            {(activeDataset.result.snapshot?.manifest_sha256 ?? activeDataset.result.revision).slice(
+                              0,
+                              12,
+                            )}
+                          </small>
+                        )}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Observations</dt>
+                      <dd>
+                        {activeCameraKeys.length} {activeCameraKeys.length === 1 ? 'camera' : 'cameras'}
+                        {activeDataset
+                          ? ` · ${number(resumeId ? activeDataset.result.total_episodes : selectedDatasets.reduce((sum, item) => sum + item.result.total_episodes, 0))} episodes`
+                          : ''}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Training budget</dt>
+                      <dd>
+                        {resumeId
+                          ? 'Saved recipe'
+                          : selectedModels.length > 1
+                            ? `${number(recipe.trainingSteps)} steps per job`
+                            : trainingBudget}
+                      </dd>
+                    </div>
+                    {(resumeId || selectedModels.length <= 1) && (
+                      <div>
+                        <dt>Action timing</dt>
+                        <dd>
+                          {resumeId
+                            ? checkpointTiming(originalTraining)
+                            : effectiveTiming
+                              ? `Predict ${effectiveTiming.prediction} · execute ${effectiveTiming.execution}${timing?.enabled ? '' : ' · default'}`
+                              : 'Model-owned settings'}
+                        </dd>
+                      </div>
+                    )}
+                  </dl>
+                  {!resumeId &&
+                    selectedModels.map((item) => {
+                      const family = temporalFamily(item.id);
+                      const draft = family ? (temporalDrafts[family] ?? defaultTemporal(family)) : null;
+                      const modelTiming = family ? (draft?.enabled ? draft : defaultTemporal(family)) : null;
+                      const estimate = trainingMemory(
+                        item,
+                        methodFor(item),
+                        batchFor(item),
+                        activeCameraKeys,
+                        activeDataset?.result,
+                        modelTiming?.prediction,
+                      );
+                      return (
+                        <div className="training-memory-estimate" key={item.id}>
+                          <strong>{item.label}</strong>
+                          <span>
+                            {selectedModels.length > 1
+                              ? `${methodFor(item).toUpperCase()} · batch ${batchFor(item)} · `
+                              : ''}
+                            {estimate ? `≈ ${estimate.gb} GB GPU memory` : 'Memory estimate unavailable'}
+                            <TrainingHelp label={`${item.label} memory estimate`}>
+                              {estimate?.source ?? 'This model has no verified catalog memory budget.'}
+                            </TrainingHelp>
+                          </span>
+                          {selectedModels.length > 1 && (
+                            <small>
+                              {modelTiming
+                                ? `Predict ${modelTiming.prediction} · execute ${modelTiming.execution}${draft?.enabled ? '' : ' · default'}`
+                                : 'Model-owned action timing'}
+                            </small>
+                          )}
+                          {estimate && (
+                            <small>
+                              {estimate.recommended
+                                ? `Suggested GPU: ${estimate.recommended}`
+                                : 'No listed GPU meets this estimate. Try a smaller batch.'}
+                            </small>
+                          )}
+                        </div>
+                      );
+                    })}
+                  {!resumeId && selectedDatasets.length > 1 && (
+                    <div className="training-mixture-recipe">
+                      <strong>Combined training set</strong>
+                      {selectedDatasets.map((item) => (
+                        <span key={item.id}>
+                          {item.result.repo_id} · {item.result.revision.slice(0, 12)}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {resumeId && <p>Dataset, model and timing stay bound to the saved checkpoint.</p>}
+                  {accumulationIssue && (
+                    <>
+                      <p role="alert">{accumulationIssue}</p>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        disabled={busy}
+                        onClick={() => update('gradientAccumulation', 1)}
+                      >
+                        Use accumulation 1
+                      </button>
+                    </>
+                  )}
+                </section>
+                <GpuPicker
+                  value={selectedGpu}
+                  onChange={setRuntimeId}
+                  disabled={busy}
+                  choices={[
+                    ...gpuChoices.map((gpu) => ({
+                      id: gpu,
+                      label: gpu === 'A100-80GB' ? 'A100' : gpu,
+                      memory: `${cloudGpuMemory[gpu]} GB`,
+                    })),
+                    ...localRuntimes.map((item) => ({
+                      id: item.id,
+                      label: item.label,
+                      memory: item.gpu_memory_mib ? `${number(item.gpu_memory_mib / 1024)} GB` : undefined,
+                    })),
+                  ]}
+                />
+                <details className="training-disclosure">
+                  <summary>Advanced settings</summary>
+                  {resumeId ? (
+                    <div className="training-saved-recipe">
+                      <p>Original recipe preserved.</p>
+                      <p>{checkpointTiming(originalTraining)}</p>
+                      <p>
+                        Resume loads the saved architecture and processors. Start a new run to request different
+                        horizons.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="training-settings-actions">
+                        <button
+                          type="button"
+                          className="text-button"
+                          disabled={busy}
+                          onClick={() => {
+                            setRecipe({
+                              ...defaults,
+                              batchSize: model?.id === 'smolvla' ? defaults.batchSize : model?.id === 'psi0' ? 2 : 4,
+                            });
+                            setModelBatchSizes({});
+                            setTemporalDrafts({});
+                          }}
+                        >
+                          Reset settings
+                        </button>
+                      </div>
+                      <fieldset className="training-hyperparameters">
+                        <legend>Learning settings</legend>
+                        <div className="training-fields">
+                          <label>
+                            <span className="training-field-name">
+                              Steps
+                              <TrainingHelp label="Steps">
+                                Optimizer updates. Learning-rate schedules and checkpoint intervals use the same count.
+                              </TrainingHelp>
+                            </span>
+                            <input
+                              aria-label="Steps"
+                              type="number"
+                              min="2"
+                              step="1"
+                              value={recipe.trainingSteps}
+                              disabled={busy}
+                              onChange={(event) => update('trainingSteps', Number(event.target.value))}
+                            />
+                          </label>
+                          <label>
+                            <span className="training-field-name">
+                              Batch size
+                              <TrainingHelp label="Batch size">
+                                Examples in each GPU microbatch. Larger batches generally need more GPU memory.
+                              </TrainingHelp>
+                            </span>
+                            <input
+                              aria-label="Batch size"
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={recipe.batchSize}
+                              disabled={busy}
+                              onChange={(event) => update('batchSize', Number(event.target.value))}
+                            />
+                          </label>
+                          <label>
+                            <span className="training-field-name">
+                              Learning rate
+                              <TrainingHelp label="Learning rate">Size of each optimizer update.</TrainingHelp>
+                            </span>
+                            <input
+                              aria-label="Learning rate"
+                              type="number"
+                              min="0.000000001"
+                              step="any"
+                              value={recipe.learningRate}
+                              disabled={busy}
+                              onChange={(event) => update('learningRate', Number(event.target.value))}
+                            />
+                          </label>
+                          <label>
+                            <span className="training-field-name">
+                              Gradient accumulation
+                              <TrainingHelp label="Gradient accumulation" id="training-accumulation-help">
+                                {accumulationSupported
+                                  ? `Nominal effective batch: ${number(nominalBatch)} examples (${recipe.batchSize} × ${recipe.gradientAccumulation} × 1 GPU). Short final windows contain fewer examples.`
+                                  : 'Only accumulation 1 is available for this model, method and compute target.'}
+                              </TrainingHelp>
+                            </span>
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              aria-label="Gradient accumulation"
+                              aria-describedby="training-accumulation-help"
+                              value={recipe.gradientAccumulation}
+                              disabled={busy || !accumulationSupported}
+                              onChange={(event) => update('gradientAccumulation', Number(event.target.value))}
+                            />
+                          </label>
+                          <label>
+                            <span className="training-field-name">
+                              Random seed
+                              <TrainingHelp label="Random seed">
+                                Controls episode splitting and training randomness.
+                              </TrainingHelp>
+                            </span>
+                            <input
+                              aria-label="Random seed"
+                              type="number"
+                              min="0"
+                              max="2147483647"
+                              step="1"
+                              value={recipe.seed}
+                              disabled={busy}
+                              onChange={(event) => update('seed', Number(event.target.value))}
+                            />
+                          </label>
+                          <label>
+                            <span className="training-field-name">
+                              Validation fraction
+                              <TrainingHelp label="Validation fraction">
+                                Fraction of separate episodes held out for validation.
+                              </TrainingHelp>
+                            </span>
+                            <input
+                              aria-label="Validation fraction"
+                              type="number"
+                              min="0.01"
+                              max="0.99"
+                              step="any"
+                              value={recipe.validationFraction}
+                              disabled={busy}
+                              onChange={(event) => update('validationFraction', Number(event.target.value))}
+                            />
+                          </label>
+                          <label>
+                            <span className="training-field-name">
+                              Validate every (steps)
+                              <TrainingHelp label="Validate every (steps)">
+                                Optimizer updates between held-out validation checks.
+                              </TrainingHelp>
+                            </span>
+                            <input
+                              aria-label="Validate every (steps)"
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={recipe.evalEvery}
+                              disabled={busy}
+                              onChange={(event) => update('evalEvery', Number(event.target.value))}
+                            />
+                          </label>
+                          <label>
+                            <span className="training-field-name">
+                              Checkpoints
+                              <TrainingHelp
+                                label="Checkpoints"
+                                id="training-checkpoint-help"
+                              >{`Every ${number(checkpointInterval)} steps, including the final checkpoint. ${runtime?.execution === 'skypilot' ? 'Saved on Google Cloud.' : 'Saved on the selected compute storage.'}`}</TrainingHelp>
+                            </span>
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={checkpointCount}
+                              disabled={busy}
+                              aria-label="Checkpoints"
+                              aria-describedby="training-checkpoint-help"
+                              onChange={(event) =>
+                                setRecipe((previous) => ({
+                                  ...previous,
+                                  checkpointCount: Number(event.target.value),
+                                  checkpointIntervalOverride: null,
+                                }))
+                              }
+                            />
+                          </label>
+                        </div>
+                      </fieldset>
+                      {timing && (
+                        <fieldset
+                          className="training-temporal"
+                          aria-label="Action timing"
+                          aria-describedby="training-timing-help"
+                        >
+                          <legend>
+                            <span className="training-field-name">
+                              Action timing
+                              <TrainingHelp label="Action timing" id="training-timing-help">
+                                Prediction: future actions learned together. Execution: actions used before the next
+                                observation. Existing checkpoints keep their shape.
+                              </TrainingHelp>
+                            </span>
+                          </legend>
+                          <div className="training-temporal-fields">
+                            <label htmlFor="training-prediction">
+                              <span className="training-field-name">
+                                Prediction horizon
+                                <TrainingHelp label="Prediction horizon" id="training-prediction-help">
+                                  Actions predicted together.
+                                </TrainingHelp>
+                              </span>
+                              <input
+                                id="training-prediction"
+                                aria-label="Prediction horizon"
+                                type="number"
+                                min="1"
+                                max="1024"
+                                step="1"
+                                value={effectiveTiming!.prediction}
+                                disabled={busy}
+                                aria-invalid={!!timingIssue}
+                                aria-describedby="training-timing-help training-prediction-help"
+                                onChange={(event) =>
+                                  updateTiming({ enabled: true, prediction: Number(event.target.value) })
+                                }
+                              />
+                            </label>
+                            <label htmlFor="training-execution">
+                              <span className="training-field-name">
+                                Execution horizon
+                                <TrainingHelp label="Execution horizon" id="training-execution-help">
+                                  Actions used before observing again.
+                                </TrainingHelp>
+                              </span>
+                              <input
+                                id="training-execution"
+                                aria-label="Execution horizon"
+                                type="number"
+                                min="1"
+                                max={effectiveTiming!.prediction >= 1 ? effectiveTiming!.prediction : 1024}
+                                step="1"
+                                value={effectiveTiming!.execution}
+                                disabled={busy}
+                                aria-invalid={!!timingIssue}
+                                aria-describedby="training-timing-help training-execution-help"
+                                onChange={(event) =>
+                                  updateTiming({ enabled: true, execution: Number(event.target.value) })
+                                }
+                              />
+                            </label>
+                          </div>
+                          {timingIssue && (
+                            <p className="error-notice" role="alert">
+                              {timingIssue}
+                            </p>
+                          )}
+                        </fieldset>
+                      )}
+                      {!timing && (
+                        <p className="training-native-timing">
+                          Action timing follows this model’s native configuration.
+                        </p>
+                      )}
+                    </>
+                  )}
+                </details>
+                <div className="training-footer">
+                  <button type="button" className="text-button" onClick={() => setStep(1)}>
+                    Back
+                  </button>
+                  <span className="training-launch">
+                    {needsAccount ? (
+                      <button type="button" className="text-button" onClick={onComputeSettings}>
+                        Connect account
+                      </button>
+                    ) : (
+                      <span role="status">{runStarting ? '' : blocked}</span>
+                    )}
+                    <button type="submit" className="primary-button" disabled={!!blocked || busy}>
+                      {startLabel}
+                      <Icon name="arrow" size={15} />
+                    </button>
+                  </span>
+                </div>
+              </section>
+            )}
+
+            {submission.error && submission.available && !attempt && (
+              <p className="error-notice" role="alert">
+                {submission.error}
+              </p>
+            )}
+            {[options.error, jobs.error, artifacts.error, mutation.error].filter(Boolean).map((error, index) => (
+              <p className="error-notice" role="alert" key={index}>
+                {error?.message}
+              </p>
+            ))}
+            {(options.isError || jobs.isError) && (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  void options.refetch();
+                  void jobs.refetch();
+                }}
+              >
+                Retry
+              </button>
+            )}
+          </form>
+        </>
+      )}
+
+      {view === 'run' && (
+        <section className="training-activity training-job-detail" aria-label="Fine-tuning job">
+          <button type="button" className="text-button training-back" onClick={showHistory}>
+            <Icon name="arrow" size={14} />
+            Back to jobs
+          </button>
           <div className="training-heading">
-            <h2 ref={headingRef} tabIndex={-1}>{selectedRun ? trainingRunModelLabel(selectedRun, models, artifacts.data ?? [], trainingRuns) ?? "Fine-tuning job" : "Fine-tuning job"}</h2>
-            <button
-              type="button"
-              className="text-button"
-              onClick={onDiagnostics}
-            >
+            <h2 ref={headingRef} tabIndex={-1}>
+              {selectedRun
+                ? (trainingRunModelLabel(selectedRun, models, artifacts.data ?? [], trainingRuns) ?? 'Fine-tuning job')
+                : 'Fine-tuning job'}
+            </h2>
+            <button type="button" className="text-button" onClick={onDiagnostics}>
               Diagnostics <Icon name="arrow" size={14} />
             </button>
           </div>
@@ -1284,7 +1976,7 @@ export function TrainingPanel({
               run={selectedRun}
               projectId={projectId}
               active={active}
-              artifacts={(artifacts.data ?? []).filter(item => item.job_id === selectedRun.id)}
+              artifacts={(artifacts.data ?? []).filter((item) => item.job_id === selectedRun.id)}
               preferredCheckpointId={selectedRun.id === preferredRunId ? preferredCheckpointId : undefined}
               modelCatalog={models}
               exportRuntimes={options.isSuccess ? options.data.runtimes : []}
@@ -1296,16 +1988,22 @@ export function TrainingPanel({
               onQuantize={onQuantize}
               onNativeQuantize={onNativeQuantize}
               onNativeDistill={onNativeDistill}
-              onResume={resumeOptions.some(item => item.jobId === selectedRun.id) ? checkpointId => {
-                selectionGeneration.current += 1;
-                const checkpoint = checkpointId ? resumeOptions.find(item => item.id === checkpointId && item.jobId === selectedRun.id) : resumeOptions.find(item => item.jobId === selectedRun.id);
-                if (!checkpoint) return;
-                setResumeId(checkpoint.id);
-                setStep(2);
-                mutation.reset();
-                setView("new");
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              } : undefined}
+              onResume={
+                resumeOptions.some((item) => item.jobId === selectedRun.id)
+                  ? (checkpointId) => {
+                      selectionGeneration.current += 1;
+                      const checkpoint = checkpointId
+                        ? resumeOptions.find((item) => item.id === checkpointId && item.jobId === selectedRun.id)
+                        : resumeOptions.find((item) => item.jobId === selectedRun.id);
+                      if (!checkpoint) return;
+                      setResumeId(checkpoint.id);
+                      setStep(2);
+                      mutation.reset();
+                      setView('new');
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
+                  : undefined
+              }
             />
           )}
           {!selectedRun && <p className="muted">This job is no longer available.</p>}

@@ -8,69 +8,139 @@ const camera = 'observation.images.front';
 
 function inspectedDataset(id = 'inspected-video', repo = 'fixture/robot') {
   return {
-    id, project_id: projectId, kind: 'dataset.inspect', status: 'succeeded',
+    id,
+    project_id: projectId,
+    kind: 'dataset.inspect',
+    status: 'succeeded',
     request: { source: 'huggingface', repo_id: repo, revision: 'main' },
-    created_at: timestamp, updated_at: timestamp,
+    created_at: timestamp,
+    updated_at: timestamp,
     result: {
-      source: 'huggingface', repo_id: repo, revision, format: 'lerobot_v3',
-      inspection_scope: 'metadata_only', total_episodes: 12, total_frames: 1800, fps: 30,
+      source: 'huggingface',
+      repo_id: repo,
+      revision,
+      format: 'lerobot_v3',
+      inspection_scope: 'metadata_only',
+      total_episodes: 12,
+      total_frames: 1800,
+      fps: 30,
       features: {
         [camera]: { dtype: 'video', shape: [480, 640, 3] },
         'observation.images.side': { dtype: 'video', shape: [480, 640, 3] },
         'observation.images.wrist': { dtype: 'image', shape: [480, 640, 3] },
-        action: { dtype: 'float32', shape: [6] }, 'observation.state': { dtype: 'float32', shape: [6] },
+        action: { dtype: 'float32', shape: [6] },
+        'observation.state': { dtype: 'float32', shape: [6] },
       },
-      metadata_sha256: 'b'.repeat(64), inspected_at: timestamp, warnings: [],
+      metadata_sha256: 'b'.repeat(64),
+      inspected_at: timestamp,
+      warnings: [],
     },
   };
 }
 
 function resultFor(body: Record<string, any>) {
   return {
-    operation: 'dataset.augment', model: 'gemini-omni-1.1-flash', prompt: 'Preserve robot motion. Use soft side lighting.',
-    source_job_id: body.source_job_id, repo_id: 'fixture/robot', revision, metadata_sha256: 'b'.repeat(64),
-    review_required: true, warnings: ['Review visual changes against the original actions.'],
+    operation: 'dataset.augment',
+    model: 'gemini-omni-1.1-flash',
+    prompt: 'Preserve robot motion. Use soft side lighting.',
+    source_job_id: body.source_job_id,
+    repo_id: 'fixture/robot',
+    revision,
+    metadata_sha256: 'b'.repeat(64),
+    review_required: true,
+    warnings: ['Review visual changes against the original actions.'],
     clips: body.episode_indices.map((episode: number, index: number) => ({
-      index, episode_index: episode, camera_key: body.camera_key,
-      source_start_seconds: body.start_seconds, source_end_seconds: body.start_seconds + body.duration_seconds,
-      input_sha256: 'c'.repeat(64), output_sha256: 'd'.repeat(64), interaction_id: 'mock-interaction',
+      index,
+      episode_index: episode,
+      camera_key: body.camera_key,
+      source_start_seconds: body.start_seconds,
+      source_end_seconds: body.start_seconds + body.duration_seconds,
+      input_sha256: 'c'.repeat(64),
+      output_sha256: 'd'.repeat(64),
+      interaction_id: 'mock-interaction',
     })),
   };
 }
 
-async function mockWorkspace(page: Page, config: { configured?: boolean; empty?: boolean; complete?: boolean; failFirst?: boolean; cloud?: boolean; projectsReady?: Promise<void>; jobsReady?: Promise<void>; failProjects?: () => boolean; submissionMode?: 'lost-ack' | 'lost-before-commit' | 'unsupported' | 'wrong-ack' | 'rejected' | 'delayed-ack'; priorRuns?: boolean } = {}) {
+async function mockWorkspace(
+  page: Page,
+  config: {
+    configured?: boolean;
+    empty?: boolean;
+    complete?: boolean;
+    failFirst?: boolean;
+    cloud?: boolean;
+    projectsReady?: Promise<void>;
+    jobsReady?: Promise<void>;
+    failProjects?: () => boolean;
+    submissionMode?: 'lost-ack' | 'lost-before-commit' | 'unsupported' | 'wrong-ack' | 'rejected' | 'delayed-ack';
+    priorRuns?: boolean;
+  } = {},
+) {
   let releaseAck!: () => void;
-  const ackReady = new Promise<void>(resolve => { releaseAck = resolve; });
+  const ackReady = new Promise<void>((resolve) => {
+    releaseAck = resolve;
+  });
   const submitted: Record<string, any>[] = [];
   const keys: string[] = [];
   const bindings = new Map<string, Record<string, any>>();
   const lookups: string[] = [];
   const unexpected: string[] = [];
   const cancelled: string[] = [];
-  const jobs: Record<string, any>[] = config.empty ? [] : [inspectedDataset(),
-    { ...inspectedDataset('failed-inspection'), status: 'failed', result: null },
-    { ...inspectedDataset('image-only'), result: { ...inspectedDataset().result, features: { 'observation.images.wrist': { dtype: 'image', shape: [480, 640, 3] } } } },
-    { ...inspectedDataset('local-inspection'), result: { ...inspectedDataset().result, source: 'local' } },
-  ];
-  if (config.priorRuns) for (let i = 1; i <= 2; i++) {
-    const request = { operation: 'dataset.augment', source_job_id: 'inspected-video', episode_indices: [i], camera_key: camera,
-      preset: 'lighting', prompt: '', start_seconds: 0, duration_seconds: 5 };
-    jobs.unshift({ id: `previous-${i}`, project_id: projectId, kind: 'dataset.augment', status: 'succeeded',
-      request, created_at: `2026-09-26T1${i}:00:00Z`, updated_at: timestamp, result: resultFor(request) });
-  }
+  const jobs: Record<string, any>[] = config.empty
+    ? []
+    : [
+        inspectedDataset(),
+        { ...inspectedDataset('failed-inspection'), status: 'failed', result: null },
+        {
+          ...inspectedDataset('image-only'),
+          result: {
+            ...inspectedDataset().result,
+            features: { 'observation.images.wrist': { dtype: 'image', shape: [480, 640, 3] } },
+          },
+        },
+        { ...inspectedDataset('local-inspection'), result: { ...inspectedDataset().result, source: 'local' } },
+      ];
+  if (config.priorRuns)
+    for (let i = 1; i <= 2; i++) {
+      const request = {
+        operation: 'dataset.augment',
+        source_job_id: 'inspected-video',
+        episode_indices: [i],
+        camera_key: camera,
+        preset: 'lighting',
+        prompt: '',
+        start_seconds: 0,
+        duration_seconds: 5,
+      };
+      jobs.unshift({
+        id: `previous-${i}`,
+        project_id: projectId,
+        kind: 'dataset.augment',
+        status: 'succeeded',
+        request,
+        created_at: `2026-09-26T1${i}:00:00Z`,
+        updated_at: timestamp,
+        result: resultFor(request),
+      });
+    }
   let optionsAttempts = 0;
   // Intercept all application requests, including every write. The browser
   // suite cannot invoke a model or upload media to a real provider.
-  await page.route('**/api/v1/**', async route => {
+  await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     const submissionPath = `/api/v1/projects/${projectId}/submissions/`;
     if (request.method() === 'GET' && path.startsWith(submissionPath)) {
       const key = decodeURIComponent(path.slice(submissionPath.length));
       lookups.push(key);
-      const headers = config.submissionMode === 'unsupported' ? {} : { 'Idempotency-Key': key, 'Cache-Control': 'no-store' };
-      await route.fulfill({ status: bindings.has(key) ? 200 : 404, headers,
-        json: bindings.get(key) ?? { detail: 'No accepted submission found for this project, operation and key' } });
+      const headers =
+        config.submissionMode === 'unsupported' ? {} : { 'Idempotency-Key': key, 'Cache-Control': 'no-store' };
+      await route.fulfill({
+        status: bindings.has(key) ? 200 : 404,
+        headers,
+        json: bindings.get(key) ?? { detail: 'No accepted submission found for this project, operation and key' },
+      });
       return;
     }
     if (request.method() === 'POST' && path === `/api/v1/projects/${projectId}/augmentations`) {
@@ -78,25 +148,44 @@ async function mockWorkspace(page: Page, config: { configured?: boolean; empty?:
       submitted.push(body);
       const key = request.headers()['idempotency-key'];
       keys.push(key);
-      if (submitted.length === 1 && config.submissionMode === 'lost-before-commit') { await route.abort('connectionfailed'); return; }
-      if (submitted.length === 1 && config.submissionMode === 'rejected') { await route.fulfill({ status: 422, json: { detail: 'Synthetic recipe rejection before admission.' } }); return; }
+      if (submitted.length === 1 && config.submissionMode === 'lost-before-commit') {
+        await route.abort('connectionfailed');
+        return;
+      }
+      if (submitted.length === 1 && config.submissionMode === 'rejected') {
+        await route.fulfill({ status: 422, json: { detail: 'Synthetic recipe rejection before admission.' } });
+        return;
+      }
       const job = {
-        id: `augmentation-${submitted.length}`, project_id: projectId, kind: 'dataset.augment',
-        request: body, status: config.complete ? 'succeeded' : 'running', stage: 'generating_clips',
-        created_at: '2026-09-26T14:00:00Z', updated_at: timestamp, error: null,
+        id: `augmentation-${submitted.length}`,
+        project_id: projectId,
+        kind: 'dataset.augment',
+        request: body,
+        status: config.complete ? 'succeeded' : 'running',
+        stage: 'generating_clips',
+        created_at: '2026-09-26T14:00:00Z',
+        updated_at: timestamp,
+        error: null,
         result: config.complete ? resultFor(body) : null,
       };
       jobs.unshift(job);
       bindings.set(key, job);
-      if (submitted.length === 1 && config.submissionMode === 'lost-ack') { await route.abort('connectionfailed'); return; }
+      if (submitted.length === 1 && config.submissionMode === 'lost-ack') {
+        await route.abort('connectionfailed');
+        return;
+      }
       if (config.submissionMode === 'delayed-ack') await ackReady;
-      await route.fulfill({ status: 202, headers: { 'Idempotency-Key': key, 'Cache-Control': 'no-store' }, json: config.submissionMode === 'wrong-ack' ? { ...job, project_id: 'another-project' } : job });
+      await route.fulfill({
+        status: 202,
+        headers: { 'Idempotency-Key': key, 'Cache-Control': 'no-store' },
+        json: config.submissionMode === 'wrong-ack' ? { ...job, project_id: 'another-project' } : job,
+      });
       return;
     }
     if (request.method() === 'POST' && /^\/api\/v1\/jobs\/[^/]+\/cancel$/.test(path)) {
       const id = path.split('/')[4];
       cancelled.push(id);
-      const job = jobs.find(item => item.id === id)!;
+      const job = jobs.find((item) => item.id === id)!;
       job.status = 'cancelled';
       await route.fulfill({ json: job });
       return;
@@ -116,15 +205,25 @@ async function mockWorkspace(page: Page, config: { configured?: boolean; empty?:
       }
       const responses: Record<string, unknown> = {
         '/api/v1/health': { status: 'ok', version: 'browser-fixture' },
-        '/api/v1/capabilities': [], '/api/v1/modules': installedModules, '/api/v1/datasets': [],
+        '/api/v1/capabilities': [],
+        '/api/v1/modules': installedModules,
+        '/api/v1/datasets': [],
         '/api/v1/projects': [{ id: projectId, name: 'Augmentation review', created_at: timestamp }],
         [`/api/v1/projects/${projectId}/jobs`]: jobs,
         '/api/v1/augmentation-options': {
-          configured: config.configured ?? true, model: 'gemini-omni-1.1-flash', max_clips: 4, max_duration_seconds: 10,
+          configured: config.configured ?? true,
+          model: 'gemini-omni-1.1-flash',
+          max_clips: 4,
+          max_duration_seconds: 10,
           auth_mode: config.cloud ? 'google_cloud' : 'gemini_api_key',
           google_cloud_project: config.cloud ? 'robotics-demo' : null,
-          auth_message: config.cloud ? 'Google Cloud · robotics-demo · uses your Google Cloud login, without an API key. Model access and billing are checked when a run starts.' : null,
-          setup_message: config.configured === false ? 'Set GEMINI_API_KEY on the application server and install ffmpeg and ffprobe.' : null,
+          auth_message: config.cloud
+            ? 'Google Cloud · robotics-demo · uses your Google Cloud login, without an API key. Model access and billing are checked when a run starts.'
+            : null,
+          setup_message:
+            config.configured === false
+              ? 'Set GEMINI_API_KEY on the application server and install ffmpeg and ffprobe.'
+              : null,
           presets: [
             { id: 'lighting', label: 'Lighting', prompt: 'Use soft side lighting.' },
             { id: 'texture', label: 'Textures', prompt: 'Change the tabletop texture.' },
@@ -132,7 +231,10 @@ async function mockWorkspace(page: Page, config: { configured?: boolean; empty?:
           ],
         },
       };
-      if (path in responses) { await route.fulfill({ json: responses[path] }); return; }
+      if (path in responses) {
+        await route.fulfill({ json: responses[path] });
+        return;
+      }
       if (/\/augmentation\/clips\/\d+$/.test(path)) {
         // Empty media deliberately exercises the accessible fallback links.
         await route.fulfill({ status: 200, contentType: 'video/mp4', body: '' });
@@ -150,11 +252,16 @@ async function mockWorkspace(page: Page, config: { configured?: boolean; empty?:
 }
 
 async function noOverflow(page: Page) {
-  const dimensions = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
+  const dimensions = await page.evaluate(() => ({
+    width: document.documentElement.clientWidth,
+    scroll: document.documentElement.scrollWidth,
+  }));
   expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.width + 1);
 }
 
-test('submits selected clips and texture instructions, then compares and downloads the completed result', async ({ page }, testInfo) => {
+test('submits selected clips and texture instructions, then compares and downloads the completed result', async ({
+  page,
+}, testInfo) => {
   const { submitted, unexpected } = await mockWorkspace(page, { complete: true });
   await expect(page.getByRole('group', { name: 'Generator', exact: true })).toContainText('Gemini API');
   expect(submitted).toEqual([]);
@@ -172,16 +279,38 @@ test('submits selected clips and texture instructions, then compares and downloa
   await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0]).toEqual({
-    operation: 'dataset.augment', source_job_id: 'inspected-video', episode_indices: [1, 3],
-    camera_key: 'observation.images.side', preset: 'texture', prompt: 'Give the table a matte wood surface.',
-    start_seconds: 1.5, duration_seconds: 4,
+    operation: 'dataset.augment',
+    source_job_id: 'inspected-video',
+    episode_indices: [1, 3],
+    camera_key: 'observation.images.side',
+    preset: 'texture',
+    prompt: 'Give the table a matte wood surface.',
+    start_seconds: 1.5,
+    duration_seconds: 4,
   });
-  await expect(page.getByText('Generated clips may not match the original action labels. Review motion and timing, and validate labels before training.', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('Original episode 1', { exact: true })).toHaveAttribute('src', /augmentation-1\/augmentation\/clips\/0\?original=true$/);
-  await expect(page.getByLabel('Augmented episode 1', { exact: true })).toHaveAttribute('src', /augmentation-1\/augmentation\/clips\/0\?original=false$/);
+  await expect(
+    page.getByText(
+      'Generated clips may not match the original action labels. Review motion and timing, and validate labels before training.',
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(page.getByLabel('Original episode 1', { exact: true })).toHaveAttribute(
+    'src',
+    /augmentation-1\/augmentation\/clips\/0\?original=true$/,
+  );
+  await expect(page.getByLabel('Augmented episode 1', { exact: true })).toHaveAttribute(
+    'src',
+    /augmentation-1\/augmentation\/clips\/0\?original=false$/,
+  );
   await page.getByRole('button', { name: 'Preview episode 3', exact: true }).click();
-  await expect(page.getByLabel('Augmented episode 3', { exact: true })).toHaveAttribute('src', /\/clips\/1\?original=false$/);
-  await expect(page.getByRole('link', { name: 'Download review bundle' })).toHaveAttribute('href', /augmentation-1\/augmentation\/download$/);
+  await expect(page.getByLabel('Augmented episode 3', { exact: true })).toHaveAttribute(
+    'src',
+    /\/clips\/1\?original=false$/,
+  );
+  await expect(page.getByRole('link', { name: 'Download review bundle' })).toHaveAttribute(
+    'href',
+    /augmentation-1\/augmentation\/download$/,
+  );
   // The only write is the requested augmentation; no training job is submitted.
   expect(unexpected).toEqual([]);
   await page.getByText('Prompt & source provenance', { exact: true }).click();
@@ -217,11 +346,17 @@ test('validates episode selection, timing and required custom instructions befor
   await expect(start).toBeEnabled();
   await start.click();
   await expect.poll(() => submitted.length).toBe(1);
-  expect(submitted[0]).toMatchObject({ episode_indices: [0, 2], preset: 'custom', prompt: 'Use a blue tabletop and soft lighting.' });
+  expect(submitted[0]).toMatchObject({
+    episode_indices: [0, 2],
+    preset: 'custom',
+    prompt: 'Use a blue tabletop and soft lighting.',
+  });
   expect(unexpected).toEqual([]);
 });
 
-test('running augmentation persists across tab changes, polls for completion and can be cancelled', async ({ page }) => {
+test('running augmentation persists across tab changes, polls for completion and can be cancelled', async ({
+  page,
+}) => {
   const { submitted, unexpected, jobs, cancelled } = await mockWorkspace(page);
   await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Cancel augmentation', exact: true })).toBeVisible();
@@ -230,14 +365,24 @@ test('running augmentation persists across tab changes, polls for completion and
   await expect(page.getByRole('button', { name: 'Cancel augmentation', exact: true })).toBeVisible();
   jobs[0].status = 'succeeded';
   jobs[0].result = resultFor(submitted[0]);
-  await expect(page.getByText('Generated clips may not match the original action labels. Review motion and timing, and validate labels before training.', { exact: true })).toBeVisible({ timeout: 8000 });
+  await expect(
+    page.getByText(
+      'Generated clips may not match the original action labels. Review motion and timing, and validate labels before training.',
+      { exact: true },
+    ),
+  ).toBeVisible({ timeout: 8000 });
   await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(2);
   await page.getByRole('button', { name: 'Cancel augmentation', exact: true }).click();
   await expect.poll(() => cancelled).toEqual(['augmentation-2']);
   await expect(page.getByText('Run did not complete.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'View run 1', exact: true }).click();
-  await expect(page.getByText('Generated clips may not match the original action labels. Review motion and timing, and validate labels before training.', { exact: true })).toBeVisible();
+  await expect(
+    page.getByText(
+      'Generated clips may not match the original action labels. Review motion and timing, and validate labels before training.',
+      { exact: true },
+    ),
+  ).toBeVisible();
   expect(unexpected).toEqual([]);
 });
 
@@ -259,14 +404,18 @@ test('shows the Google Cloud login and billing project before augmentation', asy
   await expect(page.getByRole('group', { name: 'Generator', exact: true })).toContainText('Google Cloud');
   await page.getByText('Connection details', { exact: true }).click();
   await expect(page.getByText(/uses your Google Cloud login, without an API key/)).toBeVisible();
-  await expect(page.getByText('Clips and prompts are sent to Google Cloud. Charges apply to robotics-demo.', { exact: true })).toBeVisible();
+  await expect(
+    page.getByText('Clips and prompts are sent to Google Cloud. Charges apply to robotics-demo.', { exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeEnabled();
   await expect(page.locator('input[type=password]')).toHaveCount(0);
   expect(submitted).toEqual([]);
   expect(unexpected).toEqual([]);
 });
 
-test('recovers a failed configuration request and offers source import when no video dataset exists', async ({ page }) => {
+test('recovers a failed configuration request and offers source import when no video dataset exists', async ({
+  page,
+}) => {
   const { submitted, unexpected } = await mockWorkspace(page, { empty: true, failFirst: true });
   await expect(page.getByText('Augmentation setup temporarily unavailable.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Retry augmentation setup', exact: true }).click();
@@ -290,7 +439,12 @@ test('augmentation remains keyboard usable without horizontal overflow at 320px'
   await page.getByLabel('Edit instructions').fill('Change only the lighting.');
   await noOverflow(page);
   await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
-  await expect(page.getByText('Generated clips may not match the original action labels. Review motion and timing, and validate labels before training.', { exact: true })).toBeVisible();
+  await expect(
+    page.getByText(
+      'Generated clips may not match the original action labels. Review motion and timing, and validate labels before training.',
+      { exact: true },
+    ),
+  ).toBeVisible();
   await page.getByText('Prompt & source provenance', { exact: true }).focus();
   await page.keyboard.press('Enter');
   await expect(page.getByText(revision, { exact: true }).last()).toBeVisible();
@@ -299,10 +453,13 @@ test('augmentation remains keyboard usable without horizontal overflow at 320px'
   expect(unexpected).toEqual([]);
 });
 
-
-test('waits for confirmed project membership and preserves the first setup error until explicit retry', async ({ page }) => {
+test('waits for confirmed project membership and preserves the first setup error until explicit retry', async ({
+  page,
+}) => {
   let releaseProjects!: () => void;
-  const projectsReady = new Promise<void>(resolve => { releaseProjects = resolve; });
+  const projectsReady = new Promise<void>((resolve) => {
+    releaseProjects = resolve;
+  });
   const fixture = await mockWorkspace(page, { projectsReady, failFirst: true });
   await expect(page.getByRole('region', { name: 'Project', exact: true }).getByRole('status')).toBeVisible();
   await expect(page.getByLabel('Additional instructions (optional)')).toBeDisabled();
@@ -319,9 +476,13 @@ test('waits for confirmed project membership and preserves the first setup error
   expect(fixture.unexpected).toEqual([]);
 });
 
-test('retains edit instructions when inspections arrive and disables cached controls after project lookup failure', async ({ page }) => {
+test('retains edit instructions when inspections arrive and disables cached controls after project lookup failure', async ({
+  page,
+}) => {
   let releaseJobs!: () => void;
-  const jobsReady = new Promise<void>(resolve => { releaseJobs = resolve; });
+  const jobsReady = new Promise<void>((resolve) => {
+    releaseJobs = resolve;
+  });
   let failProjects = false;
   const fixture = await mockWorkspace(page, { jobsReady, failProjects: () => failProjects });
   const prompt = page.getByLabel('Additional instructions (optional)');
@@ -345,7 +506,6 @@ test('retains edit instructions when inspections arrive and disables cached cont
   expect(fixture.submitted).toEqual([]);
   expect(fixture.unexpected).toEqual([]);
 });
-
 
 test('episode quick picks enforce the clip limit and keep manual selection in sync', async ({ page }) => {
   const { submitted, unexpected } = await mockWorkspace(page);
@@ -371,11 +531,34 @@ test('episode quick picks enforce the clip limit and keep manual selection in sy
 
 test('dataset handoff only offers supported video sources and preserves the selected inspection', async ({ page }) => {
   const { jobs, submitted, unexpected } = await mockWorkspace(page);
-  jobs.find(job => job.id === 'local-inspection')!.result.snapshot = { path: '/fixture/local', lineage_validated: true, total_episodes: 12 };
+  jobs.find((job) => job.id === 'local-inspection')!.result.snapshot = {
+    path: '/fixture/local',
+    lineage_validated: true,
+    total_episodes: 12,
+  };
   jobs.push({ ...inspectedDataset('second-video', 'fixture/second'), created_at: '2026-09-25T12:00:00Z' });
-  await page.route('**/api/v1/jobs/*/episodes**', route => route.fulfill({ json: { episodes: [], total_episodes: 12, offset: 0, limit: 6, warnings: [] } }));
-  await page.route('**/api/v1/jobs/*/cover', route => route.fulfill({ status: 422, json: { detail: 'Cover media is unavailable in this handoff fixture' } }));
-  await page.route('**/api/v1/datasets**', route => route.fulfill({ json: jobs.filter(job=>job.kind==='dataset.inspect' && job.result).map(job=>({id:`inspection:${job.id}`,job_id:job.id,project_id:projectId,name:job.id,source:job.result.source,status:'ready',created_at:job.created_at,profile:job.result})) }));
+  await page.route('**/api/v1/jobs/*/episodes**', (route) =>
+    route.fulfill({ json: { episodes: [], total_episodes: 12, offset: 0, limit: 6, warnings: [] } }),
+  );
+  await page.route('**/api/v1/jobs/*/cover', (route) =>
+    route.fulfill({ status: 422, json: { detail: 'Cover media is unavailable in this handoff fixture' } }),
+  );
+  await page.route('**/api/v1/datasets**', (route) =>
+    route.fulfill({
+      json: jobs
+        .filter((job) => job.kind === 'dataset.inspect' && job.result)
+        .map((job) => ({
+          id: `inspection:${job.id}`,
+          job_id: job.id,
+          project_id: projectId,
+          name: job.id,
+          source: job.result.source,
+          status: 'ready',
+          created_at: job.created_at,
+          profile: job.result,
+        })),
+    }),
+  );
   await page.reload();
   await page.getByRole('link', { name: 'Dataset', exact: true }).click();
   await page.getByRole('button', { name: 'Open dataset inspected-video', exact: true }).click();
@@ -383,19 +566,21 @@ test('dataset handoff only offers supported video sources and preserves the sele
   const history = page.getByRole('combobox', { name: 'History', exact: true });
   const augment = page.getByRole('button', { name: 'Augment this dataset', exact: true });
   for (const id of ['local-inspection', 'image-only']) {
-    if (!await history.isVisible()) await page.getByText('Advanced', { exact: true }).click();
+    if (!(await history.isVisible())) await page.getByText('Advanced', { exact: true }).click();
     await history.selectOption(id);
     await expect(augment).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Train on this dataset', exact: true })).toBeVisible();
   }
-  if (!await history.isVisible()) await page.getByText('Advanced', { exact: true }).click();
+  if (!(await history.isVisible())) await page.getByText('Advanced', { exact: true }).click();
   await history.selectOption('failed-inspection');
   await expect(augment).toHaveCount(0);
   await page.getByRole('button', { name: '← Back to library', exact: true }).click();
   await page.getByRole('button', { name: 'Open dataset second-video', exact: true }).click();
   await expect(augment).toBeVisible();
   await augment.click();
-  await expect(page.getByRole('radiogroup', { name: 'Dataset', exact: true }).getByRole('radio', { name: /^fixture\/second,/ })).toBeChecked();
+  await expect(
+    page.getByRole('radiogroup', { name: 'Dataset', exact: true }).getByRole('radio', { name: /^fixture\/second,/ }),
+  ).toBeChecked();
   expect(submitted).toEqual([]);
   await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
   await expect.poll(() => submitted.length).toBe(1);
@@ -403,8 +588,9 @@ test('dataset handoff only offers supported video sources and preserves the sele
   expect(unexpected).toEqual([]);
 });
 
-
-test('lost augmentation acknowledgement recovers its original job by saved key after reload without another POST', async ({ page }) => {
+test('lost augmentation acknowledgement recovers its original job by saved key after reload without another POST', async ({
+  page,
+}) => {
   const fixture = await mockWorkspace(page, { submissionMode: 'lost-ack', complete: true });
   await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
   const recovery = page.getByRole('complementary', { name: 'Request recovery' });
@@ -422,7 +608,9 @@ test('lost augmentation acknowledgement recovers its original job by saved key a
   expect(fixture.unexpected).toEqual([]);
 });
 
-test('a missing binding keeps new augmentation blocked and explicit retry preserves the original key and recipe', async ({ page }) => {
+test('a missing binding keeps new augmentation blocked and explicit retry preserves the original key and recipe', async ({
+  page,
+}) => {
   const fixture = await mockWorkspace(page, { submissionMode: 'lost-before-commit', complete: true });
   await page.getByLabel('Additional instructions (optional)').fill('Original saved lighting');
   await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
@@ -451,7 +639,9 @@ test('an older server cannot receive an unprotected augmentation POST', async ({
   expect(fixture.submitted).toEqual([]);
 });
 
-test('a wrong-project augmentation acknowledgement remains unresolved until scoped lookup verifies it', async ({ page }) => {
+test('a wrong-project augmentation acknowledgement remains unresolved until scoped lookup verifies it', async ({
+  page,
+}) => {
   const fixture = await mockWorkspace(page, { submissionMode: 'wrong-ack' });
   await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
   const recovery = page.getByRole('complementary', { name: 'Request recovery' });
@@ -474,7 +664,6 @@ test('definitive initial recipe rejection allows correction with a new key', asy
   expect(fixture.keys[1]).not.toBe(fixture.keys[0]);
   expect(fixture.submitted[1].prompt).toBe('Corrected recipe');
 });
-
 
 test('late augmentation acknowledgement preserves a manually selected earlier result', async ({ page }) => {
   const state = await mockWorkspace(page, { submissionMode: 'delayed-ack', priorRuns: true, complete: true });
