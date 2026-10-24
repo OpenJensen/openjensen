@@ -27,7 +27,7 @@
 }
 .cloud-settings > h2,
 .cloud-workers h2 {
-  font-size: 16px;
+  font-size: var(--text-section);
   font-weight: 600;
   letter-spacing: -0.2px;
   margin: 0 0 18px;
@@ -56,7 +56,7 @@
   margin: 0;
   min-width: 0;
   color: var(--ink);
-  font-size: 14px;
+  font-size: var(--text-subsection);
   font-weight: 550;
   letter-spacing: -0.2px;
 }
@@ -227,7 +227,7 @@
   margin-bottom: 24px;
 }
 .cloud-dialog h2 {
-  font-size: 17px;
+  font-size: var(--text-section);
   font-weight: 600;
   letter-spacing: -0.3px;
   margin: 0;
@@ -384,7 +384,7 @@
     padding: 19px;
   }
   .cloud-dialog h2 {
-    font-size: 15px;
+    font-size: var(--text-section);
   }
   .cloud-dialog-fields input {
     font-size: 16px;

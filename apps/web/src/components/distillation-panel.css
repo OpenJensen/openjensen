@@ -10,7 +10,7 @@
 .distillation-model-heading h2,
 .distillation-history-overview h2 {
   margin: 0;
-  font-size: 15px;
+  font-size: var(--text-section);
   font-weight: 600;
 }
 .distillation-model-heading > span {
@@ -157,7 +157,7 @@
 }
 .distillation-continuation h3 {
   margin: 6px 0 10px;
-  font-size: 17px;
+  font-size: var(--text-section);
   font-weight: 600;
 }
 .distillation-continuation p {

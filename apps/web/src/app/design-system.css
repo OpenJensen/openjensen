@@ -4,6 +4,12 @@
  * beside the canonical ones until their components move to the shared markup.
  */
 
+/* Type scale for titles inside pages; the page title (h1) keeps its own size. */
+:root {
+  --text-section: 17px;
+  --text-subsection: 14px;
+}
+
 /* Notices: a short title, the next step, and raw output collapsed in Details. */
 .notice,
 .error-notice,

@@ -6,7 +6,7 @@
 }
 .augmentation-history-heading h2 {
   margin: 0;
-  font-size: 17px;
+  font-size: var(--text-section);
   font-weight: 600;
   letter-spacing: -0.3px;
 }
@@ -64,7 +64,7 @@
 }
 .augmentation-empty h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--text-subsection);
   font-weight: 550;
 }
 .augmentation-empty p {
@@ -98,7 +98,7 @@
   gap: 10px;
   padding: 0;
   margin: 0 0 9px;
-  font-size: 14px;
+  font-size: var(--text-subsection);
   font-weight: 600;
 }
 .augmentation-form fieldset.augmentation-edit {
@@ -582,7 +582,7 @@
   gap: 14px;
 }
 .augmentation-run-heading h3 {
-  font-size: 14px;
+  font-size: var(--text-subsection);
   font-weight: 550;
 }
 .augmentation-run-heading p {

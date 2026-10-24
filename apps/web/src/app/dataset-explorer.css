@@ -19,7 +19,7 @@
   text-transform: uppercase;
 }
 .dx-heading h2 {
-  font-size: 15px;
+  font-size: var(--text-section);
   font-weight: 550;
   letter-spacing: -0.2px;
   margin: 0;
@@ -112,7 +112,7 @@
   background: var(--subtle);
 }
 .dx-load-preview h3 {
-  font-size: 14px;
+  font-size: var(--text-subsection);
   font-weight: 500;
 }
 .dx-load-preview p {
@@ -298,7 +298,7 @@
 }
 .dx-preview-loading h3 {
   color: var(--ink);
-  font-size: 14px;
+  font-size: var(--text-subsection);
   font-weight: 500;
 }
 .dx-preview-loading p {

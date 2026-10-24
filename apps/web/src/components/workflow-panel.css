@@ -165,7 +165,7 @@
   margin-bottom: 5px;
 }
 .workflow-job-heading h2 {
-  font-size: 22px;
+  font-size: var(--text-section);
   font-weight: 600;
   letter-spacing: -0.4px;
   line-height: 1.4;
@@ -190,7 +190,7 @@
 }
 .workflow-current-stage h3 {
   min-width: 0;
-  font-size: 21px;
+  font-size: var(--text-section);
   font-weight: 600;
   letter-spacing: -0.3px;
   line-height: 1.4;
@@ -252,7 +252,7 @@
 }
 .workflow-job-output > h3,
 .workflow-measurements > h3 {
-  font-size: 14px;
+  font-size: var(--text-subsection);
   font-weight: 600;
   margin-bottom: 14px;
 }
@@ -363,13 +363,13 @@
     gap: 12px;
   }
   .workflow-job-heading h2 {
-    font-size: 20px;
+    font-size: var(--text-section);
   }
   .workflow-current-stage {
     padding: 18px;
   }
   .workflow-current-stage h3 {
-    font-size: 19px;
+    font-size: var(--text-section);
   }
   .workflow-job-facts {
     grid-template-columns: repeat(2, minmax(0, 1fr));

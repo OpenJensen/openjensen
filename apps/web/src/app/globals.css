@@ -461,7 +461,7 @@ h1 {
 }
 .panel-title h2,
 .activity-heading h2 {
-  font-size: 15px;
+  font-size: var(--text-section);
   font-weight: 550;
   letter-spacing: -0.2px;
 }
@@ -638,7 +638,7 @@ input::placeholder {
   margin-bottom: 19px;
 }
 .empty-state h3 {
-  font-size: 15px;
+  font-size: var(--text-subsection);
   font-weight: 500;
   letter-spacing: -0.2px;
 }
@@ -838,7 +838,7 @@ input::placeholder {
   margin: 25px 0 12px;
 }
 .result-heading h3 {
-  font-size: 18px;
+  font-size: var(--text-section);
   font-weight: 550;
   letter-spacing: -0.4px;
   margin-top: 4px;
@@ -1023,7 +1023,7 @@ input::placeholder {
   margin-bottom: 15px;
 }
 .planned-panel h2 {
-  font-size: 22px;
+  font-size: var(--text-section);
   font-weight: 550;
   letter-spacing: -0.5px;
 }
@@ -1214,7 +1214,7 @@ input::placeholder {
     margin: 32px 0;
   }
   .planned-panel h2 {
-    font-size: 20px;
+    font-size: var(--text-section);
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1236,7 +1236,7 @@ input::placeholder {
 }
 .workflow-panel h2 {
   margin-bottom: 0.5rem;
-  font-size: 18px;
+  font-size: var(--text-section);
   font-weight: 550;
 }
 .workflow-panel .section-tabs {
@@ -1580,7 +1580,7 @@ input::placeholder {
   margin-bottom: 10px;
 }
 .endpoint-description h3 {
-  font-size: 14px;
+  font-size: var(--text-subsection);
   font-weight: 550;
 }
 .endpoint-detail-grid {
@@ -1717,7 +1717,7 @@ input::placeholder {
 }
 .reference-state h2,
 .reference-state h3 {
-  font-size: 15px;
+  font-size: var(--text-subsection);
   font-weight: 550;
 }
 .reference-state p {
@@ -1964,7 +1964,7 @@ input::placeholder {
   padding: 15px;
 }
 .starter-copy h3 {
-  font-size: 14px;
+  font-size: var(--text-subsection);
   font-weight: 550;
   letter-spacing: -0.2px;
 }
@@ -2011,7 +2011,7 @@ input::placeholder {
   margin-top: 22px;
 }
 .inspection-overview .result-heading h3 {
-  font-size: 23px;
+  font-size: var(--text-section);
   overflow-wrap: anywhere;
 }
 .inspection-overview .metric-grid {
@@ -2138,7 +2138,7 @@ input::placeholder {
   margin-top: 18px;
 }
 .inspection-overview .result-heading h3 {
-  font-size: 18px;
+  font-size: var(--text-section);
 }
 .inspection-overview .inspection-provenance {
   margin-bottom: 0;
@@ -2415,13 +2415,13 @@ input::placeholder {
   margin-top: 20px;
 }
 .panel h2 {
-  font-size: 20px;
+  font-size: var(--text-section);
   font-weight: 650;
   letter-spacing: -0.45px;
   line-height: 1.4;
 }
 .panel h3 {
-  font-size: 16px;
+  font-size: var(--text-subsection);
   font-weight: 600;
   letter-spacing: -0.2px;
 }
@@ -2437,7 +2437,7 @@ input::placeholder {
 }
 .panel-title h2,
 .activity-heading h2 {
-  font-size: 17px;
+  font-size: var(--text-section);
   font-weight: 600;
 }
 .panel-title p,
@@ -2477,7 +2477,7 @@ input::placeholder {
   padding: 18px;
 }
 .starter-copy h3 {
-  font-size: 16px;
+  font-size: var(--text-subsection);
 }
 .starter-copy p,
 .starter-meta,
@@ -2905,7 +2905,7 @@ input[type='file']::file-selector-button {
     padding: 14px;
   }
   .starter-copy h3 {
-    font-size: 14px;
+    font-size: var(--text-subsection);
   }
   :where(.panel, .native-simulation-history)
     :where(input:not([type='checkbox']):not([type='radio']), select, textarea) {

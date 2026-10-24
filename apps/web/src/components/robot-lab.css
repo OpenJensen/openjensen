@@ -20,7 +20,7 @@
 .robot-lab-main { padding: 24px; }
 .robot-lab-card { padding: 20px; }
 .robot-lab-panel-heading { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 20px; }
-.robot-lab-panel-heading h2 { font-size: 17px; font-weight: 600; }
+.robot-lab-panel-heading h2 { font-size: var(--text-section); font-weight: 600; }
 .robot-lab-panel-heading p { margin-top: 5px; font-size: 12px; color: var(--muted); max-width: 490px; }
 .robot-lab-mini-label { display: inline-flex; flex-shrink: 0; padding: 4px 8px; border-radius: 5px; background: var(--subtle); color: var(--muted); font: 10px ui-monospace, monospace; }
 .robot-lab-form { display: grid; gap: 18px; }
@@ -35,7 +35,7 @@
 .robot-lab-check span strong { display: block; font-weight: 600; }
 .robot-lab-side { display: grid; gap: 18px; }
 .robot-lab-card-header { display: flex; gap: 10px; justify-content: space-between; align-items: center; margin-bottom: 14px; }
-.robot-lab-card h3 { font-size: 17px; font-weight: 600; }
+.robot-lab-card h3 { font-size: var(--text-section); font-weight: 600; }
 .robot-lab-camera { width: 100%; aspect-ratio: 4 / 3; background: var(--canvas); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; position: relative; display: grid; place-items: center; margin-bottom: 14px; }
 .robot-lab-camera img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .robot-lab-camera-empty { color: var(--muted); text-align: center; font-size: 11px; padding: 15px; display: grid; gap: 7px; justify-items: center; }
@@ -55,7 +55,7 @@
 .robot-lab-motor small { display: block; font-size: 9px; margin-top: 2px; }
 .robot-lab-motor-guide { border: 1px solid var(--line); background: var(--canvas); border-radius: 10px; display: flex; gap: 18px; align-items: center; padding: 21px; }
 .robot-lab-motor-number { font: 600 39px ui-monospace, monospace; color: var(--primary); line-height: 1; width: 64px; height: 70px; display: grid; place-items: center; background: var(--selected); border-radius: 9px; flex-shrink: 0; }
-.robot-lab-motor-guide h3 { font-size: 16px; font-weight: 600; letter-spacing: -.3px; margin-bottom: 4px; }
+.robot-lab-motor-guide h3 { font-size: var(--text-subsection); font-weight: 600; letter-spacing: -.3px; margin-bottom: 4px; }
 .robot-lab-motor-guide p { color: var(--muted); font-size: 11px; }
 .robot-lab-motor-guide small { display: block; margin-top: 8px; color: var(--primary); font-size: 10px; }
 .robot-lab-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
@@ -113,7 +113,7 @@
 
 .robot-lab-assembled { display: grid; gap: 16px; padding-top: 20px; border-top: 1px solid var(--line); }
 .robot-lab-assembled-heading { display: flex; gap: 16px; justify-content: space-between; align-items: flex-start; }
-.robot-lab-assembled-heading h3 { font-size: 14px; font-weight: 600; }
+.robot-lab-assembled-heading h3 { font-size: var(--text-subsection); font-weight: 600; }
 .robot-lab-experimental { color: var(--warning); font-size: 11px; }
 .robot-lab-assembled-state { display: grid; gap: 8px; border-left: 2px solid var(--accent); background: var(--surface); padding: 13px; border-radius: 0 7px 7px 0; }
 .robot-lab-assembled-state .robot-lab-mini-label { justify-self: start; }

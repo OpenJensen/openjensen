@@ -36,7 +36,7 @@
   flex: 1;
 }
 .dashboard-collection h3 {
-  font-size: 18px;
+  font-size: var(--text-section);
   margin: 0 0 4px;
 }
 .dashboard-collection p {
@@ -157,7 +157,7 @@
     margin-bottom: 10px;
   }
   .dashboard-resource-heading h3 {
-    font-size: 15px;
+    font-size: var(--text-subsection);
   }
 }
 @media (max-width: 640px) {
@@ -189,7 +189,7 @@
 }
 .dashboard-section-heading h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--text-section);
 }
 .dashboard-section-heading p {
   margin: 6px 0 0;
