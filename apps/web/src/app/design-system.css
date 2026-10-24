@@ -200,3 +200,13 @@
   cursor: default;
   opacity: 0.55;
 }
+
+/* Measurements line up: fixed-width digits wherever values are compared. */
+table,
+dl,
+input,
+output,
+time,
+.status-badge {
+  font-variant-numeric: tabular-nums;
+}
