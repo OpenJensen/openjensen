@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { installedModules } from './module-fixtures';
 
 async function chooseOnlyModel(page: Page, name: string) {
   const choices = page.getByRole('group', { name: 'Base model', exact: true });
@@ -10,17 +11,32 @@ async function openGpuPicker(page: Page, local = false) {
   const timestamp = '2026-09-26T12:00:00Z';
   const writes: string[] = [];
   const unexpected: string[] = [];
-  const runtimes = ['L4', 'T4', 'A100', 'A100-80GB'].map(accelerator => ({
-    id: `skypilot-gcp-${accelerator}`, accelerator, label: accelerator,
-    execution: 'skypilot', provider: 'gcp', region: 'us-central1',
-    enabled: true, device: 'cuda', training: true, simulation: false,
+  const runtimes = ['L4', 'T4', 'A100', 'A100-80GB'].map((accelerator) => ({
+    id: `skypilot-gcp-${accelerator}`,
+    accelerator,
+    label: accelerator,
+    execution: 'skypilot',
+    provider: 'gcp',
+    region: 'us-central1',
+    enabled: true,
+    device: 'cuda',
+    training: true,
+    simulation: false,
     training_model_ids: ['smolvla', 'pi05'],
   }));
   const localRuntime = {
-    id: 'local-3070', label: 'Robotics lab RTX 3070', provider: 'local', execution: 'native',
-    enabled: true, device: 'cuda', training: true, simulation: false, training_model_ids: ['smolvla', 'pi05'], gpu_memory_mib: 8192,
+    id: 'local-3070',
+    label: 'Robotics lab RTX 3070',
+    provider: 'local',
+    execution: 'native',
+    enabled: true,
+    device: 'cuda',
+    training: true,
+    simulation: false,
+    training_model_ids: ['smolvla', 'pi05'],
+    gpu_memory_mib: 8192,
   };
-  await page.route('**/api/v1/**', async route => {
+  await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (request.method() !== 'GET') {
@@ -30,17 +46,44 @@ async function openGpuPicker(page: Page, local = false) {
     }
     const replies: Record<string, unknown> = {
       '/api/v1/health': { status: 'ok', version: 'gpu-picker-fixture' },
-      '/api/v1/capabilities': [], '/api/v1/datasets': [],
+      '/api/v1/capabilities': [],
+      '/api/v1/modules': installedModules,
+      '/api/v1/datasets': [],
       '/api/v1/projects': [{ id: 'picker', name: 'GPU selection', created_at: timestamp }],
       '/api/v1/projects/picker/jobs': [],
       '/api/v1/projects/picker/artifacts': [],
       '/api/v1/policy-options': {
         runtimes: local ? [...runtimes, localRuntime] : runtimes,
-        sources: [], training_models: [{ id: 'pi05', label: 'π₀.₅', model_id: 'lerobot/pi05_base', model_revision: 'a'.repeat(40), description: 'Generalist policy', backend: 'lerobot', methods: ['full'], minimum_gpu_memory_gb: 40, available: true, status: 'ready', runtime_ids: runtimes.map(item => item.id) }],
-        training_methods: [{ id: 'lora', label: 'LoRA', description: 'Train adapters.' }, { id: 'full', label: 'Full training', description: 'Train policy weights.' }],
+        sources: [],
+        training_models: [
+          {
+            id: 'pi05',
+            label: 'π₀.₅',
+            model_id: 'lerobot/pi05_base',
+            model_revision: 'a'.repeat(40),
+            description: 'Generalist policy',
+            backend: 'lerobot',
+            methods: ['full'],
+            minimum_gpu_memory_gb: 40,
+            available: true,
+            status: 'ready',
+            runtime_ids: runtimes.map((item) => item.id),
+          },
+        ],
+        training_methods: [
+          { id: 'lora', label: 'LoRA', description: 'Train adapters.' },
+          { id: 'full', label: 'Full training', description: 'Train policy weights.' },
+        ],
         default_training_method: 'lora',
-        compute: { local: { enabled: local, label: 'Robotics lab' }, gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 } },
-        quantization_defaults: { cuda: { language: 'Q8_0', vision: null }, cpu: { language: 'Q8_0', vision: null }, note: '' },
+        compute: {
+          local: { enabled: local, label: 'Robotics lab' },
+          gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 },
+        },
+        quantization_defaults: {
+          cuda: { language: 'Q8_0', vision: null },
+          cpu: { language: 'Q8_0', vision: null },
+          note: '',
+        },
       },
     };
     if (path in replies) await route.fulfill({ json: replies[path] });
@@ -51,9 +94,15 @@ async function openGpuPicker(page: Page, local = false) {
   });
   await page.goto('/training/');
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();
-  await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Model', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: 'Training setup' })
+    .getByRole('button', { name: 'Model', exact: true })
+    .click();
   await chooseOnlyModel(page, 'SmolVLA');
-  await page.getByRole('navigation', { name: 'Training setup' }).getByRole('button', { name: 'Compute', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: 'Training setup' })
+    .getByRole('button', { name: 'Compute', exact: true })
+    .click();
   const picker = page.getByRole('combobox', { name: 'GPU', exact: true });
   await expect(picker).toBeVisible();
   await expect(picker).toHaveAttribute('value', 'A100');
@@ -67,15 +116,27 @@ test('GPU picker supports keyboard navigation, explicit selection and Escape wit
   const menu = page.getByRole('listbox', { name: 'GPU', exact: true });
   await expect(menu).toBeVisible();
   await expect(menu.getByRole('option')).toHaveCount(4);
-  await expect(menu.getByRole('option', { name: 'A100', exact: true }).filter({hasText:'40 GB'})).toHaveAttribute('aria-selected', 'true');
+  await expect(menu.getByRole('option', { name: 'A100', exact: true }).filter({ hasText: '40 GB' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
   await page.keyboard.press('Home');
-  await expect(picker).toHaveAttribute('aria-activedescendant', (await menu.getByRole('option', { name: 'L4', exact: true }).getAttribute('id'))!);
+  await expect(picker).toHaveAttribute(
+    'aria-activedescendant',
+    (await menu.getByRole('option', { name: 'L4', exact: true }).getAttribute('id'))!,
+  );
   await expect(picker).toHaveAttribute('value', 'A100');
   await page.keyboard.press('ArrowDown');
-  await expect(picker).toHaveAttribute('aria-activedescendant', (await menu.getByRole('option', { name: 'T4', exact: true }).getAttribute('id'))!);
+  await expect(picker).toHaveAttribute(
+    'aria-activedescendant',
+    (await menu.getByRole('option', { name: 'T4', exact: true }).getAttribute('id'))!,
+  );
   await page.keyboard.press('ArrowUp');
   await page.keyboard.press('End');
-  await expect(picker).toHaveAttribute('aria-activedescendant', (await menu.getByRole('option', { name: 'A100', exact: true }).filter({hasText:'80 GB'}).getAttribute('id'))!);
+  await expect(picker).toHaveAttribute(
+    'aria-activedescendant',
+    (await menu.getByRole('option', { name: 'A100', exact: true }).filter({ hasText: '80 GB' }).getAttribute('id'))!,
+  );
   await page.keyboard.press('Home');
   await page.keyboard.press('Enter');
   await expect(menu).toHaveCount(0);
@@ -98,26 +159,37 @@ test('changing to a large model removes undersized GPUs and clears the previous 
   const setup = page.getByRole('navigation', { name: 'Training setup' });
   await setup.getByRole('button', { name: 'Model', exact: true }).click();
   await chooseOnlyModel(page, 'π₀.₅');
-  await expect(page.getByRole('checkbox', { name: 'π₀.₅', exact: true }).locator('..').locator('.training-model-memory strong')).toHaveText('40 GB+');
+  await expect(
+    page.getByRole('checkbox', { name: 'π₀.₅', exact: true }).locator('..').locator('.training-model-memory strong'),
+  ).toHaveText('40 GB+');
   await setup.getByRole('button', { name: 'Compute', exact: true }).click();
   await expect(picker).toHaveAttribute('value', 'A100');
   await picker.click();
   const menu = page.getByRole('listbox', { name: 'GPU', exact: true });
   await expect(menu.getByRole('option')).toHaveCount(2);
-  await expect(menu.getByRole('option', { name: 'A100', exact: true }).filter({hasText:'40 GB'})).toBeVisible();
+  await expect(menu.getByRole('option', { name: 'A100', exact: true }).filter({ hasText: '40 GB' })).toBeVisible();
   await page.keyboard.press('Escape');
-  await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
+  await page
+    .locator('summary')
+    .filter({ hasText: /^Advanced settings/ })
+    .click();
   await expect(page.getByRole('spinbutton', { name: 'Batch size', exact: true })).toHaveValue('4');
   await page.getByRole('spinbutton', { name: 'Batch size', exact: true }).fill('3');
   await setup.getByRole('button', { name: 'Model', exact: true }).click();
   await chooseOnlyModel(page, 'SmolVLA');
   await setup.getByRole('button', { name: 'Compute', exact: true }).click();
-  await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
+  await page
+    .locator('summary')
+    .filter({ hasText: /^Advanced settings/ })
+    .click();
   await expect(page.getByRole('spinbutton', { name: 'Batch size', exact: true })).toHaveValue('64');
   await setup.getByRole('button', { name: 'Model', exact: true }).click();
   await chooseOnlyModel(page, 'π₀.₅');
   await setup.getByRole('button', { name: 'Compute', exact: true }).click();
-  await page.locator('summary').filter({ hasText: /^Advanced settings/ }).click();
+  await page
+    .locator('summary')
+    .filter({ hasText: /^Advanced settings/ })
+    .click();
   await expect(page.getByRole('spinbutton', { name: 'Batch size', exact: true })).toHaveValue('3');
   expect(writes).toEqual([]);
   expect(unexpected).toEqual([]);
@@ -148,15 +220,23 @@ test('GPU picker supports pointer choice, typeahead, Tab and outside dismissal',
 });
 
 for (const theme of ['Light', 'Dark']) {
-  test(`GPU picker menu fits 320px and shows memory badges in ${theme.toLowerCase()} mode`, async ({ page }, testInfo) => {
+  test(`GPU picker menu fits 320px and shows memory badges in ${theme.toLowerCase()} mode`, async ({
+    page,
+  }, testInfo) => {
     await page.setViewportSize({ width: 320, height: 740 });
     const { picker, writes, unexpected } = await openGpuPicker(page, true);
     await page.getByRole('button', { name: theme, exact: true }).click();
     await picker.click();
     const menu = page.getByRole('listbox', { name: 'GPU', exact: true });
     await expect(menu.getByRole('option')).toHaveCount(5);
-    for (const [gpu, memory] of [['L4', '24 GB'], ['T4', '16 GB'], ['A100', '40 GB']]) {
-      await expect(menu.getByRole('option', { name: gpu, exact: true }).filter({hasText:memory}).locator('.gpu-picker-memory')).toHaveText(memory);
+    for (const [gpu, memory] of [
+      ['L4', '24 GB'],
+      ['T4', '16 GB'],
+      ['A100', '40 GB'],
+    ]) {
+      await expect(
+        menu.getByRole('option', { name: gpu, exact: true }).filter({ hasText: memory }).locator('.gpu-picker-memory'),
+      ).toHaveText(memory);
     }
     const bounds = await menu.boundingBox();
     expect(bounds).not.toBeNull();
@@ -185,43 +265,132 @@ async function trainingAdmission(page: Page, { format = 'lerobot_v3', dimensions
     { id: 'gr00t_n17', label: 'GR00T N1.7', model_id: 'nvidia/GR00T-N1.7-LIBERO', minimum_gpu_memory_gb: 40 },
     { id: 'evo1', label: 'EVO-1', model_id: 'zuoxingdong/evo1_libero', minimum_gpu_memory_gb: 24 },
   ];
-  const runtime = { id: 'skypilot-gcp-A100', label: 'A100', accelerator: 'A100', execution: 'skypilot', provider: 'gcp', enabled: true, device: 'cuda', training: true, simulation: false, gpu_memory_mib: 40960, training_model_ids: ['smolvla', ...profiles.map(model => model.id)] };
-  const dataset = { id: 'admission-dataset', project_id: project.id, kind: 'dataset.inspect', status: 'succeeded', created_at: timestamp, updated_at: timestamp,
+  const runtime = {
+    id: 'skypilot-gcp-A100',
+    label: 'A100',
+    accelerator: 'A100',
+    execution: 'skypilot',
+    provider: 'gcp',
+    enabled: true,
+    device: 'cuda',
+    training: true,
+    simulation: false,
+    gpu_memory_mib: 40960,
+    training_model_ids: ['smolvla', ...profiles.map((model) => model.id)],
+  };
+  const dataset = {
+    id: 'admission-dataset',
+    project_id: project.id,
+    kind: 'dataset.inspect',
+    status: 'succeeded',
+    created_at: timestamp,
+    updated_at: timestamp,
     request: { source: 'huggingface', repo_id: 'fixture/admission', revision: 'a'.repeat(40) },
-    result: { source: 'huggingface', repo_id: 'fixture/admission', revision: 'a'.repeat(40), format, inspection_scope: 'metadata_only', total_episodes: 10, total_frames: 1000, fps: 30, metadata_sha256: 'b'.repeat(64), inspected_at: timestamp, warnings: [],
-      features: { 'observation.images.front': { dtype: 'video', shape: [480, 640, 3] }, 'observation.state': { dtype: 'float32', shape: [dimensions] }, action: { dtype: 'float32', shape: [dimensions] } } } };
-  await page.route('**/api/v1/**', async route => {
+    result: {
+      source: 'huggingface',
+      repo_id: 'fixture/admission',
+      revision: 'a'.repeat(40),
+      format,
+      inspection_scope: 'metadata_only',
+      total_episodes: 10,
+      total_frames: 1000,
+      fps: 30,
+      metadata_sha256: 'b'.repeat(64),
+      inspected_at: timestamp,
+      warnings: [],
+      features: {
+        'observation.images.front': { dtype: 'video', shape: [480, 640, 3] },
+        'observation.state': { dtype: 'float32', shape: [dimensions] },
+        action: { dtype: 'float32', shape: [dimensions] },
+      },
+    },
+  };
+  await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (request.method() === 'POST' && path === '/api/v1/projects/admission/policy-jobs') {
       state.submitted.push(request.postDataJSON());
-      await route.fulfill({ status: 422, json: { detail: 'Recorded fixture request; no worker is launched.' }, headers: { 'Idempotency-Key': request.headers()['idempotency-key'], 'Cache-Control': 'no-store' } });
+      await route.fulfill({
+        status: 422,
+        json: { detail: 'Recorded fixture request; no worker is launched.' },
+        headers: { 'Idempotency-Key': request.headers()['idempotency-key'], 'Cache-Control': 'no-store' },
+      });
       return;
     }
     if (request.method() !== 'GET') throw new Error(`Unexpected write ${path}`);
     if (path.startsWith('/api/v1/projects/admission/submissions/')) {
-      await route.fulfill({ status: 404, json: { detail: 'No saved fixture request.' }, headers: { 'Idempotency-Key': decodeURIComponent(path.split('/').at(-1)!), 'Cache-Control': 'no-store' } });
+      await route.fulfill({
+        status: 404,
+        json: { detail: 'No saved fixture request.' },
+        headers: { 'Idempotency-Key': decodeURIComponent(path.split('/').at(-1)!), 'Cache-Control': 'no-store' },
+      });
       return;
     }
     if (path === '/api/v1/projects') {
       state.projectReads += 1;
-      await route.fulfill({ status: state.projectStatus, json: state.projectStatus === 200 ? state.projects : { detail: 'Project list temporarily unavailable' } });
+      await route.fulfill({
+        status: state.projectStatus,
+        json: state.projectStatus === 200 ? state.projects : { detail: 'Project list temporarily unavailable' },
+      });
       return;
     }
     const replies: Record<string, unknown> = {
-      '/api/v1/health': { status: 'ok', version: 'admission-fixture' }, '/api/v1/capabilities': [], '/api/v1/datasets': [],
-      '/api/v1/projects/admission/jobs': [dataset], '/api/v1/projects/admission/artifacts': [],
+      '/api/v1/health': { status: 'ok', version: 'admission-fixture' },
+      '/api/v1/capabilities': [],
+      '/api/v1/modules': installedModules,
+      '/api/v1/datasets': [],
+      '/api/v1/projects/admission/jobs': [dataset],
+      '/api/v1/projects/admission/artifacts': [],
       '/api/v1/jobs/admission-dataset/episodes': { episodes: [], total: 10, offset: 0, limit: 6 },
-      '/api/v1/policy-options': { runtimes: cloudConnected ? [runtime] : [], sources: [],
-        training_models: [...profiles.map((model, index) => ({ ...model, model_revision: 'c'.repeat(40), description: 'Fixture profile', backend: 'lerobot', available:true, status:'ready', methods: ['full'], runtime_ids: cloudConnected ? [runtime.id] : [],
-          // Include a stale ready record with no matching runtime: the client must
-          // retain its own compute gate while accurately labeling the API state.
-          available: cloudConnected,
-          status: cloudConnected ? 'ready' : ['connect_account', 'setup_required', 'ready'][index],
-        })), ...(!cloudConnected ? [{ id: 'smolvla', label: 'SmolVLA', model_id: 'lerobot/smolvla_base', model_revision: 'a'.repeat(40), description: 'Fixture preflight-selectable adapter', backend: 'smolvla', methods: ['lora'], runtime_ids: [], status: 'connect_account' }] : [])],
-        training_methods: [{ id: 'lora', label: 'LoRA', description: 'Adapter training' }, { id: 'full', label: 'Full training', description: 'Native policy training' }], default_training_method: 'lora',
-        compute: { local: { enabled: false, label: 'Local' }, gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 } },
-        quantization_defaults: { cuda: { language: 'Q8_0', vision: null }, cpu: { language: 'Q8_0', vision: null }, note: '' } },
+      '/api/v1/policy-options': {
+        runtimes: cloudConnected ? [runtime] : [],
+        sources: [],
+        training_models: [
+          ...profiles.map((model, index) => ({
+            ...model,
+            model_revision: 'c'.repeat(40),
+            description: 'Fixture profile',
+            backend: 'lerobot',
+            available: true,
+            status: 'ready',
+            methods: ['full'],
+            runtime_ids: cloudConnected ? [runtime.id] : [],
+            // Include a stale ready record with no matching runtime: the client must
+            // retain its own compute gate while accurately labeling the API state.
+            available: cloudConnected,
+            status: cloudConnected ? 'ready' : ['connect_account', 'setup_required', 'ready'][index],
+          })),
+          ...(!cloudConnected
+            ? [
+                {
+                  id: 'smolvla',
+                  label: 'SmolVLA',
+                  model_id: 'lerobot/smolvla_base',
+                  model_revision: 'a'.repeat(40),
+                  description: 'Fixture preflight-selectable adapter',
+                  backend: 'smolvla',
+                  methods: ['lora'],
+                  runtime_ids: [],
+                  status: 'connect_account',
+                },
+              ]
+            : []),
+        ],
+        training_methods: [
+          { id: 'lora', label: 'LoRA', description: 'Adapter training' },
+          { id: 'full', label: 'Full training', description: 'Native policy training' },
+        ],
+        default_training_method: 'lora',
+        compute: {
+          local: { enabled: false, label: 'Local' },
+          gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 },
+        },
+        quantization_defaults: {
+          cuda: { language: 'Q8_0', vision: null },
+          cpu: { language: 'Q8_0', vision: null },
+          note: '',
+        },
+      },
     };
     if (!(path in replies)) throw new Error(`Unexpected admission request ${path}`);
     await route.fulfill({ json: replies[path] });
@@ -238,7 +407,9 @@ async function trainingAdmission(page: Page, { format = 'lerobot_v3', dimensions
   return { state, setup, chooseModel, start: page.getByRole('button', { name: 'Start fine-tuning', exact: true }) };
 }
 
-test('native training explains the v3 requirement before submission while SmolVLA keeps its v2 path', async ({ page }) => {
+test('native training explains the v3 requirement before submission while SmolVLA keeps its v2 path', async ({
+  page,
+}) => {
   const fixture = await trainingAdmission(page, { format: 'lerobot_v2' });
   await fixture.chooseModel('ACT');
   await expect(fixture.start).toBeDisabled();
@@ -251,14 +422,20 @@ test('native training explains the v3 requirement before submission while SmolVL
   expect(fixture.state.submitted[0].training.model_id).toBe('lerobot/smolvla_base');
 });
 
-test('native model dimension bounds allow GR00T vectors above 36 and reject narrower architectures', async ({ page }) => {
+test('native model dimension bounds allow GR00T vectors above 36 and reject narrower architectures', async ({
+  page,
+}) => {
   const fixture = await trainingAdmission(page, { dimensions: 100 });
   await expect(page.getByRole('checkbox', { name: 'fixture/admission', exact: true })).toBeEnabled();
   await fixture.chooseModel('GR00T N1.7');
   await expect(fixture.start).toBeEnabled();
   await fixture.start.click();
   await expect.poll(() => fixture.state.submitted.length).toBe(1);
-  expect(fixture.state.submitted[0]).toMatchObject({ dataset_job_id: 'admission-dataset', training_method: 'full', training: { model_id: 'nvidia/GR00T-N1.7-LIBERO', camera_keys: ['observation.images.front'] } });
+  expect(fixture.state.submitted[0]).toMatchObject({
+    dataset_job_id: 'admission-dataset',
+    training_method: 'full',
+    training: { model_id: 'nvidia/GR00T-N1.7-LIBERO', camera_keys: ['observation.images.front'] },
+  });
   await fixture.chooseModel('EVO-1');
   await expect(fixture.start).toBeDisabled();
   await expect(page.getByText('EVO-1 supports at most 24 observation.state dimensions.')).toBeVisible();
@@ -287,7 +464,6 @@ test('training cannot submit using cached project data after a failed project re
   expect(fixture.state.submitted[0].training).toMatchObject({ model_id: 'code://lerobot/act', batch_size: 4 });
 });
 
-
 test('GR00T rejects vectors exceeding its architecture bound before any submission', async ({ page }) => {
   const fixture = await trainingAdmission(page, { dimensions: 133 });
   await fixture.chooseModel('GR00T N1.7');
@@ -296,8 +472,9 @@ test('GR00T rejects vectors exceeding its architecture bound before any submissi
   expect(fixture.state.submitted).toEqual([]);
 });
 
-
-test('disconnected cloud labels implemented trainers separately from planned adapters without enabling launch', async ({ page }) => {
+test('disconnected cloud labels implemented trainers separately from planned adapters without enabling launch', async ({
+  page,
+}) => {
   const fixture = await trainingAdmission(page, { cloudConnected: false });
   await fixture.setup.getByRole('button', { name: 'Model', exact: true }).click();
   for (const [model, label] of [

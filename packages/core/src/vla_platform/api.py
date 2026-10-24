@@ -49,6 +49,7 @@ from vla_platform.lifecycle.contracts import (
 )
 from vla_platform.lifecycle.model_names import ModelRunName
 from vla_platform.lifecycle.training_catalog import public_training_models
+from vla_platform.modules import WorkspaceModule, workspace_modules
 from vla_platform.projects import Projects
 from vla_platform.recordings_api import router as recordings_router
 from vla_platform.robot_lab_api import router as robot_lab_router
@@ -254,6 +255,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """Read bounded operator snapshots; never connect to or control a cloud host."""
         response.headers["Cache-Control"] = "no-store"
         return await asyncio.to_thread(read_cloud_runs, settings.cloud_runs_dir)
+
+    @app.get("/api/v1/modules", response_model=list[WorkspaceModule])
+    async def modules(request: Request) -> list[WorkspaceModule]:
+        """Report which optional modules this host has set up; nothing is contacted."""
+        return await asyncio.to_thread(
+            workspace_modules, settings, request.app.state.robot_lab.config_path
+        )
 
     @app.get("/api/v1/capabilities", response_model=list[Capability])
     async def capabilities(execution: ExecutionDep) -> list[Capability]:

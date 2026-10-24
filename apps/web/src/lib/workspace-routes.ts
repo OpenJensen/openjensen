@@ -1,34 +1,57 @@
+import type { IconName } from '@/components/icon';
+import type { WorkspaceModule } from '@/lib/api';
 import { basePath } from '@/lib/base-path';
 
-export const workspaceRoutes = [
-  { name: 'Dataset', icon: 'database', path: '/datasets/' },
-  { name: 'Fine-tune', icon: 'sliders', path: '/training/' },
-  { name: 'Distill', icon: 'layers', path: '/distillation/' },
-  { name: 'Quantize', icon: 'compress', path: '/quantization/' },
-  { name: 'Evaluate', icon: 'chart', path: '/evaluation/' },
-  { name: 'Run', icon: 'play', path: '/simulation/' },
-  { name: 'Settings & diagnostics', icon: 'sliders', path: '/settings/' },
-  { name: 'Cloud runs', icon: 'clock', path: '/cloud-runs/' },
-  { name: 'Augmentation', icon: 'spark', path: '/augmentation/' },
-  { name: 'Teaching', icon: 'plus', path: '/teaching/' },
-  { name: 'Decision lab', icon: 'chart', path: '/decision-lab/' },
-  { name: 'My models', icon: 'layers', path: '/models/' },
-  { name: 'Dashboard', icon: 'layers', path: '/dashboard/' },
-  { name: 'Robot Lab', icon: 'robot', path: '/robot-lab/' },
-] as const;
+export type ModuleId = WorkspaceModule['id'];
+export type StageId =
+  | 'dashboard'
+  | 'datasets'
+  | 'training'
+  | 'distillation'
+  | 'quantization'
+  | 'evaluation'
+  | 'simulation'
+  | 'models'
+  | 'settings'
+  | ModuleId;
+export type WorkspaceRoute = { name: string; icon: IconName; path: string; module?: true };
 
-export const navigationGroups = [
-  { name: 'Overview', items: [12] },
-  { name: 'Data', items: [0, 8, 9, 13] },
-  { name: 'Train', items: [1, 2, 3] },
-  { name: 'Test', items: [4, 5, 10] },
-  { name: 'Workspace', items: [11, 7, 6] },
+// Route keys match the URL segment. Optional modules use the same id as
+// GET /api/v1/modules and only appear in navigation once installed.
+export const workspaceRoutes: Record<StageId, WorkspaceRoute> = {
+  dashboard: { name: 'Dashboard', icon: 'home', path: '/dashboard/' },
+  'robot-lab': { name: 'Robot Lab', icon: 'robot', path: '/robot-lab/', module: true },
+  teaching: { name: 'Teaching', icon: 'record', path: '/teaching/', module: true },
+  datasets: { name: 'Dataset', icon: 'database', path: '/datasets/' },
+  augmentation: { name: 'Augmentation', icon: 'spark', path: '/augmentation/', module: true },
+  training: { name: 'Fine-tune', icon: 'sliders', path: '/training/' },
+  distillation: { name: 'Distill', icon: 'funnel', path: '/distillation/' },
+  quantization: { name: 'Quantize', icon: 'compress', path: '/quantization/' },
+  evaluation: { name: 'Evaluate', icon: 'chart', path: '/evaluation/' },
+  simulation: { name: 'Run', icon: 'play', path: '/simulation/' },
+  'decision-lab': { name: 'Decision lab', icon: 'branch', path: '/decision-lab/', module: true },
+  models: { name: 'My models', icon: 'box', path: '/models/' },
+  'cloud-runs': { name: 'Cloud runs', icon: 'cloud', path: '/cloud-runs/', module: true },
+  settings: { name: 'Settings & diagnostics', icon: 'gear', path: '/settings/' },
+};
+
+export const isModule = (id: StageId): id is ModuleId => !!workspaceRoutes[id].module;
+
+export const navigationGroups: { name?: string; items: StageId[] }[] = [
+  { items: ['dashboard'] },
+  { name: 'Robot', items: ['robot-lab', 'teaching'] },
+  { name: 'Data', items: ['datasets', 'augmentation'] },
+  { name: 'Train', items: ['training', 'distillation', 'quantization'] },
+  { name: 'Test', items: ['evaluation', 'simulation', 'decision-lab'] },
+  { name: 'Workspace', items: ['models', 'cloud-runs', 'settings'] },
 ];
 
-export function workspaceStage(pathname: string) {
-  const local = basePath && (pathname === basePath || pathname.startsWith(`${basePath}/`))
-    ? pathname.slice(basePath.length) : pathname;
+export function workspaceStage(pathname: string): StageId {
+  const local =
+    basePath && (pathname === basePath || pathname.startsWith(`${basePath}/`))
+      ? pathname.slice(basePath.length)
+      : pathname;
   const path = `${local.replace(/\/+$/, '')}/`;
-  const index = workspaceRoutes.findIndex(route => route.path === path);
-  return index < 0 ? 12 : index;
+  const match = (Object.keys(workspaceRoutes) as StageId[]).find((id) => workspaceRoutes[id].path === path);
+  return match ?? 'dashboard';
 }

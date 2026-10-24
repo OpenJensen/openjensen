@@ -1,0 +1,56 @@
+name: Bug report
+description: Something in OpenJensen does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Remove secrets, tokens and private data from everything you paste. Report security concerns as described in SECURITY.md instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Dataset and inspect `owner/dataset`
+        2. Select …
+    validations:
+      required: true
+  - type: input
+    id: revision
+    attributes:
+      label: Source revision
+      description: Output of `git rev-parse --short HEAD`, or the release you run.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Web app
+        - CLI or terminal app
+        - Robot Lab
+        - Training or other worker
+        - Simulation
+        - Installation or setup
+        - Documentation
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python, Node and GPU (if relevant).
+      placeholder: Ubuntu 24.04, Python 3.14.7, Node 24.21.0, RTX 3070
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error output
+      description: Redacted logs or browser console output.
+      render: text

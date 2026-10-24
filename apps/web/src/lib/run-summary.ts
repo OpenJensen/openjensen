@@ -2,7 +2,18 @@ import type { Job, JobEvent } from './api';
 
 export function runLabel(job: Job) {
   if (job.kind === 'policy.finetune' || ('training' in job.request && job.request.training)) return 'Training';
-  return ({ 'policy.evaluate': 'Evaluation', 'policy.quantize': 'Compression', 'policy.workflow': 'Policy workflow', 'policy.export': 'Export', 'policy.import': 'Import', 'policy.run': 'Policy run' } as Record<string, string>)[job.kind] ?? 'Run';
+  return (
+    (
+      {
+        'policy.evaluate': 'Evaluation',
+        'policy.quantize': 'Compression',
+        'policy.workflow': 'Policy workflow',
+        'policy.export': 'Export',
+        'policy.import': 'Import',
+        'policy.run': 'Policy run',
+      } as Record<string, string>
+    )[job.kind] ?? 'Run'
+  );
 }
 
 export function runSummary(job: Job, phase = job.stage, status: string = job.status) {
@@ -25,7 +36,8 @@ export function observedProgress(events: JobEvent[]) {
   for (const event of events) {
     const trainingMatch = /\bOptimizer step (\d+)\b/i.exec(event.message);
     const checkpointMatch = /\bCheckpoint (\d+) saved\b/i.exec(event.message);
-    if (trainingMatch && Number.isSafeInteger(Number(trainingMatch[1]))) step = Math.max(step ?? 0, Number(trainingMatch[1]));
+    if (trainingMatch && Number.isSafeInteger(Number(trainingMatch[1])))
+      step = Math.max(step ?? 0, Number(trainingMatch[1]));
     if (checkpointMatch && Number.isSafeInteger(Number(checkpointMatch[1]))) {
       checkpoint = Math.max(checkpoint ?? 0, Number(checkpointMatch[1]));
       step = Math.max(step ?? 0, Number(checkpointMatch[1]));

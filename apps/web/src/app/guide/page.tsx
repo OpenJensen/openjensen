@@ -8,7 +8,10 @@ import { publicPath } from '@/lib/base-path';
 import { guideSectionId } from '@/lib/guide-section';
 import './guide.css';
 
-export const metadata: Metadata = { title: 'Open Jensen · Workspace guide', description: 'A short guide to every part of the robotics workspace.' };
+export const metadata: Metadata = {
+  title: 'Open Jensen · Workspace guide',
+  description: 'A short guide to every part of the robotics workspace.',
+};
 
 // Read the same concise guide that ships in the repository. No separate copy to maintain.
 async function readGuide() {
@@ -16,7 +19,7 @@ async function readGuide() {
   const [intro, ...sections] = source.split(/^## /m);
   return {
     intro: intro.replace(/^# [^\n]+\n+/, '').trim(),
-    sections: sections.map(section => {
+    sections: sections.map((section) => {
       const split = section.indexOf('\n');
       const title = section.slice(0, split).trim();
       return { title, id: guideSectionId(title), body: section.slice(split + 1).trim() };
@@ -47,7 +50,11 @@ function inline(text: string): ReactNode[] {
     if (match[1]) {
       const href = guideHref(match[2]);
       const external = /^https?:/.test(href);
-      output.push(<a key={index} href={href} {...(external ? { target: '_blank', rel: 'noreferrer' } : {})}>{inline(match[1])}</a>);
+      output.push(
+        <a key={index} href={href} {...(external ? { target: '_blank', rel: 'noreferrer' } : {})}>
+          {inline(match[1])}
+        </a>,
+      );
     } else if (match[3]) output.push(<strong key={index}>{match[3]}</strong>);
     else output.push(<code key={index}>{match[4]}</code>);
     cursor = index + match[0].length;
@@ -57,21 +64,56 @@ function inline(text: string): ReactNode[] {
 }
 
 function Paragraphs({ text }: { text: string }) {
-  return text.split(/\n\s*\n/).filter(Boolean).map((paragraph, index) => <p key={index}>{inline(paragraph.replace(/\n/g, ' '))}</p>);
+  return text
+    .split(/\n\s*\n/)
+    .filter(Boolean)
+    .map((paragraph, index) => <p key={index}>{inline(paragraph.replace(/\n/g, ' '))}</p>);
 }
 
 export default async function GuidePage() {
   const guide = await readGuide();
-  return <WorkspaceShell showGuideShortcut={false} contentClassName="guide-page" skipLabel="Skip to guide" sidebarLabel="Guide navigation"
-    breadcrumb={<><Icon name="book" size={18} /><strong>Guide</strong></>}
-    navigation={<nav className="guide-navigation" aria-label="Guide sections">
-      <a className="guide-back" href={publicPath('/dashboard/')}><Icon name="arrow" size={16} />Back to workspace</a>
-      <ul>{guide.sections.map(section => <li key={section.id}><a href={`#${section.id}`}>{section.title}</a></li>)}</ul>
-    </nav>}>
-    <div className="page-heading"><h1>Workspace guide</h1></div>
-    <div className="guide-intro"><Paragraphs text={guide.intro} /></div>
-    <div className="guide-sections">{guide.sections.map(section => <section key={section.id} id={section.id} aria-labelledby={`${section.id}-title`}>
-      <h2 id={`${section.id}-title`}>{section.title}</h2><Paragraphs text={section.body} />
-    </section>)}</div>
-  </WorkspaceShell>;
+  return (
+    <WorkspaceShell
+      showGuideShortcut={false}
+      contentClassName="guide-page"
+      skipLabel="Skip to guide"
+      sidebarLabel="Guide navigation"
+      breadcrumb={
+        <>
+          <Icon name="book" size={18} />
+          <strong>Guide</strong>
+        </>
+      }
+      navigation={
+        <nav className="guide-navigation" aria-label="Guide sections">
+          <a className="guide-back" href={publicPath('/dashboard/')}>
+            <Icon name="arrow" size={16} />
+            Back to workspace
+          </a>
+          <ul>
+            {guide.sections.map((section) => (
+              <li key={section.id}>
+                <a href={`#${section.id}`}>{section.title}</a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      }
+    >
+      <div className="page-heading">
+        <h1>Workspace guide</h1>
+      </div>
+      <div className="guide-intro">
+        <Paragraphs text={guide.intro} />
+      </div>
+      <div className="guide-sections">
+        {guide.sections.map((section) => (
+          <section key={section.id} id={section.id} aria-labelledby={`${section.id}-title`}>
+            <h2 id={`${section.id}-title`}>{section.title}</h2>
+            <Paragraphs text={section.body} />
+          </section>
+        ))}
+      </div>
+    </WorkspaceShell>
+  );
 }

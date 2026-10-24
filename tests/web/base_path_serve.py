@@ -12,6 +12,9 @@ from vla_platform.api import create_app
 from vla_platform.environment import getenv
 from vla_platform.settings import Settings
 
+# Browser tests open every module page; module detection has its own API tests.
+os.environ.setdefault("JENSEN_MODULES", "all")
+
 prefix = os.environ.get("NEXT_PUBLIC_BASE_PATH", "/jensen").rstrip("/")
 static_dir = Path(
     getenv("JENSEN_TEST_WEB_DIR", str(Path(__file__).resolve().parents[2] / "apps" / "web" / "out"))

@@ -26,6 +26,7 @@ Keep the application server running for the CLI and TUI. Install the optional te
 
 | Sector | In the workspace |
 | --- | --- |
+| Robot Lab | Set up an SO-101 arm from the computer it is plugged into: assign motor IDs, calibrate, teleoperate and record LeRobot v3 episodes. |
 | Dataset | Inspect public LeRobot v2/v3 datasets, play camera recordings and review sampled state/action rows. Validate local v3 datasets into immutable training copies. |
 | Fine-tune | Choose a policy and compatible compute, follow loss and progress, resume supported runs, and download checkpoints with their training settings. |
 | Distill | Train an ACT256 student from an ACT (Action Chunking with Transformers) teacher using selected observations, actions and episode splits. |
@@ -35,7 +36,7 @@ Keep the application server running for the CLI and TUI. Install the optional te
 | Decision lab | Compare text criteria with the configured local Muose scorer. |
 | Cloud runs / Settings | Review saved cloud activity, configure connections and compute, and inspect project diagnostics. |
 
-Each operation needs a worker that matches the policy, dataset format and available hardware. Some advanced workflows remain experimental; check [requirements and support](docs/support.md) before choosing a runtime.
+Robot Lab, Teaching, Augmentation, Decision lab and Cloud runs are optional modules: they appear in the sidebar once the host is set up for them (see [installation profiles](docs/installation-profiles.md#workspace-modules)). Each operation needs a worker that matches the policy, dataset format and available hardware. Some advanced workflows remain experimental; check [requirements and support](docs/support.md) before choosing a runtime.
 
 [OPEN JENSEN Quant](workers/jensen_quant/README.md) is a 4/8-bit quantization library and CLI for dense PyTorch models. Use its native ACT packing path from the workspace or its standalone library and command-line client.
 
@@ -129,6 +130,8 @@ uv run --frozen pytest -q
 uv run --frozen ruff check packages/core scripts tests
 uv run --frozen ruff format --check packages/core scripts tests
 pnpm check:web
+pnpm format:check
+pnpm lint:web
 pnpm build:web
 pnpm exec playwright install chromium
 pnpm test:web
