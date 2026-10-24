@@ -9,6 +9,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tarfile
@@ -69,16 +70,32 @@ def write_state(path, value):
 
 def run(args, *, cwd=None, env=None, timeout=1800, capture=False):
     print("Running " + str(args[0]) + " " + str(args[1:3]), flush=True)
-    result = subprocess.run(
+    process = subprocess.Popen(
         args,
         cwd=cwd,
         env=env,
-        timeout=timeout,
-        check=True,
         stdout=subprocess.PIPE if capture else None,
         text=capture,
+        start_new_session=True,
     )
-    return result.stdout.strip() if capture else None
+    try:
+        stdout, _ = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        # Every command owns a new process group. Do not leave build descendants running.
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            try:
+                os.killpg(process.pid, sig)
+            except ProcessLookupError:
+                pass
+            try:
+                process.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                continue
+        process.wait(timeout=5)
+        raise
+    if process.returncode:
+        raise subprocess.CalledProcessError(process.returncode, args, output=stdout)
+    return stdout.strip() if capture else None
 
 
 def git(config, *args):

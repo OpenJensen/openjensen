@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import subprocess
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -13,6 +14,10 @@ from vla_platform import update_runner as runner
 from vla_platform.api import create_app
 from vla_platform.application_updates import ApplicationUpdates, UpdateError, installed_commit
 from vla_platform.settings import Settings
+
+pytestmark = pytest.mark.skipif(
+    os.name != "posix", reason="Managed updates require POSIX Supervisor"
+)
 
 OLD, NEW, LATER = "1" * 40, "2" * 40, "3" * 40
 
@@ -386,3 +391,28 @@ def test_replayed_confirmation_returns_original_operation(tmp_path, deployment, 
         assert calls == [True]
         payload["target_commit"] = LATER
         assert client.post("/api/v1/updates/apply", json=payload).status_code == 409
+
+
+def test_timed_out_build_stops_its_owned_process_group(tmp_path):
+    import socket
+    import sys
+
+    if os.name != "posix":
+        pytest.skip("Managed updates require POSIX")
+    ready = tmp_path / "ready.json"
+    code = """import json,os,signal,socket,subprocess,sys,time
+child=subprocess.Popen([sys.executable,"-c","import time;time.sleep(60)"])
+sock=socket.socket();sock.bind(("127.0.0.1",0));sock.listen()
+open(sys.argv[1],"w").write(json.dumps({"port":sock.getsockname()[1],"pid":os.getpid()}))
+def finish(*_):
+    child.wait(timeout=3);sys.exit(0)
+signal.signal(signal.SIGTERM,finish)
+time.sleep(60)
+"""
+    with pytest.raises(subprocess.TimeoutExpired):
+        runner.run([sys.executable, "-c", code, str(ready)], timeout=1)
+    value = json.loads(ready.read_text())
+    with socket.socket() as sock:
+        assert sock.connect_ex(("127.0.0.1", value["port"])) != 0
+    with pytest.raises(ProcessLookupError):
+        os.kill(value["pid"], 0)
