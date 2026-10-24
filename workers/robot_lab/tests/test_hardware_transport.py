@@ -13,8 +13,8 @@ from hardware import REGISTERS, HardwareError, ServoBus, encode_sign
 class TransportTests(unittest.TestCase):
     def setUp(self):
         self.bus = ServoBus.__new__(ServoBus)
-        self.bus.sdk = SimpleNamespace(COMM_SUCCESS=0, COMM_RX_TIMEOUT=-3001)
-        self.bus.port = object()
+        self.bus.sdk = SimpleNamespace(COMM_SUCCESS=0, COMM_RX_TIMEOUT=-3001, COMM_RX_CORRUPT=-3002)
+        self.bus.port = SimpleNamespace(ser=Mock())
         self.bus.packet = Mock()
         self.bus.packet.getTxRxResult.return_value = "No status packet"
         self.bus.packet.getRxPacketError.return_value = "Overload"
@@ -36,8 +36,8 @@ class TransportTests(unittest.TestCase):
             self.bus.read("Present_Position", 2)
         self.assertEqual(read.call_count, 3)
 
-    def test_corrupt_read_or_motor_fault_is_not_retried(self):
-        for result, error in ((-3002, 0), (0, 32), (-3001, 32)):
+    def test_transmit_failure_or_motor_fault_is_not_retried(self):
+        for result, error in ((-1001, 0), (0, 32), (-3001, 32), (-3002, 32)):
             with self.subTest(result=result, error=error):
                 read = self.bus.packet.read2ByteTxRx
                 read.reset_mock()
@@ -45,6 +45,23 @@ class TransportTests(unittest.TestCase):
                 with self.assertRaises(HardwareError):
                     self.bus.read("Present_Position", 1)
                 read.assert_called_once()
+
+    def test_incomplete_or_corrupt_read_discards_value_and_recovers_fresh_sample(self):
+        read = self.bus.packet.read2ByteTxRx
+        read.side_effect = [(65000, -3002, 0), (4095, -3001, 0), (2047, 0, 0)]
+        self.assertEqual(self.bus.read("Present_Position", 2), 2047)
+        self.assertEqual(read.call_count, 3)
+        self.assertEqual(self.bus.port.ser.reset_input_buffer.call_count, 2)
+        self.bus.packet.write1ByteTxRx.assert_not_called()
+        self.bus.packet.write2ByteTxRx.assert_not_called()
+
+    def test_persistent_corrupt_reads_are_bounded_and_fail(self):
+        read = self.bus.packet.read2ByteTxRx
+        read.return_value = (2047, -3002, 0)
+        with self.assertRaisesRegex(HardwareError, "Motor 2 read Present_Position"):
+            self.bus.read("Present_Position", 2)
+        self.assertEqual(read.call_count, 3)
+        self.assertEqual(self.bus.port.ser.reset_input_buffer.call_count, 2)
 
     def test_lost_configuration_ack_requires_exact_readback_and_never_rewrites(self):
         for register, requested in (

@@ -127,13 +127,21 @@ class ServoBus:
     def read(self, register: str, motor_id: int):
         address, size = REGISTERS[register]
         method = self.packet.read1ByteTxRx if size == 1 else self.packet.read2ByteTxRx
-        # Reads are safe to repeat. Keep missing-packet recovery bounded; a
-        # corrupt packet or a motor-reported fault must still stop the session.
+        # Reads are safe to repeat. The SDK reports both truncated replies and
+        # checksum failures as RX_CORRUPT. Discard them and request fresh data;
+        # persistent communication failures or any motor fault still stop.
         for attempt in range(3):
             value, result, error = method(self.port, motor_id, address)
-            if result != self.sdk.COMM_RX_TIMEOUT or error or attempt == 2:
+            if (
+                result not in (self.sdk.COMM_RX_TIMEOUT, self.sdk.COMM_RX_CORRUPT)
+                or error
+                or attempt == 2
+            ):
                 break
             time.sleep(0.005)
+            # SDK clearPort() only flushes output. Remove a partial/stale input
+            # packet before sending the next read, never reuse its value.
+            self.port.ser.reset_input_buffer()
         self._check(result, error, motor_id, f"read {register}")
         if register == "Homing_Offset":
             return decode_sign(int(value), 11)
