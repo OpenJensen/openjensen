@@ -205,6 +205,8 @@ jobs:
         if: matrix.leg.kind == 'core' && (runner.os == 'Linux' || inputs.windows_browser)
       - run: pnpm format:check
         if: matrix.leg.kind == 'core' && (runner.os == 'Linux' || inputs.windows_browser)
+      - run: pnpm lint:web
+        if: matrix.leg.kind == 'core' && (runner.os == 'Linux' || inputs.windows_browser)
       # Every leg serves the static export (tests/web/serve.py), so every leg builds it.
       - run: pnpm build:web
         if: runner.os == 'Linux' || inputs.windows_browser

@@ -24,7 +24,7 @@ WEB_BOTH = {"desktop_lane", "mobile_lane"}
     [
         (["README.md", "docs/terminal.md"], set()),
         (["CONTRIBUTING.md", "SECURITY.md", "NOTICE"], set()),
-        ([".prettierrc.json", ".prettierignore"], {"desktop_lane"}),
+        ([".prettierrc.json", ".prettierignore", "eslint.config.mjs"], {"desktop_lane"}),
         ([".github/CODEOWNERS", ".github/ISSUE_TEMPLATE/bug.md"], set()),
         (["docs/workspace-guide.md"], {"desktop_lane"}),
         # Unknown paths fail open to the pull-request lane, never to everything.

@@ -61,6 +61,7 @@ DESKTOP_FILES = {
     ".node-version",
     ".prettierrc.json",  # The web format check runs on the desktop lane.
     ".prettierignore",
+    "eslint.config.mjs",
     "docs/workspace-guide.md",  # Rendered into the application at build time.
 }
 MOBILE_FILES = {"playwright.config.ts", "playwright.diagnostics.config.ts"}

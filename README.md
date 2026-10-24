@@ -131,6 +131,7 @@ uv run --frozen ruff check packages/core scripts tests
 uv run --frozen ruff format --check packages/core scripts tests
 pnpm check:web
 pnpm format:check
+pnpm lint:web
 pnpm build:web
 pnpm exec playwright install chromium
 pnpm test:web
