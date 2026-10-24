@@ -83,7 +83,10 @@ restores the previous calibration when the bus permits, and reports calibration
 `phase: "interrupted"`, `interrupted_stage: "center" | "ranges"`, and `error`.
 Starting calibration again is explicit; cancelling normally returns to `idle`.
 Missing, incomplete or checksum-invalid read replies receive at most three attempts,
-with stale input discarded before each fresh request. Motor-reported faults are
+with stale input discarded before each fresh request. Read replies must match the
+requested motor ID and register width, frame length, header and checksum before
+decoding; a short write acknowledgement cannot become a register value. Unexpected
+center-capture exceptions also enter the stop/restore path. Motor-reported faults are
 not retried; persistent errors stop the session. Missing configuration-write
 acknowledgements require an exact register read-back, without replaying the write.
 Motion, torque, ID and baudrate writes do not use this recovery.

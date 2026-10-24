@@ -10,12 +10,26 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from hardware import REGISTERS, HardwareError, ServoBus, encode_sign
 
 
+def frame(sid, data, error=0):
+    packet = [255, 255, sid, len(data) + 2, error, *data]
+    return [*packet, ~sum(packet[2:]) & 255]
+
+
 class TransportTests(unittest.TestCase):
     def setUp(self):
         self.bus = ServoBus.__new__(ServoBus)
         self.bus.sdk = SimpleNamespace(COMM_SUCCESS=0, COMM_RX_TIMEOUT=-3001, COMM_RX_CORRUPT=-3002)
         self.bus.port = SimpleNamespace(ser=Mock())
         self.bus.packet = Mock()
+
+        # Existing tuple-based fault cases feed raw frames into the adapter.
+        def exchange(port, request):
+            sid, address, size = request[2], request[5], request[6]
+            source = self.bus.packet.read1ByteTxRx if size == 1 else self.bus.packet.read2ByteTxRx
+            value, result, error = source(port, sid, address)
+            return frame(sid, value.to_bytes(size, "little"), error), result, error
+
+        self.bus.packet.txRxPacket.side_effect = exchange
         self.bus.packet.getTxRxResult.return_value = "No status packet"
         self.bus.packet.getRxPacketError.return_value = "Overload"
         self.sleep = patch("hardware.time.sleep")
@@ -62,6 +76,53 @@ class TransportTests(unittest.TestCase):
             self.bus.read("Present_Position", 2)
         self.assertEqual(read.call_count, 3)
         self.assertEqual(self.bus.port.ser.reset_input_buffer.call_count, 2)
+
+    def test_short_ack_is_never_decoded_as_register_data(self):
+        for register, size in (("Lock", 1), ("Present_Position", 2)):
+            with self.subTest(register=register):
+                exchange = self.bus.packet.txRxPacket
+                exchange.reset_mock()
+                expected = 1 if size == 1 else 2047
+                exchange.side_effect = [
+                    (frame(2, b""), 0, 0),
+                    (frame(2, expected.to_bytes(size, "little")), 0, 0),
+                ]
+                self.assertEqual(self.bus.read(register, 2), expected)
+                self.assertEqual(exchange.call_count, 2)
+                self.assertEqual(
+                    exchange.call_args.args[1], [0, 0, 2, 4, 2, REGISTERS[register][0], size, 0]
+                )
+        self.bus.packet.write1ByteTxRx.assert_not_called()
+        self.bus.packet.write2ByteTxRx.assert_not_called()
+
+    def test_persistent_short_ack_is_a_named_hardware_error(self):
+        self.bus.packet.txRxPacket.side_effect = None
+        self.bus.packet.txRxPacket.return_value = (frame(6, b""), 0, 0)
+        with self.assertRaisesRegex(HardwareError, "Motor 6 read Present_Position"):
+            self.bus.read("Present_Position", 6)
+        self.assertEqual(self.bus.packet.txRxPacket.call_count, 3)
+
+    def test_wrong_id_length_checksum_or_parser_error_is_discarded(self):
+        good = frame(1, (2047).to_bytes(2, "little"))
+        bad_checksum = [*good[:-1], good[-1] ^ 1]
+        bad_length = list(good)
+        bad_length[3] = 3
+        for invalid in (
+            frame(2, b"\xff\x07"),
+            frame(1, b"\xff"),
+            bad_checksum,
+            bad_length,
+            IndexError("short packet"),
+        ):
+            with self.subTest(invalid=invalid):
+                exchange = self.bus.packet.txRxPacket
+                exchange.reset_mock()
+                exchange.side_effect = [
+                    invalid if isinstance(invalid, Exception) else (invalid, 0, 0),
+                    (good, 0, 0),
+                ]
+                self.assertEqual(self.bus.read("Present_Position", 1), 2047)
+                self.assertEqual(exchange.call_count, 2)
 
     def test_lost_configuration_ack_requires_exact_readback_and_never_rewrites(self):
         for register, requested in (

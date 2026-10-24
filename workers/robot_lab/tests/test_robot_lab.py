@@ -413,6 +413,12 @@ class SafetyTests(unittest.TestCase):
             self.lab._tick()
 
     def test_http_center_failure_preserves_interruption_and_allows_restart(self):
+        self._check_http_center_failure()
+
+    def test_http_center_decode_exception_restores_and_marks_interrupted(self):
+        self._check_http_center_failure(decode=True)
+
+    def _check_http_center_failure(self, decode=False):
         payload = {
             "port": "/dev/cu.fake",
             "robot_id": "new",
@@ -427,7 +433,14 @@ class SafetyTests(unittest.TestCase):
             if register == "Homing_Offset":
                 raise HardwareError("Motor 1 write Homing_Offset failed: No status packet")
 
-        bus.on_write = fail_center
+        def fail_read():
+            raise IndexError("list index out of range")
+
+        if decode:
+            bus.positions = fail_read
+        else:
+            bus.on_write = fail_center
+        expected = "list index out of range" if decode else "Homing_Offset"
         server = create_server(self.lab, "test-token-" + "a" * 32, port=0)
         thread = threading.Thread(target=server.serve_forever)
         thread.start()
@@ -444,7 +457,7 @@ class SafetyTests(unittest.TestCase):
             )
             response = connection.getresponse()
             self.assertEqual(response.status, 409)
-            self.assertIn("Homing_Offset", json.loads(response.read())["error"])
+            self.assertIn(expected, json.loads(response.read())["error"])
         finally:
             connection.close()
             server.shutdown()
@@ -458,7 +471,7 @@ class SafetyTests(unittest.TestCase):
         self.assertEqual(state["session"]["mode"], "idle")
         self.assertEqual(state["calibration"]["phase"], "interrupted")
         self.assertEqual(state["calibration"]["interrupted_stage"], "center")
-        self.assertIn("Homing_Offset", state["calibration"]["error"])
+        self.assertIn(expected, state["calibration"]["error"])
         self.lab.stop()
         self.assertEqual(self.lab.status()["calibration"]["phase"], "interrupted")
         self.lab.calibration_start(payload)

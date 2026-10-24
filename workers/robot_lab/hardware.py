@@ -126,12 +126,34 @@ class ServoBus:
 
     def read(self, register: str, motor_id: int):
         address, size = REGISTERS[register]
-        method = self.packet.read1ByteTxRx if size == 1 else self.packet.read2ByteTxRx
+        # Validate the status packet before decoding. The SDK convenience reads
+        # slice a short write ACK as if it contained data (including its checksum),
+        # returning a bogus byte or raising IndexError for a two-byte register.
         # Reads are safe to repeat. The SDK reports both truncated replies and
         # checksum failures as RX_CORRUPT. Discard them and request fresh data;
         # persistent communication failures or any motor fault still stop.
         for attempt in range(3):
-            value, result, error = method(self.port, motor_id, address)
+            request = [0, 0, motor_id, 4, 2, address, size, 0]
+            try:
+                reply, result, error = self.packet.txRxPacket(self.port, request)
+            except IndexError:
+                # A malformed frame can also fail inside the SDK parser.
+                self.port.is_using = False
+                reply, result, error = [], self.sdk.COMM_RX_CORRUPT, 0
+            value = 0
+            if result == self.sdk.COMM_SUCCESS and not error:
+                if (
+                    not isinstance(reply, list)
+                    or len(reply) != size + 6
+                    or reply[:2] != [255, 255]
+                    or reply[2] != motor_id
+                    or reply[3] != size + 2
+                    or reply[-1] != (~sum(reply[2:-1]) & 255)
+                ):
+                    result = self.sdk.COMM_RX_CORRUPT
+                else:
+                    error = reply[4]
+                    value = int.from_bytes(bytes(reply[5:-1]), "little")
             if (
                 result not in (self.sdk.COMM_RX_TIMEOUT, self.sdk.COMM_RX_CORRUPT)
                 or error

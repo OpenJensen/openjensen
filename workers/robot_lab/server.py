@@ -627,19 +627,23 @@ class RobotLab:
             with bus.lock:
                 if generation != self.generation:
                     raise RequestError("Calibration has stopped")
-                for motor_id in IDS.values():
-                    bus.write("Homing_Offset", motor_id, 0)
-                    bus.write("Min_Position_Limit", motor_id, 0)
-                    bus.write("Max_Position_Limit", motor_id, 4095)
-                raw = validate_raw(bus.positions())
-                offsets = {joint: position - 2047 for joint, position in raw.items()}
-                if any(abs(value) > 2047 for value in offsets.values()):
-                    raise RequestError(
-                        "Invalid middle pose encoder reading; cancel and inspect the motor setup"
-                    )
-                for joint, offset in offsets.items():
-                    bus.write("Homing_Offset", IDS[joint], offset)
-                raw = validate_raw(bus.positions())
+                try:
+                    for motor_id in IDS.values():
+                        bus.write("Homing_Offset", motor_id, 0)
+                        bus.write("Min_Position_Limit", motor_id, 0)
+                        bus.write("Max_Position_Limit", motor_id, 4095)
+                    raw = validate_raw(bus.positions())
+                    offsets = {joint: position - 2047 for joint, position in raw.items()}
+                    if any(abs(value) > 2047 for value in offsets.values()):
+                        raise RequestError(
+                            "Invalid middle pose encoder reading; "
+                            "cancel and inspect the motor setup"
+                        )
+                    for joint, offset in offsets.items():
+                        bus.write("Homing_Offset", IDS[joint], offset)
+                    raw = validate_raw(bus.positions())
+                except Exception as error:
+                    raise HardwareError(f"Middle-position capture failed: {error}") from error
             # Publish only after a concurrent Stop has fully completed, or
             # before Stop can invalidate this stage. Never resurrect a phase.
             with self.stop_lock, self.lifecycle_lock:
@@ -1175,7 +1179,7 @@ class Handler(BaseHTTPRequestHandler):
                     self.close_connection = True
                     return
             return self._send(404, {"error": "Unknown companion route", "code": "not_found"})
-        except (BrokenPipeError, ConnectionResetError):
+        except BrokenPipeError, ConnectionResetError:
             pass
         except Exception as error:
             self._error(error)
@@ -1236,7 +1240,7 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 return self._send(404, {"error": "Unknown companion route", "code": "not_found"})
             self._send(200, result)
-        except (BrokenPipeError, ConnectionResetError):
+        except BrokenPipeError, ConnectionResetError:
             pass
         except Exception as error:
             self._error(error)
