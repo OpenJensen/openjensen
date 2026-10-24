@@ -1,0 +1,150 @@
+{
+  "date": "2026-10-24",
+  "base_commit": "191e4c8e7267ad2f811a6433dfb8bf8964f7f5f2",
+  "sources_sha256": {
+    "apps/web/src/components/robot-lab.tsx": "86634f0e1df831ab4aff39c98e8d63ce547b98e44a18ffdf3bc868115ad3f9eb",
+    "apps/web/src/lib/robot-api.ts": "eae0f5ad52ad3b59485b68f09cfde1d076533c34b786b807b6c15e8dba96d6bd",
+    "tests/web/robot-lab.spec.ts": "eb4f76fee01da172cdd3f98859554e417e4f4b7cbc54528e5db2b163df8ef1f0",
+    "workers/robot_lab/API.md": "c9dda504e2d74902e0cb2e929b6c7ef84bbec213c49ca693ee348f3cceb88b7e",
+    "workers/robot_lab/motion.py": "bf7cec18e56c7f36b292e5b942fe14e5e98775709f5031b4be5b9747f360abb5",
+    "workers/robot_lab/server.py": "ba767242eafa9a17e5282868ee2973c65feac7d38e845080f135e304565f776c",
+    "workers/robot_lab/tests/test_motion.py": "623f54721358c3424e5f0c3a573e511a7e60b008dc7f52f1c9e8b03c30a54cdf",
+    "workers/robot_lab/tests/test_robot_lab.py": "ffbde8ac2e1528ab1fbac2322484bb4774dcfa3ee93aba065ee14c88ed6c6e71"
+  },
+  "scope": "Configurable recorded-middle arrival tolerance",
+  "behavior": [
+    "Default arrival band is +/-2 degrees; gripper +/-2 percent of calibrated travel",
+    "UI offers 2 or 5, remembers choice and locks it during active control",
+    "Companion validates finite 0.5-5 value before opening the serial port",
+    "Scheduled movement finishes before encoder arrival acceptance; controls no longer require exact eight-tick alignment",
+    "Accepting arrival preserves the stable hold target and issues no additional position command",
+    "Five-degree/five-percent tracking guard, Stop, watchdog, calibrated limits and rate cap remain unchanged"
+  ],
+  "verification": {
+    "companion": {
+      "run": 167,
+      "passed": 155,
+      "optional_dataset_skips": 12
+    },
+    "api_installer_wrapper_passed": 43,
+    "production_export": "passed",
+    "typescript": "passed",
+    "ruff": "passed",
+    "focused_desktop_mobile_passed": 20,
+    "regressions": [
+      "Angular and gripper boundary checks for two and five, including just outside tolerance",
+      "No premature completion before scheduled movement ends",
+      "Nearby encoder accepted without a fresh hold command",
+      "Outside band remains pending; five-degree tracking violations still fail",
+      "Choice persistence and active-session lock on desktop/mobile",
+      "Stop, sliders, quiet jogs and selected-motor behavior retain coverage"
+    ]
+  },
+  "receipts": {
+    "lint-final": {
+      "pid": 311093,
+      "command": [
+        "/home/aayrapetyan/.local/bin/uvx",
+        "ruff==0.16.9",
+        "check",
+        "workers/robot_lab/hardware.py",
+        "workers/robot_lab/server.py",
+        "workers/robot_lab/tests/test_hardware_transport.py",
+        "workers/robot_lab/tests/test_robot_lab.py",
+        "workers/robot_lab/motion.py",
+        "workers/robot_lab/tests/test_motion.py",
+        "workers/robot_lab/verification.py",
+        "workers/robot_lab/tests/test_mapping_verification.py"
+      ],
+      "started": 1792836716.7048063,
+      "source_sha256": "86634f0e1df831ab4aff39c98e8d63ce547b98e44a18ffdf3bc868115ad3f9eb",
+      "exit_code": 0,
+      "finished": 1792836716.7828472
+    },
+    "companion-final": {
+      "pid": 311127,
+      "command": [
+        "/home/aayrapetyan/ollamaforvlas/source/openjensen/.venv/bin/python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "workers/robot_lab/tests",
+        "-v"
+      ],
+      "started": 1792836716.8140256,
+      "source_sha256": "86634f0e1df831ab4aff39c98e8d63ce547b98e44a18ffdf3bc868115ad3f9eb",
+      "exit_code": 0,
+      "finished": 1792836731.1718247
+    },
+    "api": {
+      "pid": 300231,
+      "command": [
+        "/home/aayrapetyan/ollamaforvlas/source/openjensen/.venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/test_robot_lab_api.py",
+        "tests/test_robot_lab_installer.py",
+        "tests/test_robot_lab_worker.py",
+        "-q"
+      ],
+      "started": 1792836480.827228,
+      "source_sha256": "86634f0e1df831ab4aff39c98e8d63ce547b98e44a18ffdf3bc868115ad3f9eb",
+      "exit_code": 0,
+      "finished": 1792836499.1994815
+    },
+    "build": {
+      "pid": 301093,
+      "command": [
+        "node",
+        "/home/aayrapetyan/ollamaforvlas/source/openjensen/apps/web/node_modules/next/dist/bin/next",
+        "build",
+        "--webpack"
+      ],
+      "started": 1792836499.244495,
+      "source_sha256": "86634f0e1df831ab4aff39c98e8d63ce547b98e44a18ffdf3bc868115ad3f9eb",
+      "exit_code": 0,
+      "finished": 1792836513.0823257
+    },
+    "typecheck": {
+      "pid": 301939,
+      "command": [
+        "node",
+        "/home/aayrapetyan/ollamaforvlas/source/openjensen/apps/web/node_modules/typescript/bin/tsc",
+        "--noEmit"
+      ],
+      "started": 1792836513.1323338,
+      "source_sha256": "86634f0e1df831ab4aff39c98e8d63ce547b98e44a18ffdf3bc868115ad3f9eb",
+      "exit_code": 0,
+      "finished": 1792836513.872445
+    },
+    "browser-focused": {
+      "pid": 302036,
+      "command": [
+        "node",
+        "node_modules/@playwright/test/cli.js",
+        "test",
+        "tests/web/robot-lab.spec.ts",
+        "--project=desktop",
+        "--project=mobile",
+        "--workers=1",
+        "--reporter=list,json",
+        "--output=/home/aayrapetyan/ollamaforvlas/run/robot-lab-middle-tolerance-20261024/browser-focused-artifacts",
+        "--grep",
+        "middle|manual control is explicit|joint sliders|joint buttons keep|Stop remains available|selected motors"
+      ],
+      "started": 1792836513.9101305,
+      "source_sha256": "86634f0e1df831ab4aff39c98e8d63ce547b98e44a18ffdf3bc868115ad3f9eb",
+      "exit_code": 0,
+      "finished": 1792836560.448069
+    }
+  },
+  "evidence_directory": "/home/aayrapetyan/ollamaforvlas/run/robot-lab-middle-tolerance-20261024",
+  "cleanup": {
+    "owned_test_processes_gone": true,
+    "temporary_listener_18865_closed": true,
+    "earlier_failure_logs_retained": true,
+    "preexisting_fixture_298352": "Not this run; left unchanged"
+  },
+  "physical_acceptance": "No powered test movement; preserve current saved calibration on installation"
+}

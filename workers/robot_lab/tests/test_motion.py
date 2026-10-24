@@ -62,3 +62,28 @@ class MotionTests(unittest.TestCase):
             clock.return_value = motion.deadline + 0.1
             with self.assertRaisesRegex(HardwareError, "slider movement timed out"):
                 motion.advance()
+
+    def test_middle_arrival_uses_degrees_and_gripper_percent_with_bounded_choices(self):
+        calibration = {j: {"range_min": 100, "range_max": 4000} for j in JOINTS}
+        motion = MiddleMotion(dict.fromkeys(JOINTS, 2200), calibration)
+        raw = dict.fromkeys(JOINTS, 2047)
+        raw["shoulder_lift"] += 22
+        raw["gripper"] += 78
+        self.assertFalse(motion.arrived(raw))  # Scheduled motion must finish first.
+        motion.progress = 1
+        self.assertTrue(motion.arrived(raw))
+        raw["shoulder_lift"] += 1
+        self.assertFalse(motion.arrived(raw))
+        raw["shoulder_lift"] -= 1
+        raw["gripper"] += 1
+        self.assertFalse(motion.arrived(raw))
+        wide = MiddleMotion(dict.fromkeys(JOINTS, 2200), calibration, 5)
+        wide.progress = 1
+        raw["shoulder_lift"] = 2047 + 56
+        raw["gripper"] = 2047 + 195
+        self.assertTrue(wide.arrived(raw))
+        raw["shoulder_lift"] += 1
+        self.assertFalse(wide.arrived(raw))
+        for value in (True, "2", None, float("nan"), float("inf"), 0, 5.1):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                MiddleMotion(dict.fromkeys(JOINTS, 2200), calibration, value)

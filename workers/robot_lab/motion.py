@@ -85,7 +85,21 @@ class PositionMotion:
 
 
 class MiddleMotion(PositionMotion):
-    def __init__(self, initial, calibration):
+    def __init__(self, initial, calibration, tolerance=2):
+        if (
+            isinstance(tolerance, bool)
+            or not isinstance(tolerance, (int, float))
+            or not math.isfinite(tolerance)
+            or not 0.5 <= tolerance <= 5
+        ):
+            raise ValueError("Middle tolerance must be between 0.5 and 5 degrees / percent")
+        self.tolerance = tolerance
+        self.arrival_limits = {
+            j: (calibration[j]["range_max"] - calibration[j]["range_min"]) * tolerance / 100
+            if j == "gripper"
+            else tolerance * TICKS_PER_DEGREE
+            for j in initial
+        }
         super().__init__(
             initial, middle_targets(calibration), calibration, "Move to recorded middle"
         )
@@ -93,6 +107,11 @@ class MiddleMotion(PositionMotion):
         # nominal duration. Continue until encoder arrival or explicit Stop;
         # the control heartbeat and tracking checks remain active.
         self.deadline = None
+
+    def arrived(self, raw):
+        return self.progress == 1 and all(
+            abs(raw[j] - self.targets[j]) <= self.arrival_limits[j] for j in self.targets
+        )
 
 
 class JointMotion(PositionMotion):

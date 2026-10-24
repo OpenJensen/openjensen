@@ -202,6 +202,7 @@ class RobotLab:
         self.action = {}
         self.commanded_raw = {}
         self.middle_motion = None
+        self.middle_tolerance = 2
         self.joint_motions = {}
         self.calibration = {}
         self.leader_calibration = {}
@@ -324,6 +325,7 @@ class RobotLab:
                 "calibration_persistence": hardware,
                 "control": hardware,
                 "move_to_middle": hardware,
+                "middle_tolerance": hardware,
                 "partial_control": hardware,
                 "joint_sliders": hardware,
                 "recording": hardware
@@ -352,6 +354,7 @@ class RobotLab:
                 "centering": {
                     "active": middle_motion is not None,
                     "progress": middle_motion.progress if middle_motion else 1.0,
+                    "tolerance": self.middle_tolerance,
                 },
                 "watchdog_seconds": None
                 if self.mode == "calibration"
@@ -918,6 +921,15 @@ class RobotLab:
         to_middle = payload.get("move_to_middle", False)
         if type(to_middle) is not bool or (to_middle and mode != "manual"):
             raise RequestError("Move to recorded middle is available only for joint control")
+        tolerance = payload.get("middle_tolerance", 2)
+        if (
+            isinstance(tolerance, bool)
+            or not isinstance(tolerance, (int, float))
+            or not math.isfinite(tolerance)
+            or not 0.5 <= tolerance <= 5
+            or ("middle_tolerance" in payload and mode != "manual")
+        ):
+            raise RequestError("Middle tolerance must be between 0.5 and 5 degrees / percent")
         with self.lock:
             self._idle()
             port = self._port(payload.get("port"))
@@ -1044,7 +1056,10 @@ class RobotLab:
                 positions = {j: normalized(j, value, calibration) for j, value in raw.items()}
                 self.positions, self.action = positions, dict(positions)
                 self.commanded_raw = dict(raw)
-                self.middle_motion = MiddleMotion(raw, calibration) if to_middle else None
+                self.middle_tolerance = tolerance
+                self.middle_motion = (
+                    MiddleMotion(raw, calibration, tolerance) if to_middle else None
+                )
                 self.joint_motions = {}
                 self.torque = mode != "handguide"
                 self.error = None
@@ -1313,11 +1328,13 @@ class RobotLab:
                             return
                         if target != self.commanded_raw[joint]:
                             bus.write("Goal_Position", IDS[joint], target)
+                            if generation != self.generation:
+                                return
                             self.commanded_raw[joint] = target
                             self.action[joint] = normalized(joint, target, self.calibration)
-                    if motion.progress == 1 and all(
-                        abs(raw[j] - motion.targets[j]) <= 8 for j in motion.targets
-                    ):
+                    if motion.arrived(raw):
+                        # Arrival tolerance unlocks controls without changing the
+                        # stable hold target or the independent tracking checks.
                         with self.lifecycle_lock:
                             if generation == self.generation:
                                 self.middle_motion = None

@@ -356,7 +356,7 @@ class SafetyTests(unittest.TestCase):
                 if self.lab.middle_motion is None:
                     break
             self.assertIsNone(self.lab.middle_motion)
-            self.assertEqual(bus.raw, dict.fromkeys(JOINTS, 2047))
+            self.assertTrue(all(abs(value - 2047) <= 22 for value in bus.raw.values()))
             self.assertTrue(self.lab.torque)
 
     def test_middle_continues_past_nominal_wall_clock_duration_until_encoder_arrival(self):
@@ -375,10 +375,69 @@ class SafetyTests(unittest.TestCase):
                     break
             self.assertGreater(clock.return_value, nominal_deadline)
             self.assertIsNone(self.lab.middle_motion)
-            self.assertEqual(bus.raw, dict.fromkeys(JOINTS, 2047))
+            self.assertTrue(all(abs(value - 2047) <= 22 for value in bus.raw.values()))
             self.assertTrue(self.lab.torque)
             self.lab.stop()
             self.assertFalse(self.lab.torque)
+
+    def test_middle_arrival_accepts_nearby_encoder_without_new_hold_command(self):
+        self.start(move_to_middle=True)
+        bus = self.buses[-1]
+        bus.raw = dict.fromkeys(JOINTS, 2067)
+        before = len(bus.writes)
+        self.lab._tick()
+        self.assertIsNone(self.lab.middle_motion)
+        self.assertEqual(self.lab.commanded_raw, dict.fromkeys(JOINTS, 2047))
+        self.assertEqual(bus.raw, dict.fromkeys(JOINTS, 2067))
+        self.assertEqual(len(bus.writes), before)
+        result = self.lab.jog({"joint": "shoulder_lift", "delta": 1})
+        self.assertAlmostEqual(
+            result["session"]["targets"]["shoulder_lift"],
+            normalized("shoulder_lift", 2058, CALIBRATION),
+        )
+
+    def test_middle_two_degree_default_and_five_degree_option(self):
+        for tolerance, expected_arrival in ((2, False), (5, True)):
+            with self.subTest(tolerance=tolerance):
+                self.start(move_to_middle=True, middle_tolerance=tolerance)
+                bus = self.buses[-1]
+                bus.raw = dict.fromkeys(JOINTS, 2047)
+                bus.raw["shoulder_lift"] += 50
+                self.lab._tick()
+                self.assertEqual(self.lab.middle_motion is None, expected_arrival)
+                self.assertEqual(self.lab.status()["session"]["centering"]["tolerance"], tolerance)
+                self.lab.stop()
+
+    def test_middle_tolerance_validation_precedes_serial_open(self):
+        for value in (True, "2", None, float("nan"), float("inf"), 0, 5.1):
+            with (
+                self.subTest(value=value),
+                self.assertRaisesRegex(RequestError, "Middle tolerance"),
+            ):
+                self.start(move_to_middle=True, middle_tolerance=value)
+        self.assertEqual(self.buses, [])
+
+    def test_wide_middle_tolerance_does_not_bypass_tracking(self):
+        self.start(move_to_middle=True, middle_tolerance=5)
+        bus = self.buses[-1]
+        bus.raw["shoulder_lift"] += 57
+        count = len(bus.writes)
+        with self.assertRaisesRegex(HardwareError, "Shoulder lift did not hold"):
+            self.lab._tick()
+        self.assertEqual(len(bus.writes), count)
+
+    def test_middle_arrival_outside_band_keeps_controls_pending_without_new_hold_command(self):
+        self.start(move_to_middle=True)
+        bus = self.buses[-1]
+        bus.raw["shoulder_lift"] += 30  # Within tracking guard, outside two-degree arrival.
+        before = len(bus.writes)
+        self.lab._tick()
+        self.assertIsNotNone(self.lab.middle_motion)
+        self.assertEqual(len(bus.writes), before)
+        with self.assertRaisesRegex(RequestError, "recorded middle"):
+            self.lab.jog({"joint": "shoulder_lift", "delta": 1})
+        self.lab.stop()
+        self.assertFalse(self.lab.torque)
 
     def test_middle_rejects_jogs_and_recordings_and_stop_cancels_future_targets(self):
         self.start_middle()

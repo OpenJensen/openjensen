@@ -7,7 +7,7 @@ const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQ
 const joints = ['shoulder_pan', 'shoulder_lift', 'elbow_flex', 'wrist_flex', 'wrist_roll', 'gripper'];
 const values = (value: number) => Object.fromEntries(joints.map(name => [name, value]));
 function initialStatus(calibrated = false): any {
-  return { ok: true, connected: true, label: 'This Mac', version: '1', platform: 'Darwin', dependencies: { lerobot: { installed: false, version: null }, serial: { installed: true, version: '3.5' }, cv2: { installed: true, version: '4.12.0' }, scservo_sdk: { installed: true, version: '1.0.0' } }, capabilities: { joint_sliders: true, calibration_persistence: true, partial_control: true, move_to_middle: true, mapping_verification: true, assembled_setup: true, probe: true, camera: true, motor_setup: true, calibration: true, control: true, recording: true }, session: { mode: 'idle', robot_id: null, port: null, role: null, positions: {}, torque_enabled: false, watchdog_seconds: 2, error: null }, calibration: { phase: 'idle', mins: {}, maxes: {}, offsets: {}, path: null }, recording: { active: false, dataset_id: null, episode_active: false, frames: 0, episodes: 0, fps: 10, error: null }, assembled: { phase: 'idle', ids: [], selected_joint: null, detected_id: null, candidate_delta: null, mapping: {}, message: 'Start experimental assembled setup.', error: null, log: [], progress: null, calibration_required: false }, calibrations: calibrated ? [{ robot_id: 'my-so101', role: 'follower', path: 'private-calibration.json' }] : [], datasets: [] };
+  return { ok: true, connected: true, label: 'This Mac', version: '1', platform: 'Darwin', dependencies: { lerobot: { installed: false, version: null }, serial: { installed: true, version: '3.5' }, cv2: { installed: true, version: '4.12.0' }, scservo_sdk: { installed: true, version: '1.0.0' } }, capabilities: { middle_tolerance: true, joint_sliders: true, calibration_persistence: true, partial_control: true, move_to_middle: true, mapping_verification: true, assembled_setup: true, probe: true, camera: true, motor_setup: true, calibration: true, control: true, recording: true }, session: { mode: 'idle', robot_id: null, port: null, role: null, positions: {}, torque_enabled: false, watchdog_seconds: 2, error: null }, calibration: { phase: 'idle', mins: {}, maxes: {}, offsets: {}, path: null }, recording: { active: false, dataset_id: null, episode_active: false, frames: 0, episodes: 0, fps: 10, error: null }, assembled: { phase: 'idle', ids: [], selected_joint: null, detected_id: null, candidate_delta: null, mapping: {}, message: 'Start experimental assembled setup.', error: null, log: [], progress: null, calibration_required: false }, calibrations: calibrated ? [{ robot_id: 'my-so101', role: 'follower', path: 'private-calibration.json' }] : [], datasets: [] };
 }
 async function fixture(page: Page, calibrated = false) {
   const state = { status: initialStatus(calibrated), writes: [] as { path: string; body: any }[], errors: [] as string[], datasetReads: 0, cameraFailure: false, stopError: null as string | null, centerError: null as string | null, portsConnected: true, middleInProgress: false, encoderLag: false, jogDelay: 0, jogStaleResponse: false, robotDatasetReads: 0, heartbeatFailures: 0, statusFailures: false, dropCalibrationReply: false };
@@ -45,7 +45,7 @@ async function fixture(page: Page, calibrated = false) {
         state.status.calibration = { ...state.status.calibration, phase: 'ranges', mins: values(700), maxes: values(3300), offsets: values(0) }; }
       else if (action === '/calibration/finish') { state.status.calibration.phase = 'saved'; state.status.assembled.calibration_required = false; state.status.session.mode = 'idle'; state.status.calibrations = [{ robot_id: 'my-so101', role: 'follower', path: 'private-calibration.json' }]; }
       else if (action === '/calibration/cancel' || action === '/stop') { if (state.status.session.mode === 'setup') state.status.assembled.phase = 'stopped'; if (state.status.session.mode === 'verification') state.status.verification.phase = 'stopped'; if (action === '/stop') state.status.session.error = state.stopError; state.status.session.mode = 'idle'; state.status.session.torque_enabled = false; state.status.recording.episode_active = false; }
-      else if (action === '/control/start') { state.status.session = { ...state.status.session, mode: body.mode, active_joints: body.joints ?? joints, port: body.port, robot_id: body.robot_id, positions: values(0), targets: values(0), slider_targets: values(0), joint_limits: Object.fromEntries((body.joints ?? joints).map((j: string) => [j, { min: j === 'gripper' ? 0.3 : -100, max: j === 'gripper' ? 99.7 : 100 }])), torque_enabled: body.mode !== 'handguide', centering: { active: !!body.move_to_middle && state.middleInProgress, progress: 0.25 } }; }
+      else if (action === '/control/start') { state.status.session = { ...state.status.session, mode: body.mode, active_joints: body.joints ?? joints, port: body.port, robot_id: body.robot_id, positions: values(0), targets: values(0), slider_targets: values(0), joint_limits: Object.fromEntries((body.joints ?? joints).map((j: string) => [j, { min: j === 'gripper' ? 0.3 : -100, max: j === 'gripper' ? 99.7 : 100 }])), torque_enabled: body.mode !== 'handguide', centering: { active: !!body.move_to_middle && state.middleInProgress, progress: 0.25, tolerance: body.middle_tolerance ?? 2 } }; }
       else if (action === '/control/heartbeat') { if (state.heartbeatFailures > 0) { state.heartbeatFailures--; return route.abort('failed'); } }
       else if (action === '/control/jog') { const before = structuredClone(state.status); if (state.jogDelay) await new Promise(resolve => setTimeout(resolve, state.jogDelay)); if (state.jogStaleResponse) return route.fulfill({ json: before }); if (body.target !== undefined) { state.status.session.slider_targets[body.joint] = body.target; } else { if (!state.encoderLag) state.status.session.positions[body.joint] += body.delta; state.status.session.targets[body.joint] += body.delta; state.status.session.slider_targets[body.joint] = state.status.session.targets[body.joint]; } }
       else if (action === '/recording/start') { state.status.recording = { active: true, dataset_id: body.dataset_id, episode_active: false, frames: 0, episodes: 0, fps: body.fps, error: null }; }
@@ -166,7 +166,7 @@ test('manual control is explicit, jogs are bounded, and navigating away stops th
   await expect(page.getByLabel('Shoulder pan position')).toHaveText('0.0°');
   await expect(page.getByLabel('Shoulder pan target', { exact: true })).toHaveText('→ 2.0°');
   await page.screenshot({ path: testInfo.outputPath('joint-target-readback.png'), fullPage: true });
-  expect(writes(state, '/control/start')[0].body).toEqual({ port, robot_id: 'my-so101', mode: 'manual', joints, move_to_middle: true, confirm: 'ENABLE MOTION' });
+  expect(writes(state, '/control/start')[0].body).toEqual({ port, robot_id: 'my-so101', mode: 'manual', joints, move_to_middle: true, middle_tolerance: 2, confirm: 'ENABLE MOTION' });
   expect(writes(state, '/control/jog')[0].body).toEqual({ joint: 'shoulder_pan', delta: 2 });
   await page.getByRole('navigation', { name: 'Policy lifecycle' }).getByRole('link', { name: 'Dashboard', exact: true }).click();
   await expect.poll(() => writes(state, '/stop').length).toBe(1);
@@ -879,4 +879,31 @@ test('joint sliders respect centering and excluded joints and reject stale repli
   await expect(page.getByRole('slider', { name: /target slider/ })).toHaveCount(0);
   expect(state.status.session.mode).toBe('idle');
   expect(state.errors).toEqual([]);
+});
+
+
+test('middle tolerance defaults to two and five is explicit, fixed during motion and remembered', async ({ page }, testInfo) => {
+  const state = await fixture(page, true);
+  state.middleInProgress = true;
+  await tab(page, 'Teleoperate').click();
+  const tolerance = page.getByLabel('Middle tolerance', { exact: true });
+  await expect(tolerance).toHaveValue('2');
+  await tolerance.selectOption('5');
+  expect(writes(state, '/control/start')).toHaveLength(0);
+  await page.getByRole('checkbox', { name: /Arm secured; workspace clear/ }).check();
+  await page.getByRole('button', { name: 'Enable & move to recorded middle', exact: true }).click();
+  expect(writes(state, '/control/start')[0].body).toMatchObject({ move_to_middle: true, middle_tolerance: 5 });
+  await expect(tolerance).toBeDisabled();
+  await expect(tolerance).toHaveValue('5');
+  await expect(page.getByRole('button', { name: 'Increase Shoulder lift', exact: true })).toBeDisabled();
+  state.status.session.centering.active = false;
+  await expect(page.getByRole('button', { name: 'Increase Shoulder lift', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Stop arm and disable torque' }).click();
+  await page.reload();
+  await tab(page, 'Teleoperate').click();
+  await expect(tolerance).toHaveValue('5');
+  await expect(tolerance).toBeEnabled();
+  expect(writes(state, '/control/start')).toHaveLength(1);
+  expect(state.errors).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath('middle-tolerance.png'), fullPage: true });
 });
