@@ -72,7 +72,7 @@ fields `phase` (idle/checking/wiggling/done/error/stopped), `port`, `joint`,
 500 ms heartbeat while active (10-second timeout); Stop and hidden-page cleanup
 cancel verification. The operation closes serial after torque-off cleanup.
 The UI only marks a motion check correct after the operator confirms the joint
-that actually moved. These visual check marks belong to the current page session.
+that actually moved. Operator confirmations are retained on the Mac and tied to the exact completed mapping journal; a new setup invalidates them.
 Completed ID mappings are restored from the private journal on companion restart
 without opening serial hardware.
 
@@ -125,3 +125,23 @@ The recorded-middle trajectory has no wall-clock completion deadline. Slow seria
 
 
 Manual `/control/start` accepts `middle_tolerance` (finite number 0.5–5, default 2) for `move_to_middle`. Units are degrees for angular joints and percent of calibrated gripper travel. The UI offers 2°/2% and 5°/5%, persists the choice, and locks it while a session is active. `capabilities.middle_tolerance` gates this setting; `session.centering.tolerance` reports its value. Once the scheduled trajectory finishes and every measured joint is inside its band, the companion unlocks controls without changing the stable hold target. Encoder feedback need not reach exact 2047-tick alignment. Existing five-degree/five-percent tracking protection and calibrated limits remain unchanged; the arrival band does not bypass tracking checks.
+
+
+### Arm readiness
+
+Status advertises `capabilities.arm_readiness` and passive `mapping_checks` metadata
+(`port`, mapping journal `revision`, `checks` keyed by joint with `run_id`, `correct`,
+`checked_at`, plus `error`). `POST /mapping/confirm` accepts
+`{port,joint,run_id,correct:boolean,confirm:"CONFIRM PHYSICAL JOINT"}` only for the
+most recent completed, cleaned-up wiggle and unchanged mapping. It stores operator
+observations separately from setup journals, never commands hardware, and supports
+idempotent same-answer retries. A new wiggle is required to change an observation.
+
+Saved calibration inventory validates all six entries, excludes backup filenames,
+and reports `valid`, `sha256`, `setup_port`, `setup_fresh`, `error`. These are file /
+setup-revision facts, not a claim that current hardware matches. An explicit
+read-only `/probe` may include `robot_id` and `role`; its `profile.state` is
+`missing`, `invalid`, `stale`, `unavailable`, `mismatch` or `matched`. Only a stable
+six-motor scan plus matching offsets and limits for every joint reports `matched`.
+A scan never writes registers or enables torque. Status/device refresh never scans
+motors. The UI retains this as a scan snapshot and clears it on USB or identity change.

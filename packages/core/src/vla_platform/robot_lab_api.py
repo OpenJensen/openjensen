@@ -93,6 +93,7 @@ PROTOCOL = {
         "probe",
         "setup/motor",
         "mapping/wiggle",
+        "mapping/confirm",
         "setup/assembled/start",
         "setup/assembled/observe",
         "setup/assembled/wiggle",

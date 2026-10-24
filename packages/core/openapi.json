@@ -8833,6 +8833,25 @@
         ]
       }
     },
+    "/api/v1/robot-lab/mapping/confirm": {
+      "post": {
+        "operationId": "robot_lab_post_mapping_confirm",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Mapping Confirm",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
     "/api/v1/robot-lab/mapping/wiggle": {
       "post": {
         "operationId": "robot_lab_post_mapping_wiggle",

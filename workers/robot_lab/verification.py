@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 from assembled import AssembledCancelled, AssembledError, AssembledSetup
+from assembled_session import durable_json
 from hardware import IDS
 
 
@@ -41,7 +42,7 @@ def latest_saved_mapping(data_dir):
             port = json.loads(path.read_text()).get("port")
             if isinstance(port, str):
                 return saved_mapping(data_dir, port)
-        except (ValueError, OSError, TypeError, AttributeError):
+        except ValueError, OSError, TypeError, AttributeError:
             continue
     return None
 
@@ -156,3 +157,71 @@ class MappingVerification:
         self.worker.join(timeout=15)
         if self.worker.is_alive():
             raise ValueError("Motor verification cleanup is still running")
+
+
+class MappingChecks:
+    """Operator observations, bound to the exact completed setup journal."""
+
+    def __init__(self, data_dir):
+        self.data_dir = Path(data_dir)
+        self.lock = threading.RLock()
+
+    def revision(self, port):
+        saved_mapping(self.data_dir, port)
+        path = (
+            self.data_dir / "assembled" / (hashlib.sha256(port.encode()).hexdigest()[:20] + ".json")
+        )
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    def path(self, port):
+        return (
+            self.data_dir / "mapping-checks" / (hashlib.sha256(port.encode()).hexdigest() + ".json")
+        )
+
+    def snapshot(self, port):
+        with self.lock:
+            empty = {"port": port, "checks": {}, "revision": None, "error": None}
+            if not port:
+                return empty
+            try:
+                revision = self.revision(port)
+                empty["revision"] = revision
+                path = self.path(port)
+                if not path.exists():
+                    return empty
+                if path.is_symlink() or path.stat().st_size > 65536:
+                    raise ValueError("Saved motion checks need inspection")
+                value = json.loads(path.read_text())
+                if value.get("revision") != revision or value.get("port") != port:
+                    return empty
+                checks = value["checks"]
+                if not isinstance(checks, dict) or any(
+                    joint not in IDS
+                    or not isinstance(entry, dict)
+                    or type(entry.get("correct")) is not bool
+                    or not isinstance(entry.get("run_id"), str)
+                    or not isinstance(entry.get("checked_at"), (int, float))
+                    for joint, entry in checks.items()
+                ):
+                    raise ValueError("Saved motion checks are invalid")
+                return {**empty, "checks": copy.deepcopy(checks)}
+            except (ValueError, KeyError, TypeError, AttributeError, OSError) as error:
+                return {**empty, "error": str(error)}
+
+    def record(self, verification, revision, correct):
+        with self.lock:
+            port, joint = verification["port"], verification["joint"]
+            state = self.snapshot(port)
+            if state["error"] or state["revision"] != revision:
+                raise ValueError("Motor mapping changed; repeat the motion check")
+            old = state["checks"].get(joint)
+            if old and old["run_id"] == verification["run_id"]:
+                if old["correct"] != correct:
+                    raise ValueError("Repeat the wiggle before changing its observation")
+                return
+            state["checks"][joint] = {
+                "run_id": verification["run_id"],
+                "correct": correct,
+                "checked_at": time.time(),
+            }
+            durable_json(self.path(port), state)
