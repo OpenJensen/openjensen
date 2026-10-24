@@ -15,6 +15,8 @@ IDS = {name: index + 1 for index, name in enumerate(JOINTS)}
 BAUDRATES = (1_000_000, 500_000, 250_000, 128_000, 115_200, 57_600, 38_400, 19_200)
 REGISTERS = {
     "ID": (5, 1),
+    "Return_Delay_Time": (7, 1),
+    "Maximum_Acceleration": (85, 1),
     "Baud_Rate": (6, 1),
     "Min_Position_Limit": (9, 2),
     "Max_Position_Limit": (11, 2),
@@ -30,6 +32,7 @@ REGISTERS = {
     "Acceleration": (41, 1),
     "Goal_Position": (42, 2),
     "Goal_Velocity": (46, 2),
+    "Torque_Limit": (48, 2),
     "Lock": (55, 1),
     "Present_Position": (56, 2),
 }
@@ -90,14 +93,10 @@ class ServoBus:
             if not self.port.openPort() or not self.port.setBaudRate(baudrate):
                 raise HardwareError("Could not open serial port at requested baudrate")
             self.opened = True
-            # Bound all packet waits: fast enough for the hardware watchdog to stop.
-            original_timeout = self.port.setPacketTimeout
+            # Use the same Feetech SDK timing fix as the upstream SO follower.
+            from lerobot_control import patch_setPacketTimeout
 
-            def bounded_timeout(length):
-                original_timeout(length)
-                self.port.setPacketTimeoutMillis(25)
-
-            self.port.setPacketTimeout = bounded_timeout
+            self.port.setPacketTimeout = patch_setPacketTimeout.__get__(self.port, type(self.port))
         except Exception:
             try:
                 self.port.closePort()
@@ -209,9 +208,12 @@ class ServoBus:
                 "Operating_Mode",
                 "Lock",
                 "Max_Torque_Limit",
+                "Torque_Limit",
                 "Protection_Current",
                 "Overload_Torque",
                 "Acceleration",
+                "Maximum_Acceleration",
+                "Return_Delay_Time",
                 "P_Coefficient",
                 "I_Coefficient",
                 "D_Coefficient",
@@ -243,6 +245,26 @@ class ServoBus:
                 f"Motor {motor_id} torque read-back did not match requested state {requested}"
             )
 
+    def write_positions(self, values, is_current=lambda: True):
+        """Use LeRobot's GroupSyncWrite position path: one packet, no ACK per joint."""
+        with self.lock:
+            if not self.opened or not is_current():
+                raise HardwareError("Control session stopped before writing goals")
+            if not values or set(values) - set(self.joints):
+                raise ValueError("Goal packet must contain only selected joints")
+            writer = self.sdk.GroupSyncWrite(self.port, self.packet, *REGISTERS["Goal_Position"])
+            try:
+                for joint, value in values.items():
+                    if type(value) is not int or not 0 <= value <= 4095:
+                        raise ValueError("Goal position must be an encoder count from 0 to 4095")
+                    if not writer.addParam(IDS[joint], list(value.to_bytes(2, "little"))):
+                        raise HardwareError(f"Could not prepare {joint} position packet")
+                if not self.opened or not is_current():
+                    raise HardwareError("Control session stopped before sending goals")
+                self._check(writer.txPacket(), 0, "selected", "sync write Goal_Position")
+            finally:
+                writer.clearParam()
+
     def _check(self, result, error, motor_id, operation):
         if result != self.sdk.COMM_SUCCESS or error:
             reason = (
@@ -252,9 +274,7 @@ class ServoBus:
 
     def positions(self):
         with self.lock:
-            return {
-                joint: self.read("Present_Position", IDS[joint]) for joint in self.joints
-            }
+            return {joint: self.read("Present_Position", IDS[joint]) for joint in self.joints}
 
     def disable(self):
         # Attempt every motor even if a previous one has disconnected.
@@ -346,8 +366,7 @@ def check_selected_motors(bus, joints):
     expected = {IDS[j] for j in joints}
     result = probe_bus(bus, sorted(expected))
     reliable = {
-        motor["id"] for motor in result["motors"]
-        if motor["stable"] and motor["model"] == 777
+        motor["id"] for motor in result["motors"] if motor["stable"] and motor["model"] == 777
     }
     if reliable != expected:
         missing = ", ".join(str(i) for i in sorted(expected - reliable))

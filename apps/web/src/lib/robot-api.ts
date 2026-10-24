@@ -14,6 +14,7 @@ export type ControlMode = 'manual' | 'leader' | 'handguide';
 export type JointValues = Partial<Record<RobotJoint, number>>;
 export type RobotDataset = { id: string; path: string; episodes: number; frames: number; fps: number; task: string; format: string; finalized: boolean; abandoned?: boolean; pending_frames?: number };
 export type RobotStatus = {
+  controller?: { name: string; upstream: string; target_mode: string; max_relative_target: number | null; acceleration: number; maximum_acceleration: number; goal_velocity: number };
   ok?: boolean; connected?: boolean; label?: string; message?: string; version?: string; platform?: string;
   dependencies?: Record<string, { installed: boolean; version: string | null }>;
   capabilities?: { large_joint_steps?: boolean; arm_readiness?: boolean; joint_sliders?: boolean; calibration_persistence?: boolean; partial_control?: boolean; move_to_middle?: boolean; middle_tolerance?: boolean; assembled_setup?: boolean; mapping_verification?: boolean; probe: boolean; camera: boolean; motor_setup: boolean; calibration: boolean; control: boolean; recording: boolean };

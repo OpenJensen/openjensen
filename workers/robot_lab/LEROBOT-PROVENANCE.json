@@ -1,0 +1,30 @@
+{
+  "project": "https://github.com/huggingface/lerobot",
+  "ref": "v0.4.4",
+  "license": "Apache-2.0",
+  "methods_ast_sha256": {
+    "robots/so_follower/so_follower.py:configure": "a1562971a41ec4ebf5a906c88defbbc4e23168955954718bd999fe1c76289b0f",
+    "robots/so_follower/so_follower.py:send_action": "d59a672082f64e14d12d2a6e0689b07f04cd95d7f4516ce46058c44c93856044",
+    "motors/feetech/feetech.py:configure_motors": "05ddc88ce44460717277df2ef81f9812a1834f44a3d1bca45550f471750a6f7d",
+    "robots/utils.py:ensure_safe_goal_position": "6451fa7a9b87b43cb850da877a2d43c09c9beb49da25436961779702398c4fe9",
+    "motors/feetech/feetech.py:patch_setPacketTimeout": "608cdff144d292b20e76452e37f65ef38af383a672d71862fbc3680c4e96a963"
+  },
+  "source_files": {
+    "motors/motors_bus.py": "a6c1f5a560840fce7e23bed02fad016ab0e41fccdd96dd116332258a20a94e7a",
+    "motors/feetech/feetech.py": "1dd81201ebd03ad39a6d46a034d99f21583dcefa81e9f099d3dc0a184dce56a8",
+    "motors/feetech/tables.py": "71f7f7beb17169781bd26a33b165ed4c5c3df7b9c477d36860f9d6011eb00428",
+    "utils/utils.py": "6d15ea2af3a80ae419af3d42d4264ff07bb769147b021a99f1a46cd51b728ac4",
+    "robots/utils.py": "a311bbb641b1f75dd6509df3d2305497858acaa8d8169e3344297290e3fecbf9",
+    "robots/so_follower/so_follower.py": "4f8fc0703aa49589e65efcc9c30ef325535d0818552a0c1d4df98c2352fe4abc"
+  },
+  "bridge_changes": [
+    "Defer torque enable until verified current-pose hold on all selected joints.",
+    "Keep calibration limits and session-generation cancellation.",
+    "Clear the previous companion goal-velocity cap to zero/default.",
+    "No relative target clipping; stock SO follower default max_relative_target=None.",
+    "The upstream connectivity decorator is replaced by the generation/port-open gate; copied function bodies are unchanged.",
+    "Restore volatile Torque_Limit (48) to the saved EEPROM Max_Torque_Limit (16), matching power-on behavior and clearing an interrupted 10% identification cap; gripper stays at 500."
+  ],
+  "ast_python": "3.14",
+  "servo_memory_reference": "https://docs.waveshare.com/Memory_Map_Explanation/ST_Servo_Memory_Map_Explanation"
+}
