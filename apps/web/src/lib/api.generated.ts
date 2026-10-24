@@ -675,6 +675,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/module-installations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Status */
+        get: operations["status_api_v1_module_installations_get"];
+        put?: never;
+        /** Install */
+        post: operations["install_api_v1_module_installations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/module-installations/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel */
+        post: operations["cancel_api_v1_module_installations_cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/modules": {
         parameters: {
             query?: never;
@@ -688,6 +723,23 @@ export interface paths {
          */
         get: operations["modules_api_v1_modules_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/modules/{ident}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Enable */
+        put: operations["enable_api_v1_modules__ident__put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2839,6 +2891,41 @@ export interface components {
              */
             token: string;
         };
+        /** InstallOperation */
+        InstallOperation: {
+            /** Finished At */
+            finished_at?: string | null;
+            /** Id */
+            id: string;
+            /** Message */
+            message: string;
+            /** Pid */
+            pid?: number | null;
+            /**
+             * Profile
+             * @enum {string}
+             */
+            profile: "robot" | "datasets" | "decision";
+            /** Stage */
+            stage: string;
+            /** Started At */
+            started_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "running" | "succeeded" | "failed" | "cancelled" | "interrupted";
+        };
+        /** InstallRequest */
+        InstallRequest: {
+            /** Operation Id */
+            operation_id: string;
+            /**
+             * Profile
+             * @enum {string}
+             */
+            profile: "robot" | "datasets" | "decision";
+        };
         /** IntakeRequest */
         IntakeRequest: {
             /** Library Id */
@@ -3202,6 +3289,21 @@ export interface components {
         ModelRunName: {
             /** Name */
             name: string;
+        };
+        /** ModuleInstallationStatus */
+        ModuleInstallationStatus: {
+            /** Error */
+            error?: string | null;
+            /** Host */
+            host: string;
+            operation?: components["schemas"]["InstallOperation"] | null;
+            /** Profiles */
+            profiles: components["schemas"]["RuntimePackage"][];
+        };
+        /** ModulePreference */
+        ModulePreference: {
+            /** Enabled */
+            enabled: boolean;
         };
         /**
          * NativeDistillation
@@ -3729,6 +3831,24 @@ export interface components {
             /** Frame Index */
             frame_index: number;
         };
+        /** RuntimePackage */
+        RuntimePackage: {
+            /**
+             * Id
+             * @enum {string}
+             */
+            id: "robot" | "datasets" | "decision";
+            /** Installable */
+            installable: boolean;
+            /** Message */
+            message: string;
+            /** Minimum Free Gib */
+            minimum_free_gib: number;
+            /** Name */
+            name: string;
+            /** Ready */
+            ready: boolean;
+        };
         /** Score */
         Score: {
             /** Id */
@@ -4127,16 +4247,31 @@ export interface components {
         /** WorkspaceModule */
         WorkspaceModule: {
             /**
+             * Configured
+             * @default false
+             */
+            configured: boolean;
+            /**
              * Id
              * @enum {string}
              */
             id: "robot-lab" | "teaching" | "augmentation" | "decision-lab" | "cloud-runs";
             /** Installed */
             installed: boolean;
+            /**
+             * Managed
+             * @default false
+             */
+            managed: boolean;
             /** Name */
             name: string;
             /** Setup */
             setup: string;
+            /**
+             * Setup Url
+             * @default /guide/
+             */
+            setup_url: string;
         };
     };
     responses: never;
@@ -5405,6 +5540,79 @@ export interface operations {
             };
         };
     };
+    status_api_v1_module_installations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModuleInstallationStatus"];
+                };
+            };
+        };
+    };
+    install_api_v1_module_installations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InstallRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstallOperation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_api_v1_module_installations_cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstallOperation"] | null;
+                };
+            };
+        };
+    };
     modules_api_v1_modules_get: {
         parameters: {
             query?: never;
@@ -5421,6 +5629,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkspaceModule"][];
+                };
+            };
+        };
+    };
+    enable_api_v1_modules__ident__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ident: "robot-lab" | "teaching" | "augmentation" | "decision-lab" | "cloud-runs";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModulePreference"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

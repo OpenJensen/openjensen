@@ -327,6 +327,12 @@ class PublicGateway:
             if expanded == decoded:
                 break
             decoded = expanded
+        if "module-installations" in decoded.split("/") or (
+            "modules" in decoded.split("/") and request.method not in SAFE_METHODS
+        ):
+            return self.error(
+                request.scope, 403, "Module installation is available in the private workspace"
+            )
         if "updates" in decoded.split("/"):
             return self.error(
                 request.scope, 403, "Server updates are available in the private workspace"

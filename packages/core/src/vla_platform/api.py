@@ -50,7 +50,9 @@ from vla_platform.lifecycle.contracts import (
 )
 from vla_platform.lifecycle.model_names import ModelRunName
 from vla_platform.lifecycle.training_catalog import public_training_models
+from vla_platform.module_installations import ModuleInstallations
 from vla_platform.modules import WorkspaceModule, workspace_modules
+from vla_platform.modules_api import router as modules_router
 from vla_platform.projects import Projects
 from vla_platform.recordings_api import router as recordings_router
 from vla_platform.robot_lab_api import router as robot_lab_router
@@ -120,12 +122,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise RuntimeError("Another application already owns this workspace") from exc
         storage = Storage(settings.data_dir)
         execution = Execution(storage, settings)
-        explorer = DatasetExplorer(cover_cache=settings.data_dir / "dataset-cover-cache")
+        explorer = DatasetExplorer(
+            cover_cache=settings.data_dir / "dataset-cover-cache", data_dir=settings.data_dir
+        )
         initialized = False
         try:
             await storage.initialize()
             initialized = True
             await execution.reconcile()
+            app.state.module_installations = ModuleInstallations(settings.data_dir)
             app.state.application_updates = ApplicationUpdates(data_dir=settings.data_dir)
             app.state.projects, app.state.execution = Projects(storage), execution
             app.state.explorer = explorer
@@ -138,6 +143,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             try:
                 if initialized:
                     try:
+                        if hasattr(app.state, "module_installations"):
+                            await app.state.module_installations.close()
                         if hasattr(app.state, "application_updates"):
                             await app.state.application_updates.close()
                         if hasattr(app.state, "robot_lab"):
@@ -191,6 +198,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(dataset_library_router)
     app.include_router(robot_lab_router)
     app.include_router(updates_router)
+    app.include_router(modules_router)
 
     @app.exception_handler(LibraryError)
     async def dataset_library_error(_request: Request, exc: LibraryError):
@@ -283,7 +291,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def cloud_runs(response: Response) -> CloudRunsFeed:
         """Read bounded operator snapshots; never connect to or control a cloud host."""
         response.headers["Cache-Control"] = "no-store"
-        return await asyncio.to_thread(read_cloud_runs, settings.cloud_runs_dir)
+        directory = settings.cloud_runs_dir or (
+            settings.data_dir / "cloud-runs"
+            if (settings.data_dir / "cloud-runs").is_dir()
+            else None
+        )
+        return await asyncio.to_thread(read_cloud_runs, directory)
 
     @app.get("/api/v1/modules", response_model=list[WorkspaceModule])
     async def modules(request: Request) -> list[WorkspaceModule]:

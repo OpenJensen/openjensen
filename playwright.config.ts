@@ -33,6 +33,7 @@ export default defineConfig({
       testMatch: [
         'workspace-routes.spec.ts',
         'application-updates.spec.ts',
+        'modules.spec.ts',
         'project-menu.spec.ts',
         'model-library.spec.ts',
         'dataset-submission.spec.ts',
@@ -65,6 +66,7 @@ export default defineConfig({
       testMatch: [
         'workspace-routes.spec.ts',
         'application-updates.spec.ts',
+        'modules.spec.ts',
         'project-menu.spec.ts',
         'model-library.spec.ts',
         'dataset-submission.spec.ts',

@@ -99,6 +99,21 @@ PROFILES = (
         20,
     ),
     InstallProfile(
+        "decision",
+        "Decision scorer",
+        "CPU dependencies for the optional Muose scorer.",
+        "3.12.14",
+        ("Darwin", "Linux"),
+        "workers/decision",
+        ("jensen-decision-worker", "torch", "safetensors", "tokenizers"),
+        ("uv",),
+        (
+            "Model files and explicit CC-BY-NC-SA-4.0 acceptance are configured separately.",
+            "No model weights are downloaded by dependency installation.",
+        ),
+        4,
+    ),
+    InstallProfile(
         "simulation",
         "Simulation",
         "External NVIDIA Isaac Sim 6.1 runtime and its isolated worker.",
@@ -123,7 +138,9 @@ def profile(ident):
     for value in PROFILES:
         if value.id == ident:
             return value
-    raise ValueError("Unknown profile. Choose core, robot, datasets, training or simulation.")
+    raise ValueError(
+        "Unknown profile. Choose core, robot, datasets, training, decision or simulation."
+    )
 
 
 def public_profiles():
@@ -174,6 +191,20 @@ def install_plan(value, root, environment=None):
     if value.id in {"robot", "datasets"}:
         requirements = "requirements-hardware.txt" if value.id == "robot" else "requirements.txt"
         command += ["--no-deps", "-r", str(root / value.directory / requirements)]
+    elif value.id == "decision":
+        if platform.system() == "Linux":
+            commands.append(
+                {
+                    "argv": [
+                        *command,
+                        "--index-url",
+                        "https://download.pytorch.org/whl/cpu",
+                        "torch==2.11.0",
+                    ],
+                    "cwd": str(root),
+                }
+            )
+        command += [str(root / value.directory)]
     elif value.id == "training":
         command += ["-e", str(root / value.directory) + "[smolvla]"]
     commands.append({"argv": command, "cwd": str(root)})
@@ -181,10 +212,15 @@ def install_plan(value, root, environment=None):
 
 
 def expected_versions(value, root):
-    if value.id == "training":
+    if value.id in {"training", "decision"}:
         project = tomllib.loads((root / value.directory / "pyproject.toml").read_text())["project"]
         result = {project["name"].lower(): project["version"]}
-        for requirement in project["optional-dependencies"]["smolvla"]:
+        requirements = (
+            project["dependencies"]
+            if value.id == "decision"
+            else project["optional-dependencies"]["smolvla"]
+        )
+        for requirement in requirements:
             requirement = requirement.split(";", 1)[0].strip()
             if "==" in requirement:
                 package, version = requirement.split("==", 1)
@@ -248,7 +284,15 @@ def check_profile(value, root, environment=None, *, runner=subprocess.run, which
         packages = details["packages"]
         versions_ok = all(
             packages.get(name) is not None
-            and (name.lower() not in expected or packages[name] == expected[name.lower()])
+            and (
+                name.lower() not in expected
+                or (
+                    packages[name].removesuffix("+cpu")
+                    if value.id == "decision" and name == "torch"
+                    else packages[name]
+                )
+                == expected[name.lower()]
+            )
             for name in value.distributions
         )
         wanted = tuple(map(int, value.python.split(".")[:2]))

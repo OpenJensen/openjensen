@@ -62,4 +62,6 @@ Open an application job to follow its status and events. For an external rollout
 
 ## Settings & diagnostics
 
+Use **Modules** to add pages to the sidebar and install optional runtime packages on the named application server. Installation progress continues after leaving the page; companion pairing, provider credentials and external simulator setup remain separate.
+
 Use **Compute** to connect Google Cloud, save Hugging Face access, or add a local worker. For local training, select **Check this machine → Add worker**, enable local runs, and save. **Modules** shows which optional pages are set up. Use **Workflow settings** to edit recipes and **Diagnostics** to launch project checks. [Local setup](compute-settings.md#local-worker-setup) · [Cloud connection](cloud-connections.md) · [Diagnostics](policy-workflow.md) · [Modules](installation-profiles.md#workspace-modules)

@@ -97,10 +97,13 @@ test('the sidebar lists installed modules and Settings shows how to add the rest
   }
   await nav.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
   await page.getByRole('button', { name: 'Modules', exact: true }).click();
-  const modules = page.getByRole('region', { name: 'Modules' }).getByRole('listitem');
+  const modules = page.getByRole('list', { name: 'Workspace modules' }).getByRole('listitem');
   await expect(modules).toHaveCount(5);
-  await expect(modules.filter({ hasText: 'Robot Lab' })).toContainText('Installed');
-  await expect(modules.filter({ hasText: 'Teaching' })).toContainText('Set JENSEN_TEACHING_URL.Not installed');
+  await expect(modules.filter({ hasText: 'Robot Lab' })).toContainText('Added');
+  const teaching = modules.filter({ hasText: 'Teaching' });
+  await expect(teaching).toContainText('Available');
+  await teaching.getByText('Setup required', { exact: true }).click();
+  await expect(teaching).toContainText('Set JENSEN_TEACHING_URL.');
   // An uninstalled module stays reachable by URL and is listed while open.
   await page.goto('/teaching/');
   await expect(nav.getByRole('link', { name: 'Teaching', exact: true })).toHaveAttribute('aria-current', 'page');

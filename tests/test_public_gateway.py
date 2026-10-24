@@ -452,6 +452,9 @@ else:
 @pytest.mark.parametrize(
     "path",
     [
+        "/api/v1/module-installations",
+        "/api/v1/module-installations/cancel",
+        "/api/v1/%256dodule-installations",
         "/api/v1/updates",
         "/api/v1/updates/apply",
         "/api/v1/%2575pdates/apply",
@@ -475,3 +478,17 @@ def test_robot_hardware_never_reaches_public_upstream(config, method, path):
         response = client.request(method, "/firebird" + path)
         assert response.status_code == 403
         assert "private workspace" in response.text
+
+
+@pytest.mark.parametrize("method", ["PUT", "POST", "DELETE"])
+@pytest.mark.parametrize("path", ["/modules/teaching", "/%256dodules/robot-lab"])
+def test_public_gateway_cannot_enable_modules(config, method, path):
+    def forbidden(_request):
+        raise AssertionError("Module management must remain private")
+
+    with TestClient(
+        gateway.PublicGateway(config[0], transport=httpx.MockTransport(forbidden)),
+        base_url=ORIGIN,
+        headers={"Authorization": AUTH, "Origin": ORIGIN},
+    ) as client:
+        assert client.request(method, "/firebird/api/v1" + path).status_code == 403

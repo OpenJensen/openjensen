@@ -28,6 +28,7 @@ from vla_platform.contracts import (
     Job,
 )
 from vla_platform.datasets.hub_parquet import ReaderError, read_parquet
+from vla_platform.datasets.local_preview import reader_python as default_reader_python
 
 MAX_JSON_BYTES = 2 * 1024 * 1024
 MAX_INDEX_BYTES = 8 * 1024 * 1024
@@ -240,10 +241,12 @@ class DatasetExplorer:
         *,
         reader_python: str | Path | None = None,
         cover_cache: Path | None = None,
+        data_dir: Path | None = None,
     ):
         self.client = client or httpx.AsyncClient(timeout=20, follow_redirects=False)
         self.reader = HubReader(self.client)
         self.reader_python = reader_python
+        self.data_dir = data_dir
         self.slots = asyncio.Semaphore(2)
         self.cover_cache = cover_cache
         self.covers: OrderedDict[str, EpisodePreview] = OrderedDict()
@@ -388,7 +391,11 @@ class DatasetExplorer:
         scanned = 0
         for path in files[:MAX_INDEX_FILES]:
             raw = await self.reader.read(hub_url(source, path), MAX_INDEX_BYTES, budget)
-            rows = await index_rows(raw, python=self.reader_python)
+            rows = await index_rows(
+                raw,
+                python=self.reader_python
+                or (default_reader_python(self.data_dir) if self.data_dir else None),
+            )
             rows.sort(key=lambda row: integer(row.get("episode_index"), "episode index"))
             if selected is not None:
                 found = [row for row in rows if row["episode_index"] == selected]
@@ -445,7 +452,12 @@ class DatasetExplorer:
             try:
                 path = self.data_path(source, info, row)
                 raw = await self.reader.read(hub_url(source, path), MAX_PARQUET_BYTES, budget)
-                samples = await frame_samples(raw, episode_index, python=self.reader_python)
+                samples = await frame_samples(
+                    raw,
+                    episode_index,
+                    python=self.reader_python
+                    or (default_reader_python(self.data_dir) if self.data_dir else None),
+                )
                 if not samples:
                     warnings.append("The selected episode has no sample rows in its frame shard.")
             except (ValueError, httpx.HTTPError) as exc:

@@ -2501,6 +2501,103 @@
         "title": "HuggingFaceTokenInput",
         "type": "object"
       },
+      "InstallOperation": {
+        "properties": {
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "pid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pid"
+          },
+          "profile": {
+            "enum": [
+              "robot",
+              "datasets",
+              "decision"
+            ],
+            "title": "Profile",
+            "type": "string"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled",
+              "interrupted"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "profile",
+          "status",
+          "stage",
+          "message",
+          "started_at"
+        ],
+        "title": "InstallOperation",
+        "type": "object"
+      },
+      "InstallRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "operation_id": {
+            "pattern": "^[0-9a-f]{32}$",
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "profile": {
+            "enum": [
+              "robot",
+              "datasets",
+              "decision"
+            ],
+            "title": "Profile",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile",
+          "operation_id"
+        ],
+        "title": "InstallRequest",
+        "type": "object"
+      },
       "IntakeRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3408,6 +3505,62 @@
           "name"
         ],
         "title": "ModelRunName",
+        "type": "object"
+      },
+      "ModuleInstallationStatus": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "host": {
+            "title": "Host",
+            "type": "string"
+          },
+          "operation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InstallOperation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "profiles": {
+            "items": {
+              "$ref": "#/components/schemas/RuntimePackage"
+            },
+            "title": "Profiles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "host",
+          "profiles"
+        ],
+        "title": "ModuleInstallationStatus",
+        "type": "object"
+      },
+      "ModulePreference": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "ModulePreference",
         "type": "object"
       },
       "NativeDistillation": {
@@ -4745,6 +4898,49 @@
         "title": "ReplayObservation",
         "type": "object"
       },
+      "RuntimePackage": {
+        "properties": {
+          "id": {
+            "enum": [
+              "robot",
+              "datasets",
+              "decision"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "installable": {
+            "title": "Installable",
+            "type": "boolean"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "minimum_free_gib": {
+            "title": "Minimum Free Gib",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "ready",
+          "installable",
+          "message",
+          "minimum_free_gib"
+        ],
+        "title": "RuntimePackage",
+        "type": "object"
+      },
       "Score": {
         "additionalProperties": false,
         "properties": {
@@ -5780,6 +5976,11 @@
       "WorkspaceModule": {
         "additionalProperties": false,
         "properties": {
+          "configured": {
+            "default": false,
+            "title": "Configured",
+            "type": "boolean"
+          },
           "id": {
             "enum": [
               "robot-lab",
@@ -5795,6 +5996,11 @@
             "title": "Installed",
             "type": "boolean"
           },
+          "managed": {
+            "default": false,
+            "title": "Managed",
+            "type": "boolean"
+          },
           "name": {
             "minLength": 1,
             "title": "Name",
@@ -5803,6 +6009,11 @@
           "setup": {
             "minLength": 1,
             "title": "Setup",
+            "type": "string"
+          },
+          "setup_url": {
+            "default": "/guide/",
+            "title": "Setup Url",
             "type": "string"
           }
         },
@@ -7485,6 +7696,95 @@
         "summary": "Training Reproducibility"
       }
     },
+    "/api/v1/module-installations": {
+      "get": {
+        "operationId": "status_api_v1_module_installations_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModuleInstallationStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Status",
+        "tags": [
+          "Workspace modules"
+        ]
+      },
+      "post": {
+        "operationId": "install_api_v1_module_installations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallOperation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Install",
+        "tags": [
+          "Workspace modules"
+        ]
+      }
+    },
+    "/api/v1/module-installations/cancel": {
+      "post": {
+        "operationId": "cancel_api_v1_module_installations_cancel_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InstallOperation"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Cancel Api V1 Module Installations Cancel Post"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Cancel",
+        "tags": [
+          "Workspace modules"
+        ]
+      }
+    },
     "/api/v1/modules": {
       "get": {
         "description": "Report which optional modules this host has set up; nothing is contacted.",
@@ -7506,6 +7806,63 @@
           }
         },
         "summary": "Modules"
+      }
+    },
+    "/api/v1/modules/{ident}": {
+      "put": {
+        "operationId": "enable_api_v1_modules__ident__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "enum": [
+                "robot-lab",
+                "teaching",
+                "augmentation",
+                "decision-lab",
+                "cloud-runs"
+              ],
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModulePreference"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enable",
+        "tags": [
+          "Workspace modules"
+        ]
       }
     },
     "/api/v1/policy-options": {
