@@ -146,7 +146,7 @@ test('guides an empty project to Quantize and blocks unsupported simulation', as
   const models = page.getByRole('region', { name: 'Your quantization models', exact: true });
   await expect(models).toBeVisible();
   await expect(models.getByRole('heading', { name: 'No saved models in this project yet', exact: true })).toBeVisible();
-  await expect(models.getByRole('button', { name: 'Open Models', exact: true })).toBeEnabled();
+  await expect(models.locator('.model-empty').getByRole('button', { name: 'Open Models', exact: true })).toBeEnabled();
   const artifact = await policy(request, id);
   await page.getByRole('link', { name: 'Settings', exact: true }).click();
   await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();

@@ -613,7 +613,7 @@ test('opens a previous quantization job from history without mixing its details 
   await expectSelectedPolicy(page, 'recent-100', false);
   await expect(page.getByRole('article', { name: 'Quantize job details' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: /^Download / })).toHaveCount(0);
-  await page.getByRole('button', { name: '← All quantization jobs', exact: true }).click();
+  await page.getByRole('button', { name: '← Back to jobs', exact: true }).click();
   await expect(history).toBeVisible();
   expect(submitted).toEqual([]);
   expect(unexpected).toEqual([]);
