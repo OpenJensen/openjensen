@@ -134,3 +134,11 @@
     flex-wrap: wrap;
   }
 }
+
+.module-manager .primary-button,
+.module-manager .secondary-button {
+  min-height: 32px;
+  width: auto;
+  padding: 6px 12px;
+  font-size: 12px;
+}

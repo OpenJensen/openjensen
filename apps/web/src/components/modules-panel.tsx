@@ -105,7 +105,7 @@ export function ModulesPanel() {
     <section className="cloud-settings module-manager" aria-labelledby="modules-heading">
       <div className="module-section-heading">
         <h2 id="modules-heading">Modules</h2>
-        <button className="btn-secondary btn-small" onClick={refresh} disabled={packages.isFetching}>
+        <button className="secondary-button" onClick={refresh} disabled={packages.isFetching}>
           Refresh
         </button>
       </div>
@@ -130,7 +130,7 @@ export function ModulesPanel() {
             <div className="module-actions">
               {item.installed ? (
                 <>
-                  <button className="btn-secondary btn-small" onClick={() => navigateStage(item.id)}>
+                  <button className="secondary-button" onClick={() => navigateStage(item.id)}>
                     Open
                   </button>
                   {!item.managed && (
@@ -146,7 +146,7 @@ export function ModulesPanel() {
                 </>
               ) : (
                 <button
-                  className="btn-primary btn-small"
+                  className="primary-button"
                   disabled={visibility.isPending || item.managed}
                   onClick={() => visibility.mutate({ id: item.id, enabled: true })}
                   aria-label={`Add ${item.name}`}
@@ -197,7 +197,7 @@ export function ModulesPanel() {
           </strong>
           <p>{operation.message}</p>
           {operation.status === 'running' && (
-            <button className="btn-secondary btn-small" disabled={cancel.isPending} onClick={() => cancel.mutate()}>
+            <button className="secondary-button" disabled={cancel.isPending} onClick={() => cancel.mutate()}>
               Cancel installation
             </button>
           )}
@@ -222,7 +222,7 @@ export function ModulesPanel() {
               <span className="cloud-status cloud-status-connected">Installed</span>
             ) : (
               <button
-                className="btn-secondary btn-small"
+                className="secondary-button"
                 disabled={busy || !item.installable}
                 onClick={() => start(item.id)}
                 aria-label={`Install ${item.name}`}
@@ -236,16 +236,14 @@ export function ModulesPanel() {
           <div>
             <h3>Training</h3>
             <p>Local SmolVLA worker · Linux NVIDIA GPU</p>
-            {training.data && training.data.status !== 'idle' && (
-              <p role="status">
-                {training.data.stage} {training.data.message}
-              </p>
+            {training.data && training.data.status !== 'idle' && training.data.status !== 'succeeded' && (
+              <p role="status">{training.data.status === 'running' ? training.data.stage : training.data.message}</p>
             )}
             {training.error && <p role="alert">{training.error.message}</p>}
           </div>
           {training.data?.status === 'running' ? (
             <button
-              className="btn-secondary btn-small"
+              className="secondary-button"
               disabled={cancelTraining.isPending}
               onClick={() => cancelTraining.mutate()}
             >
@@ -255,7 +253,7 @@ export function ModulesPanel() {
             <span className="cloud-status cloud-status-connected">Installed</span>
           ) : (
             <button
-              className="btn-secondary btn-small"
+              className="secondary-button"
               disabled={busy || training.isPending || training.isError}
               onClick={() => setupTraining.mutate()}
               aria-label="Install Training"
