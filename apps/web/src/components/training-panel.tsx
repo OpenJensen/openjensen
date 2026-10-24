@@ -43,6 +43,9 @@ import { useTrainingBatch } from '@/lib/training-batch';
 import { combinationCameraMapping, datasetCombinationIssue } from '@/lib/dataset-combination';
 import { trainingMemory } from '@/lib/training-memory';
 import { TrainingHelp } from './training-help';
+import { BatchRecoveryNotice, SubmissionRecoveryNotice } from './training-recovery';
+import { TrainingAdvancedSettings } from './training-advanced-settings';
+import { defaultRecipe, type Recipe } from '@/lib/training-recipe';
 import './training-panel.css';
 
 const steps = ['Dataset', 'Model', 'Compute'];
@@ -71,30 +74,6 @@ function validTrainingHistory(value: unknown, project: string): value is Job[] {
     )
   );
 }
-type Recipe = {
-  trainingSteps: number;
-  batchSize: number;
-  checkpointCount: number;
-  checkpointIntervalOverride: number | null;
-  seed: number;
-  learningRate: number;
-  gradientAccumulation: number;
-  validationFraction: number;
-  evalEvery: number;
-};
-// KiteML SmolVLA form defaults, verified in its signed-in UI on 2026-09-26.
-// Its automatic save cadence targets about five checkpoints across the run.
-const defaults: Recipe = {
-  trainingSteps: 20000,
-  batchSize: 64,
-  checkpointCount: 5,
-  checkpointIntervalOverride: null,
-  seed: 42,
-  learningRate: 0.0001,
-  gradientAccumulation: 1,
-  validationFraction: 0.2,
-  evalEvery: 100,
-};
 type InspectedDataset = DatasetJob & { result: DatasetProfile };
 
 function positiveInteger(value: unknown): value is number {
@@ -106,9 +85,11 @@ function savedRecipe(saved: Record<string, unknown>): Recipe {
   const trainingSteps =
     positiveInteger(saved.trainingSteps) && !(version < 2 && saved.trainingSteps === 1000)
       ? saved.trainingSteps
-      : defaults.trainingSteps;
+      : defaultRecipe.trainingSteps;
   const batchSize =
-    positiveInteger(saved.batchSize) && !(version < 2 && saved.batchSize === 1) ? saved.batchSize : defaults.batchSize;
+    positiveInteger(saved.batchSize) && !(version < 2 && saved.batchSize === 1)
+      ? saved.batchSize
+      : defaultRecipe.batchSize;
   // The old five-step value shipped as a default. Other interval choices remain
   // exact until the user edits the new checkpoint-count control.
   const interval =
@@ -123,26 +104,28 @@ function savedRecipe(saved: Record<string, unknown>): Recipe {
     ? Math.ceil(trainingSteps / interval)
     : version >= 3 && positiveInteger(saved.checkpointCount)
       ? saved.checkpointCount
-      : defaults.checkpointCount;
+      : defaultRecipe.checkpointCount;
   return {
     trainingSteps,
     batchSize,
     checkpointCount,
     checkpointIntervalOverride: interval,
     seed:
-      typeof saved.seed === 'number' && Number.isInteger(saved.seed) && saved.seed >= 0 ? saved.seed : defaults.seed,
+      typeof saved.seed === 'number' && Number.isInteger(saved.seed) && saved.seed >= 0
+        ? saved.seed
+        : defaultRecipe.seed,
     learningRate:
       typeof saved.learningRate === 'number' && Number.isFinite(saved.learningRate) && saved.learningRate > 0
         ? saved.learningRate
-        : defaults.learningRate,
+        : defaultRecipe.learningRate,
     gradientAccumulation: positiveInteger(saved.gradientAccumulation)
       ? saved.gradientAccumulation
-      : defaults.gradientAccumulation,
+      : defaultRecipe.gradientAccumulation,
     validationFraction:
       typeof saved.validationFraction === 'number' && saved.validationFraction > 0 && saved.validationFraction < 1
         ? saved.validationFraction
-        : defaults.validationFraction,
-    evalEvery: positiveInteger(saved.evalEvery) ? saved.evalEvery : defaults.evalEvery,
+        : defaultRecipe.validationFraction,
+    evalEvery: positiveInteger(saved.evalEvery) ? saved.evalEvery : defaultRecipe.evalEvery,
   };
 }
 
@@ -283,7 +266,7 @@ export function TrainingPanel({
   const [runtimeId, setRuntimeId] = useState('');
   const [method, setMethod] = useState('');
   const [resumeId, setResumeId] = useState('');
-  const [recipe, setRecipe] = useState(defaults);
+  const [recipe, setRecipe] = useState(defaultRecipe);
   const [temporalDrafts, setTemporalDrafts] = useState<TemporalDrafts>({});
   const [loaded, setLoaded] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState('');
@@ -396,7 +379,7 @@ export function TrainingPanel({
           : {};
       setModelBatchSizes({ smolvla: restored.batchSize, ...batches });
     } catch {
-      setRecipe(defaults);
+      setRecipe(defaultRecipe);
       setTemporalDrafts({});
     }
     setLoaded(true);
@@ -644,7 +627,6 @@ export function TrainingPanel({
     !resumeId && recipe.gradientAccumulation !== 1 && !accumulationSupported
       ? `Accumulation ${recipe.gradientAccumulation} is not supported by the selected model, method and compute target. Choose a supported configuration or explicitly use accumulation 1.`
       : null;
-  const nominalBatch = recipe.batchSize * recipe.gradientAccumulation;
   const trainingBudget = `${number(recipe.trainingSteps)} ${accumulationSupported ? 'optimizer updates' : 'steps'} · batch ${recipe.batchSize}`;
   const displayedModelId = model?.id;
   const stepComplete = [!!activeDataset && !datasetIssue(activeDataset.result), !!model && !!activeMethod, !!runtime];
@@ -931,135 +913,28 @@ export function TrainingPanel({
 
   return (
     <>
-      {(batch.journal || batch.error) && (
-        <section className="warning-box training-recovery" aria-label="Multi-model submission recovery">
-          <h2>Independent training jobs</h2>
-          {batch.error && <p role="alert">{batch.error}</p>}
-          {batch.journal && (
-            <>
-              <ul>
-                {batch.journal.entries.map((entry) => (
-                  <li key={entry.key}>
-                    {String(entry.body.training?.model_id)} · {entry.state}
-                    {entry.job && (
-                      <button type="button" className="text-button" onClick={() => chooseRun(entry.job!.id)}>
-                        Open job
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-              <div className="training-recovery-actions">
-                <button
-                  type="button"
-                  className="secondary-button"
-                  disabled={batch.busy}
-                  onClick={() => void batch.check()}
-                >
-                  Check saved jobs
-                </button>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  disabled={batch.busy || !batch.canContinue}
-                  onClick={() => void batch.continue()}
-                >
-                  Continue saved plan
-                </button>
-                <button
-                  type="button"
-                  className="text-button"
-                  disabled={
-                    batch.busy || batch.journal.entries.some((item) => ['pending', 'unknown'].includes(item.state))
-                  }
-                  onClick={batch.dismiss}
-                >
-                  Dismiss unsubmitted recipes
-                </button>
-              </div>
-            </>
-          )}
-        </section>
-      )}
-      {(attempt || (!submission.available && submission.error)) && (
-        <section className="warning-box training-recovery" aria-label="Training submission recovery">
-          <h2>
-            {attempt?.state === 'pending' && !submission.error ? 'Starting training' : 'Check your training request'}
-          </h2>
-          <p role={attempt?.state === 'pending' ? 'status' : 'alert'}>{submission.error || attempt?.message}</p>
-          {attempt?.state === 'uncertain' && (
-            <>
-              <p>New submissions are paused until this request is resolved.</p>
-              {keyedAttempt ? (
-                <>
-                  <p>Checking the saved request does not start training.</p>
-                  <div className="training-recovery-actions">
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      disabled={!submission.available || submission.busy}
-                      onClick={() => void recoverSubmission()}
-                    >
-                      Check saved request
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      disabled={!submission.canRetry || submission.busy}
-                      onClick={() => void recoverSubmission(true)}
-                    >
-                      Retry same request
-                    </button>
-                  </div>
-                  <p className="training-recovery-note">
-                    Retry resends the saved recipe only if the server has no matching job.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p>This older request has no server key. Check recorded jobs before allowing a new request.</p>
-                  <div className="training-recovery-actions">
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      disabled={jobs.isFetching}
-                      onClick={() => {
-                        showHistory();
-                        void reviewHistory();
-                      }}
-                    >
-                      Refresh training jobs
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      disabled={
-                        !submission.available || historyReviewed !== attempt || jobs.isError || mutation.isPending
-                      }
-                      onClick={() => {
-                        if (submission.clearLegacy(attempt)) {
-                          setHistoryReviewed(null);
-                          mutation.reset();
-                        }
-                      }}
-                    >
-                      I checked the jobs; allow a new request
-                    </button>
-                  </div>
-                  {jobs.isError && <p role="alert">Training history could not refresh. {jobs.error.message}</p>}
-                </>
-              )}
-            </>
-          )}
-          {submission.receipt && (
-            <div className="training-recovery-actions">
-              <button type="button" className="secondary-button" onClick={() => chooseRun(submission.receipt!.id)}>
-                View saved request {submission.receipt.id}
-              </button>
-            </div>
-          )}
-        </section>
-      )}
+      <BatchRecoveryNotice batch={batch} onOpenJob={chooseRun} />
+      <SubmissionRecoveryNotice
+        submission={submission}
+        keyed={!!keyedAttempt}
+        historyReviewed={historyReviewed === attempt}
+        historyRefreshing={jobs.isFetching}
+        historyError={jobs.error}
+        submitting={mutation.isPending}
+        onCheck={() => void recoverSubmission()}
+        onRetry={() => void recoverSubmission(true)}
+        onRefreshHistory={() => {
+          showHistory();
+          void reviewHistory();
+        }}
+        onAllowNew={() => {
+          if (submission.clearLegacy(attempt)) {
+            setHistoryReviewed(null);
+            mutation.reset();
+          }
+        }}
+        onOpenJob={chooseRun}
+      />
       {view === 'jobs' && (
         <JobHistory
           title="Fine-tuning jobs"
@@ -1396,7 +1271,7 @@ export function TrainingPanel({
                                     ...previous,
                                     batchSize:
                                       modelBatchSizes[editId] ??
-                                      (editId === 'smolvla' ? defaults.batchSize : editId === 'psi0' ? 2 : 4),
+                                      (editId === 'smolvla' ? defaultRecipe.batchSize : editId === 'psi0' ? 2 : 4),
                                   }));
                                   setModelIds(next);
                                   setModelId(next.includes(item.id) ? item.id : (next[0] ?? ''));
@@ -1649,263 +1524,35 @@ export function TrainingPanel({
                 />
                 <details className="training-disclosure">
                   <summary>Advanced settings</summary>
-                  {resumeId ? (
-                    <div className="training-saved-recipe">
-                      <p>Original recipe preserved.</p>
-                      <p>{checkpointTiming(originalTraining)}</p>
-                      <p>
-                        Resume loads the saved architecture and processors. Start a new run to request different
-                        horizons.
-                      </p>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="training-settings-actions">
-                        <button
-                          type="button"
-                          className="text-button"
-                          disabled={busy}
-                          onClick={() => {
-                            setRecipe({
-                              ...defaults,
-                              batchSize: model?.id === 'smolvla' ? defaults.batchSize : model?.id === 'psi0' ? 2 : 4,
-                            });
-                            setModelBatchSizes({});
-                            setTemporalDrafts({});
-                          }}
-                        >
-                          Reset settings
-                        </button>
-                      </div>
-                      <fieldset className="training-hyperparameters">
-                        <legend>Learning settings</legend>
-                        <div className="training-fields">
-                          <label>
-                            <span className="training-field-name">
-                              Steps
-                              <TrainingHelp label="Steps">
-                                Optimizer updates. Learning-rate schedules and checkpoint intervals use the same count.
-                              </TrainingHelp>
-                            </span>
-                            <input
-                              aria-label="Steps"
-                              type="number"
-                              min="2"
-                              step="1"
-                              value={recipe.trainingSteps}
-                              disabled={busy}
-                              onChange={(event) => update('trainingSteps', Number(event.target.value))}
-                            />
-                          </label>
-                          <label>
-                            <span className="training-field-name">
-                              Batch size
-                              <TrainingHelp label="Batch size">
-                                Examples in each GPU microbatch. Larger batches generally need more GPU memory.
-                              </TrainingHelp>
-                            </span>
-                            <input
-                              aria-label="Batch size"
-                              type="number"
-                              min="1"
-                              step="1"
-                              value={recipe.batchSize}
-                              disabled={busy}
-                              onChange={(event) => update('batchSize', Number(event.target.value))}
-                            />
-                          </label>
-                          <label>
-                            <span className="training-field-name">
-                              Learning rate
-                              <TrainingHelp label="Learning rate">Size of each optimizer update.</TrainingHelp>
-                            </span>
-                            <input
-                              aria-label="Learning rate"
-                              type="number"
-                              min="0.000000001"
-                              step="any"
-                              value={recipe.learningRate}
-                              disabled={busy}
-                              onChange={(event) => update('learningRate', Number(event.target.value))}
-                            />
-                          </label>
-                          <label>
-                            <span className="training-field-name">
-                              Gradient accumulation
-                              <TrainingHelp label="Gradient accumulation" id="training-accumulation-help">
-                                {accumulationSupported
-                                  ? `Nominal effective batch: ${number(nominalBatch)} examples (${recipe.batchSize} × ${recipe.gradientAccumulation} × 1 GPU). Short final windows contain fewer examples.`
-                                  : 'Only accumulation 1 is available for this model, method and compute target.'}
-                              </TrainingHelp>
-                            </span>
-                            <input
-                              type="number"
-                              min="1"
-                              step="1"
-                              aria-label="Gradient accumulation"
-                              aria-describedby="training-accumulation-help"
-                              value={recipe.gradientAccumulation}
-                              disabled={busy || !accumulationSupported}
-                              onChange={(event) => update('gradientAccumulation', Number(event.target.value))}
-                            />
-                          </label>
-                          <label>
-                            <span className="training-field-name">
-                              Random seed
-                              <TrainingHelp label="Random seed">
-                                Controls episode splitting and training randomness.
-                              </TrainingHelp>
-                            </span>
-                            <input
-                              aria-label="Random seed"
-                              type="number"
-                              min="0"
-                              max="2147483647"
-                              step="1"
-                              value={recipe.seed}
-                              disabled={busy}
-                              onChange={(event) => update('seed', Number(event.target.value))}
-                            />
-                          </label>
-                          <label>
-                            <span className="training-field-name">
-                              Validation fraction
-                              <TrainingHelp label="Validation fraction">
-                                Fraction of separate episodes held out for validation.
-                              </TrainingHelp>
-                            </span>
-                            <input
-                              aria-label="Validation fraction"
-                              type="number"
-                              min="0.01"
-                              max="0.99"
-                              step="any"
-                              value={recipe.validationFraction}
-                              disabled={busy}
-                              onChange={(event) => update('validationFraction', Number(event.target.value))}
-                            />
-                          </label>
-                          <label>
-                            <span className="training-field-name">
-                              Validate every (steps)
-                              <TrainingHelp label="Validate every (steps)">
-                                Optimizer updates between held-out validation checks.
-                              </TrainingHelp>
-                            </span>
-                            <input
-                              aria-label="Validate every (steps)"
-                              type="number"
-                              min="1"
-                              step="1"
-                              value={recipe.evalEvery}
-                              disabled={busy}
-                              onChange={(event) => update('evalEvery', Number(event.target.value))}
-                            />
-                          </label>
-                          <label>
-                            <span className="training-field-name">
-                              Checkpoints
-                              <TrainingHelp
-                                label="Checkpoints"
-                                id="training-checkpoint-help"
-                              >{`Every ${number(checkpointInterval)} steps, including the final checkpoint. ${runtime?.execution === 'skypilot' ? 'Saved on Google Cloud.' : 'Saved on the selected compute storage.'}`}</TrainingHelp>
-                            </span>
-                            <input
-                              type="number"
-                              min="1"
-                              step="1"
-                              value={checkpointCount}
-                              disabled={busy}
-                              aria-label="Checkpoints"
-                              aria-describedby="training-checkpoint-help"
-                              onChange={(event) =>
-                                setRecipe((previous) => ({
-                                  ...previous,
-                                  checkpointCount: Number(event.target.value),
-                                  checkpointIntervalOverride: null,
-                                }))
-                              }
-                            />
-                          </label>
-                        </div>
-                      </fieldset>
-                      {timing && (
-                        <fieldset
-                          className="training-temporal"
-                          aria-label="Action timing"
-                          aria-describedby="training-timing-help"
-                        >
-                          <legend>
-                            <span className="training-field-name">
-                              Action timing
-                              <TrainingHelp label="Action timing" id="training-timing-help">
-                                Prediction: future actions learned together. Execution: actions used before the next
-                                observation. Existing checkpoints keep their shape.
-                              </TrainingHelp>
-                            </span>
-                          </legend>
-                          <div className="training-temporal-fields">
-                            <label htmlFor="training-prediction">
-                              <span className="training-field-name">
-                                Prediction horizon
-                                <TrainingHelp label="Prediction horizon" id="training-prediction-help">
-                                  Actions predicted together.
-                                </TrainingHelp>
-                              </span>
-                              <input
-                                id="training-prediction"
-                                aria-label="Prediction horizon"
-                                type="number"
-                                min="1"
-                                max="1024"
-                                step="1"
-                                value={effectiveTiming!.prediction}
-                                disabled={busy}
-                                aria-invalid={!!timingIssue}
-                                aria-describedby="training-timing-help training-prediction-help"
-                                onChange={(event) =>
-                                  updateTiming({ enabled: true, prediction: Number(event.target.value) })
-                                }
-                              />
-                            </label>
-                            <label htmlFor="training-execution">
-                              <span className="training-field-name">
-                                Execution horizon
-                                <TrainingHelp label="Execution horizon" id="training-execution-help">
-                                  Actions used before observing again.
-                                </TrainingHelp>
-                              </span>
-                              <input
-                                id="training-execution"
-                                aria-label="Execution horizon"
-                                type="number"
-                                min="1"
-                                max={effectiveTiming!.prediction >= 1 ? effectiveTiming!.prediction : 1024}
-                                step="1"
-                                value={effectiveTiming!.execution}
-                                disabled={busy}
-                                aria-invalid={!!timingIssue}
-                                aria-describedby="training-timing-help training-execution-help"
-                                onChange={(event) =>
-                                  updateTiming({ enabled: true, execution: Number(event.target.value) })
-                                }
-                              />
-                            </label>
-                          </div>
-                          {timingIssue && (
-                            <p className="error-notice" role="alert">
-                              {timingIssue}
-                            </p>
-                          )}
-                        </fieldset>
-                      )}
-                      {!timing && (
-                        <p className="training-native-timing">
-                          Action timing follows this model’s native configuration.
-                        </p>
-                      )}
-                    </>
-                  )}
+                  <TrainingAdvancedSettings
+                    savedTiming={resumeId ? checkpointTiming(originalTraining) : undefined}
+                    recipe={recipe}
+                    busy={busy}
+                    accumulationSupported={accumulationSupported}
+                    checkpointCount={checkpointCount}
+                    checkpointInterval={checkpointInterval}
+                    cloudStorage={runtime?.execution === 'skypilot'}
+                    timing={timing}
+                    effectiveTiming={effectiveTiming}
+                    timingIssue={timingIssue}
+                    onChange={update}
+                    onCheckpointCount={(count) =>
+                      setRecipe((previous) => ({
+                        ...previous,
+                        checkpointCount: count,
+                        checkpointIntervalOverride: null,
+                      }))
+                    }
+                    onTiming={updateTiming}
+                    onReset={() => {
+                      setRecipe({
+                        ...defaultRecipe,
+                        batchSize: model?.id === 'smolvla' ? defaultRecipe.batchSize : model?.id === 'psi0' ? 2 : 4,
+                      });
+                      setModelBatchSizes({});
+                      setTemporalDrafts({});
+                    }}
+                  />
                 </details>
                 <div className="training-footer">
                   <button type="button" className="text-button" onClick={() => setStep(1)}>
