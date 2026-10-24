@@ -24,7 +24,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 from assembled_session import AssembledSession, CalibrationRevisions, empty_assembled_state
 from calibration_draft import CalibrationDraft, file_hash
-from camera import CameraPool
+from camera import MAX_CAMERA_INDEX, CameraPool
 from dataset import DatasetWriter, atomic_json, dataset_file, list_datasets, manifest, safe_slug
 from dispatch import MainThreadDispatcher
 from hardware import (
@@ -229,7 +229,7 @@ class RobotLab:
                     phase="interrupted",
                     interrupted_stage=draft["state"]["phase"],
                     recoverable=True,
-                    error="Calibration checkpoint recovered on the Mac",
+                    error="Calibration checkpoint recovered on the robot computer",
                     robot_id=draft["robot_id"],
                     role=draft["role"],
                     port=draft["port"],
@@ -1345,7 +1345,7 @@ class RobotLab:
             camera_index = payload.get("camera_index", 0)
             image_shape = None
             if camera_index is not None:
-                integer(camera_index, 0, 8, "Camera index")
+                integer(camera_index, 0, MAX_CAMERA_INDEX, "Camera index")
                 image_shape = tuple(self.camera.read(camera_index).shape)
             if shutil.disk_usage(self.datasets_dir).free < 1024**3:
                 raise RequestError(
@@ -1517,7 +1517,7 @@ class RobotLab:
 
     def _watchdog(self):
         while not self.finished.wait(0.1):
-            # Calibration is unpowered and owned by this Mac process. Browser
+            # Calibration is unpowered and owned by this companion process. Browser
             # connectivity must not discard a captured middle or joint ranges.
             if self.mode not in {"idle", "calibration"} and time.monotonic() - self.heartbeat > (
                 10 if self.mode in {"setup", "verification"} else 2
@@ -1585,7 +1585,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/v1/devices":
                 return self._send(200, lab.devices())
             if path == "/v1/camera.jpg":
-                index = integer(int(query.get("index", ["0"])[0]), 0, 8, "Camera index")
+                index = integer(
+                    int(query.get("index", ["0"])[0]), 0, MAX_CAMERA_INDEX, "Camera index"
+                )
                 image = (
                     lab.camera.cached_jpeg(index)
                     if lab.writer and lab.writer.episode_active and lab.camera_index == index
@@ -1729,7 +1731,12 @@ def main():
     parser.add_argument(
         "--data-dir",
         type=Path,
-        default=Path.home() / "Library/Application Support/OpenJensen/robot-lab",
+        default=(
+            Path.home() / "Library/Application Support/OpenJensen/robot-lab"
+            if platform.system() == "Darwin"
+            else Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
+            / "OpenJensen/robot-lab"
+        ),
     )
     args = parser.parse_args()
     token_path = args.token_file
