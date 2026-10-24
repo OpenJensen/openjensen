@@ -22,9 +22,11 @@ class MotionTests(unittest.TestCase):
             clock.return_value = 12
             targets = motion.advance()
             self.assertTrue(all(2995 <= v <= 3000 for v in targets.values()))
-            clock.return_value = motion.deadline + 0.1
-            with self.assertRaisesRegex(HardwareError, "timed out"):
-                motion.advance()
+            clock.return_value = 610
+            later = motion.advance()
+            self.assertTrue(all(0 <= targets[j] - later[j] <= 5 for j in JOINTS))
+            self.assertLess(motion.progress, 1)
+            self.assertIsNone(motion.deadline)
 
     def test_already_at_middle_has_no_division_or_target_jump(self):
         calibration = {j: {"range_min": 1000, "range_max": 4000} for j in JOINTS}
@@ -52,3 +54,11 @@ class MotionTests(unittest.TestCase):
         self.assertAlmostEqual(limits["gripper"]["max"], 100 - 8 / 39)
         self.assertLess(limits["elbow_flex"]["min"], 0)
         self.assertGreater(limits["elbow_flex"]["max"], 0)
+
+    def test_slider_deadline_remains_separate_from_middle_arrival(self):
+        calibration = {j: {"range_min": 100, "range_max": 4000} for j in JOINTS}
+        with patch("motion.time.monotonic", return_value=10) as clock:
+            motion = JointMotion("elbow_flex", 2000, 2500, calibration)
+            clock.return_value = motion.deadline + 0.1
+            with self.assertRaisesRegex(HardwareError, "slider movement timed out"):
+                motion.advance()

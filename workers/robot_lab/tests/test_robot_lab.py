@@ -359,6 +359,27 @@ class SafetyTests(unittest.TestCase):
             self.assertEqual(bus.raw, dict.fromkeys(JOINTS, 2047))
             self.assertTrue(self.lab.torque)
 
+    def test_middle_continues_past_nominal_wall_clock_duration_until_encoder_arrival(self):
+        with patch("motion.time.monotonic", return_value=100) as clock:
+            self.start_middle()
+            nominal_deadline = 100 + self.lab.middle_motion.duration + 10
+            bus = self.buses[-1]
+            for i in range(1, 60):
+                # One-second serial cycles still advance only 100 ms of motion.
+                clock.return_value = 100 + i
+                self.lab.heartbeat = clock.return_value
+                before = dict(bus.raw)
+                self.lab._tick()
+                self.assertTrue(all(abs(bus.raw[j] - before[j]) <= 5 for j in JOINTS))
+                if self.lab.middle_motion is None:
+                    break
+            self.assertGreater(clock.return_value, nominal_deadline)
+            self.assertIsNone(self.lab.middle_motion)
+            self.assertEqual(bus.raw, dict.fromkeys(JOINTS, 2047))
+            self.assertTrue(self.lab.torque)
+            self.lab.stop()
+            self.assertFalse(self.lab.torque)
+
     def test_middle_rejects_jogs_and_recordings_and_stop_cancels_future_targets(self):
         self.start_middle()
         with self.assertRaisesRegex(RequestError, "recorded middle"):

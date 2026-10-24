@@ -73,7 +73,7 @@ class PositionMotion:
 
     def advance(self):
         now = time.monotonic()
-        if now > self.deadline:
+        if self.deadline is not None and now > self.deadline:
             raise HardwareError(f"{self.label} timed out; motion stopped")
         self.elapsed += max(0.0, min(0.1, now - self.last_time))
         self.last_time = now
@@ -89,6 +89,10 @@ class MiddleMotion(PositionMotion):
         super().__init__(
             initial, middle_targets(calibration), calibration, "Move to recorded middle"
         )
+        # Serial I/O can make the rate-capped trajectory take longer than its
+        # nominal duration. Continue until encoder arrival or explicit Stop;
+        # the control heartbeat and tracking checks remain active.
+        self.deadline = None
 
 
 class JointMotion(PositionMotion):
