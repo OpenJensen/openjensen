@@ -38,7 +38,14 @@ from hardware import (
     normalized,
     probe_bus,
 )
-from motion import MiddleMotion, check_tracking, jog_target, middle_targets
+from motion import (
+    JointMotion,
+    MiddleMotion,
+    check_tracking,
+    control_limits,
+    jog_target,
+    middle_targets,
+)
 from verification import (
     MappingVerification,
     empty_verification,
@@ -195,6 +202,7 @@ class RobotLab:
         self.action = {}
         self.commanded_raw = {}
         self.middle_motion = None
+        self.joint_motions = {}
         self.calibration = {}
         self.leader_calibration = {}
         self.original_calibration = None
@@ -291,6 +299,7 @@ class RobotLab:
             assembled = json.loads(json.dumps(self.assembled_state))
             copy_verification = json.loads(json.dumps(self.verification_state))
             middle_motion = self.middle_motion
+            joint_motions = dict(self.joint_motions)
         try:
             assembled["calibration_required"] = self.calibration_revisions.required(
                 assembled["port"]
@@ -316,6 +325,7 @@ class RobotLab:
                 "control": hardware,
                 "move_to_middle": hardware,
                 "partial_control": hardware,
+                "joint_sliders": hardware,
                 "recording": hardware
                 and all(deps[key]["installed"] for key in ("pyarrow", "PIL", "numpy")),
             },
@@ -329,6 +339,15 @@ class RobotLab:
                 if self.mode in {"manual", "leader", "handguide"}
                 else [],
                 "targets": dict(self.action) if self.mode in {"manual", "leader"} else {},
+                "joint_limits": control_limits(self.calibration) if self.mode == "manual" else {},
+                "slider_targets": {
+                    j: normalized(j, joint_motions[j].targets[j], self.calibration)
+                    if j in joint_motions
+                    else self.action[j]
+                    for j in self.calibration
+                }
+                if self.mode == "manual"
+                else {},
                 "torque_enabled": self.torque,
                 "centering": {
                     "active": middle_motion is not None,
@@ -1026,6 +1045,7 @@ class RobotLab:
                 self.positions, self.action = positions, dict(positions)
                 self.commanded_raw = dict(raw)
                 self.middle_motion = MiddleMotion(raw, calibration) if to_middle else None
+                self.joint_motions = {}
                 self.torque = mode != "handguide"
                 self.error = None
                 self.heartbeat = time.monotonic()
@@ -1037,16 +1057,26 @@ class RobotLab:
                 raise RequestError("Start manual control before jogging a joint")
             if self.middle_motion is not None:
                 raise RequestError("Wait for movement to the recorded middle to finish")
-            joint, delta = payload.get("joint"), payload.get("delta")
+            joint = payload.get("joint")
+            absolute = "target" in payload
+            if absolute == ("delta" in payload):
+                raise RequestError("Choose either a slider target or a jog delta")
+            value = payload.get("target" if absolute else "delta")
             if (
-                joint not in self.calibration
-                or isinstance(delta, bool)
-                or not isinstance(delta, (int, float))
-                or not math.isfinite(delta)
-                or not 0 < abs(delta) <= 2
+                not isinstance(joint, str)
+                or joint not in self.calibration
+                or isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
             ):
+                raise RequestError("Choose a valid joint and a finite position")
+            if absolute:
+                limits = control_limits(self.calibration)[joint]
+                if not limits["min"] <= value <= limits["max"]:
+                    raise RequestError("Slider target is outside the calibrated joint limits")
+            elif not 0 < abs(value) <= 2:
                 raise RequestError("Jog one valid joint by at most 2 degrees (gripper 2 percent)")
-            if time.monotonic() - self.last_jog < 0.1:
+            elif time.monotonic() - self.last_jog < 0.1:
                 raise RequestError("Wait at least 100 ms between jog commands")
             if time.monotonic() - self.heartbeat > 2:
                 raise RequestError("Control heartbeat expired; stop and reconnect")
@@ -1058,13 +1088,25 @@ class RobotLab:
                     raise RequestError("Session has stopped")
                 raw = validate_raw(bus.positions(), self.calibration)
                 check_tracking(raw, self.commanded_raw, self.calibration)
-                target = jog_target(joint, delta, raw, self.commanded_raw, self.calibration)
                 if generation != self.generation:
                     raise RequestError("Session has stopped")
-                bus.write("Goal_Position", IDS[joint], target)
-                self.action[joint] = normalized(joint, target, self.calibration)
-                self.commanded_raw[joint] = target
-            self.last_jog = time.monotonic()
+                if absolute:
+                    target = denormalized(joint, value, self.calibration)
+                    entry = self.calibration[joint]
+                    target = max(entry["range_min"] + 8, min(entry["range_max"] - 8, target))
+                    with self.lifecycle_lock:
+                        if generation != self.generation:
+                            raise RequestError("Session has stopped")
+                        self.joint_motions[joint] = JointMotion(
+                            joint, self.commanded_raw[joint], target, self.calibration
+                        )
+                else:
+                    target = jog_target(joint, value, raw, self.commanded_raw, self.calibration)
+                    self.joint_motions.pop(joint, None)
+                    bus.write("Goal_Position", IDS[joint], target)
+                    self.action[joint] = normalized(joint, target, self.calibration)
+                    self.commanded_raw[joint] = target
+                    self.last_jog = time.monotonic()
         return self.status()
 
     def stop(self, reason=None):
@@ -1092,6 +1134,7 @@ class RobotLab:
             self.torque = False
             self.mode = "idle"
             self.middle_motion = None
+            self.joint_motions = {}
             if reason:
                 self.error = reason
             if self.writer:
@@ -1278,6 +1321,26 @@ class RobotLab:
                         with self.lifecycle_lock:
                             if generation == self.generation:
                                 self.middle_motion = None
+                for joint, motion in list(self.joint_motions.items()):
+                    if generation != self.generation:
+                        return
+                    target = motion.advance()[joint]
+                    check_tracking(raw, {joint: target}, self.calibration)
+                    if generation != self.generation:
+                        return
+                    if target != self.commanded_raw[joint]:
+                        bus.write("Goal_Position", IDS[joint], target)
+                        if generation != self.generation:
+                            return
+                        self.commanded_raw[joint] = target
+                        self.action[joint] = normalized(joint, target, self.calibration)
+                    if motion.progress == 1:
+                        with self.lifecycle_lock:
+                            if (
+                                generation == self.generation
+                                and self.joint_motions.get(joint) is motion
+                            ):
+                                self.joint_motions.pop(joint)
             if mode == "leader" and leader is not None:
                 with leader.lock:
                     leader_raw = validate_raw(leader.positions(), self.leader_calibration)

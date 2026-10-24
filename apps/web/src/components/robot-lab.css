@@ -78,7 +78,7 @@
 .robot-lab-mode.selected { border-color: var(--accent); background: var(--selected); }
 .robot-lab-mode strong { display: block; font-size: 13px; font-weight: 500; margin: 8px 0 4px; }
 .robot-lab-mode small { display: block; font-size: 12px; color: var(--muted); line-height: 1.6; }
-.robot-lab-control-heading { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.robot-lab-control-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: center; }
 .robot-lab-control-heading h3 { font-size: 12px; font-weight: 600; }
 .robot-lab-control-heading label { display: flex; align-items: center; gap: 8px; font-size: 10px; font-weight: 400; }
 .robot-lab-control-heading select { min-height: 32px; padding: 4px 7px; width: 75px; font-size: 10px; }
@@ -88,6 +88,11 @@
 .robot-lab-joint output { color: var(--muted); font: 10px ui-monospace, monospace; text-align: right; }
 .robot-lab-joint-readings { display: grid; gap: 3px; }
 .robot-lab-joint button { height: 31px; width: 36px; border: 1px solid var(--line-strong); border-radius: 5px; color: var(--primary); background: var(--subtle); font-size: 18px; line-height: 1; }
+.robot-lab-joint-slider { grid-column: 1 / -1; display: grid; grid-template-columns: 52px minmax(0, 1fr) 52px; align-items: center; gap: 8px; }
+.robot-lab-joint-slider span { color: var(--muted); font: 10px ui-monospace, monospace; }
+.robot-lab-joint-slider span:last-child { text-align: right; }
+.robot-lab-joint-slider input[type="range"] { width: 100%; min-width: 0; min-height: 28px; margin: 0; padding: 0; accent-color: var(--primary); cursor: pointer; }
+.robot-lab-joint-slider input:disabled { cursor: default; opacity: .5; }
 .robot-lab-joint button:hover:enabled { background: var(--selected); border-color: var(--primary); }
 .robot-lab-recording-status { display: flex; align-items: center; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas); }
 .robot-lab-recording-status.recording { border-color: var(--error); background: var(--error-bg); }

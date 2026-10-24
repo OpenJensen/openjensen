@@ -14,7 +14,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from dataset import DatasetWriter
 from hardware import IDS, JOINTS, HardwareError, denormalized, normalized
-from server import RequestError, RobotLab, create_server, is_usb_serial
+from server import RequestError, RobotLab, check_tracking, create_server, is_usb_serial
 
 DATASET_AVAILABLE = all(
     importlib.util.find_spec(name) is not None for name in ("numpy", "PIL", "pyarrow")
@@ -483,6 +483,126 @@ class SafetyTests(unittest.TestCase):
             self.start(joints=["elbow_flex"])
         self.assertFalse(any(r == "Torque_Enable" and v for r, _, v in self.buses[-1].writes))
         self.assertTrue(all(i == 3 for _, i, _ in self.buses[-1].writes))
+
+    def test_slider_request_only_schedules_bounded_motion_and_exposes_limits(self):
+        with patch("motion.time.monotonic", return_value=100) as clock:
+            self.start(joints=["elbow_flex"])
+            bus = self.buses[-1]
+            before = len(bus.writes)
+            result = self.lab.jog({"joint": "elbow_flex", "target": 20})
+            self.assertEqual(len(bus.writes), before)
+            self.assertEqual(set(result["session"]["joint_limits"]), {"elbow_flex"})
+            self.assertAlmostEqual(result["session"]["slider_targets"]["elbow_flex"], 20, delta=0.1)
+            for i in range(1, 65):
+                previous = bus.raw["elbow_flex"]
+                clock.return_value = 100 + i * 0.1
+                self.lab._tick()
+                self.assertLessEqual(abs(bus.raw["elbow_flex"] - previous), 5)
+            self.assertFalse(self.lab.joint_motions)
+            self.assertAlmostEqual(
+                normalized("elbow_flex", bus.raw["elbow_flex"], CALIBRATION), 20, delta=0.1
+            )
+            self.assertTrue(all(i == 3 for _, i, _ in bus.writes))
+
+    def test_slider_rejects_invalid_targets_and_ambiguous_commands_without_writes(self):
+        self.start(joints=["elbow_flex"])
+        bus = self.buses[-1]
+        before = len(bus.writes)
+        for payload in (
+            {"joint": "elbow_flex", "target": value}
+            for value in (True, None, float("nan"), float("inf"), 1000, -1000)
+        ):
+            with self.subTest(payload=payload), self.assertRaises(RequestError):
+                self.lab.jog(payload)
+        for payload in (
+            {"joint": "gripper", "target": 20},
+            {"joint": "elbow_flex", "target": 20, "delta": 1},
+        ):
+            with self.assertRaises(RequestError):
+                self.lab.jog(payload)
+        self.assertEqual(len(bus.writes), before)
+        self.lab.heartbeat -= 3
+        with self.assertRaisesRegex(RequestError, "heartbeat expired"):
+            self.lab.jog({"joint": "elbow_flex", "target": 20})
+        self.assertEqual(len(bus.writes), before)
+
+    def test_slider_retarget_and_jog_replace_only_the_selected_joint_motion(self):
+        with patch("motion.time.monotonic", return_value=100) as clock:
+            self.start()
+            self.lab.jog({"joint": "elbow_flex", "target": 20})
+            self.lab.jog({"joint": "gripper", "target": 80})
+            clock.return_value = 100.1
+            self.lab._tick()
+            previous = self.lab.commanded_raw["elbow_flex"]
+            self.lab.jog({"joint": "elbow_flex", "target": -20})
+            self.assertEqual(self.lab.joint_motions["elbow_flex"].initial["elbow_flex"], previous)
+            self.assertEqual(self.lab.commanded_raw["elbow_flex"], previous)
+            self.lab.jog({"joint": "elbow_flex", "delta": -1})
+            self.assertNotIn("elbow_flex", self.lab.joint_motions)
+            self.assertIn("gripper", self.lab.joint_motions)
+
+    def test_slider_tracking_failure_prevents_any_out_of_tolerance_target(self):
+        with patch("motion.time.monotonic", return_value=100) as clock:
+            self.start()
+            bus = self.buses[-1]
+            self.lab.jog({"joint": "elbow_flex", "target": 30})
+            # Freeze encoder feedback while collecting outgoing targets.
+            bus.on_write = None
+            original = bus.write
+
+            def stalled(register, motor_id, value):
+                previous = dict(bus.raw)
+                original(register, motor_id, value)
+                bus.raw = previous
+
+            bus.write = stalled
+            with self.assertRaisesRegex(HardwareError, "Elbow.*did not hold"):
+                for i in range(1, 30):
+                    clock.return_value = 100 + i * 0.1
+                    self.lab._tick()
+            targets = [v for r, i, v in bus.writes if r == "Goal_Position" and i == 3]
+            self.assertTrue(all(abs(v - 2047) <= 5 * 4095 / 360 for v in targets))
+
+    def test_stop_after_slider_tracking_check_prevents_target_write(self):
+        with patch("motion.time.monotonic", return_value=100) as clock:
+            self.start()
+            self.lab.jog({"joint": "elbow_flex", "target": 20})
+            bus = self.buses[-1]
+            before = len([w for w in bus.writes if w[0] == "Goal_Position"])
+
+            def stop_after_check(raw, commanded, calibration):
+                check_tracking(raw, commanded, calibration)
+                if set(commanded) == {"elbow_flex"}:
+                    self.lab.stop()
+
+            clock.return_value = 100.1
+            with patch("server.check_tracking", side_effect=stop_after_check):
+                self.lab._tick()
+            self.assertEqual(len([w for w in bus.writes if w[0] == "Goal_Position"]), before)
+            self.assertFalse(self.lab.torque)
+
+    def test_stop_cancels_slider_motion_between_joint_writes(self):
+        with patch("motion.time.monotonic", return_value=100) as clock:
+            self.start()
+            self.lab.jog({"joint": "elbow_flex", "target": 20})
+            self.lab.jog({"joint": "gripper", "target": 80})
+            bus = self.buses[-1]
+            before = len([w for w in bus.writes if w[0] == "Goal_Position"])
+
+            def stop_on_target(register, motor_id, value):
+                if register == "Goal_Position":
+                    bus.on_write = None
+                    self.lab.stop()
+
+            bus.on_write = stop_on_target
+            clock.return_value = 100.1
+            self.lab._tick()
+            self.assertEqual(len([w for w in bus.writes if w[0] == "Goal_Position"]) - before, 1)
+            self.assertFalse(self.lab.joint_motions)
+            self.assertFalse(self.lab.torque)
+            count = len(bus.writes)
+            self.lab._tick()
+            self.assertEqual(len(bus.writes), count)
 
     def test_jog_bounds_and_rate_limit(self):
         self.start()

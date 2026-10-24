@@ -7,7 +7,7 @@ const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQ
 const joints = ['shoulder_pan', 'shoulder_lift', 'elbow_flex', 'wrist_flex', 'wrist_roll', 'gripper'];
 const values = (value: number) => Object.fromEntries(joints.map(name => [name, value]));
 function initialStatus(calibrated = false): any {
-  return { ok: true, connected: true, label: 'This Mac', version: '1', platform: 'Darwin', dependencies: { lerobot: { installed: false, version: null }, serial: { installed: true, version: '3.5' }, cv2: { installed: true, version: '4.12.0' }, scservo_sdk: { installed: true, version: '1.0.0' } }, capabilities: { calibration_persistence: true, partial_control: true, move_to_middle: true, mapping_verification: true, assembled_setup: true, probe: true, camera: true, motor_setup: true, calibration: true, control: true, recording: true }, session: { mode: 'idle', robot_id: null, port: null, role: null, positions: {}, torque_enabled: false, watchdog_seconds: 2, error: null }, calibration: { phase: 'idle', mins: {}, maxes: {}, offsets: {}, path: null }, recording: { active: false, dataset_id: null, episode_active: false, frames: 0, episodes: 0, fps: 10, error: null }, assembled: { phase: 'idle', ids: [], selected_joint: null, detected_id: null, candidate_delta: null, mapping: {}, message: 'Start experimental assembled setup.', error: null, log: [], progress: null, calibration_required: false }, calibrations: calibrated ? [{ robot_id: 'my-so101', role: 'follower', path: 'private-calibration.json' }] : [], datasets: [] };
+  return { ok: true, connected: true, label: 'This Mac', version: '1', platform: 'Darwin', dependencies: { lerobot: { installed: false, version: null }, serial: { installed: true, version: '3.5' }, cv2: { installed: true, version: '4.12.0' }, scservo_sdk: { installed: true, version: '1.0.0' } }, capabilities: { joint_sliders: true, calibration_persistence: true, partial_control: true, move_to_middle: true, mapping_verification: true, assembled_setup: true, probe: true, camera: true, motor_setup: true, calibration: true, control: true, recording: true }, session: { mode: 'idle', robot_id: null, port: null, role: null, positions: {}, torque_enabled: false, watchdog_seconds: 2, error: null }, calibration: { phase: 'idle', mins: {}, maxes: {}, offsets: {}, path: null }, recording: { active: false, dataset_id: null, episode_active: false, frames: 0, episodes: 0, fps: 10, error: null }, assembled: { phase: 'idle', ids: [], selected_joint: null, detected_id: null, candidate_delta: null, mapping: {}, message: 'Start experimental assembled setup.', error: null, log: [], progress: null, calibration_required: false }, calibrations: calibrated ? [{ robot_id: 'my-so101', role: 'follower', path: 'private-calibration.json' }] : [], datasets: [] };
 }
 async function fixture(page: Page, calibrated = false) {
   const state = { status: initialStatus(calibrated), writes: [] as { path: string; body: any }[], errors: [] as string[], datasetReads: 0, cameraFailure: false, stopError: null as string | null, centerError: null as string | null, portsConnected: true, middleInProgress: false, encoderLag: false, jogDelay: 0, jogStaleResponse: false, robotDatasetReads: 0, heartbeatFailures: 0, statusFailures: false, dropCalibrationReply: false };
@@ -45,9 +45,9 @@ async function fixture(page: Page, calibrated = false) {
         state.status.calibration = { ...state.status.calibration, phase: 'ranges', mins: values(700), maxes: values(3300), offsets: values(0) }; }
       else if (action === '/calibration/finish') { state.status.calibration.phase = 'saved'; state.status.assembled.calibration_required = false; state.status.session.mode = 'idle'; state.status.calibrations = [{ robot_id: 'my-so101', role: 'follower', path: 'private-calibration.json' }]; }
       else if (action === '/calibration/cancel' || action === '/stop') { if (state.status.session.mode === 'setup') state.status.assembled.phase = 'stopped'; if (state.status.session.mode === 'verification') state.status.verification.phase = 'stopped'; if (action === '/stop') state.status.session.error = state.stopError; state.status.session.mode = 'idle'; state.status.session.torque_enabled = false; state.status.recording.episode_active = false; }
-      else if (action === '/control/start') { state.status.session = { ...state.status.session, mode: body.mode, active_joints: body.joints ?? joints, port: body.port, robot_id: body.robot_id, positions: values(0), targets: values(0), torque_enabled: body.mode !== 'handguide', centering: { active: !!body.move_to_middle && state.middleInProgress, progress: 0.25 } }; }
+      else if (action === '/control/start') { state.status.session = { ...state.status.session, mode: body.mode, active_joints: body.joints ?? joints, port: body.port, robot_id: body.robot_id, positions: values(0), targets: values(0), slider_targets: values(0), joint_limits: Object.fromEntries((body.joints ?? joints).map((j: string) => [j, { min: j === 'gripper' ? 0.3 : -100, max: j === 'gripper' ? 99.7 : 100 }])), torque_enabled: body.mode !== 'handguide', centering: { active: !!body.move_to_middle && state.middleInProgress, progress: 0.25 } }; }
       else if (action === '/control/heartbeat') { if (state.heartbeatFailures > 0) { state.heartbeatFailures--; return route.abort('failed'); } }
-      else if (action === '/control/jog') { const before = structuredClone(state.status); if (state.jogDelay) await new Promise(resolve => setTimeout(resolve, state.jogDelay)); if (state.jogStaleResponse) return route.fulfill({ json: before }); if (!state.encoderLag) state.status.session.positions[body.joint] += body.delta; state.status.session.targets[body.joint] += body.delta; }
+      else if (action === '/control/jog') { const before = structuredClone(state.status); if (state.jogDelay) await new Promise(resolve => setTimeout(resolve, state.jogDelay)); if (state.jogStaleResponse) return route.fulfill({ json: before }); if (body.target !== undefined) { state.status.session.slider_targets[body.joint] = body.target; } else { if (!state.encoderLag) state.status.session.positions[body.joint] += body.delta; state.status.session.targets[body.joint] += body.delta; state.status.session.slider_targets[body.joint] = state.status.session.targets[body.joint]; } }
       else if (action === '/recording/start') { state.status.recording = { active: true, dataset_id: body.dataset_id, episode_active: false, frames: 0, episodes: 0, fps: body.fps, error: null }; }
       else if (action === '/recording/episode/start') { state.status.recording.episode_active = true; state.status.recording.frames = 10; }
       else if (action === '/recording/episode/save') { state.status.recording.episode_active = false; state.status.recording.episodes++; state.status.recording.frames = 0; }
@@ -164,7 +164,7 @@ test('manual control is explicit, jogs are bounded, and navigating away stops th
   await page.getByLabel('Joint step size').selectOption('2');
   await page.getByRole('button', { name: 'Increase Shoulder pan', exact: true }).click();
   await expect(page.getByLabel('Shoulder pan position')).toHaveText('0.0°');
-  await expect(page.getByLabel('Shoulder pan target')).toHaveText('→ 2.0°');
+  await expect(page.getByLabel('Shoulder pan target', { exact: true })).toHaveText('→ 2.0°');
   await page.screenshot({ path: testInfo.outputPath('joint-target-readback.png'), fullPage: true });
   expect(writes(state, '/control/start')[0].body).toEqual({ port, robot_id: 'my-so101', mode: 'manual', joints, move_to_middle: true, confirm: 'ENABLE MOTION' });
   expect(writes(state, '/control/jog')[0].body).toEqual({ joint: 'shoulder_pan', delta: 2 });
@@ -798,4 +798,85 @@ test('lost calibration replies reconcile the completed stage without replaying m
   expect(writes(state, '/calibration/center')).toHaveLength(1);
   expect(writes(state, '/calibration/finish')).toHaveLength(1);
   expect(writes(state, '/stop')).toHaveLength(0);
+});
+
+
+for (const recording of [false, true]) {
+  test(`joint sliders commit a bounded target on release during ${recording ? 'recording' : 'teleoperation'}`, async ({ page }, testInfo) => {
+    const state = await fixture(page, true);
+    await startManual(page);
+    if (recording) {
+      await tab(page, 'Record').click();
+      await page.getByLabel('Dataset name', { exact: true }).fill('slider-controls');
+      await page.getByLabel('Task instruction', { exact: true }).fill('Move the arm.');
+      await page.getByRole('button', { name: 'Create recording dataset', exact: true }).click();
+      await page.getByRole('button', { name: 'Start episode', exact: true }).click();
+    }
+    const slider = page.getByRole('slider', { name: 'Elbow target slider', exact: true });
+    await expect(slider).toBeEnabled();
+    await expect(page.getByRole('slider', { name: /target slider/ })).toHaveCount(6);
+    expect(await slider.getAttribute('min')).toBe('-100');
+    expect(await page.getByRole('slider', { name: 'Gripper target slider' }).getAttribute('max')).toBe('99.7');
+    await slider.scrollIntoViewIfNeeded();
+    const box = (await slider.boundingBox())!;
+    const reads = state.robotDatasetReads;
+    const before = await page.evaluate(() => window.scrollY);
+    let navigations = 0;
+    page.on('framenavigated', frame => { if (frame === page.mainFrame()) navigations++; });
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * .7, box.y + box.height / 2, { steps: 5 });
+    expect(writes(state, '/control/jog')).toHaveLength(0);
+    await page.mouse.up();
+    await expect.poll(() => writes(state, '/control/jog').length).toBe(1);
+    const command = writes(state, '/control/jog')[0].body;
+    expect(command.joint).toBe('elbow_flex');
+    expect(command.target).toBeGreaterThan(0);
+    expect(command.target).toBeLessThanOrEqual(100);
+    expect(command.delta).toBeUndefined();
+    await expect(slider).toBeEnabled();
+    await expect(slider).toHaveValue(String(command.target));
+    await expect(page.getByLabel('Elbow position', { exact: true })).toHaveText('0.0°');
+    await expect(page.getByLabel('Elbow target', { exact: true })).toHaveText(`→ ${command.target.toFixed(1)}°`);
+    expect(await page.evaluate(() => window.scrollY)).toBe(before);
+    expect(state.robotDatasetReads).toBe(reads);
+    expect(navigations).toBe(0);
+    await slider.focus();
+    await page.keyboard.press('ArrowLeft');
+    await expect.poll(() => writes(state, '/control/jog').length).toBe(2);
+    expect(writes(state, '/control/jog')[1].body.target).toBeCloseTo(command.target - .1, 1);
+    expect(state.errors).toEqual([]);
+    await page.screenshot({ path: testInfo.outputPath('joint-sliders.png'), fullPage: true });
+    await page.locator('.robot-lab-joints').screenshot({ path: testInfo.outputPath('joint-sliders-controls.png') });
+  });
+}
+
+test('joint sliders respect centering and excluded joints and reject stale replies after Stop', async ({ page }) => {
+  const state = await fixture(page, true);
+  state.middleInProgress = true;
+  await tab(page, 'Teleoperate').click();
+  await page.getByRole('checkbox', { name: /Arm secured; workspace clear/ }).check();
+  await page.getByRole('button', { name: 'Enable & move to recorded middle', exact: true }).click();
+  await expect(page.getByRole('slider', { name: 'Elbow target slider' })).toBeDisabled();
+  state.status.session.centering.active = false;
+  await expect(page.getByRole('slider', { name: 'Elbow target slider' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Stop arm and disable torque' }).click();
+  for (const name of ['Shoulder pan', 'Shoulder lift', 'Wrist flex', 'Wrist roll', 'Gripper']) {
+    await page.getByRole('checkbox', { name: new RegExp(name) }).uncheck();
+  }
+  await page.getByRole('checkbox', { name: /Arm secured; workspace clear/ }).check();
+  await page.getByRole('button', { name: 'Enable selected motors' }).click();
+  const slider = page.getByRole('slider', { name: 'Elbow target slider', exact: true });
+  await expect(slider).toBeEnabled();
+  await expect(page.getByRole('slider', { name: /target slider/ })).toHaveCount(1);
+  state.jogDelay = 500; state.jogStaleResponse = true;
+  await slider.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(() => writes(state, '/control/jog').length).toBe(1);
+  await expect(page.getByRole('button', { name: 'Stop arm and disable torque' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Stop arm and disable torque' }).click();
+  await page.waitForTimeout(650);
+  await expect(page.getByRole('slider', { name: /target slider/ })).toHaveCount(0);
+  expect(state.status.session.mode).toBe('idle');
+  expect(state.errors).toEqual([]);
 });

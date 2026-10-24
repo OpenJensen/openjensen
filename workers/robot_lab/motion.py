@@ -1,9 +1,9 @@
-"""Bounded movement to the pose captured by half-turn calibration."""
+"""Bounded manual trajectories and movement to the recorded middle."""
 
 import math
 import time
 
-from hardware import HardwareError
+from hardware import HardwareError, normalized
 
 MIDDLE_TICKS = 2047
 TICKS_PER_DEGREE = 4095 / 360
@@ -27,9 +27,7 @@ def tracking_tolerance(joint, calibration):
 def jog_target(joint, delta, raw, commanded, calibration):
     entry = calibration[joint]
     scale = (
-        (entry["range_max"] - entry["range_min"]) / 100
-        if joint == "gripper"
-        else TICKS_PER_DEGREE
+        (entry["range_max"] - entry["range_min"]) / 100 if joint == "gripper" else TICKS_PER_DEGREE
     )
     # A lagging encoder must not reset the target on each click or reverse it.
     # Truncate magnitude so quantization never exceeds the requested step.
@@ -54,10 +52,11 @@ def check_tracking(raw, commanded, calibration):
             )
 
 
-class MiddleMotion:
-    def __init__(self, initial, calibration):
+class PositionMotion:
+    def __init__(self, initial, targets, calibration, label):
         self.initial = dict(initial)
-        self.targets = middle_targets(calibration)
+        self.targets = dict(targets)
+        self.label = label
         # Four degrees/s, or four percent/s for the gripper. Advance by elapsed
         # time, capped per tick: a delayed thread must never catch up with a jump.
         rates = {
@@ -75,7 +74,7 @@ class MiddleMotion:
     def advance(self):
         now = time.monotonic()
         if now > self.deadline:
-            raise HardwareError("Move to recorded middle timed out; motion stopped")
+            raise HardwareError(f"{self.label} timed out; motion stopped")
         self.elapsed += max(0.0, min(0.1, now - self.last_time))
         self.last_time = now
         self.progress = min(1.0, self.elapsed / self.duration) if self.duration else 1.0
@@ -83,3 +82,30 @@ class MiddleMotion:
             j: round(self.initial[j] + (self.targets[j] - self.initial[j]) * self.progress)
             for j in self.initial
         }
+
+
+class MiddleMotion(PositionMotion):
+    def __init__(self, initial, calibration):
+        super().__init__(
+            initial, middle_targets(calibration), calibration, "Move to recorded middle"
+        )
+
+
+class JointMotion(PositionMotion):
+    def __init__(self, joint, initial, target, calibration):
+        super().__init__(
+            {joint: initial},
+            {joint: target},
+            calibration,
+            f"{joint.replace('_', ' ').capitalize()} slider movement",
+        )
+
+
+def control_limits(calibration):
+    return {
+        joint: {
+            "min": normalized(joint, entry["range_min"] + 8, calibration),
+            "max": normalized(joint, entry["range_max"] - 8, calibration),
+        }
+        for joint, entry in calibration.items()
+    }

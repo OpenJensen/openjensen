@@ -1,0 +1,149 @@
+{
+  "date": "2026-10-24",
+  "base_commit": "3df813bf5686bac86262e159f39a284e4d6227c4",
+  "sources_sha256": {
+    "apps/web/src/components/robot-lab.css": "784764272eb4c6edb3460430e293676ebbb5fe69ed3c56cacc06af328f1345f3",
+    "apps/web/src/components/robot-lab.tsx": "6ed79a0380aa84c0349ce2e951aac50b50a66d34880b522ec013e7bff972160d",
+    "apps/web/src/lib/robot-api.ts": "2be6587b5360af7926c8ae3697c5af7572d18043bf3d74d85bb77288d0133c04",
+    "tests/web/robot-lab.spec.ts": "4a918d6a2e80ae35e17b412321a8d528a28ac2572c10950b5386b69c7117c3cf",
+    "workers/robot_lab/API.md": "5af2652982b355d9be29b0fe9b9088a5b43ac1fc59f79056fbc6834c016e1ab2",
+    "workers/robot_lab/motion.py": "6b44d2907e05122610903fe30b301e1409f210ae027ea5414e84b39339362fd1",
+    "workers/robot_lab/server.py": "bb32b7fca3634fdd402617c3a4ebf5f02e4c96337184e5ba6fccde497d5ff536",
+    "workers/robot_lab/tests/test_motion.py": "3652e75acaa0f499563d41f9d065f903e16fbf0553484a2c677375e43fd730b9",
+    "workers/robot_lab/tests/test_robot_lab.py": "499ddaac530f6af34827b926a2d1d2fc7e9d171f24c892cc21cda8f1b5356bac"
+  },
+  "scope": "Absolute joint sliders in Teleoperate and Record with release-to-commit and bounded companion trajectories",
+  "behavior": [
+    "Sliders use per-joint calibration limits with the existing eight-tick end margin",
+    "No position target is sent during dragging; pointer release and keyboard key-up commit once",
+    "Companion interpolates at 4 degrees/second or 4 percent/second with a 100 ms elapsed-time cap",
+    "Tracking is checked before each target write; Stop generation cancels between checks and writes",
+    "Targets replace only the selected joint trajectory; delta buttons remain available and cancel that joint trajectory",
+    "Final slider targets are displayed separately from measured positions and intermediate recorded commands",
+    "Partial sessions, heartbeat watchdog, hidden-tab Stop and stale-reply cancellation remain active"
+  ],
+  "verification": {
+    "companion": {
+      "run": 159,
+      "passed": 147,
+      "optional_dataset_skips": 12
+    },
+    "api_installer_wrapper_passed": 43,
+    "lint": "passed",
+    "production_export": "passed",
+    "typescript": "passed",
+    "initial_full_desktop_mobile": {
+      "passed": 64,
+      "failed": 2,
+      "failure": "Existing target-output locator also matched the new target slider; changed to an exact accessible label"
+    },
+    "final_focused_desktop_mobile_passed": 14,
+    "visual_review": "Desktop and mobile slider captures inspected; no overflow"
+  },
+  "receipts": {
+    "lint-final": {
+      "pid": 244205,
+      "command": [
+        "/home/aayrapetyan/.local/bin/uvx",
+        "ruff==0.16.9",
+        "check",
+        "workers/robot_lab/hardware.py",
+        "workers/robot_lab/server.py",
+        "workers/robot_lab/tests/test_hardware_transport.py",
+        "workers/robot_lab/tests/test_robot_lab.py",
+        "workers/robot_lab/motion.py",
+        "workers/robot_lab/tests/test_motion.py",
+        "workers/robot_lab/verification.py",
+        "workers/robot_lab/tests/test_mapping_verification.py"
+      ],
+      "started": 1792834848.850106,
+      "source_sha256": "6ed79a0380aa84c0349ce2e951aac50b50a66d34880b522ec013e7bff972160d",
+      "exit_code": 0,
+      "finished": 1792834848.9074316
+    },
+    "companion-final": {
+      "pid": 244238,
+      "command": [
+        "/home/aayrapetyan/ollamaforvlas/source/openjensen/.venv/bin/python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "workers/robot_lab/tests",
+        "-v"
+      ],
+      "started": 1792834848.9321756,
+      "source_sha256": "6ed79a0380aa84c0349ce2e951aac50b50a66d34880b522ec013e7bff972160d",
+      "exit_code": 0,
+      "finished": 1792834860.901013
+    },
+    "api": {
+      "pid": 242584,
+      "command": [
+        "/home/aayrapetyan/ollamaforvlas/source/openjensen/.venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/test_robot_lab_api.py",
+        "tests/test_robot_lab_installer.py",
+        "tests/test_robot_lab_worker.py",
+        "-q"
+      ],
+      "started": 1792834785.876346,
+      "source_sha256": "6ed79a0380aa84c0349ce2e951aac50b50a66d34880b522ec013e7bff972160d",
+      "exit_code": 0,
+      "finished": 1792834799.4715316
+    },
+    "build": {
+      "pid": 242811,
+      "command": [
+        "node",
+        "/home/aayrapetyan/ollamaforvlas/source/openjensen/apps/web/node_modules/next/dist/bin/next",
+        "build",
+        "--webpack"
+      ],
+      "started": 1792834799.4960313,
+      "source_sha256": "6ed79a0380aa84c0349ce2e951aac50b50a66d34880b522ec013e7bff972160d",
+      "exit_code": 0,
+      "finished": 1792834808.3994277
+    },
+    "typecheck": {
+      "pid": 243313,
+      "command": [
+        "node",
+        "/home/aayrapetyan/ollamaforvlas/source/openjensen/apps/web/node_modules/typescript/bin/tsc",
+        "--noEmit"
+      ],
+      "started": 1792834808.4282951,
+      "source_sha256": "6ed79a0380aa84c0349ce2e951aac50b50a66d34880b522ec013e7bff972160d",
+      "exit_code": 0,
+      "finished": 1792834808.8503783
+    },
+    "browser-confirmed": {
+      "pid": 246951,
+      "command": [
+        "node",
+        "node_modules/@playwright/test/cli.js",
+        "test",
+        "tests/web/robot-lab.spec.ts",
+        "--project=desktop",
+        "--project=mobile",
+        "--workers=1",
+        "--reporter=list,json",
+        "--output=/home/aayrapetyan/ollamaforvlas/run/robot-lab-joint-sliders-20261024/browser-confirmed-artifacts",
+        "--grep",
+        "joint sliders|manual control is explicit|joint buttons keep|Stop remains available"
+      ],
+      "started": 1792834994.8834777,
+      "source_sha256": "6ed79a0380aa84c0349ce2e951aac50b50a66d34880b522ec013e7bff972160d",
+      "exit_code": 0,
+      "finished": 1792835018.1546986
+    }
+  },
+  "evidence_directory": "/home/aayrapetyan/ollamaforvlas/run/robot-lab-joint-sliders-20261024",
+  "cleanup": {
+    "owned_browser_fixture_processes_gone": true,
+    "temporary_listener_18865_closed": true,
+    "earlier_failure_logs_retained": true
+  },
+  "physical_acceptance": "No powered hardware movement used to test sliders. Operator acceptance under load is pending."
+}
