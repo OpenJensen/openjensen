@@ -148,3 +148,24 @@ test('lost acceptance reply reconnects to the same update without submitting twi
   expect(writes).toBe(1);
   expect(await page.evaluate(() => sessionStorage.getItem('openjensen-pending-update'))).toBeNull();
 });
+
+test('unavailable browser storage keeps the workspace and update dialog usable', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'sessionStorage', {
+      get() {
+        throw new DOMException('Storage disabled', 'SecurityError');
+      },
+    });
+  });
+  await page.route('**/api/v1/updates**', (route) => route.fulfill({ json: initial }));
+  await page.goto('/dashboard/');
+  await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Version and updates' }).click();
+  await expect(page.getByRole('dialog', { name: 'OpenJensen updates' })).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Dataset', exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
+});

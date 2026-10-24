@@ -8,8 +8,31 @@ import './application-updates.css';
 const active = new Set(['queued', 'building', 'backing_up', 'validating', 'restarting']);
 const pendingKey = 'openjensen-pending-update';
 
+function recall(key: string): string | null {
+  try {
+    return sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function remember(key: string, value: string) {
+  try {
+    sessionStorage.setItem(key, value);
+  } catch {
+    /* Resume in memory when storage is unavailable. */
+  }
+}
+function forget(key: string) {
+  try {
+    sessionStorage.removeItem(key);
+  } catch {
+    /* Storage is optional. */
+  }
+}
+
 export function ApplicationUpdates() {
   const client = useQueryClient();
+  const pendingTarget = useRef<string | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [open, setOpen] = useState(false);
@@ -41,7 +64,8 @@ export function ApplicationUpdates() {
   const short = (commit?: string | null) => commit?.slice(0, 8) ?? 'Unknown';
 
   useEffect(() => {
-    setPending(sessionStorage.getItem(pendingKey));
+    setPending(recall(pendingKey));
+    pendingTarget.current = recall(pendingKey + '-target');
   }, []);
 
   useEffect(() => {
@@ -53,12 +77,12 @@ export function ApplicationUpdates() {
     if (!pending || !operation || operation.id !== pending) return;
     if (active.has(operation.phase)) setError(null);
     if (operation.phase === 'complete' && value?.installed.commit === operation.target_commit) {
-      sessionStorage.removeItem(pendingKey);
-      sessionStorage.removeItem(pendingKey + '-target');
+      forget(pendingKey);
+      forget(pendingKey + '-target');
       window.location.reload();
     } else if (['failed', 'rolled_back', 'recovery_required'].includes(operation.phase)) {
-      sessionStorage.removeItem(pendingKey);
-      sessionStorage.removeItem(pendingKey + '-target');
+      forget(pendingKey);
+      forget(pendingKey + '-target');
       setPending(null);
     }
   }, [operation, pending, value?.installed.commit]);
@@ -80,14 +104,15 @@ export function ApplicationUpdates() {
   }
 
   async function apply(retry = false) {
-    const target = retry ? sessionStorage.getItem(pendingKey + '-target') : value?.upstream_commit;
+    const target = retry ? (pendingTarget.current ?? recall(pendingKey + '-target')) : value?.upstream_commit;
     if (!target) return;
     const operationId =
       retry && pending
         ? pending
         : Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('');
-    sessionStorage.setItem(pendingKey, operationId);
-    sessionStorage.setItem(pendingKey + '-target', target);
+    pendingTarget.current = target;
+    remember(pendingKey, operationId);
+    remember(pendingKey + '-target', target);
     setPending(operationId);
     setConfirming(true);
     setError(null);
@@ -96,8 +121,8 @@ export function ApplicationUpdates() {
       updateCache(next);
     } catch (failure) {
       if (failure instanceof ApiError && failure.status < 500) {
-        sessionStorage.removeItem(pendingKey);
-        sessionStorage.removeItem(pendingKey + '-target');
+        forget(pendingKey);
+        forget(pendingKey + '-target');
         setPending(null);
         setError(failure.message);
       } else {
