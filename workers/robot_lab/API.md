@@ -145,3 +145,18 @@ read-only `/probe` may include `robot_id` and `role`; its `profile.state` is
 six-motor scan plus matching offsets and limits for every joint reports `matched`.
 A scan never writes registers or enables torque. Status/device refresh never scans
 motors. The UI retains this as a scan snapshot and clears it on USB or identity change.
+
+
+### Larger joint steps
+
+`capabilities.large_joint_steps` enables 5° and 10° choices in the Step selector
+(gripper 5% and 10%). Manual `/control/jog {joint,delta}` accepts finite nonzero
+steps up to +/-10. Steps above 2 schedule the existing bounded trajectory at
+4°/s (gripper 4%/s) instead of sending a large immediate position jump. Repeated
+large steps advance the pending final target and clip to calibrated limits with
+the eight-tick margin. Each trajectory starts at the current commanded position;
+there is no replay of motor writes. Smaller steps retain the existing direct jog
+and five-degree tracking guard. The 100 ms request spacing, Stop cancellation,
+heartbeat watchdog, tracking checks, partial-joint selection and intermediate
+action values used for recording remain unchanged. This selector sets distance
+per click; it does not raise motor speed, torque or tracking tolerances.

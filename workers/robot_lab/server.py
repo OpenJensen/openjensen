@@ -46,6 +46,7 @@ from motion import (
     control_limits,
     jog_target,
     middle_targets,
+    step_target,
 )
 from verification import (
     MappingChecks,
@@ -366,6 +367,7 @@ class RobotLab:
                 "middle_tolerance": hardware,
                 "partial_control": hardware,
                 "joint_sliders": hardware,
+                "large_joint_steps": hardware,
                 "recording": hardware
                 and all(deps[key]["installed"] for key in ("pyarrow", "PIL", "numpy")),
             },
@@ -1183,8 +1185,10 @@ class RobotLab:
                 limits = control_limits(self.calibration)[joint]
                 if not limits["min"] <= value <= limits["max"]:
                     raise RequestError("Slider target is outside the calibrated joint limits")
-            elif not 0 < abs(value) <= 2:
-                raise RequestError("Jog one valid joint by at most 2 degrees (gripper 2 percent)")
+            elif not 0 < abs(value) <= 10:
+                raise RequestError(
+                    "Step one valid joint by at most 10 degrees (gripper 10 percent)"
+                )
             elif time.monotonic() - self.last_jog < 0.1:
                 raise RequestError("Wait at least 100 ms between jog commands")
             if time.monotonic() - self.heartbeat > 2:
@@ -1199,16 +1203,32 @@ class RobotLab:
                 check_tracking(raw, self.commanded_raw, self.calibration)
                 if generation != self.generation:
                     raise RequestError("Session has stopped")
-                if absolute:
-                    target = denormalized(joint, value, self.calibration)
+                if absolute or abs(value) > 2:
+                    if absolute:
+                        target = denormalized(joint, value, self.calibration)
+                    else:
+                        # Advance the requested final target so repeated large
+                        # steps do not reset to a lagging encoder or intermediate
+                        # command. The trajectory still bounds every motor write.
+                        previous = self.joint_motions.get(joint)
+                        base = previous.targets[joint] if previous else self.commanded_raw[joint]
+                        target = step_target(joint, value, {joint: base}, self.calibration)
                     entry = self.calibration[joint]
                     target = max(entry["range_min"] + 8, min(entry["range_max"] - 8, target))
                     with self.lifecycle_lock:
                         if generation != self.generation:
                             raise RequestError("Session has stopped")
                         self.joint_motions[joint] = JointMotion(
-                            joint, self.commanded_raw[joint], target, self.calibration
+                            joint,
+                            self.commanded_raw[joint],
+                            target,
+                            self.calibration,
+                            label=None
+                            if absolute
+                            else f"{joint.replace('_', ' ').capitalize()} step movement",
                         )
+                        if not absolute:
+                            self.last_jog = time.monotonic()
                 else:
                     target = jog_target(joint, value, raw, self.commanded_raw, self.calibration)
                     self.joint_motions.pop(joint, None)

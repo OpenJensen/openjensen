@@ -7,7 +7,7 @@ const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQ
 const joints = ['shoulder_pan', 'shoulder_lift', 'elbow_flex', 'wrist_flex', 'wrist_roll', 'gripper'];
 const values = (value: number) => Object.fromEntries(joints.map(name => [name, value]));
 function initialStatus(calibrated = false): any {
-  return { ok: true, connected: true, label: 'This Mac', version: '1', platform: 'Darwin', dependencies: { lerobot: { installed: false, version: null }, serial: { installed: true, version: '3.5' }, cv2: { installed: true, version: '4.12.0' }, scservo_sdk: { installed: true, version: '1.0.0' } }, capabilities: { arm_readiness: true, middle_tolerance: true, joint_sliders: true, calibration_persistence: true, partial_control: true, move_to_middle: true, mapping_verification: true, assembled_setup: true, probe: true, camera: true, motor_setup: true, calibration: true, control: true, recording: true }, session: { mode: 'idle', robot_id: null, port: null, role: null, positions: {}, torque_enabled: false, watchdog_seconds: 2, error: null }, calibration: { phase: 'idle', mins: {}, maxes: {}, offsets: {}, path: null }, recording: { active: false, dataset_id: null, episode_active: false, frames: 0, episodes: 0, fps: 10, error: null }, assembled: { phase: 'idle', ids: [], selected_joint: null, detected_id: null, candidate_delta: null, mapping: {}, message: 'Start experimental assembled setup.', error: null, log: [], progress: null, calibration_required: false }, calibrations: calibrated ? [{ robot_id: 'my-so101', role: 'follower', path: 'private-calibration.json' }] : [], datasets: [] };
+  return { ok: true, connected: true, label: 'This Mac', version: '1', platform: 'Darwin', dependencies: { lerobot: { installed: false, version: null }, serial: { installed: true, version: '3.5' }, cv2: { installed: true, version: '4.12.0' }, scservo_sdk: { installed: true, version: '1.0.0' } }, capabilities: { large_joint_steps: true, arm_readiness: true, middle_tolerance: true, joint_sliders: true, calibration_persistence: true, partial_control: true, move_to_middle: true, mapping_verification: true, assembled_setup: true, probe: true, camera: true, motor_setup: true, calibration: true, control: true, recording: true }, session: { mode: 'idle', robot_id: null, port: null, role: null, positions: {}, torque_enabled: false, watchdog_seconds: 2, error: null }, calibration: { phase: 'idle', mins: {}, maxes: {}, offsets: {}, path: null }, recording: { active: false, dataset_id: null, episode_active: false, frames: 0, episodes: 0, fps: 10, error: null }, assembled: { phase: 'idle', ids: [], selected_joint: null, detected_id: null, candidate_delta: null, mapping: {}, message: 'Start experimental assembled setup.', error: null, log: [], progress: null, calibration_required: false }, calibrations: calibrated ? [{ robot_id: 'my-so101', role: 'follower', path: 'private-calibration.json' }] : [], datasets: [] };
 }
 async function fixture(page: Page, calibrated = false) {
   const state = { status: initialStatus(calibrated), writes: [] as { path: string; body: any }[], errors: [] as string[], datasetReads: 0, cameraFailure: false, stopError: null as string | null, centerError: null as string | null, portsConnected: true, middleInProgress: false, encoderLag: false, jogDelay: 0, jogStaleResponse: false, robotDatasetReads: 0, heartbeatFailures: 0, statusFailures: false, dropCalibrationReply: false };
@@ -51,7 +51,7 @@ async function fixture(page: Page, calibrated = false) {
       else if (action === '/calibration/cancel' || action === '/stop') { if (state.status.session.mode === 'setup') state.status.assembled.phase = 'stopped'; if (state.status.session.mode === 'verification') state.status.verification.phase = 'stopped'; if (action === '/stop') state.status.session.error = state.stopError; state.status.session.mode = 'idle'; state.status.session.torque_enabled = false; state.status.recording.episode_active = false; }
       else if (action === '/control/start') { state.status.session = { ...state.status.session, mode: body.mode, active_joints: body.joints ?? joints, port: body.port, robot_id: body.robot_id, positions: values(0), targets: values(0), slider_targets: values(0), joint_limits: Object.fromEntries((body.joints ?? joints).map((j: string) => [j, { min: j === 'gripper' ? 0.3 : -100, max: j === 'gripper' ? 99.7 : 100 }])), torque_enabled: body.mode !== 'handguide', centering: { active: !!body.move_to_middle && state.middleInProgress, progress: 0.25, tolerance: body.middle_tolerance ?? 2 } }; }
       else if (action === '/control/heartbeat') { if (state.heartbeatFailures > 0) { state.heartbeatFailures--; return route.abort('failed'); } }
-      else if (action === '/control/jog') { const before = structuredClone(state.status); if (state.jogDelay) await new Promise(resolve => setTimeout(resolve, state.jogDelay)); if (state.jogStaleResponse) return route.fulfill({ json: before }); if (body.target !== undefined) { state.status.session.slider_targets[body.joint] = body.target; } else { if (!state.encoderLag) state.status.session.positions[body.joint] += body.delta; state.status.session.targets[body.joint] += body.delta; state.status.session.slider_targets[body.joint] = state.status.session.targets[body.joint]; } }
+      else if (action === '/control/jog') { const before = structuredClone(state.status); if (state.jogDelay) await new Promise(resolve => setTimeout(resolve, state.jogDelay)); if (state.jogStaleResponse) return route.fulfill({ json: before }); if (body.target !== undefined) { state.status.session.slider_targets[body.joint] = body.target; } else if (Math.abs(body.delta) > 2) { const limits = state.status.session.joint_limits[body.joint]; state.status.session.slider_targets[body.joint] = Math.max(limits.min, Math.min(limits.max, state.status.session.slider_targets[body.joint] + body.delta)); } else { if (!state.encoderLag) state.status.session.positions[body.joint] += body.delta; state.status.session.targets[body.joint] += body.delta; state.status.session.slider_targets[body.joint] = state.status.session.targets[body.joint]; } }
       else if (action === '/recording/start') { state.status.recording = { active: true, dataset_id: body.dataset_id, episode_active: false, frames: 0, episodes: 0, fps: body.fps, error: null }; }
       else if (action === '/recording/episode/start') { state.status.recording.episode_active = true; state.status.recording.frames = 10; }
       else if (action === '/recording/episode/save') { state.status.recording.episode_active = false; state.status.recording.episodes++; state.status.recording.frames = 0; }
@@ -998,4 +998,40 @@ test('calibration ranges indicate which joints still need movement before saving
   await expect(page.getByText('5/5 ranges detected · wrist roll automatic',{exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Save calibration',exact:true})).toBeEnabled();
   expect(writes(state,'/calibration/finish')).toEqual([]);
+});
+
+
+test('large joint steps offer five and ten and update only the requested destination without refreshing', async ({ page }, testInfo) => {
+  const state = await fixture(page, true);
+  await startManual(page);
+  const selector = page.getByLabel('Joint step size');
+  await expect(selector.locator('option')).toHaveText(['0.5° / %', '1° / %', '2° / %', '5° / %', '10° / %']);
+  await selector.selectOption('5');
+  await page.getByRole('button', {name:'Increase Elbow',exact:true}).click();
+  await expect(page.getByLabel('Elbow target', {exact:true})).toHaveText('→ 5.0°');
+  await expect(page.getByLabel('Elbow position', {exact:true})).toHaveText('0.0°');
+  await selector.selectOption('10');
+  await page.getByRole('button', {name:'Increase Elbow',exact:true}).click();
+  await expect(page.getByLabel('Elbow target', {exact:true})).toHaveText('→ 15.0°');
+  await page.getByRole('button', {name:'Decrease Elbow',exact:true}).click();
+  await expect(page.getByLabel('Elbow target', {exact:true})).toHaveText('→ 5.0°');
+  await page.getByRole('button', {name:'Increase Gripper',exact:true}).click();
+  await expect(page.getByLabel('Gripper target', {exact:true})).toHaveText('→ 10.0%');
+  expect(writes(state,'/control/jog').map(write=>write.body)).toEqual([
+    {joint:'elbow_flex',delta:5},{joint:'elbow_flex',delta:10},{joint:'elbow_flex',delta:-10},{joint:'gripper',delta:10},
+  ]);
+  await expect(selector).toHaveValue('10');
+  await page.screenshot({path:testInfo.outputPath('large-joint-steps.png'),fullPage:true});
+  await page.getByRole('button', {name:'Stop & release motors',exact:true}).click();
+  await expect(page.getByRole('button', {name:'Increase Elbow',exact:true})).toHaveCount(0);
+  expect(state.errors).toEqual([]);
+});
+
+test('large joint steps are hidden when the connected companion does not support them', async ({ page }) => {
+  const state = await fixture(page, true);
+  state.status.capabilities.large_joint_steps = false;
+  await page.getByRole('button', {name:'Refresh devices',exact:true}).click();
+  await startManual(page);
+  await expect(page.getByLabel('Joint step size').locator('option')).toHaveText(['0.5° / %','1° / %','2° / %']);
+  expect(writes(state,'/control/jog')).toEqual([]);
 });

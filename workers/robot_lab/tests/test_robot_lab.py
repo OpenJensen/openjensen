@@ -684,9 +684,83 @@ class SafetyTests(unittest.TestCase):
             self.lab._tick()
             self.assertEqual(len(bus.writes), count)
 
+    def test_large_steps_schedule_smooth_selected_joint_motion_and_accumulate_destination(self):
+        with patch("motion.time.monotonic", return_value=100) as clock:
+            self.start(joints=["elbow_flex"])
+            bus = self.buses[-1]
+            before = len(bus.writes)
+            result = self.lab.jog({"joint": "elbow_flex", "delta": 10})
+            self.assertEqual(len(bus.writes), before)
+            self.assertAlmostEqual(
+                result["session"]["slider_targets"]["elbow_flex"]
+                - self.lab.positions["elbow_flex"],
+                10,
+                delta=0.1,
+            )
+            first = self.lab.joint_motions["elbow_flex"].targets["elbow_flex"]
+            clock.return_value = 102
+            self.lab._tick()  # Delayed tick still advances at most 100 ms.
+            self.assertLessEqual(bus.raw["elbow_flex"] - 2047, 5)
+            current = self.lab.commanded_raw["elbow_flex"]
+            self.lab.jog({"joint": "elbow_flex", "delta": 5})
+            motion = self.lab.joint_motions["elbow_flex"]
+            self.assertEqual(motion.initial["elbow_flex"], current)
+            self.assertAlmostEqual(motion.targets["elbow_flex"] - first, 5 * 4095 / 360, delta=1)
+            final = motion.targets["elbow_flex"]
+            for i in range(1, 65):
+                previous = bus.raw["elbow_flex"]
+                clock.return_value = 102 + i * 0.1
+                self.lab._tick()
+                self.assertLessEqual(abs(bus.raw["elbow_flex"] - previous), 5)
+            self.assertEqual(bus.raw["elbow_flex"], final)
+            self.assertFalse(self.lab.joint_motions)
+            self.assertTrue(all(sid == 3 for _, sid, _ in bus.writes))
+
+    def test_large_steps_clip_joint_and_gripper_destinations_to_usable_limits(self):
+        with patch("motion.time.monotonic", return_value=100):
+            self.start()
+            bus = self.buses[-1]
+            for joint, sign in (("elbow_flex", 1), ("gripper", -1)):
+                entry = self.lab.calibration[joint]
+                origin = entry["range_max"] - 20 if sign == 1 else entry["range_min"] + 20
+                bus.raw[joint] = self.lab.commanded_raw[joint] = origin
+                before = len(bus.writes)
+                self.lab.last_jog = 0
+                result = self.lab.jog({"joint": joint, "delta": sign * 10})
+                self.assertEqual(len(bus.writes), before)
+                expected = entry["range_max"] - 8 if sign == 1 else entry["range_min"] + 8
+                self.assertEqual(self.lab.joint_motions[joint].targets[joint], expected)
+                self.assertAlmostEqual(
+                    result["session"]["slider_targets"][joint],
+                    normalized(joint, expected, self.lab.calibration),
+                )
+
+    def test_large_step_stop_and_tracking_failure_prevent_further_targets(self):
+        with patch("motion.time.monotonic", return_value=100) as clock:
+            self.start(joints=["elbow_flex"])
+            bus = self.buses[-1]
+            self.lab.jog({"joint": "elbow_flex", "delta": -10})
+            clock.return_value = 100.1
+            self.lab._tick()
+            self.lab.stop()
+            count = len(bus.writes)
+            clock.return_value = 100.2
+            self.lab._tick()
+            self.assertEqual(len(bus.writes), count)
+            self.assertFalse(self.lab.torque)
+            self.assertFalse(self.lab.joint_motions)
+            self.start(joints=["elbow_flex"])
+            bus = self.buses[-1]
+            bus.raw["elbow_flex"] += 80
+            count = len(bus.writes)
+            with self.assertRaisesRegex(HardwareError, "did not hold"):
+                self.lab.jog({"joint": "elbow_flex", "delta": 10})
+            self.assertEqual(len(bus.writes), count)
+            self.assertFalse(self.lab.joint_motions)
+
     def test_jog_bounds_and_rate_limit(self):
         self.start()
-        for delta in (3, float("nan"), float("inf"), True):
+        for delta in (10.1, -10.1, 0, float("nan"), float("inf"), True):
             with self.assertRaises(RequestError):
                 self.lab.jog({"joint": "shoulder_pan", "delta": delta})
         before = self.lab.positions["shoulder_pan"]
