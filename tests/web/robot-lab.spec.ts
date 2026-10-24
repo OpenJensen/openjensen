@@ -135,6 +135,8 @@ test('failed center capture stays at the interrupted stage and requires an expli
   await page.getByRole('button', { name: 'Begin calibration', exact: true }).click();
   state.centerError = 'Motor 1 write Homing_Offset acknowledgement missing; read-back failed.';
   await page.getByRole('button', { name: 'Record middle position', exact: true }).click();
+  await expect(page.getByRole('alert', { name: 'Calibration error' })).toHaveText(state.centerError);
+  await expect(page.getByRole('region', { name: 'Calibrate', exact: true }).getByRole('alert', { name: 'Calibration error' })).toBeVisible();
   await expect(page.getByText('Calibration interrupted', { exact: true })).toBeVisible();
   await expect(page.getByText('Middle position was not saved. Restart calibration to continue.', { exact: true })).toBeVisible();
   await expect(page.locator('.robot-lab-calibration-steps .current')).toHaveText('2. Middle position');
