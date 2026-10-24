@@ -10,7 +10,7 @@ function initialStatus(calibrated = false): any {
   return { ok: true, connected: true, label: 'This Mac', version: '1', platform: 'Darwin', dependencies: { lerobot: { installed: false, version: null }, serial: { installed: true, version: '3.5' }, cv2: { installed: true, version: '4.12.0' }, scservo_sdk: { installed: true, version: '1.0.0' } }, capabilities: { partial_control: true, move_to_middle: true, mapping_verification: true, assembled_setup: true, probe: true, camera: true, motor_setup: true, calibration: true, control: true, recording: true }, session: { mode: 'idle', robot_id: null, port: null, role: null, positions: {}, torque_enabled: false, watchdog_seconds: 2, error: null }, calibration: { phase: 'idle', mins: {}, maxes: {}, offsets: {}, path: null }, recording: { active: false, dataset_id: null, episode_active: false, frames: 0, episodes: 0, fps: 10, error: null }, assembled: { phase: 'idle', ids: [], selected_joint: null, detected_id: null, candidate_delta: null, mapping: {}, message: 'Start experimental assembled setup.', error: null, log: [], progress: null, calibration_required: false }, calibrations: calibrated ? [{ robot_id: 'my-so101', role: 'follower', path: 'private-calibration.json' }] : [], datasets: [] };
 }
 async function fixture(page: Page, calibrated = false) {
-  const state = { status: initialStatus(calibrated), writes: [] as { path: string; body: any }[], errors: [] as string[], datasetReads: 0, cameraFailure: false, stopError: null as string | null, centerError: null as string | null, portsConnected: true, middleInProgress: false, encoderLag: false };
+  const state = { status: initialStatus(calibrated), writes: [] as { path: string; body: any }[], errors: [] as string[], datasetReads: 0, cameraFailure: false, stopError: null as string | null, centerError: null as string | null, portsConnected: true, middleInProgress: false, encoderLag: false, jogDelay: 0, jogStaleResponse: false, robotDatasetReads: 0 };
   page.on('pageerror', error => state.errors.push(error.message));
   await page.route('**/api/v1/**', async route => {
     const request = route.request(), path = new URL(request.url()).pathname, body = request.method() === 'POST' ? request.postDataJSON() : undefined;
@@ -20,7 +20,7 @@ async function fixture(page: Page, calibrated = false) {
       if (action === '/status') return route.fulfill({ json: state.status });
       if (action === '/devices') return route.fulfill({ json: { ports: state.portsConnected ? [{ device: port, description: 'SO-101 controller', manufacturer: 'USB serial', serial_number: 'test-1' }, { device: '/dev/cu.usbmodem-leader', description: 'Leader controller', manufacturer: 'USB serial', serial_number: 'test-2' }] : [], cameras: [{ index: 0, name: 'Robot camera', width: 640, height: 480 }], camera_error: null } });
       if (action === '/camera.jpg') return state.cameraFailure ? route.fulfill({ status: 503, json: { detail: 'Camera disconnected.' } }) : route.fulfill({ contentType: 'image/png', body: pixel });
-      if (action === '/datasets') return route.fulfill({ json: { datasets: state.status.datasets } });
+      if (action === '/datasets') { state.robotDatasetReads++; return route.fulfill({ json: { datasets: state.status.datasets } }); }
       if (action === '/probe') return route.fulfill({ json: { port, baudrate: 1000000, motors: [{ id: 1, model: 777, stable: true, responses: 3 }], ready: false, expected_ids: [1, 2, 3, 4, 5, 6], warning: 'A response at one ID cannot prove that only one physical motor is connected.' } });
       if (action === '/setup/motor') return route.fulfill({ json: { assigned: { joint: body.joint, id: joints.indexOf(body.joint) + 1, baudrate: 1000000 }, warning: 'Keep other motors disconnected.' } });
       if (action === '/mapping/wiggle') {
@@ -47,7 +47,7 @@ async function fixture(page: Page, calibrated = false) {
       else if (action === '/calibration/cancel' || action === '/stop') { if (state.status.session.mode === 'setup') state.status.assembled.phase = 'stopped'; if (state.status.session.mode === 'verification') state.status.verification.phase = 'stopped'; if (action === '/stop') state.status.session.error = state.stopError; state.status.session.mode = 'idle'; state.status.session.torque_enabled = false; state.status.recording.episode_active = false; }
       else if (action === '/control/start') { state.status.session = { ...state.status.session, mode: body.mode, active_joints: body.joints ?? joints, port: body.port, robot_id: body.robot_id, positions: values(0), targets: values(0), torque_enabled: body.mode !== 'handguide', centering: { active: !!body.move_to_middle && state.middleInProgress, progress: 0.25 } }; }
       else if (action === '/control/heartbeat') { /* Explicitly owned session only. */ }
-      else if (action === '/control/jog') { if (!state.encoderLag) state.status.session.positions[body.joint] += body.delta; state.status.session.targets[body.joint] += body.delta; }
+      else if (action === '/control/jog') { const before = structuredClone(state.status); if (state.jogDelay) await new Promise(resolve => setTimeout(resolve, state.jogDelay)); if (state.jogStaleResponse) return route.fulfill({ json: before }); if (!state.encoderLag) state.status.session.positions[body.joint] += body.delta; state.status.session.targets[body.joint] += body.delta; }
       else if (action === '/recording/start') { state.status.recording = { active: true, dataset_id: body.dataset_id, episode_active: false, frames: 0, episodes: 0, fps: body.fps, error: null }; }
       else if (action === '/recording/episode/start') { state.status.recording.episode_active = true; state.status.recording.frames = 10; }
       else if (action === '/recording/episode/save') { state.status.recording.episode_active = false; state.status.recording.episodes++; state.status.recording.frames = 0; }
@@ -657,4 +657,66 @@ test('selected motor control excludes disconnected motors and blocks dataset rec
   await expect(page.getByText('Dataset recording requires all six joints.')).toBeVisible();
   await page.getByRole('button', { name: 'Stop arm and disable torque' }).click();
   await expect.poll(() => writes(state, '/stop').length).toBe(1);
+});
+
+
+for (const recording of [false, true]) {
+  test(`joint buttons keep the page stable during ${recording ? 'recording' : 'teleoperation'}`, async ({ page }, testInfo) => {
+    const state = await fixture(page, true);
+    await startManual(page);
+    if (recording) {
+      await tab(page, 'Record').click();
+      await page.getByLabel('Dataset name', { exact: true }).fill('stable-controls');
+      await page.getByLabel('Task instruction', { exact: true }).fill('Move the elbow.');
+      await page.getByRole('button', { name: 'Create recording dataset', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'Start episode', exact: true })).toBeEnabled();
+    }
+    await expect.poll(() => state.robotDatasetReads).toBeGreaterThan(recording ? 2 : 1);
+    const reads = state.robotDatasetReads;
+    const banner = page.locator('.robot-lab-event[role="status"]');
+    const initialBanner = await banner.innerText();
+    const plus = page.getByRole('button', { name: recording ? 'Record increase Elbow' : 'Increase Elbow', exact: true });
+    const minus = page.getByRole('button', { name: recording ? 'Record decrease Elbow' : 'Decrease Elbow', exact: true });
+    await plus.scrollIntoViewIfNeeded();
+    const before = await plus.boundingBox();
+    const scrollBefore = await page.evaluate(() => window.scrollY);
+    let navigations = 0;
+    page.on('framenavigated', frame => { if (frame === page.mainFrame()) navigations++; });
+    state.jogDelay = 250;
+    await plus.click();
+    await expect.poll(() => writes(state, '/control/jog').length).toBe(1);
+    await expect(banner).toHaveText(initialBanner);
+    await expect(tab(page, recording ? 'Record' : 'Teleoperate')).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Stop arm and disable torque' })).toBeEnabled();
+    await expect.poll(async () => (await plus.boundingBox())?.y).toBeCloseTo(before!.y, 0);
+    expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
+    await expect(plus).toBeEnabled();
+    await minus.click();
+    await expect.poll(() => writes(state, '/control/jog').length).toBe(2);
+    await expect(minus).toBeEnabled();
+    await expect(banner).toHaveText(initialBanner);
+    expect(state.robotDatasetReads).toBe(reads);
+    expect(navigations).toBe(0);
+    expect(state.errors).toEqual([]);
+    await page.screenshot({ path: testInfo.outputPath('stable-joint-controls.png'), fullPage: true });
+  });
+}
+
+
+test('Stop remains available during a joint request and a late reply cannot restore control', async ({ page }) => {
+  const state = await fixture(page, true);
+  await startManual(page);
+  state.jogDelay = 500;
+  state.jogStaleResponse = true;
+  await page.getByRole('button', { name: 'Increase Elbow', exact: true }).click();
+  await expect.poll(() => writes(state, '/control/jog').length).toBe(1);
+  await page.getByRole('button', { name: 'Stop arm and disable torque' }).click();
+  await expect(page.getByRole('button', { name: 'Enable & move to recorded middle', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Increase Elbow', exact: true })).toHaveCount(0);
+  await expect.poll(() => state.status.session.mode).toBe('idle');
+  // Wait for the deliberately stale manual-mode response to arrive.
+  await page.waitForTimeout(650);
+  await expect(page.getByRole('button', { name: 'Increase Elbow', exact: true })).toHaveCount(0);
+  expect(writes(state, '/stop')).toHaveLength(1);
+  expect(state.errors).toEqual([]);
 });
