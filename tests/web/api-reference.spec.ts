@@ -558,7 +558,7 @@ const modelRevision = 'c'.repeat(40);
 const localTrainingRuntimes = [
   { id: 'cpu', label: 'CPU worker', device: 'cpu', training: false, simulation: false },
   { id: 'inference', label: 'Inference-only GPU', device: 'cuda', training: false, simulation: true },
-  { id: 'gpu-3070', label: 'RTX 3070 workstation', device: 'cuda', training: true, simulation: true },
+  { id: 'gpu-4060', label: 'RTX 4060 workstation', device: 'cuda', training: true, simulation: true },
   { id: 'gpu-4090', label: 'RTX 4090 workstation', device: 'cuda', training: true, simulation: true },
 ];
 const trainingRuntimes: Record<string, any>[] = [
@@ -1493,7 +1493,7 @@ test('an explicitly enabled local GPU can be selected without adding provider co
     .getByRole('button', { name: 'Compute', exact: true })
     .click();
   const gpu = page.getByRole('combobox', { name: 'GPU', exact: true });
-  await expectGpuChoices(page, ['L4', 'T4', 'A100', 'A100-80GB', 'RTX 3070 workstation', 'RTX 4090 workstation']);
+  await expectGpuChoices(page, ['L4', 'T4', 'A100', 'A100-80GB', 'RTX 4060 workstation', 'RTX 4090 workstation']);
   await chooseGpu(page, 'gpu-4090', 'RTX 4090 workstation');
   await expect(gpu).toHaveAttribute('value', 'gpu-4090');
   await page.getByRole('button', { name: 'Start fine-tuning', exact: true }).click();

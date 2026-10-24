@@ -23,7 +23,7 @@ def host(tmp_path, monkeypatch):
     monkeypatch.setattr(installer, "_worker_root", lambda: root)
     monkeypatch.setattr(installer.platform, "system", lambda: "Linux")
     monkeypatch.setattr(installer.platform, "machine", lambda: "x86_64")
-    gpu = ("0", "GPU-1234-abcd", "NVIDIA RTX 3070", 8192)
+    gpu = ("0", "GPU-1234-abcd", "NVIDIA RTX 4060", 8192)
     monkeypatch.setattr(installer, "_hardware", lambda env: gpu)
     monkeypatch.setattr(discovery, "_hardware", lambda env: gpu)
     monkeypatch.setattr(installer.shutil, "which", lambda name: sys.executable)

@@ -61,7 +61,7 @@ Save a JSON recipe and replace runtime/source IDs with values from `policy optio
 ```json
 {
   "operation": "policy.workflow",
-  "runtime_id": "rtx3070",
+  "runtime_id": "local-gpu",
   "source_id": "smolvla-libero",
   "candidates": [{"language": "Q4_0"}, {"language": "Q8_0"}],
   "evaluation": {"mode": "engine", "warmups": 3, "repetitions": 10}

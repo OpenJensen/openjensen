@@ -33,9 +33,9 @@ robot communication, GPU training or simulator execution.
 
 The Robot Lab companion records LeRobot v3 datasets without installing Torch or
 the training environment on the USB computer. With the arm on a Mac and the app
-on Xbox, install `robot` on the Mac and keep Core, dataset tools and GPU workers
-on Xbox. The private connection forwards the app's Robot Lab requests to the Mac;
-recordings stay on the Mac until you explicitly import them into an Xbox project.
+on a GPU server, install `robot` on the Mac and keep Core, dataset tools and GPU
+workers on the server. The private connection forwards the app's Robot Lab requests to the Mac;
+recordings stay on the Mac until you explicitly import them into a project.
 
 Use the managed [Mac companion setup](../deploy/macos/README.md) for its service,
 camera permission and private pairing. Installing dependencies does not assign
