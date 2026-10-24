@@ -1,0 +1,72 @@
+{
+  "date": "2026-10-24",
+  "base_commit": "4002d719aca243728ea862026eeb14bec962d6ae",
+  "sources_sha256": {
+    "workers/robot_lab/API.md": "ae5ab1b6542471147254ac2512188f47d632daa82004f033f4b5edddf860fc97",
+    "workers/robot_lab/motion.py": "29f4b90439b580319961021ff6099836474078f7998fb31acdbd48253191b15c",
+    "workers/robot_lab/tests/test_motion.py": "c6e2fb8aeca7a648b6c543f570f1993c2a8bfdadda178da7e07ee55849e79d17",
+    "workers/robot_lab/tests/test_robot_lab.py": "ad52af8a0d459aed3dd092faa7779b25a318fc922fd94d86a1e34a6ff7b3828f"
+  },
+  "scope": "Remove only the recorded-middle wall-clock completion deadline",
+  "verification": {
+    "companion": {
+      "run": 161,
+      "passed": 149,
+      "optional_dataset_skips": 12
+    },
+    "lint": "passed",
+    "regressions": [
+      "Slow serial cycles continue past the old nominal deadline until encoder arrival",
+      "A 600-second delayed tick remains capped to a 100 ms trajectory advance",
+      "Slider deadline remains separate",
+      "Existing Stop, tracking, heartbeat, end-margin and packet checks pass"
+    ],
+    "web_export": "Reuses verified 4002d71 export; apps/web sources unchanged"
+  },
+  "receipts": {
+    "lint-complete": {
+      "pid": 259279,
+      "command": [
+        "/home/aayrapetyan/.local/bin/uvx",
+        "ruff==0.16.9",
+        "check",
+        "workers/robot_lab/hardware.py",
+        "workers/robot_lab/server.py",
+        "workers/robot_lab/tests/test_hardware_transport.py",
+        "workers/robot_lab/tests/test_robot_lab.py",
+        "workers/robot_lab/motion.py",
+        "workers/robot_lab/tests/test_motion.py",
+        "workers/robot_lab/verification.py",
+        "workers/robot_lab/tests/test_mapping_verification.py",
+        "deploy/macos/install_robot_lab.py",
+        "tests/test_robot_lab_installer.py",
+        "workers/robot_lab/calibration_draft.py"
+      ],
+      "started": 1792835492.2334898,
+      "source_sha256": "6ed79a0380aa84c0349ce2e951aac50b50a66d34880b522ec013e7bff972160d",
+      "exit_code": 0,
+      "finished": 1792835492.290602
+    },
+    "companion": {
+      "pid": 259313,
+      "command": [
+        "/home/aayrapetyan/ollamaforvlas/source/openjensen/.venv/bin/python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "workers/robot_lab/tests",
+        "-v"
+      ],
+      "started": 1792835492.325635,
+      "source_sha256": "6ed79a0380aa84c0349ce2e951aac50b50a66d34880b522ec013e7bff972160d",
+      "exit_code": 0,
+      "finished": 1792835504.736339
+    }
+  },
+  "evidence_directory": "/home/aayrapetyan/ollamaforvlas/run/robot-lab-middle-no-deadline-20261024",
+  "cleanup": {
+    "owned_test_processes_gone": true
+  },
+  "physical_acceptance": "No powered movement sent; deploy while idle and preserve current calibration"
+}

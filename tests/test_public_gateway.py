@@ -446,3 +446,29 @@ else:
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "rejected fifo"
+
+
+@pytest.mark.parametrize("method", ["GET", "POST"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v1/robot-lab/status",
+        "/api/v1/robot-lab/camera.jpg",
+        "/api/v1/robot-lab/control/start",
+        "/api/v1/projects/project/robot-lab/datasets/capture/import",
+        "/api/v1/%72obot-lab/status",
+        "/api/v1/robot-lab%2Fstop",
+    ],
+)
+def test_robot_hardware_never_reaches_public_upstream(config, method, path):
+    def forbidden(_request):
+        raise AssertionError("Physical hardware must remain private")
+
+    with TestClient(
+        gateway.PublicGateway(config[0], transport=httpx.MockTransport(forbidden)),
+        base_url=ORIGIN,
+        headers={"Authorization": AUTH, "Origin": ORIGIN},
+    ) as client:
+        response = client.request(method, "/firebird" + path)
+        assert response.status_code == 403
+        assert "private workspace" in response.text

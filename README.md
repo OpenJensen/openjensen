@@ -4,9 +4,19 @@
 
 **Inspect robot data, train policies, and prepare models for native inference.**
 
-OPEN JENSEN brings dataset exploration, training, quantization and simulation into one self-hosted workspace. The web app, CLI and optional terminal client share the same projects, jobs and artifacts. Training and simulation run in separate worker environments, locally or on configured cloud compute.
+OPEN JENSEN brings dataset exploration, training, quantization and simulation into one self-hosted workspace. Interact with it through the **web app**, the **`jensen` command-line interface (CLI)**, or the **optional interactive terminal client (TUI)**. All three connect to the same application API and share projects, jobs and artifacts. Training and simulation run in separate worker environments, locally or on configured cloud compute.
 
 [Get started](#run-locally) · [Workspace guide](docs/workspace-guide.md) · [Requirements and support](docs/support.md) · [Backup and upgrade](docs/upgrading.md)
+
+![Illustration of the three OPEN JENSEN interfaces: a browser workspace, jensen CLI commands, and an interactive terminal with project, job and detail views; all connect to the same projects, jobs and artifacts](docs/images/workspace-interfaces.svg)
+
+| Interface | Open it | Use it for |
+| --- | --- | --- |
+| [Web app](docs/workspace-guide.md) | Start `uv run --frozen jensen serve`, then open `http://127.0.0.1:8000` | Visual dataset exploration, training setup and job monitoring. |
+| [CLI](docs/terminal.md#follow-lifecycle-jobs-from-the-cli) | `uv run --frozen jensen projects list` | Scriptable requests, job events and artifact downloads. |
+| [Interactive terminal (TUI)](docs/terminal.md) | `uv run --frozen --extra tui jensen tui` | Keyboard-driven project and job views, dataset intake and recipe review. |
+
+Keep the application server running for the CLI and TUI. Install the optional terminal dependencies with `uv sync --frozen --all-packages --extra tui`; see the [terminal guide](docs/terminal.md) for connecting either client to another server.
 
 ![OPEN JENSEN dataset explorer showing recorded camera frames and episode data](docs/images/dataset-explorer.png)
 
@@ -105,6 +115,10 @@ docs/              Setup guides and workflow documentation
 New project data lives in `.jensen/` by default. Set `JENSEN_DATA_DIR` to choose a persistent absolute directory, and start one application process for each workspace. Cloud training stores checkpoints in private GCS; a local workspace backup preserves their references and does not copy those remote objects.
 
 The deployment scope is a single-user application on loopback, with an SSH tunnel for remote access. See [security guidance](SECURITY.md) before changing its network exposure.
+
+## Install only the components you use
+
+Core, Robot Lab, Dataset tools, Training and Simulation have separate installation profiles. Run `jensen install list` to see their requirements, `jensen install robot --dry-run` to inspect a plan, and `jensen install robot --check` to check an existing environment. Training and simulation keep their own runtimes; adding USB hardware support does not install a CUDA stack or download models. See [installation profiles](docs/installation-profiles.md) and [SO-101 Robot Lab](docs/so101-robot-lab.md).
 
 ## Development
 

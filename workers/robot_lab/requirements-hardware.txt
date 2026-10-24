@@ -1,0 +1,7 @@
+# Hardware computer only: no Torch, policy weights, simulator or training stack.
+pyserial==3.5
+feetech-servo-sdk==1.0.0
+opencv-python-headless==5.0.0.93
+numpy==2.5.4
+Pillow==13.0.0
+pyarrow==25.0.1

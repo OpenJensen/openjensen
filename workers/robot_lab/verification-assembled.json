@@ -1,0 +1,68 @@
+{
+  "date": "2026-10-23",
+  "baseline_commit": "d68aa3a0309c329a8108590aa7f353fd5127a329",
+  "scope": "Experimental no-unplug SO-101 setup with clickable joint animation and manual encoder mapping",
+  "upstream": {
+    "url": "https://github.com/Enigma-Incorporated/servotools",
+    "commit": "1c65c57587f91085cd32fca3743f3e6f464cfe35",
+    "license": "MIT",
+    "research": "https://www.enigma.inc/posts/sts3215-servo-hacking"
+  },
+  "checks": {
+    "root_targeted_api_schema_installer_gateway_worker_wrapper": {
+      "passed": 121,
+      "seconds": 18.96
+    },
+    "independent_targeted_integration": {
+      "passed": 151
+    },
+    "companion": {
+      "run": 76,
+      "passed": 75,
+      "skipped": 1,
+      "skip_reason": "official LeRobot loader lane is explicit; dataset implementation unchanged"
+    },
+    "web": {
+      "production_export": "passed using webpack",
+      "typescript": "passed after regenerated client",
+      "full_robot_lab_browser_before_final_refinement": 22,
+      "final_targeted_desktop_mobile": 8,
+      "axis_invariants": 4
+    },
+    "quality": "Pinned Ruff 0.16.9 lint and format checks passed across 220 CI files; companion formatted for Python 3.11",
+    "mac_file_directory_fsync": "passed without servo access"
+  },
+  "physical_acceptance": {
+    "performed": false,
+    "not_tested": [
+      "actual duplicate ID separation/reboot timing",
+      "actual manual movement-to-joint mapping",
+      "real motor ID EEPROM persistence after reboot",
+      "real calibration or powered control"
+    ],
+    "limitation": "Fake buses establish packet/state logic, not firmware boot behavior or host timing. The real procedure requires explicit supported-arm acknowledgement and a physically supported arm."
+  },
+  "source_sha256": {
+    "_vendor/servotools/LICENSE": "83c543c69591078889dc0ae847f0b11875457392c6d9df9280b5e1fd9340bf5c",
+    "_vendor/servotools/PROVENANCE.json": "16b94c419db93784324a04bae09f6e2b3376d853d8b322f114254a282b9e8d2b",
+    "_vendor/servotools/__init__.py": "a67718a7bd21dcd2b2611f4f035cd0e0312b9ed560334893fc1a424760d7e46c",
+    "_vendor/servotools/bus.py": "e802f62b2e43d773dc0c3a3ec098fb4c46da3e2f7ff044545241d28e3a89bf5a",
+    "_vendor/servotools/config.py": "a6ba80978c728bfc6d51961207acb66acd8aa6ebae746d5b57a30c7a7d6959cc",
+    "_vendor/servotools/framing.py": "19c81173347f23948bb6ea9c42a5e9c16e23460b7e913ec05225f43b7aaa0dc9",
+    "_vendor/servotools/registers.py": "a1b68e047ecb720441dc90aad827c945fdaf26622f06d864ab4c165a05f472f9",
+    "assembled.py": "88c783e590def6e2529f8c78737c9a742fafe2a24091ada41f864de53443b8ec",
+    "assembled_session.py": "17099fc489f49f5d78a36c16f0277181678eff309e5277e44b2ef7c35635fcf8",
+    "camera.py": "b838bd14b548f416776b7543314d59d4224076bf86f3df1a409de5114248d556",
+    "dataset.py": "7d59516b09fa8dd179aebd63fd455c5257f34a3a2cf8bfb944d816e2a4342994",
+    "dispatch.py": "adc124edc5bb8daa14ffb8bcc7099413076e6bde893f394c738fa88786418f1e",
+    "hardware.py": "005c837f5021152a77a69f9440245a6a0eb922f1d1e4b369e15b59d931d1fe13",
+    "server.py": "394abcab138ac80fd996e13fd7282067772e133f5a22d90ae952d158195adba6"
+  },
+  "application_sha256": {
+    "apps/web/src/components/robot-lab.tsx": "047911c1600a012598bf544b231ba408eb3ac4f11687792f6285c62011c29a1e",
+    "apps/web/src/components/so101-joint-guide.tsx": "23396ad110f15b44bf416a65bcbaffb41e7fbbdddee588eb0d63b0fc51e7d861",
+    "apps/web/src/lib/so101-schematic.ts": "67c2931b618183707fb0c60ec6f01a827bda7c8a07fbcb76bb8cc294ee135b26",
+    "packages/core/src/vla_platform/robot_lab_api.py": "fa3d3fbf44807b816caaec3da74c87c4ca54dedd0904cf58c1a2b7513dac65e7",
+    "deploy/macos/install_robot_lab.py": "99ffda3ee0fc822aaa37b28fd1cc035b3da4a29727b83eab9b2a09a74394291d"
+  }
+}

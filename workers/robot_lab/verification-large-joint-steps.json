@@ -1,0 +1,139 @@
+{
+  "date": "2026-10-24",
+  "base_commit": "29c1d16956d45dda0a255be8d3dda2957e9adbad",
+  "scope": "5 and 10 degree / gripper percent joint steps via bounded trajectories",
+  "sources_sha256": {
+    "apps/web/src/components/robot-lab.tsx": "eb54cefb9e2b69e6d5eb8d354106a6068fa769a5a4e5ea5eb4bdb0b549889e4d",
+    "apps/web/src/lib/robot-api.ts": "9f022b38c855f33d7e48a53aac3d6911ebf9b62f061d199b5a563d46f0c89d71",
+    "tests/web/robot-lab.spec.ts": "af7cc491d7a920bb4a71df229f86c3bea36925d2c2b812e00c74083521de0070",
+    "workers/robot_lab/API.md": "ce26fef75d9a4bdf1b8a4ea35649b3da7cfbe2f8eaab71b14bd8a415e4b17732",
+    "workers/robot_lab/motion.py": "4db927829744babd7f3040107627f0a9d8bcd1dcecd4148e0909bed93fd574be",
+    "workers/robot_lab/server.py": "c70a9f32cf48733dbb65cd6cb9c6931e96ab8a250b8041999b17d4abac99484d",
+    "workers/robot_lab/tests/test_robot_lab.py": "84ba9c51849637add50ff1aa389bf115232ec58fa27bb06bf3dfbd57f591ccb8"
+  },
+  "behavior": [
+    "Step selector adds 5 and 10 only for supporting companions",
+    "Finite nonzero deltas up to 10 accepted; above 2 schedule existing 4-degree/second or 4-percent/second trajectory with 100-ms advance cap",
+    "Repeated large steps advance the pending destination and clip to calibrated limits with eight-tick margin",
+    "Small jogs, tracking guard, request spacing, heartbeat, Stop, partial joint scope and recording actions remain unchanged",
+    "No motor speed, torque, calibration, mapping or arrival tolerance changes"
+  ],
+  "verification": {
+    "companion_run": 176,
+    "companion_passed": 164,
+    "optional_dataset_skips": 12,
+    "api_installer_wrapper_passed": 44,
+    "desktop_mobile_passed": 22,
+    "production_export": "passed",
+    "typescript": "passed",
+    "ruff": "passed",
+    "initial_test_failure": "A relative-step test assumed a zero-degree calibrated initial pose; corrected it to compare the delta from the actual initial angle. Original log retained."
+  },
+  "receipts": {
+    "lint-final": {
+      "pid": 459127,
+      "command": [
+        "/home/aayrapetyan/.local/bin/uvx",
+        "ruff==0.16.9",
+        "check",
+        "workers/robot_lab/hardware.py",
+        "workers/robot_lab/server.py",
+        "workers/robot_lab/tests/test_hardware_transport.py",
+        "workers/robot_lab/tests/test_robot_lab.py",
+        "workers/robot_lab/tests/test_arm_readiness.py",
+        "workers/robot_lab/motion.py",
+        "workers/robot_lab/tests/test_motion.py",
+        "workers/robot_lab/verification.py",
+        "workers/robot_lab/tests/test_mapping_verification.py"
+      ],
+      "started": 1792843615.8106394,
+      "source_sha256": "eb54cefb9e2b69e6d5eb8d354106a6068fa769a5a4e5ea5eb4bdb0b549889e4d",
+      "exit_code": 0,
+      "finished": 1792843615.880606
+    },
+    "companion-final": {
+      "pid": 456913,
+      "command": [
+        "/home/aayrapetyan/ollamaforvlas/source/openjensen/.venv/bin/python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "workers/robot_lab/tests",
+        "-v"
+      ],
+      "started": 1792843489.2248409,
+      "source_sha256": "eb54cefb9e2b69e6d5eb8d354106a6068fa769a5a4e5ea5eb4bdb0b549889e4d",
+      "exit_code": 0,
+      "finished": 1792843500.748566
+    },
+    "api": {
+      "pid": 457044,
+      "command": [
+        "/home/aayrapetyan/ollamaforvlas/source/openjensen/.venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/test_robot_lab_api.py",
+        "tests/test_robot_lab_installer.py",
+        "tests/test_robot_lab_worker.py",
+        "-q"
+      ],
+      "started": 1792843500.7771153,
+      "source_sha256": "eb54cefb9e2b69e6d5eb8d354106a6068fa769a5a4e5ea5eb4bdb0b549889e4d",
+      "exit_code": 0,
+      "finished": 1792843514.5438318
+    },
+    "build": {
+      "pid": 457272,
+      "command": [
+        "node",
+        "/home/aayrapetyan/ollamaforvlas/source/openjensen/apps/web/node_modules/next/dist/bin/next",
+        "build",
+        "--webpack"
+      ],
+      "started": 1792843514.569163,
+      "source_sha256": "eb54cefb9e2b69e6d5eb8d354106a6068fa769a5a4e5ea5eb4bdb0b549889e4d",
+      "exit_code": 0,
+      "finished": 1792843522.328535
+    },
+    "typecheck": {
+      "pid": 457768,
+      "command": [
+        "node",
+        "/home/aayrapetyan/ollamaforvlas/source/openjensen/apps/web/node_modules/typescript/bin/tsc",
+        "--noEmit"
+      ],
+      "started": 1792843522.3527553,
+      "source_sha256": "eb54cefb9e2b69e6d5eb8d354106a6068fa769a5a4e5ea5eb4bdb0b549889e4d",
+      "exit_code": 0,
+      "finished": 1792843522.7320967
+    },
+    "browser-focused": {
+      "pid": 457792,
+      "command": [
+        "node",
+        "node_modules/@playwright/test/cli.js",
+        "test",
+        "tests/web/robot-lab.spec.ts",
+        "--project=desktop",
+        "--project=mobile",
+        "--workers=1",
+        "--reporter=list,json",
+        "--output=/home/aayrapetyan/ollamaforvlas/run/robot-lab-large-steps-20261024/browser-focused-artifacts",
+        "--grep",
+        "large joint steps|manual control is explicit|joint sliders|joint buttons keep|Stop remains available|selected motor control|middle tolerance"
+      ],
+      "started": 1792843522.7558417,
+      "source_sha256": "eb54cefb9e2b69e6d5eb8d354106a6068fa769a5a4e5ea5eb4bdb0b549889e4d",
+      "exit_code": 0,
+      "finished": 1792843553.799398
+    }
+  },
+  "evidence_directory": "/home/aayrapetyan/ollamaforvlas/run/robot-lab-large-steps-20261024",
+  "cleanup": {
+    "owned_process_groups_gone": true,
+    "temporary_listener_18865_closed": true,
+    "failure_logs_retained": true
+  },
+  "physical_acceptance": "No connected-arm motion commands sent for this update; active session left intact pending operator Stop before installation"
+}

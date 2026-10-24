@@ -8019,6 +8019,55 @@
         "summary": "Recording Options"
       }
     },
+    "/api/v1/projects/{project_id}/robot-lab/datasets/{dataset_id}/import": {
+      "post": {
+        "operationId": "import_recording_api_v1_projects__project_id__robot_lab_datasets__dataset_id__import_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "dataset_id",
+            "required": true,
+            "schema": {
+              "title": "Dataset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Recording",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
     "/api/v1/projects/{project_id}/submissions/{key}": {
       "get": {
         "description": "Observe an accepted job without resolving inputs, dispatching or retrying it.",
@@ -8573,6 +8622,593 @@
           }
         },
         "summary": "Training Plan"
+      }
+    },
+    "/api/v1/robot-lab/calibration/cancel": {
+      "post": {
+        "operationId": "robot_lab_post_calibration_cancel",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Calibration Cancel",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/calibration/center": {
+      "post": {
+        "operationId": "robot_lab_post_calibration_center",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Calibration Center",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/calibration/finish": {
+      "post": {
+        "operationId": "robot_lab_post_calibration_finish",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Calibration Finish",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/calibration/start": {
+      "post": {
+        "operationId": "robot_lab_post_calibration_start",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Calibration Start",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/camera.jpg": {
+      "get": {
+        "operationId": "robot_lab_get_camera_jpg",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Get Camera Jpg",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/control/heartbeat": {
+      "post": {
+        "operationId": "robot_lab_post_control_heartbeat",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Control Heartbeat",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/control/jog": {
+      "post": {
+        "operationId": "robot_lab_post_control_jog",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Control Jog",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/control/start": {
+      "post": {
+        "operationId": "robot_lab_post_control_start",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Control Start",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/control/stop": {
+      "post": {
+        "operationId": "robot_lab_post_control_stop",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Control Stop",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/datasets": {
+      "get": {
+        "operationId": "robot_lab_get_datasets",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Get Datasets",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/devices": {
+      "get": {
+        "operationId": "robot_lab_get_devices",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Get Devices",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/mapping/confirm": {
+      "post": {
+        "operationId": "robot_lab_post_mapping_confirm",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Mapping Confirm",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/mapping/wiggle": {
+      "post": {
+        "operationId": "robot_lab_post_mapping_wiggle",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Mapping Wiggle",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/probe": {
+      "post": {
+        "operationId": "robot_lab_post_probe",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Probe",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/recording/episode/discard": {
+      "post": {
+        "operationId": "robot_lab_post_recording_episode_discard",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Recording Episode Discard",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/recording/episode/save": {
+      "post": {
+        "operationId": "robot_lab_post_recording_episode_save",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Recording Episode Save",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/recording/episode/start": {
+      "post": {
+        "operationId": "robot_lab_post_recording_episode_start",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Recording Episode Start",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/recording/finish": {
+      "post": {
+        "operationId": "robot_lab_post_recording_finish",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "allOf": [
+                  {
+                    "if": {
+                      "properties": {
+                        "abandon_empty": {
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "abandon_empty"
+                      ]
+                    },
+                    "then": {
+                      "properties": {
+                        "confirm": {
+                          "const": "ABANDON EMPTY RECORDING"
+                        }
+                      },
+                      "required": [
+                        "confirm"
+                      ]
+                    }
+                  }
+                ],
+                "properties": {
+                  "abandon_empty": {
+                    "default": false,
+                    "title": "Abandon Empty",
+                    "type": "boolean"
+                  },
+                  "confirm": {
+                    "anyOf": [
+                      {
+                        "const": "ABANDON EMPTY RECORDING",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Confirm"
+                  }
+                },
+                "title": "RecordingFinishRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Recording Finish",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/recording/start": {
+      "post": {
+        "operationId": "robot_lab_post_recording_start",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Recording Start",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/setup/assembled/accept": {
+      "post": {
+        "operationId": "robot_lab_post_setup_assembled_accept",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Setup Assembled Accept",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/setup/assembled/cancel": {
+      "post": {
+        "operationId": "robot_lab_post_setup_assembled_cancel",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Setup Assembled Cancel",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/setup/assembled/finish": {
+      "post": {
+        "operationId": "robot_lab_post_setup_assembled_finish",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Setup Assembled Finish",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/setup/assembled/observe": {
+      "post": {
+        "operationId": "robot_lab_post_setup_assembled_observe",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Setup Assembled Observe",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/setup/assembled/start": {
+      "post": {
+        "operationId": "robot_lab_post_setup_assembled_start",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Setup Assembled Start",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/setup/assembled/wiggle": {
+      "post": {
+        "operationId": "robot_lab_post_setup_assembled_wiggle",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Setup Assembled Wiggle",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/setup/motor": {
+      "post": {
+        "operationId": "robot_lab_post_setup_motor",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Setup Motor",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/status": {
+      "get": {
+        "operationId": "status_api_v1_robot_lab_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Status",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/stop": {
+      "post": {
+        "operationId": "robot_lab_post_stop",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Stop",
+        "tags": [
+          "Robot Lab"
+        ]
       }
     },
     "/api/v1/simulation-options": {

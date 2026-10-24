@@ -1,0 +1,53 @@
+{
+  "date": "2026-10-24",
+  "scope": "Current USB inventory gates motor startup; bounded invalid-read recovery; canonical-only saved mapping preflight",
+  "base_commit": "24a885ca7a3c1845784559157ca579178b96a0b1",
+  "source_sha256": {
+    "apps/web/src/components/robot-lab.tsx": "dac5fa166a702a9cca6eceb68169c439fe2c4d8b1924b782aa118d79d38a4c4b",
+    "tests/web/robot-lab.spec.ts": "c06db2ff5aa426ad0621b61f8dbf1047ae1657efd9b9de15ddbebccad3993388",
+    "workers/robot_lab/API.md": "6436adb8bc2be0698a4c74ca39040d3e75fd6085c28db425eff4c6e96429d70e",
+    "workers/robot_lab/hardware.py": "aecfa3f5bd887887a4a2721a870d694473a7e208f1c02edf7f08e1bc007a18de",
+    "workers/robot_lab/tests/test_hardware_transport.py": "0235f91f72604a0b7757e2e6f328ff1744986e1b297adcc13e8c23a36dce073a",
+    "workers/robot_lab/tests/test_mapping_verification.py": "40ea84ac025653a9f911d0c18c9117dc0312011803a08055c9211c80f0d91cad",
+    "workers/robot_lab/verification.py": "8d23d5f154a556b6a6d58a9c58115d565d6345fae88a870a13e2e3ac78c75be6"
+  },
+  "verification": {
+    "production_export": "passed",
+    "typescript": "passed",
+    "ruff": "passed for changed Python sources",
+    "companion": {
+      "run": 113,
+      "passed": 101,
+      "skipped": 12,
+      "skip_reason": "Optional dataset dependencies unavailable in Xbox test environment"
+    },
+    "api_installer_wrapper": {
+      "passed": 42
+    },
+    "browser": {
+      "passed": 42,
+      "platforms": [
+        "desktop",
+        "mobile"
+      ]
+    },
+    "latency_regression": "Saved wiggle preflight verifies only IDs 1-6 and starts before 5 simulated seconds at 25ms per exchange; wrong models, missing IDs or existing torque block motion."
+  },
+  "hardware_acceptance": "USB controller and external camera reappeared. Read-only probe found all six IDs stable (3/3). Observed operator-triggered calibration packet error and saved-wiggle scan timeout on prior release. Updated motion/calibration acceptance remains pending; agent sent no motor writes.",
+  "evidence_directory": "/home/aayrapetyan/ollamaforvlas/run/robot-lab-usb-recovery-20261024",
+  "cleanup": {
+    "owned_pids": [
+      47386,
+      52152,
+      52275,
+      48211,
+      48188,
+      47710,
+      47527,
+      47352,
+      52118
+    ],
+    "remaining": [],
+    "test_listener_closed": true
+  }
+}

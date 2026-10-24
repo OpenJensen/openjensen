@@ -14,11 +14,12 @@ export const workspaceRoutes = [
   { name: 'Decision lab', icon: 'chart', path: '/decision-lab/' },
   { name: 'My models', icon: 'layers', path: '/models/' },
   { name: 'Dashboard', icon: 'layers', path: '/dashboard/' },
+  { name: 'Robot Lab', icon: 'robot', path: '/robot-lab/' },
 ] as const;
 
 export const navigationGroups = [
   { name: 'Overview', items: [12] },
-  { name: 'Data', items: [0, 8, 9] },
+  { name: 'Data', items: [0, 8, 9, 13] },
   { name: 'Train', items: [1, 2, 3] },
   { name: 'Test', items: [4, 5, 10] },
   { name: 'Workspace', items: [11, 7, 6] },

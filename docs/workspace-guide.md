@@ -28,7 +28,7 @@ Start the configured executor, open Teaching, wait for a camera frame, set an in
 
 ## Fine-tune
 
-Choose data, cameras, model, method and compute. Review the recipe and start training. Open the saved run to follow progress, download a checkpoint, resume, or export it. [Worker setup](native-training.md) · [Recipes and commands](policy-workflow.md)
+Choose a recent dataset or use **Browse all datasets** to search saved datasets in this project and select up to eight compatible datasets without leaving the training form. Apply the selection, then choose cameras, model, method and compute. Review the recipe and start training. Open the saved run to follow progress, download a checkpoint, resume, or export it. [Worker setup](native-training.md) · [Recipes and commands](policy-workflow.md)
 
 ## Distill
 
@@ -57,3 +57,16 @@ Open an application job to follow its status and events. For an external rollout
 ## Settings & diagnostics
 
 Use **Compute** to connect Google Cloud, save Hugging Face access, or add a local worker. For local training, select **Check this machine → Add worker**, enable local runs, and save. Use **Workflow settings** to edit recipes and **Diagnostics** to launch project checks. [Local setup](compute-settings.md#local-worker-setup) · [Cloud connection](cloud-connections.md) · [Diagnostics](policy-workflow.md)
+
+
+## Robot Lab
+
+Open **Robot Lab** to connect the computer beside your SO-101, preview its camera, and move through **Connect → Motor IDs → Calibrate → Teleoperate → Record**. The local hardware companion keeps USB access on that computer while the private OpenJensen workspace manages the workflow.
+
+Select a numbered joint in the SO-101 CAD view. Use **Preview motion** or the angle slider to inspect the joint; selection stays static. The view does not move the real arm or display live joint positions. Experimental assembled-arm setup keeps the cables connected: support the arm, explicitly start automatic address separation, then move and confirm each highlighted joint. Review and save all six IDs before calibration. This uses a measured reboot-timing workaround and can stop if the servo firmware or adapter is incompatible. The standard isolated-motor method remains an advanced option. During calibration, keep the full chain connected, support the arm, capture its middle pose, then gently move each joint through its usable range and save the measured limits.
+
+Enable movement explicitly after calibration. Manual controls use small bounded steps; a leader arm can drive the follower when both profiles are calibrated. Keep the **Stop** button reachable. A lost control heartbeat stops the session. The camera preview shares the recording camera instead of opening a competing connection.
+
+To create a dataset, enter a name and task, select the camera and frame rate, then start an episode. Save or discard each take, finish the dataset, and add it to the selected project. Captures stay local until you choose to add them; they are not automatically uploaded to Hugging Face. If no episode has been saved, **Close unsaved recording** retains pending files and allows a new recording with a different frame rate. A factory arm still needs unique motor IDs before joint control and recording are ready.
+
+Robot Lab hardware APIs and room-camera previews are available only in the private workspace, not through the public gateway. Setup and installation details are in [the SO-101 guide](so101-robot-lab.md).

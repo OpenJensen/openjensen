@@ -7,3 +7,16 @@ Third-party source, datasets, robot assets, model weights and runtime dependenci
 retain their original licenses and attribution. Consult their accompanying
 LICENSE, NOTICE, source-provenance records and provider terms. The application
 license does not grant additional rights to those materials.
+
+The assembled-arm motor-ID workflow includes MIT-licensed code adapted from
+Enigma-Incorporated/servotools, commit
+1c65c57587f91085cd32fca3743f3e6f464cfe35.
+The vendored source retains its accompanying license and provenance record.
+https://github.com/Enigma-Incorporated/servotools
+
+The Robot Lab CAD view bundles unmodified SO-101 URDF and STL assets from
+TheRobotStudio/SO-ARM100, commit
+5f6d2b876a53a4872e405b991dd925556c9e38a4, under Apache-2.0.
+Their license, source URLs and hashes are retained in
+apps/web/public/robots/so101/LICENSE and manifest.json.
+https://github.com/TheRobotStudio/SO-ARM100

@@ -1,4 +1,4 @@
-"""CLI client. Only `serve` owns the application; all other commands use its API."""
+"""CLI: serve owns the app, install manages local components; other commands use the API."""
 
 import asyncio
 import json
@@ -13,6 +13,7 @@ import typer
 
 from vla_platform import cli_client
 from vla_platform.environment import getenv
+from vla_platform.install_cli import install
 from vla_platform.tui_client import ApiError, segment
 
 app = typer.Typer(
@@ -26,6 +27,7 @@ app.add_typer(augmentation, name="augmentation")
 app.add_typer(policy, name="policy")
 app.add_typer(projects, name="projects")
 app.add_typer(jobs, name="jobs")
+app.command("install")(install)
 
 
 def execute(operation, *, mutation: bool = False):

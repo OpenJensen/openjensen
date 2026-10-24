@@ -101,8 +101,9 @@ test('the contextual guide covers every section and keeps API docs separate', as
   await expect(page).toHaveURL(/\/guide\/#distill$/);
   await expect(page.getByRole('heading', { name: 'Workspace guide', exact: true })).toBeVisible();
   const sections = page.locator('.guide-sections > section');
-  await expect(sections).toHaveCount(13);
-  for (const name of ['Dashboard', 'My models', 'Dataset', 'Augmentation', 'Teaching', 'Fine-tune', 'Distill', 'Quantize', 'Evaluate', 'Run', 'Decision lab', 'Cloud runs', 'Settings & diagnostics']) {
+  const expectedSections = ['Dashboard', 'My models', 'Dataset', 'Augmentation', 'Teaching', 'Robot Lab', 'Fine-tune', 'Distill', 'Quantize', 'Evaluate', 'Run', 'Decision lab', 'Cloud runs', 'Settings & diagnostics'];
+  await expect(sections).toHaveCount(expectedSections.length);
+  for (const name of expectedSections) {
     await expect(sections.getByRole('heading', { name, exact: true })).toBeVisible();
   }
   await expect(page.locator('#distill')).toContainText('ACT256');
@@ -111,6 +112,9 @@ test('the contextual guide covers every section and keeps API docs separate', as
   await expect(page.locator('#distill')).toContainText('ACT256');
   await page.setViewportSize({ width: 320, height: 900 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+  await page.getByRole('navigation', { name: 'Guide sections' }).getByRole('link', { name: 'Robot Lab', exact: true }).click();
+  await expect(page).toHaveURL(/#robot-lab$/);
+  await expect(page.locator('#robot-lab')).toContainText('SO-101');
   await page.getByRole('navigation', { name: 'Guide sections' }).getByRole('link', { name: 'Augmentation', exact: true }).click();
   await expect(page).toHaveURL(/#augmentation$/);
   await page.getByRole('link', { name: 'API reference', exact: true }).filter({ visible: true }).click();

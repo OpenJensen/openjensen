@@ -1,0 +1,39 @@
+{
+  "date": "2026-10-23",
+  "scope": "Robot Lab, Mac USB companion and separate installation profiles",
+  "core_checks": {
+    "command": "pytest tests/test_api_reference.py tests/test_robot_lab_api.py tests/test_robot_lab_installer.py tests/test_install_profiles.py tests/test_public_gateway.py tests/test_robot_lab_worker.py",
+    "passed": 120,
+    "seconds": 15.91,
+    "followup": "After extending recording save/finalize deadlines, all 20 proxy/import tests passed again."
+  },
+  "web_checks": {
+    "typecheck": "passed, including regenerated API client",
+    "build": "next build --webpack passed; 19 static routes",
+    "browser": {
+      "passed": 19,
+      "skipped": 1,
+      "skip_reason": "mobile modifier-click does not apply"
+    }
+  },
+  "companion_checks": "workers/robot_lab/verification.json records final module hashes, 31 passing tests, one explicit optional-loader skip and six separate official LeRobot 0.4.4 dataset-loader checks.",
+  "real_devices": {
+    "host": "Mac",
+    "serial": "USB Single Serial detected",
+    "camera": "External USB Camera frames captured locally and through Xbox private bridge",
+    "service": "Five module hashes verified; companion idle, torque disabled, recording inactive"
+  },
+  "physical_acceptance_remaining": [
+    "Isolated factory motor ID assignment",
+    "Physical arm calibration",
+    "Powered physical movement and leader teleoperation",
+    "Real arm demonstration recording"
+  ],
+  "preservation": "Stopped-workspace backup verified before deployment; prior release retained. Candidate uses an independent copy of saved workspace data.",
+  "hosted_checks": "Inspect the pull request current-head results separately; these records describe local checks.",
+  "ci_alignment": {
+    "formatter": "Ruff 0.16.9 full CI lint and format checks passed across 220 files",
+    "followup_core_tests": "68 proxy/profile/API reference checks passed after formatting",
+    "guide_tests": "Desktop and mobile contextual guide checks passed; guide inventory includes Robot Lab"
+  }
+}

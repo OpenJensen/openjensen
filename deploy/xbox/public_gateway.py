@@ -10,7 +10,7 @@ import stat
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 import anyio
 import httpx
@@ -319,6 +319,16 @@ class PublicGateway:
 
     async def handle(self, request: Request):
         path = request.scope["path"][len(self.prefix) :] or "/"
+        # Physical hardware and room-camera access are private to the owner's
+        # loopback/SSH workspace, including when this gateway is authenticated.
+        decoded = path
+        for _ in range(8):
+            expanded = unquote(decoded)
+            if expanded == decoded:
+                break
+            decoded = expanded
+        if "robot-lab" in decoded.split("/"):
+            return self.error(request.scope, 403, "Robot Lab is available in the private workspace")
         if request.scope["path"] == self.prefix:
             response = RedirectResponse(self.prefix + "/", status_code=307)
         elif path == "/api" or path.startswith("/api/") or path == "/openapi.json":

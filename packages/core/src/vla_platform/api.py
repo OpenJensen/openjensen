@@ -51,6 +51,8 @@ from vla_platform.lifecycle.model_names import ModelRunName
 from vla_platform.lifecycle.training_catalog import public_training_models
 from vla_platform.projects import Projects
 from vla_platform.recordings_api import router as recordings_router
+from vla_platform.robot_lab_api import router as robot_lab_router
+from vla_platform.robot_lab_bridge import RobotLabBridge
 from vla_platform.settings import Settings
 from vla_platform.storage import Storage
 from vla_platform.submissions import (
@@ -124,6 +126,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.projects, app.state.execution = Projects(storage), execution
             app.state.explorer = explorer
             app.state.dataset_library = DatasetLibrary(settings.data_dir)
+            app.state.robot_lab = RobotLabBridge(settings.data_dir)
             app.state.cloud_connections = CloudConnections(settings.data_dir)
             app.state.huggingface_connection = HuggingFaceConnection(settings.data_dir)
             yield
@@ -131,6 +134,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             try:
                 if initialized:
                     try:
+                        if hasattr(app.state, "robot_lab"):
+                            await app.state.robot_lab.close()
                         if hasattr(app.state, "dataset_library"):
                             await app.state.dataset_library.close()
                         if hasattr(execution.lifecycle, "local_worker_setup"):
@@ -176,6 +181,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(decision_router)
     app.include_router(recordings_router)
     app.include_router(dataset_library_router)
+    app.include_router(robot_lab_router)
 
     @app.exception_handler(LibraryError)
     async def dataset_library_error(_request: Request, exc: LibraryError):

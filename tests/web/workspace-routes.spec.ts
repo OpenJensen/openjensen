@@ -6,7 +6,7 @@ const destinations = [
   ['distillation', 'Distill'], ['quantization', 'Quantize'], ['evaluation', 'Evaluate'],
   ['simulation', 'Run'], ['settings', 'Settings & diagnostics'], ['cloud-runs', 'Cloud runs'],
   ['augmentation', 'Augmentation'], ['teaching', 'Teaching'], ['decision-lab', 'Decision lab'],
-  ['models', 'My models'],
+  ['models', 'My models'], ['robot-lab', 'Robot Lab'],
 ] as const;
 
 async function fixture(page: Page) {

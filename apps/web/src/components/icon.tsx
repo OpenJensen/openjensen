@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 
-export function Icon({ name, size = 20 }: { name: 'search' | 'arrow' | 'plus' | 'database' | 'folder' | 'check' | 'clock' | 'spark' | 'external' | 'sliders' | 'layers' | 'compress' | 'chart' | 'play' | 'book' | 'help'; size?: number }) {
+export function Icon({ name, size = 20 }: { name: 'search' | 'arrow' | 'plus' | 'database' | 'folder' | 'check' | 'clock' | 'spark' | 'external' | 'sliders' | 'layers' | 'compress' | 'chart' | 'play' | 'book' | 'help' | 'robot'; size?: number }) {
   const paths: Record<typeof name, ReactNode> = {
+    robot: <><path d="M4 21h16M7 21v-3l4-3M11 15l-4-5 4-6 5 3-3 6 4 3v5" /><circle cx="11" cy="15" r="2" /><circle cx="7" cy="10" r="2" /><path d="m16 7 3-2 2 3-3 2" /></>,
     search: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" /></>,
     arrow: <><path d="M5 12h14M13 6l6 6-6 6" /></>,
     plus: <><path d="M12 5v14M5 12h14" /></>,

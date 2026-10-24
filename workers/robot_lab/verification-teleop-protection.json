@@ -1,0 +1,34 @@
+{
+  "date": "2026-10-24",
+  "base_commit": "fb92e50cd3cafb2fe8c44324011b79623504e409",
+  "scope": "Recover lost gripper-protection write acknowledgements by exact read-back without replay; verify all three protection settings before enabling any motor",
+  "source_sha256": {
+    "workers/robot_lab/hardware.py": "acc392c15a11008029c40e8ad224b2b56ff03e4ccbb9967afc2721c3c69f7e57",
+    "workers/robot_lab/server.py": "9cfd87e1f4861f0e6ddee3e4415b51503566788c0971bdf7b33f020e310100b8",
+    "workers/robot_lab/tests/test_hardware_transport.py": "78811b2859d21e9e01fdf6ad77febffedac3b073186ba98d7a6380e080251cac",
+    "workers/robot_lab/tests/test_robot_lab.py": "50c11dd792585f71985955d08c30500bf9011e72876d9606b7ac337d6282bf82"
+  },
+  "verification": {
+    "ruff": "passed",
+    "companion": {
+      "run": 120,
+      "passed": 108,
+      "skipped": 12,
+      "skip_reason": "Optional dataset dependencies absent in Xbox test environment"
+    },
+    "api_installer_wrapper": {
+      "passed": 42
+    },
+    "web": "No web sources changed; reuse production export and browser evidence from fb92e50"
+  },
+  "hardware_acceptance": "Startup previously failed on gripper Max_Torque_Limit acknowledgement before enabling motors. Updated runtime not yet installed; physical teleoperation acceptance pending.",
+  "evidence_directory": "/home/aayrapetyan/ollamaforvlas/run/robot-lab-teleop-protection-20261024",
+  "cleanup": {
+    "owned_pids": [
+      117313,
+      117384,
+      117526
+    ],
+    "remaining": []
+  }
+}
