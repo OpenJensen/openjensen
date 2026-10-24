@@ -39,15 +39,8 @@ from hardware import (
     normalized,
     probe_bus,
 )
-from motion import (
-    JointMotion,
-    MiddleMotion,
-    check_tracking,
-    control_limits,
-    jog_target,
-    middle_targets,
-    step_target,
-)
+from lerobot_control import PROFILE, LeRobotPositionControl
+from motion import MiddleMotion, control_limits, middle_targets, step_target
 from verification import (
     MappingChecks,
     MappingVerification,
@@ -208,7 +201,7 @@ class RobotLab:
         self.commanded_raw = {}
         self.middle_motion = None
         self.middle_tolerance = 2
-        self.joint_motions = {}
+        self.controller = None
         self.calibration = {}
         self.leader_calibration = {}
         self.original_calibration = None
@@ -338,7 +331,6 @@ class RobotLab:
             assembled = json.loads(json.dumps(self.assembled_state))
             copy_verification = json.loads(json.dumps(self.verification_state))
             middle_motion = self.middle_motion
-            joint_motions = dict(self.joint_motions)
         try:
             assembled["calibration_required"] = self.calibration_revisions.required(
                 assembled["port"]
@@ -352,6 +344,7 @@ class RobotLab:
             "platform": platform.system(),
             "backend": "feetech-sdk",
             "dataset_format": "lerobot-v3",
+            "controller": dict(PROFILE),
             "dependencies": deps,
             "capabilities": {
                 "probe": hardware,
@@ -363,6 +356,7 @@ class RobotLab:
                 "calibration": hardware,
                 "calibration_persistence": hardware,
                 "control": hardware,
+                "lerobot_position_control": hardware,
                 "move_to_middle": hardware,
                 "middle_tolerance": hardware,
                 "partial_control": hardware,
@@ -382,14 +376,8 @@ class RobotLab:
                 else [],
                 "targets": dict(self.action) if self.mode in {"manual", "leader"} else {},
                 "joint_limits": control_limits(self.calibration) if self.mode == "manual" else {},
-                "slider_targets": {
-                    j: normalized(j, joint_motions[j].targets[j], self.calibration)
-                    if j in joint_motions
-                    else self.action[j]
-                    for j in self.calibration
-                }
-                if self.mode == "manual"
-                else {},
+                "slider_targets": dict(self.action) if self.mode == "manual" else {},
+                "torque_limits": dict(self.controller.torque_limits) if self.controller else {},
                 "torque_enabled": self.torque,
                 "centering": {
                     "active": middle_motion is not None,
@@ -1035,7 +1023,8 @@ class RobotLab:
             if to_middle:
                 middle_targets(calibration)
             generation = self.generation
-            leader, bus = None, self.bus_factory(port)
+            control_generation = [generation]
+            leader, control, bus = None, None, self.bus_factory(port)
             bus.joints = joints
             with self.stop_lock, self.lifecycle_lock:
                 if generation != self.generation:
@@ -1089,29 +1078,10 @@ class RobotLab:
                             validate_raw(leader.positions(), leader_calibration)
                         self.leader_calibration = leader_calibration
                     if mode != "handguide":
-                        for joint in joints:
-                            motor_id = IDS[joint]
-                            if generation != self.generation:
-                                raise RequestError("Session cancelled by Stop")
-                            bus.write("Lock", motor_id, 0)
-                            bus.write("Operating_Mode", motor_id, 0)
-                            bus.write("Acceleration", motor_id, 10)
-                            bus.write("Goal_Velocity", motor_id, 100)
-                            bus.write("P_Coefficient", motor_id, 16)
-                            bus.write("I_Coefficient", motor_id, 0)
-                            bus.write("D_Coefficient", motor_id, 32)
-                            if joint == "gripper":
-                                for register, value in (
-                                    ("Max_Torque_Limit", 500),
-                                    ("Protection_Current", 250),
-                                    ("Overload_Torque", 25),
-                                ):
-                                    bus.write(register, motor_id, value)
-                                    if bus.read(register, motor_id) != value:
-                                        raise HardwareError(
-                                            f"Motor {motor_id} {register} read-back did not "
-                                            "match; motion remains disabled"
-                                        )
+                        control = LeRobotPositionControl(
+                            bus, calibration, lambda: control_generation[0] == self.generation
+                        )
+                        control.configure()
                         # Sample again after configuration, immediately before holding.
                         raw = validate_raw(bus.positions(), calibration)
                         for joint in joints:
@@ -1121,6 +1091,7 @@ class RobotLab:
                             bus.write("Goal_Position", motor_id, raw[joint])
                             if bus.read("Goal_Position", motor_id) != raw[joint]:
                                 raise HardwareError(f"{joint} hold target read-back did not match")
+                        control.hold(raw)
                         for joint in joints:
                             motor_id = IDS[joint]
                             if generation != self.generation:
@@ -1148,6 +1119,7 @@ class RobotLab:
                 self.pending_bus = None
                 self.bus, self.leader, self.calibration = bus, leader, calibration
                 self.generation += 1
+                control_generation[0] = self.generation
                 self.mode, self.port, self.robot_id, self.role = mode, port, robot_id, "follower"
                 positions = {j: normalized(j, value, calibration) for j, value in raw.items()}
                 self.positions, self.action = positions, dict(positions)
@@ -1156,7 +1128,7 @@ class RobotLab:
                 self.middle_motion = (
                     MiddleMotion(raw, calibration, tolerance) if to_middle else None
                 )
-                self.joint_motions = {}
+                self.controller = control
                 self.torque = mode != "handguide"
                 self.error = None
                 self.heartbeat = time.monotonic()
@@ -1199,43 +1171,22 @@ class RobotLab:
             with bus.lock:
                 if generation != self.generation:
                     raise RequestError("Session has stopped")
-                raw = validate_raw(bus.positions(), self.calibration)
-                check_tracking(raw, self.commanded_raw, self.calibration)
+                validate_raw(bus.positions(), self.calibration)
                 if generation != self.generation:
                     raise RequestError("Session has stopped")
-                if absolute or abs(value) > 2:
-                    if absolute:
-                        target = denormalized(joint, value, self.calibration)
-                    else:
-                        # Advance the requested final target so repeated large
-                        # steps do not reset to a lagging encoder or intermediate
-                        # command. The trajectory still bounds every motor write.
-                        previous = self.joint_motions.get(joint)
-                        base = previous.targets[joint] if previous else self.commanded_raw[joint]
-                        target = step_target(joint, value, {joint: base}, self.calibration)
-                    entry = self.calibration[joint]
-                    target = max(entry["range_min"] + 8, min(entry["range_max"] - 8, target))
-                    with self.lifecycle_lock:
-                        if generation != self.generation:
-                            raise RequestError("Session has stopped")
-                        self.joint_motions[joint] = JointMotion(
-                            joint,
-                            self.commanded_raw[joint],
-                            target,
-                            self.calibration,
-                            label=None
-                            if absolute
-                            else f"{joint.replace('_', ' ').capitalize()} step movement",
-                        )
-                        if not absolute:
-                            self.last_jog = time.monotonic()
-                else:
-                    target = jog_target(joint, value, raw, self.commanded_raw, self.calibration)
-                    self.joint_motions.pop(joint, None)
-                    bus.write("Goal_Position", IDS[joint], target)
-                    self.action[joint] = normalized(joint, target, self.calibration)
-                    self.commanded_raw[joint] = target
-                    self.last_jog = time.monotonic()
+                target = (
+                    denormalized(joint, value, self.calibration)
+                    if absolute
+                    else step_target(joint, value, self.commanded_raw, self.calibration)
+                )
+                if self.controller is None:
+                    raise HardwareError("LeRobot position controller is unavailable")
+                sent = self.controller.command_raw({joint: target})
+                if generation != self.generation:
+                    raise RequestError("Session has stopped")
+                self.commanded_raw.update(sent)
+                self.action[joint] = normalized(joint, sent[joint], self.calibration)
+                self.last_jog = time.monotonic()
         return self.status()
 
     def stop(self, reason=None):
@@ -1263,7 +1214,7 @@ class RobotLab:
             self.torque = False
             self.mode = "idle"
             self.middle_motion = None
-            self.joint_motions = {}
+            self.controller = None
             if reason:
                 self.error = reason
             if self.writer:
@@ -1432,61 +1383,51 @@ class RobotLab:
                 joint: normalized(joint, value, self.calibration) for joint, value in raw.items()
             }
             self.positions = positions
+            control = self.controller
+            if generation != self.generation:
+                return
             if mode == "manual":
-                check_tracking(raw, self.commanded_raw, self.calibration)
+                if control is None:
+                    raise HardwareError("LeRobot position controller is unavailable")
                 motion = self.middle_motion
                 if motion is not None:
-                    targets = motion.advance()
-                    for joint, target in targets.items():
-                        if generation != self.generation:
-                            return
-                        if target != self.commanded_raw[joint]:
-                            bus.write("Goal_Position", IDS[joint], target)
-                            if generation != self.generation:
-                                return
-                            self.commanded_raw[joint] = target
-                            self.action[joint] = normalized(joint, target, self.calibration)
                     if motion.arrived(raw):
-                        # Arrival tolerance unlocks controls without changing the
-                        # stable hold target or the independent tracking checks.
                         with self.lifecycle_lock:
                             if generation == self.generation:
                                 self.middle_motion = None
-                for joint, motion in list(self.joint_motions.items()):
-                    if generation != self.generation:
-                        return
-                    target = motion.advance()[joint]
-                    check_tracking(raw, {joint: target}, self.calibration)
-                    if generation != self.generation:
-                        return
-                    if target != self.commanded_raw[joint]:
-                        bus.write("Goal_Position", IDS[joint], target)
+                    elif not motion.sent:
+                        sent = control.command_raw(motion.targets)
                         if generation != self.generation:
                             return
-                        self.commanded_raw[joint] = target
-                        self.action[joint] = normalized(joint, target, self.calibration)
-                    if motion.progress == 1:
-                        with self.lifecycle_lock:
-                            if (
-                                generation == self.generation
-                                and self.joint_motions.get(joint) is motion
-                            ):
-                                self.joint_motions.pop(joint)
+                        self.commanded_raw.update(sent)
+                        self.action.update(
+                            {j: normalized(j, value, self.calibration) for j, value in sent.items()}
+                        )
+                        motion.sent = True
+                if generation != self.generation:
+                    return
+                # LeRobot teleoperation sends complete position goals repeatedly.
+                # A joint may legitimately lag a full target while lifting; never
+                # reinterpret that error as breakage or reduce its requested goal.
+                control.repeat()
             if mode == "leader" and leader is not None:
+                if control is None:
+                    raise HardwareError("LeRobot position controller is unavailable")
                 with leader.lock:
                     leader_raw = validate_raw(leader.positions(), self.leader_calibration)
-                for joint in JOINTS:
-                    desired = normalized(joint, leader_raw[joint], self.leader_calibration)
-                    target = positions[joint] + max(-2.0, min(2.0, desired - positions[joint]))
-                    target_raw = denormalized(joint, target, self.calibration)
-                    entry = self.calibration[joint]
-                    target_raw = max(
-                        entry["range_min"] + 8, min(entry["range_max"] - 8, target_raw)
-                    )
-                    if generation != self.generation:
-                        return
-                    bus.write("Goal_Position", IDS[joint], target_raw)
-                    self.action[joint] = normalized(joint, target_raw, self.calibration)
+                desired = {
+                    joint: normalized(joint, leader_raw[joint], self.leader_calibration)
+                    for joint in JOINTS
+                }
+                if generation != self.generation:
+                    return
+                sent = control.command(desired)
+                if generation != self.generation:
+                    return
+                self.commanded_raw.update(sent)
+                self.action = {
+                    j: normalized(j, value, self.calibration) for j, value in sent.items()
+                }
             elif mode == "handguide":
                 self.action = dict(positions)
         writer = self.writer
