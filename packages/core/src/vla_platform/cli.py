@@ -15,6 +15,7 @@ from vla_platform import cli_client
 from vla_platform.environment import getenv
 from vla_platform.install_cli import install
 from vla_platform.tui_client import ApiError, segment
+from vla_platform.update_cli import configure_updates
 
 app = typer.Typer(
     no_args_is_help=True, help="Local robotics projects, lifecycle jobs and artifacts."
@@ -28,6 +29,7 @@ app.add_typer(policy, name="policy")
 app.add_typer(projects, name="projects")
 app.add_typer(jobs, name="jobs")
 app.command("install")(install)
+app.command("configure-updates")(configure_updates)
 
 
 def execute(operation, *, mutation: bool = False):

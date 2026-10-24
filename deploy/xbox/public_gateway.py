@@ -327,6 +327,10 @@ class PublicGateway:
             if expanded == decoded:
                 break
             decoded = expanded
+        if "updates" in decoded.split("/"):
+            return self.error(
+                request.scope, 403, "Server updates are available in the private workspace"
+            )
         if "robot-lab" in decoded.split("/"):
             return self.error(request.scope, 403, "Robot Lab is available in the private workspace")
         if request.scope["path"] == self.prefix:

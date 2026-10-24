@@ -118,6 +118,36 @@
         "title": "AdviceResult",
         "type": "object"
       },
+      "ApplicationVersion": {
+        "properties": {
+          "commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commit"
+          },
+          "host": {
+            "title": "Host",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "commit",
+          "host"
+        ],
+        "title": "ApplicationVersion",
+        "type": "object"
+      },
       "AugmentationClip": {
         "additionalProperties": false,
         "properties": {
@@ -5519,6 +5549,151 @@
         "title": "TrainingTelemetry",
         "type": "object"
       },
+      "UpdateOperation": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "phase": {
+            "title": "Phase",
+            "type": "string"
+          },
+          "target_commit": {
+            "title": "Target Commit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "phase",
+          "target_commit",
+          "message"
+        ],
+        "title": "UpdateOperation",
+        "type": "object"
+      },
+      "UpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmation": {
+            "const": "update-and-restart",
+            "title": "Confirmation",
+            "type": "string"
+          },
+          "target_commit": {
+            "pattern": "^[0-9a-f]{40}$",
+            "title": "Target Commit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_commit",
+          "confirmation"
+        ],
+        "title": "UpdateRequest",
+        "type": "object"
+      },
+      "UpdateStatus": {
+        "properties": {
+          "automatic_update": {
+            "title": "Automatic Update",
+            "type": "boolean"
+          },
+          "channel": {
+            "const": "main",
+            "default": "main",
+            "title": "Channel",
+            "type": "string"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "installed": {
+            "$ref": "#/components/schemas/ApplicationVersion"
+          },
+          "latest_release": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Release"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "operation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UpdateOperation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "setup_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setup Message"
+          },
+          "state": {
+            "enum": [
+              "unchecked",
+              "current",
+              "available",
+              "ahead",
+              "diverged",
+              "unknown",
+              "error"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "upstream_commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upstream Commit"
+          }
+        },
+        "required": [
+          "installed",
+          "state",
+          "message",
+          "automatic_update"
+        ],
+        "title": "UpdateStatus",
+        "type": "object"
+      },
       "UploadCreate": {
         "additionalProperties": false,
         "properties": {
@@ -9716,6 +9891,130 @@
         "tags": [
           "Teaching",
           "Teaching intelligence"
+        ]
+      }
+    },
+    "/api/v1/updates": {
+      "get": {
+        "operationId": "status_api_v1_updates_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Status",
+        "tags": [
+          "Application updates"
+        ]
+      }
+    },
+    "/api/v1/updates/apply": {
+      "post": {
+        "operationId": "apply_api_v1_updates_apply_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Apply",
+        "tags": [
+          "Application updates"
+        ]
+      }
+    },
+    "/api/v1/updates/check": {
+      "get": {
+        "operationId": "check_api_v1_updates_check_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "refresh",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Refresh",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check",
+        "tags": [
+          "Application updates"
+        ]
+      }
+    },
+    "/api/v1/updates/readiness": {
+      "get": {
+        "operationId": "readiness_api_v1_updates_readiness_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Readiness",
+        "tags": [
+          "Application updates"
         ]
       }
     }

@@ -236,7 +236,21 @@ export const augmentationClipUrl = (jobId: string, index: number, original = fal
 export const augmentationDownloadUrl = (jobId: string) =>
   `${apiOrigin}/api/v1/jobs/${encodeURIComponent(jobId)}/augmentation/download`;
 
+export type ApplicationUpdateStatus = components['schemas']['UpdateStatus'];
+
 export const api = {
+  applicationUpdates: () => request<ApplicationUpdateStatus>('/updates'),
+  checkApplicationUpdates: (refresh = false) =>
+    request<ApplicationUpdateStatus>(`/updates/check?refresh=${refresh}`, undefined, 30_000),
+  applyApplicationUpdate: (target: string) =>
+    request<ApplicationUpdateStatus>(
+      '/updates/apply',
+      {
+        method: 'POST',
+        body: JSON.stringify({ target_commit: target, confirmation: 'update-and-restart' }),
+      },
+      30_000,
+    ),
   huggingFaceStatus: () => request<HuggingFaceConnectionStatus>('/huggingface-connection'),
   saveHuggingFaceToken: (token: string) =>
     request<HuggingFaceConnectionStatus>(

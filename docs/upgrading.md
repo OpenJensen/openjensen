@@ -46,3 +46,63 @@ Database schema changes can occur on startup. There is no general promise that a
 Stop all writers first. Restore by copying the **unchanged stopped backup** into a new private directory and launch the preserved old checkout/runtime with its supported data-directory setting pointing there. For an alpha version that predates the rename, use `FIREBIRD_DATA_DIR`; current releases accept `JENSEN_DATA_DIR` and its alpha alias. Keep the failed candidate for diagnosis. Do not merge database files from different versions or overwrite the only copy of a workspace.
 
 Confirm project/job records and representative artifacts after launch and again after a restart. Restore external data, model paths and cloud access separately when needed. If a check fails, retain the original/backup and report the exact source revisions with redacted errors through [GitHub issues](https://github.com/OpenJensen/openjensen/issues).
+
+## Confirmed browser updates
+
+The header version button checks upstream `OpenJensen/openjensen` main every ten
+minutes and offers **Update & restart** when main is ahead of the installed commit.
+Opening the dialog shows the exact source commit and server. A remote browser
+updates that server for all its users; it does not install software on the browser's
+computer. Checking never installs anything. There is no unattended update timer.
+
+Automatic installation supports macOS/Linux **Supervisor deployments** using the
+[release-directory layout](../deploy/xbox/README.md): `current` points into
+`releases/`, with a separate `data/`, `run/`, `private/` and `supervisord.conf`.
+The service must load its code and web files from `current`, and read
+`JENSEN_DATA_DIR` (or the legacy alias) from the persistent `data/` directory.
+Python 3.14, Node 24, uv, pinned pnpm (or Corepack) and Supervisor must already be
+installed. Worker environments are retained; the updater does not download models
+or change the Mac Robot Lab companion.
+
+Configure once on the server, using its actual paths and service identity:
+
+```sh
+uv run --frozen jensen configure-updates \
+  --deployment-root /absolute/deployment \
+  --repository /absolute/source/openjensen \
+  --node-bin /absolute/node/bin
+```
+
+Optional `--uv` and `--pnpm` select existing absolute tool paths. The command
+writes a private `private/application-updates.json`. Add the printed
+`JENSEN_UPDATE_CONFIG` setting to the Supervisor application's environment and
+restart that service. Keep this configuration outside the source checkout. The
+repository's `origin` must be the canonical GitHub repository; local edits and
+feature branches in that checkout are not reset or checked out by updates.
+
+A confirmed update blocks new writes, refuses active jobs or Robot Lab sessions,
+fetches the exact confirmed main commit and builds a separate application release.
+It then stops the API, takes a complete workspace backup, validates migrations on a
+copy, activates that copy and the new release, restarts the service and verifies
+its reported commit. The browser reconnects and reloads when that version is ready.
+A failed migration or startup retains/restores the previous release **and its
+original workspace**, including configuration, datasets and model references.
+
+Progress and logs live under `run/application-update.json` and
+`run/application-update.log`. Backups, the original workspace and any failed
+candidate remain under `private/application-updates/<operation-id>/`. These can
+contain credentials and must stay private. Allow space for the build and two full
+workspace copies while retaining at least 10 GiB free. Review and retire old
+backups/releases only after checking live runtime dependencies. A recovery-required
+status blocks further writes and needs server administration; preserve all copies
+before restoring as described above.
+
+Update administration is private to the loopback/SSH workspace. The public gateway
+blocks these routes, including encoded paths. Source-only installations show
+version/update information but need the manual procedure above or a configured
+managed deployment. Containers must be rebuilt by their deployment manager; frozen
+desktop packages need a separately verified installer. This updater does not
+replace either deployment mechanism.
+
+See [versioning](versioning.md) for the difference between a package version,
+upstream main and a published release.

@@ -1832,6 +1832,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/updates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Status */
+        get: operations["status_api_v1_updates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/updates/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply */
+        post: operations["apply_api_v1_updates_apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/updates/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Check */
+        get: operations["check_api_v1_updates_check_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/updates/readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Readiness */
+        get: operations["readiness_api_v1_updates_readiness_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1882,6 +1950,15 @@ export interface components {
              * @constant
              */
             schema_version: 1;
+        };
+        /** ApplicationVersion */
+        ApplicationVersion: {
+            /** Commit */
+            commit: string | null;
+            /** Host */
+            host: string;
+            /** Version */
+            version: string;
         };
         /** AugmentationClip */
         AugmentationClip: {
@@ -3972,6 +4049,55 @@ export interface components {
             updated_at: string;
             /** Wall Seconds */
             wall_seconds?: number | null;
+        };
+        /** UpdateOperation */
+        UpdateOperation: {
+            /** Id */
+            id: string;
+            /** Message */
+            message: string;
+            /** Phase */
+            phase: string;
+            /** Target Commit */
+            target_commit: string;
+        };
+        /** UpdateRequest */
+        UpdateRequest: {
+            /**
+             * Confirmation
+             * @constant
+             */
+            confirmation: "update-and-restart";
+            /** Target Commit */
+            target_commit: string;
+        };
+        /** UpdateStatus */
+        UpdateStatus: {
+            /** Automatic Update */
+            automatic_update: boolean;
+            /**
+             * Channel
+             * @default main
+             * @constant
+             */
+            channel: "main";
+            /** Checked At */
+            checked_at?: string | null;
+            installed: components["schemas"]["ApplicationVersion"];
+            /** Latest Release */
+            latest_release?: string | null;
+            /** Message */
+            message: string;
+            operation?: components["schemas"]["UpdateOperation"] | null;
+            /** Setup Message */
+            setup_message?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "unchecked" | "current" | "available" | "ahead" | "diverged" | "unknown" | "error";
+            /** Upstream Commit */
+            upstream_commit?: string | null;
         };
         /** UploadCreate */
         UploadCreate: {
@@ -7168,6 +7294,110 @@ export interface operations {
         };
     };
     voice_status_api_v1_teaching_voice_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    status_api_v1_updates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateStatus"];
+                };
+            };
+        };
+    };
+    apply_api_v1_updates_apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_api_v1_updates_check_get: {
+        parameters: {
+            query?: {
+                refresh?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    readiness_api_v1_updates_readiness_get: {
         parameters: {
             query?: never;
             header?: never;

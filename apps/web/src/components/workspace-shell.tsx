@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import './workspace-shell.css';
 import { Icon } from '@/components/icon';
+import { ApplicationUpdates } from '@/components/application-updates';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { apiReferenceUrl } from '@/lib/api';
 import { publicPath } from '@/lib/base-path';
@@ -73,6 +74,7 @@ export function WorkspaceShell({
         <header className="topbar">
           <div className="breadcrumb">{breadcrumb}</div>
           <div className="topbar-actions">
+            <ApplicationUpdates />
             {showGuideShortcut && (
               <a className="mobile-guide-link" href={publicPath('/guide/')} aria-label="Workspace guide">
                 <Icon name="book" size={18} />

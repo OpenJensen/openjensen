@@ -452,6 +452,9 @@ else:
 @pytest.mark.parametrize(
     "path",
     [
+        "/api/v1/updates",
+        "/api/v1/updates/apply",
+        "/api/v1/%2575pdates/apply",
         "/api/v1/robot-lab/status",
         "/api/v1/robot-lab/camera.jpg",
         "/api/v1/robot-lab/control/start",
