@@ -26,9 +26,9 @@ def configured_compute(tmp_path):
                 "runtimes": [
                     {
                         "id": "local-gpu",
-                        "label": "RTX 3070",
+                        "label": "RTX 4060",
                         "device": "cuda",
-                        "gpu_name": "NVIDIA GeForce RTX 3070",
+                        "gpu_name": "NVIDIA GeForce RTX 4060",
                         "gpu_memory_mib": 8192,
                         "python": sys.executable,
                         "worker_root": root,
@@ -84,7 +84,7 @@ def test_settings_persist_label_and_disable_model_availability(configured_comput
         result = client.put("/api/v1/compute-settings", json=payload).json()
         assert result["local"] == {"enabled": False, "label": "Robot lab desktop"}
         assert result["runtimes"][0]["provider_label"] == "Robot lab desktop"
-        assert result["runtimes"][0]["label"] == "RTX 3070"
+        assert result["runtimes"][0]["label"] == "RTX 4060"
         assert result["runtimes"][0]["enabled"] is False
         options = client.get("/api/v1/policy-options").json()
         assert not any(model["available"] for model in options["training_models"])

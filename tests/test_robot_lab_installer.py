@@ -90,7 +90,7 @@ def test_reinstall_stops_only_managed_services_before_runtime_mutation(
             "--arrow-site-packages",
             str(arrow),
             "--ssh-host",
-            "xbox-360",
+            "gpu-server",
             "--no-start",
         ],
     )

@@ -16,7 +16,8 @@ import pytest
 from starlette.testclient import TestClient
 
 SPEC = importlib.util.spec_from_file_location(
-    "firebird_public_gateway", Path(__file__).resolve().parents[1] / "deploy/xbox/public_gateway.py"
+    "firebird_public_gateway",
+    Path(__file__).resolve().parents[1] / "deploy/linux-server/public_gateway.py",
 )
 gateway = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = gateway
@@ -370,7 +371,9 @@ def test_proxy_response_streams_each_chunk_before_requesting_next_and_closes(con
     assert stream.closed
 
 
-@pytest.mark.skipif(os.name != "posix", reason="Xbox gateway configuration uses POSIX permissions")
+@pytest.mark.skipif(
+    os.name != "posix", reason="Public gateway configuration uses POSIX permissions"
+)
 def test_config_requires_private_file_and_rejects_arbitrary_preview_origin(config, tmp_path):
     path = tmp_path / "gateway.json"
     path.write_text(json.dumps(config[1]))

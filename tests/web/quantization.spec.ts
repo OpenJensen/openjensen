@@ -132,8 +132,8 @@ async function workspace(
             ...(!cloudOnly
               ? [
                   {
-                    id: 'xbox',
-                    label: 'Xbox 360',
+                    id: 'workstation',
+                    label: 'Lab workstation',
                     device: 'cuda',
                     training: true,
                     simulation: false,
@@ -478,7 +478,7 @@ test('native evaluation targets remain usable while cloud training targets are e
   });
   await page.getByRole('link', { name: 'Evaluate', exact: true }).click();
   await page.getByRole('button', { name: 'New evaluation', exact: true }).click();
-  await expect(choice(page, 'Compute', 'xbox')).toBeChecked();
+  await expect(choice(page, 'Compute', 'workstation')).toBeChecked();
   await expect(choice(page, 'Compute', 'gcp')).toHaveCount(0);
   await choosePolicy(page, 'packed-policy');
   await expect(page.getByRole('button', { name: 'Start evaluation', exact: true })).toBeEnabled();
@@ -795,7 +795,7 @@ test('quantization uses one compute picker and preserves compression and checkpo
           },
           {
             id: 'local-gpu',
-            label: 'Local RTX 3070',
+            label: 'Local RTX 4060',
             device: 'cuda',
             provider: 'local',
             execution: 'native',
@@ -836,7 +836,7 @@ test('quantization uses one compute picker and preserves compression and checkpo
   await choosePolicy(page, 'recent-20');
   await choice(page, 'Language compression', 'Q4_0').check();
   await choice(page, 'Vision compression', 'Q8_0').check();
-  await selectCompute(page, 'Local RTX 3070');
+  await selectCompute(page, 'Local RTX 4060');
   await expectCompute(page, 'local-gpu');
   await expect(page.getByRole('button', { name: 'Run quantization workflow', exact: true })).toBeDisabled();
   await expect(

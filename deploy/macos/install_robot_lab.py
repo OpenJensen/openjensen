@@ -87,7 +87,7 @@ def main():
         "--arrow-site-packages", type=Path, help="Reuse an existing compatible PyArrow"
     )
     parser.add_argument(
-        "--ssh-host", help="Private Xbox SSH alias for automatic local/reverse tunnel"
+        "--ssh-host", help="Application host SSH alias for the automatic local/reverse tunnel"
     )
     parser.add_argument("--no-start", action="store_true")
     args = parser.parse_args()

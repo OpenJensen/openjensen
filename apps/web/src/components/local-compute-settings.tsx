@@ -257,7 +257,7 @@ export function LocalComputeSettingsPanel() {
               maxLength={80}
               required
               disabled={!saved || save.isPending || busy}
-              placeholder="My RTX 3070 workstation"
+              placeholder="Lab workstation"
               onChange={(event) => {
                 save.reset();
                 setDraft({ ...current, label: event.target.value });

@@ -1,6 +1,6 @@
 # OpenJensen Robot Lab companion
 
-This private Mac-side service gives the Xbox OpenJensen web app access to the
+This private Mac-side service gives the OpenJensen web app on your application host access to the
 Mac's USB SO-101 arms and cameras. Hardware operation requires PySerial,
 the Feetech SDK, OpenCV and NumPy. Recording additionally uses Pillow and
 PyArrow; a full local Torch/LeRobot training installation is unnecessary.

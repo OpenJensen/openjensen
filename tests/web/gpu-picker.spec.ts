@@ -25,8 +25,8 @@ async function openGpuPicker(page: Page, local = false) {
     training_model_ids: ['smolvla', 'pi05'],
   }));
   const localRuntime = {
-    id: 'local-3070',
-    label: 'Robotics lab RTX 3070',
+    id: 'local-4060',
+    label: 'Robotics lab RTX 4060',
     provider: 'local',
     execution: 'native',
     enabled: true,
@@ -246,9 +246,9 @@ for (const theme of ['Light', 'Dark']) {
     const screenshot = testInfo.outputPath(`gpu-picker-${theme.toLowerCase()}-320.png`);
     await page.screenshot({ path: screenshot, fullPage: true });
     await testInfo.attach(`gpu-picker-${theme.toLowerCase()}-320`, { path: screenshot, contentType: 'image/png' });
-    await menu.getByRole('option', { name: 'Robotics lab RTX 3070', exact: true }).click();
-    await expect(picker).toHaveAttribute('value', 'local-3070');
-    await expect(picker).toContainText('Robotics lab RTX 3070');
+    await menu.getByRole('option', { name: 'Robotics lab RTX 4060', exact: true }).click();
+    await expect(picker).toHaveAttribute('value', 'local-4060');
+    await expect(picker).toContainText('Robotics lab RTX 4060');
     expect(writes).toEqual([]);
     expect(unexpected).toEqual([]);
   });
