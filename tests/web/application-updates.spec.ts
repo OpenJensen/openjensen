@@ -165,7 +165,7 @@ test('unavailable browser storage keeps the workspace and update dialog usable',
   await page.getByRole('button', { name: 'Version and updates' }).click();
   await expect(page.getByRole('dialog', { name: 'OpenJensen updates' })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Dataset', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Datasets', exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
