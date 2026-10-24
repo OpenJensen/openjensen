@@ -1,5 +1,6 @@
 """Mac installer lifecycle and credential checks use no real services or packages."""
 
+import ast
 import importlib.util
 import os
 import plistlib
@@ -169,3 +170,15 @@ def test_vendor_sources_are_complete_regular_and_validated_before_any_mutation(
     with pytest.raises(SystemExit):
         installer.main()
     assert not prefix.exists()
+
+
+def test_installer_includes_local_dependencies_of_shipped_modules():
+    source = Path(__file__).parents[1] / "workers/robot_lab"
+    shipped = set(installer.SOURCE_MODULES)
+    for name in shipped:
+        tree = ast.parse((source / name).read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                dependency = node.module.split(".")[0] + ".py"
+                if (source / dependency).is_file():
+                    assert dependency in shipped, f"{name} requires {dependency} in the installer"

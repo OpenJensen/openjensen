@@ -1,0 +1,60 @@
+{
+  "date": "2026-10-24",
+  "base_commit": "43db4e8d58c37bde1be9cf8808bb4be5016b448f",
+  "scope": "Bounded move to recorded calibration middle on manual start; incremental jogs retain target despite encoder lag; report measured and requested positions; stop on tracking error",
+  "source_sha256": {
+    "apps/web/src/components/robot-lab.css": "597833a081cca16fe39317c12aaa3ef30942ed0654f4796a59df59a1c973eed2",
+    "apps/web/src/components/robot-lab.tsx": "390ad4d20c1a41a39782da3d88e9567685ce45114c09227db0adb338b7538d79",
+    "apps/web/src/lib/robot-api.ts": "35c5c6ef12ce57acdc1033ca4103531a4ba88a8e60c08474ffdc1d042c00674e",
+    "deploy/macos/install_robot_lab.py": "ac264ce5f745c5541cfd013ca31eda86be1a1fa8a90405f9c8c6eedaf1a1ca6e",
+    "tests/test_robot_lab_installer.py": "d356a47b94700327e5aeb48e2d56bf1958a9e3c7650dc69bd271819822f9ff03",
+    "tests/web/robot-lab.spec.ts": "5fd685600df1382ec14f74bda6aa635d1ab8c5eb8cd29f51ec5d4fdeff2795dd",
+    "workers/robot_lab/API.md": "bbca33e80e0b0f83cc21bacd7e42ebb7bc627ed99233329443d16153006fb440",
+    "workers/robot_lab/server.py": "3b182a34000516e737b9f5941eac118507420d1eee3d498470cd000c26f43a8b",
+    "workers/robot_lab/tests/test_robot_lab.py": "6c5e637c579560323c9f3bda5748e053b89c3384460bf361774be9ed4f649b8a",
+    "workers/robot_lab/motion.py": "5783e8f7510b76b519cc5d36cc0ebb1a54331c75eb9656c6123f1962c27e6175",
+    "workers/robot_lab/tests/test_motion.py": "66157942c7a19552497635dec8803517c32d877785444d3a211168a33aad7995"
+  },
+  "verification": {
+    "ruff": "passed",
+    "companion": {
+      "run": 138,
+      "passed": 126,
+      "skipped": 12,
+      "skip_reason": "Optional dataset dependencies absent in Xbox test environment"
+    },
+    "api_installer_wrapper": {
+      "passed": 43
+    },
+    "production_export": "passed",
+    "typescript": "passed",
+    "browser": {
+      "desktop_mobile_passed": 44,
+      "stalled_encoder_ui_followup_passed": 2
+    },
+    "failure_logs_retained": [
+      "companion.log: initial error-message capitalization assertion",
+      "lint-final.log: line length"
+    ]
+  },
+  "hardware_diagnostic": "Read-only after stopping control: all six torque registers zero, elbow status 0, 12.2 V, 31 C; saved calibration SHA256 unchanged. Operator reports smooth unpowered elbow movement. Powered elbow response and automatic middle movement not accepted yet; motor health under load is unresolved.",
+  "evidence_directory": "/home/aayrapetyan/ollamaforvlas/run/robot-lab-middle-motion-20261024",
+  "cleanup": {
+    "owned_pids": [
+      182713,
+      185821,
+      182747,
+      185855,
+      188989,
+      185688,
+      188956,
+      186180,
+      185979,
+      186695,
+      188242,
+      186672
+    ],
+    "remaining": [],
+    "temporary_listener_18865": "absent"
+  }
+}

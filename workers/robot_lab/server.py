@@ -36,6 +36,7 @@ from hardware import (
     normalized,
     probe_bus,
 )
+from motion import MiddleMotion, check_tracking, jog_target, middle_targets
 from verification import (
     MappingVerification,
     empty_verification,
@@ -128,13 +129,14 @@ def validate_raw(raw, calibration=None):
         for value in raw.values()
     ):
         raise HardwareError("Invalid encoder reading; inspect cabling and motor setup")
-    if calibration is not None and any(
-        not calibration[joint]["range_min"] <= value <= calibration[joint]["range_max"]
-        for joint, value in raw.items()
-    ):
-        raise HardwareError(
-            "Joint reading outside its calibrated range; stop and recalibrate before motion"
-        )
+    if calibration is not None:
+        for joint, value in raw.items():
+            low, high = calibration[joint]["range_min"], calibration[joint]["range_max"]
+            if not low <= value <= high:
+                raise HardwareError(
+                    f"{joint.replace('_', ' ').capitalize()} is outside its saved range "
+                    f"({value} ticks; allowed {low}–{high}). Motion stopped"
+                )
     return raw
 
 
@@ -189,6 +191,8 @@ class RobotLab:
         self.error = None
         self.positions = {}
         self.action = {}
+        self.commanded_raw = {}
+        self.middle_motion = None
         self.calibration = {}
         self.leader_calibration = {}
         self.original_calibration = None
@@ -267,6 +271,7 @@ class RobotLab:
         with self.lifecycle_lock:
             assembled = json.loads(json.dumps(self.assembled_state))
             copy_verification = json.loads(json.dumps(self.verification_state))
+            middle_motion = self.middle_motion
         try:
             assembled["calibration_required"] = self.calibration_revisions.required(
                 assembled["port"]
@@ -289,6 +294,7 @@ class RobotLab:
                 "mapping_verification": hardware,
                 "calibration": hardware,
                 "control": hardware,
+                "move_to_middle": hardware,
                 "recording": hardware
                 and all(deps[key]["installed"] for key in ("pyarrow", "PIL", "numpy")),
             },
@@ -298,7 +304,12 @@ class RobotLab:
                 "port": self.port,
                 "role": self.role,
                 "positions": dict(self.positions),
+                "targets": dict(self.action) if self.mode in {"manual", "leader"} else {},
                 "torque_enabled": self.torque,
+                "centering": {
+                    "active": middle_motion is not None,
+                    "progress": middle_motion.progress if middle_motion else 1.0,
+                },
                 "watchdog_seconds": 10.0
                 if self.mode in {"calibration", "setup", "verification"}
                 else 2.0,
@@ -323,7 +334,7 @@ class RobotLab:
                 {
                     "name": joint,
                     "id": IDS[joint],
-                    "label": joint.replace("_", " ").title(),
+                    "label": joint.replace("_", " ").capitalize(),
                     "unit": "percent" if joint == "gripper" else "degrees",
                 }
                 for joint in JOINTS
@@ -719,11 +730,16 @@ class RobotLab:
         mode = payload.get("mode")
         if mode not in ("manual", "leader", "handguide"):
             raise RequestError("Choose manual, leader or handguide mode")
+        to_middle = payload.get("move_to_middle", False)
+        if type(to_middle) is not bool or (to_middle and mode != "manual"):
+            raise RequestError("Move to recorded middle is available only for joint control")
         with self.lock:
             self._idle()
             port = self._port(payload.get("port"))
             robot_id = safe_slug(payload.get("robot_id"))
             calibration = self.load_calibration(robot_id, "follower", port)
+            if to_middle:
+                middle_targets(calibration)
             generation = self.generation
             leader, bus = None, self.bus_factory(port)
             with self.stop_lock, self.lifecycle_lock:
@@ -797,7 +813,14 @@ class RobotLab:
                                             f"Motor {motor_id} {register} read-back did not "
                                             "match; motion remains disabled"
                                         )
+                        # Sample again after configuration, immediately before holding.
+                        raw = validate_raw(bus.positions(), calibration)
+                        for joint, motor_id in IDS.items():
+                            if generation != self.generation:
+                                raise RequestError("Session cancelled by Stop")
                             bus.write("Goal_Position", motor_id, raw[joint])
+                            if bus.read("Goal_Position", motor_id) != raw[joint]:
+                                raise HardwareError(f"{joint} hold target read-back did not match")
                         for motor_id in IDS.values():
                             if generation != self.generation:
                                 raise RequestError("Session cancelled by Stop")
@@ -825,7 +848,10 @@ class RobotLab:
                 self.bus, self.leader, self.calibration = bus, leader, calibration
                 self.generation += 1
                 self.mode, self.port, self.robot_id, self.role = mode, port, robot_id, "follower"
+                positions = {j: normalized(j, value, calibration) for j, value in raw.items()}
                 self.positions, self.action = positions, dict(positions)
+                self.commanded_raw = dict(raw)
+                self.middle_motion = MiddleMotion(raw, calibration) if to_middle else None
                 self.torque = mode != "handguide"
                 self.error = None
                 self.heartbeat = time.monotonic()
@@ -835,6 +861,8 @@ class RobotLab:
         with self.lock:
             if self.mode != "manual" or not self.torque:
                 raise RequestError("Start manual control before jogging a joint")
+            if self.middle_motion is not None:
+                raise RequestError("Wait for movement to the recorded middle to finish")
             joint, delta = payload.get("joint"), payload.get("delta")
             if (
                 joint not in JOINTS
@@ -855,15 +883,13 @@ class RobotLab:
                 if generation != self.generation:
                     raise RequestError("Session has stopped")
                 raw = validate_raw(bus.positions(), self.calibration)
-                current = normalized(joint, raw[joint], self.calibration)
-                target = denormalized(joint, current + delta, self.calibration)
-                # Keep a small margin away from captured mechanical limits.
-                entry = self.calibration[joint]
-                target = max(entry["range_min"] + 8, min(entry["range_max"] - 8, target))
+                check_tracking(raw, self.commanded_raw, self.calibration)
+                target = jog_target(joint, delta, raw, self.commanded_raw, self.calibration)
                 if generation != self.generation:
                     raise RequestError("Session has stopped")
                 bus.write("Goal_Position", IDS[joint], target)
                 self.action[joint] = normalized(joint, target, self.calibration)
+                self.commanded_raw[joint] = target
             self.last_jog = time.monotonic()
         return self.status()
 
@@ -891,6 +917,7 @@ class RobotLab:
             self.bus = self.leader = self.pending_bus = None
             self.torque = False
             self.mode = "idle"
+            self.middle_motion = None
             if reason:
                 self.error = reason
             if self.writer:
@@ -948,6 +975,8 @@ class RobotLab:
         with self.lock:
             if self.mode not in ("manual", "leader", "handguide"):
                 raise RequestError("Connect a calibrated arm in Teleoperate before recording")
+            if self.middle_motion is not None:
+                raise RequestError("Wait for movement to the recorded middle before recording")
             if self.writer and not self.writer.finalized:
                 raise RequestError("Finalize the previous dataset before starting another")
             fps = integer(payload.get("fps", 10), 1, 20, "FPS")
@@ -977,6 +1006,8 @@ class RobotLab:
             if writer is None or writer.finalized:
                 raise RequestError("Create a dataset first")
             if action == "start":
+                if self.middle_motion is not None:
+                    raise RequestError("Wait for movement to the recorded middle before recording")
                 if self.mode not in ("manual", "leader", "handguide"):
                     raise RequestError("Reconnect the calibrated arm before recording")
                 writer.start_episode()
@@ -1039,6 +1070,24 @@ class RobotLab:
                 joint: normalized(joint, value, self.calibration) for joint, value in raw.items()
             }
             self.positions = positions
+            if mode == "manual":
+                check_tracking(raw, self.commanded_raw, self.calibration)
+                motion = self.middle_motion
+                if motion is not None:
+                    targets = motion.advance()
+                    for joint, target in targets.items():
+                        if generation != self.generation:
+                            return
+                        if target != self.commanded_raw[joint]:
+                            bus.write("Goal_Position", IDS[joint], target)
+                            self.commanded_raw[joint] = target
+                            self.action[joint] = normalized(joint, target, self.calibration)
+                    if motion.progress == 1 and all(
+                        abs(raw[j] - motion.targets[j]) <= 8 for j in JOINTS
+                    ):
+                        with self.lifecycle_lock:
+                            if generation == self.generation:
+                                self.middle_motion = None
             if mode == "leader" and leader is not None:
                 with leader.lock:
                     leader_raw = validate_raw(leader.positions(), self.leader_calibration)

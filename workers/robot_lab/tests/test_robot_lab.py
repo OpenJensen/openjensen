@@ -318,6 +318,99 @@ class SafetyTests(unittest.TestCase):
         self.assertFalse(self.lab.torque)
         self.assertEqual(self.lab.mode, "idle")
 
+    def test_recorded_middle_request_validates_before_opening_hardware(self):
+        for extras in ({"move_to_middle": "yes"}, {"move_to_middle": True, "mode": "handguide"}):
+            with self.assertRaises(RequestError):
+                self.start(**extras)
+        self.assertEqual(self.buses, [])
+        invalid = json.loads(json.dumps(CALIBRATION))
+        invalid["gripper"]["range_min"] = 2100
+        self.lab.calibration_path("test", "follower").write_text(json.dumps(invalid))
+        with self.assertRaisesRegex(ValueError, "Recorded middle for gripper"):
+            self.start(move_to_middle=True)
+        self.assertEqual(self.buses, [])
+
+    def start_middle(self):
+        def factory(*args):
+            bus = FakeBus(*args)
+            bus.raw = dict.fromkeys(JOINTS, 2200)
+            self.buses.append(bus)
+            return bus
+
+        self.lab.bus_factory = factory
+        return self.start(move_to_middle=True)
+
+    def test_middle_holds_current_pose_then_moves_slowly_and_finishes_on_encoder_readback(self):
+        with patch("motion.time.monotonic", return_value=100) as clock:
+            result = self.start_middle()
+            bus = self.buses[-1]
+            self.assertTrue(result["session"]["centering"]["active"])
+            self.assertEqual(bus.raw, dict.fromkeys(JOINTS, 2200))
+            for i in range(1, 60):
+                before = dict(bus.raw)
+                clock.return_value = 100 + i * 0.1
+                self.lab._tick()
+                self.assertTrue(all(abs(bus.raw[j] - before[j]) <= 5 for j in JOINTS))
+                if self.lab.middle_motion is None:
+                    break
+            self.assertIsNone(self.lab.middle_motion)
+            self.assertEqual(bus.raw, dict.fromkeys(JOINTS, 2047))
+            self.assertTrue(self.lab.torque)
+
+    def test_middle_rejects_jogs_and_recordings_and_stop_cancels_future_targets(self):
+        self.start_middle()
+        with self.assertRaisesRegex(RequestError, "recorded middle"):
+            self.lab.jog({"joint": "shoulder_pan", "delta": 1})
+        with self.assertRaisesRegex(RequestError, "recorded middle"):
+            self.lab.recording_start({})
+        self.lab.stop()
+        count = len(self.buses[-1].writes)
+        self.lab._tick()
+        self.assertEqual(len(self.buses[-1].writes), count)
+        self.assertIsNone(self.lab.middle_motion)
+        self.assertFalse(self.lab.torque)
+
+    def test_stop_during_middle_write_does_not_command_another_joint(self):
+        with patch("motion.time.monotonic", return_value=100) as clock:
+            self.start_middle()
+            bus = self.buses[-1]
+
+            def stop_on_target(register, motor_id, value):
+                if register == "Goal_Position":
+                    bus.on_write = None
+                    self.lab.stop("Stop during middle move")
+
+            bus.on_write = stop_on_target
+            before = len([w for w in bus.writes if w[0] == "Goal_Position"])
+            clock.return_value = 100.1
+            self.lab._tick()
+            after = len([w for w in bus.writes if w[0] == "Goal_Position"])
+            self.assertEqual(after - before, 1)
+            self.assertIsNone(self.lab.middle_motion)
+            self.assertFalse(self.lab.torque)
+
+    def test_manual_tracking_error_names_joint_and_stops_sending_targets(self):
+        self.start_middle()
+        bus = self.buses[-1]
+        bus.raw["wrist_flex"] += 100
+        count = len(bus.writes)
+        with self.assertRaisesRegex(HardwareError, "Wrist flex did not hold.*2300.*2200"):
+            self.lab._tick()
+        self.assertEqual(len(bus.writes), count)
+
+    def test_hold_target_mismatch_prevents_all_torque_enables(self):
+        original = FakeBus.read
+
+        def read(bus, register, motor_id):
+            return 0 if register == "Goal_Position" else original(bus, register, motor_id)
+
+        with (
+            patch.object(FakeBus, "read", read),
+            self.assertRaisesRegex(HardwareError, "hold target"),
+        ):
+            self.start()
+        self.assertFalse(any(r == "Torque_Enable" and v for r, _, v in self.buses[-1].writes))
+
     def test_handguide_never_enables_torque(self):
         self.start(mode="handguide")
         self.assertFalse(
@@ -340,6 +433,49 @@ class SafetyTests(unittest.TestCase):
         self.assertLessEqual(actual, 2)
         with self.assertRaises(RequestError):
             self.lab.jog({"joint": "shoulder_pan", "delta": 2})
+
+    def test_repeated_jogs_advance_target_when_encoder_has_not_moved(self):
+        self.start()
+        bus = self.buses[-1]
+        for joint in ("elbow_flex", "gripper"):
+            origin = bus.raw[joint]
+            targets = []
+            for _ in range(3):
+                bus.raw[joint] = origin
+                self.lab.last_jog = 0
+                result = self.lab.jog({"joint": joint, "delta": -1})
+                targets.append(self.lab.commanded_raw[joint])
+                self.assertEqual(result["session"]["targets"][joint], self.lab.action[joint])
+            self.assertGreater(origin, targets[0])
+            self.assertGreater(targets[0], targets[1])
+            self.assertGreater(targets[1], targets[2])
+
+    def test_jogs_cannot_accumulate_a_large_target_ahead_of_stalled_motor(self):
+        self.start()
+        bus = self.buses[-1]
+        origin = bus.raw["elbow_flex"]
+        for _ in range(2):
+            bus.raw["elbow_flex"] = origin
+            self.lab.last_jog = 0
+            self.lab.jog({"joint": "elbow_flex", "delta": -2})
+        bus.raw["elbow_flex"] = origin
+        self.lab.last_jog = 0
+        count = len(bus.writes)
+        with self.assertRaisesRegex(ValueError, "has not reached its target"):
+            self.lab.jog({"joint": "elbow_flex", "delta": -2})
+        self.assertEqual(len(bus.writes), count)
+        # A reversing click reduces the pending distance and is still allowed.
+        self.lab.jog({"joint": "elbow_flex", "delta": 2})
+        self.assertGreater(self.lab.commanded_raw["elbow_flex"], origin - 44)
+
+    def test_jog_checks_tracking_before_any_new_target(self):
+        self.start()
+        bus = self.buses[-1]
+        bus.raw["elbow_flex"] += 80
+        count = len(bus.writes)
+        with self.assertRaisesRegex(HardwareError, "Elbow flex did not hold"):
+            self.lab.jog({"joint": "elbow_flex", "delta": -1})
+        self.assertEqual(len(bus.writes), count)
 
     def test_bad_but_plausible_encoder_read_cannot_create_a_large_jog(self):
         self.start()

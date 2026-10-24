@@ -23,6 +23,7 @@ SOURCE_MODULES = (
     "dispatch.py",
     "server.py",
     "hardware.py",
+    "motion.py",
     "camera.py",
     "dataset.py",
     "assembled.py",

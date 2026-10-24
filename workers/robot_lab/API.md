@@ -94,3 +94,21 @@ Motion, torque, ID and baudrate writes do not use this recovery.
 Saved-mapping wiggles verify the six canonical addresses directly (stable encoder
 samples, STS3215 model, stored ID and torque-off). They do not repeat address
 separation or scan unused addresses; the completed journal is required first.
+
+### Moving to the recorded middle
+
+`POST /v1/control/start` accepts optional `move_to_middle: true` for `mode: manual`.
+The browser's **Enable & move to recorded middle** button requests this behavior.
+The captured half-turn center is 2047 encoder ticks per joint; it is not the average
+of the subsequently captured minimum and maximum. Startup rejects a center outside
+the calibrated range, holds a freshly sampled pose with verified goal and torque
+read-back, then approaches the center at no more than 4 degrees/second (4 percent
+of calibrated travel/second for the gripper). A delayed control tick cannot cause
+a catch-up jump. Session status reports `centering.active` and `centering.progress`.
+Jogging and recording are blocked until measured positions reach the center.
+Stop, hidden-page cancellation, heartbeat expiry, motor faults, range checks and
+trajectory timeout remain active. Manual control also stops on tracking deviation
+greater than 5 degrees (5 percent for the gripper). The app never expands calibration
+limits or raises torque limits to complete a move.
+
+Manual jogs advance the previous requested target, not the measured encoder position. Pending targets cannot exceed 5° (5% for the gripper) ahead of the measured position. A measured tracking error over that threshold stops motion. `session.targets` exposes requested normalized joint values alongside measured `session.positions`.
