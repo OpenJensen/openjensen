@@ -22,6 +22,8 @@ import {
   trainingRunModelLabel,
 } from '@/lib/checkpoints';
 import './workflow-panel.css';
+import { WorkflowSettingsForm } from './workflow-settings-form';
+import { initialPreferences, type Preferences } from '@/lib/workflow-preferences';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { readPublicPreference, writePublicPreference } from '@/lib/public-preferences';
 import {
@@ -36,52 +38,6 @@ import {
 
 export type SettingsTab = 'compute' | 'modules' | 'settings' | 'diagnostics';
 
-type Preferences = {
-  mode: 'engine' | 'libero';
-  suite: 'libero_object' | 'libero_spatial';
-  taskIds: string;
-  parityProfile: string;
-  parityRmse: string;
-  parityMaxError: string;
-  repetitions: number;
-  steps: number;
-  warmup: number;
-  task: number;
-  searchStates: string;
-  finalStates: string;
-  trainingSteps: number;
-  camera: string;
-  select: boolean;
-  minSuccess: number;
-  maxLatency: number;
-  maxMemory: number;
-  precision: 'recommended' | 'Q4_0' | 'Q8_0';
-  vision: boolean;
-  compareQ4: boolean;
-};
-const initial: Preferences = {
-  mode: 'engine',
-  suite: 'libero_object',
-  taskIds: '0,1,2,3,4,5,6,7,8,9',
-  parityProfile: '',
-  parityRmse: '',
-  parityMaxError: '',
-  repetitions: 10,
-  steps: 500,
-  warmup: 3,
-  task: 0,
-  searchStates: '0,1',
-  finalStates: '2,3',
-  trainingSteps: 20000,
-  camera: 'observation.images.front',
-  select: false,
-  minSuccess: 100,
-  maxLatency: 1000,
-  maxMemory: 8192,
-  precision: 'Q8_0',
-  vision: false,
-  compareQ4: false,
-};
 function states(text: string) {
   const values = text.split(',').map((x) => Number(x.trim()));
   if (!text.trim() || values.some((x) => !Number.isInteger(x) || x < 0))
@@ -183,7 +139,7 @@ export function WorkflowPanel({
   onModel?: (artifactId: string) => void;
 }) {
   const client = useQueryClient();
-  const [preferences, setPreferences] = useState(initial);
+  const [preferences, setPreferences] = useState(initialPreferences);
   const [loadedProjectId, setLoadedProjectId] = useState<string | null>(null);
   const ready = !!projectId && loadedProjectId === projectId;
   const [runtimeId, setRuntimeId] = useState('');
@@ -218,13 +174,13 @@ export function WorkflowPanel({
     if (!projectId) return;
     try {
       const restored: Preferences = {
-        ...initial,
+        ...initialPreferences,
         ...JSON.parse(readPublicPreference(localStorage, `workflow.${projectId}`) ?? '{}'),
       };
       // Restore saved Spatial preferences from before the protocol was restricted.
       setPreferences(restored.suite === 'libero_spatial' ? { ...restored, mode: 'libero', steps: 280 } : restored);
     } catch {
-      setPreferences(initial);
+      setPreferences(initialPreferences);
     }
     setLoadedProjectId(projectId);
   }, [projectId]);
@@ -496,208 +452,20 @@ export function WorkflowPanel({
         ) : tab === 'modules' ? (
           <ModulesPanel />
         ) : tab === 'settings' ? (
-          <fieldset className="workflow-fields workflow-controls" disabled={!ready}>
-            <legend className="visually-hidden">Project workflow settings</legend>
-            <h2>Compression defaults</h2>
-            <label>
-              Quantization recipe
-              <select
-                value={language}
-                onChange={(e) => update('precision', e.target.value as Preferences['precision'])}
-              >
-                <option value="Q4_0">LM Q4 (experimental)</option>
-                <option value="Q8_0">LM Q8</option>
-              </select>
-            </label>
-            <label className="workflow-check">
-              <input
-                type="checkbox"
-                checked={preferences.compareQ4}
-                onChange={(e) => update('compareQ4', e.target.checked)}
-              />
-              Compare Q8 and Q4 (experimental)
-            </label>
-            <label className="workflow-check">
-              <input
-                type="checkbox"
-                checked={preferences.vision}
-                onChange={(e) => update('vision', e.target.checked)}
-              />
-              Also quantize vision to Q8 (experimental)
-            </label>
-            <h2>Evaluation</h2>
-            <label>
-              Task suite
-              <select
-                value={preferences.suite}
-                onChange={(e) => {
-                  const suite = e.target.value as Preferences['suite'];
-                  if (ready)
-                    setPreferences((old) => ({
-                      ...old,
-                      suite,
-                      mode: suite === 'libero_spatial' ? 'libero' : old.mode,
-                      steps: suite === 'libero_spatial' ? 280 : 500,
-                    }));
-                }}
-              >
-                <option value="libero_object">LIBERO Object (legacy policy)</option>
-                <option value="libero_spatial">LIBERO Spatial (pinned SmolVLA policy)</option>
-              </select>
-            </label>
-            {preferences.suite === 'libero_spatial' && (
-              <>
-                <label>
-                  Spatial task IDs
-                  <input value={preferences.taskIds} onChange={(e) => update('taskIds', e.target.value)} />
-                </label>
-                <label>
-                  Approved parity profile
-                  <input
-                    value={preferences.parityProfile}
-                    onChange={(e) => update('parityProfile', e.target.value)}
-                    placeholder="Name your reviewed tolerance profile"
-                  />
-                </label>
-                <label>
-                  Maximum action RMSE
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={preferences.parityRmse}
-                    onChange={(e) => update('parityRmse', e.target.value)}
-                  />
-                </label>
-                <label>
-                  Maximum absolute action error
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={preferences.parityMaxError}
-                    onChange={(e) => update('parityMaxError', e.target.value)}
-                  />
-                </label>
-              </>
-            )}
-            <label>
-              Protocol
-              <select
-                value={preferences.mode}
-                disabled={preferences.suite === 'libero_spatial'}
-                onChange={(e) => update('mode', e.target.value as Preferences['mode'])}
-              >
-                <option value="engine">Engine diagnostics</option>
-                <option value="libero">Paired LIBERO episodes</option>
-              </select>
-            </label>
-            <label>
-              Timed predictions
-              <input
-                type="number"
-                min="2"
-                max="1000"
-                value={preferences.repetitions}
-                onChange={(e) => update('repetitions', Number(e.target.value))}
-              />
-            </label>
-            <label>
-              Warmup predictions
-              <input
-                type="number"
-                min="1"
-                max="100"
-                value={preferences.warmup}
-                onChange={(e) => update('warmup', Number(e.target.value))}
-              />
-            </label>
-            {preferences.mode === 'libero' && (
-              <>
-                {preferences.suite === 'libero_object' && (
-                  <label>
-                    LIBERO object task
-                    <input
-                      type="number"
-                      min="0"
-                      max="9"
-                      value={preferences.task}
-                      onChange={(e) => update('task', Number(e.target.value))}
-                    />
-                  </label>
-                )}
-                <label>
-                  Search initial states
-                  <input value={preferences.searchStates} onChange={(e) => update('searchStates', e.target.value)} />
-                </label>
-                <label>
-                  Unused final initial states
-                  <input value={preferences.finalStates} onChange={(e) => update('finalStates', e.target.value)} />
-                </label>
-                <label>
-                  Episode step limit
-                  <input
-                    type="number"
-                    min="1"
-                    max="500"
-                    value={preferences.steps}
-                    disabled={preferences.suite === 'libero_spatial'}
-                    onChange={(e) => update('steps', Number(e.target.value))}
-                  />
-                </label>
-                <label className="workflow-check">
-                  <input
-                    type="checkbox"
-                    checked={preferences.select}
-                    onChange={(e) => update('select', e.target.checked)}
-                  />
-                  Select the smallest candidate that meets my limits
-                </label>
-                {preferences.select && (
-                  <>
-                    <label>
-                      Minimum task success (%)
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={preferences.minSuccess}
-                        onChange={(e) => update('minSuccess', Number(e.target.value))}
-                      />
-                    </label>
-                    <label>
-                      Maximum p95 latency (ms)
-                      <input
-                        type="number"
-                        min="1"
-                        value={preferences.maxLatency}
-                        onChange={(e) => update('maxLatency', Number(e.target.value))}
-                      />
-                    </label>
-                    <label>
-                      Maximum measured target memory (MiB)
-                      <input
-                        type="number"
-                        min="1"
-                        value={preferences.maxMemory}
-                        onChange={(e) => update('maxMemory', Number(e.target.value))}
-                      />
-                    </label>
-                  </>
-                )}
-              </>
-            )}
-            <h2>Fine-tuning</h2>
-            <label>
-              Optimizer steps
-              <input
-                type="number"
-                min="2"
-                value={preferences.trainingSteps}
-                onChange={(e) => update('trainingSteps', Number(e.target.value))}
-              />
-            </label>
-          </fieldset>
+          <WorkflowSettingsForm
+            preferences={preferences}
+            ready={ready}
+            language={language}
+            update={update}
+            onSuite={(suite) =>
+              setPreferences((old) => ({
+                ...old,
+                suite,
+                mode: suite === 'libero_spatial' ? 'libero' : old.mode,
+                steps: suite === 'libero_spatial' ? 280 : 500,
+              }))
+            }
+          />
         ) : (
           <>
             <h2>Run diagnostics</h2>
