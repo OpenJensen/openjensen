@@ -22,7 +22,7 @@ export const workspaceRoutes: Record<StageId, WorkspaceRoute> = {
   dashboard: { name: 'Dashboard', icon: 'home', path: '/dashboard/' },
   'robot-lab': { name: 'Robot Lab', icon: 'robot', path: '/robot-lab/', module: true },
   teaching: { name: 'Teaching', icon: 'record', path: '/teaching/', module: true },
-  datasets: { name: 'Dataset', icon: 'database', path: '/datasets/' },
+  datasets: { name: 'Datasets', icon: 'database', path: '/datasets/' },
   augmentation: { name: 'Augmentation', icon: 'spark', path: '/augmentation/', module: true },
   training: { name: 'Fine-tune', icon: 'sliders', path: '/training/' },
   distillation: { name: 'Distill', icon: 'funnel', path: '/distillation/' },
@@ -30,9 +30,9 @@ export const workspaceRoutes: Record<StageId, WorkspaceRoute> = {
   evaluation: { name: 'Evaluate', icon: 'chart', path: '/evaluation/' },
   simulation: { name: 'Run', icon: 'play', path: '/simulation/' },
   'decision-lab': { name: 'Decision lab', icon: 'branch', path: '/decision-lab/', module: true },
-  models: { name: 'My models', icon: 'box', path: '/models/' },
+  models: { name: 'Models', icon: 'box', path: '/models/' },
   'cloud-runs': { name: 'Cloud runs', icon: 'cloud', path: '/cloud-runs/', module: true },
-  settings: { name: 'Settings & diagnostics', icon: 'gear', path: '/settings/' },
+  settings: { name: 'Settings', icon: 'gear', path: '/settings/' },
 };
 
 export const isModule = (id: StageId): id is ModuleId => !!workspaceRoutes[id].module;

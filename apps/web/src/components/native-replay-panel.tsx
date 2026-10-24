@@ -664,7 +664,7 @@ export function NativeReplayPanel({
                   <div className="native-setup-empty">
                     <p>No dataset snapshots.</p>
                     <button className="text-link" type="button" onClick={onDataset}>
-                      Open Dataset intake
+                      Open Datasets
                     </button>
                   </div>
                 )}

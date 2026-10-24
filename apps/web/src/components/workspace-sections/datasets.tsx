@@ -473,7 +473,7 @@ export default function DatasetsSection() {
           <>
             <div className="dataset-back-navigation">
               <button type="button" className="text-link" onClick={() => setDatasetView('sources')}>
-                ← Back to library
+                ← Back to datasets
               </button>
             </div>
             <DatasetLabeling
@@ -491,7 +491,7 @@ export default function DatasetsSection() {
           <section className="inspection-record" aria-label="Dataset inspection">
             <div className="dataset-back-navigation">
               <button type="button" className="text-link" onClick={() => setDatasetView('sources')}>
-                ← Back to library
+                ← Back to datasets
               </button>
             </div>
             <ErrorNotice error={jobs.error} />

@@ -68,6 +68,6 @@ training and scheduled compute through the configured SkyPilot runtime.
 
 The sidebar always shows the dataset, training and testing pages. Robot Lab,
 Teaching, Augmentation, Decision lab and Cloud runs appear once this host has
-their configuration; **Settings & diagnostics → Modules** lists what each one
+their configuration; **Settings → Modules** lists what each one
 needs. Set `JENSEN_MODULES` to a comma-separated list such as
 `robot-lab,teaching` to choose the modules yourself, or to `all`.

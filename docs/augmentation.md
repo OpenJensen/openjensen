@@ -2,7 +2,7 @@
 
 ## Setup
 
-Install `gcloud`, `ffmpeg` and `ffprobe` on the API host. Connect Google Cloud in **Settings & diagnostics → Compute**, enable the Vertex AI API (`aiplatform.googleapis.com`), billing and Gemini Omni permissions. The server obtains access tokens with `gcloud auth print-access-token --quiet`.
+Install `gcloud`, `ffmpeg` and `ffprobe` on the API host. Connect Google Cloud in **Settings → Compute**, enable the Vertex AI API (`aiplatform.googleapis.com`), billing and Gemini Omni permissions. The server obtains access tokens with `gcloud auth print-access-token --quiet`.
 
 Alternatively, disconnect the saved Cloud project, set `GEMINI_API_KEY` in the server environment and restart the application. The Cloud route uses `gemini-omni-1.1-flash-preview`; the key route uses `gemini-omni-1.1-flash`.
 

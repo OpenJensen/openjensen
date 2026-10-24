@@ -417,7 +417,7 @@ test('completed reconciliation retains minimal accepted identity when history an
   s.failStatus = true;
   await check(page).click();
   await expect(managed(page).getByLabel('Saved teaching session', { exact: true })).toHaveValue('capture-a');
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await enterManaged(page);
   await expect(managed(page).getByText(/Request accepted as job capture-a/)).toBeVisible();
   await chooseSaved(page);

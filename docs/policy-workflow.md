@@ -2,7 +2,7 @@
 
 ## Configure a local native execution host
 
-Install workers on the API/GPU host. For SmolVLA, install the [pinned training environment](../workers/smolvla_qlora/docs/training/smolvla-qlora.md#install-on-the-training-machine) under `workers/smolvla_qlora/.venv`. In **Settings & diagnostics → Compute → Local runs**, select **Check this machine → Add worker**, enable local runs and save.
+Install workers on the API/GPU host. For SmolVLA, install the [pinned training environment](../workers/smolvla_qlora/docs/training/smolvla-qlora.md#install-on-the-training-machine) under `workers/smolvla_qlora/.venv`. In **Settings → Compute → Local runs**, select **Check this machine → Add worker**, enable local runs and save.
 
 For GGUF conversion, packing and diagnostics, install the [native worker](../workers/vla_cpp/README.md) and [instrumented GPU build](../workers/vla_cpp/docs/gpu-setup.md). From `workers/vla_cpp`, install conversion dependencies with `uv pip install --python .venv/bin/python -e '.[quantize,convert]'` when exporting a trained checkpoint.
 
@@ -52,7 +52,7 @@ Install the [ACT distillation adapter](../workers/policy_distillation/README.md)
 
 ## Evaluate and run
 
-In **Evaluate** or **Settings & diagnostics → Diagnostics**, select the project policy and registered runtime, choose engine or LIBERO checks, edit the protocol and start. For LIBERO Spatial, [prepare its assets and parity settings](spatial-workflow.md). For cloud engine checks, follow [cloud inference](cloud-inference.md). For Isaac, follow [simulation setup](native-simulation.md).
+In **Evaluate** or **Settings → Diagnostics**, select the project policy and registered runtime, choose engine or LIBERO checks, edit the protocol and start. For LIBERO Spatial, [prepare its assets and parity settings](spatial-workflow.md). For cloud engine checks, follow [cloud inference](cloud-inference.md). For Isaac, follow [simulation setup](native-simulation.md).
 
 ## CLI and persistence
 

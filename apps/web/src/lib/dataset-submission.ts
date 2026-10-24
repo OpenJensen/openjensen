@@ -111,7 +111,7 @@ export function reviewedIntakeHistory(value: unknown, project: string): Job[] {
     if ('recordings' in job.request && job.request.recordings != null) recordingReceipt(job, project);
     if (job.status === 'queued' || job.status === 'running')
       throw new Error(
-        `Dataset intake ${job.id} is still ${job.status}. Inspect its saved job before clearing legacy recovery.`,
+        `Dataset import ${job.id} is still ${job.status}. Inspect its saved job before clearing legacy recovery.`,
       );
   }
   return history;

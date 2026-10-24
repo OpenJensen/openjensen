@@ -1,14 +1,14 @@
-# OPEN JENSEN
+# OpenJensen
 
 **Joint Embodied Neural Simulation & Execution Network**
 
 **Inspect robot data, train policies, and prepare models for native inference.**
 
-OPEN JENSEN brings dataset exploration, training, quantization and simulation into one self-hosted workspace. Interact with it through the **web app**, the **`jensen` command-line interface (CLI)**, or the **optional interactive terminal client (TUI)**. All three connect to the same application API and share projects, jobs and artifacts. Training and simulation run in separate worker environments, locally or on configured cloud compute.
+OpenJensen brings dataset exploration, training, quantization and simulation into one self-hosted workspace. Interact with it through the **web app**, the **`jensen` command-line interface (CLI)**, or the **optional interactive terminal client (TUI)**. All three connect to the same application API and share projects, jobs and artifacts. Training and simulation run in separate worker environments, locally or on configured cloud compute.
 
 [Get started](#run-locally) · [Workspace guide](docs/workspace-guide.md) · [Requirements and support](docs/support.md) · [Backup and upgrade](docs/upgrading.md)
 
-![Illustration of the three OPEN JENSEN interfaces: a browser workspace, jensen CLI commands, and an interactive terminal with project, job and detail views; all connect to the same projects, jobs and artifacts](docs/images/workspace-interfaces.svg)
+![Illustration of the three OpenJensen interfaces: a browser workspace, jensen CLI commands, and an interactive terminal with project, job and detail views; all connect to the same projects, jobs and artifacts](docs/images/workspace-interfaces.svg)
 
 | Interface | Open it | Use it for |
 | --- | --- | --- |
@@ -18,7 +18,7 @@ OPEN JENSEN brings dataset exploration, training, quantization and simulation in
 
 Keep the application server running for the CLI and TUI. Install the optional terminal dependencies with `uv sync --frozen --all-packages --extra tui`; see the [terminal guide](docs/terminal.md) for connecting either client to another server.
 
-![OPEN JENSEN dataset explorer showing recorded camera frames and episode data](docs/images/dataset-explorer.png)
+![OpenJensen dataset explorer showing recorded camera frames and episode data](docs/images/dataset-explorer.png)
 
 *Browse recorded episodes and inspect their camera views, state and action samples.*
 
@@ -38,7 +38,7 @@ Keep the application server running for the CLI and TUI. Install the optional te
 
 Robot Lab, Teaching, Augmentation, Decision lab and Cloud runs are optional modules: they appear in the sidebar once the host is set up for them (see [installation profiles](docs/installation-profiles.md#workspace-modules)). Each operation needs a worker that matches the policy, dataset format and available hardware. Some advanced workflows remain experimental; check [requirements and support](docs/support.md) before choosing a runtime.
 
-[OPEN JENSEN Quant](workers/jensen_quant/README.md) is a 4/8-bit quantization library and CLI for dense PyTorch models. Use its native ACT packing path from the workspace or its standalone library and command-line client.
+[OpenJensen Quant](workers/jensen_quant/README.md) is a 4/8-bit quantization library and CLI for dense PyTorch models. Use its native ACT packing path from the workspace or its standalone library and command-line client.
 
 ## Run locally
 
@@ -101,7 +101,7 @@ The separate [`/docs/`](http://127.0.0.1:8000/docs/) route serves the [API refer
 
 ## Architecture
 
-The Python application owns persistent projects, job state and artifact records. Isolated workers own model-specific dependencies and execution. OPEN JENSEN adopts LeRobot, SkyPilot and native runtimes instead of maintaining a second implementation of each trainer or simulator.
+The Python application owns persistent projects, job state and artifact records. Isolated workers own model-specific dependencies and execution. OpenJensen adopts LeRobot, SkyPilot and native runtimes instead of maintaining a second implementation of each trainer or simulator.
 
 ```text
 apps/web/          Next.js and React interface, exported as static files

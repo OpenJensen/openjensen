@@ -68,7 +68,7 @@ test('project switching and keyboard navigation preserve scope without creating 
   await expect(menu(page)).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Dashboard', exact: true })).toBeFocused();
   await current(page).click();
-  await page.getByRole('heading', { name: 'Dataset', exact: true, level: 1 }).click();
+  await page.getByRole('heading', { name: 'Datasets', exact: true, level: 1 }).click();
   await expect(menu(page)).toHaveCount(0);
   expect(writes).toEqual([]);
 });

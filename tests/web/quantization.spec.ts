@@ -611,7 +611,7 @@ test('opens a previous quantization job from history without mixing its details 
   await expectSelectedPolicy(page, 'recent-100', false);
   await expect(page.getByRole('article', { name: 'Quantize job details' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: /^Download / })).toHaveCount(0);
-  await page.getByRole('button', { name: '← All quantization jobs', exact: true }).click();
+  await page.getByRole('button', { name: '← Back to jobs', exact: true }).click();
   await expect(history).toBeVisible();
   expect(submitted).toEqual([]);
   expect(unexpected).toEqual([]);
@@ -753,7 +753,7 @@ for (const stage of ['Evaluate', 'Run']) {
     await expect(
       page.getByRole('button', { name: stage === 'Evaluate' ? 'Start evaluation' : 'Reload and run', exact: true }),
     ).toBeDisabled();
-    await page.getByRole('button', { name: 'Go to quantization', exact: true }).click();
+    await page.getByRole('button', { name: 'Open Quantize', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Quantization jobs', exact: true })).toBeVisible();
     await chooseTransformationModel(page, 'quantization', 'Choose LoRA checkpoint · recent-100');
     await expectSelectedPolicy(page, 'recent-100');

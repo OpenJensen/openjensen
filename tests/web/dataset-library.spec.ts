@@ -22,7 +22,7 @@ test('open an imported two-view fixture, save labels, reopen it and reach the da
   // Conversion and immutable-copy validation run real CPU subprocesses.
   test.setTimeout(120_000);
   const project = await ownProject(page, `Label fixture ${testInfo.project.name}`);
-  await expect(page.getByRole('heading', { name: 'My datasets', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Saved datasets', exact: true })).toBeVisible();
   await expect(page.getByText('Example datasets', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('status', { name: 'Application API connection' })).toHaveCount(0);
   await expect(page.getByText('LeRobot v2 / v3', { exact: true })).toHaveCount(0);
@@ -51,7 +51,7 @@ test('open an imported two-view fixture, save labels, reopen it and reach the da
   await expect(labels.getByRole('textbox', { name: 'Image label' })).toHaveValue('');
   await labels.getByRole('button', { name: 'Previous image', exact: true }).click();
   await expect(labels.getByRole('textbox', { name: 'Image label' })).toHaveValue('Red block approaching the target');
-  await page.getByRole('button', { name: '← Back to library', exact: true }).click();
+  await page.getByRole('button', { name: '← Back to datasets', exact: true }).click();
   await page.getByRole('button', { name: 'Open dataset Robot labeling playground' }).click();
   await expect(page.getByRole('textbox', { name: 'Image label' })).toHaveValue('Red block approaching the target');
   await expect(labels.getByRole('link', { name: 'Export dataset' })).toHaveAttribute(
@@ -82,8 +82,8 @@ test('open an imported two-view fixture, save labels, reopen it and reach the da
   await expect(page.getByRole('button', { name: 'Train on this dataset' })).toBeEnabled();
   await page.getByRole('link', { name: 'Dashboard', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Resources & connections' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'My models', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'My datasets', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Models', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Datasets', exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('workspace-dashboard.png'), fullPage: true });
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),
@@ -121,7 +121,7 @@ test('native folder selection uploads files, detects records and converts for in
   await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Dataset inspection', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Local dataset', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '← Back to library', exact: true }).click();
+  await page.getByRole('button', { name: '← Back to datasets', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Open dataset source-folder' })).toBeVisible();
 });
 
@@ -342,11 +342,11 @@ for (const available of [true, false]) {
       await expect.poll(() => video.evaluate((node) => (node as HTMLVideoElement).paused)).toBe(false);
       await page.waitForTimeout(1200); // Exercise the exclusive end boundary across a full loop.
       expect(await video.evaluate((node) => (node as HTMLVideoElement).currentTime)).toBeLessThan(2);
-      await page.getByRole('heading', { name: 'Dataset', exact: true }).hover();
+      await page.getByRole('heading', { name: 'Datasets', exact: true }).hover();
       await expect.poll(() => video.evaluate((node) => (node as HTMLVideoElement).paused)).toBe(true);
     }
     await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
-    await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+    await page.getByRole('link', { name: 'Datasets', exact: true }).click();
     if (available) {
       expect(requests).toHaveLength(1);
       await expect(card.locator('video')).toHaveClass('loaded');
@@ -439,15 +439,15 @@ test('dashboard uses the current project library scope, and inspection is reache
   await expect(page.getByRole('navigation', { name: 'Dataset views' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Open dataset/ })).toHaveCount(3);
   await page.getByRole('link', { name: 'Dashboard', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'My datasets', exact: true })).toContainText('3 saved datasets');
+  await expect(page.getByRole('button', { name: 'Datasets', exact: true })).toContainText('3 saved datasets');
   await expect(page.getByRole('region', { name: 'Recent datasets' }).getByText('our/data-3')).toHaveCount(0);
-  await page.getByRole('button', { name: 'My datasets', exact: true }).click();
+  await page.getByRole('button', { name: 'Datasets', exact: true }).click();
   await page.getByRole('button', { name: 'Open dataset our/data-0', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Dataset inspection', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Explore dataset', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: '← Back to library', exact: true })).toHaveCount(1);
-  await page.getByRole('button', { name: '← Back to library', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'My datasets', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '← Back to datasets', exact: true })).toHaveCount(1);
+  await page.getByRole('button', { name: '← Back to datasets', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Saved datasets', exact: true })).toBeVisible();
   expect(reads).not.toContain('all');
   expect(reads).toContain(project);
   expect(writes).toEqual([]);
@@ -496,8 +496,8 @@ test('dashboard resource checks stay in the same position on a fresh visit and a
   const after = await position();
   expect(Math.abs(after.x - before.x)).toBeLessThan(1);
   expect(Math.abs(after.y - before.y)).toBeLessThan(1);
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'My datasets', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Saved datasets', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Dashboard', exact: true }).click();
   const revisited = await position();
   expect(Math.abs(revisited.x - before.x)).toBeLessThan(1);
@@ -530,7 +530,7 @@ test('immutable training copy keeps its checkbox aligned and explains storage an
   expect(bounds.x).toBeGreaterThanOrEqual(0);
   expect(bounds.x + bounds.width).toBeLessThanOrEqual(page.viewportSize()!.width);
   await page.screenshot({ path: testInfo.outputPath('training-copy-help.png'), fullPage: true });
-  await page.getByRole('heading', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('heading', { name: 'Datasets', exact: true }).click();
   await expect(tooltip).toBeHidden();
 });
 
@@ -613,14 +613,14 @@ test('unsaved labels survive library, workflow, project and reload navigation wi
   const field = () => page.getByRole('textbox', { name: 'View name front', exact: true });
   await open();
   await field().fill('Unsaved front camera');
-  await page.getByRole('button', { name: '← Back to library', exact: true }).click();
+  await page.getByRole('button', { name: '← Back to datasets', exact: true }).click();
   await open();
   await expect(field()).toHaveValue('Unsaved front camera');
   await page.getByRole('button', { name: 'Inspect for training', exact: true }).click();
   await open();
   await expect(field()).toHaveValue('Unsaved front camera');
   await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await open();
   await expect(field()).toHaveValue('Unsaved front camera');
   await selectProject(page, 'other');
@@ -640,7 +640,7 @@ test('unsaved labels survive library, workflow, project and reload navigation wi
   expect(state.saves[0].revision).toBe(0);
   await page.getByRole('button', { name: 'Reload saved labels', exact: true }).click();
   await expect(field()).toHaveValue('Changed in another window');
-  await page.getByRole('button', { name: '← Back to library', exact: true }).click();
+  await page.getByRole('button', { name: '← Back to datasets', exact: true }).click();
   await open();
   await expect(field()).toHaveValue('Changed in another window');
 });
@@ -668,7 +668,7 @@ test('unavailable browser draft storage preserves labels during in-app navigatio
   const field = page.getByRole('textbox', { name: 'View name front', exact: true });
   await field.fill('Draft without storage');
   await expect(page.getByRole('alert').filter({ hasText: 'Browser storage is unavailable' })).toBeVisible();
-  await page.getByRole('button', { name: '← Back to library', exact: true }).click();
+  await page.getByRole('button', { name: '← Back to datasets', exact: true }).click();
   await page.getByRole('button', { name: 'Open dataset Saved local data', exact: true }).click();
   await expect(field).toHaveValue('Draft without storage');
   await page.getByRole('button', { name: 'Save labels', exact: true }).click();
@@ -742,7 +742,7 @@ test('unknown-owner records are workspace repair notices with no project or disc
   );
   expect(state.deletes).toEqual([]);
   await page.getByRole('link', { name: 'Dashboard', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'My datasets', exact: true })).toContainText('1 saved datasets');
+  await expect(page.getByRole('button', { name: 'Datasets', exact: true })).toContainText('1 saved datasets');
 });
 
 test('late label-save acknowledgement does not erase a newer draft after reopening', async ({ page }) => {
@@ -764,13 +764,13 @@ test('late label-save acknowledgement does not erase a newer draft after reopeni
   await field().fill('First submitted draft');
   await page.getByRole('button', { name: 'Save labels', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Saving…', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '← Back to library', exact: true }).click();
+  await page.getByRole('button', { name: '← Back to datasets', exact: true }).click();
   await open();
   await field().fill('Newer unsaved draft');
   const response = page.waitForResponse((value) => value.url().endsWith(`/datasets/${id}/annotations`));
   release();
   await response;
-  await page.getByRole('button', { name: '← Back to library', exact: true }).click();
+  await page.getByRole('button', { name: '← Back to datasets', exact: true }).click();
   await open();
   await expect(field()).toHaveValue('Newer unsaved draft');
 });

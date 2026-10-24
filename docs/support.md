@@ -1,6 +1,6 @@
 # Requirements and platform support
 
-OPEN JENSEN is a self-hosted, single-user robotics research workspace. Start with
+OpenJensen is a self-hosted, single-user robotics research workspace. Start with
 [source installation and dataset preview](getting-started.md), which needs no GPU
 or provider account. Training, inference and simulation use separate worker
 environments.

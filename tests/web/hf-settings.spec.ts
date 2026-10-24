@@ -81,7 +81,7 @@ async function settings(page: Page, reject = false) {
     return route.fulfill({ json: value });
   });
   await page.goto('/datasets/');
-  await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
+  await page.getByRole('link', { name: 'Settings', exact: true }).click();
   await page.getByRole('button', { name: 'Compute', exact: true }).click();
   return { panel: page.getByRole('region', { name: 'Hugging Face', exact: true }), requests };
 }
