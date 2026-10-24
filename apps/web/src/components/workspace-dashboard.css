@@ -36,7 +36,7 @@
   flex: 1;
 }
 .dashboard-collection h3 {
-  font-size: 18px;
+  font-size: var(--text-section);
   margin: 0 0 4px;
 }
 .dashboard-collection p {
@@ -77,19 +77,6 @@
   font-size: 13px;
   flex: 1;
   white-space: nowrap;
-}
-.resource-state {
-  font-size: 10px;
-  border: 1px solid var(--line);
-  padding: 3px 6px;
-  border-radius: 5px;
-  color: var(--muted);
-  background: var(--surface);
-}
-.resource-state.ready {
-  color: var(--success);
-  background: var(--success-bg);
-  border-color: var(--success-bg);
 }
 .dashboard-resource-grid p {
   font-size: 13px;
@@ -170,7 +157,7 @@
     margin-bottom: 10px;
   }
   .dashboard-resource-heading h3 {
-    font-size: 15px;
+    font-size: var(--text-subsection);
   }
 }
 @media (max-width: 640px) {
@@ -202,7 +189,7 @@
 }
 .dashboard-section-heading h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--text-section);
 }
 .dashboard-section-heading p {
   margin: 6px 0 0;

@@ -9,18 +9,14 @@
 .robot-lab-connection strong { display: block; font-size: 12px; }
 .robot-lab-connection small { display: block; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
 .robot-lab-status-actions { display: flex; gap: 10px; align-items: center; }
-.robot-lab-stop { border: 1px solid var(--error); color: var(--error); background: var(--error-bg); min-height: 37px; border-radius: 7px; font-size: 12px !important; font-weight: 650 !important; padding: 7px 13px; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.robot-lab-stop { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
 .robot-lab-stop > span { display: block; width: 9px; height: 9px; border-radius: 2px; background: currentColor; }
-.robot-lab-steps { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
-.robot-lab-step { padding: 11px 17px; color: var(--muted); background: transparent; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; font-size: 13px !important; font-weight: 500 !important; white-space: nowrap; }
-.robot-lab-step.selected { color: var(--primary); border-bottom-color: var(--primary); }
-.robot-lab-step:hover:enabled { color: var(--ink); background: var(--subtle); }
 .robot-lab-grid { display: grid; grid-template-columns: minmax(0, 1fr) 310px; align-items: start; gap: 22px; }
 .robot-lab-main, .robot-lab-card { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); min-width: 0; }
 .robot-lab-main { padding: 24px; }
 .robot-lab-card { padding: 20px; }
 .robot-lab-panel-heading { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 20px; }
-.robot-lab-panel-heading h2 { font-size: 17px; font-weight: 600; }
+.robot-lab-panel-heading h2 { font-size: var(--text-section); font-weight: 600; }
 .robot-lab-panel-heading p { margin-top: 5px; font-size: 12px; color: var(--muted); max-width: 490px; }
 .robot-lab-mini-label { display: inline-flex; flex-shrink: 0; padding: 4px 8px; border-radius: 5px; background: var(--subtle); color: var(--muted); font: 10px ui-monospace, monospace; }
 .robot-lab-form { display: grid; gap: 18px; }
@@ -30,17 +26,12 @@
 .robot-lab textarea { min-height: 72px; resize: vertical; line-height: 1.5; }
 .robot-lab label > small { font-weight: 400; font-size: 11px; color: var(--muted); }
 .robot-lab-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-.robot-lab-subtle { color: var(--muted); font-size: 12px; }
-.robot-lab-info, .robot-lab-warning, .robot-lab-success { border: 1px solid var(--line); background: var(--subtle); padding: 13px 15px; font-size: 12px; border-radius: 8px; color: var(--muted); }
-.robot-lab-info strong, .robot-lab-warning strong, .robot-lab-success strong { display: block; color: var(--ink); margin-bottom: 3px; font-weight: 600; }
-.robot-lab-warning { background: var(--warning-bg); border-color: color-mix(in srgb, var(--warning) 28%, var(--line)); color: var(--warning); }
-.robot-lab-success { background: var(--success-bg); border-color: color-mix(in srgb, var(--success) 25%, var(--line)); color: var(--success); }
-.robot-lab-check { display: flex !important; align-items: flex-start; gap: 9px !important; font-weight: 450 !important; font-size: 12px !important; line-height: 1.65; padding: 13px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas); }
+.robot-lab-subtle { color: var(--muted); font-size: 12px; }.robot-lab-info strong, .robot-lab-warning strong, .robot-lab-success strong { display: block; color: var(--ink); margin-bottom: 3px; font-weight: 600; }.robot-lab-check { display: flex !important; align-items: flex-start; gap: 9px !important; font-weight: 450 !important; font-size: 12px !important; line-height: 1.65; padding: 13px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas); }
 .robot-lab-check input { accent-color: var(--primary); margin: 4px 0 0; flex-shrink: 0; }
 .robot-lab-check span strong { display: block; font-weight: 600; }
 .robot-lab-side { display: grid; gap: 18px; }
 .robot-lab-card-header { display: flex; gap: 10px; justify-content: space-between; align-items: center; margin-bottom: 14px; }
-.robot-lab-card h3 { font-size: 13px; font-weight: 600; }
+.robot-lab-card h3 { font-size: var(--text-section); font-weight: 600; }
 .robot-lab-camera { width: 100%; aspect-ratio: 4 / 3; background: var(--canvas); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; position: relative; display: grid; place-items: center; margin-bottom: 14px; }
 .robot-lab-camera img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .robot-lab-camera-empty { color: var(--muted); text-align: center; font-size: 11px; padding: 15px; display: grid; gap: 7px; justify-items: center; }
@@ -60,7 +51,7 @@
 .robot-lab-motor small { display: block; font-size: 9px; margin-top: 2px; }
 .robot-lab-motor-guide { border: 1px solid var(--line); background: var(--canvas); border-radius: 10px; display: flex; gap: 18px; align-items: center; padding: 21px; }
 .robot-lab-motor-number { font: 600 39px ui-monospace, monospace; color: var(--primary); line-height: 1; width: 64px; height: 70px; display: grid; place-items: center; background: var(--selected); border-radius: 9px; flex-shrink: 0; }
-.robot-lab-motor-guide h3 { font-size: 16px; font-weight: 600; letter-spacing: -.3px; margin-bottom: 4px; }
+.robot-lab-motor-guide h3 { font-size: var(--text-subsection); font-weight: 600; letter-spacing: -.3px; margin-bottom: 4px; }
 .robot-lab-motor-guide p { color: var(--muted); font-size: 11px; }
 .robot-lab-motor-guide small { display: block; margin-top: 8px; color: var(--primary); font-size: 10px; }
 .robot-lab-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
@@ -110,9 +101,7 @@
 .robot-lab-dataset-meta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 9px; color: var(--muted); font: 10px ui-monospace, monospace; }
 .robot-lab-empty { padding: 24px; text-align: center; color: var(--muted); font-size: 12px; background: var(--canvas); border: 1px dashed var(--line-strong); border-radius: 8px; }
 .robot-lab-empty svg { display: block; margin: 0 auto 9px; color: var(--line-strong); }
-.robot-lab-event { padding: 13px 15px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
-.robot-lab-error { color: var(--error); border-color: color-mix(in srgb, var(--error) 30%, var(--line)); background: var(--error-bg); }
-.robot-lab-imported { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.robot-lab-event { padding: 13px 15px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }.robot-lab-imported { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .robot-lab-progress { display: block; height: 4px; width: 100%; appearance: none; border: 0; background: var(--line); border-radius: 9px; overflow: hidden; }
 .robot-lab-progress::-webkit-progress-bar { background: var(--line); }
 .robot-lab-progress::-webkit-progress-value { background: var(--success); border-radius: 9px; }
@@ -120,7 +109,7 @@
 
 .robot-lab-assembled { display: grid; gap: 16px; padding-top: 20px; border-top: 1px solid var(--line); }
 .robot-lab-assembled-heading { display: flex; gap: 16px; justify-content: space-between; align-items: flex-start; }
-.robot-lab-assembled-heading h3 { font-size: 14px; font-weight: 600; }
+.robot-lab-assembled-heading h3 { font-size: var(--text-subsection); font-weight: 600; }
 .robot-lab-experimental { color: var(--warning); font-size: 11px; }
 .robot-lab-assembled-state { display: grid; gap: 8px; border-left: 2px solid var(--accent); background: var(--surface); padding: 13px; border-radius: 0 7px 7px 0; }
 .robot-lab-assembled-state .robot-lab-mini-label { justify-self: start; }
@@ -140,8 +129,6 @@
   .robot-lab { gap: 16px; }
   .robot-lab-statusbar { position: static; flex-wrap: wrap; padding: 12px; gap: 10px; }
   .robot-lab-status-actions { width: 100%; justify-content: space-between; }
-  .robot-lab-steps { gap: 0; justify-content: space-between; }
-  .robot-lab-step { padding: 10px 5px; font-size: 11px !important; }
   .robot-lab-main, .robot-lab-card { padding: 16px; }
   .robot-lab-fields, .robot-lab-mode-grid { grid-template-columns: minmax(0, 1fr); }
   .robot-lab input:not([type=checkbox]):not([type=radio]):not([type=range]), .robot-lab select, .robot-lab textarea { font-size: 16px; }
@@ -172,15 +159,17 @@
 .robot-lab-motor-selection small { display: block; color: var(--muted); margin-top: 10px; font-size: 10px; }
 
 .robot-lab-readiness { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); overflow: hidden; }
-.robot-lab-readiness-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.robot-lab-readiness-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; padding: 12px 16px; border: 0; border-right: 1px solid var(--line); text-align: left; background: transparent; color: var(--ink); }
-.robot-lab-readiness-item:last-child { border-right: 0; }
-.robot-lab-readiness-item > span { color: var(--muted); font-size: 11px; }
-.robot-lab-readiness-item > strong { grid-column: 1; grid-row: 2; display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 550; }
-.robot-lab-readiness-item > svg { grid-column: 2; grid-row: 1 / 3; align-self: center; color: var(--muted); }
-.robot-lab-readiness-item:hover:enabled { background: var(--subtle); }
-.robot-lab-readiness-item.verified strong, .robot-lab-pass { color: var(--success); }
-.robot-lab-readiness-item.attention strong, .robot-lab-fail { color: var(--warning); }
+.robot-lab-steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); overflow-x: auto; }
+.robot-lab-step { display: grid; gap: 3px; min-width: 104px; padding: 12px 16px; border: 0; border-right: 1px solid var(--line); border-bottom: 2px solid transparent; background: transparent; color: var(--ink); text-align: left; }
+.robot-lab-step:last-child { border-right: 0; }
+.robot-lab-step:hover:enabled { background: var(--subtle); }
+.robot-lab-step.selected { border-bottom-color: var(--primary); background: color-mix(in srgb, var(--selected) 45%, var(--surface)); }
+.robot-lab-step-title { font-size: 13px; font-weight: 600; }
+.robot-lab-step-state { display: flex; align-items: center; gap: 4px; overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.robot-lab-step.verified .robot-lab-step-state { color: var(--success); }
+.robot-lab-step.attention .robot-lab-step-state { color: var(--warning); }
+.robot-lab-pass { color: var(--success); }
+.robot-lab-fail { color: var(--warning); }
 .robot-lab-next { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px 16px; border-top: 1px solid var(--line); padding: 10px 16px; background: var(--subtle); font-size: 12px; color: var(--muted); }
 .robot-lab-next .text-button, .robot-lab-profile .text-button { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 12px; }
 .robot-lab-profile { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; border: 1px solid var(--line); border-radius: 7px; padding: 12px 14px; background: var(--canvas); }
@@ -191,9 +180,5 @@
 .robot-lab-details p { margin-top: 10px; }
 .robot-lab-details code { display: block; overflow-wrap: anywhere; font-size: 10px; margin-top: 10px; }
 @media (max-width: 650px) {
-  .robot-lab-readiness-item { padding: 10px 8px; gap: 5px; }
-  .robot-lab-readiness-item > span { font-size: 10px; }
-  .robot-lab-readiness-item > strong { font-size: 11px; }
-  .robot-lab-readiness-item > svg { display: none; }
   .robot-lab-next { padding: 10px; }
 }

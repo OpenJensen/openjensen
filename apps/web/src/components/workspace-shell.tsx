@@ -51,12 +51,12 @@ export function WorkspaceShell({
                 }
               : undefined
           }
-          aria-label="Open Jensen workspace home"
+          aria-label="OpenJensen workspace home"
         >
           <span className="brand-mark">
             <Icon name="layers" size={21} />
           </span>
-          <span className="brand-copy">Open Jensen</span>
+          <span className="brand-copy">OpenJensen</span>
         </Link>
         <div className="sidebar-content">{navigation}</div>
         <div className="sidebar-bottom">

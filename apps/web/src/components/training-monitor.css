@@ -24,7 +24,7 @@
 }
 .training-monitor-header h3 {
   margin: 5px 0 0;
-  font-size: 18px;
+  font-size: var(--text-section);
   font-weight: 550;
   line-height: 1.4;
   overflow-wrap: anywhere;
@@ -95,15 +95,6 @@
   margin: 10px 0;
   font-size: 11px;
   color: var(--muted);
-  line-height: 1.7;
-}
-.training-stale-notice {
-  background: var(--warning-bg);
-  color: var(--warning);
-  border-radius: 5px;
-  padding: 10px 12px;
-  margin: 12px 0;
-  font-size: 11px;
   line-height: 1.7;
 }
 .training-metrics {
@@ -408,7 +399,7 @@
     gap: 12px;
   }
   .training-monitor-header h3 {
-    font-size: 17px;
+    font-size: var(--text-section);
   }
   .training-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -446,18 +437,6 @@
   border-top: 1px solid var(--line);
   padding-top: 16px;
   margin-top: 20px;
-}
-.training-error-detail {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  max-height: 180px;
-  overflow: auto;
-  color: var(--error);
-  background: var(--error-bg);
-  padding: 12px;
-  border-radius: 5px;
-  font-size: 11px;
-  margin: 14px 0;
 }
 .training-checkpoint-actions {
   display: flex;

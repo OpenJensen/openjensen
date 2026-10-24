@@ -11,7 +11,7 @@
   margin-bottom: 24px;
 }
 .job-history-heading h2 {
-  font-size: 17px;
+  font-size: var(--text-section);
   font-weight: 600;
   letter-spacing: -0.3px;
 }

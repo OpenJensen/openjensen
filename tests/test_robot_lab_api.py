@@ -101,7 +101,7 @@ def test_status_reports_missing_or_unavailable_companion_without_secret(tmp_path
 
 
 def test_proxy_preserves_json_uses_bearer_and_redacts_response_secrets(tmp_path):
-    connection(tmp_path, label="Alex Mac")
+    connection(tmp_path, label="Lab Mac")
     calls = []
 
     def handler(request):
@@ -119,7 +119,7 @@ def test_proxy_preserves_json_uses_bearer_and_redacts_response_secrets(tmp_path)
         assert TOKEN not in response.text and "token" not in response.json()
         assert response.headers["cache-control"] == "no-store"
         status = client.get("/api/v1/robot-lab/status").json()
-        assert status["connected"] and status["label"] == "Alex Mac"
+        assert status["connected"] and status["label"] == "Lab Mac"
     asyncio.run(companion.close())
 
 

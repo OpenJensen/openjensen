@@ -8,9 +8,9 @@ Install `uv` and use Python 3.14.7. From a checkout run:
 
 ```sh
 # macOS
-python3 deploy/macos/install_robot_lab.py --source workers/robot_lab --ssh-host xbox-360
+python3 deploy/macos/install_robot_lab.py --source workers/robot_lab --ssh-host application-server
 # Linux
-python3 deploy/linux/install_robot_lab.py --source workers/robot_lab --ssh-host xbox-360
+python3 deploy/linux/install_robot_lab.py --source workers/robot_lab --ssh-host application-server
 ```
 
 On macOS, the installer creates an isolated runtime under `~/.local/share/jensen/robot-lab`, private data under `~/Library/Application Support/OpenJensen/robot-lab`, and two user LaunchAgents: `com.openjensen.robot-lab` and `com.openjensen.robot-lab.tunnel`. The companion listens only on 127.0.0.1:18101; the private SSH tunnel exposes it only on Xbox loopback and opens the private workspace at http://127.0.0.1:18096/. The operator must already have authorized SSH access to that host.

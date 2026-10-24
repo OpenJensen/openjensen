@@ -1,4 +1,4 @@
-# Getting started with OPEN JENSEN
+# Getting started with OpenJensen
 
 Start with dataset inspection: it needs the application and CPU reader, with no GPU or provider account. Run the complete [source installation commands](../README.md#run-locally) from the repository root, then configure optional workers when you need them.
 

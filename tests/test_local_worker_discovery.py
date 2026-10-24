@@ -19,7 +19,7 @@ def ready_response(**gpu):
             "status": "ready",
             "reason": None,
             "gpu": {
-                "name": "NVIDIA RTX 3070",
+                "name": "NVIDIA RTX 4060",
                 "memory_mib": 8192,
                 "uuid": "GPU-1234-abcd",
                 "index": 0,
@@ -129,11 +129,11 @@ def test_hardware_alone_does_not_advertise_training(local, monkeypatch):
     service, root = local
     (root / ".venv/bin/python").unlink()
     monkeypatch.setattr(
-        discovery, "_hardware", lambda env: ("0", "GPU-1234", "NVIDIA RTX 3070", 8192)
+        discovery, "_hardware", lambda env: ("0", "GPU-1234", "NVIDIA RTX 4060", 8192)
     )
     result = asyncio.run(service.check())
     assert result.status == "unavailable"
-    assert result.candidates[0].gpu_name == "NVIDIA RTX 3070"
+    assert result.candidates[0].gpu_name == "NVIDIA RTX 4060"
     assert result.candidates[0].status == "setup_required"
 
 
@@ -399,7 +399,7 @@ def test_missing_gpu_uuid_cannot_persist_a_numeric_device_target(local, monkeypa
     assert candidate.status == "setup_required"
     assert candidate.runtime_id is None
     assert "stable GPU identity" in candidate.reason
-    assert candidate.gpu_name == "NVIDIA RTX 3070"
+    assert candidate.gpu_name == "NVIDIA RTX 4060"
     with pytest.raises(ValueError, match="Check this machine again"):
         asyncio.run(service.add(candidate.id))
     assert service.lifecycle.local_workers.writes == 0

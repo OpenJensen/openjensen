@@ -323,14 +323,14 @@ export function TeachingIntelligence({ context, online }: { context: Context | n
             disabled={!online || !ready || !consent || !question.trim() || pending}
             onClick={() => void ask('decision')}
           >
-            Ask Jev for a review suggestion
+            Suggest what to review
           </button>
           <button
             className="secondary-button"
             disabled={!online || !ready || !consent || !question.trim() || pending}
             onClick={() => void ask('perception')}
           >
-            Ask Mk1.5 about the camera
+            Ask about the camera image
           </button>
           {pending && (
             <button className="secondary-button" onClick={() => void stop()}>

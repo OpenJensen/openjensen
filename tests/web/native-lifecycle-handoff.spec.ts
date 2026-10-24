@@ -1077,7 +1077,7 @@ test('delayed capability reads and history polling cannot replace a manual mode 
     'data-job-id',
     'replay-b',
   );
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await page.getByRole('link', { name: 'Run', exact: true }).click();
   await expect(page.getByRole('article', { name: 'Observation replay details' })).toHaveAttribute(
     'data-job-id',
@@ -1220,7 +1220,7 @@ test('the engine preparation link returns to the saved model chooser', async ({ 
   await openSavedAct(page);
   await page.getByRole('link', { name: 'Evaluate', exact: true }).click();
   await page.getByRole('button', { name: 'New evaluation', exact: true }).click();
-  await page.getByRole('button', { name: 'Go to quantization', exact: true }).click();
+  await page.getByRole('button', { name: 'Open Quantize', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Quantization jobs', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Start a new quantization', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Your quantization models' })).toBeVisible();
@@ -1261,7 +1261,7 @@ test('saved simulation history opens once and preserves the manually selected ex
     'isaac-a',
   );
   await page.getByLabel('Saved simulation job', { exact: true }).selectOption('isaac-b');
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await page.getByRole('link', { name: 'Run', exact: true }).click();
   await expect(page.getByRole('article', { name: 'Native simulation job details' })).toHaveAttribute(
     'data-job-id',

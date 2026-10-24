@@ -103,7 +103,7 @@
 }
 .training-dataset-dialog h2 {
   margin: 0 0 8px;
-  font-size: 20px;
+  font-size: var(--text-section);
 }
 .training-dataset-dialog header p {
   margin: 0;

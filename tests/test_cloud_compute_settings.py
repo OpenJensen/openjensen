@@ -390,7 +390,7 @@ def test_workspace_script_only_creates_missing_scoped_entry(
     name = catalog.sky_workspace_name("robotics-demo")
     untouched = {
         "default": {"gcp": {"project_id": "existing-project"}},
-        "robotics-team": {"ssh": {"allowed_node_pools": ["xbox-360"]}},
+        "robotics-team": {"ssh": {"allowed_node_pools": ["gpu-server"]}},
     }
     workspaces = copy.deepcopy(untouched)
     if existing:

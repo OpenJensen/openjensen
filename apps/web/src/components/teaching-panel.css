@@ -42,7 +42,7 @@
 .teaching-advice-heading h3,
 .teaching-voice h3 {
   margin: 0;
-  font-size: 15px;
+  font-size: var(--text-subsection);
   font-weight: 600;
 }
 .teaching-services > summary {

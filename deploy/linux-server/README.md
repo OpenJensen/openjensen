@@ -1,6 +1,6 @@
-# Deploy on Xbox
+# Deploy on a Linux server
 
-Use Python 3.14.7 and a dedicated service user on the host. Build the web client locally, then copy the source and export into a timestamped release under `~/ollamaforvlas/releases/`.
+Use Python 3.14.7 and a dedicated service user on the host. Build the web client locally, then copy the source and export into a timestamped release under `~/openjensen/releases/`.
 
 Use the canonical public route below for a new deployment. The supplied Supervisor
 template retains the alpha service labels `firebird` and `firebird-public` for
@@ -15,9 +15,9 @@ not only the old application symlink.
 
 1. Install the application dependencies in the release with `uv sync --frozen`.
 2. Install the [isolated CPU reader](../../workers/_cpu_readers/README.md) in the release checkout, and install FFmpeg/ffprobe on the host for dataset import and video previews.
-3. Select the release using the `~/ollamaforvlas/current` symlink.
-4. Create `data/`, `run/` and `logs/` under `~/ollamaforvlas`.
-5. Install Supervisor into `~/ollamaforvlas/.supervisor` and copy `supervisord.conf` into the deployment root.
+3. Select the release using the `~/openjensen/current` symlink.
+4. Create `data/`, `run/` and `logs/` under `~/openjensen`.
+5. Install Supervisor into `~/openjensen/.supervisor` and copy `supervisord.conf` into the deployment root.
 6. Start Supervisor using that configuration. Add an `@reboot` user crontab entry to start it when WSL starts.
 7. Configure [cloud credentials and workers](../../docs/cloud-connections.md) on the service host.
 
@@ -28,8 +28,8 @@ The configuration uses `data/` for application data, `current/apps/web/out` for 
 Run on the deployment host:
 
 ```sh
-~/ollamaforvlas/.supervisor/bin/supervisorctl -c ~/ollamaforvlas/supervisord.conf status
-~/ollamaforvlas/.supervisor/bin/supervisorctl -c ~/ollamaforvlas/supervisord.conf restart firebird
+~/openjensen/.supervisor/bin/supervisorctl -c ~/openjensen/supervisord.conf status
+~/openjensen/.supervisor/bin/supervisorctl -c ~/openjensen/supervisord.conf restart firebird
 curl -fsS http://127.0.0.1:8096/api/v1/health
 ```
 
@@ -49,13 +49,13 @@ to build, back up and restart this service from a private browser session.
 
 ## Connect through SSH
 
-Replace `xbox-360` with the configured SSH host alias:
+Replace `gpu-server` with the SSH host alias of the server:
 
 ```sh
-ssh -N -L 127.0.0.1:18096:127.0.0.1:8096 xbox-360
+ssh -N -L 127.0.0.1:18096:127.0.0.1:8096 gpu-server
 ```
 
-Open [localhost:18096](http://127.0.0.1:18096). Read service logs under `~/ollamaforvlas/logs/`.
+Open [localhost:18096](http://127.0.0.1:18096). Read service logs under `~/openjensen/logs/`.
 
 ## Public Funnel route
 
@@ -71,7 +71,7 @@ Configure the gateway JSON with these fields, replacing the host, service-user p
 ```json
 {
   "public_origin": "https://host.tailnet.ts.net",
-  "static_dir": "/home/service-user/ollamaforvlas/public-web/funnel-20260926",
+  "static_dir": "/home/service-user/openjensen/public-web/funnel-20260926",
   "username": "jensen",
   "path_prefix": "/jensen",
   "password_salt_hex": "REPLACE_WITH_16_BYTE_SALT_AS_HEX",

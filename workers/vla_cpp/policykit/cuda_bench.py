@@ -89,7 +89,7 @@ def measure(command: list[str], log: Path, timeout: int = 600) -> dict:
 
 
 def report(payload: dict, output: Path) -> None:
-    lines = ['# RTX 3070 SmolVLA CUDA engine screen', '',
+    lines = ['# SmolVLA CUDA engine screen', '',
              '**Deployment decision: pending closed-loop quality and package validation.**', '',
              'Two synthetic 512px camera images, fixed state/language/noise, four CPU threads. '
              'Three warmups per fresh process. Latencies include the native predict call, '

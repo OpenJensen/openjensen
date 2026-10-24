@@ -4,7 +4,7 @@
 
 1. Install Google Cloud CLI on the API host.
 2. Sign in with `gcloud auth login`.
-3. Open **Settings & diagnostics → Compute** and enter the project ID and region.
+3. Open **Settings → Compute** and enter the project ID and region.
 4. Connect Google Cloud, save the GPU/disk preferences, and continue to [training](skypilot-training.md).
 
 Inspect a project with `gcloud projects describe`. See the [login reference](https://docs.cloud.google.com/sdk/gcloud/reference/auth/login) and [project reference](https://docs.cloud.google.com/sdk/gcloud/reference/projects/describe).

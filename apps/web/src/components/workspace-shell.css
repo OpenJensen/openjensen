@@ -51,7 +51,7 @@
   margin-bottom: 15px;
 }
 .workflow-section-heading h2 {
-  font-size: 17px;
+  font-size: var(--text-section);
   font-weight: 600;
   letter-spacing: -0.3px;
 }

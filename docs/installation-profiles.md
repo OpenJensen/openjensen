@@ -34,9 +34,9 @@ robot communication, GPU training or simulator execution.
 
 The Robot Lab companion records LeRobot v3 datasets without installing Torch or
 the training environment on the USB computer. With the arm on macOS or Linux and the app
-on Xbox, install `robot` on the USB computer and keep Core, dataset tools and GPU workers
-on Xbox. The private connection forwards the app's Robot Lab requests to that computer;
-recordings stay there until you explicitly import them into an Xbox project.
+on an application server, install `robot` on the USB computer and keep Core, dataset tools
+and GPU workers on the server. The private connection forwards Robot Lab requests to the
+USB computer; recordings stay there until you explicitly import them into a project.
 
 Use the managed [macOS](../deploy/macos/README.md) or [Linux companion setup](../deploy/linux/README.md) for its service,
 camera permission and private pairing. Installing dependencies does not assign
@@ -97,6 +97,6 @@ are blocked at the public gateway.
 
 The sidebar always shows the dataset, training and testing pages. Robot Lab,
 Teaching, Augmentation, Decision lab and Cloud runs appear once this host has
-their configuration or you add them in Modules; **Settings & diagnostics → Modules** lists what each one
+their configuration or you add them in Modules; **Settings → Modules** lists what each one
 needs. Set `JENSEN_MODULES` to a comma-separated list such as
 `robot-lab,teaching` to choose the modules yourself, or to `all`.

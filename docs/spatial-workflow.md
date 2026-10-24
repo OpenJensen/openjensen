@@ -23,7 +23,7 @@ Copy [runtime.spatial.example.json](runtime.spatial.example.json), replace its a
 
 Set the source task to `libero_spatial`, its local `evaluation_bundle` to the prepared bundle, and the expected hash to its `spatial-assets.json` SHA-256. Supply the floating GGUF's separate hash.
 
-1. Open **Settings & diagnostics → Workflow settings**.
+1. Open **Settings → Workflow settings**.
 2. Choose **LIBERO Spatial**, task IDs and paired search/final states.
 3. Use LIBERO mode, the full 280-step horizon and 50 replayed actions.
 4. Enter `evaluation.parity_limits` with `profile`, `max_rmse` and `max_abs_error` for the fixed observations.

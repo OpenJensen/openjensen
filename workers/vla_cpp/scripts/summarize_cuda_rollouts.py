@@ -32,7 +32,7 @@ for candidate in manifest['results']:
 payload = {'scope':'One paired development episode per candidate; no population success-rate claim',
            'protocol':identity, 'results':rows, 'deployment_winner':None}
 (root/'results.json').write_text(json.dumps(payload, indent=2)+'\n')
-lines = ['# RTX 3070 paired LIBERO development pilot', '', payload['scope']+'.', '',
+lines = ['# Paired LIBERO CUDA development pilot', '', payload['scope']+'.', '',
          '| Candidate | Success | Environment steps |', '|---|---|---:|']
 lines += [f"| {r['preset']} | {r['task_success']} | {r['steps']} |" for r in rows]
 lines += ['', 'Task 0 / initial state 0 / seed 42, 500-step natural horizon, four replayed actions per call. '

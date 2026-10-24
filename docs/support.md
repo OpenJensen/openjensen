@@ -1,6 +1,6 @@
 # Requirements and platform support
 
-OPEN JENSEN is a self-hosted, single-user robotics research workspace. Start with
+OpenJensen is a self-hosted, single-user robotics research workspace. Start with
 [source installation and dataset preview](getting-started.md), which needs no GPU
 or provider account. Training, inference and simulation use separate worker
 environments.
@@ -15,7 +15,7 @@ environments.
 | ACT export, distillation, INT8/INT4 packing and observation replay | Separate CPU model and dataset environments; [CPU setup](../workers/local_cpu/README.md) covers Apple Silicon macOS and Linux x86_64. | Distillation and packing are experimental. Packed weights reduce storage; inference uses standard Torch operations. Evaluate the resulting policy before using it for a task. |
 | SmolVLA GGUF quantization and native inference | Patched native runtime and complete source model; [worker setup](../workers/vla_cpp/README.md). | Q4 is experimental. Quantization can change policy behavior, and a smaller file does not guarantee faster inference. |
 | LIBERO Spatial evaluation | Compatible Linux runtime, complete policy, processors, normalization and simulator assets. | Prepare the task and initial-state settings described in [LIBERO setup](spatial-workflow.md). Results depend on that setup. |
-| SO-101 setup, calibration, teleoperation and recording | Private Robot Lab plus the local macOS/Linux hardware companion, compatible Feetech servos and camera. | Initial motor IDs require one isolated motor at a time. Movement requires a saved calibration and an active control heartbeat. See [SO-101 Robot Lab](so101-robot-lab.md). |
+| SO-101 setup, calibration, teleoperation and recording | Private Robot Lab plus the local macOS/Linux hardware companion, compatible Feetech servos and camera. | Motor IDs can be assigned with the arm assembled (experimental) or one motor at a time. Movement requires a saved calibration and an active control heartbeat. See [SO-101 Robot Lab](so101-robot-lab.md). |
 | Isaac simulation and Teaching | Linux NVIDIA/Isaac 6.1 runtime, scene and policy/control configuration; optional voice services installed separately. | Experimental. Physical robot deployment is outside this setup. See [simulation setup](native-simulation.md). |
 | Desktop client | Rust/Tauri platform prerequisites and a separately running application; [desktop setup](../apps/desktop/README.md). | The source client connects to the local server. Bundled Python is an opt-in macOS ARM64 experiment; self-contained release installers and automatic updates are not provided. |
 | Windows | Source instructions include Windows CPU reader and CLI paths. | Source setup is experimental. Use Linux for NVIDIA training and Isaac workers. |

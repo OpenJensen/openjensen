@@ -188,7 +188,7 @@ def test_training_options_expose_configured_gpu_specs_without_private_runtime_fi
         device="cuda",
         training_python=sys.executable,
         training_root="fixture",
-        gpu_name="NVIDIA GeForce RTX 3070",
+        gpu_name="NVIDIA GeForce RTX 4060",
         gpu_memory_mib=8192,
         env={"PRIVATE_RUNTIME_VALUE": "not-public"},
     )
@@ -222,7 +222,7 @@ def test_training_options_expose_configured_gpu_specs_without_private_runtime_fi
         "simulation": True,
         "engine_evaluation": True,
         "run": True,
-        "gpu_name": "NVIDIA GeForce RTX 3070",
+        "gpu_name": "NVIDIA GeForce RTX 4060",
         "gpu_memory_mib": 8192,
         "training_gpu_count": 1,
     }

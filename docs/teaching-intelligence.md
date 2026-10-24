@@ -15,8 +15,8 @@ Supply LiveKit URL/key/secret and speech services through the worker setup. Use 
 1. Open Teaching after starting the configured executor and wait for its current session.
 2. Select **Connect voice** and allow microphone access.
 3. Confirm the voice agent appears in the room.
-4. Enter a question, review transmission consent, and select **Ask Jev for a review suggestion**.
-5. For a camera description, select **Ask Mk1.5 about the camera** with the current frame.
+4. Enter a question, review transmission consent, and select **Suggest what to review**.
+5. For a camera description, select **Ask about the camera image** with the current frame.
 
 Use Jev `typesafe/jev-1.13` for advisory requests and Mk1.5 `perceptron/perceptron-mk1.5` for image descriptions. Choose a chat model for the voice agent.
 

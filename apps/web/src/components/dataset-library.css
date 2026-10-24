@@ -65,7 +65,7 @@
   padding: 16px;
 }
 .dataset-library-copy h3 {
-  font-size: 15px;
+  font-size: var(--text-subsection);
   margin: 0 0 6px;
   overflow-wrap: anywhere;
 }
@@ -99,7 +99,7 @@
 }
 .dataset-empty h3 {
   color: var(--ink);
-  font-size: 16px;
+  font-size: var(--text-subsection);
   margin: 12px 0 7px;
 }
 .dataset-empty p {
@@ -223,7 +223,7 @@
   color: var(--muted);
 }
 .dataset-label-fields h3 {
-  font-size: 15px;
+  font-size: var(--text-subsection);
   margin-top: 0;
 }
 .dataset-label-fields textarea {

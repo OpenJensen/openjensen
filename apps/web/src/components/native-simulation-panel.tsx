@@ -744,7 +744,7 @@ export function NativeSimulationPanel({
                 <h3 id="simulation-policy-title">Policy</h3>
                 {preferredModelId && !modelPreferenceConsumed.current && (
                   <p role="status">
-                    Model from My models: {preferredModelId}. Choose a compatible profile to use this exact model.
+                    Selected model: {preferredModelId}. Choose a compatible profile to use this exact model.
                   </p>
                 )}
                 <div

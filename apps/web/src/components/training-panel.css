@@ -66,7 +66,7 @@
   margin-bottom: 18px;
 }
 .training-heading h2 {
-  font-size: 17px;
+  font-size: var(--text-section);
   font-weight: 600;
   letter-spacing: -0.3px;
 }
@@ -802,7 +802,7 @@
   margin-bottom: 24px;
 }
 .training-recovery h2 {
-  font-size: 15px;
+  font-size: var(--text-section);
 }
 .training-recovery-actions {
   display: flex;

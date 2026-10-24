@@ -54,7 +54,7 @@ test('data tools are first-class pages with clear return paths and no job submis
   }
   await navigation.getByRole('link', { name: 'Augmentation', exact: true }).click();
   await page.getByRole('button', { name: 'Import a dataset', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Dataset', level: 1, exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Datasets', level: 1, exact: true })).toBeVisible();
   expect(mutations).toEqual([]);
 });
 
@@ -87,7 +87,7 @@ test('workspace pages use a single title without introductory subtitles', async 
   await workspace(page);
   const navigation = page.getByRole('navigation', { name: 'Policy lifecycle' });
   for (const name of [
-    'Dataset',
+    'Datasets',
     'Augmentation',
     'Teaching',
     'Fine-tune',
@@ -97,7 +97,7 @@ test('workspace pages use a single title without introductory subtitles', async 
     'Run',
     'Decision lab',
     'Cloud runs',
-    'Settings & diagnostics',
+    'Settings',
     'Dashboard',
   ]) {
     await navigation.getByRole('link', { name, exact: true }).click();
@@ -112,8 +112,8 @@ test('workspace pages use a single title without introductory subtitles', async 
     await expect(page.getByRole('status', { name: 'Application API connection', exact: true })).toHaveCount(0);
     await expect(page.getByText('App connected', { exact: true })).toHaveCount(0);
   }
-  await page.getByRole('link', { name: 'My models', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'My models', level: 1, exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Models', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Models', level: 1, exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Workflow context', exact: true })).toHaveCount(0);
   await navigation.getByRole('link', { name: 'Distill', exact: true }).click();
   await expect(page.getByText('Teach a smaller ACT policy', { exact: true })).toHaveCount(0);
@@ -141,8 +141,8 @@ test('the contextual guide covers every section and keeps API docs separate', as
   const sections = page.locator('.guide-sections > section');
   const expectedSections = [
     'Dashboard',
-    'My models',
-    'Dataset',
+    'Models',
+    'Datasets',
     'Augmentation',
     'Teaching',
     'Robot Lab',
@@ -153,7 +153,7 @@ test('the contextual guide covers every section and keeps API docs separate', as
     'Run',
     'Decision lab',
     'Cloud runs',
-    'Settings & diagnostics',
+    'Settings',
   ];
   await expect(sections).toHaveCount(expectedSections.length);
   for (const name of expectedSections) {
@@ -350,8 +350,8 @@ test('compact mobile navigation leaves useful stage content visible and every to
     'Run',
     'Decision lab',
     'Cloud runs',
-    'Settings & diagnostics',
-    'Dataset',
+    'Settings',
+    'Datasets',
   ]) {
     const button = navigation.getByRole('link', { name, exact: true });
     await button.focus();
@@ -414,7 +414,7 @@ test('missing history stays visible in the run list and cannot enable metadata-o
   state.jobs = state.jobs.filter((job) => job.id === 'dataset-first');
   state.jobs[0].result.snapshot = null;
   await page.reload();
-  await page.getByRole('link', { name: 'Dataset', exact: true }).click();
+  await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await page.getByRole('button', { name: 'Open dataset dataset-first', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Dataset inspection', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Train on this dataset', exact: true })).toHaveCount(0);

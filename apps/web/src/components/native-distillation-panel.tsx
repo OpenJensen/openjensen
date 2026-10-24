@@ -525,7 +525,7 @@ export function NativeDistillationPanel({
             <div className="native-result-actions">
               {outputs.map((item) => (
                 <button type="button" key={item.id} className="secondary-button" onClick={() => onModel(item.id)}>
-                  View {item.label} in My models
+                  View {item.label} in Models
                 </button>
               ))}
             </div>
@@ -581,7 +581,7 @@ export function NativeDistillationPanel({
       )}
       {!selected && continuedTeacher && (
         <div className="distillation-continuation" aria-label="Selected teacher model">
-          <span className="distillation-continuation-step">My models → Distill</span>
+          <span className="distillation-continuation-step">Open Models Distill</span>
           <h3>Your saved teacher is selected</h3>
           <p>
             {continuedTeacher.label} · Run {continuedTeacher.job_id.slice(0, 8)}
@@ -674,7 +674,7 @@ export function NativeDistillationPanel({
               />
               {!datasets.length && (
                 <button type="button" className="text-link" onClick={onDataset}>
-                  Open Dataset intake
+                  Open Datasets
                 </button>
               )}
               {(runtimes.length > 1 || !runtime) && (

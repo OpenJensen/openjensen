@@ -4,17 +4,17 @@ version: 1
 default_target: mac_cpu
 targets:
   mac_cpu:
-    label: Intel MacBook Pro CPU
+    label: macOS x86-64 CPU
     runtime_backend: cpu
     artifact_format: gguf
     benchmark_lane: intel-mac-cpu
     deployment: local
-    notes: Primary v1 development and CPU feasibility target.
-  rtx_3070:
-    label: NVIDIA RTX 3070 laptop/desktop GPU
+    notes: CPU feasibility target.
+  cuda_gpu:
+    label: NVIDIA CUDA GPU
     runtime_backend: cuda
     artifact_format: gguf
-    benchmark_lane: rtx-3070-cuda
+    benchmark_lane: cuda
     deployment: local
     notes: Use a separate CUDA build and publish an independent leaderboard lane.
   gcloud_gpu:

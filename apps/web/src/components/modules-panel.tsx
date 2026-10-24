@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Icon } from '@/components/icon';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { useWorkspace } from '@/components/workspace-context';
 import { api, type InstallableProfile, type WorkspaceModule } from '@/lib/api';
 import { publicPath } from '@/lib/base-path';
@@ -122,9 +123,9 @@ export function ModulesPanel() {
             <div className="module-title">
               <Icon name={workspaceRoutes[item.id].icon} size={18} />
               <h3>{item.name}</h3>
-              <span className={`cloud-status${item.installed ? ' cloud-status-connected' : ''}`}>
+              <StatusBadge tone={item.installed ? 'success' : 'neutral'}>
                 {item.installed ? 'Added' : 'Available'}
-              </span>
+              </StatusBadge>
             </div>
             <p>{purpose[item.id]}</p>
             <div className="module-actions">
@@ -154,7 +155,7 @@ export function ModulesPanel() {
                   Add module
                 </button>
               )}
-              {item.managed && <span className="module-muted">Managed by server</span>}
+              {item.managed && <span className="module-muted">Managed by server</StatusBadge>}
             </div>
             {!item.configured && (
               <details>

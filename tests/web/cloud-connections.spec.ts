@@ -57,7 +57,7 @@ function connected(provider: Provider, config: NonNullable<Connection['config']>
 }
 
 async function openCompute(page: Page) {
-  await page.getByRole('link', { name: 'Settings & diagnostics', exact: true }).click();
+  await page.getByRole('link', { name: 'Settings', exact: true }).click();
   await page.getByRole('button', { name: 'Compute', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Google Cloud', exact: true })).toBeVisible();
 }
@@ -100,7 +100,7 @@ async function mockWorkspace(
       {
         id: 'smolvla-cuda-0',
         label: 'SmolVLA training',
-        gpu_name: 'NVIDIA RTX 3070',
+        gpu_name: 'NVIDIA RTX 4060',
         gpu_memory_mib: 8192,
         training_model_ids: ['smolvla'],
         status: 'ready',
@@ -533,14 +533,14 @@ test('local run preferences and machine label persist after saving and reloading
   const { writes, unexpected, computeWrites } = await mockWorkspace(page);
   const local = page.getByRole('region', { name: 'Local runs', exact: true });
   await expect(local.getByRole('checkbox', { name: 'Enable local runs', exact: true })).not.toBeChecked();
-  await local.getByRole('textbox', { name: 'Machine label', exact: true }).fill('Robotics lab RTX 3070');
+  await local.getByRole('textbox', { name: 'Machine label', exact: true }).fill('Robotics lab RTX 4060');
   await local.getByRole('checkbox', { name: 'Enable local runs', exact: true }).check();
   await local.getByRole('button', { name: 'Save local settings', exact: true }).click();
   await expect(local.getByRole('status')).toHaveText('Local settings saved.');
-  expect(computeWrites).toEqual([{ local: { enabled: true, label: 'Robotics lab RTX 3070' } }]);
+  expect(computeWrites).toEqual([{ local: { enabled: true, label: 'Robotics lab RTX 4060' } }]);
   await page.reload();
   await openCompute(page);
-  await expect(local.getByRole('textbox', { name: 'Machine label', exact: true })).toHaveValue('Robotics lab RTX 3070');
+  await expect(local.getByRole('textbox', { name: 'Machine label', exact: true })).toHaveValue('Robotics lab RTX 4060');
   await expect(local.getByRole('checkbox', { name: 'Enable local runs', exact: true })).toBeChecked();
   await local.getByRole('checkbox', { name: 'Enable local runs', exact: true }).uncheck();
   await local.getByRole('button', { name: 'Save local settings', exact: true }).click();
@@ -565,7 +565,7 @@ test('local discovery and registration are explicit, preserve preferences, and s
   await local.getByRole('button', { name: 'Check this machine', exact: true }).focus();
   await page.keyboard.press('Enter');
   await expect(local.getByText('App host · robotics-workstation', { exact: true })).toBeVisible();
-  await expect(local.getByText('NVIDIA RTX 3070 · 8 GB', { exact: true })).toBeVisible();
+  await expect(local.getByText('NVIDIA RTX 4060 · 8 GB', { exact: true })).toBeVisible();
   await expect(local.getByRole('button', { name: 'Add SmolVLA training', exact: true })).toBeVisible();
   expect(localWrites).toEqual([]);
   await local.getByRole('button', { name: 'Add SmolVLA training', exact: true }).click();
@@ -633,7 +633,7 @@ test('missing local worker dependencies are never represented as ready', async (
         {
           id: 'smolvla-cuda-0',
           label: 'SmolVLA training',
-          gpu_name: 'NVIDIA RTX 3070',
+          gpu_name: 'NVIDIA RTX 4060',
           gpu_memory_mib: 8192,
           training_model_ids: ['smolvla'],
           status: 'setup_required',
@@ -666,7 +666,7 @@ test('automatic setup requires a click, survives reload, cancels and retries wit
         {
           id: 'smolvla-cuda-0',
           label: 'Local NVIDIA GPU',
-          gpu_name: 'NVIDIA RTX 3070',
+          gpu_name: 'NVIDIA RTX 4060',
           gpu_memory_mib: 8192,
           training_model_ids: ['smolvla'],
           status: 'setup_required',
