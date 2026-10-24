@@ -247,17 +247,11 @@ export function DecisionPanel() {
         <WorkbenchDisclosure title="Model details">
           {status.data?.message && <p>{publicMessage(status.data.message)}</p>}
           <p>Muose-50M runs on the application host CPU. Scoring never starts a job, calls a tool, or moves a robot.</p>
+          <p>Not evaluated on robotics tasks. Weights are relative, not probabilities of correctness.</p>
+          <p>Model: muose/Muose-50M-Decision · CC-BY-NC-SA-4.0 (noncommercial). An operator must accept the license.</p>
           <p>
-            Only 3 of 6 workflow examples were correct in a small hand-authored fixture (5 of 6 banking examples). This
-            is not a robotics benchmark. Relative weights are uncalibrated, not probabilities of correctness.
-          </p>
-          <p>
-            Model: muose/Muose-50M-Decision · Noncommercial CC-BY-NC-SA-4.0; the operator must explicitly accept the
-            license.
-          </p>
-          <p>
-            Supply 2–8 unique criteria. Each state + instructions + criterion must fit 512 model tokens; excessive text
-            is rejected, never truncated.
+            Use 2–8 unique criteria. The state, instructions and each criterion must fit in 512 tokens; longer text is
+            rejected, not truncated.
           </p>
         </WorkbenchDisclosure>
       </div>
