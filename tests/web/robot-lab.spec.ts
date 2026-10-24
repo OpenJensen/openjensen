@@ -10,7 +10,7 @@ function initialStatus(calibrated = false): any {
   return { ok: true, connected: true, label: 'This Mac', version: '1', platform: 'Darwin', dependencies: { lerobot: { installed: false, version: null }, serial: { installed: true, version: '3.5' }, cv2: { installed: true, version: '4.12.0' }, scservo_sdk: { installed: true, version: '1.0.0' } }, capabilities: { mapping_verification: true, assembled_setup: true, probe: true, camera: true, motor_setup: true, calibration: true, control: true, recording: true }, session: { mode: 'idle', robot_id: null, port: null, role: null, positions: {}, torque_enabled: false, watchdog_seconds: 2, error: null }, calibration: { phase: 'idle', mins: {}, maxes: {}, offsets: {}, path: null }, recording: { active: false, dataset_id: null, episode_active: false, frames: 0, episodes: 0, fps: 10, error: null }, assembled: { phase: 'idle', ids: [], selected_joint: null, detected_id: null, candidate_delta: null, mapping: {}, message: 'Start experimental assembled setup.', error: null, log: [], progress: null, calibration_required: false }, calibrations: calibrated ? [{ robot_id: 'my-so101', role: 'follower', path: 'private-calibration.json' }] : [], datasets: [] };
 }
 async function fixture(page: Page, calibrated = false) {
-  const state = { status: initialStatus(calibrated), writes: [] as { path: string; body: any }[], errors: [] as string[], datasetReads: 0, cameraFailure: false, stopError: null as string | null, centerError: null as string | null };
+  const state = { status: initialStatus(calibrated), writes: [] as { path: string; body: any }[], errors: [] as string[], datasetReads: 0, cameraFailure: false, stopError: null as string | null, centerError: null as string | null, portsConnected: true };
   page.on('pageerror', error => state.errors.push(error.message));
   await page.route('**/api/v1/**', async route => {
     const request = route.request(), path = new URL(request.url()).pathname, body = request.method() === 'POST' ? request.postDataJSON() : undefined;
@@ -18,7 +18,7 @@ async function fixture(page: Page, calibrated = false) {
     if (path.startsWith('/api/v1/robot-lab/')) {
       const action = path.slice('/api/v1/robot-lab'.length);
       if (action === '/status') return route.fulfill({ json: state.status });
-      if (action === '/devices') return route.fulfill({ json: { ports: [{ device: port, description: 'SO-101 controller', manufacturer: 'USB serial', serial_number: 'test-1' }, { device: '/dev/cu.usbmodem-leader', description: 'Leader controller', manufacturer: 'USB serial', serial_number: 'test-2' }], cameras: [{ index: 0, name: 'Robot camera', width: 640, height: 480 }], camera_error: null } });
+      if (action === '/devices') return route.fulfill({ json: { ports: state.portsConnected ? [{ device: port, description: 'SO-101 controller', manufacturer: 'USB serial', serial_number: 'test-1' }, { device: '/dev/cu.usbmodem-leader', description: 'Leader controller', manufacturer: 'USB serial', serial_number: 'test-2' }] : [], cameras: [{ index: 0, name: 'Robot camera', width: 640, height: 480 }], camera_error: null } });
       if (action === '/camera.jpg') return state.cameraFailure ? route.fulfill({ status: 503, json: { detail: 'Camera disconnected.' } }) : route.fulfill({ contentType: 'image/png', body: pixel });
       if (action === '/datasets') return route.fulfill({ json: { datasets: state.status.datasets } });
       if (action === '/probe') return route.fulfill({ json: { port, baudrate: 1000000, motors: [{ id: 1, model: 777, stable: true, responses: 3 }], ready: false, expected_ids: [1, 2, 3, 4, 5, 6], warning: 'A response at one ID cannot prove that only one physical motor is connected.' } });
@@ -569,6 +569,45 @@ test('orbiting the CAD model updates joint labels without hardware commands', as
   await expect(view).not.toHaveAttribute('data-view-yaw','0.0');
   await page.getByRole('button', {name:'Zoom in 3D view',exact:true}).click();
   await marker.click();
+  expect(state.writes).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
+
+test('USB disconnect disables remembered motor controls and reconnect requires fresh motion acknowledgement', async ({page}) => {
+  const state = await savedMapping(page);
+  const wiggle = page.getByRole('button', {name:'Wiggle gripper · ID 6',exact:true});
+  const acknowledge = page.getByRole('checkbox', {name:/Arm supported; joints clear/});
+  await acknowledge.check();
+  await expect(wiggle).toBeEnabled();
+  state.portsConnected = false;
+  await page.getByRole('button', {name:'Check connection',exact:true}).click();
+  await expect(page.getByText('Robot USB disconnected',{exact:true})).toBeVisible();
+  await expect(wiggle).toBeDisabled();
+  await expect(acknowledge).not.toBeChecked();
+  await expect(acknowledge).toBeDisabled();
+  await expect(page.getByRole('heading',{name:'Saved IDs',exact:true})).toBeVisible();
+  await expect(page.getByLabel('Robot USB port')).toHaveValue(port);
+  await expect(page.getByLabel('Robot USB port').locator('option:checked')).toContainText('Disconnected');
+  await tab(page, 'Calibrate').click();
+  await expect(page.getByRole('button',{name:'Begin calibration',exact:true})).toBeDisabled();
+  state.status.calibrations = [{robot_id:'my-so101',role:'follower',path:'saved.json'}];
+  state.status.assembled.calibration_required = false;
+  await page.getByRole('button', {name:'Check connection',exact:true}).click();
+  await tab(page, 'Teleoperate').click();
+  await page.getByRole('checkbox',{name:/Arm secured; workspace clear/}).check();
+  await expect(page.getByRole('button',{name:'Enable on-screen controls',exact:true})).toBeDisabled();
+  await tab(page, 'Connect').click();
+  await expect(page.getByRole('button',{name:'Check motor connection',exact:true})).toBeDisabled();
+  await tab(page, 'Motor IDs').click();
+  state.portsConnected = true;
+  // Idle inventory polling notices USB return without refreshing or starting a session.
+  await expect(page.getByText('Robot USB connected · Idle',{exact:true})).toBeVisible({timeout:8_000});
+  await expect(acknowledge).toBeEnabled();
+  await expect(acknowledge).not.toBeChecked();
+  await expect(wiggle).toBeDisabled();
+  await acknowledge.check();
+  await expect(wiggle).toBeEnabled();
   expect(state.writes).toEqual([]);
   expect(state.errors).toEqual([]);
 });
