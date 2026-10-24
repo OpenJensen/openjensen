@@ -76,10 +76,12 @@ export async function datasetRequest<T>(path: string, init?: RequestInit, timeou
         init?.signal?.aborted
           ? 'Dataset request cancelled. A change may already have been saved; refresh its saved state before retrying.'
           : 'The dataset API did not respond in time. A change may already have been saved; refresh its saved state before retrying.',
+        { cause: error },
       );
     if (error instanceof TypeError)
       throw new Error(
         'Cannot reach the dataset API. Check the application connection and refresh saved state before retrying.',
+        { cause: error },
       );
     throw error;
   } finally {

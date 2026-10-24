@@ -29,7 +29,6 @@ import {
   isSimulationJob,
   nativeInput,
   simulationOptions,
-  simulationTarget,
   simulationProfileTarget,
   simulationExecutionTarget,
   simulationTaskSummary,

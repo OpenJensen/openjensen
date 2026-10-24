@@ -331,7 +331,7 @@ export function useWorkbenchState() {
     if (!stage || !workflowProjectId || context?.[stage]) return;
     // An unfinished request has priority over restoring owned history.
     // Read only: the child owns its journal and explicit recovery acknowledgement.
-    let recovery = false,
+    let recovery: boolean,
       simulationRecovery = false;
     try {
       const operation = 'policy.run.replay';

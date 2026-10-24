@@ -99,7 +99,7 @@ export function useTrainingBatch(project: string) {
     try {
       for (let index = 0; index < current().journal!.entries.length; index++) {
         let journal = current().journal!;
-        let entry = journal.entries[index];
+        const entry = journal.entries[index];
         if (entry.state === 'accepted') {
           retain(entry.job!);
           continue;

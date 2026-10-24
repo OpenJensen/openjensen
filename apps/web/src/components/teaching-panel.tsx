@@ -44,7 +44,9 @@ async function request<T>(path: string, body?: object, beforePost?: () => void):
     return value;
   } catch (error) {
     if (controller.signal.aborted)
-      throw new Error(body ? 'No response. Check the executor before retrying.' : 'Teaching connection timed out.');
+      throw new Error(body ? 'No response. Check the executor before retrying.' : 'Teaching connection timed out.', {
+        cause: error,
+      });
     throw error;
   } finally {
     clearTimeout(timeout);

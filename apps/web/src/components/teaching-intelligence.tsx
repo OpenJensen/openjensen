@@ -62,7 +62,8 @@ export async function intelligenceRequest<T>(
       throw new Error(typeof value.detail === 'string' ? value.detail : 'Intelligence request unavailable.');
     return value;
   } catch (error) {
-    if (controller.signal.aborted) throw new Error('Request stopped or timed out. It was not retried.');
+    if (controller.signal.aborted)
+      throw new Error('Request stopped or timed out. It was not retried.', { cause: error });
     throw error;
   } finally {
     clearTimeout(timeout);

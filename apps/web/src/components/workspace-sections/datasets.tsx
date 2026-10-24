@@ -8,7 +8,6 @@ import { Icon } from '@/components/icon';
 import { DatasetExplorer, FeatureChips } from '@/components/dataset-explorer';
 import { DatasetLibrary, DatasetLabeling, LocalDatasetImport } from '@/components/dataset-library';
 import type { LibraryDataset } from '@/lib/dataset-library';
-import { publicPath } from '@/lib/base-path';
 import { useDurableSubmission } from '@/lib/durable-submission';
 import { intakeAcknowledgement, validatedProjectHistory } from '@/lib/dataset-submission';
 import { DatasetSubmissionRecovery } from '@/components/dataset-submission-recovery';

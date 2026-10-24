@@ -210,10 +210,13 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs = 15_000):
     if (error instanceof DOMException && error.name === 'AbortError') {
       throw new Error(
         `The API did not respond within ${timeoutMs / 1000} seconds. Check the connection and try again.`,
+        { cause: error },
       );
     }
     if (error instanceof TypeError) {
-      throw new Error('Cannot reach the application API. Start the Python application and check its address.');
+      throw new Error('Cannot reach the application API. Start the Python application and check its address.', {
+        cause: error,
+      });
     }
     throw error;
   } finally {
