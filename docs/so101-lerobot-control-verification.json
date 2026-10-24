@@ -1,0 +1,80 @@
+{
+  "recorded_at": "2026-10-24T17:12:55.366840+00:00",
+  "upstream": "huggingface/lerobot@v0.4.4",
+  "scope": "SO101 follower position configuration and direct actions through the private companion bridge",
+  "feature_source_sha256": {
+    "apps/web/src/components/robot-lab.tsx": "b6d5af36c8927835ca778a24c388730cfe148b5f540685ee26d63b41743ec115",
+    "apps/web/src/lib/robot-api.ts": "124ccea4b9be09c383244eb990d815d112e03291912c0efd66a90af0cf7eed04",
+    "tests/web/robot-lab.spec.ts": "6ea67a4bce8a85a324bff9c1937e67e8b717eb6c316e93226b492d6d366438d6",
+    "workers/robot_lab/hardware.py": "8f1e665e35e1e4c88c0984878cc7b9dbf28e38ba3817eb3841e10acf3d0dec0c",
+    "workers/robot_lab/motion.py": "7dca91ccfa43c0f58ef9efa42f5f9894da5e706bb55bd9c4e7e53e22afc13429",
+    "workers/robot_lab/server.py": "93b838e5462a0b6b9a49a969071761b9ed285a875ca29eda18ac94d489fd128d",
+    "workers/robot_lab/lerobot_control.py": "b21701a0a5bc03540ad4378bebd1045ff7c6ae546345fac625af6b7383b6663f",
+    "workers/robot_lab/LEROBOT-LICENSE": "0583375a0ec642ec79c447781f34322b0cfa66baff31258214d040f1f6d86d7c",
+    "workers/robot_lab/LEROBOT-PROVENANCE.json": "70b0ac04cf9d41ff05b6da9bd180ead87c3c649ae5dfbc4d4987c686825d4e90",
+    "workers/robot_lab/tests/test_robot_lab.py": "215912198451adb8a627d37c1011cefe8b93dd0971b1779a414cbe7cf7f99fc9",
+    "workers/robot_lab/tests/test_motion.py": "db2386088008c95d0ca6fb0860a79bbb225110bc3d9be45cfc690fa743d831e4",
+    "workers/robot_lab/tests/test_lerobot_control.py": "03efc070259b255790e1eae81b3893bc5946f0f72bfbf84be6522121bcaa9b58",
+    "deploy/install_robot_lab.py": "2a90c546e3e92e958248297726624817104eedc08fe02e4af59002681d082991",
+    "tests/test_robot_lab_installer.py": "79cfbe88de832cac5f625a8d561e6d1784a1bba62ce49ee3746aa399a26bd374",
+    "workers/robot_lab/README.md": "b524ce4c44784496b457b477139d762ec251130b73b0861be301db0ba1187dd9",
+    "workers/robot_lab/API.md": "3469aef344acbf197e40f1c9429275da4583cba397ef2c17fa7748afc6864203",
+    "docs/so101-robot-lab.md": "954f4e84cf4f6665d7ef2f527368bbb1b2fef2fb27593d6236e8576aa8fb7250"
+  },
+  "deployed_integration_source_sha256": {
+    "apps/web/src/components/robot-lab.tsx": "b6d5af36c8927835ca778a24c388730cfe148b5f540685ee26d63b41743ec115",
+    "apps/web/src/lib/robot-api.ts": "124ccea4b9be09c383244eb990d815d112e03291912c0efd66a90af0cf7eed04",
+    "tests/web/robot-lab.spec.ts": "c1d2d6fe9fb07eb19543968a9f0ceaa0c17b5c981da3e2a1e8213cba35901e69",
+    "workers/robot_lab/hardware.py": "8f1e665e35e1e4c88c0984878cc7b9dbf28e38ba3817eb3841e10acf3d0dec0c",
+    "workers/robot_lab/motion.py": "7dca91ccfa43c0f58ef9efa42f5f9894da5e706bb55bd9c4e7e53e22afc13429",
+    "workers/robot_lab/server.py": "93b838e5462a0b6b9a49a969071761b9ed285a875ca29eda18ac94d489fd128d",
+    "workers/robot_lab/lerobot_control.py": "b21701a0a5bc03540ad4378bebd1045ff7c6ae546345fac625af6b7383b6663f",
+    "workers/robot_lab/LEROBOT-LICENSE": "0583375a0ec642ec79c447781f34322b0cfa66baff31258214d040f1f6d86d7c",
+    "workers/robot_lab/LEROBOT-PROVENANCE.json": "70b0ac04cf9d41ff05b6da9bd180ead87c3c649ae5dfbc4d4987c686825d4e90",
+    "workers/robot_lab/tests/test_robot_lab.py": "215912198451adb8a627d37c1011cefe8b93dd0971b1779a414cbe7cf7f99fc9",
+    "workers/robot_lab/tests/test_motion.py": "db2386088008c95d0ca6fb0860a79bbb225110bc3d9be45cfc690fa743d831e4",
+    "workers/robot_lab/tests/test_lerobot_control.py": "03efc070259b255790e1eae81b3893bc5946f0f72bfbf84be6522121bcaa9b58",
+    "deploy/install_robot_lab.py": "2a90c546e3e92e958248297726624817104eedc08fe02e4af59002681d082991",
+    "tests/test_robot_lab_installer.py": "79cfbe88de832cac5f625a8d561e6d1784a1bba62ce49ee3746aa399a26bd374",
+    "workers/robot_lab/README.md": "b524ce4c44784496b457b477139d762ec251130b73b0861be301db0ba1187dd9",
+    "workers/robot_lab/API.md": "3469aef344acbf197e40f1c9429275da4583cba397ef2c17fa7748afc6864203",
+    "docs/so101-robot-lab.md": "954f4e84cf4f6665d7ef2f527368bbb1b2fef2fb27593d6236e8576aa8fb7250"
+  },
+  "checks": {
+    "companion_unittest": {
+      "passed": 185,
+      "skipped": 1,
+      "total": 186,
+      "skipped_reason": "Optional official ML/dataset loader not installed in the lightweight companion environment."
+    },
+    "installer_worker_api_gateway_pytest": {
+      "passed": 118
+    },
+    "desktop_mobile_robot_lab_playwright": {
+      "passed": 84,
+      "workers": 1,
+      "runs": "82 existing checks passed in the full run; 2 new checks passed after correcting only their exact-text selector. No application change was needed for the rerun."
+    },
+    "changed_python_ruff": "passed",
+    "typescript": "passed",
+    "production_web_export": "passed",
+    "upstream_method_AST_and_license": "passed as part of companion unittest",
+    "packet_group_sync_write_and_Stop_races": "passed with fake serial transport",
+    "interrupted_identification_RAM_torque_cap_reset": "passed with fake hardware; saved lower EEPROM ceiling preserved"
+  },
+  "physical_acceptance": {
+    "performed": false,
+    "reason": "No arm USB serial device was present on the Mac companion during this work. Software tests do not measure physical torque or validate the power adapter. No powered motion was initiated."
+  },
+  "retained_guards": [
+    "explicit motion acknowledgement",
+    "calibration and model validation",
+    "selected joints and calibrated bounds",
+    "verified current-pose hold before enable",
+    "Stop and heartbeat cancellation",
+    "serial/motor fault stop",
+    "upstream gripper protection"
+  ],
+  "deployment_parent": "91b18db7bf309418d6120c558511f7e0f04d3c4f",
+  "integration_note": "Includes the existing deployed application-update and module-management changes. Only the Robot Lab browser fixture differs from the feature source, to retain the application-update read fixture."
+}
