@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, artifactDownloadUrl, isActive, isDatasetJob } from '@/lib/api';
 import { record, UncertainPolicyJob } from '@/lib/policy-job-mutation';
@@ -96,7 +96,7 @@ export function NativeReplayPanel({
     retry: false,
     refetchInterval: 5000,
   });
-  const attemptKey = ['native-replay-attempt', projectId];
+  const attemptKey = useMemo(() => ['native-replay-attempt', projectId], [projectId]);
   const attempt = useQuery<PolicyJobAttempt>({
     queryKey: attemptKey,
     queryFn: async () => null,
@@ -142,10 +142,13 @@ export function NativeReplayPanel({
     } catch {
       setError('Enable browser storage before submitting.');
     }
-  }, [client, projectId]);
+  }, [client, attemptKey, projectId]);
   const runtimes = (options.data?.runtimes ?? []).filter(replayRuntime);
   const runtime = runtimeId ? runtimes.find((item) => item.id === runtimeId) : runtimes[0];
-  const policies = (artifacts.data ?? []).filter((item) => replayPolicy(item, projectId));
+  const policies = useMemo(
+    () => (artifacts.data ?? []).filter((item) => replayPolicy(item, projectId)),
+    [artifacts.data, projectId],
+  );
   const policy = policies.find((item) => item.id === policyId);
   const datasets = (jobs.data ?? []).filter(isDatasetJob).filter((item) => replayDataset(item, projectId));
   const dataset = datasets.find((item) => item.id === datasetId);
@@ -160,7 +163,7 @@ export function NativeReplayPanel({
       setPolicy(preferredArtifactId);
       setAttested(false);
     }
-  }, [preferredArtifactId, artifacts.data, projectId]);
+  }, [preferredArtifactId, policies]);
   const history = (jobs.data ?? [])
     .filter(replayJob)
     .filter((item) => item.project_id === projectId)

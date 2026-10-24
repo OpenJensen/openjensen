@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, artifactDownloadUrl, isActive } from '@/lib/api';
 import { storeAttempt, type PolicyJobAttempt } from '@/lib/policy-job-attempt';
@@ -100,12 +100,18 @@ export function NativeSimulationPanel({
       ? options.data?.profiles.find((item) => item.policy_runtime !== 'packed-act-cpu')
       : undefined);
   const [artifactId, setArtifactId] = useState('');
-  const inputs = profile ? (artifacts.data ?? []).filter((item) => nativeInput(item, projectId, profile)) : [];
+  const inputs = useMemo(
+    () => (profile ? (artifacts.data ?? []).filter((item) => nativeInput(item, projectId, profile)) : []),
+    [profile, artifacts.data, projectId],
+  );
   const input = inputs.find((item) => item.id === artifactId && (!handoff || item === handedArtifact));
-  const handoffProfiles =
-    handedArtifact && options.isSuccess && !options.isError
-      ? simulationHandoffProfiles(handedArtifact, options.data.profiles)
-      : [];
+  const handoffProfiles = useMemo(
+    () =>
+      handedArtifact && options.isSuccess && !options.isError
+        ? simulationHandoffProfiles(handedArtifact, options.data.profiles)
+        : [],
+    [handedArtifact, options.isSuccess, options.isError, options.data],
+  );
   const [file, setFile] = useState<File | null>(null);
   const [policySource, setPolicySource] = useState<'saved' | 'upload'>(initialPolicySource);
   const modelPreferenceConsumed = useRef(false);

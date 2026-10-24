@@ -210,7 +210,9 @@ async function request<T>(
     return (await response.json()) as T;
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError')
-      throw new Error('The robot companion did not respond in time. Check the connection before trying again.');
+      throw new Error('The robot companion did not respond in time. Check the connection before trying again.', {
+        cause: error,
+      });
     throw error;
   } finally {
     clearTimeout(timer);
@@ -320,6 +322,7 @@ export async function importRobotDataset(
     if (error instanceof Error && error.name === 'AbortError')
       throw new Error(
         'Dataset import is taking longer than expected. Check the project dataset library before retrying.',
+        { cause: error },
       );
     throw error;
   } finally {

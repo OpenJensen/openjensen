@@ -112,7 +112,7 @@ export function GpuPicker({ value, onChange, choices, disabled = false, label = 
     }
     if (event.key.length !== 1 || event.altKey || event.ctrlKey || event.metaKey) return;
     event.preventDefault();
-    const now = Date.now();
+    const now = event.timeStamp;
     const text = (now - search.current.time < 600 ? search.current.text : '') + event.key.toLowerCase();
     const query = [...text].every((character) => character === text[0]) ? text[0] : text;
     const start = expanded ? active : Math.max(selectedIndex, 0);

@@ -399,9 +399,9 @@ export function RobotLab() {
   useEffect(() => {
     if (!devices.data) return;
     if (!port) setPort(devices.data.ports[0]?.device ?? '');
-    if (!availableCameras.some((camera) => camera.index === cameraIndex))
-      setCameraIndex(availableCameras[0]?.index ?? 0);
-  }, [devices.data, port, cameraIndex, availableCameras]);
+    const cameras = devices.data.cameras;
+    if (!cameras.some((camera) => camera.index === cameraIndex)) setCameraIndex(cameras[0]?.index ?? 0);
+  }, [devices.data, port, cameraIndex]);
   useEffect(() => {
     setIsolated(false);
     setAssembledReady(false);
@@ -532,6 +532,39 @@ export function RobotLab() {
     };
   }, [ownsSession, client]);
 
+  async function perform<T>(
+    label: string,
+    action: () => Promise<T>,
+    done?: (result: T) => void,
+    announce = true,
+    calibrationTarget?: 'ranges' | 'saved',
+  ) {
+    const token = ++epoch.current;
+    setPending(label);
+    setError(null);
+    setNotice(null);
+    setAwaitingCalibration(null);
+    try {
+      const result = await action();
+      if (!mounted.current || token !== epoch.current) return;
+      if (isStatus(result)) {
+        await client.cancelQueries({ queryKey: statusKey });
+        client.setQueryData(statusKey, result);
+      }
+      done?.(result);
+      setNotice(announce ? label : null);
+      void client.invalidateQueries({ queryKey: ['robot-lab', 'datasets'] });
+      void client.invalidateQueries({ queryKey: statusKey });
+    } catch (failure) {
+      if (mounted.current && token === epoch.current) {
+        setAwaitingCalibration(calibrationTarget ?? null);
+        setError(readable(failure));
+        void client.invalidateQueries({ queryKey: statusKey });
+      }
+    } finally {
+      if (mounted.current && token === epoch.current) setPending(null);
+    }
+  }
   function selectIllustratedJoint(joint: RobotJoint) {
     setMotorIndex(setupOrder.indexOf(joint));
     if (
@@ -697,39 +730,6 @@ export function RobotLab() {
       );
     } catch {
       /* Preferences are optional. */
-    }
-  }
-  async function perform<T>(
-    label: string,
-    action: () => Promise<T>,
-    done?: (result: T) => void,
-    announce = true,
-    calibrationTarget?: 'ranges' | 'saved',
-  ) {
-    const token = ++epoch.current;
-    setPending(label);
-    setError(null);
-    setNotice(null);
-    setAwaitingCalibration(null);
-    try {
-      const result = await action();
-      if (!mounted.current || token !== epoch.current) return;
-      if (isStatus(result)) {
-        await client.cancelQueries({ queryKey: statusKey });
-        client.setQueryData(statusKey, result);
-      }
-      done?.(result);
-      setNotice(announce ? label : null);
-      void client.invalidateQueries({ queryKey: ['robot-lab', 'datasets'] });
-      void client.invalidateQueries({ queryKey: statusKey });
-    } catch (failure) {
-      if (mounted.current && token === epoch.current) {
-        setAwaitingCalibration(calibrationTarget ?? null);
-        setError(readable(failure));
-        void client.invalidateQueries({ queryKey: statusKey });
-      }
-    } finally {
-      if (mounted.current && token === epoch.current) setPending(null);
     }
   }
   async function jog(joint: RobotJoint, delta: number) {
