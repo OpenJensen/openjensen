@@ -276,6 +276,7 @@ class SafetyTests(unittest.TestCase):
         for failed_register in ("Max_Torque_Limit", "Protection_Current", "Overload_Torque"):
             for missing in (False, True):
                 with self.subTest(register=failed_register, missing=missing):
+
                     def read(bus, register, motor_id):
                         if register == failed_register:
                             if missing:
@@ -293,6 +294,29 @@ class SafetyTests(unittest.TestCase):
                     self.assertFalse(self.lab.torque)
                     self.assertEqual(self.lab.mode, "idle")
                     self.assertEqual(bus.calibration, CALIBRATION)
+
+    def test_uncertain_torque_enable_never_publishes_control_and_disables_all_joints(self):
+        def factory(*args):
+            bus = FakeBus(*args)
+
+            def fail_torque(register, motor_id, value):
+                if register == "Torque_Enable" and value == 1 and motor_id == 3:
+                    raise HardwareError("Torque state could not be verified")
+
+            bus.on_write = fail_torque
+            self.buses.append(bus)
+            return bus
+
+        self.lab.bus_factory = factory
+        with self.assertRaisesRegex(HardwareError, "Torque state could not be verified"):
+            self.start()
+        bus = self.buses[-1]
+        self.assertEqual(bus.writes[-6:], [("Torque_Enable", sid, 0) for sid in IDS.values()])
+        self.assertFalse(bus.opened)
+        self.assertIsNone(self.lab.bus)
+        self.assertIsNone(self.lab.pending_bus)
+        self.assertFalse(self.lab.torque)
+        self.assertEqual(self.lab.mode, "idle")
 
     def test_handguide_never_enables_torque(self):
         self.start(mode="handguide")

@@ -24,7 +24,15 @@ class TransportTests(unittest.TestCase):
 
         # Existing tuple-based fault cases feed raw frames into the adapter.
         def exchange(port, request):
-            sid, address, size = request[2], request[5], request[6]
+            sid, address = request[2], request[5]
+            if request[4] == 3:
+                size = request[3] - 3
+                source = (
+                    self.bus.packet.write1ByteTxRx if size == 1 else self.bus.packet.write2ByteTxRx
+                )
+                result, error = source(port, sid, address, int.from_bytes(request[6:-1], "little"))
+                return frame(sid, b"", error), result, error
+            size = request[6]
             source = self.bus.packet.read1ByteTxRx if size == 1 else self.bus.packet.read2ByteTxRx
             value, result, error = source(port, sid, address)
             return frame(sid, value.to_bytes(size, "little"), error), result, error
@@ -134,6 +142,10 @@ class TransportTests(unittest.TestCase):
             ("Max_Torque_Limit", 500),
             ("Protection_Current", 250),
             ("Overload_Torque", 25),
+            ("Acceleration", 10),
+            ("P_Coefficient", 16),
+            ("I_Coefficient", 0),
+            ("D_Coefficient", 32),
         ):
             with self.subTest(register=register):
                 self.bus.packet.reset_mock()
@@ -183,12 +195,10 @@ class TransportTests(unittest.TestCase):
         self.bus.packet.write2ByteTxRx.assert_called_once()
         self.assertEqual(self.bus.packet.read2ByteTxRx.call_count, 3)
 
-    def test_motion_torque_and_id_writes_never_use_ack_recovery(self):
+    def test_target_velocity_and_identity_writes_never_use_ack_recovery(self):
         for register, value in (
             ("Goal_Position", 2047),
             ("Goal_Velocity", 100),
-            ("Torque_Enable", 1),
-            ("Torque_Enable", 0),
             ("ID", 2),
             ("Baud_Rate", 0),
         ):
@@ -206,14 +216,66 @@ class TransportTests(unittest.TestCase):
                 self.bus.packet.read1ByteTxRx.assert_not_called()
                 self.bus.packet.read2ByteTxRx.assert_not_called()
 
+    def test_torque_ack_loss_or_corruption_requires_exact_fresh_state_without_replay(self):
+        for result in (-3001, -3002):
+            for requested in (0, 1):
+                with self.subTest(result=result, requested=requested):
+                    self.bus.packet.reset_mock()
+                    self.bus.packet.write1ByteTxRx.return_value = (result, 0)
+                    self.bus.packet.read1ByteTxRx.return_value = (requested, 0, 0)
+                    self.bus.write("Torque_Enable", 1, requested)
+                    self.bus.packet.write1ByteTxRx.assert_called_once_with(
+                        self.bus.port, 1, 40, requested
+                    )
+                    self.bus.packet.read1ByteTxRx.assert_called_once_with(self.bus.port, 1, 40)
+
+    def test_torque_mismatch_missing_read_or_motor_fault_stops_without_replay(self):
+        for requested in (0, 1):
+            for read_result in ((1 - requested, 0, 0), (0, -3001, 0), (requested, 0, 32)):
+                with self.subTest(requested=requested, read_result=read_result):
+                    self.bus.packet.reset_mock()
+                    self.bus.packet.write1ByteTxRx.return_value = (-3002, 0)
+                    self.bus.packet.read1ByteTxRx.return_value = read_result
+                    with self.assertRaises(HardwareError):
+                        self.bus.write("Torque_Enable", 1, requested)
+                    self.bus.packet.write1ByteTxRx.assert_called_once()
+
+    def test_even_valid_torque_ack_requires_matching_motor_state(self):
+        self.bus.packet.write1ByteTxRx.return_value = (0, 0)
+        self.bus.packet.read1ByteTxRx.return_value = (0, 0, 0)
+        with self.assertRaisesRegex(HardwareError, "torque read-back did not match"):
+            self.bus.write("Torque_Enable", 1, 1)
+        self.bus.packet.write1ByteTxRx.assert_called_once()
+        self.bus.packet.read1ByteTxRx.assert_called_once()
+
+    def test_stale_read_response_cannot_acknowledge_a_position_command(self):
+        self.bus.packet.txRxPacket.side_effect = None
+        self.bus.packet.txRxPacket.return_value = (frame(1, b"\xff\x07"), 0, 0)
+        with self.assertRaisesRegex(HardwareError, "write Goal_Position=2047"):
+            self.bus.write("Goal_Position", 1, 2047)
+        self.bus.packet.txRxPacket.assert_called_once_with(
+            self.bus.port, [0, 0, 1, 5, 3, 42, 255, 7, 0]
+        )
+
+    def test_corrupt_short_or_wrong_id_ack_does_not_replay_position_command(self):
+        good = frame(1, b"")
+        for reply in (good[:-1], [*good[:-1], good[-1] ^ 1], frame(2, b"")):
+            with self.subTest(reply=reply):
+                self.bus.packet.txRxPacket.reset_mock()
+                self.bus.packet.txRxPacket.side_effect = None
+                self.bus.packet.txRxPacket.return_value = (reply, 0, 0)
+                with self.assertRaises(HardwareError):
+                    self.bus.write("Goal_Position", 1, 2047)
+                self.bus.packet.txRxPacket.assert_called_once()
+
     def test_acknowledged_configuration_write_does_not_need_recovery(self):
         self.bus.packet.write2ByteTxRx.return_value = (0, 0)
         self.bus.write("Homing_Offset", 1, 0)
         self.bus.packet.write2ByteTxRx.assert_called_once()
         self.bus.packet.read2ByteTxRx.assert_not_called()
 
-    def test_write_fault_or_corrupt_reply_never_uses_readback_recovery(self):
-        for result, error in ((-3002, 0), (0, 32), (-3001, 32)):
+    def test_write_motor_fault_or_transmit_error_never_uses_readback_recovery(self):
+        for result, error in ((-1001, 0), (-3002, 32), (0, 32), (-3001, 32)):
             with self.subTest(result=result, error=error):
                 self.bus.packet.reset_mock()
                 self.bus.packet.write2ByteTxRx.return_value = (result, error)

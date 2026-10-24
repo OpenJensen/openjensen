@@ -176,10 +176,28 @@ class ServoBus:
         requested = int(value)
         if register == "Homing_Offset":
             value = encode_sign(value)
-        method = self.packet.write1ByteTxRx if size == 1 else self.packet.write2ByteTxRx
-        result, error = method(self.port, motor_id, address, int(value))
+        # Check the complete write ACK too: a delayed read response must not
+        # stand in for acknowledgement of a later command to the same motor.
+        request = [0, 0, motor_id, size + 3, 3, address, *int(value).to_bytes(size, "little"), 0]
+        try:
+            reply, result, error = self.packet.txRxPacket(self.port, request)
+        except IndexError:
+            self.port.is_using = False
+            reply, result, error = [], self.sdk.COMM_RX_CORRUPT, 0
+        if result == self.sdk.COMM_SUCCESS and not error:
+            if (
+                not isinstance(reply, list)
+                or len(reply) != 6
+                or reply[:2] != [255, 255]
+                or reply[2] != motor_id
+                or reply[3] != 2
+                or reply[-1] != (~sum(reply[2:-1]) & 255)
+            ):
+                result = self.sdk.COMM_RX_CORRUPT
+            else:
+                error = reply[4]
         if (
-            result == self.sdk.COMM_RX_TIMEOUT
+            result in (self.sdk.COMM_RX_TIMEOUT, self.sdk.COMM_RX_CORRUPT)
             and not error
             and register
             in {
@@ -191,25 +209,37 @@ class ServoBus:
                 "Max_Torque_Limit",
                 "Protection_Current",
                 "Overload_Torque",
+                "Acceleration",
+                "P_Coefficient",
+                "I_Coefficient",
+                "D_Coefficient",
+                "Torque_Enable",
             }
         ):
-            # A lost acknowledgement does not mean the write failed. Verify
-            # configuration without replaying a write or any motion command.
+            # A damaged/missing ACK does not establish whether the command
+            # took effect. Verify the register with a new validated read, never
+            # replay the write. Torque read-back resolves the actual on/off
+            # state; target, velocity, ID and baud writes remain fail-closed.
             time.sleep(0.01)
+            self.port.ser.reset_input_buffer()
             try:
                 actual = self.read(register, motor_id)
             except HardwareError as caught:
                 raise HardwareError(
-                    f"Motor {motor_id} write {register} acknowledgement missing; "
+                    f"Motor {motor_id} write {register} acknowledgement unverified; "
                     f"read-back failed: {caught}"
                 ) from caught
             if actual == requested:
                 return
             raise HardwareError(
-                f"Motor {motor_id} write {register} acknowledgement missing; "
+                f"Motor {motor_id} write {register} acknowledgement unverified; "
                 f"read-back was {actual}, expected {requested}"
             )
-        self._check(result, error, motor_id, f"write {register}")
+        self._check(result, error, motor_id, f"write {register}={requested}")
+        if register == "Torque_Enable" and self.read(register, motor_id) != requested:
+            raise HardwareError(
+                f"Motor {motor_id} torque read-back did not match requested state {requested}"
+            )
 
     def _check(self, result, error, motor_id, operation):
         if result != self.sdk.COMM_SUCCESS or error:

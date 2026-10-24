@@ -1,0 +1,36 @@
+{
+  "date": "2026-10-24",
+  "base_commit": "5e56727eedb974ecd9f2f6e60bcec0ea9021c9c2",
+  "scope": "Validate write ACK packet shape and verify torque on/off by register read-back; recover uncertain configuration and torque replies without repeating writes; target/velocity/identity writes stay fail-closed",
+  "source_sha256": {
+    "workers/robot_lab/hardware.py": "96107f86a345291659e15448b29a7b53d7489508a50d6976f1b4bcff32335427",
+    "workers/robot_lab/tests/test_hardware_transport.py": "35e5c71acdea3746ffe2b88ff6e15f8643c204ad78e11b229d1ccb5769c469e1",
+    "workers/robot_lab/tests/test_robot_lab.py": "fb92162922a6678e53a5088f31f4c302d5e43bb47a964d642aece7310bfa0727"
+  },
+  "verification": {
+    "ruff": "passed; initial formatting failure retained",
+    "companion": {
+      "run": 126,
+      "passed": 114,
+      "skipped": 12,
+      "skip_reason": "Optional dataset dependencies absent in Xbox test environment"
+    },
+    "api_installer_wrapper": {
+      "passed": 42
+    },
+    "web": "No web source changes; reuse verified fb92e50 export"
+  },
+  "hardware_diagnostic": "All six torque registers read zero. 360 encoder reads, 15 read/disable-only probe cycles, and five HTTP handguide starts passed. A startup diagnostic blocked Torque_Enable=1 before transmission and reproduced a lost gripper Overload_Torque ACK recovered by exact read-back. Powered control acceptance pending.",
+  "evidence_directory": "/home/aayrapetyan/ollamaforvlas/run/robot-lab-teleop-ack-20261024",
+  "cleanup": {
+    "owned_pids": [
+      173318,
+      173927,
+      173445,
+      173894,
+      173128,
+      173284
+    ],
+    "remaining": []
+  }
+}
