@@ -3,7 +3,13 @@ import { expect, test, type Page } from '@playwright/test';
 const fakeToken = 'hf_BrowserFixtureTokenNotARealCredential1234567890';
 const timestamp = '2026-09-26T12:00:00Z';
 const blank = { configured: false, username: null, token_hint: null, checked_at: null, message: null };
-const configured = { configured: true, username: 'robotic-user', token_hint: '••••7890', checked_at: timestamp, message: null };
+const configured = {
+  configured: true,
+  username: 'robotic-user',
+  token_hint: '••••7890',
+  checked_at: timestamp,
+  message: null,
+};
 
 async function settings(page: Page, reject = false) {
   let status: typeof blank | typeof configured = blank;
@@ -25,20 +31,52 @@ async function settings(page: Page, reject = false) {
     } else if (path === '/health') value = { status: 'ok', version: '0.1.0' };
     else if (path === '/projects') value = [{ id: 'hf-fixture', name: 'HF settings test', created_at: timestamp }];
     else if (path === '/capabilities' || path.endsWith('/jobs') || path.endsWith('/artifacts')) value = [];
-    else if (path === '/policy-options') value = {
-      runtimes: [], sources: [], training_models: [], training_methods: [], default_training_method: 'lora',
-      compute: { local: { enabled: false, label: 'Local machine' } },
-      quantization_defaults: { cuda: { language: 'Q8_0', vision: null }, cpu: { language: 'Q8_0', vision: null }, note: '' },
-    };
-    else if (path === '/cloud-connections') value = { providers: [{
-      provider: 'gcp', name: 'Google Cloud', status: 'disconnected', config: null, identity: null,
-      checked_at: null, message: null, setup_commands: [],
-    }] };
-    else if (path === '/compute-settings') value = {
-      local: { enabled: false, label: 'Local machine' }, runtimes: [], gpu_options: [],
-      gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 },
-      gcp_status: { status: 'unchecked', configured: false, project_id: null, region: null, skypilot_installed: true, checked_at: null, message: 'Connect Google Cloud.', setup_commands: [] },
-    };
+    else if (path === '/policy-options')
+      value = {
+        runtimes: [],
+        sources: [],
+        training_models: [],
+        training_methods: [],
+        default_training_method: 'lora',
+        compute: { local: { enabled: false, label: 'Local machine' } },
+        quantization_defaults: {
+          cuda: { language: 'Q8_0', vision: null },
+          cpu: { language: 'Q8_0', vision: null },
+          note: '',
+        },
+      };
+    else if (path === '/cloud-connections')
+      value = {
+        providers: [
+          {
+            provider: 'gcp',
+            name: 'Google Cloud',
+            status: 'disconnected',
+            config: null,
+            identity: null,
+            checked_at: null,
+            message: null,
+            setup_commands: [],
+          },
+        ],
+      };
+    else if (path === '/compute-settings')
+      value = {
+        local: { enabled: false, label: 'Local machine' },
+        runtimes: [],
+        gpu_options: [],
+        gcp: { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 },
+        gcp_status: {
+          status: 'unchecked',
+          configured: false,
+          project_id: null,
+          region: null,
+          skypilot_installed: true,
+          checked_at: null,
+          message: 'Connect Google Cloud.',
+          setup_commands: [],
+        },
+      };
     else return route.fulfill({ status: 404, json: { detail: 'Not used by this fixture' } });
     return route.fulfill({ json: value });
   });
@@ -62,7 +100,9 @@ test('HF token is optional, masked, cleared after save, and removable', async ({
   await expect(panel.getByText('••••7890', { exact: true })).toBeVisible();
   await expect(panel).not.toContainText(fakeToken);
   expect(requests).toEqual([{ method: 'PUT', body: { token: fakeToken } }]);
-  expect(await page.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }))).not.toContain(fakeToken);
+  expect(
+    await page.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } })),
+  ).not.toContain(fakeToken);
   await panel.getByRole('button', { name: 'Remove token', exact: true }).click();
   await expect(panel.getByText('Optional', { exact: true })).toBeVisible();
   await expect(panel.getByText('Hugging Face token removed.', { exact: true })).toBeVisible();

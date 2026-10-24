@@ -59,10 +59,22 @@ DESKTOP_FILES = {
     "pnpm-lock.yaml",
     "pnpm-workspace.yaml",
     ".node-version",
+    ".prettierrc.json",  # The web format check runs on the desktop lane.
+    ".prettierignore",
+    "eslint.config.mjs",
     "docs/workspace-guide.md",  # Rendered into the application at build time.
 }
 MOBILE_FILES = {"playwright.config.ts", "playwright.diagnostics.config.ts"}
-DOC_FILES = {"README.md", "LICENSE", ".gitignore", ".gitattributes", "workers/README.md"}
+DOC_FILES = {
+    "README.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "NOTICE",
+    "LICENSE",
+    ".gitignore",
+    ".gitattributes",
+    "workers/README.md",
+}
 DEFAULT_SHARDS = {"CI_PY_SHARDS": 2, "CI_DESKTOP_SHARDS": 4, "CI_MOBILE_SHARDS": 6}
 
 

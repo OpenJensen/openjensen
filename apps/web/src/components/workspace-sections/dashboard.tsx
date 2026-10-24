@@ -5,7 +5,22 @@ import { useWorkspace } from '@/components/workspace-context';
 
 export default function DashboardSection() {
   const { projects, workflowProjectId, navigateStage, setDatasetView, openDataset, setSettingsTab } = useWorkspace();
-  return <>
-    <WorkspaceDashboard projects={projects.data ?? []} projectId={workflowProjectId} onModels={() => navigateStage(11)} onDatasets={() => { navigateStage(0); setDatasetView('sources'); }} onDataset={openDataset} onSettings={() => { setSettingsTab('compute'); navigateStage(6); }} />
-  </>;
+  return (
+    <>
+      <WorkspaceDashboard
+        projects={projects.data ?? []}
+        projectId={workflowProjectId}
+        onModels={() => navigateStage('models')}
+        onDatasets={() => {
+          navigateStage('datasets');
+          setDatasetView('sources');
+        }}
+        onDataset={openDataset}
+        onSettings={() => {
+          setSettingsTab('compute');
+          navigateStage('settings');
+        }}
+      />
+    </>
+  );
 }

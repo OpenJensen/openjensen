@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 import { getenv } from './apps/web/src/lib/environment';
 
 const python = process.platform === 'win32' ? '.venv/Scripts/python.exe' : '.venv/bin/python';
-const port = getenv('JENSEN_BROWSER_PORT',process.env,'8765');
+const port = getenv('JENSEN_BROWSER_PORT', process.env, '8765');
 
 export default defineConfig({
   testDir: './tests/web',
@@ -23,9 +23,73 @@ export default defineConfig({
   projects: [
     { name: 'pure', testMatch: '*-pure.spec.ts' },
     { name: 'openapi', testMatch: 'openapi.spec.ts' },
-    { name: 'workflow', testMatch: 'workflow.spec.ts', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1000 } } },
-    { name: 'desktop', testMatch: ['workspace-routes.spec.ts', 'project-menu.spec.ts', 'model-library.spec.ts', 'dataset-submission.spec.ts', 'recording-preparation.spec.ts', 'distillation-model-choice.spec.ts', 'workspace-ux.spec.ts', 'native-lifecycle-handoff.spec.ts', 'native-replay.spec.ts', 'native-distillation.spec.ts', 'native-quantization.spec.ts', 'native-simulation.spec.ts', 'decision.spec.ts', 'teaching.spec.ts', 'managed-teaching.spec.ts', 'robot-lab.spec.ts', 'api-reference.spec.ts', 'augmentation.spec.ts', 'cloud-connections.spec.ts', 'gpu-picker.spec.ts', 'dataset-library.spec.ts', 'training-monitor.spec.ts', 'hf-settings.spec.ts', 'quantization.spec.ts', 'cloud-runs.spec.ts'], use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1000 } } },
-    { name: 'mobile', testMatch: ['workspace-routes.spec.ts', 'project-menu.spec.ts', 'model-library.spec.ts', 'dataset-submission.spec.ts', 'recording-preparation.spec.ts', 'distillation-model-choice.spec.ts', 'workspace-ux.spec.ts', 'native-lifecycle-handoff.spec.ts', 'native-replay.spec.ts', 'native-distillation.spec.ts', 'native-quantization.spec.ts', 'native-simulation.spec.ts', 'decision.spec.ts', 'teaching.spec.ts', 'managed-teaching.spec.ts', 'robot-lab.spec.ts', 'api-reference.spec.ts', 'augmentation.spec.ts', 'cloud-connections.spec.ts', 'gpu-picker.spec.ts', 'dataset-library.spec.ts', 'training-monitor.spec.ts', 'hf-settings.spec.ts', 'quantization.spec.ts', 'cloud-runs.spec.ts'], use: { ...devices['Pixel 7'], defaultBrowserType: 'chromium' } },
+    {
+      name: 'workflow',
+      testMatch: 'workflow.spec.ts',
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1000 } },
+    },
+    {
+      name: 'desktop',
+      testMatch: [
+        'workspace-routes.spec.ts',
+        'project-menu.spec.ts',
+        'model-library.spec.ts',
+        'dataset-submission.spec.ts',
+        'recording-preparation.spec.ts',
+        'distillation-model-choice.spec.ts',
+        'workspace-ux.spec.ts',
+        'native-lifecycle-handoff.spec.ts',
+        'native-replay.spec.ts',
+        'native-distillation.spec.ts',
+        'native-quantization.spec.ts',
+        'native-simulation.spec.ts',
+        'decision.spec.ts',
+        'teaching.spec.ts',
+        'managed-teaching.spec.ts',
+        'robot-lab.spec.ts',
+        'api-reference.spec.ts',
+        'augmentation.spec.ts',
+        'cloud-connections.spec.ts',
+        'gpu-picker.spec.ts',
+        'dataset-library.spec.ts',
+        'training-monitor.spec.ts',
+        'hf-settings.spec.ts',
+        'quantization.spec.ts',
+        'cloud-runs.spec.ts',
+      ],
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1000 } },
+    },
+    {
+      name: 'mobile',
+      testMatch: [
+        'workspace-routes.spec.ts',
+        'project-menu.spec.ts',
+        'model-library.spec.ts',
+        'dataset-submission.spec.ts',
+        'recording-preparation.spec.ts',
+        'distillation-model-choice.spec.ts',
+        'workspace-ux.spec.ts',
+        'native-lifecycle-handoff.spec.ts',
+        'native-replay.spec.ts',
+        'native-distillation.spec.ts',
+        'native-quantization.spec.ts',
+        'native-simulation.spec.ts',
+        'decision.spec.ts',
+        'teaching.spec.ts',
+        'managed-teaching.spec.ts',
+        'robot-lab.spec.ts',
+        'api-reference.spec.ts',
+        'augmentation.spec.ts',
+        'cloud-connections.spec.ts',
+        'gpu-picker.spec.ts',
+        'dataset-library.spec.ts',
+        'training-monitor.spec.ts',
+        'hf-settings.spec.ts',
+        'quantization.spec.ts',
+        'cloud-runs.spec.ts',
+      ],
+      use: { ...devices['Pixel 7'], defaultBrowserType: 'chromium' },
+    },
   ],
   // Exercise the production export and Python routing together. Refuse to reuse
   // a server: the developer's workspace and running application stay untouched.

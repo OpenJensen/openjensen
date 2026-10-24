@@ -5589,6 +5589,44 @@
         ],
         "title": "VoiceJoin",
         "type": "object"
+      },
+      "WorkspaceModule": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "enum": [
+              "robot-lab",
+              "teaching",
+              "augmentation",
+              "decision-lab",
+              "cloud-runs"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "installed": {
+            "title": "Installed",
+            "type": "boolean"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "setup": {
+            "minLength": 1,
+            "title": "Setup",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "installed",
+          "setup"
+        ],
+        "title": "WorkspaceModule",
+        "type": "object"
       }
     }
   },
@@ -7258,6 +7296,29 @@
           }
         },
         "summary": "Training Reproducibility"
+      }
+    },
+    "/api/v1/modules": {
+      "get": {
+        "description": "Report which optional modules this host has set up; nothing is contacted.",
+        "operationId": "modules_api_v1_modules_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WorkspaceModule"
+                  },
+                  "title": "Response Modules Api V1 Modules Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Modules"
       }
     },
     "/api/v1/policy-options": {

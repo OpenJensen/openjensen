@@ -5,9 +5,18 @@ import { record, sameJson, UncertainPolicyJob } from './policy-job-mutation';
 const statuses = ['queued', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted'];
 
 function acknowledgement(value: unknown, project: string, operation: string): Record<string, unknown> {
-  if (!record(value) || typeof value.id !== 'string' || !value.id || value.id.length > 200 ||
-      value.project_id !== project || value.kind !== operation || (typeof value.status !== 'string' || !statuses.includes(value.status)) ||
-      !record(value.request) || ![value.created_at, value.updated_at].every(date => typeof date === 'string' && Number.isFinite(Date.parse(date)))) {
+  if (
+    !record(value) ||
+    typeof value.id !== 'string' ||
+    !value.id ||
+    value.id.length > 200 ||
+    value.project_id !== project ||
+    value.kind !== operation ||
+    typeof value.status !== 'string' ||
+    !statuses.includes(value.status) ||
+    !record(value.request) ||
+    ![value.created_at, value.updated_at].every((date) => typeof date === 'string' && Number.isFinite(Date.parse(date)))
+  ) {
     throw new UncertainPolicyJob();
   }
   return value;
@@ -27,20 +36,41 @@ export function intakeAcknowledgement(value: unknown, project: string, original:
   }
   const body = original as IntakeRequest;
   const request = job.request as Record<string, unknown>;
-  if (request.source !== body.source || (request.snapshot_for_training ?? false) !== (body.snapshot_for_training ?? false) ||
-      !sameJson(request.recordings ?? null, body.recordings ?? null)) throw new UncertainPolicyJob();
+  if (
+    request.source !== body.source ||
+    (request.snapshot_for_training ?? false) !== (body.snapshot_for_training ?? false) ||
+    !sameJson(request.recordings ?? null, body.recordings ?? null)
+  )
+    throw new UncertainPolicyJob();
   if (body.source === 'huggingface') {
     const submittedRevision = body.revision?.trim() || 'main';
-    if (request.repo_id !== body.repo_id || request.path != null || typeof request.revision !== 'string' ||
-        (/^[a-f0-9]{40}$/i.test(submittedRevision) ? request.revision !== submittedRevision :
-          request.revision !== submittedRevision && !/^[a-f0-9]{40}$/i.test(request.revision))) throw new UncertainPolicyJob();
+    if (
+      request.repo_id !== body.repo_id ||
+      request.path != null ||
+      typeof request.revision !== 'string' ||
+      (/^[a-f0-9]{40}$/i.test(submittedRevision)
+        ? request.revision !== submittedRevision
+        : request.revision !== submittedRevision && !/^[a-f0-9]{40}$/i.test(request.revision))
+    )
+      throw new UncertainPolicyJob();
   } else if (body.library_id) {
-    if (request.library_id !== body.library_id || request.path != null || request.repo_id != null || request.revision !== 'main') throw new UncertainPolicyJob();
+    if (
+      request.library_id !== body.library_id ||
+      request.path != null ||
+      request.repo_id != null ||
+      request.revision !== 'main'
+    )
+      throw new UncertainPolicyJob();
   } else {
     // Metadata inspection resolves allowed relative paths and symlinks on the API host.
     // A training snapshot retains its original path; never guess a host filesystem here.
-    if (request.repo_id != null || typeof request.path !== 'string' || !request.path ||
-        (body.snapshot_for_training && request.path !== body.path)) throw new UncertainPolicyJob();
+    if (
+      request.repo_id != null ||
+      typeof request.path !== 'string' ||
+      !request.path ||
+      (body.snapshot_for_training && request.path !== body.path)
+    )
+      throw new UncertainPolicyJob();
   }
   return job as unknown as Job;
 }
@@ -49,7 +79,13 @@ export function augmentationAcknowledgement(value: unknown, project: string, ori
   const job = acknowledgement(value, project, 'dataset.augment');
   if (!record(original)) throw new UncertainPolicyJob();
   const request = job.request as Record<string, unknown>;
-  const defaults: Partial<AugmentationRequest> = { operation: 'dataset.augment', preset: 'lighting', prompt: '', start_seconds: 0, duration_seconds: 5 };
+  const defaults: Partial<AugmentationRequest> = {
+    operation: 'dataset.augment',
+    preset: 'lighting',
+    prompt: '',
+    start_seconds: 0,
+    duration_seconds: 5,
+  };
   for (const [key, expected] of Object.entries({ ...defaults, ...original })) {
     if (!sameJson(request[key], expected)) throw new UncertainPolicyJob();
   }
@@ -73,7 +109,10 @@ export function reviewedIntakeHistory(value: unknown, project: string): Job[] {
   for (const job of history) {
     if (job.kind !== 'dataset.inspect') continue;
     if ('recordings' in job.request && job.request.recordings != null) recordingReceipt(job, project);
-    if (job.status === 'queued' || job.status === 'running') throw new Error(`Dataset intake ${job.id} is still ${job.status}. Inspect its saved job before clearing legacy recovery.`);
+    if (job.status === 'queued' || job.status === 'running')
+      throw new Error(
+        `Dataset intake ${job.id} is still ${job.status}. Inspect its saved job before clearing legacy recovery.`,
+      );
   }
   return history;
 }

@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -11,6 +12,9 @@ from vla_platform.api import create_app
 from vla_platform.compute_settings import ComputeSettings, ComputeSettingsUpdate
 from vla_platform.environment import getenv
 from vla_platform.settings import Settings
+
+# Browser tests open every module page; module detection has its own API tests.
+os.environ.setdefault("JENSEN_MODULES", "all")
 
 static_dir = Path(
     getenv(

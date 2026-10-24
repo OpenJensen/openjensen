@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { LocalWorkerDiscovery, PolicyOptions } from '../../apps/web/src/lib/api';
+import { installedModules } from './module-fixtures';
 
 type Provider = 'gcp';
 type Connection = {
@@ -33,15 +34,23 @@ const cloudGpus = [
 
 function disconnected(provider: Provider): Connection {
   return {
-    provider, name: 'Google Cloud',
-    status: 'disconnected', config: null, identity: null, checked_at: null, message: null,
+    provider,
+    name: 'Google Cloud',
+    status: 'disconnected',
+    config: null,
+    identity: null,
+    checked_at: null,
+    message: null,
     setup_commands: ['gcloud auth login'],
   };
 }
 
 function connected(provider: Provider, config: NonNullable<Connection['config']>): Connection {
   return {
-    ...disconnected(provider), config, status: 'connected', checked_at: timestamp,
+    ...disconnected(provider),
+    config,
+    status: 'connected',
+    checked_at: timestamp,
     identity: { account: 'robotics@example.test', account_id: null, principal: null },
   };
 }
@@ -52,13 +61,27 @@ async function openCompute(page: Page) {
   await expect(page.getByRole('region', { name: 'Google Cloud', exact: true })).toBeVisible();
 }
 
-async function mockWorkspace(page: Page, initial: Connection[] = [], initialCompute: { gcp?: Partial<CloudPreferences>; status?: Partial<ComputeStatus>; discovery?: Partial<LocalWorkerDiscovery> } = {}) {
+async function mockWorkspace(
+  page: Page,
+  initial: Connection[] = [],
+  initialCompute: {
+    gcp?: Partial<CloudPreferences>;
+    status?: Partial<ComputeStatus>;
+    discovery?: Partial<LocalWorkerDiscovery>;
+  } = {},
+) {
   const providers: Record<Provider, Connection> = { gcp: disconnected('gcp') };
   for (const item of initial) providers[item.provider] = item;
   const writes: { provider: Provider; action: string; body: unknown }[] = [];
   const computeWrites: unknown[] = [];
   let local = { enabled: false, label: 'Local machine' };
-  let gcp: CloudPreferences = { enabled: true, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10, ...initialCompute.gcp };
+  let gcp: CloudPreferences = {
+    enabled: true,
+    default_gpu: 'A100',
+    disk_size_gb: 200,
+    idle_minutes: 10,
+    ...initialCompute.gcp,
+  };
   let checkedStatus: Partial<ComputeStatus> | null = initialCompute.status ?? null;
   let availableGpus = ['L4', 'T4', 'A100'];
   const mutations: string[] = [];
@@ -68,8 +91,22 @@ async function mockWorkspace(page: Page, initial: Connection[] = [], initialComp
   let runtimes: PolicyOptions['runtimes'] = [];
   let discovery: LocalWorkerDiscovery = {
     host: { name: 'robotics-workstation', platform: 'Linux', architecture: 'x86_64' },
-    checked_at: timestamp, status: 'ready', message: null, issues: [],
-    candidates: [{ id: 'smolvla-cuda-0', label: 'SmolVLA training', gpu_name: 'NVIDIA RTX 3070', gpu_memory_mib: 8192, training_model_ids: ['smolvla'], status: 'ready', runtime_id: null, reason: null }],
+    checked_at: timestamp,
+    status: 'ready',
+    message: null,
+    issues: [],
+    candidates: [
+      {
+        id: 'smolvla-cuda-0',
+        label: 'SmolVLA training',
+        gpu_name: 'NVIDIA RTX 3070',
+        gpu_memory_mib: 8192,
+        training_model_ids: ['smolvla'],
+        status: 'ready',
+        runtime_id: null,
+        reason: null,
+      },
+    ],
     ...initialCompute.discovery,
   };
   const localReplies: { status?: number; detail?: string; discovery?: LocalWorkerDiscovery }[] = [];
@@ -77,47 +114,86 @@ async function mockWorkspace(page: Page, initial: Connection[] = [], initialComp
   let setupStatus = { status: 'idle', stage: '', message: '', runtime_id: null as string | null };
   function completeSetup() {
     const candidate = discovery.candidates[0];
-    runtimes = [{ id: 'local-smolvla', label: 'Local NVIDIA GPU', device: 'cuda', training: true,
-      training_only: true, simulation: false, run: false, engine_evaluation: false,
-      gpu_name: candidate.gpu_name, gpu_memory_mib: candidate.gpu_memory_mib,
-      training_model_ids: candidate.training_model_ids, provider: 'local', enabled: false }];
-    discovery = { ...discovery, status: 'ready', candidates: [{ ...candidate, status: 'registered', runtime_id: 'local-smolvla' }] };
-    setupStatus = { status: 'succeeded', stage: '', message: 'SmolVLA is installed and added. Enable local runs when you are ready.', runtime_id: 'local-smolvla' };
+    runtimes = [
+      {
+        id: 'local-smolvla',
+        label: 'Local NVIDIA GPU',
+        device: 'cuda',
+        training: true,
+        training_only: true,
+        simulation: false,
+        run: false,
+        engine_evaluation: false,
+        gpu_name: candidate.gpu_name,
+        gpu_memory_mib: candidate.gpu_memory_mib,
+        training_model_ids: candidate.training_model_ids,
+        provider: 'local',
+        enabled: false,
+      },
+    ];
+    discovery = {
+      ...discovery,
+      status: 'ready',
+      candidates: [{ ...candidate, status: 'registered', runtime_id: 'local-smolvla' }],
+    };
+    setupStatus = {
+      status: 'succeeded',
+      stage: '',
+      message: 'SmolVLA is installed and added. Enable local runs when you are ready.',
+      runtime_id: 'local-smolvla',
+    };
   }
 
   function computeResponse() {
     const config = providers.gcp.config;
     const gcp_status: ComputeStatus = {
-      status: 'unchecked', configured: !!config, skypilot_installed: true,
-      project_id: config?.project_id ?? null, region: config?.region ?? null, checked_at: null,
-      message: config ? 'Check SkyPilot setup to verify application credentials and regional GPU offerings.' : 'Connect Google Cloud in Settings first.',
+      status: 'unchecked',
+      configured: !!config,
+      skypilot_installed: true,
+      project_id: config?.project_id ?? null,
+      region: config?.region ?? null,
+      checked_at: null,
+      message: config
+        ? 'Check SkyPilot setup to verify application credentials and regional GPU offerings.'
+        : 'Connect Google Cloud in Settings first.',
       setup_commands: config ? ['gcloud auth application-default login'] : [],
       ...checkedStatus,
     };
-    const gpu_options = cloudGpus.map(gpu => {
-      const unavailable_reason = !gcp.enabled ? 'Enable Google Cloud training in Settings.'
-        : gcp_status.status !== 'ready' ? gcp_status.message
-        : !availableGpus.includes(gpu.id) ? `SkyPilot does not offer this single-GPU machine in ${gcp_status.region}.`
-        : null;
+    const gpu_options = cloudGpus.map((gpu) => {
+      const unavailable_reason = !gcp.enabled
+        ? 'Enable Google Cloud training in Settings.'
+        : gcp_status.status !== 'ready'
+          ? gcp_status.message
+          : !availableGpus.includes(gpu.id)
+            ? `SkyPilot does not offer this single-GPU machine in ${gcp_status.region}.`
+            : null;
       return { ...gpu, accelerator: gpu.id, gpu_count: 1, available: unavailable_reason === null, unavailable_reason };
     });
     return { local, gcp, runtimes, gcp_status, gpu_options };
   }
   // Every application request is intercepted. These tests cannot authenticate
   // with a provider, alter real cloud configuration, or provision compute.
-  await page.route('**/api/v1/**', async route => {
+  await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (request.method() !== 'GET') mutations.push(`${request.method()} ${path}`);
     if (request.method() === 'POST' && path.startsWith('/api/v1/compute-settings/local/setup')) {
       setupStatus = path.endsWith('/cancel')
-        ? { status: 'cancelled', stage: '', message: 'Setup cancelled. Installed dependencies are retained for a retry.', runtime_id: null }
+        ? {
+            status: 'cancelled',
+            stage: '',
+            message: 'Setup cancelled. Installed dependencies are retained for a retry.',
+            runtime_id: null,
+          }
         : { status: 'running', stage: 'Installing SmolVLA dependencies', message: '', runtime_id: null };
       await route.fulfill({ status: path.endsWith('/cancel') ? 200 : 202, json: setupStatus });
       return;
     }
 
-    if (request.method() === 'POST' && ['/api/v1/compute-settings/local/check', '/api/v1/compute-settings/local/workers'].includes(path)) {
+    if (
+      request.method() === 'POST' &&
+      ['/api/v1/compute-settings/local/check', '/api/v1/compute-settings/local/workers'].includes(path)
+    ) {
       const reply = localReplies.shift();
       if (path.endsWith('/workers')) localWrites.push(request.postDataJSON());
       if (reply?.status && reply.status >= 400) {
@@ -129,15 +205,29 @@ async function mockWorkspace(page: Page, initial: Connection[] = [], initialComp
         await route.fulfill({ json: discovery });
         return;
       }
-      const candidate = discovery.candidates.find(item => item.id === request.postDataJSON().candidate_id)!;
+      const candidate = discovery.candidates.find((item) => item.id === request.postDataJSON().candidate_id)!;
       const runtime: PolicyOptions['runtimes'][number] = {
-        id: 'local-smolvla', label: candidate.label, device: 'cuda', training: true, training_only: true,
-        simulation: false, run: false, engine_evaluation: false, gpu_name: candidate.gpu_name,
-        gpu_memory_mib: candidate.gpu_memory_mib, training_model_ids: candidate.training_model_ids,
-        provider: 'local', enabled: local.enabled,
+        id: 'local-smolvla',
+        label: candidate.label,
+        device: 'cuda',
+        training: true,
+        training_only: true,
+        simulation: false,
+        run: false,
+        engine_evaluation: false,
+        gpu_name: candidate.gpu_name,
+        gpu_memory_mib: candidate.gpu_memory_mib,
+        training_model_ids: candidate.training_model_ids,
+        provider: 'local',
+        enabled: local.enabled,
       };
       runtimes = [runtime];
-      discovery = { ...discovery, candidates: discovery.candidates.map(item => item.id === candidate.id ? { ...item, status: 'registered', runtime_id: runtime.id } : item) };
+      discovery = {
+        ...discovery,
+        candidates: discovery.candidates.map((item) =>
+          item.id === candidate.id ? { ...item, status: 'registered', runtime_id: runtime.id } : item,
+        ),
+      };
       await route.fulfill({ json: { runtime, compute: computeResponse(), discovery } });
       return;
     }
@@ -160,8 +250,11 @@ async function mockWorkspace(page: Page, initial: Connection[] = [], initialComp
         await route.fulfill({ status: reply.status, json: { detail: reply.detail } });
         return;
       }
-      const response = reply?.connection ?? (action === 'disconnect' ? disconnected(provider)
-        : connected(provider, action === 'connect' ? body : providers[provider].config!));
+      const response =
+        reply?.connection ??
+        (action === 'disconnect'
+          ? disconnected(provider)
+          : connected(provider, action === 'connect' ? body : providers[provider].config!));
       // Failed connect attempts leave the previously saved connection intact.
       if (action !== 'connect' || response.status === 'connected') {
         providers[provider] = response;
@@ -174,35 +267,71 @@ async function mockWorkspace(page: Page, initial: Connection[] = [], initialComp
       reads.push(path);
       const responses: Record<string, unknown> = {
         '/api/v1/health': { status: 'ok', version: 'browser-fixture' },
-        '/api/v1/capabilities': [], '/api/v1/datasets': [],
+        '/api/v1/capabilities': [],
+        '/api/v1/modules': installedModules,
+        '/api/v1/datasets': [],
         '/api/v1/projects': [{ id: projectId, name: 'Cloud review', created_at: timestamp }],
         [`/api/v1/projects/${projectId}/jobs`]: [],
         [`/api/v1/projects/${projectId}/artifacts`]: [],
-        '/api/v1/huggingface-connection': { configured: false, username: null, token_hint: null, checked_at: null, message: null },
+        '/api/v1/huggingface-connection': {
+          configured: false,
+          username: null,
+          token_hint: null,
+          checked_at: null,
+          message: null,
+        },
         '/api/v1/cloud-connections': { providers: Object.values(providers) },
         '/api/v1/compute-settings': computeResponse(),
         '/api/v1/compute-settings/local/setup': setupStatus,
         '/api/v1/policy-options': {
-          runtimes, sources: [], training_models: [], training_methods: [], default_training_method: 'lora', compute: { local, gcp },
-          quantization_defaults: { cuda: { language: 'Q8_0', vision: null }, cpu: { language: 'Q8_0', vision: null }, note: '' },
+          runtimes,
+          sources: [],
+          training_models: [],
+          training_methods: [],
+          default_training_method: 'lora',
+          compute: { local, gcp },
+          quantization_defaults: {
+            cuda: { language: 'Q8_0', vision: null },
+            cpu: { language: 'Q8_0', vision: null },
+            note: '',
+          },
         },
       };
-      if (path in responses) { await route.fulfill({ json: responses[path] }); return; }
+      if (path in responses) {
+        await route.fulfill({ json: responses[path] });
+        return;
+      }
     }
     unexpected.push(`${request.method()} ${path}`);
     await route.fulfill({ status: 405, json: { detail: 'Blocked by cloud connection browser fixture.' } });
   });
   await page.goto('/datasets/');
   await openCompute(page);
-  return { providers, writes, unexpected, replies, reads, computeWrites, mutations, localReplies, localWrites, completeSetup };
+  return {
+    providers,
+    writes,
+    unexpected,
+    replies,
+    reads,
+    computeWrites,
+    mutations,
+    localReplies,
+    localWrites,
+    completeSetup,
+  };
 }
 
 async function noOverflow(page: Page) {
-  const sizes = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
+  const sizes = await page.evaluate(() => ({
+    width: document.documentElement.clientWidth,
+    scroll: document.documentElement.scrollWidth,
+  }));
   expect(sizes.scroll).toBeLessThanOrEqual(sizes.width + 1);
 }
 
-test('Google Cloud opens a cancellable keyboard-accessible form without verifying or asking for secrets', async ({ page }) => {
+test('Google Cloud opens a cancellable keyboard-accessible form without verifying or asking for secrets', async ({
+  page,
+}) => {
   const { writes, unexpected } = await mockWorkspace(page);
   const gcp = page.getByRole('region', { name: 'Google Cloud', exact: true });
   await expect(gcp.getByRole('button', { name: 'Connect', exact: true })).toBeVisible();
@@ -237,15 +366,17 @@ test('verifies Google Cloud through the API, restores server state after reload,
   await dialog.getByRole('button', { name: 'Verify & save', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await expect(gcp.getByText('Connected', { exact: true })).toBeVisible();
-  expect(writes).toEqual([{ provider: 'gcp', action: 'connect', body: { project_id: 'robot-training-123', region: 'europe-west4' } }]);
+  expect(writes).toEqual([
+    { provider: 'gcp', action: 'connect', body: { project_id: 'robot-training-123', region: 'europe-west4' } },
+  ]);
   expect(providers.gcp.config).toEqual({ project_id: 'robot-training-123', region: 'europe-west4' });
   await page.evaluate(() => localStorage.clear());
-  const priorReads = reads.filter(path => path === '/api/v1/cloud-connections').length;
+  const priorReads = reads.filter((path) => path === '/api/v1/cloud-connections').length;
   await page.reload();
   await openCompute(page);
   await expect(gcp.getByText('Connected', { exact: true })).toBeVisible();
   await expect(gcp.getByText('robot-training-123', { exact: true })).toBeVisible();
-  expect(reads.filter(path => path === '/api/v1/cloud-connections').length).toBeGreaterThan(priorReads);
+  expect(reads.filter((path) => path === '/api/v1/cloud-connections').length).toBeGreaterThan(priorReads);
   await gcp.getByRole('button', { name: 'Disconnect', exact: true }).click();
   await expect(gcp.getByRole('button', { name: 'Connect', exact: true })).toBeVisible();
   await expect(gcp.getByText('Connected', { exact: true })).toHaveCount(0);
@@ -260,8 +391,15 @@ test('missing authentication stays unsaved and offers a retry with the entered v
   await gcp.getByRole('button', { name: 'Connect', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Connect Google Cloud', exact: true });
   await dialog.getByLabel('Project ID', { exact: true }).fill('robot-training-123');
-  replies.push({ connection: { ...disconnected('gcp'), status: 'setup_required', checked_at: timestamp,
-    message: 'Sign in to Google Cloud on the application server.', setup_commands: ['gcloud auth login'] } });
+  replies.push({
+    connection: {
+      ...disconnected('gcp'),
+      status: 'setup_required',
+      checked_at: timestamp,
+      message: 'Sign in to Google Cloud on the application server.',
+      setup_commands: ['gcloud auth login'],
+    },
+  });
   await dialog.getByRole('button', { name: 'Verify & save', exact: true }).click();
   await expect(dialog.getByText('Sign in to Google Cloud on the application server.', { exact: true })).toBeVisible();
   await expect(dialog.getByText('gcloud auth login', { exact: true })).toBeVisible();
@@ -302,21 +440,36 @@ test('an unsuccessful account edit preserves the saved connection', async ({ pag
   const dialog = page.getByRole('dialog', { name: 'Connect Google Cloud', exact: true });
   await expect(dialog.getByLabel('Project ID', { exact: true })).toHaveValue('existing-project-123');
   await dialog.getByLabel('Project ID', { exact: true }).fill('inaccessible-project-456');
-  replies.push({ connection: { ...disconnected('gcp'), status: 'error', checked_at: timestamp,
-    message: 'This account cannot access that Google Cloud project.' } });
+  replies.push({
+    connection: {
+      ...disconnected('gcp'),
+      status: 'error',
+      checked_at: timestamp,
+      message: 'This account cannot access that Google Cloud project.',
+    },
+  });
   await dialog.getByRole('button', { name: 'Verify & save', exact: true }).click();
-  await expect(dialog.getByText('This account cannot access that Google Cloud project.', { exact: true })).toBeVisible();
+  await expect(
+    dialog.getByText('This account cannot access that Google Cloud project.', { exact: true }),
+  ).toBeVisible();
   expect(providers.gcp).toEqual(saved);
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(gcp.getByText('Connected', { exact: true })).toBeVisible();
   await expect(gcp.getByText('existing-project-123', { exact: true })).toBeVisible();
   await expect(gcp.getByText('inaccessible-project-456', { exact: true })).toHaveCount(0);
-  expect(writes).toEqual([{ provider: 'gcp', action: 'connect', body: { project_id: 'inaccessible-project-456', region: 'us-central1' } }]);
+  expect(writes).toEqual([
+    { provider: 'gcp', action: 'connect', body: { project_id: 'inaccessible-project-456', region: 'us-central1' } },
+  ]);
   expect(unexpected).toEqual([]);
 });
 
-test('unverified saved accounts require an explicit recheck and expired authentication clears connected status', async ({ page }) => {
-  const saved = { ...connected('gcp', { project_id: 'robot-training-123', region: 'us-central1' }), status: 'unverified' as const };
+test('unverified saved accounts require an explicit recheck and expired authentication clears connected status', async ({
+  page,
+}) => {
+  const saved = {
+    ...connected('gcp', { project_id: 'robot-training-123', region: 'us-central1' }),
+    status: 'unverified' as const,
+  };
   const { writes, unexpected, replies } = await mockWorkspace(page, [saved]);
   const gcp = page.getByRole('region', { name: 'Google Cloud', exact: true });
   await expect(gcp.getByText('Connected', { exact: true })).toHaveCount(0);
@@ -324,13 +477,24 @@ test('unverified saved accounts require an explicit recheck and expired authenti
   expect(writes).toEqual([]);
   await gcp.getByRole('button', { name: 'Recheck', exact: true }).click();
   await expect(gcp.getByText('Connected', { exact: true })).toBeVisible();
-  replies.push({ connection: { ...saved, status: 'setup_required', identity: null, checked_at: timestamp,
-    message: 'Google Cloud sign-in expired.', setup_commands: ['gcloud auth login'] } });
+  replies.push({
+    connection: {
+      ...saved,
+      status: 'setup_required',
+      identity: null,
+      checked_at: timestamp,
+      message: 'Google Cloud sign-in expired.',
+      setup_commands: ['gcloud auth login'],
+    },
+  });
   await gcp.getByRole('button', { name: 'Recheck', exact: true }).click();
   await expect(gcp.getByText('Connected', { exact: true })).toHaveCount(0);
   await expect(gcp.getByText('Google Cloud sign-in expired.', { exact: true })).toBeVisible();
   await expect(gcp.getByRole('button', { name: 'Disconnect', exact: true })).toBeVisible();
-  expect(writes).toEqual([{ provider: 'gcp', action: 'recheck', body: null }, { provider: 'gcp', action: 'recheck', body: null }]);
+  expect(writes).toEqual([
+    { provider: 'gcp', action: 'recheck', body: null },
+    { provider: 'gcp', action: 'recheck', body: null },
+  ]);
   expect(unexpected).toEqual([]);
 });
 
@@ -339,11 +503,21 @@ test('cloud cards and authentication setup fit at 320px in dark mode', async ({ 
   const { unexpected, replies } = await mockWorkspace(page);
   await page.getByRole('button', { name: 'Dark', exact: true }).click();
   await noOverflow(page);
-  await page.getByRole('region', { name: 'Google Cloud', exact: true }).getByRole('button', { name: 'Connect', exact: true }).click();
+  await page
+    .getByRole('region', { name: 'Google Cloud', exact: true })
+    .getByRole('button', { name: 'Connect', exact: true })
+    .click();
   const dialog = page.getByRole('dialog', { name: 'Connect Google Cloud', exact: true });
   await dialog.getByLabel('Project ID', { exact: true }).fill('robotics-development-team');
-  replies.push({ connection: { ...disconnected('gcp'), status: 'setup_required', checked_at: timestamp,
-    message: 'Sign in to Google Cloud on the application server.', setup_commands: ['gcloud auth login --project robotics-development-team'] } });
+  replies.push({
+    connection: {
+      ...disconnected('gcp'),
+      status: 'setup_required',
+      checked_at: timestamp,
+      message: 'Sign in to Google Cloud on the application server.',
+      setup_commands: ['gcloud auth login --project robotics-development-team'],
+    },
+  });
   await dialog.getByRole('button', { name: 'Verify & save', exact: true }).click();
   await expect(dialog.getByText('Sign in to Google Cloud on the application server.', { exact: true })).toBeVisible();
   await noOverflow(page);
@@ -352,7 +526,6 @@ test('cloud cards and authentication setup fit at 320px in dark mode', async ({ 
   await testInfo.attach('cloud-setup-mobile', { path: screenshot, contentType: 'image/png' });
   expect(unexpected).toEqual([]);
 });
-
 
 test('local run preferences and machine label persist after saving and reloading', async ({ page }, testInfo) => {
   const { writes, unexpected, computeWrites } = await mockWorkspace(page);
@@ -377,7 +550,9 @@ test('local run preferences and machine label persist after saving and reloading
   expect(unexpected).toEqual([]);
 });
 
-test('local discovery and registration are explicit, preserve preferences, and survive reload', async ({ page }, testInfo) => {
+test('local discovery and registration are explicit, preserve preferences, and survive reload', async ({
+  page,
+}, testInfo) => {
   const { mutations, unexpected, localWrites, computeWrites } = await mockWorkspace(page);
   const local = page.getByRole('region', { name: 'Local runs', exact: true });
   await expect(local.getByRole('button', { name: 'Check this machine', exact: true })).toBeVisible();
@@ -394,8 +569,12 @@ test('local discovery and registration are explicit, preserve preferences, and s
   await local.getByRole('button', { name: 'Add SmolVLA training', exact: true }).click();
   await expect(local.getByText('Added', { exact: true })).toBeVisible();
   await expect(local.getByRole('checkbox', { name: 'Enable local runs', exact: true })).not.toBeChecked();
-  await expect(local.getByRole('textbox', { name: 'Machine label', exact: true })).toHaveValue('My robotics workstation');
-  await expect(local.getByText('SmolVLA training added. Enable local runs when you’re ready.', { exact: true })).toBeVisible();
+  await expect(local.getByRole('textbox', { name: 'Machine label', exact: true })).toHaveValue(
+    'My robotics workstation',
+  );
+  await expect(
+    local.getByText('SmolVLA training added. Enable local runs when you’re ready.', { exact: true }),
+  ).toBeVisible();
   await expect(local.getByRole('button', { name: 'Add SmolVLA training', exact: true })).toHaveCount(0);
   expect(localWrites).toEqual([{ candidate_id: 'smolvla-cuda-0' }]);
   expect(computeWrites).toEqual([]);
@@ -406,7 +585,10 @@ test('local discovery and registration are explicit, preserve preferences, and s
   await expect(local.getByText('Local NVIDIA GPU', { exact: true })).toBeVisible();
   await expect(local.getByText('Configured', { exact: true })).toBeVisible();
   await expect(local.getByRole('checkbox', { name: 'Enable local runs', exact: true })).not.toBeChecked();
-  expect(mutations).toEqual(['POST /api/v1/compute-settings/local/check', 'POST /api/v1/compute-settings/local/workers']);
+  expect(mutations).toEqual([
+    'POST /api/v1/compute-settings/local/check',
+    'POST /api/v1/compute-settings/local/workers',
+  ]);
   await local.getByRole('button', { name: 'Check this machine', exact: true }).click();
   await expect(local.getByText('Added', { exact: true })).toBeVisible();
   await expect(local.locator('.local-worker-card')).toHaveCount(1);
@@ -414,10 +596,14 @@ test('local discovery and registration are explicit, preserve preferences, and s
 });
 
 test('local discovery without a compatible GPU explains its host scope without an install action', async ({ page }) => {
-  const { mutations, unexpected, localWrites } = await mockWorkspace(page, [], { discovery: {
-    host: { name: 'application-server', platform: 'Darwin', architecture: 'arm64' },
-    status: 'unavailable', message: 'No NVIDIA GPU found on this app host.', candidates: [],
-  } });
+  const { mutations, unexpected, localWrites } = await mockWorkspace(page, [], {
+    discovery: {
+      host: { name: 'application-server', platform: 'Darwin', architecture: 'arm64' },
+      status: 'unavailable',
+      message: 'No NVIDIA GPU found on this app host.',
+      candidates: [],
+    },
+  });
   const local = page.getByRole('region', { name: 'Local runs', exact: true });
   await local.getByRole('button', { name: 'Check this machine', exact: true }).click();
   await expect(local.getByText('App host · application-server', { exact: true })).toBeVisible();
@@ -432,11 +618,30 @@ test('local discovery without a compatible GPU explains its host scope without a
 });
 
 test('missing local worker dependencies are never represented as ready', async ({ page }, testInfo) => {
-  const { mutations, unexpected } = await mockWorkspace(page, [], { discovery: {
-    host: { name: 'robotics-workstation-with-a-long-hostname.example.test', platform: 'Linux', architecture: 'x86_64' },
-    status: 'unavailable', message: null,
-    candidates: [{ id: 'smolvla-cuda-0', label: 'SmolVLA training', gpu_name: 'NVIDIA RTX 3070', gpu_memory_mib: 8192, training_model_ids: ['smolvla'], status: 'setup_required', setup_supported: true, runtime_id: null, reason: 'Install the SmolVLA worker, then check again.' }],
-  } });
+  const { mutations, unexpected } = await mockWorkspace(page, [], {
+    discovery: {
+      host: {
+        name: 'robotics-workstation-with-a-long-hostname.example.test',
+        platform: 'Linux',
+        architecture: 'x86_64',
+      },
+      status: 'unavailable',
+      message: null,
+      candidates: [
+        {
+          id: 'smolvla-cuda-0',
+          label: 'SmolVLA training',
+          gpu_name: 'NVIDIA RTX 3070',
+          gpu_memory_mib: 8192,
+          training_model_ids: ['smolvla'],
+          status: 'setup_required',
+          setup_supported: true,
+          runtime_id: null,
+          reason: 'Install the SmolVLA worker, then check again.',
+        },
+      ],
+    },
+  });
   const local = page.getByRole('region', { name: 'Local runs', exact: true });
   await local.getByRole('button', { name: 'Check this machine', exact: true }).click();
   await expect(local.getByRole('button', { name: 'Set up locally', exact: true })).toBeEnabled();
@@ -449,12 +654,27 @@ test('missing local worker dependencies are never represented as ready', async (
   expect(unexpected).toEqual([]);
 });
 
-test('automatic setup requires a click, survives reload, cancels and retries without enabling runs', async ({ page }) => {
-  const { mutations, unexpected, computeWrites, completeSetup } = await mockWorkspace(page, [], { discovery: {
-    status: 'unavailable', candidates: [{ id: 'smolvla-cuda-0', label: 'Local NVIDIA GPU',
-      gpu_name: 'NVIDIA RTX 3070', gpu_memory_mib: 8192, training_model_ids: ['smolvla'],
-      status: 'setup_required', setup_supported: true, runtime_id: null, reason: 'Install the pinned worker environment.' }],
-  } });
+test('automatic setup requires a click, survives reload, cancels and retries without enabling runs', async ({
+  page,
+}) => {
+  const { mutations, unexpected, computeWrites, completeSetup } = await mockWorkspace(page, [], {
+    discovery: {
+      status: 'unavailable',
+      candidates: [
+        {
+          id: 'smolvla-cuda-0',
+          label: 'Local NVIDIA GPU',
+          gpu_name: 'NVIDIA RTX 3070',
+          gpu_memory_mib: 8192,
+          training_model_ids: ['smolvla'],
+          status: 'setup_required',
+          setup_supported: true,
+          runtime_id: null,
+          reason: 'Install the pinned worker environment.',
+        },
+      ],
+    },
+  });
   const local = page.getByRole('region', { name: 'Local runs', exact: true });
   expect(mutations).toEqual([]);
   await local.getByRole('button', { name: 'Check this machine', exact: true }).click();
@@ -473,8 +693,9 @@ test('automatic setup requires a click, survives reload, cancels and retries wit
   await expect(local.getByRole('checkbox', { name: 'Enable local runs', exact: true })).not.toBeChecked();
   await expect(local.getByRole('button', { name: 'Set up locally', exact: true })).toHaveCount(0);
   expect(computeWrites).toEqual([]);
-  expect(mutations.filter(path => path.includes('/local/setup'))).toEqual([
-    'POST /api/v1/compute-settings/local/setup', 'POST /api/v1/compute-settings/local/setup/cancel',
+  expect(mutations.filter((path) => path.includes('/local/setup'))).toEqual([
+    'POST /api/v1/compute-settings/local/setup',
+    'POST /api/v1/compute-settings/local/setup/cancel',
     'POST /api/v1/compute-settings/local/setup',
   ]);
   expect(unexpected).toEqual([]);
@@ -500,15 +721,17 @@ test('failed local checks and registration remain retryable without enabling com
   await expect(local.getByText('Added', { exact: true })).toBeVisible();
   expect(computeWrites).toEqual([]);
   expect(localWrites).toHaveLength(2);
-  expect(mutations.every(item => item.startsWith('POST /api/v1/compute-settings/local/'))).toBe(true);
+  expect(mutations.every((item) => item.startsWith('POST /api/v1/compute-settings/local/'))).toBe(true);
   expect(unexpected).toEqual([]);
 });
 
 test('a local check in progress blocks duplicate actions and announces the host scope', async ({ page }) => {
   const { mutations, unexpected } = await mockWorkspace(page);
   let release: () => void = () => {};
-  const held = new Promise<void>(resolve => { release = resolve; });
-  await page.route('**/api/v1/compute-settings/local/check', async route => {
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route('**/api/v1/compute-settings/local/check', async (route) => {
     await held;
     await route.fallback();
   });
@@ -546,7 +769,8 @@ for (const gpu of ['L4', 'T4', 'A100']) {
     await picker.click();
     const choices = panel.getByRole('listbox', { name: 'Default GPU', exact: true });
     await expect(choices.getByRole('option')).toHaveCount(3);
-    for (const option of ['L4', 'T4', 'A100']) await expect(choices.getByRole('option', { name: option, exact: true })).toBeVisible();
+    for (const option of ['L4', 'T4', 'A100'])
+      await expect(choices.getByRole('option', { name: option, exact: true })).toBeVisible();
     await choices.getByRole('option', { name: gpu, exact: true }).click();
     await expect(picker).toHaveAttribute('value', gpu);
     await panel.locator('.cloud-gpu-advanced > summary').click();
@@ -558,7 +782,11 @@ for (const gpu of ['L4', 'T4', 'A100']) {
     await panel.getByRole('button', { name: 'Save preferences', exact: true }).click();
     await expect(panel.getByRole('status')).toHaveText('Preferences saved.');
     expect(computeWrites).toEqual([{ gcp: { enabled: true, default_gpu: gpu, disk_size_gb: 300, idle_minutes: 15 } }]);
-    await expect(page.getByRole('region', { name: 'Local runs', exact: true }).getByRole('checkbox', { name: 'Enable local runs', exact: true })).not.toBeChecked();
+    await expect(
+      page
+        .getByRole('region', { name: 'Local runs', exact: true })
+        .getByRole('checkbox', { name: 'Enable local runs', exact: true }),
+    ).not.toBeChecked();
     await page.reload();
     await openCompute(page);
     await expect(preferences).not.toHaveAttribute('open', '');
@@ -578,15 +806,23 @@ for (const gpu of ['L4', 'T4', 'A100']) {
 test('connected cloud account requires no manual training setup screens', async ({ page }) => {
   const saved = connected('gcp', { project_id: 'robot-training-123', region: 'us-central1' });
   const { mutations, unexpected } = await mockWorkspace(page, [saved], {
-    status: { status: 'unchecked', message: 'Internal preparation will happen automatically.', setup_commands: ['gcloud auth application-default login'] },
+    status: {
+      status: 'unchecked',
+      message: 'Internal preparation will happen automatically.',
+      setup_commands: ['gcloud auth application-default login'],
+    },
   });
   const preferences = page.locator('.cloud-gpu-settings');
   await expect(preferences).not.toHaveAttribute('open', '');
-  await expect(page.getByRole('region', { name: 'Google Cloud', exact: true }).getByText('Connected', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Google Cloud', exact: true }).getByText('Connected', { exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole('button', { name: /Prepare SkyPilot|Check SkyPilot/ })).toHaveCount(0);
   await expect(page.getByText('Training preferences', { exact: false })).toBeVisible();
   await openTrainingPreferences(page);
-  await expect(preferences.getByText(/SkyPilot|application-default|Internal preparation|Setup required/)).toHaveCount(0);
+  await expect(preferences.getByText(/SkyPilot|application-default|Internal preparation|Setup required/)).toHaveCount(
+    0,
+  );
   await expect(preferences.locator('.cloud-gpu-advanced')).not.toHaveAttribute('open', '');
   await expect(preferences.getByRole('spinbutton')).toHaveCount(0);
   expect(mutations).toEqual([]);
@@ -601,7 +837,9 @@ test('advanced cloud opt-out is saved without changing the connected account', a
   await panel.getByRole('checkbox', { name: 'Allow cloud training', exact: true }).uncheck();
   await panel.getByRole('button', { name: 'Save preferences', exact: true }).click();
   await expect(panel.getByRole('status')).toHaveText('Preferences saved.');
-  expect(computeWrites).toEqual([{ gcp: { enabled: false, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 } }]);
+  expect(computeWrites).toEqual([
+    { gcp: { enabled: false, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 } },
+  ]);
   await page.reload();
   await openCompute(page);
   await openTrainingPreferences(page);
@@ -613,7 +851,9 @@ test('advanced cloud opt-out is saved without changing the connected account', a
 });
 
 test('training preferences GPU popover fits the screen without infrastructure details', async ({ page }, testInfo) => {
-  const { mutations, unexpected } = await mockWorkspace(page, [connected('gcp', { project_id: 'robotics-training-123', region: 'us-central1' })]);
+  const { mutations, unexpected } = await mockWorkspace(page, [
+    connected('gcp', { project_id: 'robotics-training-123', region: 'us-central1' }),
+  ]);
   const panel = await openTrainingPreferences(page);
   await panel.getByRole('combobox', { name: 'Default GPU', exact: true }).click();
   await expect(panel.getByRole('listbox', { name: 'Default GPU', exact: true })).toBeVisible();

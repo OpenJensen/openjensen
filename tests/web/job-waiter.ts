@@ -15,10 +15,8 @@ export async function waitForJob(
     throw new Error(`Worker wait budget must be in (0, ${jobWaitMs}]ms`);
   const deadline = performance.now() + timeoutMs;
   let last = `Job ${id}: no snapshot received`;
-  const expired = (cause?: unknown) => new Error(
-    `Job did not reach ${expected} within ${timeoutMs}ms. Last observation: ${last}`,
-    { cause },
-  );
+  const expired = (cause?: unknown) =>
+    new Error(`Job did not reach ${expected} within ${timeoutMs}ms. Last observation: ${last}`, { cause });
   async function get(path: string) {
     const remaining = deadline - performance.now();
     try {
@@ -36,7 +34,13 @@ export async function waitForJob(
     const response = await get(`/api/v1/jobs/${id}`);
     expect(response.status(), `Reading job ${id}: ${await response.text()}`).toBe(200);
     const job = await response.json();
-    last = JSON.stringify({ id: job.id, status: job.status, stage: job.stage, error: job.error, updated_at: job.updated_at });
+    last = JSON.stringify({
+      id: job.id,
+      status: job.status,
+      stage: job.stage,
+      error: job.error,
+      updated_at: job.updated_at,
+    });
     if (!['queued', 'running'].includes(job.status)) {
       expect(job.status, `Job reached ${job.status}; expected ${expected}. ${last}`).toBe(expected);
       return job;

@@ -1,0 +1,24 @@
+# Formatting covers the web app, its browser tests and their configuration.
+# Everything else keeps its own conventions (Python uses ruff).
+*
+!apps/
+!apps/web/
+!apps/web/src/
+!apps/web/src/**
+!tests/
+!tests/web/
+!tests/web/**
+!playwright*.ts
+
+# Generated from packages/core/openapi.json; CI compares it with fresh output.
+apps/web/src/lib/api.generated.ts
+tests/web/*.py
+
+# SO-101 Robot Lab sources are under active development on another branch.
+# Format them once that work merges, so it does not need a whole-file rebase.
+apps/web/src/components/robot-lab.*
+apps/web/src/components/so101-*
+apps/web/src/lib/robot-api.ts
+apps/web/src/lib/so101-*
+tests/web/robot-lab.spec.ts
+tests/web/so101-*

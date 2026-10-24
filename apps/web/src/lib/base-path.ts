@@ -11,6 +11,13 @@ export function normalizeBasePath(value: string | undefined) {
 export const basePath = normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH);
 
 export function publicPath(path: string) {
-  if (!path.startsWith('/') || path.startsWith('//') || !basePath || path === basePath || path.startsWith(`${basePath}/`)) return path;
+  if (
+    !path.startsWith('/') ||
+    path.startsWith('//') ||
+    !basePath ||
+    path === basePath ||
+    path.startsWith(`${basePath}/`)
+  )
+    return path;
   return `${basePath}${path}`;
 }
