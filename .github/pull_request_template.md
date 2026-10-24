@@ -6,6 +6,4 @@
 
 <!-- The resulting behavior. Link the issue if there is one. -->
 
-## Verification
-
-<!-- Checks you ran (see docs/ci.md) and their results. List any check you could not run, and why. -->
+<!-- CI runs the checks. Leave local experiment results, benchmarks and details about your machines out of the pull request. -->
