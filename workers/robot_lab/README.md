@@ -1,7 +1,7 @@
 # OpenJensen Robot Lab companion
 
-This private Mac-side service gives the Xbox OpenJensen web app access to the
-Mac's USB SO-101 arms and cameras. Hardware operation requires PySerial,
+This private macOS/Linux service gives the Xbox OpenJensen web app access to the
+computer's USB SO-101 arms and cameras. Hardware operation requires PySerial,
 the Feetech SDK, OpenCV and NumPy. Recording additionally uses Pillow and
 PyArrow; a full local Torch/LeRobot training installation is unnecessary.
 The app forwards requests through a private SSH loopback bridge. Never expose
@@ -15,7 +15,7 @@ this service, its token, or a USB serial port on a public network.
 ```
 
 The token must be a regular private file (0600), at least 32 characters long.
-The launch installer keeps source/runtime/config separately. `--data-dir`
+The [macOS installer](../../deploy/macos/README.md) and [Linux installer](../../deploy/linux/README.md) keep source/runtime/config separately. `--data-dir`
 contains datasets and pending episode frames. Calibration JSON is saved under
 LeRobot's standard `~/.cache/huggingface/lerobot/calibration/robots/so_follower/`
 or `teleoperators/so_leader/`, respecting `HF_LEROBOT_CALIBRATION`.
@@ -59,9 +59,15 @@ the serial watchdog. A recording's preview reuses its latest frame. Camera
 access may need macOS Privacy & Security → Camera approval for the companion's
 Python process. Timed out queued opens are cancelled and late handles released.
 
+Linux uses V4L2 camera capture and USB serial adapters (`/dev/ttyACM*` or
+`/dev/ttyUSB*`). Inventory queries V4L2 capabilities without starting streaming
+and excludes metadata-only nodes. Check your device groups (usually `dialout`
+and `video` on Ubuntu/Debian), then log in again after group changes. The Linux
+installer uses systemd user services; foreground operation is also supported.
+
 Recording writes LeRobot **v3.0** image datasets directly: Parquet frame tables,
 embedded lossless RGB PNG images, task/episode metadata, and normalization stats.
-The format is verified with LeRobot 0.4.4 without importing Torch on the Mac.
+The format is verified with LeRobot 0.4.4 without importing Torch on the hardware computer.
 Images use `observation.images.front`; states/actions use `observation.state`
 and `action` in official joint-name order, in degrees and gripper percent.
 Handguide demonstrations record observed position as action; manual/leader
@@ -76,10 +82,10 @@ finalizing. Stop preserves pending frames for save/discard. The writer stops
 before disk exhaustion (1 GiB required to create a dataset; 512 MiB reserve during
 capture), with a five-minute episode limit. Finalized datasets expose a sorted
 file manifest with sizes and SHA-256 checksums to the app's project importer.
-Original Mac files remain intact. No Hugging Face upload is automatic.
+Original local files remain intact. No Hugging Face upload is automatic.
 
 See [API.md](API.md) for request/response contracts and
-[requirements-hardware.txt](requirements-hardware.txt) for Mac runtime versions.
+[requirements-hardware.txt](requirements-hardware.txt) for hardware runtime versions.
 The workflow follows the
 [official SO-101 guide](https://huggingface.co/docs/lerobot/main/en/so101) and
 [LeRobot v0.4.4 source](https://github.com/huggingface/lerobot/tree/v0.4.4/src/lerobot).
@@ -94,7 +100,7 @@ python -m unittest discover -s workers/robot_lab/tests -v
 
 The format proof loads two recorded episodes, camera tensors, actions, tasks and
 action delta timestamps with official LeRobot 0.4.4. Run in an existing compatible
-environment; the lightweight Mac runtime skips this one test explicitly:
+environment; the lightweight hardware runtime skips this one test explicitly:
 
 ```sh
 OPENJENSEN_VERIFY_LEROBOT=1 /path/to/lerobot-env/bin/python \

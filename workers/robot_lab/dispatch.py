@@ -41,8 +41,8 @@ class MainThreadDispatcher:
                 if not job.done.is_set():
                     job.cancelled = True
                     raise TimeoutError(
-                        "Camera authorization/open timed out. Allow the macOS camera prompt "
-                        "and retry."
+                        "Camera authorization/open timed out. Check camera permissions "
+                        "on the robot computer and retry."
                     )
         if job.error is not None:
             raise job.error

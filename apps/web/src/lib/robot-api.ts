@@ -47,7 +47,7 @@ async function request<T>(path: string, body?: unknown, options: { timeoutMs?: n
     }
     return await response.json() as T;
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') throw new Error('The Mac companion did not respond in time. Check the connection before trying again.');
+    if (error instanceof Error && error.name === 'AbortError') throw new Error('The robot companion did not respond in time. Check the connection before trying again.');
     throw error;
   } finally { clearTimeout(timer); }
 }

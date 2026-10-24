@@ -1,4 +1,4 @@
-"""Mac installer lifecycle and credential checks use no real services or packages."""
+"""Companion installer lifecycle and credential checks use no real services or packages."""
 
 import ast
 import importlib.util
@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 SPEC = importlib.util.spec_from_file_location(
-    "robot_lab_installer", Path(__file__).parents[1] / "deploy/macos/install_robot_lab.py"
+    "robot_lab_installer", Path(__file__).parents[1] / "deploy/install_robot_lab.py"
 )
 installer = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(installer)
@@ -35,10 +35,11 @@ def test_private_token_refuses_symlinks_public_permissions_and_invalid_contents(
         installer.read_private_token(token)
 
 
+@pytest.mark.parametrize("host_platform", ["darwin", "linux"])
 def test_reinstall_stops_only_managed_services_before_runtime_mutation(
-    tmp_path, monkeypatch, capsys
+    tmp_path, monkeypatch, capsys, host_platform
 ):
-    home = tmp_path / "home"
+    home = tmp_path / "home with $dollars and %percent"
     source = tmp_path / "source"
     source.mkdir()
     for name in installer.SOURCE_MODULES:
@@ -67,11 +68,13 @@ def test_reinstall_stops_only_managed_services_before_runtime_mutation(
 
     def run(args, **kwargs):
         calls.append(args)
-        return SimpleNamespace(returncode=0, stdout=b"")
+        return SimpleNamespace(returncode=0, stdout="loaded" if kwargs.get("text") else b"")
 
-    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(sys, "platform", host_platform)
     monkeypatch.setattr(Path, "home", lambda: home)
-    monkeypatch.setattr("shutil.which", lambda _: "/bin/uv")
+    monkeypatch.setattr("shutil.which", lambda command: "/bin/" + command)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
     monkeypatch.setattr("shutil.disk_usage", lambda _: SimpleNamespace(free=100 * 1024**3))
     monkeypatch.setattr("subprocess.run", run)
     monkeypatch.setattr("subprocess.check_output", lambda *a, **k: str(site) + "\n")
@@ -95,27 +98,46 @@ def test_reinstall_stops_only_managed_services_before_runtime_mutation(
         ],
     )
     installer.main()
-    bootouts = [
-        index for index, command in enumerate(calls) if command[:2] == ["launchctl", "bootout"]
-    ]
     pip = next(
         index for index, command in enumerate(calls) if command[:3] == ["/bin/uv", "pip", "install"]
     )
-    assert len(bootouts) == 2 and max(bootouts) < pip
-    assert {calls[index][-1] for index in bootouts} == {
-        f"gui/{os.getuid()}/" + label for label in installer.SERVICE_LABELS
-    }
+    if host_platform == "darwin":
+        stops = [
+            index for index, command in enumerate(calls) if command[:2] == ["launchctl", "bootout"]
+        ]
+        assert {calls[index][-1] for index in stops} == {
+            f"gui/{os.getuid()}/" + label for label in installer.SERVICE_LABELS
+        }
+    else:
+        stops = [
+            index
+            for index, command in enumerate(calls)
+            if command[:3] == ["/bin/systemctl", "--user", "stop"]
+        ]
+        assert {calls[index][-1] for index in stops} == set(installer.LINUX_SERVICES)
+        unit = (home / ".config/systemd/user" / installer.LINUX_SERVICES[0]).read_text()
+        assert "127.0.0.1" in unit and "UMask=0077" in unit and "Restart=on-failure" in unit
+        assert "$$dollars" in unit and "%%percent" in unit
+        tunnel = (home / ".config/systemd/user" / installer.LINUX_SERVICES[1]).read_text()
+        assert "127.0.0.1:18101:127.0.0.1:18101" in tunnel
+        assert "127.0.0.1:18096:127.0.0.1:8096" in tunnel
+        receipt = __import__("json").loads((private / "installation.json").read_text())
+        assert receipt["data"] == str(home / ".local/share/OpenJensen/robot-lab")
+    assert len(stops) == 2 and max(stops) < pip
     assert "--offline" in calls[pip]
-    assert not any(command[:2] == ["launchctl", "bootstrap"] for command in calls)
+    assert not any(
+        command[:2] == ["launchctl", "bootstrap"] or "--now" in command for command in calls
+    )
     assert token.read_text() == "t" * 48 + "\n" and "t" * 48 not in capsys.readouterr().out
     assert all((prefix / "source" / name).is_file() for name in installer.SOURCE_MODULES)
     assert all(
         (prefix / "source/_vendor/servotools" / name).is_file() for name in installer.VENDOR_FILES
     )
     assert not (prefix / "source/_vendor/servotools/__pycache__").exists()
-    with (home / "Library/LaunchAgents/com.openjensen.robot-lab.plist").open("rb") as stream:
-        service = plistlib.load(stream)
-    assert service["ProgramArguments"][1].endswith("/source/server.py")
+    if host_platform == "darwin":
+        with (home / "Library/LaunchAgents/com.openjensen.robot-lab.plist").open("rb") as stream:
+            service = plistlib.load(stream)
+        assert service["ProgramArguments"][1].endswith("/source/server.py")
 
 
 def test_missing_dispatch_module_fails_before_creating_files_or_stopping_services(
@@ -182,3 +204,102 @@ def test_installer_includes_local_dependencies_of_shipped_modules():
                 dependency = node.module.split(".")[0] + ".py"
                 if (source / dependency).is_file():
                     assert dependency in shipped, f"{name} requires {dependency} in the installer"
+
+
+def test_linux_first_offline_preparation_does_not_require_a_user_bus(tmp_path, monkeypatch):
+    monkeypatch.setattr(installer, "linux_units_dir", lambda: tmp_path)
+    monkeypatch.setattr("shutil.which", lambda _: None)
+    assert installer.stop_linux_services(no_start=True) is None
+    with pytest.raises(ValueError, match="user manager"):
+        installer.stop_linux_services(no_start=False)
+    (tmp_path / installer.LINUX_SERVICES[0]).touch()
+    with pytest.raises(ValueError, match="user manager"):
+        installer.stop_linux_services(no_start=True)
+
+
+def test_linux_service_enable_and_tunnel_removal(tmp_path, monkeypatch):
+    monkeypatch.setattr(installer, "linux_units_dir", lambda: tmp_path / "units")
+    calls = []
+    monkeypatch.setattr("subprocess.run", lambda args, **kw: calls.append(args))
+    arguments = [
+        tmp_path / "python",
+        tmp_path / "source",
+        tmp_path / "token",
+        tmp_path / "data",
+        tmp_path / "logs",
+    ]
+    installer.install_linux_services(*arguments, "xbox-360", False, "/bin/systemctl")
+    assert calls[-1] == ["/bin/systemctl", "--user", "enable", "--now", *installer.LINUX_SERVICES]
+    installer.install_linux_services(*arguments, None, False, "/bin/systemctl")
+    assert ["/bin/systemctl", "--user", "disable", installer.LINUX_SERVICES[1]] in calls
+    assert not (tmp_path / "units" / installer.LINUX_SERVICES[1]).exists()
+    assert (tmp_path / "units" / installer.LINUX_SERVICES[0]).stat().st_mode & 0o777 == 0o600
+
+
+def test_service_paths_cannot_inject_unit_directives():
+    with pytest.raises(ValueError, match="control characters"):
+        installer.unit_quote("/tmp/source\nExecStart=/bin/false")
+    quoted = installer.unit_quote('/tmp/with "quotes" and \\slashes', command=True)
+    assert __import__("json").loads(quoted) == '/tmp/with "quotes" and \\slashes'
+
+
+def test_linux_missing_units_do_not_require_success_exit_status(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr("shutil.which", lambda _: "/bin/systemctl")
+
+    def run(arguments, **kwargs):
+        calls.append(arguments)
+        return (
+            SimpleNamespace(returncode=1, stdout="not-found\n")
+            if "show" in arguments
+            else SimpleNamespace(returncode=0)
+        )
+
+    monkeypatch.setattr("subprocess.run", run)
+    assert installer.stop_linux_services(False) == "/bin/systemctl"
+    assert not any("stop" in command for command in calls)
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="systemd is Linux-only")
+def test_generated_linux_units_pass_native_systemd_validation(tmp_path, monkeypatch):
+    import shutil
+    import subprocess
+
+    analyzer = shutil.which("systemd-analyze")
+    if not analyzer:
+        pytest.skip("systemd-analyze is unavailable")
+    source = tmp_path / 'source with $literal %percent "quotes"'
+    source.mkdir()
+    (source / "server.py").touch()
+    runtime = tmp_path / "runtime-dir"
+    runtime.mkdir(mode=0o700)
+    units = tmp_path / "units"
+    monkeypatch.setattr(installer, "linux_units_dir", lambda: units)
+    installer.install_linux_services(
+        Path(sys.executable),
+        source,
+        tmp_path / "token",
+        tmp_path / "data",
+        tmp_path / "logs",
+        "xbox-360",
+        True,
+        None,
+    )
+    checked = subprocess.run(
+        [analyzer, "--user", "verify", *[str(units / name) for name in installer.LINUX_SERVICES]],
+        env={**os.environ, "XDG_RUNTIME_DIR": str(runtime)},
+        capture_output=True,
+        text=True,
+    )
+    assert checked.returncode == 0, checked.stdout + checked.stderr
+
+
+def test_installer_bootstraps_with_distribution_python_310():
+    # uv installs the companion Python; the installer must parse before that exists.
+    root = Path(__file__).parents[1]
+    for relative in (
+        "deploy/install_robot_lab.py",
+        "deploy/linux/install_robot_lab.py",
+        "deploy/macos/install_robot_lab.py",
+    ):
+        ast.parse((root / relative).read_text(), feature_version=(3, 10))

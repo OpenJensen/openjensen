@@ -32,12 +32,12 @@ robot communication, GPU training or simulator execution.
 | `simulation` | Setup plan for external Isaac Sim 6.1 | Supported Linux NVIDIA host; Isaac's bundled Python and separate container |
 
 The Robot Lab companion records LeRobot v3 datasets without installing Torch or
-the training environment on the USB computer. With the arm on a Mac and the app
-on Xbox, install `robot` on the Mac and keep Core, dataset tools and GPU workers
-on Xbox. The private connection forwards the app's Robot Lab requests to the Mac;
-recordings stay on the Mac until you explicitly import them into an Xbox project.
+the training environment on the USB computer. With the arm on macOS or Linux and the app
+on Xbox, install `robot` on the USB computer and keep Core, dataset tools and GPU workers
+on Xbox. The private connection forwards the app's Robot Lab requests to that computer;
+recordings stay there until you explicitly import them into an Xbox project.
 
-Use the managed [Mac companion setup](../deploy/macos/README.md) for its service,
+Use the managed [macOS](../deploy/macos/README.md) or [Linux companion setup](../deploy/linux/README.md) for its service,
 camera permission and private pairing. Installing dependencies does not assign
 motor IDs, calibrate the arm or enable torque. Those are explicit Robot Lab steps.
 

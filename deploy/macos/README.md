@@ -1,5 +1,7 @@
 # Mac Robot Lab component
 
+For Linux, use the [Linux companion installer](../linux/README.md).
+
 Use the managed installer to install only the camera, servo and LeRobot-format dataset tools on the computer attached to the arm:
 
 ```sh

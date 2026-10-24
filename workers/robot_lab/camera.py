@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import os
 import platform
 import re
 import shutil
+import struct
 import subprocess
 import threading
 import time
+from pathlib import Path
+
+MAX_CAMERA_INDEX = 63
 
 
 class CameraPool:
@@ -21,8 +26,12 @@ class CameraPool:
     def read(self, index=0, width=640, height=480):
         import cv2
 
-        if not isinstance(index, int) or isinstance(index, bool) or not 0 <= index <= 8:
-            raise ValueError("Camera index must be an integer from 0 to 8")
+        if (
+            not isinstance(index, int)
+            or isinstance(index, bool)
+            or not 0 <= index <= MAX_CAMERA_INDEX
+        ):
+            raise ValueError(f"Camera index must be an integer from 0 to {MAX_CAMERA_INDEX}")
         with self.lock:
             if index not in self.handles:
 
@@ -31,14 +40,22 @@ class CameraPool:
                     # main thread; LaunchAgents otherwise cannot spin its loop.
                     capture = cv2.VideoCapture(
                         index,
-                        cv2.CAP_AVFOUNDATION if platform.system() == "Darwin" else cv2.CAP_ANY,
+                        cv2.CAP_AVFOUNDATION if platform.system() == "Darwin" else cv2.CAP_V4L2,
                     )
                     if not capture.isOpened():
                         capture.release()
-                        raise RuntimeError(
-                            "Camera could not open. In macOS Privacy & Security, allow Camera "
-                            "access for the companion's Python process, then retry."
-                        )
+                        if platform.system() == "Darwin":
+                            message = (
+                                "Camera could not open. In macOS Privacy & Security, allow Camera "
+                                "access for the companion's Python process, then retry."
+                            )
+                        else:
+                            message = (
+                                f"Camera /dev/video{index} could not open. Check read/write "
+                                "permissions (usually the video group), USB connection, and "
+                                "whether another app is using it, then retry."
+                            )
+                        raise RuntimeError(message)
                     capture.set(cv2.CAP_PROP_FRAME_WIDTH, min(1920, max(160, int(width))))
                     capture.set(cv2.CAP_PROP_FRAME_HEIGHT, min(1080, max(120, int(height))))
                     capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
@@ -131,22 +148,7 @@ class CameraPool:
                 }
                 for index, device in enumerate(devices)
             ]
-        from pathlib import Path
-
-        output = []
-        for path in sorted(Path("/sys/class/video4linux").glob("video*")):
-            index = int(path.name.removeprefix("video"))
-            name_path = path / "name"
-            output.append(
-                {
-                    "index": index,
-                    "name": name_path.read_text().strip() if name_path.exists() else path.name,
-                    "width": 640,
-                    "height": 480,
-                    "verified": False,
-                }
-            )
-        return output
+        return linux_cameras()
 
     def cached_jpeg(self, index=0):
         import cv2
@@ -174,3 +176,43 @@ class CameraPool:
             for index, used in list(self.last_used.items()):
                 if time.monotonic() - used > max_age:
                     self.close(index)
+
+
+def linux_cameras(sysfs=Path("/sys/class/video4linux"), devices=Path("/dev")):
+    """Query V4L2 capabilities without starting capture or requesting frames."""
+    import fcntl
+
+    output = []
+    for path in sysfs.glob("video*"):
+        match = re.fullmatch(r"video(\d+)", path.name)
+        if not match or int(match[1]) > MAX_CAMERA_INDEX:
+            continue
+        index = int(match[1])
+        try:
+            descriptor = os.open(devices / path.name, os.O_RDONLY | os.O_NONBLOCK)
+        except PermissionError:
+            # Keep an inaccessible camera visible so preview can explain permissions.
+            descriptor = None
+        except OSError:
+            continue  # Disconnected between sysfs enumeration and query.
+        if descriptor is not None:
+            try:
+                capability = bytearray(104)  # struct v4l2_capability, Linux UAPI.
+                fcntl.ioctl(descriptor, 0x80685600, capability)  # VIDIOC_QUERYCAP
+                caps, device_caps = struct.unpack_from("=II", capability, 84)
+                if caps & 0x80000000:  # V4L2_CAP_DEVICE_CAPS
+                    caps = device_caps
+                if not caps & (0x00000001 | 0x00001000):  # VIDEO_CAPTURE / MPLANE
+                    continue  # Metadata-only/output nodes are not selectable cameras.
+            except OSError:
+                continue
+            finally:
+                os.close(descriptor)
+        try:
+            name = (path / "name").read_text().strip()
+        except OSError:
+            name = path.name
+        output.append(
+            {"index": index, "name": name, "width": 640, "height": 480, "verified": False}
+        )
+    return sorted(output, key=lambda camera: camera["index"])

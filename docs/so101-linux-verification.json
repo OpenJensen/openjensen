@@ -1,0 +1,57 @@
+{
+  "date": "2026-10-24",
+  "scope": "Linux SO-101 companion installation, V4L2 discovery and cross-platform Robot Lab UI",
+  "pytest": {
+    "passed": 108,
+    "files": [
+      "test_robot_lab_installer.py",
+      "test_robot_lab_api.py",
+      "test_robot_lab_worker.py",
+      "test_install_profiles.py",
+      "test_public_gateway.py"
+    ]
+  },
+  "companion_suite": {
+    "passed": 180,
+    "skipped": 1,
+    "skip_reason": "Optional official LeRobot/Torch loader proof is separate from the lightweight hardware runtime."
+  },
+  "browser": {
+    "desktop_mobile_robot_lab_passed": 82,
+    "final_rebuild_linux_offline_smoke_passed": 4
+  },
+  "build": {
+    "typecheck": "passed",
+    "next_webpack_static_export": "passed",
+    "ruff_lint_and_format": "passed",
+    "eslint": "Robot Lab files remain explicitly excluded by repository ESLint configuration."
+  },
+  "linux_native": {
+    "python_310_installer_help": "passed for Linux and compatibility macOS entry points",
+    "systemd_analyze_user_verify": "passed, including spaces and dollar/percent/quote characters in source paths",
+    "foreground_companion": "Authenticated Linux status, rejected unauthenticated status (401), idle torque-off state and clean shutdown with listener closed."
+  },
+  "limitations": [
+    "No SO-101 arm or USB camera was attached to Linux; physical calibration, powered control, teleoperation and capture are unverified on Linux.",
+    "This SSH session has no systemd user bus; live service enable/autostart is unexecuted. Unit syntax uses native systemd validation; lifecycle commands use mocks."
+  ],
+  "source_files": {
+    "apps/web/src/components/robot-lab.tsx": "f9220a6d3c30b0d877f857e4fe5bdd6a13787b59f07cf59374faf275a5a9d994",
+    "apps/web/src/lib/robot-api.ts": "ef6d8d71c2c4f7e81ad3ef0e653d383cd53cd2ec5d1d7f06da57beb4c48bc0de",
+    "deploy/install_robot_lab.py": "64168b87c5ebf5b090294fe9e509066d52ddc0ad949f1c65ff645cf47b5ddafb",
+    "deploy/linux/README.md": "7b734c8df62fe3036147fbfbbdac759826442dccd3fe8c358c36ae0c59e675a8",
+    "deploy/linux/install_robot_lab.py": "c12084643823f7bb62def4ed2de59dcea7625bcc0c6a81f4f2ce0b7eb5174a0c",
+    "deploy/macos/README.md": "a459f7f71b6933d27b825a398af05c9bdcc89863e2a33a680f9ddeb119ac755c",
+    "deploy/macos/install_robot_lab.py": "c12084643823f7bb62def4ed2de59dcea7625bcc0c6a81f4f2ce0b7eb5174a0c",
+    "docs/installation-profiles.md": "7b55f9639df574a956ad3e4792b5625ef0c4796060e26f1f0878719a2edfccb3",
+    "docs/so101-robot-lab.md": "045000567ee0a91e78f1c705d57e091b191fcbe430bd6ae994e8ccff73225274",
+    "tests/test_robot_lab_installer.py": "12ec246da69d441e819a4b2aa780ee99e20b796cebe481090ab17bf839f79e21",
+    "tests/web/robot-lab.spec.ts": "cb57ca4a017a41ccd5426b6e98f619dafdde549de7a268bcf3e5a70b312af92c",
+    "workers/robot_lab/API.md": "215b1fc9817d56f83a02147bed938eb30ab02138c5b96550133938b6150a3464",
+    "workers/robot_lab/README.md": "ae596c6e41364ded3986842d7ee9c7f7ed3c446eddae397dfe62ff3e9dc8aab6",
+    "workers/robot_lab/camera.py": "dcb0943f75fcf716c57428ed298b5ac135fcf589f3baebb22350317cfb8f0f02",
+    "workers/robot_lab/dispatch.py": "f22cfec27aeb5105a2a2414e7761bf6e44009a308c5deb09b0bcde62821d1191",
+    "workers/robot_lab/server.py": "8780be41aab4eacb7a89e889547b20b327b9d22e794f355f9130333698c20d30",
+    "workers/robot_lab/tests/test_linux_camera.py": "3025c8e8da24acddbd002fe3643f1e9a2a493eaf808d6129a13560261e73663c"
+  }
+}
