@@ -5,13 +5,12 @@ import json
 import os
 import stat
 import sys
-from importlib.metadata import version
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
-from vla_platform import cli_client
+from vla_platform import __version__, cli_client
 from vla_platform.environment import getenv
 from vla_platform.install_cli import install
 from vla_platform.tui_client import ApiError, segment
@@ -260,7 +259,7 @@ def read_recipe(path: Path) -> dict:
 
 def show_version(value: bool):
     if value:
-        typer.echo(version("vla-platform"))
+        typer.echo(__version__)
         raise typer.Exit()
 
 

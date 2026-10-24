@@ -94,7 +94,7 @@ def test_docker_cleanup_failure_is_visible_after_native_process_cleanup(monkeypa
     assert process.wait.await_count == 1
 
 
-def test_application_release_versions_agree_across_build_manifests():
+def test_application_release_versions_agree_across_build_manifests(tmp_path):
     root = Path(__file__).resolve().parents[1]
     for relative in (
         "pyproject.toml",
@@ -123,3 +123,15 @@ def test_application_release_versions_agree_across_build_manifests():
         json.loads((root / "packages/core/openapi.json").read_text())["info"]["version"]
         == __version__
     )
+
+
+def test_cli_and_api_report_running_code_version_not_stale_distribution(tmp_path, monkeypatch):
+    import importlib.metadata
+
+    from typer.testing import CliRunner
+    from vla_platform.cli import app
+
+    monkeypatch.setattr(importlib.metadata, "version", lambda _name: "0.0.1")
+    assert CliRunner().invoke(app, ["--version"]).stdout.strip() == __version__
+    with TestClient(create_app(Settings(data_dir=tmp_path))) as client:
+        assert client.get("/api/v1/health").json()["version"] == __version__

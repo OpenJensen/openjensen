@@ -6,7 +6,7 @@ import sys
 
 import httpx
 from typer.testing import CliRunner
-from vla_platform import cli, cli_client
+from vla_platform import __version__, cli, cli_client
 
 runner = CliRunner()
 
@@ -24,7 +24,7 @@ def mock_api(monkeypatch, handler):
 def test_help_version_and_no_textual_import():
     assert runner.invoke(cli.app, ["--help"]).exit_code == 0
     assert runner.invoke(cli.app, ["tui", "--help"]).exit_code == 0
-    assert runner.invoke(cli.app, ["--version"]).stdout.strip() == "0.1.0"
+    assert runner.invoke(cli.app, ["--version"]).stdout.strip() == __version__
     result = subprocess.run(
         [
             sys.executable,
