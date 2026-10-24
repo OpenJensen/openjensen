@@ -131,6 +131,9 @@ class TransportTests(unittest.TestCase):
             ("Max_Position_Limit", 3900),
             ("Lock", 1),
             ("Operating_Mode", 0),
+            ("Max_Torque_Limit", 500),
+            ("Protection_Current", 250),
+            ("Overload_Torque", 25),
         ):
             with self.subTest(register=register):
                 self.bus.packet.reset_mock()
@@ -153,6 +156,25 @@ class TransportTests(unittest.TestCase):
             self.bus.write("Homing_Offset", 1, 0)
         self.bus.packet.write2ByteTxRx.assert_called_once()
 
+    def test_protection_mismatch_fails_without_write_replay(self):
+        for register, requested in (
+            ("Max_Torque_Limit", 500),
+            ("Protection_Current", 250),
+            ("Overload_Torque", 25),
+        ):
+            with self.subTest(register=register):
+                self.bus.packet.reset_mock()
+                size = REGISTERS[register][1]
+                write = (
+                    self.bus.packet.write1ByteTxRx if size == 1 else self.bus.packet.write2ByteTxRx
+                )
+                read = self.bus.packet.read1ByteTxRx if size == 1 else self.bus.packet.read2ByteTxRx
+                write.return_value = (-3001, 0)
+                read.return_value = (requested + 1, 0, 0)
+                with self.assertRaisesRegex(HardwareError, f"write {register}.*read-back was"):
+                    self.bus.write(register, 6, requested)
+                write.assert_called_once()
+
     def test_configuration_missing_readback_fails_without_write_replay(self):
         self.bus.packet.write2ByteTxRx.return_value = (-3001, 0)
         self.bus.packet.read2ByteTxRx.return_value = (0, -3001, 0)
@@ -164,6 +186,7 @@ class TransportTests(unittest.TestCase):
     def test_motion_torque_and_id_writes_never_use_ack_recovery(self):
         for register, value in (
             ("Goal_Position", 2047),
+            ("Goal_Velocity", 100),
             ("Torque_Enable", 1),
             ("Torque_Enable", 0),
             ("ID", 2),

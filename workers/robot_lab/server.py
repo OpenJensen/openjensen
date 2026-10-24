@@ -786,9 +786,17 @@ class RobotLab:
                             bus.write("I_Coefficient", motor_id, 0)
                             bus.write("D_Coefficient", motor_id, 32)
                             if joint == "gripper":
-                                bus.write("Max_Torque_Limit", motor_id, 500)
-                                bus.write("Protection_Current", motor_id, 250)
-                                bus.write("Overload_Torque", motor_id, 25)
+                                for register, value in (
+                                    ("Max_Torque_Limit", 500),
+                                    ("Protection_Current", 250),
+                                    ("Overload_Torque", 25),
+                                ):
+                                    bus.write(register, motor_id, value)
+                                    if bus.read(register, motor_id) != value:
+                                        raise HardwareError(
+                                            f"Motor {motor_id} {register} read-back did not "
+                                            "match; motion remains disabled"
+                                        )
                             bus.write("Goal_Position", motor_id, raw[joint])
                         for motor_id in IDS.values():
                             if generation != self.generation:

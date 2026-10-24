@@ -254,6 +254,46 @@ class SafetyTests(unittest.TestCase):
         self.assertLess(max(goals), min(enables))
         self.assertTrue(result["session"]["torque_enabled"])
 
+    def test_gripper_protections_verified_before_any_torque_enable(self):
+        original_read = FakeBus.read
+        verified = []
+
+        def read(bus, register, motor_id):
+            if register in ("Max_Torque_Limit", "Protection_Current", "Overload_Torque"):
+                self.assertFalse(any(r == "Torque_Enable" and v for r, _, v in bus.writes))
+                verified.append((register, motor_id))
+            return original_read(bus, register, motor_id)
+
+        with patch.object(FakeBus, "read", read):
+            self.start()
+        self.assertEqual(
+            verified,
+            [("Max_Torque_Limit", 6), ("Protection_Current", 6), ("Overload_Torque", 6)],
+        )
+
+    def test_unverified_gripper_protection_aborts_before_any_torque_enable(self):
+        original_read = FakeBus.read
+        for failed_register in ("Max_Torque_Limit", "Protection_Current", "Overload_Torque"):
+            for missing in (False, True):
+                with self.subTest(register=failed_register, missing=missing):
+                    def read(bus, register, motor_id):
+                        if register == failed_register:
+                            if missing:
+                                raise HardwareError("No status packet")
+                            return original_read(bus, register, motor_id) + 1
+                        return original_read(bus, register, motor_id)
+
+                    with patch.object(FakeBus, "read", read), self.assertRaises(HardwareError):
+                        self.start()
+                    bus = self.buses[-1]
+                    self.assertFalse(any(r == "Torque_Enable" and v for r, _, v in bus.writes))
+                    self.assertFalse(bus.opened)
+                    self.assertIsNone(self.lab.pending_bus)
+                    self.assertIsNone(self.lab.bus)
+                    self.assertFalse(self.lab.torque)
+                    self.assertEqual(self.lab.mode, "idle")
+                    self.assertEqual(bus.calibration, CALIBRATION)
+
     def test_handguide_never_enables_torque(self):
         self.start(mode="handguide")
         self.assertFalse(

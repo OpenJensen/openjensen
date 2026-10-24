@@ -188,6 +188,9 @@ class ServoBus:
                 "Max_Position_Limit",
                 "Operating_Mode",
                 "Lock",
+                "Max_Torque_Limit",
+                "Protection_Current",
+                "Overload_Torque",
             }
         ):
             # A lost acknowledgement does not mean the write failed. Verify
