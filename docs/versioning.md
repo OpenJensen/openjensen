@@ -9,12 +9,14 @@ As of 2026-10-24:
 | Identifier | Value |
 | --- | --- |
 | Latest published release | [`v0.0.1`](https://github.com/OpenJensen/openjensen/releases/tag/v0.0.1), published 2026-10-04 |
-| Current core, web and desktop package version | `0.1.0` |
+| Current core, web and desktop package version | `0.1.1` |
 | Current development build | The commit displayed by the running server |
 
-A package containing `0.1.0` is not evidence that a `v0.1.0` release exists.
+A package containing `0.1.1` is not evidence that a `v0.1.1` release exists.
 Source builds between releases are identified by their commit. Release tags are
-immutable. The next planned release is `v0.1.0`; this feature does not publish it.
+immutable. The next planned release is `v0.1.1`. Publish it after the updater, module installer
+and remaining Robot Lab changes are integrated and the final commit passes CI.
+No `v0.1.0` release was published.
 
 ## Release policy
 

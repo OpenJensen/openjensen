@@ -1,12 +1,16 @@
 """Public naming migration must preserve alpha workspace configuration and data."""
 
 import asyncio
+import json
 import shutil
+import tomllib
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
+from vla_platform import __version__
 from vla_platform.api import create_app
 from vla_platform.environment import getenv
 from vla_platform.lifecycle.service import Lifecycle
@@ -88,3 +92,34 @@ def test_docker_cleanup_failure_is_visible_after_native_process_cleanup(monkeypa
     ):
         asyncio.run(Lifecycle.__new__(Lifecycle).stop(process, "jensen-owned-fixture"))
     assert process.wait.await_count == 1
+
+
+def test_application_release_versions_agree_across_build_manifests():
+    root = Path(__file__).resolve().parents[1]
+    for relative in (
+        "pyproject.toml",
+        "packages/core/pyproject.toml",
+        "apps/desktop/src-tauri/Cargo.toml",
+    ):
+        value = tomllib.loads((root / relative).read_text())
+        assert (value.get("project") or value["package"])["version"] == __version__, relative
+    for relative in (
+        "apps/web/package.json",
+        "apps/desktop/package.json",
+        "apps/desktop/src-tauri/tauri.conf.json",
+    ):
+        assert json.loads((root / relative).read_text())["version"] == __version__, relative
+    core_lock = tomllib.loads((root / "uv.lock").read_text())["package"]
+    assert {
+        p["version"] for p in core_lock if p["name"] in {"openjensen-workspace", "vla-platform"}
+    } == {__version__}
+    desktop_lock = tomllib.loads((root / "apps/desktop/src-tauri/Cargo.lock").read_text())[
+        "package"
+    ]
+    assert (
+        next(p for p in desktop_lock if p["name"] == "openjensen-desktop")["version"] == __version__
+    )
+    assert (
+        json.loads((root / "packages/core/openapi.json").read_text())["info"]["version"]
+        == __version__
+    )

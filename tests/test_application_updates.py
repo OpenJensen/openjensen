@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from vla_platform import __version__
 from vla_platform import update_runner as runner
 from vla_platform.api import create_app
 from vla_platform.application_updates import ApplicationUpdates, UpdateError, installed_commit
@@ -74,7 +75,7 @@ def test_compares_main_history_instead_of_package_numbers(deployment, relation, 
         )
         value = await service.check()
         assert value.state == state
-        assert value.installed.version == "0.1.0"
+        assert value.installed.version == __version__
         assert value.upstream_commit == NEW
         assert value.latest_release == "v0.0.1"
         assert value.automatic_update
