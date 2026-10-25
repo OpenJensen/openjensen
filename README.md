@@ -33,10 +33,10 @@ Keep the application server running for the CLI and TUI. Install the optional te
 | Quantize | Convert SmolVLA checkpoints to GGUF with Q8 or Q4 language-weight quantization. Export completed ACT checkpoints as FP32 inference packages, then create packed INT8/INT4 ACT packages. |
 | Evaluate / Run | Measure native inference, inspect full packed ACT predictions on recorded observations, run configured LIBERO evaluations, or launch an ACT/SmolVLA Isaac simulation. |
 | Teaching / Augmentation | Record demonstrations through the Teaching interface, connect optional voice services, or review appearance-augmentation candidates before reusing them. |
-| Decision lab | Compare text criteria with the configured local Muose scorer. |
+| Decision Lab | Compare text criteria with the configured local Muose scorer. |
 | Cloud runs / Settings | Review saved cloud activity, configure connections and compute, and inspect project diagnostics. |
 
-Robot Lab, Teaching, Augmentation, Decision lab and Cloud runs are optional modules: they appear in the sidebar once the host is set up for them (see [installation profiles](docs/installation-profiles.md#workspace-modules)). Each operation needs a worker that matches the policy, dataset format and available hardware. Some advanced workflows remain experimental; check [requirements and support](docs/support.md) before choosing a runtime.
+Robot Lab, Teaching, Augmentation, Decision Lab and Cloud runs are optional modules: they appear in the sidebar once the host is set up for them (see [installation profiles](docs/installation-profiles.md#workspace-modules)). Each operation needs a worker that matches the policy, dataset format and available hardware. Some advanced workflows remain experimental; check [requirements and support](docs/support.md) before choosing a runtime.
 
 [OpenJensen Quant](workers/jensen_quant/README.md) is a 4/8-bit quantization library and CLI for dense PyTorch models. Use its native ACT packing path from the workspace or its standalone library and command-line client.
 

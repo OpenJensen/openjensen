@@ -29,7 +29,7 @@ export const workspaceRoutes: Record<StageId, WorkspaceRoute> = {
   quantization: { name: 'Quantize', icon: 'compress', path: '/quantization/' },
   evaluation: { name: 'Evaluate', icon: 'chart', path: '/evaluation/' },
   simulation: { name: 'Run', icon: 'play', path: '/simulation/' },
-  'decision-lab': { name: 'Decision lab', icon: 'branch', path: '/decision-lab/', module: true },
+  'decision-lab': { name: 'Decision Lab', icon: 'branch', path: '/decision-lab/', module: true },
   models: { name: 'Models', icon: 'box', path: '/models/' },
   'cloud-runs': { name: 'Cloud runs', icon: 'cloud', path: '/cloud-runs/', module: true },
   settings: { name: 'Settings', icon: 'gear', path: '/settings/' },

@@ -1,6 +1,6 @@
 # Workspace guide
 
-Open the project menu and select or create a project. Use the sidebar to open a page; bookmark its address to return directly. Robot Lab, Teaching, Augmentation, Decision lab and Cloud runs appear once they are set up on the app host; **Settings → Modules** lists what each needs. Open **Guide** at `/guide/` and the API reference at `/docs/`.
+Open the project menu and select or create a project. Use the sidebar to open a page; bookmark its address to return directly. Robot Lab, Teaching, Augmentation, Decision Lab and Cloud runs appear once they are set up on the app host; **Settings → Modules** lists what each needs. Open **Guide** at `/guide/` and the API reference at `/docs/`.
 
 ## Dashboard
 
@@ -48,7 +48,7 @@ Select the policy, runtime and check type, review the recipe, and start. For LIB
 
 Choose **3D simulation**, **Replay observations**, or **Check inference**. Select the configured runtime and inputs, review consent, and start. Open the saved job for status, video or downloadable output. [Isaac](native-simulation.md) · [Replay](../workers/isaac_sim/NATIVE_REPLAY.md) · [Cloud inference](cloud-inference.md)
 
-## Decision lab
+## Decision Lab
 
 Install the [Muose worker](../workers/decision/README.md), configure its model directory and license acceptance, then enter a state, instructions and 2–8 unique criteria. Keep each comparison within 512 tokens and select **Score criteria**.
 

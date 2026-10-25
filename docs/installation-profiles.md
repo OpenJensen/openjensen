@@ -96,7 +96,7 @@ are blocked at the public gateway.
 ## Workspace modules
 
 The sidebar always shows the dataset, training and testing pages. Robot Lab,
-Teaching, Augmentation, Decision lab and Cloud runs appear once this host has
+Teaching, Augmentation, Decision Lab and Cloud runs appear once this host has
 their configuration or you add them in Modules; **Settings → Modules** lists what each one
 needs. Set `JENSEN_MODULES` to a comma-separated list such as
 `robot-lab,teaching` to choose the modules yourself, or to `all`.
