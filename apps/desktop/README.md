@@ -1,6 +1,6 @@
-# Run the OPEN JENSEN desktop client
+# Run the OpenJensen desktop client
 
-This client connects to a separately running OPEN JENSEN application. Complete
+This client connects to a separately running OpenJensen application. Complete
 the [source setup](../../docs/getting-started.md) first. The ordinary build requires
 a separate Python application. For the easiest first launch, use the web
 workspace directly.

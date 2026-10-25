@@ -22,7 +22,7 @@ provide CUDA toolkit headers when building from source.
 
 ## Configure and run
 
-Select the named Psi0 interpreter and the absolute OPEN JENSEN source path:
+Select the named Psi0 interpreter and the absolute OpenJensen source path:
 
 ```sh
 export JENSEN_PSI_ROOT=/opt/openjensen/Psi0

@@ -1,4 +1,4 @@
-# Run the OPEN JENSEN teaching viewer
+# Run the OpenJensen teaching viewer
 
 ## Install and bind
 

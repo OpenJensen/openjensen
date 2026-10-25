@@ -2,7 +2,7 @@
 
 1. Install the [CPU reader](../workers/_cpu_readers/README.md) and FFmpeg/ffprobe on the API host.
 2. Put a finalized LeRobot v3 dataset under `JENSEN_LOCAL_DATA_ROOT`. Use Linux or macOS for snapshot preparation.
-3. Open **Dataset → Sources → Local files**, select **Prepare immutable training copy**, and inspect the dataset.
+3. Open **Datasets**, select **Local files** and **Prepare immutable training copy**, and inspect the dataset.
 4. Open the completed inspection and select **Train on this dataset**.
 5. Choose the native LeRobot model, cameras and runtime, review the recipe and start.
 

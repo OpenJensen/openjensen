@@ -1,6 +1,6 @@
 # Getting started with OpenJensen
 
-Start with dataset inspection: it needs the application and CPU reader, with no GPU or provider account. Run the complete [source installation commands](../README.md#run-locally) from the repository root, then configure optional workers when you need them.
+Start with dataset inspection: it needs the application and CPU reader, with no GPU or provider account. Run the complete [source installation commands](../README.md#quick-start) from the repository root, then configure optional workers when you need them.
 
 ## Toolchain
 
@@ -30,7 +30,7 @@ uv run --frozen jensen serve
 ```
 
 1. Open [localhost:8000](http://127.0.0.1:8000) and create a project.
-2. Open **Dataset → Sources**, select **Hugging Face**, and enter `codywang/so101_pickup_test` in **Dataset repository**.
+2. Open **Datasets**, select **Hugging Face** under **Import a dataset**, and enter `codywang/so101_pickup_test` in **Dataset repository**.
 3. Expand **Revision (optional)** and enter `ecef85bc07005f771ad86deeff1427f9d72953ed` to reproduce this example. Leaving it blank uses the latest `main` revision.
 4. Select **Inspect dataset**. After inspection succeeds, the episode list and first episode's camera previews load automatically.
 5. Select an episode from **Episodes**, then use **Play**, **Pause** and the playback slider to browse its camera recordings. Open **Frame samples** and choose **Joint / state** or **Action** to inspect sampled values.
@@ -41,7 +41,7 @@ Metadata and recordings need network access. If a request fails, use **Retry epi
 
 Open **Guide** or the [workspace guide](workspace-guide.md), then follow the steps for the page you want to use.
 
-For browser uploads, open **Dataset → Sources → Local files**, choose your folder, ZIP or HDF5 file, and review the detected format, frame rate and mapping. Install the CPU reader and FFmpeg before converting local recordings. See [supported input layouts](dataset-import.md).
+For browser uploads, open **Datasets**, select **Local files**, choose your folder, ZIP or HDF5 file, and review the detected format, frame rate and mapping. Install the CPU reader and FFmpeg before converting local recordings. See [supported input layouts](dataset-import.md).
 
 ## Use local data
 

@@ -18,7 +18,7 @@ Start the configured executor, open Teaching, wait for a camera frame, set an in
 
 ## Datasets
 
-Open **Sources**, select **Hugging Face**, and enter `codywang/so101_pickup_test` in **Dataset repository**. For the pinned example, expand **Revision (optional)** and enter `ecef85bc07005f771ad86deeff1427f9d72953ed`; leave it blank to use the latest `main` revision. Select **Inspect dataset**, then choose an episode, use **Play**, and open **Frame samples** to inspect state or action values.
+Under **Import a dataset**, select **Hugging Face** and enter `codywang/so101_pickup_test` in **Dataset repository**. For the pinned example, expand **Revision (optional)** and enter `ecef85bc07005f771ad86deeff1427f9d72953ed`; leave it blank to use the latest `main` revision. Select **Inspect dataset**, then choose an episode, use **Play**, and open **Frame samples** to inspect state or action values.
 
 For local data, choose **Local files**, upload your folder, ZIP or HDF5 file, and review the conversion settings. Save camera names and labels before exporting.
 

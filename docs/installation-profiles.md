@@ -67,7 +67,7 @@ training and scheduled compute through the configured SkyPilot runtime.
 
 ## Install from the web
 
-Open **Settings & diagnostics → Modules**. **Add module** makes a page available in
+Open **Settings → Modules**. **Add module** makes a page available in
 this workspace's sidebar; **Hide** removes it without deleting dependencies or data.
 An added module can still need a companion, provider or model configuration.
 The server's `JENSEN_MODULES` override takes precedence and locks these controls.
