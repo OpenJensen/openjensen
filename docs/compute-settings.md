@@ -48,4 +48,4 @@ See Google's [GPU machine types](https://docs.cloud.google.com/compute/docs/gpus
 
 ## Existing native workers
 
-Set `JENSEN_RUNTIME_CONFIG` to an operator runtime file. Supply each worker's installed interpreter, source root and model assets. Use `provider: local` or `provider: gcp`, and the same provider for entries on one application host. Add an optional `region` for the host. Follow [native runtime setup](policy-workflow.md#configure-a-local-native-execution-host).
+Set `JENSEN_RUNTIME_CONFIG` to an operator runtime file. Supply each worker's installed interpreter, source root and model assets. Use `provider: local` or `provider: gcp`, and the same provider for entries on one application host. Add an optional `region` for the host. Follow [native runtime setup](policy-workflow.md#configure-the-execution-host).
