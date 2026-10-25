@@ -201,3 +201,44 @@ def test_training_check_rejects_different_lerobot_and_torch_versions(checkout, m
             "ready"
         ]
         packages[package] = saved
+
+
+@pytest.mark.parametrize(
+    ("system", "torch_version", "ready"),
+    [
+        ("Linux", "2.11.0+cpu", True),
+        ("Linux", "2.11.0", False),
+        ("Linux", "2.11.0+cu130", False),
+        ("Darwin", "2.11.0", True),
+    ],
+)
+def test_decision_readiness_matches_platform_torch_build(
+    checkout, monkeypatch, system, torch_version, ready
+):
+    monkeypatch.setattr("platform.system", lambda: system)
+    value = profile("decision")
+    directory = checkout / value.directory
+    directory.mkdir()
+    (directory / "pyproject.toml").write_text(
+        '[project]\nname="jensen-decision-worker"\nversion="0.1.0"\n'
+        'dependencies=["torch==2.11.0", "safetensors==0.8.0", "tokenizers==0.23.2"]\n'
+    )
+    python = interpreter(environment_path(value, checkout))
+    python.parent.mkdir(parents=True)
+    python.touch()
+    packages = {
+        "jensen-decision-worker": "0.1.0",
+        "torch": torch_version,
+        "safetensors": "0.8.0",
+        "tokenizers": "0.23.2",
+    }
+
+    def metadata(*args, **kwargs):
+        return SimpleNamespace(
+            returncode=0, stdout=json.dumps({"python": [3, 12, 14], "packages": packages})
+        )
+
+    assert (
+        check_profile(value, checkout, runner=metadata, which=lambda _: "/bin/tool")["ready"]
+        is ready
+    )

@@ -197,9 +197,9 @@ def install_plan(value, root, environment=None):
                 {
                     "argv": [
                         *command,
-                        "--index-url",
+                        "--default-index",
                         "https://download.pytorch.org/whl/cpu",
-                        "torch==2.11.0",
+                        "torch==" + expected_versions(value, root)["torch"],
                     ],
                     "cwd": str(root),
                 }
@@ -225,6 +225,8 @@ def expected_versions(value, root):
             if "==" in requirement:
                 package, version = requirement.split("==", 1)
                 result[package.split("[", 1)[0].lower()] = version
+        if value.id == "decision" and platform.system() == "Linux":
+            result["torch"] = result["torch"].split("+", 1)[0] + "+cpu"
         return result
     if value.id not in {"robot", "datasets"}:
         return {}
@@ -284,15 +286,7 @@ def check_profile(value, root, environment=None, *, runner=subprocess.run, which
         packages = details["packages"]
         versions_ok = all(
             packages.get(name) is not None
-            and (
-                name.lower() not in expected
-                or (
-                    packages[name].removesuffix("+cpu")
-                    if value.id == "decision" and name == "torch"
-                    else packages[name]
-                )
-                == expected[name.lower()]
-            )
+            and (name.lower() not in expected or packages[name] == expected[name.lower()])
             for name in value.distributions
         )
         wanted = tuple(map(int, value.python.split(".")[:2]))
