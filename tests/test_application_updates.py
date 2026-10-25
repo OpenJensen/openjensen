@@ -417,3 +417,24 @@ time.sleep(60)
         assert sock.connect_ex(("127.0.0.1", value["port"])) != 0
     with pytest.raises(ProcessLookupError):
         os.kill(value["pid"], 0)
+
+
+def test_pnpm_modern_package_launcher_uses_node(deployment):
+    root, config, _ = deployment
+    package = root / "modern-pnpm"
+    (package / "bin").mkdir(parents=True)
+    (package / "package.json").write_text('{"name":"pnpm"}')
+    (package / "pnpm").write_text('exec ./bin/pnpm.mjs "$@"\n')
+    entry = package / "bin/pnpm.mjs"
+    entry.write_text("// intentionally no executable shebang\n")
+    config["pnpm"] = str(package / "pnpm")
+    assert runner.pnpm_command(config) == [str(root / "node/node"), str(entry)]
+    config["pnpm"] = str(entry)
+    assert runner.pnpm_command(config) == [str(root / "node/node"), str(entry)]
+
+
+def test_pnpm_corepack_and_executables_remain_supported(deployment):
+    root, config, _ = deployment
+    assert runner.pnpm_command(config) == [str(root / "pnpm")]
+    config["pnpm"] = str(root / "corepack")
+    assert runner.pnpm_command(config) == [str(root / "corepack"), "pnpm"]
