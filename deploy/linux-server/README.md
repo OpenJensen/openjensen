@@ -18,7 +18,7 @@ not only the old application symlink.
 3. Select the release using the `~/openjensen/current` symlink.
 4. Create `data/`, `run/` and `logs/` under `~/openjensen`.
 5. Install Supervisor into `~/openjensen/.supervisor` and copy `supervisord.conf` into the deployment root.
-6. Start Supervisor using that configuration. Add an `@reboot` user crontab entry to start it when WSL starts.
+6. Start Supervisor using that configuration. Add an `@reboot` user crontab entry to start it when the host starts.
 7. Configure [cloud credentials and workers](../../docs/cloud-connections.md) on the service host.
 
 The configuration uses `data/` for application data, `current/apps/web/out` for web files and `127.0.0.1:8096` for the backend. Keep `data/` across release changes.
@@ -60,7 +60,7 @@ Open [localhost:18096](http://127.0.0.1:18096). Read service logs under `~/openj
 ## Public Funnel route
 
 1. Build the public frontend with `NEXT_PUBLIC_BASE_PATH=/jensen`.
-2. Place the export under `public-web/funnel-20260926/` and copy `public_gateway.py` into the deployment root.
+2. Place the export under `public-web/jensen/` and copy `public_gateway.py` into the deployment root.
 3. Create `private/public-gateway.json` for the service user, using mode `0600` and a salted password hash. Keep the generated login details outside the repository.
 4. Start or restart the template's `firebird-public` Supervisor service on `127.0.0.1:8097`.
 5. Preview through a loopback SSH tunnel at `http://127.0.0.1:18097/jensen/`.
@@ -71,7 +71,7 @@ Configure the gateway JSON with these fields, replacing the host, service-user p
 ```json
 {
   "public_origin": "https://host.tailnet.ts.net",
-  "static_dir": "/home/service-user/openjensen/public-web/funnel-20260926",
+  "static_dir": "/home/service-user/openjensen/public-web/jensen",
   "username": "jensen",
   "path_prefix": "/jensen",
   "password_salt_hex": "REPLACE_WITH_16_BYTE_SALT_AS_HEX",
