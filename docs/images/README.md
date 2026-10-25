@@ -1,14 +1,8 @@
-# Use interface image assets
-
-Use these files in Markdown with paths relative to the document:
+# Interface images
 
 | File | Screen |
 | --- | --- |
-| `dataset-explorer.png` | Dataset explorer |
-| `training-workspace.png` | Fine-tuning monitor |
-| `native-simulation.png` | Simulation setup |
-| `workspace-models.png` | Model selection |
-| `decision-form.png` | Decision form |
-| `workspace-interfaces.svg` | Illustrated web app, CLI and interactive terminal entry points (not screenshots) |
+| `robot-lab.png` | Robot Lab on the Motor IDs step, captured from the browser-test companion fixture |
+| `dataset-explorer.png` | Datasets playing an episode of [codywang/so101_pickup_test](https://huggingface.co/datasets/codywang/so101_pickup_test) (Apache-2.0) |
 
-Keep source-dataset attribution with dataset imagery. Follow [the asset notes](../../apps/web/public/datasets/README.md) for pinned sources, licenses and extraction commands.
+Capture at 1440×900 in the light theme. Never include machine names, hardware, usernames, local paths or private projects. Keep source-dataset attribution with dataset imagery; see [the asset notes](../../apps/web/public/datasets/README.md).
