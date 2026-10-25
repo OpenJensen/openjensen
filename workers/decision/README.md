@@ -75,7 +75,7 @@ export JENSEN_DECISION_MODEL_DIR=/absolute/operator/path/to/pinned-muose
 export JENSEN_DECISION_ACCEPT_LICENSE=CC-BY-NC-SA-4.0
 ```
 
-Open **Test → Decision lab**, enter the state and criteria, then choose
+Open **Test → Decision Lab**, enter the state and criteria, then choose
 **Score criteria**. `GET /api/v1/decision/status` checks configuration;
 `POST /api/v1/decision/score` accepts the request structure above.
 

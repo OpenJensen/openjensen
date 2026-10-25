@@ -62,7 +62,7 @@ test('prefixed export loads bundles, library media, API and docs without escapin
   const decisionState = page.waitForResponse(
     (response) => new URL(response.url()).pathname === `${prefix}/api/v1/decision/status`,
   );
-  await page.getByRole('link', { name: 'Decision lab', exact: true }).click();
+  await page.getByRole('link', { name: 'Decision Lab', exact: true }).click();
   expect((await decisionState).status()).toBe(200);
   await expect(page.getByRole('region', { name: 'Decision advisory', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Teaching', exact: true }).click();
