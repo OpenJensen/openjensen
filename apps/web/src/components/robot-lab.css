@@ -264,15 +264,7 @@
 }
 .robot-lab-camera-controls {
   display: grid;
-  gap: 10px;
-}
-.robot-lab-camera-controls label {
-  font-size: 10px;
-}
-.robot-lab-camera-controls .secondary-button {
-  min-height: 36px;
-  font-size: 11px;
-  padding: 7px 10px;
+  gap: 14px;
 }
 .robot-lab-help-link {
   display: inline-flex;
