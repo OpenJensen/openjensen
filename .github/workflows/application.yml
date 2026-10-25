@@ -51,6 +51,10 @@ jobs:
         if: runner.environment == 'self-hosted' && runner.os == 'Linux'
         working-directory: ${{ github.workspace }}
         run: sudo bash .github/scripts/prepare_runner.sh
+      - uses: actions/setup-python@v6
+        if: github.event_name == 'pull_request' || inputs.version_pr != ''
+        with:
+          python-version: '3.14.7'
       - name: Validate the PR patch version
         if: github.event_name == 'pull_request' || inputs.version_pr != ''
         run: python3 .github/scripts/patch_release.py check-ci

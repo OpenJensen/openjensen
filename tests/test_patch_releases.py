@@ -280,3 +280,17 @@ def test_privileged_workflows_execute_only_trusted_main():
         assert checkout["with"] == {"ref": "main", "persist-credentials": False}
         assert "pull_request_target" not in value.get(True, {}) or name == "patch-versions.yml"
         assert all("download-artifact" not in step.get("uses", "") for step in job["steps"])
+
+
+def test_version_gate_pins_python_instead_of_relying_on_the_runner_system():
+    import yaml
+
+    workflow = yaml.safe_load((ROOT / ".github/workflows/application.yml").read_text())
+    steps = workflow["jobs"]["scope"]["steps"]
+    gate = next(
+        i for i, step in enumerate(steps) if step.get("name") == "Validate the PR patch version"
+    )
+    assert any(
+        step.get("uses") == "actions/setup-python@v6" and step["with"]["python-version"] == "3.14.7"
+        for step in steps[:gate]
+    )

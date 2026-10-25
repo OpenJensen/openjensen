@@ -42,7 +42,7 @@ Fork contributors update their own branch and run:
 
 ```sh
 git fetch https://github.com/OpenJensen/openjensen.git main
-python3 .github/scripts/version_files.py apply --base-ref FETCH_HEAD
+uv run --no-project --python 3.14.7 .github/scripts/version_files.py apply --base-ref FETCH_HEAD
 ```
 
 A maintainer can deliberately choose a new minor or major milestone by applying
