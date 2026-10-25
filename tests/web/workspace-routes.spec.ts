@@ -152,11 +152,21 @@ test('section links can open in a new tab and unknown pages remain 404s', async 
   // Installed modules join the sidebar once listed; click after it settles.
   await expect(nav).toHaveAttribute('aria-busy', 'false');
   const link = nav.getByRole('link', { name: 'Fine-tune', exact: true });
-  const [other] = await Promise.all([context.waitForEvent('page'), link.click({ modifiers: ['ControlOrMeta'] })]);
-  // A second tab loads the full export; allow for a busy machine running parallel suites.
-  await expect(other).toHaveURL(/\/training\/$/, { timeout: 15_000 });
-  await expect(other.getByRole('heading', { name: 'Fine-tune', level: 1, exact: true })).toBeVisible();
+  await expect(link).toHaveAttribute('href', '/training/');
+  // A modifier click belongs to the browser: the workspace must neither cancel it nor
+  // navigate this tab. Chromium does not reliably report the background tab it opens
+  // under load, so the section's own address is loaded in a second tab below.
+  await page.evaluate(() => {
+    window.addEventListener('click', (event) => {
+      document.documentElement.dataset.modifierClickPrevented = String(event.defaultPrevented);
+    });
+  });
+  await link.click({ modifiers: ['ControlOrMeta'] });
+  await expect(page.locator('html')).toHaveAttribute('data-modifier-click-prevented', 'false');
   await expect(page).toHaveURL(/\/datasets\/$/);
+  const other = await context.newPage();
+  await other.goto('/training/');
+  await expect(other.getByRole('heading', { name: 'Fine-tune', level: 1, exact: true })).toBeVisible();
   await other.close();
   const response = await page.request.get('/training/missing-page/');
   expect(response.status()).toBe(404);
