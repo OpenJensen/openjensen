@@ -202,9 +202,11 @@ def check_ci(api, event, root):
         pr = api.request("GET", f"/pulls/{number}")
         if pr["head"]["sha"] != os.environ["GITHUB_SHA"]:
             raise ValueError("PR advanced after CI dispatch; verify its current head.")
-    if pr.get("draft"):
-        print("Patch version is prepared when the draft is ready for review.")
+    if pr["base"]["ref"] != "main":
+        print("Automatic patch versions apply only to PRs targeting main.")
         return
+    # Drafts must also validate: a green draft check must not survive ready-for-review
+    # with an unprepared version. Preparation starts when the author marks it ready.
     # Read the base snapshot; no fork files or artifacts are executed.
     base_file = api.request("GET", "/contents/pyproject.toml?ref=" + pr["base"]["sha"])
     base_version = tomllib.loads(base64.b64decode(base_file["content"]).decode())["project"][

@@ -294,3 +294,20 @@ def test_version_gate_pins_python_instead_of_relying_on_the_runner_system():
         step.get("uses") == "actions/setup-python@v6" and step["with"]["python-version"] == "3.14.7"
         for step in steps[:gate]
     )
+
+
+def test_draft_cannot_keep_a_green_version_gate_before_becoming_ready(monkeypatch):
+    api = FakeGitHub()
+    api.pr["draft"] = True
+    monkeypatch.setattr(release, "load", lambda root: api.values)
+    with pytest.raises(ValueError, match="Expected patch"):
+        release.check_ci(api, {"pull_request": api.pr}, ROOT)
+    api.values = versions.rewrite(api.values, "0.1.2")
+    release.check_ci(api, {"pull_request": api.pr}, ROOT)
+
+
+def test_prs_targeting_other_branches_do_not_require_a_main_patch():
+    api = FakeGitHub()
+    api.pr["base"]["ref"] = "feature"
+    release.check_ci(api, {"pull_request": api.pr}, ROOT)
+    assert not api.calls
