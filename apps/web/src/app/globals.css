@@ -377,8 +377,9 @@ svg {
 .theme-toggle button:hover {
   color: var(--ink);
 }
+/* One content width for every page, header included: 1060px inside the padding. */
 .main-content {
-  max-width: 1360px;
+  max-width: 1140px;
   padding: 40px 40px 32px;
   margin: 0 auto;
 }

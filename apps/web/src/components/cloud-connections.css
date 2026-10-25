@@ -22,9 +22,6 @@
 .settings-tabs .section-tab {
   white-space: nowrap;
 }
-.cloud-settings {
-  max-width: 1040px;
-}
 .cloud-settings > h2,
 .cloud-workers h2 {
   font-size: var(--text-section);
