@@ -13,7 +13,7 @@ async function fixture(page: Page) {
     { id: 'robot-lab', name: 'Robot Lab' },
     { id: 'teaching', name: 'Teaching' },
     { id: 'augmentation', name: 'Augmentation' },
-    { id: 'decision-lab', name: 'Decision lab' },
+    { id: 'decision-lab', name: 'Decision Lab' },
     { id: 'cloud-runs', name: 'Cloud runs' },
   ].map((item) => ({
     ...item,

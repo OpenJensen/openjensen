@@ -615,7 +615,7 @@ for (const width of [320, 390])
     ).toBe(true);
     await page.getByRole('link', { name: 'Run', exact: true }).focus();
     await page.keyboard.press('Tab');
-    await expect(page.getByRole('link', { name: 'Decision lab', exact: true })).toBeFocused();
+    await expect(page.getByRole('link', { name: 'Decision Lab', exact: true })).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(navigation.getByRole('link', { name: 'Models', exact: true })).toBeFocused();
     await page.keyboard.press('Tab');
