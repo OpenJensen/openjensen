@@ -39,7 +39,7 @@ the recipient and any charge once, at the checkbox.
 Call the product OpenJensen. Use one name per page everywhere it appears: the
 sidebar, page title, browser title, guide heading and any button that opens it
 (Dashboard, Robot Lab, Teaching, Datasets, Augmentation, Fine-tune, Distill,
-Quantize, Evaluate, Run, Decision lab, Models, Cloud runs, Settings). Buttons that
+Quantize, Evaluate, Run, Decision Lab, Models, Cloud runs, Settings). Buttons that
 open a page say "Open <page>"; links back to a list say "← Back to <list>". Do not
 end link text with an arrow, and do not put internal model codenames in labels;
 name what the action does.

@@ -14,7 +14,7 @@ const destinations = [
   ['cloud-runs', 'Cloud runs'],
   ['augmentation', 'Augmentation'],
   ['teaching', 'Teaching'],
-  ['decision-lab', 'Decision lab'],
+  ['decision-lab', 'Decision Lab'],
   ['models', 'Models'],
   ['robot-lab', 'Robot Lab'],
 ] as const;
@@ -83,7 +83,7 @@ test('the sidebar lists installed modules and Settings shows how to add the rest
         { id: 'robot-lab', name: 'Robot Lab', installed: true, setup: 'Install the robot profile.' },
         { id: 'teaching', name: 'Teaching', installed: false, setup: 'Set JENSEN_TEACHING_URL.' },
         { id: 'augmentation', name: 'Augmentation', installed: false, setup: 'Connect Google Cloud.' },
-        { id: 'decision-lab', name: 'Decision lab', installed: false, setup: 'Configure the scorer.' },
+        { id: 'decision-lab', name: 'Decision Lab', installed: false, setup: 'Configure the scorer.' },
         { id: 'cloud-runs', name: 'Cloud runs', installed: false, setup: 'Set JENSEN_CLOUD_RUNS_DIR.' },
       ],
     }),
@@ -92,7 +92,7 @@ test('the sidebar lists installed modules and Settings shows how to add the rest
   const nav = page.getByRole('navigation', { name: 'Policy lifecycle' });
   await expect(nav.getByRole('group', { name: 'Robot' }).getByRole('link')).toHaveText(['Robot Lab']);
   await expect(nav.getByRole('group', { name: 'Data' }).getByRole('link')).toHaveText(['Datasets']);
-  for (const name of ['Teaching', 'Augmentation', 'Decision lab', 'Cloud runs']) {
+  for (const name of ['Teaching', 'Augmentation', 'Decision Lab', 'Cloud runs']) {
     await expect(nav.getByRole('link', { name, exact: true })).toHaveCount(0);
   }
   await nav.getByRole('link', { name: 'Settings', exact: true }).click();

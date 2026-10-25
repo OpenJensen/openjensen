@@ -109,7 +109,7 @@ def workspace_modules(settings: Settings, robot_lab_config: Path) -> list[Worksp
             "Set JENSEN_TEACHING_URL, JENSEN_TEACHING_SESSION_CONFIG or JENSEN_RECORDING_CONFIG.",
         ),
         "augmentation": ("Augmentation", "Connect Google Cloud or set GEMINI_API_KEY."),
-        "decision-lab": ("Decision lab", "Configure the local decision scorer on this host."),
+        "decision-lab": ("Decision Lab", "Configure the local decision scorer on this host."),
         "cloud-runs": ("Cloud runs", "Add this module to create a local snapshots folder."),
     }
     guides = {
