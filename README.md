@@ -24,10 +24,10 @@ Keep the application server running for the CLI and TUI. Install the optional te
 
 ## What you can do
 
-| Sector | In the workspace |
+| Page | In the workspace |
 | --- | --- |
 | Robot Lab | Set up an SO-101 arm from the computer it is plugged into: assign motor IDs, calibrate, teleoperate and record LeRobot v3 episodes. |
-| Dataset | Inspect public LeRobot v2/v3 datasets, play camera recordings and review sampled state/action rows. Validate local v3 datasets into immutable training copies. |
+| Datasets | Inspect public LeRobot v2/v3 datasets, play camera recordings and review sampled state/action rows. Validate local v3 datasets into immutable training copies. |
 | Fine-tune | Choose a policy and compatible compute, follow loss and progress, resume supported runs, and download checkpoints with their training settings. |
 | Distill | Train an ACT256 student from an ACT (Action Chunking with Transformers) teacher using selected observations, actions and episode splits. |
 | Quantize | Convert SmolVLA checkpoints to GGUF with Q8 or Q4 language-weight quantization. Export completed ACT checkpoints as FP32 inference packages, then create packed INT8/INT4 ACT packages. |
@@ -73,7 +73,7 @@ and configure the runtimes. For native ACT quantization, configure the
 ### Your first project
 
 1. Open the project menu, choose **Create project**, and give it a name.
-2. Open **Dataset → Sources**, select **Hugging Face**, and enter `codywang/so101_pickup_test` in **Dataset repository**.
+2. Open **Datasets**, select **Hugging Face** under **Import a dataset**, and enter `codywang/so101_pickup_test` in **Dataset repository**.
 3. Expand **Revision (optional)** and enter `ecef85bc07005f771ad86deeff1427f9d72953ed` to use the pinned example.
 4. Select **Inspect dataset**. After inspection succeeds, the episode list and first episode's camera previews load automatically. Select an episode, use **Play** and the playback slider, and open **Frame samples → Action** to inspect sampled actions.
 
@@ -83,11 +83,11 @@ When you are ready to train, follow [compute setup](docs/compute-settings.md) an
 
 ## Documentation
 
-Start with the [workspace guide](docs/workspace-guide.md) for a short explanation of every sector. The app also serves it at [`/guide/`](http://127.0.0.1:8000/guide/) through the **Guide** link on desktop and mobile.
+Start with the [workspace guide](docs/workspace-guide.md) for a short explanation of every page. The app also serves it at [`/guide/`](http://127.0.0.1:8000/guide/) through the **Guide** link on desktop and mobile.
 
 | Topic | Guides |
 | --- | --- |
-| Workspace | [Sector guide](docs/workspace-guide.md), [frontend development](docs/workbench-design.md) |
+| Workspace | [Page guide](docs/workspace-guide.md), [frontend development](docs/workbench-design.md) |
 | Setup and compute | [Getting started](docs/getting-started.md), [requirements and support](docs/support.md), [backup and upgrade](docs/upgrading.md), [compute settings](docs/compute-settings.md), [cloud training](docs/skypilot-training.md) |
 | Datasets | [Dataset imports](docs/dataset-import.md), [local training and Teaching](docs/local-training.md), [appearance augmentation](docs/augmentation.md) |
 | Policies and artifacts | [Training adapters](docs/native-training.md), [native policy workflow](docs/policy-workflow.md), [ACT export](docs/cloud-act-export.md), [ACT distillation](workers/policy_distillation/README.md), [cloud artifact storage](docs/cloud-artifact-storage.md) |
