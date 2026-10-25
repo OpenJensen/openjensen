@@ -1,10 +1,16 @@
 # SO-101 Robot Lab
 
-Robot Lab adds the physical-robot workflow to OpenJensen: local USB devices and camera preview, initial joint IDs, staged calibration, bounded manual control or leader-arm teleoperation, episode recording, and project dataset import. It uses a small local companion on the computer connected to the arm. GPU training workers remain separate.
+Robot Lab sets up and drives an SO-101 arm from the browser: find its motors, assign their IDs, calibrate, teleoperate and record LeRobot v3 datasets. A small companion runs on the computer the arm is plugged into and reaches the OpenJensen server through a private SSH tunnel. USB devices and recordings stay on that computer until you import a dataset. GPU training workers are separate.
 
-## Connect macOS or Linux
+## What you need
 
-Install `uv` and use Python 3.14.7. From a checkout run:
+- An SO-101 follower arm with Feetech STS3215 servos, its controller board and motor power supply. A second, calibrated arm if you want leader-arm teleoperation.
+- A USB camera, if you want to record video.
+- A macOS or Linux computer for the arm, with Python 3.14.7, [uv](https://docs.astral.sh/uv/), SSH access to the OpenJensen server, and at least 10 GiB of free disk.
+
+## 1. Install the companion
+
+From a checkout on the computer with the arm:
 
 ```sh
 # macOS
@@ -13,62 +19,84 @@ python3 deploy/macos/install_robot_lab.py --source workers/robot_lab --ssh-host 
 python3 deploy/linux/install_robot_lab.py --source workers/robot_lab --ssh-host application-server
 ```
 
-On macOS, the installer creates an isolated runtime under `~/.local/share/jensen/robot-lab`, private data under `~/Library/Application Support/OpenJensen/robot-lab`, and two user LaunchAgents: `com.openjensen.robot-lab` and `com.openjensen.robot-lab.tunnel`. The companion listens only on 127.0.0.1:18101; the private SSH tunnel exposes it only on the application server loopback and opens the private workspace at http://127.0.0.1:18096/. The operator must already have authorized SSH access to that host.
+Replace `application-server` with the SSH host alias of your OpenJensen server. The installer sets up an isolated runtime and two user services: the companion and its SSH tunnel. It does not install a GPU stack or download model weights.
 
-On Linux, the same isolated hardware runtime uses systemd user services and private capture data under `~/.local/share/OpenJensen/robot-lab` (or `$XDG_DATA_HOME/OpenJensen/robot-lab`). See [Linux installation and operations](../deploy/linux/README.md) for device permissions, headless setup and service commands. The companion supports USB serial adapters and V4L2 cameras; it excludes metadata-only camera nodes without starting capture. Stop the previous computer's SSH tunnel before switching the bridge to another computer.
+| | macOS | Linux |
+| --- | --- | --- |
+| Runtime | `~/.local/share/jensen/robot-lab` | `~/.local/share/jensen/robot-lab` |
+| Recordings and calibrations | `~/Library/Application Support/OpenJensen/robot-lab` | `~/.local/share/OpenJensen/robot-lab` (or `$XDG_DATA_HOME/OpenJensen/robot-lab`) |
+| Services | LaunchAgents `com.openjensen.robot-lab` and `com.openjensen.robot-lab.tunnel` | systemd user services `openjensen-robot-lab` and `openjensen-robot-lab-tunnel` |
 
-An existing Robot Lab profile environment can be reused with `--runtime workers/robot_lab/.venv`. An existing compatible PyArrow environment can be reused with `--arrow-site-packages /absolute/path/to/site-packages`. With cached camera/servo dependencies, `--offline` prevents downloads. The installation receipt records this runtime dependency; preserve that PyArrow environment while the companion uses it. Installations require at least 10 GiB free disk space before adding dependencies. This hardware runtime does not download model weights or install a GPU training stack.
+On Linux, see [Linux installation](../deploy/linux/README.md) for device permissions and headless setup. Useful installer options:
 
-On the application host, write a private owned mode-0600 JSON file at `<workspace>/robot-lab-connection.json`:
+- `--runtime workers/robot_lab/.venv` reuses an existing Robot Lab environment.
+- `--arrow-site-packages /absolute/path/to/site-packages` reuses a compatible PyArrow; keep that environment while the companion uses it.
+- `--offline` installs from cached dependencies without downloading.
+
+## 2. Connect it to the server
+
+The companion listens only on `127.0.0.1:18101`, and the tunnel exposes it only on the server's loopback. On the server, create `<workspace>/robot-lab-connection.json`, owned by the service user with mode `0600`:
 
 ```json
 {"url":"http://127.0.0.1:18101","token":"COPY_THE_PRIVATE_COMPANION_TOKEN","label":"Robot computer"}
 ```
 
-The token is read from the companion's private `companion-token` file; it never goes to the browser. An operator can override the connection-file path with `JENSEN_ROBOT_LAB_CONFIG`. Only loopback HTTP endpoints are accepted. Do not expose either service port publicly. Public gateways deny Robot Lab device, camera, control and import APIs, even for signed-in viewers.
+Copy the token from the companion's private `companion-token` file; it never reaches the browser. `JENSEN_ROBOT_LAB_CONFIG` overrides the file location. Only loopback addresses are accepted.
 
-The SO-101 controller USB port and camera must be visible to the computer running the companion. If a USB-A-host sharing hub came with an A-to-A cable, keep its supplied cable and attach through a USB-A host adapter or a working monitor hub. Use the hub's labeled power input and power specification; Waveshare USB 2.0 and USB 3.2 versions have different DC requirements. Camera access may need approval in macOS Privacy & Security. Only the selected camera is captured, and the companion shares its frames between preview and recording.
+- Never expose either port publicly. Public gateways refuse Robot Lab device, camera, control and import requests, even for signed-in viewers.
+- To move the arm to another computer, stop the old computer's tunnel first.
 
-## Guided workflow
+## 3. Plug in the arm and camera
 
-Choose a project and open **Robot Lab**. **Connect** lists local serial adapters and cameras and probes motors without enabling torque. A factory-ID response cannot prove that only one physical motor is attached.
+The controller's USB port and the camera must be visible to the computer running the companion.
 
-**Motor IDs** opens an interactive view of the assembled SO-101. Select a numbered joint to highlight it in the SO-101 CAD model. Use the motion preview or position slider to inspect its axis; selection itself is static. The model uses the repository’s URDF and meshes and does not represent live encoder positions or command the arm. A static view remains available with reduced motion.
+- On macOS, approve camera access in **Privacy & Security** if asked.
+- A USB-A sharing hub supplied with an A-to-A cable needs that cable, connected through a USB-A host adapter or a working monitor hub. Use the hub's labeled power input and rating; Waveshare USB 2.0 and USB 3.2 versions need different DC supplies.
+- Linux supports USB serial adapters and V4L2 cameras, and skips metadata-only camera nodes.
+- Only the selected camera is captured; preview and recording share its frames.
 
-The **assembled-arm setup** is experimental. It adapts [Enigma's STS3215 research](https://www.enigma.inc/posts/sts3215-servo-hacking) and [MIT-licensed servotools](https://github.com/Enigma-Incorporated/servotools/tree/1c65c57587f91085cd32fca3743f3e6f464cfe35): first separate duplicate factory IDs using measured reboot timing, then identify each physical joint from manual encoder movement. Keep every servo cable connected. Support the arm before starting: rebooting and disabling torque can let it fall. Starting requires an explicit acknowledgement because it reboots servos and changes persistent IDs, even though it never commands powered movement.
+## 4. Set up and use the arm
 
-After six separately responding STS3215 motors are found, choose **Move by hand** to select a joint, move it gently, and confirm the detected address. Alternatively choose **Wiggle a motor**, select a temporary address, support the arm with all joints clear of their stops, and explicitly request its brief low-torque motion. Select the joint you actually saw move and confirm that match. Wiggle mode releases torque afterward and requires measurable encoder movement; it cannot operate on duplicate or unverified addresses. Repeat for all six joints, review the mapping, then save. The app renumbers through unused temporary addresses and verifies the canonical mapping: shoulder pan 1, shoulder lift 2, elbow 3, wrist flex 4, wrist roll 5, gripper 6. Previous calibration files are preserved but require fresh calibration after this setup. Stop cancels new work, finishes any in-flight persistence cleanup, and retains a recovery record of partial addressing. Each separation round rescans saved addresses after reboot so RAM-only sweep addresses are never reused as reboot targets. Clearly early/late sweep outcomes adjust the bounded timing window; ambiguity never authorizes powered identification.
+Choose a project, open **Robot Lab** and work through the steps. The status bar shows the companion, USB and torque state, and **Stop arm** appears whenever motors may be powered.
 
-This is a timing workaround, not a documented unique-serial addressing feature. Simulator tests cannot establish compatibility with every servo firmware, USB adapter or host. Unsupported timing, ambiguous movement, missing motors and verification errors leave setup incomplete. The standard isolated-motor method remains in the advanced section; its ID assignment button still requires physical isolation and is never used on the fully connected chain.
+**Connect.** Lists serial adapters and cameras and checks which motors respond, without enabling torque. A reply from a factory-default ID cannot prove only one motor is attached.
 
-**Calibrate** first verifies all six IDs and disables torque. Support the arm, capture the middle pose, move the joints gently through their usable ranges, then save. Saved calibration uses the official LeRobot JSON structure and namespace. Range validation rejects incomplete or invalid measurements; cancel preserves the previous calibration. The guide does not command automatic sweeps.
+**Motor IDs.** Each joint needs its own ID: shoulder pan 1, shoulder lift 2, elbow 3, wrist flex 4, wrist roll 5, gripper 6. Select a joint in the 3D view to highlight it; the view is a model of the arm and never moves or reads the real one. There are two ways to assign IDs:
 
-**Teleoperate** requires a saved calibration. Joint control uses LeRobot SO101 configuration and direct calibrated position targets; leader mode requires a separate calibrated leader controller. Hand-guide mode leaves torque disabled and can record passive demonstrations. Enabling motion is an explicit UI action. Manual control initially holds the current pose; in leader mode the follower immediately tracks the leader using full calibrated targets. Sliders, steps and movement to the recorded middle send full requested positions and may move faster than earlier versions. Keep the entire path clear. The session stops on serial errors, an expired browser heartbeat or **Stop**. Disabling torque can let the arm fall; support it and keep the motor power switch accessible.
+- *One motor at a time* (standard). Power off, connect only the motor being set, restore power, and assign its ID. Repeat for each joint.
+- *Assembled arm* (experimental). Keep every cable connected and support the arm: this mode reboots servos and changes stored IDs, and torque can release. It separates duplicate factory IDs by reboot timing, then identifies each joint either by **Move by hand** (move the joint gently and confirm the detected address) or **Wiggle a motor** (with all joints clear, request a brief low-torque motion and confirm the joint that moved). Review the mapping and save. Existing calibrations are kept but must be redone.
 
-**Record** captures calibrated states, actual commanded actions and the selected camera into a local LeRobot v3 dataset. Enter a task and dataset name, start an episode, then save or discard that take. Finish before importing the dataset into the selected project. No automatic Hugging Face upload occurs. Capture errors remain visible; partial episodes are not reported as successful demonstrations. If a recording has no saved episodes, **Close unsaved recording** stops capture and preserves its unsaved files. Create a new dataset with a different name to retry at a lower frame rate. Closed recordings cannot be imported as finalized datasets. Monitor disk space during long captures.
+**Calibrate.** Checks all six IDs and disables torque. Support the arm, capture the middle pose, then move each joint gently through its usable range and save. Incomplete or invalid ranges are rejected, and cancelling keeps the previous calibration. Calibrations use the LeRobot JSON format.
 
-## Operations and validation
+**Teleoperate.** Needs a saved calibration and the robot USB connected. Choose:
 
-The token stays under the companion installation directory. Linux service logs use `journalctl --user -u openjensen-robot-lab.service`; restart with `systemctl --user restart openjensen-robot-lab.service`. macOS logs stay under the installation directory. Restart with `launchctl kickstart -k gui/$(id -u)/com.openjensen.robot-lab`; use the same command with `com.openjensen.robot-lab.tunnel` for the SSH connection. Stop a service with `launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/<label>.plist`. Stopping or uninstalling the runtime must not delete captured datasets or calibrations.
+- *Joint control:* sliders and steps send calibrated position targets. The arm first holds its current pose.
+- *Hand guiding:* torque stays off so you can move the arm by hand and record passive demonstrations.
+- *Leader → follower:* a second calibrated arm drives the follower, which starts tracking immediately.
 
-Companion API details are in [the protocol](../workers/robot_lab/API.md). Automated tests use injected fake buses and cameras; real-arm motion, ID changes and calibration require a connected, prepared arm and are separate from contract/browser test success.
+**Record.** Name the dataset and task, pick the camera and frame rate, then record episodes and save or discard each one. Recordings hold calibrated states, the actions actually commanded and the camera, in LeRobot v3 format. Finish the dataset to import it into the project; nothing uploads to Hugging Face automatically. An unsaved recording can be closed with **Close unsaved recording**, which keeps its files but cannot be imported. Watch disk space during long sessions.
 
+## Safety
 
-## LeRobot control profile
+- Support the arm whenever torque may be released: it can fall.
+- Keep **Stop arm** and the motor power switch within reach, and the arm's whole path clear.
+- Moves are sent as full position targets and can be fast.
+- Control stops on a serial error, on **Stop**, or when the browser's heartbeat expires (for example, a closed or hidden tab).
+- Do not raise the supply voltage without confirming your servo variant. If a shoulder or elbow cannot hold the arm, check the servo variant, power supply, cable voltage drop and joint binding.
 
-The companion reuses the Apache-2.0-licensed LeRobot v0.4.4 SO follower setup and
-position-action methods. It uses the stock acceleration/PID settings and batched
-position packets, with no relative-target clipping. The former custom slow
-trajectories, speed cap and five-degree lag abort are removed. Gripper protection,
-calibration limits, explicit enable and the control heartbeat remain in place.
-The status response identifies the active profile; an older companion is labeled
-as an earlier profile in the control screen.
+## Run the companion
 
-Normal control also restores the volatile torque ceiling from the saved motor
-maximum, so an interrupted low-torque identification cannot silently leave the
-arm limited to 10%. This follows the manufacturer's [power-on register behavior](https://docs.waveshare.com/Memory_Map_Explanation/ST_Servo_Memory_Map_Explanation).
-Physical motor torque has not been measured by the software checks.
-If a shoulder or elbow still needs support, verify the actual servo variant and
-its matching motor power supply, cable voltage drop and joint binding. Do not
-choose a higher supply voltage without checking the motor variant. Hardware
-acceptance requires a connected arm with the operator present.
+| | Linux | macOS |
+| --- | --- | --- |
+| Logs | `journalctl --user -u openjensen-robot-lab.service` | In the runtime directory |
+| Restart | `systemctl --user restart openjensen-robot-lab.service` (or `openjensen-robot-lab-tunnel.service`) | `launchctl kickstart -k gui/$(id -u)/com.openjensen.robot-lab` (or `com.openjensen.robot-lab.tunnel`) |
+| Stop | `systemctl --user stop openjensen-robot-lab-tunnel.service openjensen-robot-lab.service` | `launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/<label>.plist` |
+
+Stopping or uninstalling the companion never deletes recordings or calibrations. The token stays in the companion's installation directory.
+
+## Technical notes
+
+- **Control.** The companion reuses the Apache-2.0 [LeRobot](https://github.com/huggingface/lerobot) v0.4.4 SO follower setup and position-action methods, with LeRobot's acceleration and PID settings and no relative-target clipping. Gripper protection, calibration limits, explicit enable and the heartbeat stay in place. Normal control restores the servos' torque limit from their saved maximum, matching their [power-on behavior](https://docs.waveshare.com/Memory_Map_Explanation/ST_Servo_Memory_Map_Explanation), so an interrupted low-torque identification cannot leave the arm weak. The status response names the active control profile.
+- **Assembled-arm setup.** Adapted from [Enigma's STS3215 research](https://www.enigma.inc/posts/sts3215-servo-hacking) and the MIT-licensed [servotools](https://github.com/Enigma-Incorporated/servotools/tree/1c65c57587f91085cd32fca3743f3e6f464cfe35). It relies on reboot timing, not a unique serial number, so some servo firmware, USB adapters or hosts may not support it. Ambiguous results leave setup incomplete; **Stop** keeps a recovery record of partial addressing.
+- **Testing.** Automated tests use simulated buses and cameras. Real motion, ID changes and calibration need a connected arm with an operator present.
+- **Protocol.** The companion API is described in [API.md](../workers/robot_lab/API.md).

@@ -22,7 +22,7 @@ Under **Import a dataset**, select **Hugging Face** and enter `codywang/so101_pi
 
 For local data, choose **Local files**, upload your folder, ZIP or HDF5 file, and review the conversion settings. Save camera names and labels before exporting.
 
-[Dataset setup](getting-started.md#inspect-a-public-dataset) · [Local imports](dataset-import.md) · [Local training](local-training.md)
+[Dataset setup](getting-started.md#2-open-a-public-dataset) · [Local imports](dataset-import.md) · [Local training](local-training.md)
 
 ## Augmentation
 

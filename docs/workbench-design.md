@@ -1,6 +1,6 @@
 # Develop workspace pages
 
-1. Start the API and development frontend using [the setup guide](getting-started.md#develop-the-frontend).
+1. Start the API and development frontend using [the setup guide](getting-started.md#work-on-the-web-interface).
 2. Edit the shared shell in `WorkspaceShell`, `Icon` and `ThemeToggle`. Update shared styling in `apps/web/src/app/globals.css`.
 3. Edit workspace routes under `apps/web/src/app/(workspace)/` and section components under `apps/web/src/components/workspace-sections/`.
 4. Update [the workspace guide](workspace-guide.md) when changing navigation or run steps. Open `/docs/` to check the API reference.
