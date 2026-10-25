@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiOrigin, type Job } from './api';
 import { record } from './policy-job-mutation';
@@ -192,7 +192,7 @@ export function useNativeCancellation(scope: CancellationScope) {
       mounted.current = false;
     };
   }, []);
-  useEffect(() => {
+  const hydrate = useEffectEvent(() => {
     try {
       let saved = readCancellation(scope);
       const current = cached();
@@ -207,6 +207,9 @@ export function useNativeCancellation(scope: CancellationScope) {
     } catch (cause) {
       unavailable(cause);
     }
+  });
+  useEffect(() => {
+    hydrate();
   }, [client, scope.project, scope.workflow]);
   function owns(expected: CancellationAttempt): boolean {
     return sameCancellation(cached().attempt, expected) && sameCancellation(readCancellation(scope), expected);
