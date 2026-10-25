@@ -258,7 +258,9 @@ def test_venv_python_symlink_is_bound_without_rewriting_invocation(tmp_path):
     identity = executable_identity(str(original))
     assert identity["invoked"] == str(original) and identity["target"] == str(actual)
     before = load_config(config).identity
-    actual.write_text("#!/bin/sh\nexit 1\n")
+    # Change the size too: a same-size rewrite within one filesystem timestamp
+    # tick keeps the inode, mtime and ctime, so only the size can differ.
+    actual.write_text("#!/bin/sh\nexit 1 # replaced\n")
     assert load_config(config).identity != before
 
 
