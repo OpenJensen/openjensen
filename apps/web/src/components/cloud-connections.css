@@ -101,18 +101,6 @@
   padding-top: 26px;
   margin-top: auto;
 }
-.cloud-provider-actions .secondary-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 13px;
-  min-height: 35px;
-  font-size: 11px;
-}
-.cloud-provider-actions .text-button {
-  font-size: 11px;
-}
 .cloud-provider-actions time {
   margin-left: auto;
   color: var(--muted);
