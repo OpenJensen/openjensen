@@ -47,7 +47,7 @@ body:
     attributes:
       label: Environment
       description: OS, Python, Node and GPU (if relevant).
-      placeholder: Ubuntu 24.04, Python 3.14.7, Node 24.21.0, RTX 3070
+      placeholder: Ubuntu 24.04, Python 3.14.7, Node 24.21.0, NVIDIA L4
   - type: textarea
     id: logs
     attributes:
