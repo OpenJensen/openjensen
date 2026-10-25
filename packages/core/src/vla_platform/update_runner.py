@@ -158,7 +158,8 @@ def prepare_release(config, target, operation):
     )
     pnpm = pnpm_command(config)
     run([*pnpm, "install", "--frozen-lockfile", "--prefer-offline"], cwd=release, env=env)
-    run([*pnpm, "build:web"], cwd=release, env=env)
+    # Invoke the web package directly: no second pnpm executable is required on PATH.
+    run([*pnpm, "--filter", "@openjensen/web", "build"], cwd=release, env=env)
     if not (release / "apps/web/out/dashboard/index.html").is_file():
         raise ValueError("The new web export is incomplete.")
     write_state(release / ".openjensen-build.json", {"commit": target, "channel": "main"})

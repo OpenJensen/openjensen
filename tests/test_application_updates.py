@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import subprocess
+import tarfile
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -438,3 +439,28 @@ def test_pnpm_corepack_and_executables_remain_supported(deployment):
     assert runner.pnpm_command(config) == [str(root / "pnpm")]
     config["pnpm"] = str(root / "corepack")
     assert runner.pnpm_command(config) == [str(root / "corepack"), "pnpm"]
+
+
+def test_prepare_release_does_not_require_a_global_pnpm(deployment, monkeypatch):
+    root, config, _ = deployment
+    uv, pnpm = root / "uv", root / "pnpm"
+    uv.write_text("#!/bin/sh\nexit 0\n")
+    pnpm.write_text(
+        '#!/bin/sh\nset -eu\ncase "$*" in\n'
+        "'install --frozen-lockfile --prefer-offline') exit 0;;\n"
+        "'--filter @openjensen/web build') mkdir -p apps/web/out/dashboard; "
+        "printf '<html></html>' > apps/web/out/dashboard/index.html;;\n"
+        "*) exit 42;;\nesac\n"
+    )
+    uv.chmod(0o700)
+    pnpm.chmod(0o700)
+
+    def archive(_config, *args):
+        output = next(arg.removeprefix("--output=") for arg in args if arg.startswith("--output="))
+        with tarfile.open(output, "w"):
+            pass
+
+    monkeypatch.setattr(runner, "git", archive)
+    prepared = runner.prepare_release(config, NEW, "fixture")
+    assert (prepared / "apps/web/out/dashboard/index.html").is_file()
+    assert json.loads((prepared / ".openjensen-build.json").read_text())["commit"] == NEW
