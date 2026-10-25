@@ -199,11 +199,12 @@ export function TrainingMonitor({
         ? 2000
         : false,
   });
+  const runActive = isActive(run);
   useEffect(() => {
-    if (!active || !isActive(run)) return;
+    if (!active || !runActive) return;
     const timer = window.setInterval(() => setNow(Date.now()), 10000);
     return () => window.clearInterval(timer);
-  }, [active, run.id, run.status]);
+  }, [active, runActive, run.id]);
   const legacy = telemetry.error instanceof ApiError && telemetry.error.status === 404;
   const legacyEvents = useQuery({
     queryKey: ['events', run.id],

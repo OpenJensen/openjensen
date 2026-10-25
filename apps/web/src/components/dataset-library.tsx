@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useEffectEvent, useRef, useState, type ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   datasetDownload,
@@ -152,12 +152,15 @@ function DatasetCover({ entry, active }: { entry: LibraryDataset; active: boolea
       })
       .catch(() => {});
   }
+  const stopPreviewFromEffect = useEffectEvent(stopPreview);
+  const playPreviewFromEffect = useEffectEvent(playPreview);
   useEffect(() => {
-    if (!active) stopPreview();
+    if (!active) stopPreviewFromEffect();
   }, [active]);
   useEffect(() => {
     if (!hovered || !camera || !loaded || !active) return;
-    playPreview();
+    const element = video.current;
+    playPreviewFromEffect();
     let frame = 0;
     const advance = () => {
       const element = video.current;
@@ -172,18 +175,15 @@ function DatasetCover({ entry, active }: { entry: LibraryDataset; active: boolea
     frame = requestAnimationFrame(advance);
     return () => {
       cancelAnimationFrame(frame);
-      video.current?.pause();
+      element?.pause();
     };
   }, [hovered, camera, loaded, active]);
   useEffect(() => {
     const pause = () => {
-      if (document.hidden) stopPreview();
+      if (document.hidden) stopPreviewFromEffect();
     };
     document.addEventListener('visibilitychange', pause);
-    return () => {
-      document.removeEventListener('visibilitychange', pause);
-      video.current?.pause();
-    };
+    return () => document.removeEventListener('visibilitychange', pause);
   }, []);
   const loading =
     !failed && ((local && samples.isPending) || (hub && preview.isPending) || (!!(sample || camera) && !loaded));

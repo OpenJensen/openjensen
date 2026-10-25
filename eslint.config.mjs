@@ -6,12 +6,6 @@ export default tseslint.config(
   {
     ignores: [
       'apps/web/src/lib/api.generated.ts',
-      // SO-101 Robot Lab sources are under active development on another branch;
-      // lint them once that work merges, as with .prettierignore.
-      'apps/web/src/components/robot-lab.*',
-      'apps/web/src/components/so101-*',
-      'apps/web/src/lib/robot-api.ts',
-      'apps/web/src/lib/so101-*',
     ],
   },
   {

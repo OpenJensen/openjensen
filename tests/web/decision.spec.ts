@@ -46,8 +46,8 @@ async function lab(page: Page, configured = true) {
     await route.fulfill({ json: replies[path] ?? [] });
   });
   await page.goto('/datasets/');
-  await page.getByRole('link', { name: 'Decision lab', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Decision lab', level: 1 })).toBeVisible();
+  await page.getByRole('link', { name: 'Decision Lab', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Decision Lab', level: 1 })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Advisory model', exact: true })).toContainText('Muose-50M');
   return { posts, controls };
 }
@@ -57,14 +57,14 @@ async function fill(page: Page) {
   await page.getByLabel('Criterion 2', { exact: true }).fill('Train a policy');
 }
 
-test('decision lab is disabled without explicit operator configuration', async ({ page }) => {
+test('Decision Lab is disabled without explicit operator configuration', async ({ page }) => {
   const { posts } = await lab(page, false);
   await fill(page);
   await expect(page.getByRole('button', { name: 'Score criteria' })).toBeDisabled();
   await expect(page.getByText('Experimental · advisory only', { exact: true })).toBeVisible();
-  await expect(page.getByText(/Only 3 of 6 workflow/)).not.toBeVisible();
+  await expect(page.getByText(/Not evaluated on robotics tasks/)).not.toBeVisible();
   await page.getByText('Model details', { exact: true }).click();
-  await expect(page.getByText(/Only 3 of 6 workflow/)).toBeVisible();
+  await expect(page.getByText(/Not evaluated on robotics tasks/)).toBeVisible();
   expect(posts).toHaveLength(0);
 });
 

@@ -45,7 +45,7 @@ test('data tools are first-class pages with clear return paths and no job submis
   await expect(page.locator('.stage-order')).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Workflow context' })).toHaveCount(0);
   const navigation = page.getByRole('navigation', { name: 'Policy lifecycle' });
-  for (const name of ['Augmentation', 'Teaching', 'Decision lab']) {
+  for (const name of ['Augmentation', 'Teaching', 'Decision Lab']) {
     const entry = navigation.getByRole('link', { name, exact: true });
     await entry.click();
     await expect(entry).toHaveAttribute('aria-current', 'page');
@@ -95,7 +95,7 @@ test('workspace pages use a single title without introductory subtitles', async 
     'Quantize',
     'Evaluate',
     'Run',
-    'Decision lab',
+    'Decision Lab',
     'Cloud runs',
     'Settings',
     'Dashboard',
@@ -151,7 +151,7 @@ test('the contextual guide covers every section and keeps API docs separate', as
     'Quantize',
     'Evaluate',
     'Run',
-    'Decision lab',
+    'Decision Lab',
     'Cloud runs',
     'Settings',
   ];
@@ -348,7 +348,7 @@ test('compact mobile navigation leaves useful stage content visible and every to
     'Quantize',
     'Evaluate',
     'Run',
-    'Decision lab',
+    'Decision Lab',
     'Cloud runs',
     'Settings',
     'Datasets',

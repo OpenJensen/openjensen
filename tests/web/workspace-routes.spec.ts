@@ -14,7 +14,7 @@ const destinations = [
   ['cloud-runs', 'Cloud runs'],
   ['augmentation', 'Augmentation'],
   ['teaching', 'Teaching'],
-  ['decision-lab', 'Decision lab'],
+  ['decision-lab', 'Decision Lab'],
   ['models', 'Models'],
   ['robot-lab', 'Robot Lab'],
 ] as const;
@@ -83,7 +83,7 @@ test('the sidebar lists installed modules and Settings shows how to add the rest
         { id: 'robot-lab', name: 'Robot Lab', installed: true, setup: 'Install the robot profile.' },
         { id: 'teaching', name: 'Teaching', installed: false, setup: 'Set JENSEN_TEACHING_URL.' },
         { id: 'augmentation', name: 'Augmentation', installed: false, setup: 'Connect Google Cloud.' },
-        { id: 'decision-lab', name: 'Decision lab', installed: false, setup: 'Configure the scorer.' },
+        { id: 'decision-lab', name: 'Decision Lab', installed: false, setup: 'Configure the scorer.' },
         { id: 'cloud-runs', name: 'Cloud runs', installed: false, setup: 'Set JENSEN_CLOUD_RUNS_DIR.' },
       ],
     }),
@@ -92,7 +92,7 @@ test('the sidebar lists installed modules and Settings shows how to add the rest
   const nav = page.getByRole('navigation', { name: 'Policy lifecycle' });
   await expect(nav.getByRole('group', { name: 'Robot' }).getByRole('link')).toHaveText(['Robot Lab']);
   await expect(nav.getByRole('group', { name: 'Data' }).getByRole('link')).toHaveText(['Datasets']);
-  for (const name of ['Teaching', 'Augmentation', 'Decision lab', 'Cloud runs']) {
+  for (const name of ['Teaching', 'Augmentation', 'Decision Lab', 'Cloud runs']) {
     await expect(nav.getByRole('link', { name, exact: true })).toHaveCount(0);
   }
   await nav.getByRole('link', { name: 'Settings', exact: true }).click();
@@ -152,11 +152,21 @@ test('section links can open in a new tab and unknown pages remain 404s', async 
   // Installed modules join the sidebar once listed; click after it settles.
   await expect(nav).toHaveAttribute('aria-busy', 'false');
   const link = nav.getByRole('link', { name: 'Fine-tune', exact: true });
-  const [other] = await Promise.all([context.waitForEvent('page'), link.click({ modifiers: ['ControlOrMeta'] })]);
-  // A second tab loads the full export; allow for a busy machine running parallel suites.
-  await expect(other).toHaveURL(/\/training\/$/, { timeout: 15_000 });
-  await expect(other.getByRole('heading', { name: 'Fine-tune', level: 1, exact: true })).toBeVisible();
+  await expect(link).toHaveAttribute('href', '/training/');
+  // A modifier click belongs to the browser: the workspace must neither cancel it nor
+  // navigate this tab. Chromium does not reliably report the background tab it opens
+  // under load, so the section's own address is loaded in a second tab below.
+  await page.evaluate(() => {
+    window.addEventListener('click', (event) => {
+      document.documentElement.dataset.modifierClickPrevented = String(event.defaultPrevented);
+    });
+  });
+  await link.click({ modifiers: ['ControlOrMeta'] });
+  await expect(page.locator('html')).toHaveAttribute('data-modifier-click-prevented', 'false');
   await expect(page).toHaveURL(/\/datasets\/$/);
+  const other = await context.newPage();
+  await other.goto('/training/');
+  await expect(other.getByRole('heading', { name: 'Fine-tune', level: 1, exact: true })).toBeVisible();
   await other.close();
   const response = await page.request.get('/training/missing-page/');
   expect(response.status()).toBe(404);
