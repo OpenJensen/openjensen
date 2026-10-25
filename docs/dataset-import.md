@@ -26,7 +26,7 @@ Prepare uploads within 2 GiB and 4096 files; use up to 100,000 converted frames,
 
 ## Import
 
-1. Open **Dataset → Sources → Local files**.
+1. Open **Datasets** and select **Local files**.
 2. Select the folder, ZIP or HDF5 file from the browser computer.
 3. Review detected format, frame rate, task description and field mapping.
 4. Start conversion and open the saved dataset after it finishes.

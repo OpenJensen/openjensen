@@ -1,4 +1,4 @@
-# OPEN JENSEN Quant setup
+# OpenJensen Quant setup
 
 This library stores eligible dense weights in INT4/INT8 and reconstructs them for
 ordinary Torch operators during inference. A smaller artifact does not establish
