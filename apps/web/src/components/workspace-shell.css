@@ -10,26 +10,36 @@
   box-shadow: none;
 }
 .sidebar .projects-section {
-  margin: 0 0 25px;
-  padding: 0 5px 22px;
+  margin: 0 0 18px;
+  padding: 0 5px 16px;
   border-bottom: 1px solid var(--line);
+}
+/* Every page fits a 900px-tall window; shorter windows scroll, with a shadow at the clipped edge. */
+@media (min-width: 701px) {
+  .sidebar-content {
+    background:
+      linear-gradient(var(--sidebar) 30%, transparent) top / 100% 24px no-repeat local,
+      linear-gradient(transparent, var(--sidebar) 70%) bottom / 100% 24px no-repeat local,
+      radial-gradient(farthest-side at 50% 0, rgb(0 0 0 / 0.12), transparent) top / 100% 8px no-repeat scroll,
+      radial-gradient(farthest-side at 50% 100%, rgb(0 0 0 / 0.12), transparent) bottom / 100% 8px no-repeat scroll;
+  }
 }
 .grouped-navigation {
   display: grid;
-  gap: 19px;
+  gap: 11px;
 }
 .grouped-navigation .sidebar-section-label {
   font-size: 10px;
   letter-spacing: 1px;
 }
 .grouped-navigation .stage-list {
-  margin-top: 7px;
+  margin-top: 6px;
   gap: 2px;
 }
 .grouped-navigation .stage-button {
-  min-height: 39px;
+  min-height: 32px;
   font-size: 13px;
-  padding-block: 7px;
+  padding-block: 5px;
 }
 .grouped-navigation .stage-button.selected {
   box-shadow: none;
@@ -149,9 +159,6 @@
   }
   .page-heading {
     margin-bottom: 30px;
-  }
-  .grouped-navigation .navigation-group:last-child .stage-button {
-    font-size: 12px;
   }
 }
 @media (max-width: 1000px) and (min-width: 701px) {
