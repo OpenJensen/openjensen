@@ -1,21 +1,50 @@
-# Set up and run policy jobs
+# Train, quantize and evaluate policies
 
-## Configure a local native execution host
+## The workflow
 
-Install workers on the API/GPU host. For SmolVLA, install the [pinned training environment](../workers/smolvla_qlora/docs/training/smolvla-qlora.md#install-on-the-training-machine) under `workers/smolvla_qlora/.venv`. In **Settings → Compute → Local runs**, select **Check this machine → Add worker**, enable local runs and save.
+1. **Train.** Inspect a dataset and select **Train on this dataset**, or open **Fine-tune**. Choose the model, method, cameras and compute, review the recipe and start.
+2. **Pick a checkpoint.** Open the saved run and select a checkpoint.
+3. **Compress it.**
+   - SmolVLA: open **Quantize → SmolVLA** and choose Q8 or Q4.
+   - ACT: [export the checkpoint](cloud-act-export.md), then [pack it locally](native-act-quantization.md) to INT8 or INT4.
+   - ACT can also be [distilled](#distill-act) into a smaller student first.
+4. **Evaluate.** In **Evaluate** (or **Settings → Diagnostics**), choose the policy, a registered runtime and engine checks or LIBERO, review the protocol and start. For LIBERO Spatial, [prepare its assets](spatial-workflow.md); for cloud engine checks, see [cloud inference](cloud-inference.md); for Isaac, see [simulation setup](native-simulation.md).
+5. **Download.** Each job's page shows its stages and outputs.
 
-For GGUF conversion, packing and diagnostics, install the [native worker](../workers/vla_cpp/README.md) and [instrumented GPU build](../workers/vla_cpp/docs/gpu-setup.md). From `workers/vla_cpp`, install conversion dependencies with `uv pip install --python .venv/bin/python -e '.[quantize,convert]'` when exporting a trained checkpoint.
+Every job keeps its recipe, stage requests, logs and outputs in its workspace directory. To stop a job, open it and cancel. To continue an interrupted training run, open it, select **Resume** and the last complete checkpoint; after a hard server stop, check any reported leftover worker or cluster first.
 
-Copy [runtime.example.json](runtime.example.json) and replace all absolute paths/source SHA-256 values. Supply:
+## Configure the execution host
 
-- `worker_root`: `workers/vla_cpp`; `training_root`: `workers/smolvla_qlora`.
-- `vendor` and `build`: pinned native checkout/build paths.
-- `tokenizer`: pinned local tokenizer directory.
-- `conversion_vendor`: the conversion checkout when using a separate build.
-- `LD_LIBRARY_PATH`: include the build's `bin` directory for shared libraries.
-- Optional `gpu_name` and positive `gpu_memory_mib`: the target GPU's specifications.
+### Local GPU training
 
-Start the server with that configuration:
+Install the [pinned SmolVLA training environment](../workers/smolvla_qlora/docs/training/smolvla-qlora.md#install-on-the-training-machine) in `workers/smolvla_qlora/.venv` on the GPU machine. Then in **Settings → Compute → Local runs**, select **Check this machine → Add worker**, enable local runs and save. See [compute settings](compute-settings.md).
+
+### Cloud GPU training
+
+[Connect Google Cloud](compute-settings.md), then choose a cloud GPU in Fine-tune. Save Hugging Face access if the model requires it. [Cloud training](skypilot-training.md) covers preparation and cleanup.
+
+### GGUF quantization and diagnostics
+
+Install the [native worker](../workers/vla_cpp/README.md) and its [GPU build](../workers/vla_cpp/docs/gpu-setup.md). To export trained checkpoints, also install its conversion dependencies from `workers/vla_cpp`:
+
+```sh
+uv pip install --python .venv/bin/python -e '.[quantize,convert]'
+```
+
+Copy [runtime.example.json](runtime.example.json), replace every absolute path and source SHA-256, and set:
+
+| Key | Value |
+| --- | --- |
+| `worker_root` / `training_root` | `workers/vla_cpp` / `workers/smolvla_qlora` |
+| `vendor`, `build` | The pinned native checkout and build |
+| `tokenizer` | The pinned local tokenizer directory |
+| `conversion_vendor` | The conversion checkout, if built separately |
+| `LD_LIBRARY_PATH` | Include the build's `bin` directory |
+| `gpu_name`, `gpu_memory_mib` | Optional: the target GPU's name and memory |
+
+For containers, set `image` and `mounts` for evaluation, `conversion_python` or `conversion_image` for conversion, and `training_python` or `training_image` for training. Mounted asset paths must be identical inside the container.
+
+Start the server with the configuration:
 
 ```sh
 export JENSEN_RUNTIME_CONFIG=/absolute/path/runtime-local.json
@@ -23,7 +52,9 @@ export JENSEN_DATA_DIR=/absolute/path/jensen-workspace
 uv run --frozen jensen serve
 ```
 
-For a custom training adapter, install its Python module in the training environment and register it with its model IDs, for example:
+### Custom training adapters
+
+Install the adapter's Python module in the training environment and register it with the model IDs it trains:
 
 ```json
 {
@@ -32,31 +63,13 @@ For a custom training adapter, install its Python module in the training environ
 }
 ```
 
-Set `image`/`mounts` for Docker evaluation, `conversion_python`/`conversion_image` for a separate conversion environment, and `training_python`/`training_image` for a separate training environment. Keep mounted asset paths identical inside the container.
+## Distill ACT
 
-## Cloud GPU setup
+Install the [ACT distillation adapter](../workers/policy_distillation/README.md) and the [CPU workers](../workers/local_cpu/README.md). In **Distill**, select an ACT teacher and local observations with the same camera, saved processors, coordinate order and units. Choose separate training, validation and final episode groups, review the recipe and submit.
 
-[Connect Google Cloud](compute-settings.md), then select the GPU in Fine-tune. Save Hugging Face access when required by the model. Follow [cloud training](skypilot-training.md) for preparation and cleanup.
+## Use the CLI
 
-## Train, export and quantize
-
-1. Inspect the dataset and select **Train on this dataset** or open **Fine-tune**.
-2. Select model, method, cameras and compute; review the recipe and start.
-3. Open the saved run and select a checkpoint.
-4. For SmolVLA, continue to **Quantize → SmolVLA** and choose Q8 or Q4. For ACT, [export the checkpoint](cloud-act-export.md), then [pack it locally](native-act-quantization.md).
-5. Open the new job to follow stages and download its artifact.
-
-## Distillation
-
-Install the [ACT distillation adapter](../workers/policy_distillation/README.md) and [CPU workers](../workers/local_cpu/README.md). Select an ACT teacher and compatible local observations, matching camera, saved processors, coordinate order and units. Choose separate training, validation and final episode groups, review the ACT256 recipe, and submit.
-
-## Evaluate and run
-
-In **Evaluate** or **Settings → Diagnostics**, select the project policy and registered runtime, choose engine or LIBERO checks, edit the protocol and start. For LIBERO Spatial, [prepare its assets and parity settings](spatial-workflow.md). For cloud engine checks, follow [cloud inference](cloud-inference.md). For Isaac, follow [simulation setup](native-simulation.md).
-
-## CLI and persistence
-
-Save a JSON recipe and replace runtime/source IDs with values from `policy options`:
+Save a recipe, replacing the runtime and source IDs with values from `jensen policy options`:
 
 ```json
 {
@@ -76,8 +89,4 @@ uv run --frozen jensen jobs events JOB_ID
 uv run --frozen jensen policy artifacts PROJECT_ID
 ```
 
-Use `policy.finetune` with `dataset_job_id`, `training_method` and `training` for training, or select the saved artifact for an export/quantization request. Recipes, stage requests, logs and outputs are retained in the job's workspace directory.
-
-## Job history and creation
-
-Select a saved job for status/events and downloads. Open its new-job action to submit another recipe. Cancel that selected job to stop its worker. For an interrupted training run, select Resume and the last complete checkpoint. Inspect any reported orphan worker/cluster before resuming work after a hard server stop.
+For training, use `"operation": "policy.finetune"` with `dataset_job_id`, `training_method` and `training`. For export or quantization, reference the saved artifact.

@@ -1,4 +1,4 @@
-# Run the OPEN JENSEN web client
+# Run the OpenJensen web client
 
 Use the repository's pinned Node and pnpm versions. Complete the [application setup](../../docs/getting-started.md), then start the API in one terminal:
 

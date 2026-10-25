@@ -22,9 +22,6 @@
 .settings-tabs .section-tab {
   white-space: nowrap;
 }
-.cloud-settings {
-  max-width: 1040px;
-}
 .cloud-settings > h2,
 .cloud-workers h2 {
   font-size: var(--text-section);
@@ -103,18 +100,6 @@
   flex-wrap: wrap;
   padding-top: 26px;
   margin-top: auto;
-}
-.cloud-provider-actions .secondary-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 13px;
-  min-height: 35px;
-  font-size: 11px;
-}
-.cloud-provider-actions .text-button {
-  font-size: 11px;
 }
 .cloud-provider-actions time {
   margin-left: auto;

@@ -10,14 +10,21 @@ on:
         description: Also run Windows core, terminal, and complete browser/build checks
         type: boolean
         default: false
+      version_pr:
+        description: PR number supplied by automatic version preparation
+        type: string
+        default: ''
 # Supersede obsolete PR revisions, but retain every main/manual verification.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || inputs.version_pr || github.run_id }}
   cancel-in-progress: true
 permissions:
   contents: read
 jobs:
   scope:
+    permissions:
+      contents: read
+      pull-requests: read
     runs-on: ${{ fromJSON((vars.CI_RUNNER == 'gcp' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-24.04"]') }}
     timeout-minutes: 3
     outputs:
@@ -44,6 +51,15 @@ jobs:
         if: runner.environment == 'self-hosted' && runner.os == 'Linux'
         working-directory: ${{ github.workspace }}
         run: sudo bash .github/scripts/prepare_runner.sh
+      - uses: actions/setup-python@v6
+        if: github.event_name == 'pull_request' || inputs.version_pr != ''
+        with:
+          python-version: '3.14.7'
+      - name: Validate the PR patch version
+        if: github.event_name == 'pull_request' || inputs.version_pr != ''
+        run: python3 .github/scripts/patch_release.py check-ci
+        env:
+          GH_TOKEN: ${{ github.token }}
       - id: changes
         run: python3 .github/scripts/ci_scope.py
         env:

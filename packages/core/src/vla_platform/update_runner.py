@@ -115,6 +115,22 @@ def verify_target(config, target, installed):
         raise ValueError("This version is already installed.")
 
 
+def pnpm_command(config):
+    """Use Node for JavaScript launchers and the pnpm package's shebang-less stub."""
+    executable = Path(config["pnpm"])
+    node = Path(config["node_bin"]) / "node"
+    if executable.name == "corepack":
+        return [str(executable), "pnpm"]
+    if executable.suffix in {".js", ".cjs", ".mjs"}:
+        return [str(node), str(executable)]
+    manifest = executable.parent / "package.json"
+    entry = executable.parent / "bin/pnpm.mjs"
+    if executable.name == "pnpm" and entry.is_file() and manifest.is_file():
+        if json.loads(manifest.read_text()).get("name") == "pnpm":
+            return [str(node), str(entry)]
+    return [str(executable)]
+
+
 def prepare_release(config, target, operation):
     root = Path(config["root"])
     release = root / "releases" / ("update-" + operation + "-" + target[:12])
@@ -140,9 +156,10 @@ def prepare_release(config, target, operation):
         cwd=release,
         env=env,
     )
-    pnpm = [config["pnpm"]] + (["pnpm"] if Path(config["pnpm"]).name == "corepack" else [])
+    pnpm = pnpm_command(config)
     run([*pnpm, "install", "--frozen-lockfile", "--prefer-offline"], cwd=release, env=env)
-    run([*pnpm, "build:web"], cwd=release, env=env)
+    # Invoke the web package directly: no second pnpm executable is required on PATH.
+    run([*pnpm, "--filter", "@openjensen/web", "build"], cwd=release, env=env)
     if not (release / "apps/web/out/dashboard/index.html").is_file():
         raise ValueError("The new web export is incomplete.")
     write_state(release / ".openjensen-build.json", {"commit": target, "channel": "main"})

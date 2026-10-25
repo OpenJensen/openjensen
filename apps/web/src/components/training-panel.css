@@ -1,9 +1,7 @@
 .training-workspace {
-  max-width: 1060px;
   min-width: 0;
 }
 .training-view-toolbar {
-  max-width: 1060px;
   margin-bottom: 20px;
 }
 .training-back {
@@ -551,7 +549,6 @@
   border-top: 1px solid var(--line);
 }
 .training-activity.training-job-detail {
-  max-width: 1060px;
   margin-top: 0;
   padding-top: 0;
   border: 0;

@@ -23,6 +23,16 @@
   line-height: 1.6;
   margin-top: 6px;
 }
+.local-setup-progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+.local-setup-progress p {
+  margin: 0;
+  font-size: 13px;
+}
 .local-worker-discovery {
   display: grid;
   gap: 12px;
