@@ -1,8 +1,6 @@
 .augmentation-panel {
   --augmentation-accent: var(--accent);
   min-width: 0;
-  max-width: 1080px;
-  margin-inline: auto;
 }
 .augmentation-history-heading h2 {
   margin: 0;

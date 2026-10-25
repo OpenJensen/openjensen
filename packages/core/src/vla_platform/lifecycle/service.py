@@ -33,6 +33,7 @@ from vla_platform.lifecycle.contracts import (
 from vla_platform.lifecycle.runtime import RuntimeCatalog, command
 from vla_platform.lifecycle.temporal import validate_temporal
 from vla_platform.lifecycle.training_catalog import (
+    checkpoint_label,
     supports_gradient_accumulation,
     training_model_for_recipe,
 )
@@ -315,13 +316,15 @@ class Lifecycle:
         metadata = manifest.get("metadata", {})
         if type(metadata.get("step")) is not int or metadata["step"] != step:
             raise ValueError("Cloud checkpoint descriptor step differs from its identity")
+        architecture = metadata.get("architecture", "Policy")
+        # Cloud workers store "<model id> · step N"; show the catalog name instead.
+        if not isinstance(label, str) or not label or label == f"{architecture} · step {step}":
+            label = checkpoint_label(str(architecture), step)
         return PolicyArtifact(
             id=f"{job.id}:{name}",
             project_id=job.project_id,
             job_id=job.id,
-            label=label
-            if isinstance(label, str) and label
-            else f"{metadata.get('architecture', 'Policy')} · step {step}",
+            label=label,
             format="training_checkpoint",
             path=path.relative_to(self.settings.data_dir).as_posix(),
             manifest_sha256=sha,
