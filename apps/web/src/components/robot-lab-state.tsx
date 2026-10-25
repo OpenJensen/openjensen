@@ -777,7 +777,13 @@ export function useRobotLab() {
         profileCheck?.state === 'mismatch',
     },
     {
-      value: controlling ? 'Active' : selectedCalibrated ? 'Ready' : 'Needs calibration',
+      value: controlling
+        ? 'Active'
+        : !portConnected
+          ? 'Needs connection'
+          : selectedCalibrated
+            ? 'Ready'
+            : 'Needs calibration',
       good: controlling,
       warn: false,
     },

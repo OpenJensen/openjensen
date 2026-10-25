@@ -1037,6 +1037,8 @@ test('USB disconnect disables remembered motor controls and reconnect requires f
   state.status.calibrations = [{ robot_id: 'my-so101', role: 'follower', path: 'saved.json' }];
   state.status.assembled.calibration_required = false;
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
+  // A saved calibration is not enough to teleoperate without the robot USB.
+  await expect(tab(page, 'Teleoperate')).toContainText('Needs connection');
   await tab(page, 'Teleoperate').click();
   await page.getByRole('checkbox', { name: /Arm secured; workspace clear/ }).check();
   await expect(page.getByRole('button', { name: 'Enable & move to recorded middle', exact: true })).toBeDisabled();
@@ -1046,6 +1048,7 @@ test('USB disconnect disables remembered motor controls and reconnect requires f
   state.portsConnected = true;
   // Idle inventory polling notices USB return without refreshing or starting a session.
   await expect(page.getByText('Robot USB connected · Idle', { exact: true })).toBeVisible({ timeout: 8_000 });
+  await expect(tab(page, 'Teleoperate')).toContainText('Ready');
   await expect(acknowledge).toBeEnabled();
   await expect(acknowledge).not.toBeChecked();
   await expect(wiggle).toBeDisabled();
