@@ -504,7 +504,8 @@ def test_cloud_checkpoint_projection_and_resume_transfer_only_descriptors(cloud,
                     "manifest": manifest,
                     "manifest_sha256": hashlib.sha256(encoded(manifest)).hexdigest(),
                     "file_bytes": 2 * 1024**3,
-                    "label": f"Step {step}",
+                    # Step 1 carries the label older cloud workers generated.
+                    "label": "smolvla · step 1" if step == 1 else f"Step {step}",
                 }
                 entries.append(item)
                 descriptor = stage / "cloud-checkpoints" / name
@@ -523,6 +524,10 @@ def test_cloud_checkpoint_projection_and_resume_transfer_only_descriptors(cloud,
             ]
             assert len(remote) == 2
             assert {artifact.metadata["step"] for artifact in remote} == {1, 2}
+            assert {artifact.metadata["step"]: artifact.label for artifact in remote} == {
+                1: "SmolVLA · step 1",
+                2: "Step 2",
+            }
             assert all(artifact.file_bytes == 2 * 1024**3 for artifact in remote)
             if action == "quantize-earlier":
                 followup = request(
