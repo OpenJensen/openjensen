@@ -19,7 +19,11 @@ from vla_platform.contracts import DatasetProfile, IntakeRequest, Job, now
 from vla_platform.lifecycle.contracts import PolicyArtifact, PolicyRequest
 from vla_platform.lifecycle.runtime import Runtime, RuntimeCatalog
 from vla_platform.lifecycle.service import Lifecycle
-from vla_platform.lifecycle.training_catalog import TRAINING_MODEL_BY_ID, public_training_models
+from vla_platform.lifecycle.training_catalog import (
+    TRAINING_MODEL_BY_ID,
+    checkpoint_label,
+    public_training_models,
+)
 from vla_platform.local_worker_registry import LocalWorkerRegistry
 from vla_platform.settings import Settings
 from vla_platform.storage import jobs
@@ -644,3 +648,9 @@ def test_native_smolvla_admission_binds_worker_memory_and_dataset_before_executi
         assert request.training_method == "full"
         assert request.training["model_id"] == model.model_id
         lifecycle.execution.get.assert_awaited_once_with("dataset")
+
+
+def test_checkpoint_labels_use_catalog_model_names():
+    assert checkpoint_label("smolvla", 20) == "SmolVLA · step 20"
+    assert checkpoint_label("act", 200) == "ACT · step 200"
+    assert checkpoint_label("custom-policy", 3) == "custom-policy · step 3"

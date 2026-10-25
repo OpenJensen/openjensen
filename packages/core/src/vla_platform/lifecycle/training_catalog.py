@@ -121,6 +121,12 @@ TRAINING_MODELS = tuple(
 TRAINING_MODEL_BY_ID = {model.id: model for model in TRAINING_MODELS}
 
 
+def checkpoint_label(model_id: str, step: int) -> str:
+    """Name a training checkpoint by the model's catalog label, e.g. "SmolVLA · step 20"."""
+    model = TRAINING_MODEL_BY_ID.get(model_id)
+    return f"{model.label if model else model_id} · step {step}"
+
+
 def supports_gradient_accumulation(model: TrainingModel, runtime: Runtime) -> bool:
     """Only reviewed bundled adapters declare optimizer-window semantics."""
     expected = {
