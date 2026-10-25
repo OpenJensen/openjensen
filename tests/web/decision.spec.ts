@@ -62,9 +62,9 @@ test('decision lab is disabled without explicit operator configuration', async (
   await fill(page);
   await expect(page.getByRole('button', { name: 'Score criteria' })).toBeDisabled();
   await expect(page.getByText('Experimental · advisory only', { exact: true })).toBeVisible();
-  await expect(page.getByText(/Only 3 of 6 workflow/)).not.toBeVisible();
+  await expect(page.getByText(/Not evaluated on robotics tasks/)).not.toBeVisible();
   await page.getByText('Model details', { exact: true }).click();
-  await expect(page.getByText(/Only 3 of 6 workflow/)).toBeVisible();
+  await expect(page.getByText(/Not evaluated on robotics tasks/)).toBeVisible();
   expect(posts).toHaveLength(0);
 });
 

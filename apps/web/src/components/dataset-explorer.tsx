@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useId, useRef, useState } from 'react';
 import {
   api,
   apiMediaUrl,
@@ -100,6 +100,20 @@ function PreviewWarnings({ warnings }: { warnings: string[] }) {
 
 type CameraState = { status: 'loading' | 'ready' | 'error'; message?: string };
 
+function cameraBoundary(camera: CameraPreview, video: HTMLVideoElement, duration: number) {
+  return Math.min(
+    camera.end_seconds,
+    camera.start_seconds + duration,
+    Number.isFinite(video.duration) ? video.duration : Infinity,
+  );
+}
+
+function cameraEnd(camera: CameraPreview, video: HTMLVideoElement, duration: number) {
+  // The source interval is half-open. Its end may be the following episode's
+  // first frame, so displayed media must stop one frame before that boundary.
+  return Math.max(camera.start_seconds, cameraBoundary(camera, video, duration) - 1 / camera.fps);
+}
+
 export function CameraPlayer({
   preview,
   active,
@@ -137,31 +151,18 @@ export function CameraPlayer({
     setPlaying(false);
   }
 
-  function cameraBoundary(camera: CameraPreview, video: HTMLVideoElement) {
-    return Math.min(
-      camera.end_seconds,
-      camera.start_seconds + duration,
-      Number.isFinite(video.duration) ? video.duration : Infinity,
-    );
-  }
-
-  function cameraEnd(camera: CameraPreview, video: HTMLVideoElement) {
-    // The source interval is half-open. Its end may be the following episode's
-    // first frame, so displayed media must stop one frame before that boundary.
-    return Math.max(camera.start_seconds, cameraBoundary(camera, video) - 1 / camera.fps);
-  }
-
   function finishEpisode(camera: CameraPreview, video: HTMLVideoElement) {
     stop();
     cameras.forEach((item) => {
       const element = videos.current[item.key];
       if (element && element.readyState >= 1 && stateRef.current[item.key]?.status !== 'error')
-        element.currentTime = cameraEnd(item, element);
+        element.currentTime = cameraEnd(item, element, duration);
     });
-    const end = Math.max(0, cameraBoundary(camera, video) - camera.start_seconds);
+    const end = Math.max(0, cameraBoundary(camera, video, duration) - camera.start_seconds);
     positionRef.current = end;
     setPosition(end);
   }
+  const finishPlayback = useEffectEvent(finishEpisode);
 
   function seek(value: number) {
     stop();
@@ -173,7 +174,7 @@ export function CameraPlayer({
       if (!video || video.readyState < 1 || cameraStates[camera.key]?.status === 'error') return;
       video.currentTime = Math.max(
         camera.start_seconds,
-        Math.min(camera.start_seconds + next, cameraEnd(camera, video)),
+        Math.min(camera.start_seconds + next, cameraEnd(camera, video, duration)),
       );
     });
   }
@@ -214,7 +215,7 @@ export function CameraPlayer({
     const firstVideo = firstCamera ? videos.current[firstCamera.key] : null;
     if (
       positionRef.current >= duration - 0.03 ||
-      (firstCamera && firstVideo && firstVideo.currentTime >= cameraEnd(firstCamera, firstVideo) - 0.03)
+      (firstCamera && firstVideo && firstVideo.currentTime >= cameraEnd(firstCamera, firstVideo, duration) - 0.03)
     )
       seek(0);
     playbackGeneration.current += 1;
@@ -251,7 +252,7 @@ export function CameraPlayer({
         cameras.forEach((camera) => {
           const video = videos.current[camera.key];
           if (!video || cameraStates[camera.key]?.status !== 'ready') return;
-          const end = cameraEnd(camera, video);
+          const end = cameraEnd(camera, video, duration);
           if (video.currentTime >= end) {
             video.pause();
             video.currentTime = end;
@@ -262,8 +263,8 @@ export function CameraPlayer({
             video.currentTime = Math.min(camera.start_seconds + next, end);
           }
         });
-        if (master.currentTime >= cameraEnd(masterCamera, master) || next >= duration - 0.015) {
-          finishEpisode(masterCamera, master);
+        if (master.currentTime >= cameraEnd(masterCamera, master, duration) || next >= duration - 0.015) {
+          finishPlayback(masterCamera, master);
           return;
         }
         if (now - lastPaint > 100) {
@@ -346,7 +347,10 @@ export function CameraPlayer({
                       });
                       return;
                     }
-                    video.currentTime = Math.min(camera.start_seconds + positionRef.current, cameraEnd(camera, video));
+                    video.currentTime = Math.min(
+                      camera.start_seconds + positionRef.current,
+                      cameraEnd(camera, video, duration),
+                    );
                   }}
                   onLoadedData={() => ready(camera)}
                   onCanPlay={() => ready(camera)}

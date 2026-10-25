@@ -5,7 +5,7 @@ import {
   recordingRecipe,
 } from './recording-preparation';
 import { reviewedIntakeHistory } from './dataset-submission';
-import { useEffect } from 'react';
+import { useEffect, useEffectEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiOrigin, type Job } from './api';
 import type { PolicyJobAttempt, SubmissionIdentity, SubmissionOperation } from './policy-job-attempt';
@@ -470,8 +470,9 @@ export function useDurableSubmission(scope: SubmissionScope) {
       client.setQueryData(key, value);
     },
   });
+  const hydrate = useEffectEvent(() => controller.hydrate());
   useEffect(() => {
-    controller.hydrate();
+    hydrate();
   }, [client, scope.project, scope.operation]);
   const run = async (operation: () => Promise<Job | null>) => {
     const receipt = await operation();
