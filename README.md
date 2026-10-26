@@ -116,7 +116,7 @@ pnpm exec playwright install chromium
 pnpm test:web
 ```
 
-Workers keep their own environments and checks. See [development checks](docs/ci.md) and [contributing](CONTRIBUTING.md).
+Workers keep their own environments and checks. See [development checks](docs/ci.md), [writing documentation](docs/writing-docs.md) and [contributing](CONTRIBUTING.md).
 
 ## License
 
