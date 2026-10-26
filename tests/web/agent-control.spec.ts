@@ -683,13 +683,27 @@ test('simulation tools require explicit selection and closing the agent panel pr
   expect(requests).toEqual([]);
 });
 
-test('reopening physical preparation never restores operator or workspace confirmations', async ({ page }) => {
+test('switching targets or reopening physical preparation clears operator confirmations and preview', async ({
+  page,
+}) => {
   const { requests } = await fixture(page, { physical: true });
   await page.goto('/ai-teleoperation/');
   const present = page.getByLabel('I am at the arm, supporting it where needed, with Stop within reach.');
   const clear = page.getByLabel(
     'The arm and its full movement path are clear; the selected camera shows the intended workspace.',
   );
+  await page.getByRole('combobox', { name: 'Physical camera', exact: true }).selectOption('0');
+  await page.getByLabel('Show the local camera preview', { exact: true }).check();
+  await expect(page.getByAltText('Local SO101 camera preview')).toBeVisible();
+  await present.check();
+  await clear.check();
+  const target = page.getByRole('combobox', { name: 'Agent target', exact: true });
+  await target.selectOption('teaching');
+  await target.selectOption('robot_lab');
+  await expect(present).not.toBeChecked();
+  await expect(clear).not.toBeChecked();
+  await expect(page.getByLabel('Show the local camera preview', { exact: true })).not.toBeChecked();
+  await expect(page.getByAltText('Local SO101 camera preview')).toHaveCount(0);
   await present.check();
   await clear.check();
   await page.getByText('Agent Control', { exact: true }).click();

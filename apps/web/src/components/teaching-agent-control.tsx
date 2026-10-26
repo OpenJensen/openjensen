@@ -406,6 +406,9 @@ function AgentControls({
               onChange={(event) => {
                 if (physical.owned || physical.connecting)
                   void physical.stop('The selected target changed. Stop was requested.');
+                physical.setPresent(false);
+                physical.setClear(false);
+                physical.togglePreview(false);
                 const next = event.target.value as 'replay' | 'teaching' | 'robot_lab';
                 onTargetChange(next);
                 if (next === 'robot_lab') {
