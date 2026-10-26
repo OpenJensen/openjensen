@@ -18,6 +18,9 @@ from vla_platform.settings import Settings
 def host(tmp_path, monkeypatch):
     root = tmp_path / "worker"
     root.mkdir()
+    source = root / "src/jensen_vla"
+    source.mkdir(parents=True)
+    (source / "application.py").write_text("# generated worker fixture\n")
     (root / "requirements-smolvla-linux.txt").write_text("generated install fixture")
     monkeypatch.setattr(discovery, "_worker_root", lambda: root)
     monkeypatch.setattr(installer, "_worker_root", lambda: root)
@@ -225,3 +228,79 @@ def test_immediate_cancellation_is_terminal_even_before_task_starts(tmp_path):
         assert result.status == "cancelled" and result.finished_at
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    "missing", ["registration", "python", "executable", "source", "entrypoint"]
+)
+def test_saved_success_does_not_claim_missing_training_worker_is_installed(tmp_path, missing):
+    python = tmp_path / "external-environment/bin/python"
+    python.parent.mkdir(parents=True)
+    python.write_text("# generated interpreter fixture\n")
+    python.chmod(0o700)
+    root = tmp_path / "external-source"
+    source = root / "src/jensen_vla"
+    source.mkdir(parents=True)
+    entrypoint = source / "application.py"
+    entrypoint.write_text("# generated worker fixture\n")
+    runtime = SimpleNamespace(
+        execution="native",
+        provider="local",
+        device="cuda",
+        training_model_ids=["smolvla"],
+        training_python=str(python),
+        training_root=str(root),
+        training_module="jensen_vla.application",
+    )
+    lifecycle = SimpleNamespace(
+        settings=Settings(data_dir=tmp_path / "workspace"),
+        catalog=SimpleNamespace(
+            runtime=lambda ident: None if missing == "registration" else runtime
+        ),
+    )
+    service = installer.LocalWorkerSetup(lifecycle, None)
+    service.state = installer.LocalSetupState(status="succeeded", runtime_id="registered-worker")
+    service._save()
+    saved = service.path.read_bytes()
+    if missing == "python":
+        python.unlink()
+    elif missing == "executable":
+        python.chmod(0o600)
+    elif missing == "source":
+        runtime.training_root = str(root.parent / "missing-source")
+    elif missing == "entrypoint":
+        entrypoint.unlink()
+    result = service.public()
+    assert result.status == "interrupted" and "retry setup" in result.message
+    assert "external-" not in result.message
+    assert service.state.status == "succeeded" and service.path.read_bytes() == saved
+    assert service.state.runtime_id == "registered-worker"
+
+
+def test_saved_success_keeps_registered_external_training_environment_installed(tmp_path):
+    python = tmp_path / "external-environment/bin/python"
+    python.parent.mkdir(parents=True)
+    python.write_text("# generated interpreter fixture\n")
+    python.chmod(0o700)
+    root = tmp_path / "external-source"
+    source = root / "src/firebird_vla"
+    source.mkdir(parents=True)
+    (source / "application.py").write_text("# generated legacy worker fixture\n")
+    runtime = SimpleNamespace(
+        execution="native",
+        provider="local",
+        device="cuda",
+        training_model_ids=["smolvla"],
+        training_python=str(python),
+        training_root=str(root),
+        training_module="firebird_vla.application",
+    )
+    lifecycle = SimpleNamespace(
+        settings=Settings(data_dir=tmp_path / "workspace"),
+        catalog=SimpleNamespace(runtime=lambda ident: runtime),
+    )
+    service = installer.LocalWorkerSetup(lifecycle, None)
+    service.state = installer.LocalSetupState(status="succeeded", runtime_id="registered-worker")
+    result = service.public()
+    assert result.status == "succeeded" and result.runtime_id == "registered-worker"
+    assert not service.path.exists()  # Status reads never rewrite installation history.

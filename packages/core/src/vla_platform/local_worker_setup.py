@@ -16,6 +16,7 @@ from sqlalchemy import select
 from vla_platform.lifecycle.contracts import StrictRecord
 from vla_platform.local_worker_discovery import _environment, _hardware, _worker_root
 from vla_platform.storage import jobs
+from vla_platform.worker_paths import canonical_module, worker_module
 
 REQUIRED_FREE_GIB = 24  # Installer/cache space plus the repository's 10 GiB reserve.
 STEP_TIMEOUT = 3600
@@ -72,7 +73,40 @@ class LocalWorkerSetup:
             Path(temporary).unlink(missing_ok=True)
 
     def public(self):
-        return self.state.model_copy(deep=True)
+        result = self.state.model_copy(deep=True)
+        if result.status == "succeeded" and not self._installed_runtime_present():
+            # A saved successful operation is history, not proof its environment
+            # and registration survived an upgrade or an administrator's change.
+            result.status = "interrupted"
+            result.stage = ""
+            result.message = (
+                "The installed training worker is unavailable. Check this machine "
+                "or retry setup to repair its environment and registration."
+            )
+        return result
+
+    def _installed_runtime_present(self):
+        runtime = self.lifecycle.catalog.runtime(self.state.runtime_id)
+        if (
+            runtime is None
+            or runtime.execution != "native"
+            or runtime.provider != "local"
+            or runtime.device != "cuda"
+            or "smolvla" not in runtime.training_model_ids
+            or not runtime.training_python
+            or not runtime.training_root
+            or canonical_module(runtime.training_module)
+            not in {"jensen_vla.application", "jensen_vla.lerobot_application"}
+        ):
+            return False
+        try:
+            python, root = Path(runtime.training_python), Path(runtime.training_root)
+            if not python.is_file() or not os.access(python, os.X_OK) or not root.is_dir():
+                return False
+            worker_module(root, runtime.training_module)
+        except OSError, ValueError:
+            return False
+        return True
 
     async def start(self):
         async with self.lock:

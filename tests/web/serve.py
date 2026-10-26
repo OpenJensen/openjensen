@@ -8,12 +8,26 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import uvicorn
+import vla_platform.api as api_module
 from vla_platform.api import create_app
 from vla_platform.compute_settings import ComputeSettings, ComputeSettingsUpdate
 from vla_platform.environment import getenv
 from vla_platform.settings import Settings
 
-# Browser tests open every module page; module detection has its own API tests.
+# Browser interaction suites intentionally open every module using synthetic
+# availability. Real installation, pairing and detection have separate API tests.
+# This fixture does not establish hardware, provider or model readiness.
+_real_workspace_modules = api_module.workspace_modules
+
+
+def _browser_modules(*args, **kwargs):
+    return [
+        item.model_copy(update={"available": True, "enabled": True, "installed": True})
+        for item in _real_workspace_modules(*args, **kwargs)
+    ]
+
+
+api_module.workspace_modules = _browser_modules
 os.environ.setdefault("JENSEN_MODULES", "all")
 
 static_dir = Path(

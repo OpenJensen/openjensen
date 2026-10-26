@@ -27,6 +27,7 @@ from vla_platform.install_profiles import (
     profile,
 )
 from vla_platform.modules import set_module_enabled
+from vla_platform.robot_lab_bridge import RobotLabBridge, RobotLabError
 
 InstallableProfile = Literal["robot", "datasets", "decision"]
 ROOT = Path(__file__).resolve().parents[4]
@@ -58,6 +59,9 @@ class RuntimePackage(BaseModel):
     installable: bool
     message: str
     minimum_free_gib: int
+    location: Literal["server", "companion"] = "server"
+    host: str | None = None
+    connected: bool | None = None
 
 
 class ModuleInstallationStatus(BaseModel):
@@ -133,6 +137,27 @@ class ModuleInstallations:
             Path(temporary).unlink(missing_ok=True)
 
     def inspect(self, ident):
+        if ident == "robot":
+            config_path = Path(
+                os.environ.get(
+                    "JENSEN_ROBOT_LAB_CONFIG", self.data_dir / "robot-lab-connection.json"
+                )
+            )
+            try:
+                pairing = RobotLabBridge.read_config(config_path)
+            except RobotLabError:
+                pass
+            else:
+                return RuntimePackage(
+                    id="robot",
+                    name="Robot Lab",
+                    ready=True,
+                    installable=False,
+                    message="Installed on the paired computer. Open Robot Lab to use it.",
+                    minimum_free_gib=11,
+                    location="companion",
+                    host=pairing["label"],
+                )
         cached = self.cached.get(ident)
         if cached and time.monotonic() - cached[0] < 60:
             return cached[1]
@@ -144,9 +169,20 @@ class ModuleInstallations:
         explicit = getenv("JENSEN_CPU_READER_PYTHON") if ident == "datasets" else None
         if explicit:
             targets = [Path(explicit).parent.parent]
+        elif ident == "decision" and getenv("JENSEN_DECISION_PYTHON"):
+            targets.insert(0, Path(getenv("JENSEN_DECISION_PYTHON")).parent.parent)
         checked = None
         for target in targets:
             state = check_profile(value, self.root, target)
+            # uv installs packages; its absence does not remove an installed runtime.
+            if (
+                state.get("supported_platform")
+                and state.get("python_matches")
+                and state.get("package_versions_match")
+                and all(found for name, found in state["external_tools"].items() if name != "uv")
+            ):
+                state["ready"] = True
+                state["message"] = "Installed package metadata and runtime tools are available."
             if (
                 target == self.target(ident)
                 and not (target / ".openjensen-installed.json").is_file()
@@ -159,13 +195,17 @@ class ModuleInstallations:
         uv = shutil.which("uv")
         tools = checked["external_tools"]
         missing = [name for name, found in tools.items() if not found]
+        runtime_missing = [name for name in missing if name != "uv"]
         installable = platform.system() in value.platforms and os.name == "posix" and bool(uv)
         message = checked["message"]
         if platform.system() not in value.platforms or os.name != "posix":
             message = "Automatic installation requires " + " or ".join(value.platforms) + "."
         elif missing:
             installable = False
-            message = "Install on the server first: " + ", ".join(missing) + "."
+            if not checked["ready"]:
+                message = "Install on the server first: " + ", ".join(missing) + "."
+        if checked["ready"] and runtime_missing:
+            checked["ready"] = False
         if explicit and not checked["ready"]:
             installable = False
             message = "The server's configured dataset reader needs administrator attention."
@@ -179,11 +219,12 @@ class ModuleInstallations:
             installable=installable,
             message=message,
             minimum_free_gib=10 + value.estimated_install_gib,
+            host=platform.node(),
         )
         self.cached[ident] = (time.monotonic(), result)
         return result
 
-    async def status(self):
+    async def status(self, robot_lab=None):
         async with self.lock:
             if self.problem:
                 return ModuleInstallationStatus(
@@ -195,9 +236,24 @@ class ModuleInstallations:
                 self.operation.finished_at = now()
                 self.operation.pid = None
                 self._save()
+            # This explicit status check refreshes runtime metadata; sidebar reads reuse it.
+            self.cached.clear()
             values = await asyncio.to_thread(
                 lambda: [self.inspect(ident) for ident in ("datasets", "robot", "decision")]
             )
+            companion = next((item for item in values if item.location == "companion"), None)
+            if companion is not None and robot_lab is not None:
+                try:
+                    async with asyncio.timeout(4):
+                        health = await robot_lab.status()
+                    companion.connected = health.get("connected") is True
+                except TimeoutError, RobotLabError:
+                    companion.connected = False
+                companion.message = (
+                    "Installed on the paired computer and connected."
+                    if companion.connected
+                    else "Installed on the paired computer. Reconnect it to use Robot Lab."
+                )
             return ModuleInstallationStatus(
                 host=platform.node(),
                 profiles=values,
@@ -217,9 +273,16 @@ class ModuleInstallations:
             value = profile(payload.profile)
             self.cached.pop(value.id, None)
             state = await asyncio.to_thread(self.inspect, value.id)
+            if state.location == "companion":
+                raise ValueError(
+                    "Robot Lab is installed on the paired computer. Open or reconnect it there."
+                )
             if not state.ready and not state.installable:
                 raise ValueError(state.message)
-            if shutil.disk_usage(self.data_dir).free < state.minimum_free_gib * GIB:
+            if (
+                not state.ready
+                and shutil.disk_usage(self.data_dir).free < state.minimum_free_gib * GIB
+            ):
                 raise ValueError(
                     f"Free at least {state.minimum_free_gib} GiB on this server first."
                 )

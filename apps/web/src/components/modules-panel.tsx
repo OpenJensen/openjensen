@@ -44,6 +44,7 @@ export function ModulesPanel() {
   const refresh = () => {
     void client.invalidateQueries({ queryKey: ['module-installations'] });
     void client.invalidateQueries({ queryKey: ['modules'] });
+    void client.invalidateQueries({ queryKey: ['local-setup'] });
   };
   const visibility = useMutation({
     mutationFn: ({ id, enabled }: { id: WorkspaceModule['id']; enabled: boolean }) => api.setModuleEnabled(id, enabled),
@@ -85,8 +86,18 @@ export function ModulesPanel() {
   });
   const operation = packages.data?.operation;
   useEffect(() => {
-    if (operation?.status === 'succeeded') void client.invalidateQueries({ queryKey: ['modules'] });
-  }, [operation?.status, operation?.id, client]);
+    if (operation && operation.status !== 'running') {
+      void client.invalidateQueries({ queryKey: ['modules'] });
+      void client.invalidateQueries({ queryKey: ['capabilities'] });
+    }
+  }, [operation, client]);
+  useEffect(() => {
+    if (training.data?.status === 'succeeded') {
+      void client.invalidateQueries({ queryKey: ['modules'] });
+      void client.invalidateQueries({ queryKey: ['capabilities'] });
+      void client.invalidateQueries({ queryKey: ['compute-settings'] });
+    }
+  }, [training.data?.status, training.data?.id, client]);
   const busy =
     operation?.status === 'running' ||
     training.data?.status === 'running' ||
@@ -124,7 +135,7 @@ export function ModulesPanel() {
               <Icon name={workspaceRoutes[item.id].icon} size={18} />
               <h3>{item.name}</h3>
               <StatusBadge tone={item.installed ? 'success' : 'neutral'}>
-                {item.installed ? 'Added' : 'Available'}
+                {item.installed ? 'Added' : item.available ? 'Available' : 'Not installed'}
               </StatusBadge>
             </div>
             <p>{purpose[item.id]}</p>
@@ -145,7 +156,7 @@ export function ModulesPanel() {
                     </button>
                   )}
                 </>
-              ) : (
+              ) : item.available ? (
                 <button
                   className="primary-button"
                   disabled={visibility.isPending || item.managed}
@@ -154,6 +165,19 @@ export function ModulesPanel() {
                 >
                   Add module
                 </button>
+              ) : item.id === 'augmentation' ? (
+                <button className="secondary-button" onClick={() => setSettingsTab('compute')}>
+                  Connect provider
+                </button>
+              ) : (
+                <a
+                  className="module-text-button"
+                  href={publicPath(item.setup_url || '/guide/')}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Set up {item.name}
+                </a>
               )}
               {item.managed && <span className="module-muted">Managed by server</span>}
             </div>
@@ -209,7 +233,12 @@ export function ModulesPanel() {
           <li key={item.id}>
             <div>
               <h3>{item.name}</h3>
-              <p>{runtimeNotes[item.id]}</p>
+              <p>
+                {item.location === 'companion'
+                  ? `Installed on ${item.host || 'the paired computer'}.`
+                  : runtimeNotes[item.id]}
+              </p>
+              {item.location === 'companion' && <p>{item.connected ? 'Companion connected.' : item.message}</p>}
               {!item.ready && (
                 <details>
                   <summary>Requirements</summary>
@@ -220,7 +249,9 @@ export function ModulesPanel() {
               )}
             </div>
             {item.ready ? (
-              <StatusBadge tone="success">Installed</StatusBadge>
+              <StatusBadge tone={item.location === 'companion' && item.connected === false ? 'warning' : 'success'}>
+                {item.location === 'companion' && item.connected === false ? 'Installed · Offline' : 'Installed'}
+              </StatusBadge>
             ) : (
               <button
                 className="secondary-button"

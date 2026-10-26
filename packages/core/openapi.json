@@ -4900,6 +4900,28 @@
       },
       "RuntimePackage": {
         "properties": {
+          "connected": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connected"
+          },
+          "host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host"
+          },
           "id": {
             "enum": [
               "robot",
@@ -4912,6 +4934,15 @@
           "installable": {
             "title": "Installable",
             "type": "boolean"
+          },
+          "location": {
+            "default": "server",
+            "enum": [
+              "server",
+              "companion"
+            ],
+            "title": "Location",
+            "type": "string"
           },
           "message": {
             "title": "Message",
@@ -5976,9 +6007,19 @@
       "WorkspaceModule": {
         "additionalProperties": false,
         "properties": {
+          "available": {
+            "default": false,
+            "title": "Available",
+            "type": "boolean"
+          },
           "configured": {
             "default": false,
             "title": "Configured",
+            "type": "boolean"
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
             "type": "boolean"
           },
           "id": {

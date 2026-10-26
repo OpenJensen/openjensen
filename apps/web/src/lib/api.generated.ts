@@ -3833,6 +3833,10 @@ export interface components {
         };
         /** RuntimePackage */
         RuntimePackage: {
+            /** Connected */
+            connected?: boolean | null;
+            /** Host */
+            host?: string | null;
             /**
              * Id
              * @enum {string}
@@ -3840,6 +3844,12 @@ export interface components {
             id: "robot" | "datasets" | "decision";
             /** Installable */
             installable: boolean;
+            /**
+             * Location
+             * @default server
+             * @enum {string}
+             */
+            location: "server" | "companion";
             /** Message */
             message: string;
             /** Minimum Free Gib */
@@ -4247,10 +4257,20 @@ export interface components {
         /** WorkspaceModule */
         WorkspaceModule: {
             /**
+             * Available
+             * @default false
+             */
+            available: boolean;
+            /**
              * Configured
              * @default false
              */
             configured: boolean;
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
             /**
              * Id
              * @enum {string}

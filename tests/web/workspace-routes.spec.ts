@@ -31,6 +31,21 @@ async function fixture(page: Page) {
       writes.push(path);
       return route.fulfill({ status: 405, json: { detail: 'Navigation must not submit work' } });
     }
+    if (path === '/api/v1/modules')
+      return route.fulfill({
+        json: destinations
+          .filter(([id]) => ['robot-lab', 'teaching', 'augmentation', 'decision-lab', 'cloud-runs'].includes(id))
+          .map(([id, name]) => ({
+            id,
+            name,
+            installed: true,
+            available: true,
+            enabled: true,
+            configured: true,
+            managed: false,
+            setup: 'Synthetic navigation fixture.',
+          })),
+      });
     if (path === '/api/v1/projects')
       return route.fulfill({
         json: [
@@ -101,12 +116,13 @@ test('the sidebar lists installed modules and Settings shows how to add the rest
   await expect(modules).toHaveCount(5);
   await expect(modules.filter({ hasText: 'Robot Lab' })).toContainText('Added');
   const teaching = modules.filter({ hasText: 'Teaching' });
-  await expect(teaching).toContainText('Available');
+  await expect(teaching).toContainText('Not installed');
   await teaching.getByText('Setup required', { exact: true }).click();
   await expect(teaching).toContainText('Set JENSEN_TEACHING_URL.');
-  // An uninstalled module stays reachable by URL and is listed while open.
+  // Direct URLs explain setup without exposing an uninstalled module in navigation.
   await page.goto('/teaching/');
-  await expect(nav.getByRole('link', { name: 'Teaching', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(nav.getByRole('link', { name: 'Teaching', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Manage modules', exact: true })).toBeVisible();
   expect(writes).toEqual([]);
   expect(errors).toEqual([]);
 });

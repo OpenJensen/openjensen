@@ -302,7 +302,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def modules(request: Request) -> list[WorkspaceModule]:
         """Report which optional modules this host has set up; nothing is contacted."""
         return await asyncio.to_thread(
-            workspace_modules, settings, request.app.state.robot_lab.config_path
+            lambda: workspace_modules(
+                settings,
+                request.app.state.robot_lab.config_path,
+                {
+                    ident: request.app.state.module_installations.inspect(ident).ready
+                    for ident in ("robot", "decision")
+                },
+            )
         )
 
     @app.get("/api/v1/capabilities", response_model=list[Capability])

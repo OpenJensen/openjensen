@@ -10,7 +10,12 @@ from vla_platform.module_installations import (
     InstallRequest,
     ModuleInstallationStatus,
 )
-from vla_platform.modules import ModuleId, ModulePreference, set_module_enabled
+from vla_platform.modules import (
+    ModuleId,
+    ModulePreference,
+    set_module_enabled,
+    workspace_modules,
+)
 from vla_platform.storage import jobs
 
 router = APIRouter(prefix="/api/v1", tags=["Workspace modules"])
@@ -19,6 +24,21 @@ router = APIRouter(prefix="/api/v1", tags=["Workspace modules"])
 @router.put("/modules/{ident}")
 async def enable(ident: ModuleId, payload: ModulePreference, request: Request):
     try:
+        if payload.enabled:
+            settings = request.app.state.execution.settings
+            modules = await asyncio.to_thread(
+                lambda: workspace_modules(
+                    settings,
+                    request.app.state.robot_lab.config_path,
+                    {
+                        key: request.app.state.module_installations.inspect(key).ready
+                        for key in ("robot", "decision")
+                    },
+                )
+            )
+            module = next(item for item in modules if item.id == ident)
+            if not module.available:
+                raise ValueError(module.setup)
         await asyncio.to_thread(
             set_module_enabled,
             request.app.state.execution.settings.data_dir,
@@ -35,7 +55,7 @@ async def enable(ident: ModuleId, payload: ModulePreference, request: Request):
 
 @router.get("/module-installations", response_model=ModuleInstallationStatus)
 async def status(request: Request):
-    return await request.app.state.module_installations.status()
+    return await request.app.state.module_installations.status(request.app.state.robot_lab)
 
 
 @router.post("/module-installations", response_model=InstallOperation, status_code=202)

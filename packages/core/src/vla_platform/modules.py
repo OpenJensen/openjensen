@@ -1,7 +1,7 @@
 """Optional workspace modules and whether this host has set them up.
 
-Checks read saved configuration only. They never contact a companion, worker or
-provider, so the workspace navigation can read them on every load.
+Checks read saved configuration and cached local runtime metadata only. They never
+contact a companion, worker or provider, so navigation remains available offline.
 """
 
 import json
@@ -10,12 +10,14 @@ import tempfile
 from pathlib import Path
 from typing import Literal
 
+from fastapi import HTTPException
 from filelock import FileLock
 from pydantic import BaseModel, ConfigDict
 
 from vla_platform.cloud_connections import CloudConnections
 from vla_platform.contracts import NonEmptyString, Record
 from vla_platform.environment import getenv
+from vla_platform.robot_lab_bridge import RobotLabBridge, RobotLabError
 from vla_platform.settings import Settings
 
 ModuleId = Literal["robot-lab", "teaching", "augmentation", "decision-lab", "cloud-runs"]
@@ -25,6 +27,8 @@ class WorkspaceModule(Record):
     id: ModuleId
     name: NonEmptyString
     installed: bool
+    available: bool = False
+    enabled: bool = False
     setup: NonEmptyString
     configured: bool = False
     managed: bool = False
@@ -70,35 +74,84 @@ def set_module_enabled(data_dir: Path, ident: ModuleId, enabled: bool):
             Path(temporary).unlink(missing_ok=True)
 
 
-def _any_env(*names: str) -> bool:
-    return any(getenv(name) for name in names)
-
-
 def _cloud_connected(data_dir: Path) -> bool:
-    return any(item.config for item in CloudConnections(data_dir).list().providers)
+    try:
+        return any(item.config for item in CloudConnections(data_dir).list().providers)
+    except OSError, ValueError:
+        return False
 
 
-def workspace_modules(settings: Settings, robot_lab_config: Path) -> list[WorkspaceModule]:
-    installed: dict[ModuleId, bool] = {
-        "robot-lab": os.path.lexists(robot_lab_config),
-        "teaching": _any_env("JENSEN_TEACHING_URL")
-        or settings.teaching_session_config is not None
-        or settings.recording_config is not None,
-        "augmentation": _cloud_connected(settings.data_dir) or _any_env("GEMINI_API_KEY"),
-        "decision-lab": _any_env(
-            "JENSEN_DECISION_PYTHON", "JENSEN_DECISION_ROOT", "JENSEN_DECISION_MODEL_DIR"
-        ),
-        "cloud-runs": settings.cloud_runs_dir is not None
-        or (settings.data_dir / "cloud-runs").is_dir(),
+def _paired(config_path: Path) -> bool:
+    try:
+        RobotLabBridge.read_config(config_path)
+        return True
+    except RobotLabError:
+        return False
+
+
+def _decision_configured() -> bool:
+    from vla_platform.decision_api import configuration
+
+    try:
+        configuration()
+        return True
+    except HTTPException:
+        return False
+
+
+def _teaching_configured(settings: Settings) -> bool:
+    from vla_platform.teaching_api import configuration
+
+    try:
+        configuration()
+        return True
+    except HTTPException:
+        pass
+    return any(
+        path is not None and path.is_file()
+        for path in (settings.teaching_session_config, settings.recording_config)
+    )
+
+
+def _agent_configured(data_dir: Path) -> bool:
+    try:
+        from vla_platform.agent_control.settings import Profiles
+
+        return bool(Profiles(data_dir).read())
+    except ImportError, OSError, ValueError:
+        return False
+
+
+def workspace_modules(
+    settings: Settings, robot_lab_config: Path, runtime_ready: dict[str, bool] | None = None
+) -> list[WorkspaceModule]:
+    runtimes = runtime_ready or {}
+    paired = _paired(robot_lab_config)
+    cloud_runs = (settings.cloud_runs_dir is not None and settings.cloud_runs_dir.is_dir()) or (
+        settings.data_dir / "cloud-runs"
+    ).is_dir()
+    configured: dict[ModuleId, bool] = {
+        "robot-lab": paired,
+        "teaching": paired
+        or _teaching_configured(settings)
+        or _agent_configured(settings.data_dir),
+        "augmentation": _cloud_connected(settings.data_dir) or bool(getenv("GEMINI_API_KEY")),
+        "decision-lab": _decision_configured(),
+        "cloud-runs": cloud_runs,
     }
-    configured = installed.copy()
-    saved = preferences(settings.data_dir)
-    installed.update(saved)
-    # JENSEN_MODULES lists the modules to show and overrides detection; "all" shows every one.
+    available = configured.copy()
+    available["robot-lab"] |= runtimes.get("robot", False)
+    available["decision-lab"] |= runtimes.get("decision", False)
+    # Snapshot viewing is bundled; adding it creates its local storage folder.
+    available["cloud-runs"] = True
+    enabled = {key: configured[key] or available[key] for key in configured}
+    enabled["cloud-runs"] = cloud_runs
+    enabled.update(preferences(settings.data_dir))
+    # An operator may choose visibility, but cannot fabricate missing prerequisites.
     override = getenv("JENSEN_MODULES")
     if override is not None:
         chosen = {item.strip() for item in override.split(",")}
-        installed = {key: "all" in chosen or key in chosen for key in installed}
+        enabled = {key: "all" in chosen or key in chosen for key in enabled}
     setup: dict[ModuleId, tuple[str, str]] = {
         "robot-lab": (
             "Robot Lab",
@@ -123,7 +176,9 @@ def workspace_modules(settings: Settings, robot_lab_config: Path) -> list[Worksp
         WorkspaceModule(
             id=key,
             name=name,
-            installed=installed[key],
+            installed=available[key] and enabled[key],
+            available=available[key],
+            enabled=enabled[key],
             setup=hint,
             configured=configured[key],
             managed=override is not None,

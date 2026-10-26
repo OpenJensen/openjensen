@@ -93,8 +93,7 @@ function Workbench({ children }: { children: ReactNode }) {
               aria-busy={modules.isPending}
             >
               {navigationGroups.map((group) => {
-                // Uninstalled modules stay reachable by URL; only an open one is listed.
-                const items = group.items.filter((id) => !isModule(id) || moduleInstalled(id) || activeStage === id);
+                const items = group.items.filter((id) => !isModule(id) || moduleInstalled(id));
                 return (
                   items.length > 0 && (
                     <div
@@ -199,7 +198,37 @@ function Workbench({ children }: { children: ReactNode }) {
             )}
           </section>
         )}
-        {state.isSectionCurrent(activeStage) ? children : <p role="status">Opening workspace section…</p>}
+        {isModule(activeStage) && !moduleInstalled(activeStage) ? (
+          <section className="panel" aria-label="Module setup">
+            {modules.isPending ? (
+              <p role="status">Checking module availability…</p>
+            ) : modules.isError ? (
+              <>
+                <ErrorNotice error={modules.error} />
+                <button className="secondary-button" onClick={() => void modules.refetch()}>
+                  Retry modules
+                </button>
+              </>
+            ) : (
+              <>
+                <p>This module is not available in the sidebar. Open Modules to install, configure or show it.</p>
+                <button
+                  className="secondary-button"
+                  onClick={() => {
+                    setSettingsTab('modules');
+                    navigateStage('settings');
+                  }}
+                >
+                  Manage modules
+                </button>
+              </>
+            )}
+          </section>
+        ) : state.isSectionCurrent(activeStage) ? (
+          children
+        ) : (
+          <p role="status">Opening workspace section…</p>
+        )}
       </WorkspaceShell>
     </WorkspaceContext.Provider>
   );

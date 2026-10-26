@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { api, isActive, isDatasetJob, type PolicyArtifact, type Project } from '@/lib/api';
 import { quantizeModeFor, type ModelAction } from '@/lib/model-library';
@@ -72,33 +72,8 @@ export function useWorkbenchState() {
   const projects = useQuery({ queryKey: ['projects'], queryFn: api.projects, retry: false });
   const capabilities = useQuery({ queryKey: ['capabilities'], queryFn: api.capabilities, retry: false });
   const modules = useQuery({ queryKey: ['modules'], queryFn: api.modules, retry: false, staleTime: 60_000 });
-  // Until the list arrives, the browser's last list keeps the sidebar from shifting.
-  const [rememberedModules, setRememberedModules] = useState<string[]>([]);
-  useLayoutEffect(() => {
-    try {
-      const saved: unknown = JSON.parse(readPublicPreference(localStorage, 'modules') ?? '[]');
-      if (Array.isArray(saved)) setRememberedModules(saved.filter((item) => typeof item === 'string'));
-    } catch {
-      /* Storage may be unavailable. */
-    }
-  }, []);
-  useEffect(() => {
-    if (!modules.data) return;
-    try {
-      writePublicPreference(
-        localStorage,
-        'modules',
-        JSON.stringify(modules.data.filter((item) => item.installed).map((item) => item.id)),
-      );
-    } catch {
-      /* Storage may be unavailable. */
-    }
-  }, [modules.data]);
-  // An unreadable module list shows every module rather than hiding working pages.
-  const moduleInstalled = (id: ModuleId) =>
-    modules.data
-      ? modules.data.some((item) => item.id === id && item.installed)
-      : modules.isError || rememberedModules.includes(id);
+  // Navigation follows the server's current availability, never a stale browser list.
+  const moduleInstalled = (id: ModuleId) => modules.data?.some((item) => item.id === id && item.installed) ?? false;
   useEffect(() => {
     if (!health.isSuccess || health.isError) return;
     // A successful health poll can be the first request after API startup or
