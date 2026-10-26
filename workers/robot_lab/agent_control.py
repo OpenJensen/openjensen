@@ -42,6 +42,7 @@ LIMITS = {
     "gripper_completion_tolerance_percent": 2.0,
     "max_observation_age_ms": MAX_AGE_MS,
     "max_sensor_read_skew_ms": MAX_SKEW_MS,
+    "max_local_health_age_seconds": 0.5,
 }
 
 
@@ -180,6 +181,7 @@ class AgentExecutor:
         self.active_id = None
         self.segment = None
         self.last_applied = None
+        self.last_health = 0.0
         self.heartbeat_nonce = -1
         self.command_revision = 0
         # Never resume a motion after process restart. Keep its original identity.
@@ -237,8 +239,9 @@ class AgentExecutor:
             raise HardwareError("Agent calibration changed")
 
     def expired(self):
-        return self.owner is not None and self.clock() >= min(
-            self.lease_deadline, self.operator_deadline
+        return self.owner is not None and (
+            self.clock() >= min(self.lease_deadline, self.operator_deadline)
+            or self.clock() - self.last_health > LIMITS["max_local_health_age_seconds"]
         )
 
     def receipt(self, ident):
@@ -366,8 +369,8 @@ class AgentExecutor:
                         authority_epoch=self.epoch,
                     )
                     self.cache[command_id] = dict(record)
-                self._save(record)
-                return record
+            self._save(record)
+            return record
         except Exception as error:
             record.update(status="rejected", reason=str(error))
             self._save(record)
@@ -442,10 +445,14 @@ class AgentExecutor:
             self.command_revision = 0
             self.session_observation_bytes = 0
             self.lab.mode = "agent"
+            self.last_applied = dict(self.lab.action)
+            self.last_health = self.clock()
             self.observations.clear()
         return {"state": self.status()}
 
     def heartbeat(self, args):
+        if self.clock() - self.last_health > LIMITS["max_local_health_age_seconds"]:
+            raise HardwareError("Local encoder/controller health expired")
         if (
             set(args) != {"nonce", "operator_present"}
             or type(args["nonce"]) is not int
@@ -645,7 +652,19 @@ class AgentExecutor:
         self.validate_owner(owner, epoch)
         measured = self.measured(raw)
         if segment is None:
+            if self.last_applied is None or any(
+                abs(measured[j] - self.last_applied[j]) > (6.0 if j == "gripper" else 3.0)
+                for j in JOINTS
+            ):
+                raise HardwareError("Agent hold tracking tolerance exceeded")
             controller.repeat()
+            with self.lab.lifecycle_lock:
+                if (
+                    generation == self.lab.generation
+                    and self.owner == owner
+                    and self.epoch == epoch
+                ):
+                    self.last_health = self.clock()
             return
         targets, arrived = segment.step(measured, self.clock())
         # Stop may revoke this tick while a USB write is in progress. It must
@@ -663,6 +682,7 @@ class AgentExecutor:
                 or self.segment is not segment
             ):
                 return None
+            self.last_health = self.clock()
             self.lab.commanded_raw = dict(sent)
             self.lab.action = {j: normalized(j, sent[j], self.lab.calibration) for j in JOINTS}
             self.last_applied = dict(self.lab.action)

@@ -243,6 +243,20 @@ class AgentTests(unittest.TestCase):
         self.assertFalse(self.lab.torque)
         self.assertIsNone(self.lab.agent.owner)
 
+    def test_held_pose_is_measured_and_health_cannot_be_renewed_by_network_alone(self):
+        self.arm()
+        self.lab._tick()
+        self.lab.agent.last_health = self.lab.agent.clock() - 0.6
+        self.assertTrue(self.lab.agent.expired())
+        with self.assertRaisesRegex(HardwareError, "health expired"):
+            self.command("heartbeat", {"nonce": 1, "operator_present": True})
+        self.lab._tick()
+        self.assertFalse(self.lab.agent.expired())
+        self.command("heartbeat", {"nonce": 2, "operator_present": True})
+        self.buses[-1].raw["shoulder_pan"] += 200
+        with self.assertRaisesRegex(HardwareError, "hold tracking"):
+            self.lab._tick()
+
     def test_heartbeat_is_owner_epoch_nonce_bound_and_duplicate_never_renews(self):
         self.arm()
         args = {"nonce": 1, "operator_present": True}
