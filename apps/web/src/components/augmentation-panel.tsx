@@ -18,6 +18,8 @@ import { isAugmentationSource, augmentationVideoCameras as videoCameras } from '
 import { useDurableSubmission } from '@/lib/durable-submission';
 import { augmentationAcknowledgement, validatedProjectHistory } from '@/lib/dataset-submission';
 import { DatasetSubmissionRecovery } from '@/components/dataset-submission-recovery';
+import { AugmentationGallery } from '@/components/augmentation-gallery';
+import { AugmentationDatasetApply } from '@/components/augmentation-dataset-apply';
 import './augmentation-panel.css';
 
 type Preset = 'lighting' | 'texture' | 'custom';
@@ -96,21 +98,15 @@ function RunStatus({ job }: { job: AugmentationJob }) {
 function AugmentationRun({
   job,
   projectId,
-  onReuse,
-  reuseDisabled,
   sourceRunLabel,
   onViewSource,
 }: {
   job: AugmentationJob;
   projectId: string;
-  onReuse: (job: AugmentationJob, clipIndex: number, variant: ClipSource['variant']) => void;
-  reuseDisabled: boolean;
   sourceRunLabel?: string;
   onViewSource: (id: string) => void;
 }) {
   const client = useQueryClient();
-  const [clipIndex, setClipIndex] = useState(0);
-  const [mediaErrors, setMediaErrors] = useState<Record<string, boolean>>({});
   const cancel = useMutation({
     mutationFn: () => api.cancel(job.id),
     onSuccess: (updated) => {
@@ -121,15 +117,17 @@ function AugmentationRun({
     },
   });
   const result = job.status === 'succeeded' ? job.result : null;
-  const clip = result?.clips.find((item) => item.index === clipIndex) ?? result?.clips[0];
+  const clip = result?.clips[0];
   return (
     <div className="augmentation-run">
       <div className="augmentation-run-heading">
         <div>
           <h3>{presetDetails[job.request.preset as Preset]?.label ?? 'Dataset augmentation'}</h3>
           <p>
-            {dateLabel(job.created_at)} · {job.request.episode_indices.length} clip
-            {job.request.episode_indices.length === 1 ? '' : 's'}
+            {dateLabel(job.created_at)} ·{' '}
+            {job.request.dataset_scope
+              ? 'Full dataset · ' + job.request.dataset_scope.camera_keys.length + ' cameras'
+              : job.request.episode_indices.length + ' preview clips'}
           </p>
         </div>
         <RunStatus job={job} />
@@ -194,85 +192,6 @@ function AugmentationRun({
                 <li key={index}>{warning}</li>
               ))}
             </ul>
-          )}
-          {clip && (
-            <>
-              <div className="augmentation-preview-heading">
-                <div>
-                  <h4>Compare the result</h4>
-                  <p>
-                    {cameraLabel(clip.camera_key)} camera · {clip.source_start_seconds}s–{clip.source_end_seconds}s
-                  </p>
-                </div>
-                {result.clips.length > 1 && (
-                  <div className="augmentation-clip-picker" role="group" aria-label="Preview episode">
-                    {result.clips.map((item) => (
-                      <button
-                        type="button"
-                        key={item.index}
-                        aria-label={`Preview episode ${item.episode_index}`}
-                        aria-pressed={clip.index === item.index}
-                        onClick={() => setClipIndex(item.index)}
-                      >
-                        Episode {item.episode_index}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="augmentation-comparison">
-                {[true, false].map((original) => {
-                  const label = original ? (job.request.source_clip ? 'Input' : 'Original') : 'Augmented';
-                  const url = augmentationClipUrl(job.id, clip.index, original);
-                  return (
-                    <figure key={`${clip.index}-${label}`}>
-                      <figcaption>
-                        <span>{label}</span>
-                        <small>Episode {clip.episode_index}</small>
-                      </figcaption>
-                      <video
-                        controls
-                        playsInline
-                        preload="metadata"
-                        aria-label={`${label} episode ${clip.episode_index}`}
-                        src={url}
-                        onError={() => setMediaErrors((previous) => ({ ...previous, [url]: true }))}
-                      />
-                      {mediaErrors[url] && (
-                        <p className="augmentation-hint">Preview could not load. Download the clip to review it.</p>
-                      )}
-                      <a className="text-link" href={url} download>
-                        Download {label.toLowerCase()} clip <Icon name="arrow" size={13} />
-                      </a>
-                    </figure>
-                  );
-                })}
-              </div>
-              <div className="augmentation-iterate" aria-label="Create another augmentation">
-                <div>
-                  <h4>Continue with this clip</h4>
-                  <p>Make another variation from its input, or apply a new edit to this result.</p>
-                </div>
-                <div className="augmentation-iterate-actions">
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    disabled={reuseDisabled}
-                    onClick={() => onReuse(job, clip.index, 'original')}
-                  >
-                    {job.request.source_clip ? 'New variation from input' : 'New variation from original'}
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    disabled={reuseDisabled}
-                    onClick={() => onReuse(job, clip.index, 'augmented')}
-                  >
-                    Refine this result
-                  </button>
-                </div>
-              </div>
-            </>
           )}
           <div className="augmentation-export">
             <a className="secondary-button" href={augmentationDownloadUrl(job.id)} download>
@@ -355,6 +274,8 @@ export function AugmentationPanel({
   const [prompt, setPrompt] = useState('');
   const [selectedRunId, setSelectedRunId] = useState('');
   const [reuse, setReuse] = useState<ReuseSelection | null>(null);
+  const [applyJob, setApplyJob] = useState<AugmentationJob | null>(null);
+  const applyRef = useRef<HTMLDivElement>(null);
   const sourceSelection = reuse?.job.project_id === projectId ? reuse : null;
   const selectedSourceClip = sourceSelection?.job.result?.clips.find(
     (item) => item.index === sourceSelection.clipIndex,
@@ -919,10 +840,44 @@ export function AugmentationPanel({
           </div>
         </section>
       </form>
+      <AugmentationGallery
+        runs={runs}
+        projectId={projectId}
+        selectedRun={selectedRun}
+        onReuse={reuseClip}
+        disabled={!projectId || create.isPending || submission.busy || !!submission.attempt}
+        onApply={(job) => {
+          setApplyJob(job);
+          requestAnimationFrame(() => applyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+        }}
+      />
+      <div ref={applyRef}>
+        {applyJob?.project_id === projectId && (
+          <AugmentationDatasetApply
+            key={applyJob.id}
+            job={applyJob}
+            dataset={datasets.find((item) => item.id === applyJob.request.source_job_id)}
+            busy={
+              create.isPending ||
+              submission.busy ||
+              !!submission.attempt ||
+              !submission.available ||
+              !submission.hydrated
+            }
+            onClose={() => setApplyJob(null)}
+            onSubmit={async (body) => {
+              const generation = selection.current.generation;
+              const accepted = await submission.submit(body, validate);
+              accept(accepted, generation);
+              if (accepted) setApplyJob(null);
+            }}
+          />
+        )}
+      </div>
       <section className="augmentation-history" aria-labelledby="augmentation-history-title">
         <div className="augmentation-history-heading">
           <div>
-            <h2 id="augmentation-history-title">History</h2>
+            <h2 id="augmentation-history-title">Run history</h2>
           </div>
           {!!runs.length && (
             <span>
@@ -972,8 +927,6 @@ export function AugmentationPanel({
                 key={selectedRun.id}
                 job={selectedRun}
                 projectId={projectId}
-                onReuse={reuseClip}
-                reuseDisabled={!projectId || create.isPending || submission.busy || !!submission.attempt}
                 sourceRunLabel={
                   selectedRun.request.source_clip ? runLabel(selectedRun.request.source_clip.job_id) : undefined
                 }

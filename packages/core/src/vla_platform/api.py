@@ -18,7 +18,11 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from vla_platform import __version__
 from vla_platform.application_updates import ApplicationUpdates
-from vla_platform.augmentation.contracts import AugmentationOptions, AugmentationRequest
+from vla_platform.augmentation.contracts import (
+    AugmentationOptions,
+    AugmentationPlan,
+    AugmentationRequest,
+)
 from vla_platform.capabilities import registry
 from vla_platform.cloud_api import router as cloud_connections_router
 from vla_platform.cloud_connections import CloudConnections
@@ -428,6 +432,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def augmentation_options(execution: ExecutionDep):
         return execution.augmentation.options()
 
+    @app.post("/api/v1/projects/{project_id}/augmentations/plan", response_model=AugmentationPlan)
+    async def plan_augmentation(
+        project_id: str,
+        payload: AugmentationRequest,
+        projects: ProjectsDep,
+        execution: ExecutionDep,
+    ):
+        if await projects.get(project_id) is None:
+            raise HTTPException(404, "Project not found")
+        try:
+            async with asyncio.timeout(300):
+                plan, _ = await execution.augmentation.dataset_plan(project_id, payload)
+            return plan
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        except (TimeoutError, httpx.HTTPError) as exc:
+            raise HTTPException(
+                503, "Dataset metadata could not be checked; try planning again"
+            ) from exc
+
     @app.post(
         "/api/v1/projects/{project_id}/augmentations",
         response_model=Job,
@@ -444,6 +468,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> Job:
         if await projects.get(project_id) is None:
             raise HTTPException(404, "Project not found")
+        if payload.dataset_scope and not payload.dataset_scope.plan_sha256:
+            raise HTTPException(422, "Review a dataset plan before starting generation")
         try:
             job = await execution.submit(project_id, payload, idempotency_key=idempotency_key)
             if idempotency_key is not None:

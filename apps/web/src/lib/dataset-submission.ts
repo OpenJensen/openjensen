@@ -80,6 +80,7 @@ export function augmentationAcknowledgement(value: unknown, project: string, ori
   if (!record(original)) throw new UncertainPolicyJob();
   const request = job.request as Record<string, unknown>;
   if (!sameJson(request.source_clip ?? null, original.source_clip ?? null)) throw new UncertainPolicyJob();
+  if (!sameJson(request.dataset_scope ?? null, original.dataset_scope ?? null)) throw new UncertainPolicyJob();
   const defaults: Partial<AugmentationRequest> = {
     operation: 'dataset.augment',
     preset: 'lighting',

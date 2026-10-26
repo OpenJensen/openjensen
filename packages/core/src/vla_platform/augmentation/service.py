@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import json
+import math
 import os
 import shutil
 import zipfile
@@ -11,6 +12,7 @@ import httpx
 from vla_platform.augmentation.contracts import (
     AugmentationClip,
     AugmentationOptions,
+    AugmentationPlan,
     AugmentationRequest,
     AugmentationResult,
 )
@@ -84,9 +86,149 @@ class Augmentation:
         feature = profile.features.get(request.camera_key)
         if not isinstance(feature, dict) or feature.get("dtype") != "video":
             raise ValueError("Choose a video camera from the inspected dataset")
+        if request.dataset_scope:
+            for key in request.dataset_scope.camera_keys:
+                if profile.features.get(key, {}).get("dtype") != "video":
+                    raise ValueError("Choose video cameras from the inspected dataset")
+            await self.recipe(project_id, request)
         if request.source_clip:
             await self.saved_clip(project_id, request)
         return source
+
+    async def recipe(self, project_id, request):
+        """Resolve the reviewed edit chain, including refinements, from saved records."""
+        current = await self.execution.get(request.dataset_scope.recipe_job_id)
+        selected, prompts, visited, include_output = current, [], set(), True
+        while current is not None:
+            if (
+                current.id in visited
+                or len(visited) >= 16
+                or current.project_id != project_id
+                or current.status != "succeeded"
+                or not isinstance(current.request, AugmentationRequest)
+                or not isinstance(current.result, AugmentationResult)
+                or current.request.source_job_id != request.source_job_id
+                or current.request.dataset_scope
+            ):
+                raise ValueError("Choose a completed preview recipe from this dataset and project")
+            visited.add(current.id)
+            if include_output:
+                prompts.insert(0, current.result.prompt)
+            parent = current.request.source_clip
+            if not parent:
+                break
+            include_output = parent.variant == "augmented"
+            current = await self.execution.get(parent.job_id)
+            if current is None:
+                raise ValueError("A saved recipe input is missing")
+        if selected is None or not prompts:
+            raise ValueError("Choose a completed preview recipe")
+        if request.prompt != selected.request.prompt or request.preset != selected.request.preset:
+            raise ValueError("The dataset recipe must match the reviewed preview")
+        return prompts
+
+    async def dataset_plan(self, project_id, request, explorer=None):
+        source = await self.validate(project_id, request)
+        if not request.dataset_scope:
+            raise ValueError("Choose a full-dataset recipe and cameras")
+        profile = source_profile(source)
+        if not 0 < profile.total_episodes <= 1000:
+            raise ValueError("Full-dataset augmentation supports 1–1,000 episodes per run")
+        prompts = await self.recipe(project_id, request)
+        own_explorer = explorer is None
+        explorer = explorer or DatasetExplorer(data_dir=self.execution.settings.data_dir)
+        segments = []
+        try:
+            # Metadata only: no provider construction or camera-media downloads.
+            for episode in range(profile.total_episodes):
+                preview = await explorer.preview(source, episode)
+                for key in request.dataset_scope.camera_keys:
+                    camera = next((c for c in preview.cameras if c.key == key), None)
+                    if (
+                        camera is None
+                        or camera.end_seconds - camera.start_seconds + 0.001
+                        < preview.duration_seconds
+                    ):
+                        raise ValueError(f"Episode {episode} does not have full coverage for {key}")
+                    seconds = preview.duration_seconds
+                    if not math.isfinite(seconds) or seconds < 1:
+                        raise ValueError(f"Episode {episode} must contain at least one second")
+                    count = math.ceil(seconds / 10)
+                    for part in range(count):
+                        start = camera.start_seconds + seconds * part / count
+                        end = camera.start_seconds + seconds * (part + 1) / count
+                        segments.append((episode, key, start, end, camera.url))
+                    if len(segments) * len(prompts) > 1000:
+                        raise ValueError(
+                            "This plan exceeds 1,000 generation requests; "
+                            "choose fewer cameras or a smaller dataset"
+                        )
+        finally:
+            if own_explorer:
+                await explorer.close()
+        options = self.options()
+        material = dict(
+            source=source.id,
+            revision=profile.revision,
+            metadata=profile.metadata_sha256,
+            segments=segments,
+            prompts=prompts,
+            model=options.model,
+            auth_mode=options.auth_mode,
+            cloud_project=options.google_cloud_project,
+        )
+        digest = hashlib.sha256(json.dumps(material, sort_keys=True).encode()).hexdigest()
+        plan = AugmentationPlan(
+            total_episodes=profile.total_episodes,
+            camera_keys=request.dataset_scope.camera_keys,
+            total_source_seconds=sum(end - start for _, _, start, end, _ in segments),
+            total_clips=len(segments),
+            provider_requests=len(segments) * len(prompts),
+            recipe_prompts=prompts,
+            plan_sha256=digest,
+            model=options.model,
+            warnings=[
+                "Full episodes are covered in segments of at most 10 seconds. "
+                "Appearance may vary at segment boundaries.",
+                "Cameras are generated independently; "
+                "visual consistency between viewpoints is not guaranteed.",
+                "Outputs are review clips, not an automatically registered training dataset. "
+                "Original data and actions stay unchanged.",
+            ],
+        )
+        return plan, segments
+
+    async def prepare_dataset(self, job, request, directory, explorer):
+        await self.stage(job.id, "Checking full episodes and selected cameras")
+        plan, segments = await self.dataset_plan(job.project_id, request, explorer)
+        if request.dataset_scope.plan_sha256 != plan.plan_sha256:
+            raise ValueError("The dataset plan changed. Review it again before generating")
+        required = len(segments) * (MAX_INPUT_BYTES + MAX_OUTPUT_BYTES) * 2 + 11 * 1024**3
+        if shutil.disk_usage(directory).free < required:
+            raise ValueError("Not enough disk space for this dataset plan and review bundle")
+        (directory / "plan.json").write_text(plan.model_dump_json(indent=2))
+        grouped = {}
+        for index, (episode, key, start, end, url) in enumerate(segments):
+            grouped.setdefault(url, []).append((index, episode, key, start, end))
+        prepared = []
+        for url, items in grouped.items():
+            await self.stage(
+                job.id, f"Preparing full-dataset clips ({len(prepared)}/{len(segments)})"
+            )
+            video = directory / "source.mp4"
+            try:
+                await download_video(explorer.client, url, video)
+                for index, episode, key, start, end in items:
+                    await self.stage(
+                        job.id,
+                        f"Preparing full-dataset clip {len(prepared) + 1} of {len(segments)}",
+                    )
+                    original = directory / f"original-{index}.mp4"
+                    await trim(video, original, start, end - start)
+                    prepared.append((index, episode, start, end, original, key))
+            finally:
+                video.unlink(missing_ok=True)
+        return sorted(prepared), plan
 
     async def saved_clip(self, project_id: str, request: AugmentationRequest):
         reference = request.source_clip
@@ -173,7 +315,7 @@ class Augmentation:
                         return
                     job.status = "running"
                     await self.execution.save(job)
-                async with asyncio.timeout(1800):
+                async with asyncio.timeout(86400 if job.request.dataset_scope else 1800):
                     request = job.request
                     source = await self.validate(job.project_id, request)
                     profile = source_profile(source)
@@ -186,7 +328,13 @@ class Augmentation:
                         if options.auth_mode == "google_cloud"
                         else GeminiOmniProvider(os.environ["GEMINI_API_KEY"])
                     )
-                    if request.source_clip:
+                    plan = None
+                    if request.dataset_scope:
+                        explorer = DatasetExplorer(data_dir=self.execution.settings.data_dir)
+                        prepared, plan = await self.prepare_dataset(
+                            job, request, directory, explorer
+                        )
+                    elif request.source_clip:
                         await self.stage(job.id, "Preparing saved clip")
                         prepared = await self.prepare_saved_clip(job.project_id, request, directory)
                     else:
@@ -230,20 +378,39 @@ class Augmentation:
                             finally:
                                 video.unlink(missing_ok=True)
                             prepared.append((index, episode, start, end, original))
-                    prompt = request.resolved_prompt()
+                    if not request.dataset_scope:
+                        prepared = [(*item, request.camera_key) for item in prepared]
+                    prompts = plan.recipe_prompts if plan else [request.resolved_prompt()]
+                    prompt = "\n\nThen apply:\n".join(prompts)
                     clips = []
-                    for index, episode, start, end, original in prepared:
+                    for index, episode, start, end, original, camera_key in prepared:
                         await self.stage(job.id, f"Augmenting clip {index + 1} of {len(prepared)}")
                         input_bytes = original.read_bytes()
-                        output_bytes, interaction_id = await provider.edit(input_bytes, prompt)
                         output = directory / f"augmented-{index}.mp4"
-                        output.write_bytes(output_bytes)
-                        await verify_output(output, request.duration_seconds)
+                        working = input_bytes
+                        for step, edit in enumerate(prompts):
+                            await self.stage(
+                                job.id,
+                                f"Augmenting clip {index + 1} of {len(prepared)} · "
+                                f"edit {step + 1} of {len(prompts)}",
+                            )
+                            output_bytes, interaction_id = await provider.edit(working, edit)
+                            output.write_bytes(output_bytes)
+                            await verify_output(output, end - start)
+                            if step < len(prompts) - 1 and len(output_bytes) >= MAX_INPUT_BYTES:
+                                intermediate = directory / "intermediate.mp4"
+                                try:
+                                    await trim(output, intermediate, 0, end - start)
+                                    working = intermediate.read_bytes()
+                                finally:
+                                    intermediate.unlink(missing_ok=True)
+                            else:
+                                working = output_bytes
                         clips.append(
                             AugmentationClip(
                                 index=index,
                                 episode_index=episode,
-                                camera_key=request.camera_key,
+                                camera_key=camera_key,
                                 source_start_seconds=start,
                                 source_end_seconds=end,
                                 input_sha256=hashlib.sha256(input_bytes).hexdigest(),
@@ -258,6 +425,8 @@ class Augmentation:
                         prompt=prompt,
                         source_job_id=source.id,
                         source_clip=request.source_clip,
+                        dataset_scope=request.dataset_scope,
+                        recipe_prompts=prompts if plan else None,
                         repo_id=profile.repo_id,
                         revision=profile.revision,
                         metadata_sha256=profile.metadata_sha256,
@@ -267,8 +436,12 @@ class Augmentation:
                             "Review each clip before pairing it with original actions.",
                             "Clip timing is checked, but frame alignment and action validity "
                             "are not verified. Outputs are not registered as training data.",
-                            "Only the selected camera and time intervals are augmented. "
                             "The source dataset and its action/state records are unchanged.",
+                            *(
+                                plan.warnings
+                                if plan
+                                else ["Only the selected camera and time intervals are augmented."]
+                            ),
                         ],
                     )
                     manifest = directory / "manifest.json"
@@ -293,6 +466,8 @@ class Augmentation:
                     # Video is already compressed; ZIP_STORED keeps packaging bounded and quick.
                     with zipfile.ZipFile(directory / "augmentation.zip", "w") as archive:
                         archive.write(manifest, manifest.name)
+                        if plan:
+                            archive.write(directory / "plan.json", "plan.json")
                         for clip in clips:
                             for prefix in ("original", "augmented"):
                                 path = directory / f"{prefix}-{clip.index}.mp4"

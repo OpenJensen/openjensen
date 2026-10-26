@@ -943,3 +943,122 @@
     width: 100%;
   }
 }
+
+.augmentation-gallery {
+  padding: 26px 0;
+  border-top: 1px solid var(--line);
+}
+.augmentation-gallery h2 {
+  font-size: 17px;
+}
+.augmentation-playback {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  margin: 18px 0;
+}
+.augmentation-variant-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.augmentation-variant {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.augmentation-variant[data-selected] {
+  border-color: var(--accent);
+}
+.augmentation-variant-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.augmentation-variant-title h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.augmentation-variant-title span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.augmentation-variant video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #111;
+  border-radius: 7px;
+}
+.augmentation-variant-description {
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  margin: 12px 0;
+}
+.augmentation-variant-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+.augmentation-variant-actions button {
+  width: 100%;
+  white-space: normal;
+}
+.augmentation-variant .augmentation-provenance {
+  padding-top: 12px;
+  margin-top: 12px;
+}
+.augmentation-dataset-apply {
+  padding: 24px;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  margin: 24px 0;
+  background: var(--surface);
+}
+.augmentation-camera-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  border: 0;
+  padding: 16px 0;
+}
+.augmentation-camera-checks label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+}
+.augmentation-panel .augmentation-camera-checks input {
+  width: 17px;
+  min-height: 17px;
+}
+.augmentation-plan-summary {
+  margin: 20px 0;
+  padding: 18px;
+  background: var(--surface-subtle, var(--canvas));
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.augmentation-plan-summary ul {
+  padding-left: 20px;
+}
+@media (max-width: 1000px) {
+  .augmentation-variant-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .augmentation-variant-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .augmentation-dataset-apply {
+    padding: 16px;
+  }
+}

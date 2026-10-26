@@ -41,6 +41,30 @@ class AugmentationSourceClip(AugmentationRecord):
     variant: Literal["original", "augmented"]
 
 
+class AugmentationDatasetScope(AugmentationRecord):
+    recipe_job_id: str = Field(min_length=1, max_length=200)
+    camera_keys: list[str] = Field(min_length=1, max_length=16)
+    plan_sha256: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+
+    @model_validator(mode="after")
+    def unique_cameras(self):
+        if len(set(self.camera_keys)) != len(self.camera_keys):
+            raise ValueError("Choose each camera only once")
+        return self
+
+
+class AugmentationPlan(AugmentationRecord):
+    total_episodes: int
+    camera_keys: list[str]
+    total_source_seconds: float
+    total_clips: int
+    provider_requests: int
+    recipe_prompts: list[str]
+    plan_sha256: str
+    model: str
+    warnings: list[str]
+
+
 class AugmentationRequest(AugmentationRecord):
     operation: Literal["dataset.augment"] = "dataset.augment"
     source_job_id: str = Field(min_length=1, max_length=200)
@@ -48,8 +72,11 @@ class AugmentationRequest(AugmentationRecord):
     source_clip: AugmentationSourceClip | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+    dataset_scope: AugmentationDatasetScope | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     episode_indices: list[Annotated[int, Field(ge=0, strict=True)]] = Field(
-        min_length=1, max_length=4
+        min_length=0, max_length=4
     )
     camera_key: str = Field(min_length=1, max_length=200)
     preset: Literal["lighting", "texture", "custom"] = "lighting"
@@ -59,6 +86,15 @@ class AugmentationRequest(AugmentationRecord):
 
     @model_validator(mode="after")
     def validate_selection(self):
+        if self.dataset_scope:
+            if self.source_clip or self.episode_indices or self.start_seconds != 0:
+                raise ValueError(
+                    "A full-dataset run covers full episodes from their original videos"
+                )
+            if self.camera_key != self.dataset_scope.camera_keys[0]:
+                raise ValueError("The primary camera must match the selected cameras")
+        elif not self.episode_indices:
+            raise ValueError("Choose at least one preview episode")
         if len(set(self.episode_indices)) != len(self.episode_indices):
             raise ValueError("Select each episode only once")
         if self.source_clip is not None and len(self.episode_indices) != 1:
@@ -94,7 +130,9 @@ class AugmentationResult(AugmentationRecord):
     repo_id: str
     revision: str = Field(pattern=r"^[a-f0-9]{40}$")
     metadata_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
-    clips: list[AugmentationClip] = Field(min_length=1, max_length=4)
+    dataset_scope: AugmentationDatasetScope | None = None
+    recipe_prompts: list[str] | None = None
+    clips: list[AugmentationClip] = Field(min_length=1, max_length=1000)
     review_required: Literal[True] = True
     warnings: list[str]
 

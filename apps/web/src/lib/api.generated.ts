@@ -853,6 +853,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/augmentations/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Plan Augmentation */
+        post: operations["plan_augmentation_api_v1_projects__project_id__augmentations_plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/dataset-uploads": {
         parameters: {
             query?: never;
@@ -2031,6 +2048,15 @@ export interface components {
             /** Source Start Seconds */
             source_start_seconds: number;
         };
+        /** AugmentationDatasetScope */
+        AugmentationDatasetScope: {
+            /** Camera Keys */
+            camera_keys: string[];
+            /** Plan Sha256 */
+            plan_sha256?: string | null;
+            /** Recipe Job Id */
+            recipe_job_id: string;
+        };
         /** AugmentationOptions */
         AugmentationOptions: {
             /** Auth Message */
@@ -2070,6 +2096,27 @@ export interface components {
             /** Setup Message */
             setup_message?: string | null;
         };
+        /** AugmentationPlan */
+        AugmentationPlan: {
+            /** Camera Keys */
+            camera_keys: string[];
+            /** Model */
+            model: string;
+            /** Plan Sha256 */
+            plan_sha256: string;
+            /** Provider Requests */
+            provider_requests: number;
+            /** Recipe Prompts */
+            recipe_prompts: string[];
+            /** Total Clips */
+            total_clips: number;
+            /** Total Episodes */
+            total_episodes: number;
+            /** Total Source Seconds */
+            total_source_seconds: number;
+            /** Warnings */
+            warnings: string[];
+        };
         /** AugmentationPreset */
         AugmentationPreset: {
             /**
@@ -2086,6 +2133,7 @@ export interface components {
         AugmentationRequest: {
             /** Camera Key */
             camera_key: string;
+            dataset_scope?: components["schemas"]["AugmentationDatasetScope"] | null;
             /**
              * Duration Seconds
              * @default 5
@@ -2129,6 +2177,7 @@ export interface components {
             auth_mode: "google_cloud" | "gemini_api_key";
             /** Clips */
             clips: components["schemas"]["AugmentationClip"][];
+            dataset_scope?: components["schemas"]["AugmentationDatasetScope"] | null;
             /** Google Cloud Project */
             google_cloud_project?: string | null;
             /** Metadata Sha256 */
@@ -2146,6 +2195,8 @@ export interface components {
             operation: "dataset.augment";
             /** Prompt */
             prompt: string;
+            /** Recipe Prompts */
+            recipe_prompts?: string[] | null;
             /** Repo Id */
             repo_id: string;
             /**
@@ -5908,6 +5959,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    plan_augmentation_api_v1_projects__project_id__augmentations_plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AugmentationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AugmentationPlan"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };

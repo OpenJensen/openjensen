@@ -89,6 +89,7 @@ async function mockWorkspace(
   const lookups: string[] = [];
   const unexpected: string[] = [];
   const cancelled: string[] = [];
+  const plans: Record<string, any>[] = [];
   const jobs: Record<string, any>[] = config.empty
     ? []
     : [
@@ -143,6 +144,25 @@ async function mockWorkspace(
         status: bindings.has(key) ? 200 : 404,
         headers,
         json: bindings.get(key) ?? { detail: 'No accepted submission found for this project, operation and key' },
+      });
+      return;
+    }
+    if (request.method() === 'POST' && path === `/api/v1/projects/${projectId}/augmentations/plan`) {
+      const body = request.postDataJSON();
+      plans.push(body);
+      const count = body.dataset_scope.camera_keys.length;
+      await route.fulfill({
+        json: {
+          total_episodes: 12,
+          camera_keys: body.dataset_scope.camera_keys,
+          total_source_seconds: 60 * count,
+          total_clips: 12 * count,
+          provider_requests: 12 * count,
+          recipe_prompts: ['Preserve motion. Make the table metal.'],
+          plan_sha256: 'f'.repeat(64),
+          model: 'unpaid-fixture',
+          warnings: ['Full episodes are covered in segments of at most 10 seconds.'],
+        },
       });
       return;
     }
@@ -252,7 +272,17 @@ async function mockWorkspace(
   await page.getByRole('link', { name: 'Augmentation', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Augmentation', exact: true, level: 1 })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Generator', exact: true })).toContainText('Gemini Omni');
-  return { submitted, unexpected, jobs, cancelled, keys, lookups, releaseAck, optionsAttempts: () => optionsAttempts };
+  return {
+    submitted,
+    unexpected,
+    jobs,
+    cancelled,
+    plans,
+    keys,
+    lookups,
+    releaseAck,
+    optionsAttempts: () => optionsAttempts,
+  };
 }
 
 async function noOverflow(page: Page) {
@@ -318,7 +348,7 @@ test('submits selected clips and texture instructions, then compares and downloa
   // The only write is the requested augmentation; no training job is submitted.
   expect(unexpected).toEqual([]);
   await page.getByText('Prompt & source provenance', { exact: true }).click();
-  await expect(page.getByText('Preserve robot motion. Use soft side lighting.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Preserve robot motion. Use soft side lighting.', { exact: true }).last()).toBeVisible();
   await noOverflow(page);
   const screenshot = testInfo.outputPath('augmentation-review.png');
   await page.screenshot({ path: screenshot, fullPage: true });
@@ -723,10 +753,11 @@ test('another variation reuses the selected input clip and waits for an explicit
     episode_indices: [3],
     source_clip: { job_id: 'augmentation-1', clip_index: 1, variant: 'original' },
   });
-  await expect(page.getByLabel('Input episode 3', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Original episode 3', { exact: true })).toBeVisible();
   await expect(page.getByText('Another variation from', { exact: false }).last()).toBeVisible();
   await page.getByRole('button', { name: 'Run 1', exact: true }).click();
-  await expect(page.getByLabel('Original episode 1', { exact: true })).toBeVisible();
+  // Returning to an earlier run keeps that episode's experiment selected.
+  await expect(page.getByLabel('Original episode 3', { exact: true })).toBeVisible();
   expect(unexpected).toEqual([]);
 });
 
@@ -753,7 +784,7 @@ test('refinement starts from the augmented result and retains its source in hist
     prompt: 'Make only the tabletop brushed steel.',
     source_clip: { job_id: 'previous-2', clip_index: 0, variant: 'augmented' },
   });
-  await expect(page.getByLabel('Input episode 2', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Original episode 2', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run 2', exact: true })).toBeVisible();
   await noOverflow(page);
   await page.getByRole('button', { name: 'Choose a different source', exact: true }).click();
@@ -761,4 +792,77 @@ test('refinement starts from the augmented result and retains its source in hist
   await expect(page.getByLabel('Episode numbers', { exact: true })).toHaveValue('2');
   expect(submitted).toHaveLength(1);
   expect(unexpected).toEqual([]);
+});
+
+test('keeps the original and all variants together when generating or changing run history', async ({
+  page,
+}, testInfo) => {
+  const fixture = await mockWorkspace(page, { complete: true });
+  await page.getByLabel('Edit instructions (optional)').fill('Make the table oak.');
+  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
+  await page.getByRole('button', { name: 'New variation from original', exact: true }).click();
+  await page.getByLabel('Edit instructions (optional)').fill('Make only the table metal.');
+  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
+  const gallery = page.getByRole('region', { name: 'Episode experiments', exact: true });
+  await expect(gallery.locator('video')).toHaveCount(3);
+  await expect(gallery.getByLabel('Original episode 0', { exact: true })).toHaveAttribute(
+    'src',
+    /augmentation-1.*original=true/,
+  );
+  await expect(gallery.getByLabel('Run 1 episode 0', { exact: true })).toHaveAttribute(
+    'src',
+    /augmentation-1.*original=false/,
+  );
+  await expect(gallery.getByLabel('Augmented episode 0', { exact: true })).toHaveAttribute(
+    'src',
+    /augmentation-2.*original=false/,
+  );
+  await page.getByRole('button', { name: 'View run 1', exact: true }).click();
+  await expect(gallery.locator('video')).toHaveCount(3);
+  await page.reload();
+  await expect(page.getByRole('region', { name: 'Episode experiments' }).locator('video')).toHaveCount(3);
+  await expect(page.getByRole('button', { name: 'Play all', exact: true })).toBeVisible();
+  await noOverflow(page);
+  expect(fixture.submitted).toHaveLength(2);
+  expect(fixture.unexpected).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath('all-three-variants.png'), fullPage: true });
+});
+
+test('plans full episodes for chosen cameras and requires explicit generation after review', async ({ page }) => {
+  const fixture = await mockWorkspace(page, { complete: true });
+  await page.getByLabel('Edit instructions (optional)').fill('Make the table metal.');
+  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
+  await page.getByRole('button', { name: 'Apply to full dataset', exact: true }).click();
+  const form = page.getByRole('region', { name: 'Apply augmentation to dataset', exact: true });
+  await expect(form.getByRole('checkbox', { name: 'front', exact: true })).toBeChecked();
+  await expect(form.getByRole('checkbox', { name: 'side', exact: true })).not.toBeChecked();
+  await expect(form.getByRole('checkbox', { name: 'wrist', exact: true })).toHaveCount(0);
+  await form.getByRole('checkbox', { name: 'side', exact: true }).check();
+  await form.getByRole('button', { name: 'Review dataset plan', exact: true }).click();
+  await expect(form).toContainText('12 full episodes · 2 cameras');
+  await expect(form).toContainText('24 generation requests');
+  expect(fixture.submitted).toHaveLength(1);
+  expect(fixture.plans[0]).toMatchObject({
+    episode_indices: [],
+    dataset_scope: { camera_keys: [camera, 'observation.images.side'], recipe_job_id: 'augmentation-1' },
+  });
+  await form.getByRole('checkbox', { name: 'front', exact: true }).uncheck();
+  await expect(form.getByRole('button', { name: 'Generate full-dataset augmentation', exact: true })).toHaveCount(0);
+  await form.getByRole('button', { name: 'Review dataset plan', exact: true }).click();
+  await expect(form).toContainText('12 generation requests');
+  await noOverflow(page);
+  await form.getByRole('button', { name: 'Generate full-dataset augmentation', exact: true }).click();
+  await expect.poll(() => fixture.submitted.length).toBe(2);
+  expect(fixture.submitted[1]).toMatchObject({
+    source_job_id: 'inspected-video',
+    episode_indices: [],
+    camera_key: 'observation.images.side',
+    start_seconds: 0,
+    dataset_scope: {
+      recipe_job_id: 'augmentation-1',
+      camera_keys: ['observation.images.side'],
+      plan_sha256: 'f'.repeat(64),
+    },
+  });
+  expect(fixture.unexpected).toEqual([]);
 });
