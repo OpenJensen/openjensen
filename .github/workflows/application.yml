@@ -51,6 +51,9 @@ jobs:
           CI_PY_SHARDS: ${{ vars.CI_PY_SHARDS }}
           CI_DESKTOP_SHARDS: ${{ vars.CI_DESKTOP_SHARDS }}
           CI_MOBILE_SHARDS: ${{ vars.CI_MOBILE_SHARDS }}
+      # Runs on every change, including documentation-only ones that need no other job.
+      - name: Check documentation links
+        run: python3 .github/scripts/check_doc_links.py
   application:
     needs: scope
     if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.application != 'false') }}
