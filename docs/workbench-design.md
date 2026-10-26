@@ -58,7 +58,18 @@ Use the components in `apps/web/src/components/ui/` and the classes in
 
 Older classes such as `error-notice`, `warning-box`, `metadata-badge` and
 `text-link` render with the same styles until their components move to the shared
-markup. Do not add new feature-specific notice, badge or button styles.
+markup. Do not add new feature-specific notice, badge or button styles, and do not
+shrink shared buttons, labels or text in feature CSS. Every page uses the one
+content width set on `.main-content`; do not add page-level width caps.
+
+## Large pages
+
+When a page component grows past a few hundred lines, split it into a `useXxx()`
+hook that owns state, queries, effects and actions, and one view component per step
+or section that receives the hook's result and contains no hooks. Robot Lab is the
+reference: `robot-lab-state.tsx` holds the hook and `robot-lab-connect.tsx`,
+`robot-lab-motor-ids.tsx` and the other step files render it. Move markup unchanged
+when splitting, so browser tests keep passing.
 
 Robot illustrations must distinguish the model from live telemetry. Use the actual
 mechanism and joint axes; motion previews should be explicit and bounded, with a
