@@ -100,3 +100,13 @@ Stopping or uninstalling the companion never deletes recordings or calibrations.
 - **Assembled-arm setup.** Adapted from [Enigma's STS3215 research](https://www.enigma.inc/posts/sts3215-servo-hacking) and the MIT-licensed [servotools](https://github.com/Enigma-Incorporated/servotools/tree/1c65c57587f91085cd32fca3743f3e6f464cfe35). It relies on reboot timing, not a unique serial number, so some servo firmware, USB adapters or hosts may not support it. Ambiguous results leave setup incomplete; **Stop** keeps a recovery record of partial addressing.
 - **Testing.** Automated tests use simulated buses and cameras. Real motion, ID changes and calibration need a connected arm with an operator present.
 - **Protocol.** The companion API is described in [API.md](../workers/robot_lab/API.md).
+
+## Save and return to a rest position
+
+In Teleoperate, start full-arm hand guiding or joint control. Position the arm in your
+preferred closed or supported resting pose and choose **Save current position as rest**.
+The pose is kept on the robot computer for that follower and calibration. Recalibration
+requires saving it again. In powered full-arm control, choose **Return to rest** before
+releasing the motors. The arm moves gradually, pauses leader tracking, then holds the
+saved pose. Keep the page visible and the entire path clear. Use **Stop & release motors**
+once the arm is supported. Immediate Stop and connection-loss safety still release torque.

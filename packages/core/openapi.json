@@ -10856,6 +10856,44 @@
         ]
       }
     },
+    "/api/v1/robot-lab/control/rest/return": {
+      "post": {
+        "operationId": "robot_lab_post_control_rest_return",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Control Rest Return",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/control/rest/save": {
+      "post": {
+        "operationId": "robot_lab_post_control_rest_save",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Control Rest Save",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
     "/api/v1/robot-lab/control/start": {
       "post": {
         "operationId": "robot_lab_post_control_start",

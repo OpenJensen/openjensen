@@ -469,7 +469,7 @@ export function useRobotLab() {
     />
   );
   const jointStep = state?.capabilities?.large_joint_steps ? jogStep : Math.min(jogStep, 2);
-  const centering = !!session?.centering?.active;
+  const centering = !!session?.centering?.active || session?.rest_position?.phase === 'returning';
   const partialSelection = controlJoints.length !== robotJoints.length;
   const sessionJoints = session?.active_joints ?? robotJoints.map((j) => j.name);
   const partialControl = controlling && sessionJoints.length !== robotJoints.length;

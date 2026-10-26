@@ -48,6 +48,7 @@ export type RobotStatus = {
     joint_sliders?: boolean;
     calibration_persistence?: boolean;
     partial_control?: boolean;
+    rest_position?: boolean;
     move_to_middle?: boolean;
     middle_tolerance?: boolean;
     assembled_setup?: boolean;
@@ -70,6 +71,12 @@ export type RobotStatus = {
     slider_targets?: JointValues;
     joint_limits?: Partial<Record<RobotJoint, { min: number; max: number }>>;
     torque_enabled: boolean;
+    rest_position?: {
+      saved: boolean;
+      phase: 'idle' | 'returning' | 'holding' | 'error';
+      progress: number;
+      targets: JointValues;
+    };
     centering?: { active: boolean; progress: number; tolerance?: number };
     watchdog_seconds: number | null;
     error: string | null;
@@ -272,6 +279,8 @@ export const robotApi = {
     leader_port?: string;
     leader_id?: string;
   }) => request<RobotStatus>('/control/start', { ...input, confirm: 'ENABLE MOTION' }, { timeoutMs: 45_000 }),
+  saveRestPosition: () => request<RobotStatus>('/control/rest/save', { confirm: 'SAVE REST POSITION' }),
+  returnToRest: () => request<RobotStatus>('/control/rest/return', { confirm: 'RETURN TO REST' }),
   heartbeat: () => request<RobotStatus>('/control/heartbeat', {}, { timeoutMs: 2_000 }),
   jog: (joint: RobotJoint, delta: number) =>
     request<RobotStatus>('/control/jog', { joint, delta }, { timeoutMs: 4_000 }),

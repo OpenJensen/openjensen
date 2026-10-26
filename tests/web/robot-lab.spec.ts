@@ -24,6 +24,7 @@ function initialStatus(calibrated = false): any {
       scservo_sdk: { installed: true, version: '1.0.0' },
     },
     capabilities: {
+      rest_position: true,
       lerobot_position_control: true,
       large_joint_steps: true,
       arm_readiness: true,
@@ -298,6 +299,12 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin') 
             tolerance: body.middle_tolerance ?? 2,
           },
         };
+      } else if (action === '/control/rest/save') {
+        state.status.session.rest_position = { saved: true, phase: 'idle', progress: 0, targets: values(0) };
+      } else if (action === '/control/rest/return') {
+        state.status.session.mode = 'manual';
+        state.status.session.rest_position.phase = 'returning';
+        state.status.session.rest_position.progress = 0.4;
       } else if (action === '/control/heartbeat') {
         if (state.heartbeatFailures > 0) {
           state.heartbeatFailures--;
@@ -1549,4 +1556,25 @@ test('LeRobot control identifies direct goals and sends the full slider target',
   await slider.press('End');
   await expect.poll(() => writes(state, '/control/jog').length).toBeGreaterThan(0);
   expect(writes(state, '/control/jog').at(-1)?.body.target).toBeGreaterThan(99);
+});
+
+test('rest position is saved explicitly and returns while holding motors', async ({ page }) => {
+  const state = await fixture(page, true);
+  await startManual(page);
+  const rest = page.getByRole('region', { name: 'Rest position', exact: true });
+  await expect(rest.getByRole('button', { name: 'Return to rest', exact: true })).toBeDisabled();
+  await rest.getByRole('button', { name: 'Save current position as rest' }).click();
+  expect(writes(state, '/control/rest/save')[0].body).toEqual({ confirm: 'SAVE REST POSITION' });
+  await rest.getByRole('button', { name: 'Return to rest', exact: true }).click();
+  expect(writes(state, '/control/rest/return')[0].body).toEqual({ confirm: 'RETURN TO REST' });
+  expect(writes(state, '/stop')).toHaveLength(0);
+  await expect(page.getByText('Returning to rest · 40%', { exact: true })).toBeVisible();
+  await expect(rest.getByRole('button', { name: 'Return to rest', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Stop & release motors', exact: true })).toBeEnabled();
+  state.status.session.rest_position.phase = 'holding';
+  await expect(page.getByText('Rest position reached. Motors are holding.', { exact: true })).toBeVisible();
+  expect(state.status.session.torque_enabled).toBe(true);
+  await page.getByRole('button', { name: 'Stop & release motors', exact: true }).click();
+  await expect.poll(() => writes(state, '/stop').length).toBe(1);
+  expect(state.status.session.torque_enabled).toBe(false);
 });
