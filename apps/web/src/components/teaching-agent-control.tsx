@@ -44,6 +44,7 @@ function AgentControls({ projectId }: { projectId: string }) {
   const [reviewOutcome, setReviewOutcome] = useState<'success' | 'failure' | 'unknown'>('unknown');
   const [reviewNote, setReviewNote] = useState('');
   const [reviewConfirmed, setReviewConfirmed] = useState('');
+  const [reviewImageLoaded, setReviewImageLoaded] = useState('');
   const [maxCalls, setMaxCalls] = useState(12);
   const [maxSeconds, setMaxSeconds] = useState(300);
   const [maxOutput, setMaxOutput] = useState(2048);
@@ -102,6 +103,7 @@ function AgentControls({ projectId }: { projectId: string }) {
       setSceneApproval('');
       setReviewConfirmed('');
       setAdmissionImageLoaded('');
+      setReviewImageLoaded('');
     };
     const hidden = () => {
       if (document.visibilityState !== 'visible') resetReview();
@@ -118,6 +120,10 @@ function AgentControls({ projectId }: { projectId: string }) {
   const provider = providers.data?.find((item) => item.id === providerId);
   const cloud = provider?.provider === 'openai_responses';
   const session = selected.data?.project_id === projectId && selected.data.id === selectedId ? selected.data : null;
+  const reservedTokens =
+    session && 'reserved_tokens' in session && typeof session.reserved_tokens === 'number'
+      ? session.reserved_tokens
+      : 0;
   const physical = useAiPhysicalConnection(target === 'robot_lab', (result) => {
     if (selectedRef.current === result.id) cacheSession(result);
   });
@@ -146,9 +152,13 @@ function AgentControls({ projectId }: { projectId: string }) {
   const sceneKey =
     session && proposal ? `${session.id}:${session.authority_epoch}:${proposal.id}:${physical.cameraIndex}` : '';
   const admissionKey = admission ? `${admission.id}:${admission.sha256}` : '';
-  const reviewKey = session?.observation
-    ? `${session.id}:${session.authority_epoch}:${session.observation.id}:${reviewOutcome}`
-    : '';
+  const reviewObservation = session?.execution_observation ?? session?.observation;
+  const reviewImageKey = reviewObservation ? `${reviewObservation.id}:${reviewObservation.sha256}` : '';
+  const reviewImageReady = !reviewObservation?.image_sha256 || reviewImageLoaded === reviewImageKey;
+  const reviewKey =
+    session && reviewObservation
+      ? `${session.id}:${session.authority_epoch}:${reviewObservation.id}:${reviewOutcome}`
+      : '';
   const admissionFresh =
     !!admission &&
     Date.parse(admission.expires_at) > now &&
@@ -362,7 +372,10 @@ function AgentControls({ projectId }: { projectId: string }) {
                   void physical.stop('The selected target changed. Stop was requested.');
                 const next = event.target.value as 'replay' | 'teaching' | 'robot_lab';
                 setTarget(next);
-                if (next === 'robot_lab') setMode('supervised');
+                if (next === 'robot_lab') {
+                  setMode('supervised');
+                  setPlanningMode('task');
+                }
                 setSceneApproval('');
                 setConsent(false);
               }}
@@ -380,7 +393,9 @@ function AgentControls({ projectId }: { projectId: string }) {
               onChange={(event) => setPlanningMode(event.target.value as 'task' | 'joint')}
             >
               <option value="task">Goal-directed task</option>
-              <option value="joint">Single correction</option>
+              <option value="joint" disabled={target === 'robot_lab'}>
+                Single correction
+              </option>
             </select>
           </label>
           <label className="workbench-field">
@@ -622,8 +637,9 @@ function AgentControls({ projectId }: { projectId: string }) {
             <div>
               <dt>Tokens reported</dt>
               <dd>
-                {session.input_tokens} input + {session.output_tokens} output ·{' '}
-                {Math.max(0, session.max_total_tokens - session.input_tokens - session.output_tokens)} remaining
+                {session.input_tokens} input + {session.output_tokens} output · {reservedTokens} reserved ·{' '}
+                {Math.max(0, session.max_total_tokens - session.input_tokens - session.output_tokens - reservedTokens)}{' '}
+                remaining
               </dd>
             </div>
             <div>
@@ -912,14 +928,27 @@ function AgentControls({ projectId }: { projectId: string }) {
               ? 'Hiding or closing this panel, losing focus or withdrawing operator presence stops this page’s physical control. The local lease also expires independently.'
               : 'Closing this panel leaves the saved session available. Use Stop agent session to revoke its authority.'}
           </p>
-          {session.observation && !pending(session) && !session.run_enabled && (
+          {reviewObservation && !pending(session) && !session.run_enabled && (
             <details>
               <summary>Review task outcome</summary>
               <div className="agent-control-body">
                 <p>
-                  Record your review of observation <code>{session.observation.id}</code>. A model assessment or a
+                  Record your review of observation <code>{reviewObservation.id}</code>. A model assessment or a
                   completed movement does not verify the task.
                 </p>
+                {reviewObservation.image_sha256 && (
+                  <img
+                    key={reviewImageKey}
+                    className="agent-control-camera"
+                    src={agentApi.imageUrl(session.id, reviewObservation.id)}
+                    alt="Task outcome review observation"
+                    onLoad={() => setReviewImageLoaded(reviewImageKey)}
+                    onError={() => {
+                      setReviewImageLoaded('');
+                      setReviewConfirmed('');
+                    }}
+                  />
+                )}
                 <label className="workbench-field">
                   Reviewed outcome
                   <select
@@ -948,7 +977,8 @@ function AgentControls({ projectId }: { projectId: string }) {
                 <label className="workbench-check">
                   <input
                     type="checkbox"
-                    checked={reviewConfirmed === reviewKey && !!reviewKey}
+                    checked={reviewConfirmed === reviewKey && !!reviewKey && reviewImageReady}
+                    disabled={!reviewImageReady}
                     onChange={(event) => setReviewConfirmed(event.target.checked ? reviewKey : '')}
                   />
                   I reviewed this retained observation and am reporting the task outcome myself.
@@ -956,11 +986,13 @@ function AgentControls({ projectId }: { projectId: string }) {
                 <button
                   type="button"
                   className="secondary-button"
-                  disabled={busy || reviewConfirmed !== reviewKey || !reviewKey || selected.isError}
+                  disabled={
+                    busy || reviewConfirmed !== reviewKey || !reviewKey || !reviewImageReady || selected.isError
+                  }
                   onClick={() => {
                     const exact = {
                       authority_epoch: session.authority_epoch,
-                      observation_id: session.observation!.id,
+                      observation_id: reviewObservation.id,
                       outcome: reviewOutcome,
                       note: reviewNote,
                     };

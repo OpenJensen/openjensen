@@ -305,6 +305,12 @@ async function fixture(
       return route.fulfill({ json: saved });
     }
     if (path === '/agent-sessions/agent-fixture/review') {
+      const reviewed = saved.execution_observation ?? saved.observation;
+      if (request.postDataJSON().observation_id !== reviewed.id)
+        return route.fulfill({
+          status: 409,
+          json: { detail: 'Review must identify the retained current observation' },
+        });
       saved.task_review = { ...request.postDataJSON(), source: 'operator', reviewed_at: new Date().toISOString() };
       saved.task_success_verified = request.postDataJSON().outcome === 'success';
       return route.fulfill({ json: saved });
@@ -485,7 +491,9 @@ test('selecting physical control without a governed companion never enables moti
   await page.goto('/ai-teleoperation/');
   await page.getByText('Agent Control', { exact: true }).click();
   await page.getByLabel('Task goal', { exact: true }).fill('Pick up the object');
+  await page.getByLabel('Planning style', { exact: true }).selectOption('joint');
   await page.getByLabel('Agent target', { exact: true }).selectOption('robot_lab');
+  await expect(page.getByLabel('Planning style', { exact: true })).toHaveValue('task');
   await expect(page.getByRole('region', { name: 'Physical SO101 preflight' })).toContainText('has not advertised');
   await expect(page.getByRole('button', { name: 'Connect arm and hold current pose', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Arm AI session', exact: true })).toBeDisabled();
@@ -563,6 +571,14 @@ test('physical arming, current-image admission and focus loss retain explicit op
       .filter((request) => request.path === '/agent-sessions/agent-fixture/heartbeat')
       .every((request) => request.body.authority_epoch === 42 && request.body.operator_present === true),
   ).toBe(true);
+  await page.getByText('Review task outcome', { exact: true }).click();
+  await expect(page.getByAltText('Task outcome review observation')).toBeVisible();
+  await page.getByLabel('Reviewed outcome', { exact: true }).selectOption('failure');
+  await page.getByLabel('I reviewed this retained observation and am reporting the task outcome myself.').check();
+  await page.getByRole('button', { name: 'Save operator review', exact: true }).click();
+  expect(String(requests.find((request) => request.path.endsWith('/review'))?.body.observation_id)).toMatch(
+    /^admission-/,
+  );
   await page.evaluate(() => window.dispatchEvent(new Event('blur')));
   await expect
     .poll(() => requests.filter((request) => request.path === '/agent-sessions/agent-fixture/stop').length)
