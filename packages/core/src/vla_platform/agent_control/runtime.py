@@ -96,10 +96,23 @@ async def run(profile, payload):
             )
         except ValueError, TypeError, UnicodeDecodeError:
             raise RuntimeError("Provider returned invalid data; no motion admitted") from None
+        if isinstance(result, dict) and result.get("status") == "error":
+            # Preserve independently bounded usage, never provider error text.
+            usage = result.get("usage")
+            safe = {"status": "error"}
+            if isinstance(usage, dict) and all(
+                type(usage.get(k)) is int and 0 <= usage[k] <= 1000000
+                for k in ("input_tokens", "output_tokens")
+            ):
+                safe["usage"] = {k: usage[k] for k in ("input_tokens", "output_tokens")}
+                return safe
+            raise RuntimeError(
+                "Provider request failed; no motion admitted. Billing may be unverified."
+            )
         if (
             process.returncode != 0
             or not isinstance(result, dict)
-            or result.get("status") not in {"proposed", "complete", "checked"}
+            or result.get("status") not in {"proposed", "complete", "checked", "assessed"}
         ):
             raise RuntimeError(
                 "Provider request failed; no motion admitted. Billing may be unverified."

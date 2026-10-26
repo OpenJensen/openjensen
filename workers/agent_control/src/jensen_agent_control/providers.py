@@ -12,6 +12,7 @@ from typing import Any
 
 import httpx
 
+from . import task_tools
 from .contracts import (
     MAX_REQUEST_BYTES,
     ProviderError,
@@ -72,7 +73,9 @@ def _input(request: dict) -> list[dict]:
                     "task": request["task"],
                     "observation": observation,
                     "joint_names": request["joint_names"],
-                    "units": "rad",
+                    "units": observation.get("joint_units", observation.get("units", "rad")),
+                    "action_space": request.get("action_space"),
+                    "completed_steps": request.get("completed_steps", 0),
                 }
             ),
         }
@@ -133,6 +136,34 @@ class MockProvider:
                     "network": False,
                 },
             }
+        if (
+            request.get("planning_mode") == "task"
+            and request.get("action_space", {}).get("kind") == "physical"
+        ):
+            return {
+                **common,
+                "status": "assessed",
+                "assessment": {
+                    "outcome": "needs_help",
+                    "summary": (
+                        "The deterministic provider cannot ground a physical manipulation "
+                        "task. Configure the vision-capable planner and review each "
+                        "bounded segment."
+                    ),
+                },
+            }
+        if request.get("planning_mode") == "task" and request.get("completed_steps", 0):
+            return {
+                **common,
+                "status": "assessed",
+                "assessment": {
+                    "outcome": "needs_help",
+                    "summary": (
+                        "The deterministic replay provider cannot verify an abstract task "
+                        "outcome. Review the receipt or select a vision-capable provider."
+                    ),
+                },
+            }
         if request["operation"] == "continue":
             return {
                 **common,
@@ -152,6 +183,19 @@ class MockProvider:
                     for m in re.finditer(pattern, request["task"], re.IGNORECASE)
                 )
             if len(matches) != 1:
+                if request.get("planning_mode") == "task":
+                    return {
+                        **common,
+                        "status": "assessed",
+                        "assessment": {
+                            "outcome": "needs_help",
+                            "summary": (
+                                "Abstract task planning requires the configured vision-capable "
+                                "provider and a grounded executor observation. This deterministic "
+                                "fixture does not pick up objects."
+                            ),
+                        },
+                    }
                 return {
                     **common,
                     "status": "complete",
@@ -184,13 +228,22 @@ class OpenAIResponsesProvider:
     async def plan(self, request: dict) -> dict:
         if request["operation"] == "check":
             return await self.check(request)
+        task_mode = request.get("planning_mode") == "task"
         input_items = _input(request)
         seen = []
         if request["operation"] == "continue":
             context = request["continuation"]
+            expected_fields = {"input", "pending_call_id", "seen_call_ids", "model", "joint_names"}
+            if task_mode:
+                expected_fields |= {"planning_mode", "action_space_sha256"}
             if (
-                set(context)
-                != {"input", "pending_call_id", "seen_call_ids", "model", "joint_names"}
+                set(context) != expected_fields
+                or task_mode
+                and (
+                    context.get("planning_mode") != "task"
+                    or context.get("action_space_sha256")
+                    != task_tools.space_hash(request["action_space"])
+                )
                 or context["model"] != request["model"]
                 or context["joint_names"] != request["joint_names"]
                 or not isinstance(context["input"], list)
@@ -208,13 +261,17 @@ class OpenAIResponsesProvider:
                     "output": _json(request["receipt"]),
                 }
             )
+            if task_mode:
+                input_items = task_tools.compact_input(input_items)
             # Never conceal a later observation behind a historical tool result.
             input_items.extend(_input(request))
         payload = {
             "model": request["model"],
-            "instructions": SYSTEM_PROMPT,
+            "instructions": task_tools.TASK_PROMPT if task_mode else SYSTEM_PROMPT,
             "input": input_items,
-            "tools": [tool_schema(request["joint_names"])],
+            "tools": task_tools.tools(request["joint_names"], request["action_space"])
+            if task_mode
+            else [tool_schema(request["joint_names"])],
             "parallel_tool_calls": False,
             "store": False,
             "include": ["reasoning.encrypted_content"],
@@ -266,7 +323,7 @@ class OpenAIResponsesProvider:
         call = calls[0]
         call_id = call.get("call_id")
         if (
-            call.get("name") != "propose_joint_correction"
+            call.get("name") not in {tool["name"] for tool in payload["tools"]}
             or not isinstance(call_id, str)
             or not call_id
             or len(call_id) > 256
@@ -277,7 +334,16 @@ class OpenAIResponsesProvider:
             )
         if not isinstance(call.get("arguments"), str):
             raise ProviderError("invalid_response", "Provider tool arguments must be encoded JSON.")
-        arguments = validate_arguments(parse_json(call["arguments"]), request["joint_names"])
+        parsed = parse_json(call["arguments"])
+        selected = (
+            task_tools.decision(call["name"], parsed, request)
+            if task_mode
+            else {
+                "status": "proposed",
+                "skill": "joint_correction",
+                "arguments": validate_arguments(parsed, request["joint_names"]),
+            }
+        )
         context = {
             "input": input_items + output,
             "pending_call_id": call_id,
@@ -285,14 +351,18 @@ class OpenAIResponsesProvider:
             "model": request["model"],
             "joint_names": request["joint_names"],
         }
+        if task_mode:
+            context.update(
+                planning_mode="task",
+                action_space_sha256=task_tools.space_hash(request["action_space"]),
+            )
         if len(_json(context).encode()) > MAX_REQUEST_BYTES - 65536:
             raise ProviderError(
                 "context_limit", "Provider continuation reached its bounded context limit."
             )
         return {
             **common,
-            "status": "proposed",
-            "arguments": arguments,
+            **selected,
             "call_id": call_id,
             "continuation": context,
             "summary": summary[:4000],
@@ -300,7 +370,7 @@ class OpenAIResponsesProvider:
 
     async def _post(self, payload: dict, timeout: float) -> dict:
         owned = self.client is None
-        client = self.client or httpx.AsyncClient(follow_redirects=False)
+        client = self.client or httpx.AsyncClient(follow_redirects=False, trust_env=False)
         try:
             response = await client.post(
                 "https://api.openai.com/v1/responses",
@@ -335,6 +405,7 @@ class OpenAIResponsesProvider:
         probe = {
             **request,
             "operation": "plan",
+            "planning_mode": "joint",
             "joint_names": ["capability_check_joint"],
             "task": "Propose capability_check_joint by 0.01 rad to check the tool protocol.",
             "observation": {

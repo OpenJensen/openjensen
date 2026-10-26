@@ -141,7 +141,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.robot_lab = RobotLabBridge(settings.data_dir)
             app.state.cloud_connections = CloudConnections(settings.data_dir)
             app.state.huggingface_connection = HuggingFaceConnection(settings.data_dir)
-            app.state.agent_control = AgentControl(storage, settings, execution)
+            app.state.agent_control = AgentControl(
+                storage, settings, execution, robot_bridge=app.state.robot_lab
+            )
             await app.state.agent_control.reconcile()
             yield
         finally:

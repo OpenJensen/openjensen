@@ -7,11 +7,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from vla_platform.agent_control.contracts import (
     Approval,
     Event,
+    Heartbeat,
     PlanRequest,
     ProviderInput,
     ProviderStatus,
     Session,
     SessionCreate,
+    TaskReview,
 )
 from vla_platform.agent_control.service import AgentControl, AgentError
 from vla_platform.agent_control.settings import ProfileError
@@ -98,12 +100,12 @@ async def approve(session_id: str, payload: Approval, agent: AgentDep):
 
 @router.post("/agent-sessions/{session_id}/cancel-inference", response_model=Session)
 async def cancel(session_id: str, agent: AgentDep):
-    return await agent.interrupt(session_id, "cancel_inference")
+    return await agent.pause_planning(session_id, "cancel_inference")
 
 
 @router.post("/agent-sessions/{session_id}/pause", response_model=Session)
 async def pause(session_id: str, agent: AgentDep):
-    return await agent.interrupt(session_id, "pause")
+    return await agent.pause_planning(session_id, "pause")
 
 
 @router.post("/agent-sessions/{session_id}/stop", response_model=Session)
@@ -129,3 +131,35 @@ def register_errors(app):
             },
             status_code=422,
         )
+
+
+@router.post("/agent-sessions/{session_id}/run", response_model=Session, status_code=202)
+async def run_task(session_id: str, agent: AgentDep):
+    return await agent.run_task(session_id)
+
+
+@router.post("/agent-sessions/{session_id}/heartbeat", response_model=Session)
+async def heartbeat(session_id: str, payload: Heartbeat, agent: AgentDep):
+    return await agent.heartbeat(session_id, payload)
+
+
+@router.post("/agent-sessions/{session_id}/execution-observation", response_model=Session)
+async def execution_observation(session_id: str, agent: AgentDep):
+    return await agent.execution_observe(session_id)
+
+
+@router.get("/agent-sessions/{session_id}/observations/{observation_id}/image")
+async def observation_image(session_id: str, observation_id: str, agent: AgentDep):
+    from fastapi import Response
+
+    data, mime = await agent.observation_image(session_id, observation_id)
+    return Response(
+        data,
+        media_type=mime,
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
+@router.post("/agent-sessions/{session_id}/review", response_model=Session)
+async def review_task(session_id: str, payload: TaskReview, agent: AgentDep):
+    return await agent.review_task(session_id, payload)

@@ -76,6 +76,9 @@ def validate_request(value: Any) -> dict:
         "continuation",
         "receipt",
         "max_total_tokens",
+        "planning_mode",
+        "action_space",
+        "completed_steps",
     }
     if set(value) - allowed:
         fail("Request contains an unsupported property.")
@@ -88,6 +91,8 @@ def validate_request(value: Any) -> dict:
         "max_total_tokens": 100000,
         "task": "",
         "observation": {},
+        "planning_mode": "joint",
+        "completed_steps": 0,
         **value,
     }
     if result.get("provider") not in {"mock", "openai_responses"}:
@@ -131,6 +136,16 @@ def validate_request(value: Any) -> dict:
         fail("Output reservation exceeds the remaining token budget.")
     if result["reasoning_effort"] not in {"low", "medium", "high", "xhigh", "max"}:
         fail("Unsupported reasoning effort.")
+    if (
+        result["planning_mode"] not in {"joint", "task"}
+        or type(result["completed_steps"]) is not int
+        or not 0 <= result["completed_steps"] <= 60
+    ):
+        fail("Invalid planning mode or completed-step count.")
+    if result["planning_mode"] == "task" and result["operation"] != "check":
+        from .task_tools import validate_space
+
+        result["action_space"] = validate_space(result.get("action_space"), result["joint_names"])
     if result["operation"] == "continue":
         if not isinstance(result.get("continuation"), dict) or not isinstance(
             result.get("receipt"), dict

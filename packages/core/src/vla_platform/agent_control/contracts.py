@@ -40,19 +40,41 @@ class ProviderStatus(Strict):
     message: str
 
 
+class PhysicalArming(Strict):
+    confirm: Literal["ARM AI CONTROL"]
+    expected_generation: int = Field(ge=0)
+    camera_index: int = Field(ge=0, le=31)
+    operator_present: Literal[True]
+    workspace_clear: Literal[True]
+
+    @model_validator(mode="before")
+    @classmethod
+    def explicit_confirmation(cls, value):
+        if (
+            not isinstance(value, dict)
+            or value.get("operator_present") is not True
+            or value.get("workspace_clear") is not True
+        ):
+            raise ValueError("Explicit operator and workspace confirmation required")
+        return value
+
+
 class SessionCreate(Strict):
     provider_id: str = Field(default="mock", pattern=IDENTITY)
     task: str = Field(min_length=1, max_length=2048)
-    target_kind: Literal["replay", "teaching"] = "replay"
+    target_kind: Literal["replay", "teaching", "robot_lab"] = "replay"
     teaching_job_id: str | None = Field(default=None, pattern=IDENTITY)
     replay_observation_id: str | None = Field(default=None, pattern=IDENTITY)
     mode: Literal["advisory", "shadow", "supervised", "bounded"] = "supervised"
-    clock_policy: Literal["replay", "stepped", "continuous"] = "replay"
-    max_calls: int = Field(default=4, ge=1, le=20)
+    clock_policy: Literal["replay", "stepped", "continuous", "physical"] = "replay"
+    max_calls: int = Field(default=4, ge=1, le=100)
     max_seconds: int = Field(default=120, ge=1, le=600)
     max_output_tokens: int = Field(default=1024, ge=128, le=4096)
-    max_total_tokens: int = Field(default=16000, ge=1024, le=100000)
+    max_total_tokens: int = Field(default=16000, ge=1024, le=1000000)
     cloud_consent: bool = False
+    planning_mode: Literal["joint", "task"] = "task"
+    max_steps: int = Field(default=12, ge=1, le=60)
+    physical: PhysicalArming | None = None
 
     @model_validator(mode="after")
     def target(self):
@@ -62,6 +84,21 @@ class SessionCreate(Strict):
             raise ValueError("Teaching needs a managed session and simulation clock")
         if self.target_kind == "replay" and (self.clock_policy != "replay" or self.teaching_job_id):
             raise ValueError("Replay requires replay clock")
+        if self.target_kind == "robot_lab" and (
+            self.physical is None
+            or self.clock_policy != "physical"
+            or self.teaching_job_id
+            or self.replay_observation_id
+            or self.mode != "supervised"
+            or self.planning_mode != "task"
+        ):
+            raise ValueError(
+                "Physical control requires explicit arming, physical clock and supervised execution"
+            )
+        if self.target_kind != "robot_lab" and (
+            self.physical is not None or self.clock_policy == "physical"
+        ):
+            raise ValueError("Physical authority belongs only to a physical target")
         if not self.task.strip():
             raise ValueError("Task is empty")
         return self
@@ -78,11 +115,14 @@ class Observation(Strict):
     captured_at: str
     expires_at: str
     clock_policy: str
-    environment_kind: Literal["replay", "simulation"]
+    environment_kind: Literal["replay", "simulation", "physical"]
     embodiment_manifest_id: str
     scene_id: str
     joints: dict[str, float]
-    units: Literal["radians"] = "radians"
+    units: Literal["radians", "mixed"] = "radians"
+    joint_units: dict[str, str] = Field(default_factory=dict)
+    calibration_sha256: str | None = None
+    task_evidence: dict | None = None
     image_sha256: str | None = None
     source: str
 
@@ -90,6 +130,28 @@ class Observation(Strict):
 class Arguments(Strict):
     joint: str = Field(min_length=1, max_length=128)
     delta_rad: float = Field(ge=-0.15, le=0.15)
+
+
+class SegmentArguments(Strict):
+    targets: dict[str, float] = Field(min_length=1, max_length=6)
+    duration_seconds: float = Field(ge=0.2, le=10)
+
+
+class Assessment(Strict):
+    outcome: Literal["achieved", "needs_help", "cannot_proceed"]
+    summary: str = Field(min_length=1, max_length=2048)
+
+
+class TaskReview(Strict):
+    authority_epoch: int = Field(ge=1)
+    observation_id: str = Field(pattern=IDENTITY)
+    outcome: Literal["success", "failure", "unknown"]
+    note: str = Field(default="", max_length=1024)
+
+
+class TaskReviewRecord(TaskReview):
+    source: Literal["operator"] = "operator"
+    reviewed_at: str
 
 
 class Proposal(Strict):
@@ -102,8 +164,9 @@ class Proposal(Strict):
     expected_revision: int
     provider_revision: str
     model: str
-    skill: Literal["joint_correction"] = "joint_correction"
-    arguments: Arguments
+    skill: Literal["joint_correction", "joint_segment"] = "joint_correction"
+    purpose: str = ""
+    arguments: Arguments | SegmentArguments
     status: Literal[
         "proposed", "rejected", "accepted", "started", "completed", "stopped", "unknown"
     ]
@@ -126,7 +189,7 @@ class Receipt(Strict):
     id: str
     proposal_id: str
     status: Literal["rejected", "completed", "stopped", "unknown", "replayed"]
-    arguments: Arguments
+    arguments: Arguments | SegmentArguments
     applied_targets: dict[str, float]
     pre_observation_id: str
     post_observation_id: str | None
@@ -134,6 +197,10 @@ class Receipt(Strict):
     reason: str
     task_success_verified: Literal[False] = False
     executor_evidence: ExecutionEvidence | None = None
+    original_model_observation_id: str | None = None
+    admission_observation_id: str | None = None
+    joint_units: dict[str, str] = Field(default_factory=dict)
+    execution_provenance: dict | None = None
 
 
 class Session(Strict):
@@ -142,7 +209,7 @@ class Session(Strict):
     provider_id: str
     provider_revision: str
     task: str
-    target_kind: Literal["replay", "teaching"]
+    target_kind: Literal["replay", "teaching", "robot_lab"]
     teaching_job_id: str | None
     mode: Literal["advisory", "shadow", "supervised", "bounded"]
     clock_policy: str
@@ -168,12 +235,22 @@ class Session(Strict):
     calls_used: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
+    reserved_tokens: int = 0
     max_calls: int
     max_seconds: int
     max_output_tokens: int
     max_total_tokens: int
     message: str = ""
-    task_success_verified: Literal[False] = False
+    task_success_verified: bool = False
+    planning_mode: Literal["joint", "task"] = "task"
+    max_steps: int = 12
+    step_count: int = 0
+    run_enabled: bool = False
+    control_armed: bool = False
+    supported_skills: list[str] = Field(default_factory=list)
+    model_assessment: Assessment | None = None
+    task_review: TaskReviewRecord | None = None
+    execution_observation: Observation | None = None
 
 
 class PlanRequest(Strict):
@@ -183,6 +260,21 @@ class PlanRequest(Strict):
 class Approval(Strict):
     proposal_id: str = Field(pattern=IDENTITY)
     authority_epoch: int = Field(ge=1)
+    execution_observation_id: str | None = Field(default=None, pattern=IDENTITY)
+    execution_observation_sha256: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+    scene_unchanged_confirmed: bool = False
+
+
+class Heartbeat(Strict):
+    authority_epoch: int = Field(ge=1)
+    operator_present: Literal[True]
+
+    @model_validator(mode="before")
+    @classmethod
+    def present(cls, value):
+        if not isinstance(value, dict) or value.get("operator_present") is not True:
+            raise ValueError("Operator presence must be explicit")
+        return value
 
 
 class Event(Strict):

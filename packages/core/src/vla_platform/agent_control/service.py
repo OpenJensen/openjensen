@@ -21,15 +21,17 @@ from . import runtime
 from .contracts import (
     Approval,
     Arguments,
+    Assessment,
     Event,
     ExecutionEvidence,
-    Observation,
     Proposal,
     Receipt,
+    SegmentArguments,
     Session,
     SessionCreate,
 )
 from .settings import Profiles
+from .task_control import TaskControl
 
 TERMINAL = {"stopped", "interrupted", "complete", "error"}
 
@@ -52,14 +54,19 @@ def digest(value):
     return hashlib.sha256(canonical(value)).hexdigest()
 
 
-class AgentControl:
-    def __init__(self, storage, settings, execution, planner=None):
+class AgentControl(TaskControl):
+    def __init__(self, storage, settings, execution, planner=None, *, robot_bridge=None):
         self.storage = storage
         self.settings = settings
         self.execution = execution
         self.profiles = Profiles(settings.data_dir)
         self.planner = planner or runtime.run
         self.tasks = {}
+        self.runners = {}
+        self.supervisors = {}
+        self.operator_heartbeats = {}
+        self.robot_bridge = robot_bridge
+        self.robot_target = None
         self.checks = set()
         self.locks = {}
         self.creation_lock = asyncio.Lock()
@@ -67,7 +74,11 @@ class AgentControl:
 
     @property
     def pending(self):
-        return bool(self.checks) or any(not t.done() for t in self.tasks.values())
+        return bool(self.checks) or any(
+            not t.done()
+            for group in (self.tasks, self.runners, self.supervisors)
+            for t in group.values()
+        )
 
     def lock(self, identity):
         return self.locks.setdefault(identity, asyncio.Lock())
@@ -114,8 +125,10 @@ class AgentControl:
         proposal=None,
         receipt=None,
         receipt_update=False,
+        admission_observation=None,
         new=False,
     ):
+        session.reserved_tokens = sum(private.get("token_reservations", {}).values())
         session.updated_at = now()
         async with self.storage.engine.begin() as c:
             fields = dict(
@@ -132,12 +145,13 @@ class AgentControl:
                     update(agent_sessions).where(agent_sessions.c.id == session.id).values(**fields)
                 )
             if observation is not None:
+                retained = admission_observation or session.observation
                 await c.execute(
                     insert(agent_observations).values(
-                        id=session.observation.id,
+                        id=retained.id,
                         session_id=session.id,
                         project_id=session.project_id,
-                        record={"public": session.observation.model_dump(), "raw": observation},
+                        record={"public": retained.model_dump(), "raw": observation},
                     )
                 )
             if proposal is not None:
@@ -233,6 +247,9 @@ class AgentControl:
         for identity in rows:
             s, p = await self.load(identity)
             s.authority_epoch += 1
+            s.control_armed = False
+            s.run_enabled = False
+            s.execution_observation = None
             s.status = "interrupted"
             s.message = (
                 "Application restarted; authority revoked. Start a new session "
@@ -358,12 +375,23 @@ class AgentControl:
                 max_seconds=payload.max_seconds,
                 max_output_tokens=payload.max_output_tokens,
                 max_total_tokens=payload.max_total_tokens,
+                planning_mode=payload.planning_mode,
+                max_steps=payload.max_steps,
+                supported_skills=["joint_segment"]
+                if payload.target_kind == "robot_lab"
+                else ["joint_correction", "joint_segment"]
+                if payload.planning_mode == "task"
+                else ["joint_correction"],
             )
             p = {
                 "requests": {},
                 "cloud_consent": payload.cloud_consent,
                 "raw_observation": None,
                 "executor_session_id": None,
+                "physical_arming": payload.physical.model_dump() if payload.physical else None,
+                "planning_snapshot_seconds": min(120, payload.max_seconds)
+                if payload.planning_mode == "task" and payload.clock_policy == "stepped"
+                else 30,
             }
             await self.save(s, p, "created", new=True)
             task = asyncio.create_task(self.initialize(s, p, payload))
@@ -392,6 +420,7 @@ class AgentControl:
                     ):
                         raise AgentError("Session interrupted before target acquisition")
                     p["acquire_command_id"] = uuid4().hex
+                    p["acquire_inflight"] = True
                     await self.save(
                         s, p, "acquisition_started", {"command_id": p["acquire_command_id"]}
                     )
@@ -404,6 +433,8 @@ class AgentControl:
                         "clock_policy": payload.clock_policy,
                         "expected_revision": state["revision"],
                         "episode_id": state["episode_id"],
+                        "max_session_seconds": s.max_seconds,
+                        "planning_snapshot_seconds": p["planning_snapshot_seconds"],
                     },
                     epoch=0,
                     command_id=p["acquire_command_id"],
@@ -417,8 +448,44 @@ class AgentControl:
                     ):
                         raise AgentError("Session interrupted during target acquisition")
                     s.authority_epoch = p["executor_epoch"]
+                    p["acquire_inflight"] = False
                     await self.save(s, p, "target_acquired")
                 raw = (await self.target_command(s, p, "observe", {}))["observation"]
+            elif payload.target_kind == "robot_lab":
+                async with self.lock(s.id):
+                    current, _ = await self.load(s.id)
+                    if (
+                        current.status != "observing"
+                        or current.authority_epoch != s.authority_epoch
+                    ):
+                        raise AgentError("Physical arming was interrupted before dispatch")
+                    p["acquire_command_id"] = uuid4().hex
+                    p["acquire_inflight"] = True
+                    await self.save(
+                        s,
+                        p,
+                        "physical_acquisition_started",
+                        {"command_id": p["acquire_command_id"]},
+                    )
+                acquired = await self.robot().acquire(
+                    s.id, payload.physical, command_id=p["acquire_command_id"]
+                )
+                p["executor_epoch"] = acquired["authority_epoch"]
+                raw = acquired["observation"]
+                p["executor_session_id"] = raw["target_session_id"]
+                p["observation_age_ms"] = getattr(self.robot(), "observation_age_ms", {}).get(
+                    (s.id, p["executor_epoch"]), raw.get("source_age_ms", 0)
+                )
+                async with self.lock(s.id):
+                    current, _ = await self.load(s.id)
+                    if (
+                        current.status != "observing"
+                        or current.authority_epoch != s.authority_epoch
+                    ):
+                        raise AgentError("Physical arming was interrupted during dispatch")
+                    s.authority_epoch = p["executor_epoch"]
+                    p["acquire_inflight"] = False
+                    await self.save(s, p, "physical_target_acquired")
             elif payload.replay_observation_id:
                 async with self.storage.engine.connect() as c:
                     row = (
@@ -440,6 +507,7 @@ class AgentControl:
                     raise AgentError("Session interrupted during observation capture")
                 self.bind_observation(s, p, raw)
                 s.status = "ready"
+                s.control_armed = s.target_kind != "replay"
                 s.message = (
                     "Observation retained. Replay records decisions without changing its source."
                     if s.target_kind == "replay"
@@ -449,6 +517,7 @@ class AgentControl:
                     )
                 )
                 await self.save(s, p, "observed", observation=raw)
+            self.begin_supervision(s)
             return s
         except BaseException as error:
             # Even cancellation after dispatch reconciles the existing acquire ID.
@@ -495,6 +564,9 @@ class AgentControl:
                 ):
                     if p.get(key) is not None:
                         latest[key] = p[key]
+                latest["acquire_inflight"] = False
+                if p.get("executor_epoch") and latest.get("released_epoch") != p["executor_epoch"]:
+                    latest["released"] = False
                 await self.save(current, latest, "acquisition_interrupted")
             await self.release_terminal(s.id)
             if isinstance(error, asyncio.CancelledError):
@@ -503,46 +575,7 @@ class AgentControl:
             raise AgentError(current.message, 503) from None
 
     def bind_observation(self, s, private, raw):
-        captured = now()
-        ttl = (
-            s.max_seconds if s.target_kind == "replay" else 30 if s.clock_policy == "stepped" else 2
-        )
-        age = private.get("observation_age_ms", raw.get("source_age_ms", 0))
-        if not isinstance(age, (int, float)) or isinstance(age, bool) or age < 0:
-            raise AgentError("Invalid executor observation age", 503)
-        expires = (datetime.now(UTC) + timedelta(seconds=max(0, ttl - age / 1000))).isoformat()
-        joints = raw.get("joints", {})
-        if isinstance(joints, list):
-            names, values = joints, raw.get("state_rad", [])
-            if len(names) != len(values) or len(set(names)) != len(names):
-                raise AgentError("Invalid observed joint dimensions", 503)
-            joints = dict(zip(names, values, strict=True))
-        if not joints or len(joints) > 64:
-            raise AgentError("Target has no admitted joint manifest", 503)
-        s.observation = Observation(
-            id=uuid4().hex,
-            sha256=digest(raw),
-            target_session_id=str(raw["target_session_id"]),
-            episode_id=raw.get("episode_id"),
-            authority_epoch=s.authority_epoch,
-            revision=raw.get("revision", 0),
-            step=raw.get("step", 0),
-            captured_at=captured,
-            expires_at=expires,
-            clock_policy=s.clock_policy,
-            environment_kind="replay" if s.target_kind == "replay" else "simulation",
-            embodiment_manifest_id=raw["embodiment_manifest_id"],
-            scene_id=raw.get("scene_id", raw.get("scene_sha256", "")),
-            joints=joints,
-            image_sha256=raw.get("image_sha256"),
-            source=raw.get(
-                "source",
-                "Immutable recorded observation"
-                if s.target_kind == "replay"
-                else "Simulator owner-thread capture",
-            ),
-        )
-        private["raw_observation"] = raw
+        return self.normalize_observation(s, private, raw)
 
     async def target_command(self, s, p, operation, arguments, *, epoch=None, command_id=None):
         identity = command_id or uuid4().hex
@@ -554,7 +587,7 @@ class AgentControl:
             "arguments": arguments,
         }
         relay = self.execution.teaching.agent_relay
-        async with asyncio.timeout(8):
+        async with asyncio.timeout(30 if operation == "segment" else 8):
             try:
                 value = await relay(s.project_id, s.teaching_job_id, "/agent/" + operation, payload)
             except Exception:
@@ -569,7 +602,8 @@ class AgentControl:
                     s.project_id, s.teaching_job_id, "/agent/executions/" + identity
                 )
         if value.get("status") != "acknowledged" or (
-            operation == "execute" and value.get("execution", {}).get("status") != "completed"
+            operation in {"execute", "segment"}
+            and value.get("execution", {}).get("status") != "completed"
         ):
             raise AgentError(
                 "Executor rejected the original context or ownership; request a fresh observation."
@@ -609,23 +643,27 @@ class AgentControl:
         estimated_input = (
             input_bound(p.get("continuation") or p["raw_observation"]) + len(s.task.encode()) + 2048
         )
-        if (
-            s.input_tokens + s.output_tokens + estimated_input + s.max_output_tokens
-            > s.max_total_tokens
-        ):
+        reservation = estimated_input + s.max_output_tokens
+        outstanding = sum(p.get("token_reservations", {}).values())
+        if s.input_tokens + s.output_tokens + outstanding + reservation > s.max_total_tokens:
             raise AgentError(
                 "Token reservation exceeds the remaining budget; no provider call started"
             )
+        return reservation
 
     async def observe(self, identity):
         async with self.lock(identity):
             s, p = await self.load(identity)
             if s.status in TERMINAL or self.active(identity):
                 raise AgentError("Stop active work or start a new session before observing")
-            if s.target_kind == "teaching":
-                raw = (await self.target_command(s, p, "observe", {}))["observation"]
-            else:
-                raw = p["raw_observation"]
+            epoch = s.authority_epoch
+        raw = await self.capture_target(s, p)
+        age = p.get("observation_age_ms", 0)
+        async with self.lock(identity):
+            s, p = await self.load(identity)
+            if s.authority_epoch != epoch or s.status in TERMINAL or self.active(identity):
+                raise AgentError("Observation context changed while capturing")
+            p["observation_age_ms"] = age
             discarded = None
             if s.pending_proposal:
                 proposal = s.pending_proposal
@@ -650,7 +688,6 @@ class AgentControl:
                         .where(agent_proposals.c.id == proposal.id)
                         .values(record=proposal.model_dump())
                     )
-            p.pop("continuation", None)
             s.pending_proposal = None
             self.bind_observation(s, p, raw)
             s.status = "ready"
@@ -671,7 +708,9 @@ class AgentControl:
             profile = self.profiles.get(s.provider_id)
             if profile["revision"] != s.provider_revision:
                 raise AgentError("Provider profile changed. Start a new session.")
-            self.budget(s, p)
+            reservation = self.budget(s, p)
+            if s.step_count >= s.max_steps:
+                raise AgentError("The session action-step budget is exhausted")
             if s.observation is None or datetime.now(UTC) > datetime.fromisoformat(
                 s.observation.expires_at
             ):
@@ -684,6 +723,7 @@ class AgentControl:
                     "request_id": request.request_id,
                 }
             )
+            p.setdefault("token_reservations", {})[request.request_id] = reservation
             s.calls_used += 1
             s.status, s.message = (
                 "planning",
@@ -723,8 +763,12 @@ class AgentControl:
                 "max_total_tokens": snapshot.max_total_tokens
                 - snapshot.input_tokens
                 - snapshot.output_tokens,
-                "timeout_seconds": min(30, remaining),
+                "timeout_seconds": min(90 if snapshot.planning_mode == "task" else 30, remaining),
+                "planning_mode": snapshot.planning_mode,
+                "completed_steps": snapshot.step_count,
             }
+            if snapshot.planning_mode == "task":
+                payload["action_space"] = self.action_space(snapshot, private)
             if private.get("continuation"):
                 payload.update(
                     continuation=private["continuation"], receipt=snapshot.receipts[-1].model_dump()
@@ -734,27 +778,62 @@ class AgentControl:
             elapsed = time.monotonic() - started
             async with self.lock(identity):
                 s, p = await self.load(identity)
+                usage = result.get("usage")
+                counts = {}
+                if usage is not None:
+                    if not isinstance(usage, dict):
+                        raise AgentError("Invalid provider usage", 503)
+                    for field in ("input_tokens", "output_tokens"):
+                        count = usage.get(field)
+                        if type(count) is not int or not 0 <= count <= 1000000:
+                            raise AgentError("Invalid provider usage", 503)
+                        counts[field] = count
+                    if request_id not in p.setdefault("accounted_requests", []):
+                        for field, count in counts.items():
+                            setattr(s, field, getattr(s, field) + count)
+                        p["accounted_requests"].append(request_id)
+                        p.setdefault("token_reservations", {}).pop(request_id, None)
+                        # Usage remains durable even when the result is malformed or stale.
+                        await self.save(
+                            s, p, "provider_usage", {"request_id": request_id, "usage": counts}
+                        )
+                try:
+                    profile_current = (
+                        self.profiles.get(s.provider_id)["revision"] == s.provider_revision
+                    )
+                except ValueError:
+                    profile_current = False
                 if (
                     s.status != "planning"
                     or s.authority_epoch != epoch
                     or s.observation.id != observation_id
-                    or self.profiles.get(s.provider_id)["revision"] != s.provider_revision
+                    or not profile_current
                 ):
-                    await self.save(s, p, "late_result_rejected", {"request_id": request_id})
+                    await self.save(
+                        s,
+                        p,
+                        "late_result_rejected",
+                        {"request_id": request_id, "usage": usage, "elapsed_seconds": elapsed},
+                    )
                     return
-                usage = result.get("usage", {})
-                for field in ("input_tokens", "output_tokens"):
-                    count = usage.get(field, 0)
-                    if type(count) is not int or count < 0:
-                        raise AgentError("Invalid provider usage", 503)
-                    setattr(s, field, getattr(s, field) + count)
+                if result.get("status") == "error":
+                    s.status = "paused" if s.target_kind == "robot_lab" else "error"
+                    s.run_enabled = False
+                    s.message = (
+                        "Provider failed. Known usage is retained; "
+                        "unknown billing remains reserved. "
+                        "No automatic retry was made."
+                    )
+                    await self.save(s, p, "provider_failed")
+                    return
                 p["continuation"] = result.get("continuation")
                 if (
                     datetime.now(UTC)
                     >= datetime.fromisoformat(s.created_at) + timedelta(seconds=s.max_seconds)
                     or s.input_tokens + s.output_tokens > s.max_total_tokens
                 ):
-                    s.status = "error"
+                    s.status = "paused" if s.target_kind == "robot_lab" else "error"
+                    s.run_enabled = False
                     s.message = (
                         "Provider result arrived outside the session budget. No proposal "
                         "was admitted."
@@ -766,8 +845,25 @@ class AgentControl:
                         {"request_id": request_id, "elapsed_seconds": elapsed, "usage": usage},
                     )
                     return
+                if result.get("status") == "assessed":
+                    p.pop("continuation", None)
+                    s.model_assessment = Assessment.model_validate(result.get("assessment"))
+                    s.run_enabled = False
+                    s.status = (
+                        "paused"
+                        if s.target_kind == "robot_lab" or s.model_assessment.outcome != "achieved"
+                        else "complete"
+                    )
+                    s.message = (
+                        s.model_assessment.summary
+                        + " Task verification is separate from this model assessment."
+                    )
+                    await self.save(s, p, "model_task_assessment", s.model_assessment.model_dump())
+                    return
                 if result.get("status") == "complete":
-                    s.status = "complete"
+                    p.pop("continuation", None)
+                    s.run_enabled = False
+                    s.status = "paused" if s.target_kind == "robot_lab" else "complete"
                     s.message = (
                         "Provider turn complete. Task outcome has not been independently verified."
                     )
@@ -778,8 +874,20 @@ class AgentControl:
                         {"model": result.get("model"), "elapsed_seconds": elapsed, "usage": usage},
                     )
                     return
-                args = Arguments.model_validate(result.get("arguments"))
-                if args.joint not in s.observation.joints:
+                skill = result.get("skill", "joint_correction")
+                if skill not in s.supported_skills:
+                    raise AgentError("Provider selected an unavailable skill", 503)
+                args = (
+                    SegmentArguments.model_validate(result.get("arguments"))
+                    if skill == "joint_segment"
+                    else Arguments.model_validate(result.get("arguments"))
+                )
+                if (
+                    skill == "joint_correction"
+                    and args.joint not in s.observation.joints
+                    or skill == "joint_segment"
+                    and not set(args.targets) <= set(s.observation.joints)
+                ):
                     raise AgentError("Provider selected a joint outside the embodiment", 503)
                 model = result.get("model")
                 if not isinstance(model, str) or not model or len(model) > 192:
@@ -795,9 +903,15 @@ class AgentControl:
                     provider_revision=s.provider_revision,
                     model=model,
                     arguments=args,
+                    skill=skill,
+                    purpose=str(result.get("purpose", result.get("summary", "")))[:512],
                     status="proposed",
                     created_at=now(),
-                    expires_at=s.observation.expires_at,
+                    expires_at=(
+                        datetime.fromisoformat(s.created_at) + timedelta(seconds=s.max_seconds)
+                    ).isoformat()
+                    if s.target_kind == "robot_lab"
+                    else s.observation.expires_at,
                 )
                 s.pending_proposal = proposal
                 s.status = "waiting_for_acceptance"
@@ -819,7 +933,8 @@ class AgentControl:
             async with self.lock(identity):
                 s, p = await self.load(identity)
                 if s.status in {"planning", "executing"} and s.authority_epoch == epoch:
-                    s.status = "error"
+                    s.status = "paused" if s.target_kind == "robot_lab" else "error"
+                    s.run_enabled = False
                     s.message = (
                         "Planning or execution failed. No automatic retry was made; "
                         "inspect the preserved evidence."
@@ -833,14 +948,17 @@ class AgentControl:
             s, p = await self.load(identity)
             if (
                 s.status not in TERMINAL
-                or s.target_kind != "teaching"
+                or s.target_kind not in {"teaching", "robot_lab"}
                 or p.get("released")
                 or not p.get("executor_epoch")
             ):
                 return
             try:
-                await self.target_command(s, p, "release", {}, epoch=p["executor_epoch"])
+                await self.release_target(s, p)
                 p["released"] = True
+                p["released_epoch"] = p["executor_epoch"]
+                s.control_armed = False
+                s.run_enabled = False
                 await self.save(s, p, "target_released")
             except Exception:
                 s.message += (
@@ -865,11 +983,32 @@ class AgentControl:
             if self.active(identity):
                 raise AgentError("Another agent operation is active")
             self.validate_approval(s, p, approval)
+            if s.target_kind == "robot_lab":
+                admitted = {
+                    "proposal_id": approval.proposal_id,
+                    "public": s.execution_observation.model_dump(),
+                    "raw": p["execution_raw_observation"],
+                }
+                p["approved_admission"] = admitted
+                await self.save(
+                    s,
+                    p,
+                    "physical_operator_admission",
+                    {
+                        "proposal_id": approval.proposal_id,
+                        "model_observation_id": s.observation.id,
+                        "execution_observation_id": s.execution_observation.id,
+                    },
+                    observation=admitted["raw"],
+                    admission_observation=s.execution_observation,
+                )
             self.tasks[identity] = asyncio.create_task(self.execute(identity, approval))
             return s
 
     def validate_approval(self, s, p, approval):
         proposal, observation = s.pending_proposal, s.observation
+        if s.step_count >= s.max_steps:
+            raise AgentError("The session action-step budget is exhausted")
         if s.mode in {"advisory", "shadow"}:
             raise AgentError("This mode only logs proposals; it cannot execute them")
         if (
@@ -881,6 +1020,8 @@ class AgentControl:
             or proposal.status != "proposed"
         ):
             raise AgentError("Approval does not match the exact current proposal and epoch")
+        if s.target_kind == "robot_lab":
+            self.validate_physical_admission(s, p, approval)
         if datetime.now(UTC) > datetime.fromisoformat(proposal.expires_at):
             raise AgentError("Proposal observation expired; capture a new observation")
         if (
@@ -929,6 +1070,8 @@ class AgentControl:
                 return
             proposal = s.pending_proposal
             proposal.status = "started"
+            s.task_success_verified = False
+            s.task_review = None
             s.status = "executing"
             execution_id = uuid5(NAMESPACE_URL, proposal.id + ":execution").hex
             p["execution_id"] = execution_id
@@ -940,20 +1083,83 @@ class AgentControl:
             )
         try:
             applied, evidence = {}, None
-            if s.target_kind == "teaching":
+            if s.target_kind == "robot_lab":
+                raw = p["raw_observation"]
+                admission = p["approved_admission"]
+                dispatched = True
+                result = await self.robot().execute(
+                    s.id,
+                    p["executor_epoch"],
+                    admission["raw"],
+                    proposal.id,
+                    proposal.arguments,
+                    proposal.model,
+                    execution_id,
+                    model_observation=raw,
+                )
+                if result.get("status") != "completed":
+                    outcome = (
+                        result.get("status")
+                        if result.get("status") in {"rejected", "stopped", "unknown"}
+                        else "unknown"
+                    )
+                    async with self.lock(identity):
+                        current, p = await self.load(identity)
+                        if current.authority_epoch != approval.authority_epoch:
+                            return
+                        receipt = Receipt(
+                            id=execution_id,
+                            proposal_id=proposal.id,
+                            status=outcome,
+                            arguments=proposal.arguments,
+                            applied_targets=result.get("applied_targets", {}),
+                            pre_observation_id=proposal.observation_id,
+                            post_observation_id=None,
+                            elapsed_seconds=time.monotonic() - started,
+                            reason=str(
+                                result.get(
+                                    "reason",
+                                    "Physical segment was not completed; no retry was made.",
+                                )
+                            ),
+                            original_model_observation_id=proposal.observation_id,
+                            admission_observation_id=admission["public"]["id"],
+                            joint_units=s.observation.joint_units,
+                            execution_provenance=result,
+                        )
+                        current.receipts.append(receipt)
+                        current.pending_proposal = None
+                        current.run_enabled = False
+                        current.status = "paused" if outcome == "rejected" else "error"
+                        current.message = receipt.reason
+                        await self.save(
+                            current, p, "receipt", receipt.model_dump(), receipt=receipt
+                        )
+                    return
+                applied = result["applied_targets"]
+                names = list(s.observation.joints)
+                evidence = ExecutionEvidence(
+                    joint_names=names,
+                    requested_targets=result["requested_targets"],
+                    applied_targets=applied,
+                    observed_next_state=result["final_measured_state"],
+                    joint_limit_clipped=[False] * len(names),
+                    speed_limit_clipped=[False] * len(names),
+                    execution_elapsed_seconds=result.get("elapsed_seconds"),
+                )
+            elif s.target_kind == "teaching":
                 raw = p["raw_observation"]
                 dispatched = True
                 result = await self.target_command(
                     s,
                     p,
-                    "execute",
+                    "segment" if proposal.skill == "joint_segment" else "execute",
                     {
                         "observation_id": raw["observation_id"],
                         "observation_sha256": raw["observation_sha256"],
-                        "joint": proposal.arguments.joint,
-                        "delta_rad": proposal.arguments.delta_rad,
                         "proposal_id": proposal.id,
                         "provider_model": proposal.model,
+                        **proposal.arguments.model_dump(),
                     },
                     command_id=execution_id,
                 )
@@ -989,8 +1195,20 @@ class AgentControl:
                     post_observation_id=None,
                     elapsed_seconds=time.monotonic() - started,
                     executor_evidence=evidence,
+                    original_model_observation_id=proposal.observation_id,
+                    admission_observation_id=p.get("approved_admission", {})
+                    .get("public", {})
+                    .get("id")
+                    if s.target_kind == "robot_lab"
+                    else proposal.observation_id,
+                    joint_units=s.observation.joint_units,
+                    execution_provenance=result
+                    if s.target_kind == "robot_lab"
+                    else result.get("execution")
+                    if dispatched
+                    else None,
                     reason=(
-                        "Local simulator completed the bounded correction; task success "
+                        "The local executor completed the bounded action; task success "
                         "remains unverified."
                     )
                     if dispatched
@@ -1000,15 +1218,18 @@ class AgentControl:
                     ),
                 )
                 current.pending_proposal.status = "completed"
+                current.step_count += 1
                 current.receipts.append(receipt)
                 current.pending_proposal = None
-                current.status = "observing" if dispatched else "ready"
+                current.status = (
+                    "observing" if dispatched else "paused" if p.get("planning_paused") else "ready"
+                )
                 current.message = receipt.reason
                 # Completion is durable before a separate observation request.
                 # Its loss cannot turn a known completed action into unknown.
                 await self.save(current, p, "receipt", receipt.model_dump(), receipt=receipt)
             if dispatched:
-                post_raw = (await self.target_command(current, p, "observe", {}))["observation"]
+                post_raw = await self.capture_target(current, p)
                 post_age = p.get("observation_age_ms", 0)
                 async with self.lock(identity):
                     current, p = await self.load(identity)
@@ -1021,10 +1242,14 @@ class AgentControl:
                     self.bind_observation(current, p, post_raw)
                     receipt = current.receipts[-1]
                     receipt.post_observation_id = current.observation.id
-                    receipt.executor_evidence.simulated_seconds = max(
-                        0.0, post_raw["sim_time"] - raw["sim_time"]
-                    )
-                    current.status = "ready"
+                    if s.target_kind == "teaching":
+                        receipt.executor_evidence.simulated_seconds = max(
+                            0.0, post_raw["sim_time"] - raw["sim_time"]
+                        )
+                    current.execution_observation = None
+                    p.pop("approved_admission", None)
+                    p.pop("execution_raw_observation", None)
+                    current.status = "paused" if p.get("planning_paused") else "ready"
                     await self.save(
                         current,
                         p,
@@ -1044,9 +1269,10 @@ class AgentControl:
                     "observing",
                 }:
                     if current.status == "observing":
-                        current.status = "error"
+                        current.status = "paused" if current.target_kind == "robot_lab" else "error"
+                        current.run_enabled = False
                         current.message = (
-                            "Simulator correction completed, but the next observation was "
+                            "The bounded action completed, but the next observation was "
                             "unavailable. Its completed receipt is preserved; no retry was "
                             "made."
                         )
@@ -1080,7 +1306,6 @@ class AgentControl:
             s, p = await self.load(identity)
             if s.status in TERMINAL:
                 return s
-            epoch = s.authority_epoch
             s.authority_epoch += 1
             receipt = None
             if s.pending_proposal:
@@ -1105,51 +1330,64 @@ class AgentControl:
                 )
                 s.receipts.append(receipt)
             s.pending_proposal = None
+            s.run_enabled = False
+            s.control_armed = False
+            s.execution_observation = None
             s.status = "stopped" if operation == "stop" else "paused"
             s.message = (
-                "Agent authority revoked. Simulator release is requested "
+                "Agent authority revoked. Local executor release is requested "
                 "independently of provider cooperation."
             )
             p.pop("continuation", None)
             await self.save(s, p, operation, receipt=receipt)
-            task = self.tasks.get(identity)
-            if task and not task.done():
+            owned = [group.get(identity) for group in (self.tasks, self.runners, self.supervisors)]
+            owned = [
+                task
+                for task in owned
+                if task and task is not asyncio.current_task() and not task.done()
+            ]
+            for task in owned:
                 task.cancel()
-        if task:
-            await asyncio.gather(task, return_exceptions=True)
+        # Release is independent of provider, camera and acknowledgement work.
+        # Revoked tasks remain tracked, but cannot delay local Stop/torque-off.
         async with self.lock(identity):
             s, p = await self.load(identity)
             if (
-                s.target_kind == "teaching"
+                s.target_kind in {"teaching", "robot_lab"}
                 and not p.get("released")
                 and not p.get("executor_epoch")
             ):
-                if p.get("acquisition_unknown"):
+                if p.get("acquisition_unknown") or p.get("acquire_inflight"):
                     s.status = "interrupted"
                     s.message = (
                         "Agent authority revoked; target acquisition outcome is unknown. "
-                        "Use the parent Teaching Stop control."
+                        "Use the local Robot Lab Stop control."
                     )
                 else:
                     p["released"] = True  # Initialization ended before an owner was acquired.
-            if s.target_kind == "teaching" and not p.get("released") and p.get("executor_epoch"):
+            if (
+                s.target_kind in {"teaching", "robot_lab"}
+                and not p.get("released")
+                and p.get("executor_epoch")
+            ):
                 try:
-                    await self.target_command(
-                        s, p, "release", {}, epoch=p.get("executor_epoch", epoch)
-                    )
+                    await self.release_target(s, p)
                     p["released"] = True
+                    p["released_epoch"] = p["executor_epoch"]
                 except Exception:
                     s.status = "interrupted"
                     s.message = (
                         "Agent authority revoked; target release was not acknowledged. "
-                        "Use the parent Teaching Stop control."
+                        "Use the local Robot Lab Stop control."
                     )
                     await self.save(s, p, "release_unknown")
             # A paused simulation no longer owns the target; explicit new session required.
-            if s.target_kind == "teaching":
+            if s.target_kind in {"teaching", "robot_lab"}:
                 if s.status == "paused":
                     s.status = "interrupted"
                 await self.save(s, p, "target_released" if p.get("released") else "release_unknown")
+        if owned:
+            await asyncio.wait(owned, timeout=0.025)
         return await self.get(identity)
 
     async def close(self):
@@ -1171,7 +1409,12 @@ class AgentControl:
         )
         # Terminal sessions can still be reconciling a local release. Drain those
         # owned tasks before the executor transports and database are closed.
-        remaining = [task for task in self.tasks.values() if not task.done()]
+        remaining = [
+            task
+            for group in (self.tasks, self.runners, self.supervisors)
+            for task in group.values()
+            if not task.done()
+        ]
         for task in remaining:
             task.cancel()
         await asyncio.gather(*remaining, return_exceptions=True)
