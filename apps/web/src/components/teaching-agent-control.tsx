@@ -421,7 +421,7 @@ function AgentControls({ projectId }: { projectId: string }) {
                 {observation.id} · {observation.environment_kind} · {observation.source}
               </p>
               <p>
-                Captured {secondsSince(observation.captured_at, now).toFixed(1)} s ago ·{' '}
+                Admitted {secondsSince(observation.captured_at, now).toFixed(1)} s ago ·{' '}
                 {Date.parse(observation.expires_at) > now ? 'Within validity window' : 'Expired'} · step{' '}
                 {observation.step} · revision {observation.revision}
               </p>
