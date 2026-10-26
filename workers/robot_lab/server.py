@@ -40,7 +40,8 @@ from hardware import (
     probe_bus,
 )
 from lerobot_control import PROFILE, LeRobotPositionControl
-from motion import MiddleMotion, control_limits, middle_targets, step_target
+from motion import MiddleMotion, RestMotion, control_limits, middle_targets, step_target
+from rest_position import RestPositions
 from verification import (
     MappingChecks,
     MappingVerification,
@@ -200,6 +201,10 @@ class RobotLab:
         self.action = {}
         self.commanded_raw = {}
         self.middle_motion = None
+        self.rest_positions = RestPositions(self.data_dir)
+        self.rest_targets = None
+        self.rest_motion = None
+        self.rest_phase = "idle"
         self.middle_tolerance = 2
         self.controller = None
         self.calibration = {}
@@ -331,6 +336,14 @@ class RobotLab:
             assembled = json.loads(json.dumps(self.assembled_state))
             copy_verification = json.loads(json.dumps(self.verification_state))
             middle_motion = self.middle_motion
+            rest_motion, rest_phase = self.rest_motion, self.rest_phase
+            rest_calibration = dict(self.calibration)
+            rest_targets = (
+                self.rest_targets
+                if self.mode in {"manual", "leader", "handguide"}
+                and set(self.calibration) == set(JOINTS)
+                else None
+            )
         try:
             assembled["calibration_required"] = self.calibration_revisions.required(
                 assembled["port"]
@@ -357,6 +370,7 @@ class RobotLab:
                 "calibration_persistence": hardware,
                 "control": hardware,
                 "lerobot_position_control": hardware,
+                "rest_position": hardware,
                 "move_to_middle": hardware,
                 "middle_tolerance": hardware,
                 "partial_control": hardware,
@@ -379,6 +393,17 @@ class RobotLab:
                 "slider_targets": dict(self.action) if self.mode == "manual" else {},
                 "torque_limits": dict(self.controller.torque_limits) if self.controller else {},
                 "torque_enabled": self.torque,
+                "rest_position": {
+                    "saved": rest_targets is not None,
+                    "phase": rest_phase,
+                    "progress": rest_motion.progress
+                    if rest_motion
+                    else (1.0 if rest_phase == "holding" else 0.0),
+                    "targets": {
+                        j: normalized(j, v, rest_calibration)
+                        for j, v in (rest_targets or {}).items()
+                    },
+                },
                 "centering": {
                     "active": middle_motion is not None,
                     "progress": middle_motion.progress if middle_motion else 1.0,
@@ -1128,16 +1153,78 @@ class RobotLab:
                 self.middle_motion = (
                     MiddleMotion(raw, calibration, tolerance) if to_middle else None
                 )
+                self.rest_targets = (
+                    self.rest_positions.load(robot_id, calibration) if joints == JOINTS else None
+                )
+                self.rest_motion = None
+                self.rest_phase = "idle"
                 self.controller = control
                 self.torque = mode != "handguide"
                 self.error = None
                 self.heartbeat = time.monotonic()
         return self.status()
 
+    def rest_position(self, payload, *, save=False):
+        require(payload, "confirm", "SAVE REST POSITION" if save else "RETURN TO REST")
+        with self.lock:
+            if self.mode not in {"manual", "leader", "handguide"} or set(self.calibration) != set(
+                JOINTS
+            ):
+                raise RequestError("Rest positions require an active session with all six joints")
+            if self.middle_motion is not None or self.rest_motion is not None:
+                raise RequestError("Wait for the current arm movement to finish")
+            if self.writer and self.writer.episode_active:
+                raise RequestError(
+                    "Save or discard the recording episode before using rest positions"
+                )
+            if time.monotonic() - self.heartbeat > 2:
+                raise RequestError("Control heartbeat expired; stop and reconnect")
+            if not save and (self.mode == "handguide" or not self.torque):
+                raise RequestError(
+                    "Start joint control or leader teleoperation before returning to rest"
+                )
+            bus, generation = self.bus, self.generation
+            if bus is None:
+                raise RequestError("Session has stopped")
+            with bus.lock:
+                if generation != self.generation:
+                    raise RequestError("Session has stopped")
+                raw = validate_raw(bus.positions(), self.calibration)
+                with self.lifecycle_lock:
+                    if generation != self.generation:
+                        raise RequestError("Session has stopped")
+                    if save:
+                        self.rest_targets = self.rest_positions.save(
+                            self.robot_id, raw, self.calibration
+                        )
+                        self.rest_phase = "idle"
+                    else:
+                        targets = self.rest_positions.load(self.robot_id, self.calibration)
+                        if targets is None:
+                            raise RequestError(
+                                "Save a rest position for this arm and calibration first"
+                            )
+                        if self.controller is None:
+                            raise HardwareError("Position controller is unavailable")
+                        # Cancel previous goals and leader tracking without releasing torque.
+                        sent = self.controller.command_raw(raw)
+                        self.commanded_raw = dict(sent)
+                        self.action = {
+                            j: normalized(j, v, self.calibration) for j, v in sent.items()
+                        }
+                        self.mode = "manual"
+                        self.rest_targets = targets
+                        self.rest_motion = RestMotion(raw, targets, self.calibration)
+                        self.rest_phase = "returning"
+                        self.error = None
+        return self.status()
+
     def jog(self, payload):
         with self.lock:
             if self.mode != "manual" or not self.torque:
                 raise RequestError("Start manual control before jogging a joint")
+            if self.rest_motion is not None:
+                raise RequestError("Wait for the return to rest to finish")
             if self.middle_motion is not None:
                 raise RequestError("Wait for movement to the recorded middle to finish")
             joint = payload.get("joint")
@@ -1186,6 +1273,7 @@ class RobotLab:
                     raise RequestError("Session has stopped")
                 self.commanded_raw.update(sent)
                 self.action[joint] = normalized(joint, sent[joint], self.calibration)
+                self.rest_phase = "idle"
                 self.last_jog = time.monotonic()
         return self.status()
 
@@ -1214,6 +1302,8 @@ class RobotLab:
             self.torque = False
             self.mode = "idle"
             self.middle_motion = None
+            self.rest_motion = None
+            self.rest_phase = "idle"
             self.controller = None
             if reason:
                 self.error = reason
@@ -1285,6 +1375,8 @@ class RobotLab:
                 raise RequestError("Connect a calibrated arm in Teleoperate before recording")
             if set(self.calibration) != set(JOINTS):
                 raise RequestError("Dataset recording requires all six joints")
+            if self.rest_motion is not None:
+                raise RequestError("Wait for the return to rest before recording")
             if self.middle_motion is not None:
                 raise RequestError("Wait for movement to the recorded middle before recording")
             if self.writer and not self.writer.finalized:
@@ -1318,6 +1410,8 @@ class RobotLab:
             if action == "start":
                 if set(self.calibration) != set(JOINTS):
                     raise RequestError("Dataset recording requires all six joints")
+                if self.rest_motion is not None:
+                    raise RequestError("Wait for the return to rest before recording")
                 if self.middle_motion is not None:
                     raise RequestError("Wait for movement to the recorded middle before recording")
                 if self.mode not in ("manual", "leader", "handguide"):
@@ -1356,6 +1450,7 @@ class RobotLab:
         with bus.lock:
             if generation != self.generation:
                 return
+            mode = self.mode
             raw = validate_raw(bus.positions(), None if mode == "calibration" else self.calibration)
             if mode == "calibration":
                 if self.calibration_state["phase"] == "ranges" and any(
@@ -1389,6 +1484,29 @@ class RobotLab:
             if mode == "manual":
                 if control is None:
                     raise HardwareError("LeRobot position controller is unavailable")
+                rest = self.rest_motion
+                if rest is not None:
+                    goals, arrived, expired = rest.step(raw)
+                    if expired and not arrived:
+                        goals = raw
+                    sent = control.command_raw(goals)
+                    if generation != self.generation:
+                        return
+                    self.commanded_raw.update(sent)
+                    self.action.update(
+                        {j: normalized(j, v, self.calibration) for j, v in sent.items()}
+                    )
+                    if arrived or expired:
+                        with self.lifecycle_lock:
+                            if generation == self.generation:
+                                self.rest_motion = None
+                                self.rest_phase = "holding" if arrived else "error"
+                                if not arrived:
+                                    self.error = (
+                                        "Return to rest timed out. Holding current position; "
+                                        "check the arm before retrying."
+                                    )
+                    return
                 motion = self.middle_motion
                 if motion is not None:
                     if motion.arrived(raw):
@@ -1612,6 +1730,10 @@ class Handler(BaseHTTPRequestHandler):
                 result = lab.stop()
             elif path == "/v1/control/start":
                 result = lab.control_start(payload)
+            elif path == "/v1/control/rest/save":
+                result = lab.rest_position(payload, save=True)
+            elif path == "/v1/control/rest/return":
+                result = lab.rest_position(payload)
             elif path == "/v1/control/jog":
                 result = lab.jog(payload)
             elif path == "/v1/control/heartbeat":

@@ -25,6 +25,7 @@ SOURCE_MODULES = (
     "hardware.py",
     "lerobot_control.py",
     "motion.py",
+    "rest_position.py",
     "camera.py",
     "calibration_draft.py",
     "dataset.py",

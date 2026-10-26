@@ -152,3 +152,17 @@ Hand-guided actions are the observed positions; manual and leader actions are th
 ```
 
 `GET /v1/datasets/pick-block/files/meta/info.json` (or `/files?path=meta/info.json`) returns the file's bytes. Dot paths, symlinks, hidden files and traversal are rejected. The app's importer copies the complete manifest into a project through the app backend.
+
+### Rest position
+
+`POST /v1/control/rest/save` with `{"confirm":"SAVE REST POSITION"}` saves the actual
+encoder positions of all six joints for the active follower and calibration, including
+hand guiding. `POST /v1/control/rest/return` with `{"confirm":"RETURN TO REST"}` requires
+powered full-arm control and a saved pose. It pauses leader tracking, ramps at at most
+10 degrees/percent per second, verifies arrival within 2 degrees/percent, and holds
+torque in manual mode. A timeout holds the observed position and reports an error.
+Recording episodes, partial control, expired heartbeats and concurrent positioning
+block both operations. Calibration changes invalidate the saved pose. Stop, browser
+visibility/disconnect safety, and shutdown retain their immediate torque-off behavior.
+`session.rest_position` reports saved/phase/progress/targets; `capabilities.rest_position`
+allows older companions to be detected without issuing unsupported commands.

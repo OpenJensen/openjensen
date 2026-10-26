@@ -1321,6 +1321,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/robot-lab/control/rest/return": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Control Rest Return */
+        post: operations["robot_lab_post_control_rest_return"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/control/rest/save": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Control Rest Save */
+        post: operations["robot_lab_post_control_rest_save"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/robot-lab/control/start": {
         parameters: {
             query?: never;
@@ -6725,6 +6759,46 @@ export interface operations {
         };
     };
     robot_lab_post_control_jog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_control_rest_return: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_control_rest_save: {
         parameters: {
             query?: never;
             header?: never;

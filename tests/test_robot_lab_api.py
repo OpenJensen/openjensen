@@ -398,3 +398,28 @@ def test_mapping_observation_route_preserves_run_identity_without_exposing_crede
         assert TOKEN not in response.text
         assert response.headers["cache-control"] == "no-store"
     asyncio.run(companion.close())
+
+
+@pytest.mark.parametrize(
+    "action,confirm",
+    [
+        ("save", "SAVE REST POSITION"),
+        ("return", "RETURN TO REST"),
+    ],
+)
+def test_rest_position_routes_forward_only_the_explicit_action(tmp_path, action, confirm):
+    connection(tmp_path)
+    seen = []
+
+    def handler(request):
+        seen.append((request.url.path, json.loads(request.content)))
+        return httpx.Response(200, json={"ok": True})
+
+    companion = bridge(tmp_path, handler)
+    with browser(tmp_path, companion) as client:
+        response = client.post(
+            "/api/v1/robot-lab/control/rest/" + action, json={"confirm": confirm}
+        )
+    assert response.status_code == 200
+    assert seen == [("/v1/control/rest/" + action, {"confirm": confirm})]
+    asyncio.run(companion.close())

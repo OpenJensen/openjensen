@@ -105,6 +105,8 @@ PROTOCOL = {
         "calibration/finish",
         "calibration/cancel",
         "control/start",
+        "control/rest/save",
+        "control/rest/return",
         "control/jog",
         "control/heartbeat",
         "control/stop",
