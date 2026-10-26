@@ -54,7 +54,7 @@ The file holds 1–32 profiles and must stay under 64 KiB. Each profile has a ha
 
 ## 2. Start and record
 
-1. Open **ROBOT LAB → AI teleoperation** and select **Managed session** under **Connection**. Choose a project first.
+1. Select a project and open **ROBOT LAB → AI teleoperation**. Choose **Simulation** under **Agent target**, then **Managed session** under **Connection**.
 2. Choose an **AI teleoperation profile** and set **Session time limit (seconds)**: 1–3600, and no more than the profile's `max_seconds`.
 3. Tick **Start this session and record simulator observations.** and select **Start simulation session**. Isaac readiness is checked only after you start.
 4. Choose the session under **Saved simulation session**. Once it is ready, the recording controls appear. Record and finish each episode as described in [Record episodes](teaching-connections.md#2-record-episodes).

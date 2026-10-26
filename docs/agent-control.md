@@ -2,7 +2,7 @@
 
 Agent Control turns a task goal into a sequence of typed proposals above a local executor. The planner receives an admitted image, named measured joints, units, limits and previous execution receipts. The core retains authority and evidence; the simulator or SO101 companion admits and times each action. Teaching advice, voice tools and Decision Lab retain their separate roles.
 
-Open **ROBOT LAB → AI teleoperation**. **Initial setup** contains physical setup, calibration and manual control. The historical Teaching route redirects to AI teleoperation; internal Teaching API and capture identifiers remain compatible.
+Open **ROBOT LAB → AI teleoperation**. **Agent Control** opens with **Physical SO101** selected. Choose **Simulation** to show simulator connection and recording tools, or **Replay observation** to inspect decisions without hardware. **Initial setup** contains physical setup, calibration and manual control. The historical Teaching route remains available; internal Teaching API and capture identifiers remain compatible.
 
 ## Goals, skills and modes
 
@@ -35,7 +35,7 @@ The isolated worker uses the [Responses function-calling protocol](https://devel
 
 ## Managed simulation
 
-Start a managed simulation in the same project through AI teleoperation, set a task and start the demonstration. Select **Simulation** in Agent Control and enter its **Managed AI teleoperation job ID**. An arbitrary external executor is not an admitted target.
+Select **Simulation** in Agent Control, then start a managed simulation in the same project, set a task and start the demonstration. Enter its **Managed AI teleoperation job ID** in Agent Control. An arbitrary external executor is not an admitted target.
 
 - **Freeze during planning, then step** captures fresh pixels and measured state on the simulator owner thread, holds physics during inference and advances only admitted local action ticks.
 - **Continuously running scene** keeps physics running and rejects action proposals whose original context is too old or has drifted.
