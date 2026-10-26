@@ -16,7 +16,7 @@ Set up **one** route:
 
 | Route | Setup | Model |
 | --- | --- | --- |
-| Google Cloud | Install `gcloud` on the application host and sign in. Connect Google Cloud in **Settings → Compute** ([steps](cloud-connections.md#provider-setup)). Enable the Vertex AI API (`aiplatform.googleapis.com`), billing and Gemini Omni permissions. | `gemini-omni-1.1-flash-preview` |
+| Google Cloud | Install `gcloud` on the application host and sign in. Connect Google Cloud in **Settings → Compute** ([steps](cloud-connections.md#connect-a-project)). Enable the Vertex AI API (`aiplatform.googleapis.com`), billing and Gemini Omni permissions. | `gemini-omni-1.1-flash-preview` |
 | Gemini API key | Disconnect any saved Cloud project, set `GEMINI_API_KEY` in the server environment, and restart the application. | `gemini-omni-1.1-flash` |
 
 - On the Cloud route, the server gets short-lived access tokens with `gcloud auth print-access-token --quiet`. No Cloud Storage bucket is needed.

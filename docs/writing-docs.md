@@ -58,9 +58,10 @@ The readers are robotics researchers and operators. They skim, then act. Every d
 | --- | --- |
 | Product | OpenJensen (never "OPEN JENSEN" or "Open Jensen") |
 | Command line and settings | `jensen`, `JENSEN_*`. Mention `firebird` and `FIREBIRD_*` only in compatibility notes |
-| Pages | Dashboard, Robot Lab, Teaching, Datasets, Augmentation, Fine-tune, Distill, Quantize, Evaluate, Run, Decision Lab, Models, Cloud runs, Settings |
+| Sidebar group | ROBOT LAB, containing Initial setup and AI teleoperation |
+| Pages | Dashboard, Initial setup, AI teleoperation, Datasets, Augmentation, Fine-tune, Distill, Quantize, Evaluate, Run, Decision Lab, Models, Cloud runs, Settings |
 | Settings tabs | Compute, Modules, Workflow settings, Diagnostics (write **Settings → Modules**) |
-| Robot Lab steps | Connect, Motor IDs, Calibrate, Teleoperate, Record |
+| Initial setup steps | Connect, Motor IDs, Calibrate, Teleoperate, Record |
 | Datasets form | **Import a dataset**, with **Hugging Face** and **Local files** |
 
 Confirm any other label by searching `apps/web/src`. Never use internal codenames for features.

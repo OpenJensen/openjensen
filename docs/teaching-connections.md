@@ -1,6 +1,6 @@
-# Connect the Teaching executor
+# Connect the simulation executor
 
-Connect OpenJensen to a Teaching executor you run yourself (Isaac Sim with the Teaching worker), then record demonstration episodes from the browser. To let OpenJensen start the simulator for you, see [managed Teaching sessions](managed-teaching.md).
+Connect OpenJensen to an Isaac Sim executor you run yourself with the Teaching worker, then record demonstration episodes from the browser. To let OpenJensen start the simulator for you, see [managed simulation sessions](managed-teaching.md).
 
 ## What you need
 
@@ -17,11 +17,19 @@ Set these on the application host, then restart the server:
 | `JENSEN_TEACHING_CONTROL_TOKEN_FILE` | Absolute path of the private token file. |
 | `JENSEN_TEACHING_VOICE_URL` | Optional. The voice and advice broker, also `http://127.0.0.1:<port>`, for example `http://127.0.0.1:8769`. Set up its LiveKit and OpenRouter services with [voice and advice setup](teaching-intelligence.md). |
 
-Setting `JENSEN_TEACHING_URL` adds **Teaching** to the sidebar under **Robot**.
+Setting `JENSEN_TEACHING_URL` makes the configured simulator available on **ROBOT LAB → AI teleoperation**. Keep the `JENSEN_TEACHING_*` configuration and `/teaching` API names shown here.
+
+## Plan an abstract task
+
+In **Agent Control**, enter a **Task goal**, such as "Pick up the object in front of the gripper." Select a configured vision-capable provider, **Goal-directed task**, the target and run limits. For **Simulation**, select a running managed session in the same project. Review its current image and enabled skills before starting.
+
+Astra selects one bounded action, then reasons from the measured result and a subsequent observation. Use **Supervised acceptance** to approve each proposal, or **Bounded execution** for simulator actions within the session limits. The planner can request help when the target object, scene or available skills are insufficient. A model assessment does not verify a grasp or physical task success.
+
+For **Physical SO101**, complete **ROBOT LAB → Initial setup**, supply the reviewed calibration and workspace evidence, and accept each segment against a separate current observation. Follow [AI teleoperation setup and operation](agent-control.md) for provider configuration, arming, mode limits, pause, Stop and outcome review.
 
 ## 2. Record episodes
 
-1. Open **Teaching** and keep **Existing executor** selected under **Connection**.
+1. Open **ROBOT LAB → AI teleoperation** and keep **Existing executor** selected under **Connection**.
 2. Wait for **Executor reachable**, the executor's current session and a camera frame.
 3. Enter a **Task instruction**, select **Set instruction**, then **Start recording**.
 4. As needed: **Pause**, nudge a joint with **Joint correction** and **+ 0.05 rad** or **− 0.05 rad**, **Mark failure**, or **Reset scene**.

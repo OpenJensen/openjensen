@@ -1,6 +1,6 @@
-# Prepare a dataset from Teaching captures
+# Prepare a dataset from simulation captures
 
-Turn finished Teaching captures into a LeRobot dataset with a verified training copy, ready for **Fine-tune**. Preparation runs on the application host and needs no simulator connection.
+Turn finished simulation captures into a LeRobot dataset with a verified training copy, ready for **Fine-tune**. Preparation runs on the application host and needs no simulator connection.
 
 ## What you need
 
@@ -31,11 +31,11 @@ Save this configuration with real absolute paths, set `JENSEN_RECORDING_CONFIG` 
 - The file lists up to 100 projects and must stay under 64 KiB.
 - `dataset_python` is the writer's interpreter; `worker_root` is the `workers/teaching` directory.
 
-Setting `JENSEN_RECORDING_CONFIG` also adds **Teaching** to the sidebar.
+Setting `JENSEN_RECORDING_CONFIG` makes published captures available on **ROBOT LAB → AI teleoperation**.
 
 ## 2. Prepare in the browser
 
-1. Open **Teaching** and choose the project. The **Prepare a dataset from recordings** panel lists the published captures.
+1. Open **ROBOT LAB → AI teleoperation** and choose the project. The **Prepare a dataset from recordings** panel lists the published captures.
 2. Under **Choose recorded episodes**, tick the episodes you want. After a [managed session](managed-teaching.md), **Select these recorded episodes** fills in that capture for you.
 3. Set **Preparation timeout (seconds)**: 60–1800, default 600.
 4. Tick the review box and select **Prepare selected recordings**. Keep the selected capture files unchanged until preparation finishes.

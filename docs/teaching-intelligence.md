@@ -1,10 +1,10 @@
-# Set up Teaching voice and advice
+# Set up AI teleoperation voice and advice
 
-These optional services add two things to the **Teaching** page: a voice agent you talk to through LiveKit, and advice from OpenRouter models about the session or the camera image. Both send data to paid providers. They work with an [existing executor](teaching-connections.md), not with managed sessions.
+These optional services add two things to the **AI teleoperation** page: a voice agent you talk to through LiveKit, and advice from OpenRouter models about the session or the camera image. Both send data to paid providers. They work with an [existing executor](teaching-connections.md), not with managed sessions.
 
 ## What you need
 
-- A running executor and its private token, set up as in [Connect the Teaching executor](teaching-connections.md).
+- A running executor and its private token, set up as in [Connect the simulation executor](teaching-connections.md).
 - An isolated Python 3.12 environment with the pinned [voice requirements](../workers/teaching/requirements-voice.txt).
 - The broker and voice agent, started as described in [Teaching worker setup](../workers/teaching/README.md#start-voice-services). Point `JENSEN_TEACHING_VOICE_URL` on the application host at the broker. Advice also goes through the broker.
 - An OpenRouter API key, plus a LiveKit URL, key and secret.
@@ -12,7 +12,7 @@ These optional services add two things to the **Teaching** page: a voice agent y
 
 ## 1. Save the OpenRouter settings
 
-1. On **Teaching**, open **Configure optional services** under **Advice**.
+1. On **AI teleoperation**, open **Configure optional services** under **Advice**.
 2. Enter the **OpenRouter API key** (16–4096 printable ASCII characters).
 3. Enter an explicit **Voice chat model** as `provider/model`. Jev models (`typesafe/...`) are rejected here.
 4. Select **Save private settings**. The app writes `openrouter_api_key` and `voice_model` to `<workspace>/teaching-intelligence.json`, with owner-only permissions. **Remove saved settings** deletes it.
@@ -30,7 +30,7 @@ The broker rereads the settings on each request. Restart the voice agent after c
 
 ## 3. Talk to the voice agent
 
-1. Start the configured executor, open **Teaching** and wait for its current session.
+1. Start the configured executor, open **AI teleoperation** and wait for its current session.
 2. Select **Connect voice** and allow microphone access. Your microphone streams through LiveKit and OpenRouter for up to 5 minutes, and provider charges apply.
 3. Check that the status reads "Voice agent present in room".
 4. Select **Disconnect microphone** to leave the room.

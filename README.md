@@ -10,8 +10,8 @@
 
 | Page | What it does |
 | --- | --- |
-| **Robot Lab** | Set up an SO-101 arm from the computer it is plugged into: assign motor IDs, calibrate, teleoperate with on-screen controls or a leader arm, and record LeRobot v3 episodes into a project. |
-| **Teaching** | Record demonstrations in Isaac simulation, with joint corrections, failure markers and optional voice. |
+| **Initial setup** | Set up an SO-101 arm from the computer it is plugged into: assign motor IDs, calibrate, teleoperate with on-screen controls or a leader arm, and record LeRobot v3 episodes into a project. |
+| **AI teleoperation** | Give Astra a task goal, review bounded actions and their measured results, or record Isaac demonstrations. Physical SO101 control uses supervised acceptance. See [setup and limits](docs/agent-control.md). |
 | **Datasets** | Inspect public LeRobot v2/v3 datasets from Hugging Face, or import local folders, ZIP and HDF5 files. Play all cameras in sync and read state and action samples. |
 | **Augmentation** | Generate appearance variations of recorded clips and review them before reuse. |
 | **Fine-tune** | Train SmolVLA, ACT, π₀, π₀.₅, GR00T N1.7, Diffusion Policy and [more](#supported-policies) on a local NVIDIA GPU or cloud GPUs. Follow loss live, resume runs and download checkpoints. |

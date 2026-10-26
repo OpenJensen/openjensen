@@ -58,4 +58,4 @@ The browser forms keep each unresolved attempt in the tab's session storage. If 
 2. If no job is found, **Retry same request** resends the saved request with the same key, even if you have edited the form since.
 3. An older attempt without a saved key offers **Refresh job history**. Review the fresh history, then select **I reviewed the jobs; allow a new request**.
 
-Managed Teaching sessions use **Check saved teaching request**, **Retry same teaching request** and **I reviewed teaching jobs; clear legacy recovery**. If browser storage is unavailable, restore it and reload before submitting again.
+Managed simulation sessions use **Check saved simulation request**, **Retry same simulation request** and **I reviewed simulation jobs; clear legacy recovery**. If browser storage is unavailable, restore it and reload before submitting again.

@@ -1,6 +1,6 @@
-# Run a managed Teaching session
+# Record a managed simulation session
 
-In a managed session, OpenJensen starts a local Isaac Sim teaching process for you, lets you record episodes from the browser, and publishes the capture when you stop. You end up with recordings ready for [dataset preparation](recording-preparation.md). To drive an executor you start yourself, see [Connect the Teaching executor](teaching-connections.md).
+In a managed session, OpenJensen starts a local Isaac Sim recording process for you, lets you record episodes from the browser, and publishes the capture when you stop. You end up with recordings ready for [dataset preparation](recording-preparation.md). To drive an executor you start yourself, see [Connect the simulation executor](teaching-connections.md).
 
 ## What you need
 
@@ -39,7 +39,7 @@ Replace the project, interpreter, worker, settings and lease paths with your own
 | Field | What to set |
 | --- | --- |
 | `id` | 1–64 letters, digits, `_` or `-`. Unique within the file. |
-| `label` | Name shown in **Teaching profile**, up to 100 characters. |
+| `label` | Name shown in **AI teleoperation profile**, up to 100 characters. |
 | `project_id` | The existing project allowed to use this profile. |
 | `isaac_python` | Isaac's Python launcher. |
 | `worker_root` | The `workers/teaching` directory. Keep the sibling `workers/isaac_sim` source present. |
@@ -54,15 +54,17 @@ The file holds 1–32 profiles and must stay under 64 KiB. Each profile has a ha
 
 ## 2. Start and record
 
-1. Open **Teaching** and select **Managed session** under **Connection**. Choose a project first.
-2. Choose a **Teaching profile** and set **Session time limit (seconds)**: 1–3600, and no more than the profile's `max_seconds`.
-3. Tick **Start this session and record simulator observations.** and select **Start teaching session**. Isaac readiness is checked only after you start.
-4. Choose the session under **Saved teaching session**. Once it is ready, the recording controls appear. Record and finish each episode as described in [Record episodes](teaching-connections.md#2-record-episodes).
+1. Open **ROBOT LAB → AI teleoperation** and select **Managed session** under **Connection**. Choose a project first.
+2. Choose an **AI teleoperation profile** and set **Session time limit (seconds)**: 1–3600, and no more than the profile's `max_seconds`.
+3. Tick **Start this session and record simulator observations.** and select **Start simulation session**. Isaac readiness is checked only after you start.
+4. Choose the session under **Saved simulation session**. Once it is ready, the recording controls appear. Record and finish each episode as described in [Record episodes](teaching-connections.md#2-record-episodes).
 5. Select **Stop and publish**, then **Confirm stop and publish**.
 
 > **Stop before the time limit.** Only a graceful stop publishes the recordings. If the time limit runs out, nothing is published. Finish every episode before you stop: the capture must hold 1–100 finished episodes.
 
-Leaving the page never stops a saved session. Use **Refresh teaching sessions** to update the list.
+Leaving the page never stops a saved session. Use **Refresh simulation sessions** to update the list.
+
+To plan a goal in that simulator, select **Simulation** under **Agent target** in **Agent Control**, then enter the running job's ID. Follow [abstract-task planning](teaching-connections.md#plan-an-abstract-task) to review skills, observations and run limits. The managed session time limit also bounds the recording process.
 
 ## 3. Prepare the dataset
 
@@ -72,12 +74,12 @@ After the stop, the job validates the capture and publishes it to the project's 
 
 - **Abort without publishing:** cancel the job with `jensen jobs cancel JOB_ID` or `POST /api/v1/jobs/{job_id}/cancel`.
 - **Failed or interrupted session:** read the saved job's error and cleanup message and the private logs before starting another. Raw evidence stays in the private job directory.
-- **Lost start response:** select **Check saved teaching request**, and **Retry same teaching request** if it is offered. See [submission recovery](job-submissions.md).
+- **Lost start response:** select **Check saved simulation request**, and **Retry same simulation request** if it is offered. See [submission recovery](job-submissions.md).
 
 ## API
 
 1. `GET /api/v1/projects/{project_id}/teaching/profiles` returns each profile's `id` and `profile_sha256`.
 2. `POST /api/v1/projects/{project_id}/teaching/sessions` with `operation: teaching.capture`, `profile_id`, `profile_sha256` and `timeout_seconds` starts a session. It accepts an `Idempotency-Key` header.
 3. Poll `GET /api/v1/projects/{project_id}/teaching/sessions/{job_id}` until `ready` is true.
-4. Record through that session's routes under `/api/v1/projects/{project_id}/teaching/sessions/{job_id}`: `GET state`, `GET frame`, `POST commands` and `GET commands/{command_id}`. The **Teaching** page uses the same routes.
+4. Record through that session's routes under `/api/v1/projects/{project_id}/teaching/sessions/{job_id}`: `GET state`, `GET frame`, `POST commands` and `GET commands/{command_id}`. The **ROBOT LAB → AI teleoperation** page uses the same routes.
 5. `POST /api/v1/projects/{project_id}/teaching/sessions/{job_id}/stop` finishes gracefully and publishes the capture.

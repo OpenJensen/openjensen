@@ -84,9 +84,9 @@ export JENSEN_TEACHING_VOICE_URL=http://127.0.0.1:8769
 export JENSEN_TEACHING_CONTROL_TOKEN_FILE=/operator/private/teaching-token
 ```
 
-Use a private token file shared with the executor and broker. For a remote executor, configure a loopback tunnel to the application host. [Connect the Teaching executor](teaching-connections.md) has the full requirements.
+Use a private token file shared with the executor and broker. For a remote executor, configure a loopback tunnel to the application host. [Connect the simulation executor](teaching-connections.md) has the full requirements.
 
-1. Open **Teaching** after starting the configured executor.
+1. Open **ROBOT LAB → AI teleoperation** after starting the configured executor.
 2. Wait for its session and camera frame, enter an instruction and start recording.
 3. Pause, correct named joints or mark failures as needed.
 4. Finish the episode, then [prepare selected captures](recording-preparation.md).

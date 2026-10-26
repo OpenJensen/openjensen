@@ -14,7 +14,7 @@ Select a joint in the SO-101 view to identify it; the view never moves the real 
 
 ## AI teleoperation
 
-Open **Robot Lab → AI teleoperation** and describe the intended task in **Agent Control**. Review the selected target, enabled skills, current observation and run limits before starting. A proposed action is separate from measured execution and verified task completion.
+Open **ROBOT LAB → AI teleoperation** and describe the intended task in **Agent Control**. Review the selected target, enabled skills, current observation and run limits before starting. A proposed action is separate from measured execution and verified task completion.
 
 For simulation recording, start the configured executor, wait for a camera frame, set an instruction, and select **Start recording**. Use pause, joint corrections or failure markers as needed. Select **Finish episode**, then prepare the recording as a dataset. [Executor setup](teaching-connections.md) · [Recording](local-training.md#teach-in-simulation) · [Voice and advice](teaching-intelligence.md)
 
