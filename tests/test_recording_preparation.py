@@ -986,3 +986,38 @@ def test_legacy_catalog_inference_does_not_relabel_agent_fields_as_human(tmp_pat
     selected = catalog(load_config(config), "project")["captures"][0]
     assert selected["actors"] == []
     assert selected["actor_summary_source"] == "unavailable"
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("actors", ["llm_agent"]),
+        ("action_provenance", [{"actor": "llm_agent"}]),
+        ("environment_kind", "physical"),
+    ],
+)
+def test_legacy_catalog_does_not_override_explicit_provenance(tmp_path, field, value):
+    from vla_platform.datasets.recordings import catalog, load_config
+
+    config, root = configuration(tmp_path)
+    capture(root)
+    receipt_path = root / "session" / ("d" * 32) / "episode.json"
+    receipt = json.loads(receipt_path.read_bytes())
+    receipt[field] = value
+    write(receipt_path, receipt)
+    selected = catalog(load_config(config), "project")["captures"][0]
+    assert selected["actors"] == []
+    assert selected["actor_summary_source"] == "unavailable"
+
+
+def test_catalog_rejects_a_legacy_capture_declaring_physical_environment(tmp_path):
+    from vla_platform.datasets.recordings import catalog, load_config
+
+    config, root = configuration(tmp_path)
+    capture(root)
+    meta_path = root / "session/session.json"
+    meta = json.loads(meta_path.read_bytes())
+    meta["environment_kind"] = "physical"
+    write(meta_path, meta)
+    with pytest.raises(ValueError, match="environment"):
+        catalog(load_config(config), "project")

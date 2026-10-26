@@ -311,6 +311,19 @@ def _catalog(loaded, project):
         # Catalog summaries describe finalized command metadata, not frame authorship.
         # Full event/frame bindings remain a preparation-time verification boundary.
         events = receipt.get("events", [])
+        agent_fields = (
+            "actor",
+            "actors",
+            "action_provenance",
+            "agent_session_id",
+            "proposal_id",
+            "execution_id",
+            "provider_model",
+            "prompt_version",
+            "prompt_sha256",
+            "observation_sha256",
+            "skill_manifest_version",
+        )
         source = "legacy_operator" if version == 1 else "declared_events"
         valid = isinstance(events, list) and len(events) <= 512
         if version == 2:
@@ -325,10 +338,7 @@ def _catalog(loaded, project):
                         event.get("source") != "operator_command"
                         or event.get("actor", "human_operator") != "human_operator"
                         or event.get("environment_kind", "simulation") != "simulation"
-                        or any(
-                            key in event
-                            for key in ("agent_session_id", "proposal_id", "execution_id")
-                        )
+                        or any(key in event for key in agent_fields if key != "actor")
                     ):
                         valid = False
                         break
@@ -344,8 +354,9 @@ def _catalog(loaded, project):
                 ):
                     valid = False
                     break
-        if version == 1 and any(
-            key in receipt for key in ("actor", "agent_session_id", "proposal_id", "execution_id")
+        if version == 1 and (
+            any(key in receipt for key in agent_fields)
+            or receipt.get("environment_kind", "simulation") != "simulation"
         ):
             valid = False
         if not valid:
@@ -374,7 +385,10 @@ def _catalog(loaded, project):
             raise RecordingError("Published capture roots may contain session directories only")
         capture = root / folder
         raw = bounded_read(capture / "session.json")
-        meta = metadata(decode(raw))
+        declared = decode(raw)
+        if declared.get("environment_kind", "simulation") != "simulation":
+            raise RecordingError("Unsupported capture environment")
+        meta = metadata(declared)
         ident = meta["session_id"]
         if ident in locations:
             raise RecordingError("Duplicate session identity in recording catalog")

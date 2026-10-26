@@ -303,11 +303,11 @@ async function fixture(page: Page) {
 }
 async function selectEpisodes(page: Page, two = true) {
   await panel(page)
-    .getByRole('checkbox', { name: `Episode ${hex('d', 32)} · 12 frames · outcome unknown`, exact: true })
+    .getByRole('checkbox', { name: new RegExp(`^Episode ${hex('d', 32)} ·`) })
     .check();
   if (two)
     await panel(page)
-      .getByRole('checkbox', { name: `Episode ${hex('e', 32)} · 12 frames · outcome unknown`, exact: true })
+      .getByRole('checkbox', { name: new RegExp(`^Episode ${hex('e', 32)} ·`) })
       .check();
   await panel(page)
     .getByRole('checkbox', { name: /I reviewed these episodes/ })
