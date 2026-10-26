@@ -129,8 +129,9 @@ def doubles(monkeypatch):
     monkeypatch.setattr(service.shutil, "which", lambda binary: f"/fixture/{binary}")
 
     class Explorer:
-        def __init__(self):
-            self.reader = self
+        def __init__(self, *, data_dir):
+            assert data_dir.is_dir()
+            self.client = self
 
         async def preview(self, source, episode):
             assert source.result.revision == SHA
@@ -149,11 +150,6 @@ def doubles(monkeypatch):
                     )
                 ],
             )
-
-        async def read(self, url, max_bytes, budget):
-            assert SHA in url
-            assert max_bytes == 48 * 1024 * 1024
-            return state.source_bytes
 
         async def close(self):
             state.explorer_closed = True
@@ -176,6 +172,11 @@ def doubles(monkeypatch):
         async def close(self):
             state.provider_closed = True
 
+    async def download_video(client, url, target):
+        assert isinstance(client, Explorer)
+        assert SHA in url
+        target.write_bytes(state.source_bytes)
+
     async def trim(source, target, start, seconds):
         assert source.read_bytes() == state.source_bytes
         state.events.append(("trim", start, seconds))
@@ -191,6 +192,7 @@ def doubles(monkeypatch):
 
     monkeypatch.setattr(service, "DatasetExplorer", Explorer)
     monkeypatch.setattr(service, "GeminiOmniProvider", Provider)
+    monkeypatch.setattr(service, "download_video", download_video)
     monkeypatch.setattr(service, "trim", trim)
     monkeypatch.setattr(service, "verify_output", verify_output)
     return state
@@ -213,6 +215,7 @@ def test_augmentation_persists_pinned_provenance_and_downloads_review_bundle(tmp
         completed = wait(client, jid)
         assert completed["status"] == "succeeded", completed
         assert completed["kind"] == completed["result"]["operation"] == "dataset.augment"
+        assert not (tmp_path / "jobs" / jid / "source.mp4").exists()
         result = completed["result"]
         assert result["review_required"] is True
         assert result["source_job_id"] == "inspected"
@@ -446,6 +449,7 @@ def test_entire_selection_is_preflighted_before_first_paid_edit(tmp_path, double
         failed = wait(client, jid)
         assert failed["status"] == "failed"
         assert failed["result"] is None
+        assert not (tmp_path / "jobs" / jid / "source.mp4").exists()
         assert client.get(f"/api/v1/jobs/{jid}/augmentation/download").status_code == 422
         assert (
             client.get(f"/api/v1/jobs/{jid}/augmentation/clips/0?original=true").status_code == 422

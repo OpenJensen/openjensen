@@ -16,9 +16,10 @@ from vla_platform.augmentation.contracts import (
 )
 from vla_platform.augmentation.media import trim, verify_output
 from vla_platform.augmentation.provider import CLOUD_MODEL, MODEL, GeminiOmniProvider
+from vla_platform.augmentation.source import download_video
 from vla_platform.cloud_connections import CloudConnections, GcpConnectionConfig
 from vla_platform.contracts import TERMINAL
-from vla_platform.datasets.explore import Budget, DatasetExplorer, source_profile
+from vla_platform.datasets.explore import DatasetExplorer, source_profile
 
 
 class Augmentation:
@@ -107,7 +108,7 @@ class Augmentation:
                     directory = self.execution.settings.data_dir / "jobs" / job.id
                     directory.mkdir(parents=True, exist_ok=True)
                     (directory / "request.json").write_text(request.model_dump_json(indent=2))
-                    explorer = DatasetExplorer()
+                    explorer = DatasetExplorer(data_dir=self.execution.settings.data_dir)
                     options = self.options()
                     provider = (
                         GeminiOmniProvider(google_cloud_project=options.google_cloud_project)
@@ -137,12 +138,13 @@ class Augmentation:
                             raise ValueError(
                                 f"Episode {episode} is too short for the requested clip interval"
                             )
-                        raw = await explorer.reader.read(camera.url, 48 * 1024 * 1024, Budget())
                         video = directory / "source.mp4"
-                        video.write_bytes(raw)
                         original = directory / f"original-{index}.mp4"
-                        await trim(video, original, start, request.duration_seconds)
-                        video.unlink()
+                        await download_video(explorer.client, camera.url, video)
+                        try:
+                            await trim(video, original, start, request.duration_seconds)
+                        finally:
+                            video.unlink(missing_ok=True)
                         prepared.append((index, episode, start, end, original))
                     prompt = request.resolved_prompt()
                     clips = []
