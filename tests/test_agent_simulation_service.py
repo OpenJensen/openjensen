@@ -227,6 +227,13 @@ def test_full_simulator_loop_records_applied_action_and_stop_releases_owner(app)
     assert receipt["status"] == "completed"
     assert receipt["arguments"]["delta_rad"] == 0.03
     assert receipt["applied_targets"] == {"shoulder_pan": 0.01}
+    evidence = receipt["executor_evidence"]
+    assert evidence["requested_targets"] == {"shoulder_pan": 0.03}
+    assert evidence["applied_targets"] == {"shoulder_pan": 0.01}
+    assert evidence["observed_next_state"] == {"shoulder_pan": 0.01}
+    assert evidence["joint_limit_clipped"] == [False]
+    assert evidence["speed_limit_clipped"] == [True]
+    assert evidence["simulated_seconds"] == pytest.approx(1 / 60)
     assert receipt["task_success_verified"] is False
     assert receipt["post_observation_id"] != receipt["pre_observation_id"]
     assert complete["observation"]["joints"] == {"shoulder_pan": 0.01}

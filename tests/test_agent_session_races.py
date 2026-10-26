@@ -4,11 +4,13 @@ import asyncio
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from test_agent_simulation_service import FakeTeaching
-from vla_platform.agent_control.contracts import PlanRequest, SessionCreate
+from vla_platform.agent_control.contracts import Approval, PlanRequest, SessionCreate
 from vla_platform.agent_control.service import AgentError
 from vla_platform.api import create_app
 from vla_platform.settings import Settings
+from vla_platform.storage import agent_proposals, agent_receipts
 
 
 class BlockedTeaching(FakeTeaching):
@@ -255,5 +257,158 @@ def test_result_after_swallowed_deadline_cancellation_cannot_create_proposal(ser
         )
         with pytest.raises(AgentError):
             await agent.propose(current.id, PlanRequest(request_id="no_retry"))
+
+    client.portal.call(scenario)
+
+
+class PostActionTeaching(FakeTeaching):
+    def __init__(self, *, fail=False):
+        super().__init__()
+        self.fail = fail
+        self.entered = asyncio.Event()
+        self.proceed = asyncio.Event()
+
+    async def agent_relay(self, project, job, path, payload=None):
+        post_action = payload is not None and path == "/agent/observe" and self.executions
+        if post_action and self.fail:
+            raise OSError("The post-action camera sample is unavailable")
+        value = await super().agent_relay(project, job, path, payload)
+        if post_action:
+            self.entered.set()
+            try:
+                await self.proceed.wait()
+            except asyncio.CancelledError:
+                await self.proceed.wait()
+        return value
+
+
+def assert_completed_evidence(receipt):
+    assert receipt.status == "completed"
+    assert receipt.arguments.delta_rad == 0.03
+    assert receipt.applied_targets == {"shoulder_pan": 0.01}
+    assert receipt.task_success_verified is False
+    evidence = receipt.executor_evidence
+    assert evidence.joint_names == ["shoulder_pan"]
+    assert evidence.requested_targets == {"shoulder_pan": 0.03}
+    assert evidence.applied_targets == {"shoulder_pan": 0.01}
+    assert evidence.observed_next_state == {"shoulder_pan": 0.01}
+    assert evidence.joint_limit_clipped == [False]
+    assert evidence.speed_limit_clipped == [True]
+    assert evidence.execution_elapsed_seconds == pytest.approx(1e-9)
+
+
+async def start_simulated_execution(agent, project):
+    current = await agent.create(project, teaching_request())
+    await agent.propose(current.id, PlanRequest(request_id="execute_once"))
+    await agent.tasks[current.id]
+    current = await agent.get(current.id)
+    proposal_id = current.pending_proposal.id
+    approval = Approval(proposal_id=proposal_id, authority_epoch=current.authority_epoch)
+    await agent.approve(current.id, approval)
+    return current.id, approval
+
+
+async def assert_durable_completed_receipt(agent, identity, receipt):
+    async with agent.storage.engine.connect() as connection:
+        rows = (
+            (
+                await connection.execute(
+                    select(agent_receipts.c.record).where(agent_receipts.c.session_id == identity)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        proposal = (
+            await connection.execute(
+                select(agent_proposals.c.record).where(agent_proposals.c.id == receipt.proposal_id)
+            )
+        ).scalar_one()
+    assert len(rows) == 1
+    assert rows[0] == receipt.model_dump()
+    assert rows[0]["status"] == "completed" and proposal["status"] == "completed"
+
+
+def test_known_completion_survives_failed_post_action_observation(service):
+    client, agent, project = service
+
+    async def scenario():
+        target = PostActionTeaching(fail=True)
+        agent.execution.teaching = target
+        identity, approval = await start_simulated_execution(agent, project)
+        await asyncio.wait_for(agent.tasks[identity], 3)
+        current = await agent.get(identity)
+        assert current.status == "error" and current.pending_proposal is None
+        assert len(current.receipts) == 1 and len(target.executions) == 1
+        receipt = current.receipts[0]
+        assert receipt.id == target.executions[0]
+        assert_completed_evidence(receipt)
+        assert receipt.post_observation_id is None
+        assert receipt.executor_evidence.simulated_seconds is None
+        await assert_durable_completed_receipt(agent, identity, receipt)
+        assert target.owner is None and target.release_count == 1
+        events = await agent.events(identity, 0)
+        completion_index = next(i for i, event in enumerate(events) if event.kind == "receipt")
+        failed_index = next(
+            i for i, event in enumerate(events) if event.kind == "post_observation_failed"
+        )
+        assert completion_index < failed_index
+        # Reconnection, duplicate approval and restart cannot repeat a known action.
+        await agent.approve(identity, approval)
+        await agent.reconcile()
+        recovered = await agent.get(identity)
+        assert len(recovered.receipts) == 1 and recovered.receipts[0].status == "completed"
+        assert len(target.executions) == 1
+
+    client.portal.call(scenario)
+
+
+def test_stop_during_post_action_observation_preserves_completed_receipt(service):
+    client, agent, project = service
+
+    async def scenario():
+        target = PostActionTeaching()
+        agent.execution.teaching = target
+        identity, approval = await start_simulated_execution(agent, project)
+        stopping = None
+        try:
+            await asyncio.wait_for(target.entered.wait(), 3)
+            observing = await agent.get(identity)
+            assert observing.status == "observing" and observing.pending_proposal is None
+            assert len(observing.receipts) == 1
+            assert_completed_evidence(observing.receipts[0])
+            assert observing.receipts[0].post_observation_id is None
+            await assert_durable_completed_receipt(agent, identity, observing.receipts[0])
+            stopping = asyncio.create_task(agent.interrupt(identity, "stop"))
+
+            async def revoked():
+                current = await agent.get(identity)
+                return current.authority_epoch == approval.authority_epoch + 1
+
+            await eventually(revoked)
+            target.proceed.set()
+            await asyncio.wait_for(stopping, 3)
+            current = await agent.get(identity)
+            assert current.status == "stopped" and current.pending_proposal is None
+            assert len(current.receipts) == 1
+            receipt = current.receipts[0]
+            assert_completed_evidence(receipt)
+            assert receipt.post_observation_id is None
+            assert receipt.executor_evidence.simulated_seconds is None
+            assert receipt.id == target.executions[0] and len(target.executions) == 1
+            await assert_durable_completed_receipt(agent, identity, receipt)
+            assert target.owner is None and target.release_count == 1
+            assert not any(
+                event.kind == "post_execution_observed" for event in await agent.events(identity, 0)
+            )
+        finally:
+            target.proceed.set()
+            for task in (agent.tasks.get(identity), stopping):
+                if task is not None and not task.done():
+                    task.cancel()
+            await asyncio.gather(
+                *(task for task in (agent.tasks.get(identity), stopping) if task),
+                return_exceptions=True,
+            )
 
     client.portal.call(scenario)
