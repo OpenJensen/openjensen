@@ -2060,6 +2060,11 @@ export interface components {
              * @default gemini-omni-1.1-flash
              */
             model: string;
+            /**
+             * Preservation Prompt
+             * @default Edit this robotics dataset video by changing visual appearance only. Preserve the exact robot and object geometry, identities, positions, camera viewpoint, motion, contact events, action sequence, timing, duration and frame order. Keep the same scene throughout the clip with temporally consistent appearance. Do not add or remove objects, introduce camera motion, retime motion, crop the scene, or add text or audio. Change only what the edit explicitly requests. Keep all unmentioned surfaces, materials, colours, lighting and backgrounds unchanged. The requested appearance change follows:
+             */
+            preservation_prompt: string;
             /** Presets */
             presets?: components["schemas"]["AugmentationPreset"][];
             /** Setup Message */
@@ -2105,6 +2110,7 @@ export interface components {
              * @default
              */
             prompt: string;
+            source_clip?: components["schemas"]["AugmentationSourceClip"] | null;
             /** Source Job Id */
             source_job_id: string;
             /**
@@ -2150,10 +2156,23 @@ export interface components {
             review_required: true;
             /** Revision */
             revision: string;
+            source_clip?: components["schemas"]["AugmentationSourceClip"] | null;
             /** Source Job Id */
             source_job_id: string;
             /** Warnings */
             warnings: string[];
+        };
+        /** AugmentationSourceClip */
+        AugmentationSourceClip: {
+            /** Clip Index */
+            clip_index: number;
+            /** Job Id */
+            job_id: string;
+            /**
+             * Variant
+             * @enum {string}
+             */
+            variant: "original" | "augmented";
         };
         /** CameraPreview */
         CameraPreview: {

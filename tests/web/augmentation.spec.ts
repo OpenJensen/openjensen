@@ -45,6 +45,7 @@ function resultFor(body: Record<string, any>) {
     model: 'gemini-omni-1.1-flash',
     prompt: 'Preserve robot motion. Use soft side lighting.',
     source_job_id: body.source_job_id,
+    source_clip: body.source_clip ?? null,
     repo_id: 'fixture/robot',
     revision,
     metadata_sha256: 'b'.repeat(64),
@@ -215,6 +216,7 @@ async function mockWorkspace(
         '/api/v1/augmentation-options': {
           configured: config.configured ?? true,
           model: 'gemini-omni-1.1-flash',
+          preservation_prompt: 'Preserve all unmentioned surfaces.\n',
           max_clips: 4,
           max_duration_seconds: 10,
           auth_mode: config.cloud ? 'google_cloud' : 'gemini_api_key',
@@ -275,7 +277,7 @@ test('submits selected clips and texture instructions, then compares and downloa
   await page.getByLabel('Start at (seconds)').fill('1.5');
   await page.getByLabel('Clip length (seconds)').fill('4');
   await page.getByRole('radio', { name: 'Change textures', exact: true }).locator('..').click();
-  await page.getByLabel('Additional instructions (optional)').fill('Give the table a matte wood surface.');
+  await page.getByLabel('Edit instructions (optional)').fill('Give the table a matte wood surface.');
   await expect(page.getByText(/Clips and prompts are sent to Google’s Gemini API. Charges may apply./)).toBeVisible();
   await noOverflow(page);
   await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
@@ -464,7 +466,7 @@ test('waits for confirmed project membership and preserves the first setup error
   });
   const fixture = await mockWorkspace(page, { projectsReady, failFirst: true });
   await expect(page.getByRole('region', { name: 'Project', exact: true }).getByRole('status')).toBeVisible();
-  await expect(page.getByLabel('Additional instructions (optional)')).toBeDisabled();
+  await expect(page.getByLabel('Edit instructions (optional)')).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeDisabled();
   expect(fixture.optionsAttempts()).toBe(0);
   releaseProjects();
@@ -487,7 +489,7 @@ test('retains edit instructions when inspections arrive and disables cached cont
   });
   let failProjects = false;
   const fixture = await mockWorkspace(page, { jobsReady, failProjects: () => failProjects });
-  const prompt = page.getByLabel('Additional instructions (optional)');
+  const prompt = page.getByLabel('Edit instructions (optional)');
   await expect(prompt).toBeEnabled();
   await prompt.fill('Preserve this lighting instruction.');
   releaseJobs();
@@ -614,11 +616,11 @@ test('a missing binding keeps new augmentation blocked and explicit retry preser
   page,
 }) => {
   const fixture = await mockWorkspace(page, { submissionMode: 'lost-before-commit', complete: true });
-  await page.getByLabel('Additional instructions (optional)').fill('Original saved lighting');
+  await page.getByLabel('Edit instructions (optional)').fill('Original saved lighting');
   await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
   const recovery = page.getByRole('complementary', { name: 'Request recovery' });
   await expect(recovery.getByRole('button', { name: 'Check saved request' })).toBeEnabled();
-  await page.getByLabel('Additional instructions (optional)').fill('Edited form must not replace saved request');
+  await page.getByLabel('Edit instructions (optional)').fill('Edited form must not replace saved request');
   await recovery.getByRole('button', { name: 'Check saved request' }).click();
   await expect(recovery.getByRole('button', { name: 'Retry same request' })).toBeEnabled();
   await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeDisabled();
@@ -660,7 +662,7 @@ test('definitive initial recipe rejection allows correction with a new key', asy
   await submit.click();
   await expect(page.getByText('Synthetic recipe rejection before admission.', { exact: true })).toBeVisible();
   await expect(submit).toBeEnabled();
-  await page.getByLabel('Additional instructions (optional)').fill('Corrected recipe');
+  await page.getByLabel('Edit instructions (optional)').fill('Corrected recipe');
   await submit.click();
   await expect.poll(() => fixture.submitted.length).toBe(2);
   expect(fixture.keys[1]).not.toBe(fixture.keys[0]);
@@ -677,4 +679,86 @@ test('late augmentation acknowledgement preserves a manually selected earlier re
   await expect(page.getByRole('complementary', { name: 'Request recovery' })).toHaveCount(0);
   await expect(page.getByLabel('Augmented episode 1', { exact: true })).toBeVisible();
   expect(state.submitted).toHaveLength(1);
+});
+
+test('written instructions replace the visible preset edit before generation', async ({ page }) => {
+  const { submitted } = await mockWorkspace(page);
+  await page.getByRole('radio', { name: 'Change textures', exact: true }).locator('..').click();
+  const preview = page.getByRole('note', { name: 'Edit to send' });
+  await expect(preview).toContainText('Change the tabletop texture.');
+  await page.getByLabel('Edit instructions (optional)').fill('Make only the table metal. Keep the wall unchanged.');
+  await expect(preview).toContainText('Make only the table metal. Keep the wall unchanged.');
+  await expect(preview).not.toContainText('Change the tabletop texture.');
+  await page.getByText('Full prompt to send', { exact: true }).click();
+  await expect(
+    page.getByText('Preserve all unmentioned surfaces.\nMake only the table metal. Keep the wall unchanged.', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(submitted).toEqual([]);
+});
+
+test('another variation reuses the selected input clip and waits for an explicit generation', async ({ page }) => {
+  const { submitted, unexpected } = await mockWorkspace(page, { complete: true });
+  await page.getByLabel('Episode numbers', { exact: true }).fill('1, 3');
+  await page.getByLabel('Start at (seconds)').fill('1.5');
+  await page.getByLabel('Clip length (seconds)').fill('4');
+  await page.getByRole('radio', { name: 'Change textures', exact: true }).locator('..').click();
+  await page.getByLabel('Edit instructions (optional)').fill('Make only the table metal.');
+  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
+  await page.getByRole('button', { name: 'Preview episode 3', exact: true }).click();
+  await page.getByRole('button', { name: 'New variation from original', exact: true }).click();
+  await expect(page.getByLabel('Selected source video')).toHaveAttribute(
+    'src',
+    /augmentation-1\/augmentation\/clips\/1\?original=true$/,
+  );
+  await expect(page.getByLabel('Edit instructions (optional)')).toHaveValue('Make only the table metal.');
+  await expect(page.getByLabel('Episode numbers', { exact: true })).toHaveCount(0);
+  expect(submitted).toHaveLength(1);
+  await noOverflow(page);
+  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
+  await expect.poll(() => submitted.length).toBe(2);
+  expect(submitted[1]).toEqual({
+    ...submitted[0],
+    episode_indices: [3],
+    source_clip: { job_id: 'augmentation-1', clip_index: 1, variant: 'original' },
+  });
+  await expect(page.getByLabel('Input episode 3', { exact: true })).toBeVisible();
+  await expect(page.getByText('Another variation from', { exact: false }).last()).toBeVisible();
+  await page.getByRole('button', { name: 'Run 1', exact: true }).click();
+  await expect(page.getByLabel('Original episode 1', { exact: true })).toBeVisible();
+  expect(unexpected).toEqual([]);
+});
+
+test('refinement starts from the augmented result and retains its source in history', async ({ page }) => {
+  const { submitted, unexpected } = await mockWorkspace(page, { complete: true, priorRuns: true });
+  await page.getByRole('button', { name: 'Refine this result', exact: true }).click();
+  await expect(page.getByLabel('Selected source video')).toHaveAttribute(
+    'src',
+    /previous-2\/augmentation\/clips\/0\?original=false$/,
+  );
+  await expect(page.getByText('Refining the generated result', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Edit instructions', { exact: true })).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeDisabled();
+  expect(submitted).toEqual([]);
+  await page.getByLabel('Edit instructions', { exact: true }).fill('Make only the tabletop brushed steel.');
+  await noOverflow(page);
+  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
+  await expect.poll(() => submitted.length).toBe(1);
+  expect(submitted[0]).toMatchObject({
+    source_job_id: 'inspected-video',
+    episode_indices: [2],
+    camera_key: camera,
+    preset: 'custom',
+    prompt: 'Make only the tabletop brushed steel.',
+    source_clip: { job_id: 'previous-2', clip_index: 0, variant: 'augmented' },
+  });
+  await expect(page.getByLabel('Input episode 2', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Run 2', exact: true })).toBeVisible();
+  await noOverflow(page);
+  await page.getByRole('button', { name: 'Choose a different source', exact: true }).click();
+  await expect(page.getByLabel('Selected source video')).toHaveCount(0);
+  await expect(page.getByLabel('Episode numbers', { exact: true })).toHaveValue('2');
+  expect(submitted).toHaveLength(1);
+  expect(unexpected).toEqual([]);
 });

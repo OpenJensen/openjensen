@@ -14,7 +14,13 @@ from vla_platform.augmentation.contracts import (
     AugmentationRequest,
     AugmentationResult,
 )
-from vla_platform.augmentation.media import trim, verify_output
+from vla_platform.augmentation.media import (
+    MAX_INPUT_BYTES,
+    MAX_OUTPUT_BYTES,
+    duration,
+    trim,
+    verify_output,
+)
 from vla_platform.augmentation.provider import CLOUD_MODEL, MODEL, GeminiOmniProvider
 from vla_platform.augmentation.source import download_video
 from vla_platform.cloud_connections import CloudConnections, GcpConnectionConfig
@@ -78,7 +84,73 @@ class Augmentation:
         feature = profile.features.get(request.camera_key)
         if not isinstance(feature, dict) or feature.get("dtype") != "video":
             raise ValueError("Choose a video camera from the inspected dataset")
+        if request.source_clip:
+            await self.saved_clip(project_id, request)
         return source
+
+    async def saved_clip(self, project_id: str, request: AugmentationRequest):
+        reference = request.source_clip
+        parent = await self.execution.get(reference.job_id)
+        if (
+            parent is None
+            or parent.project_id != project_id
+            or parent.status != "succeeded"
+            or not isinstance(parent.request, AugmentationRequest)
+            or not isinstance(parent.result, AugmentationResult)
+        ):
+            raise ValueError("Choose a completed augmentation in this project")
+        clip = next(
+            (item for item in parent.result.clips if item.index == reference.clip_index), None
+        )
+        if clip is None:
+            raise ValueError("The selected augmentation clip does not exist")
+        if (
+            parent.result.source_job_id != request.source_job_id
+            or parent.request.source_job_id != request.source_job_id
+            or request.episode_indices != [clip.episode_index]
+            or request.camera_key != clip.camera_key
+            or request.start_seconds != parent.request.start_seconds
+            or abs(request.duration_seconds - (clip.source_end_seconds - clip.source_start_seconds))
+            > 0.001
+        ):
+            raise ValueError(
+                "Saved clip selection must keep its dataset, episode, camera and timing"
+            )
+        path = await self.download(parent.id, clip.index, original=reference.variant == "original")
+        if path.is_symlink() or not 0 < path.stat().st_size <= MAX_OUTPUT_BYTES:
+            raise ValueError("The saved source clip is invalid or exceeds the 40 MiB limit")
+        return clip, path
+
+    async def prepare_saved_clip(self, project_id, request, directory):
+        clip, path = await self.saved_clip(project_id, request)
+        video = directory / "source.mp4"
+        original = directory / "original-0.mp4"
+        try:
+            shutil.copyfile(path, video)
+            if video.stat().st_size > MAX_OUTPUT_BYTES:
+                raise ValueError("The saved source clip exceeds the 40 MiB limit")
+            with video.open("rb") as stream:
+                digest = hashlib.file_digest(stream, "sha256").hexdigest()
+            expected = (
+                clip.input_sha256
+                if request.source_clip.variant == "original"
+                else clip.output_sha256
+            )
+            if digest != expected:
+                raise ValueError("The saved source clip no longer matches its recorded hash")
+            actual = await duration(video)
+            if abs(actual - request.duration_seconds) > 0.15:
+                raise ValueError("The saved source clip no longer matches its recorded duration")
+            if video.stat().st_size >= MAX_INPUT_BYTES:
+                await trim(video, original, 0, request.duration_seconds)
+            else:
+                # Preserve the exact reviewed input bytes whenever they fit the upload limit.
+                video.replace(original)
+        finally:
+            video.unlink(missing_ok=True)
+        return [
+            (0, clip.episode_index, clip.source_start_seconds, clip.source_end_seconds, original)
+        ]
 
     async def stage(self, job_id: str, text: str):
         async with self.execution.lock:
@@ -108,44 +180,56 @@ class Augmentation:
                     directory = self.execution.settings.data_dir / "jobs" / job.id
                     directory.mkdir(parents=True, exist_ok=True)
                     (directory / "request.json").write_text(request.model_dump_json(indent=2))
-                    explorer = DatasetExplorer(data_dir=self.execution.settings.data_dir)
                     options = self.options()
                     provider = (
                         GeminiOmniProvider(google_cloud_project=options.google_cloud_project)
                         if options.auth_mode == "google_cloud"
                         else GeminiOmniProvider(os.environ["GEMINI_API_KEY"])
                     )
-                    prepared = []
-                    # Validate and trim the entire selection before any paid generation request.
-                    for index, episode in enumerate(request.episode_indices):
-                        await self.stage(job.id, f"Preparing clip {index + 1}")
-                        preview = await explorer.preview(source, episode)
-                        camera = next(
-                            (item for item in preview.cameras if item.key == request.camera_key),
-                            None,
-                        )
-                        if camera is None:
-                            raise ValueError("The selected camera has no playable episode video")
-                        start = camera.start_seconds + request.start_seconds
-                        end = start + request.duration_seconds
-                        if (
-                            end
-                            > min(
-                                camera.end_seconds, camera.start_seconds + preview.duration_seconds
+                    if request.source_clip:
+                        await self.stage(job.id, "Preparing saved clip")
+                        prepared = await self.prepare_saved_clip(job.project_id, request, directory)
+                    else:
+                        explorer = DatasetExplorer(data_dir=self.execution.settings.data_dir)
+                        prepared = []
+                        # Validate and trim the entire selection before any paid generation request.
+                        for index, episode in enumerate(request.episode_indices):
+                            await self.stage(job.id, f"Preparing clip {index + 1}")
+                            preview = await explorer.preview(source, episode)
+                            camera = next(
+                                (
+                                    item
+                                    for item in preview.cameras
+                                    if item.key == request.camera_key
+                                ),
+                                None,
                             )
-                            + 0.001
-                        ):
-                            raise ValueError(
-                                f"Episode {episode} is too short for the requested clip interval"
-                            )
-                        video = directory / "source.mp4"
-                        original = directory / f"original-{index}.mp4"
-                        await download_video(explorer.client, camera.url, video)
-                        try:
-                            await trim(video, original, start, request.duration_seconds)
-                        finally:
-                            video.unlink(missing_ok=True)
-                        prepared.append((index, episode, start, end, original))
+                            if camera is None:
+                                raise ValueError(
+                                    "The selected camera has no playable episode video"
+                                )
+                            start = camera.start_seconds + request.start_seconds
+                            end = start + request.duration_seconds
+                            if (
+                                end
+                                > min(
+                                    camera.end_seconds,
+                                    camera.start_seconds + preview.duration_seconds,
+                                )
+                                + 0.001
+                            ):
+                                raise ValueError(
+                                    f"Episode {episode} is too short "
+                                    "for the requested clip interval"
+                                )
+                            video = directory / "source.mp4"
+                            original = directory / f"original-{index}.mp4"
+                            await download_video(explorer.client, camera.url, video)
+                            try:
+                                await trim(video, original, start, request.duration_seconds)
+                            finally:
+                                video.unlink(missing_ok=True)
+                            prepared.append((index, episode, start, end, original))
                     prompt = request.resolved_prompt()
                     clips = []
                     for index, episode, start, end, original in prepared:
@@ -173,6 +257,7 @@ class Augmentation:
                         google_cloud_project=options.google_cloud_project,
                         prompt=prompt,
                         source_job_id=source.id,
+                        source_clip=request.source_clip,
                         repo_id=profile.repo_id,
                         revision=profile.revision,
                         metadata_sha256=profile.metadata_sha256,

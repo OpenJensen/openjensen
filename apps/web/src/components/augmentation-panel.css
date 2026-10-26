@@ -880,3 +880,66 @@
   margin-top: 24px;
   padding-top: 20px;
 }
+
+.augmentation-edit-preview,
+.augmentation-saved-source,
+.augmentation-iterate {
+  padding: 18px;
+  margin-top: 18px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--subtle);
+}
+.augmentation-edit-preview strong,
+.augmentation-iterate h4,
+.augmentation-saved-source h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 550;
+}
+.augmentation-edit-preview p,
+.augmentation-iterate p,
+.augmentation-saved-source p,
+.augmentation-lineage {
+  margin: 8px 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.augmentation-edit-preview p {
+  color: var(--ink);
+}
+.augmentation-iterate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+.augmentation-saved-source {
+  display: grid;
+  grid-template-columns: minmax(160px, 280px) minmax(0, 1fr);
+  gap: 20px;
+  margin-top: 0;
+}
+.augmentation-saved-source video {
+  display: block;
+  width: 100%;
+  background: #111;
+  border-radius: 8px;
+}
+.augmentation-saved-source .text-button {
+  margin-top: 8px;
+}
+@media (max-width: 640px) {
+  .augmentation-saved-source {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .augmentation-iterate-actions {
+    flex-direction: column;
+  }
+  .augmentation-iterate-actions button {
+    width: 100%;
+  }
+}

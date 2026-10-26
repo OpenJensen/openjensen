@@ -263,6 +263,11 @@
             "title": "Model",
             "type": "string"
           },
+          "preservation_prompt": {
+            "default": "Edit this robotics dataset video by changing visual appearance only. Preserve the exact robot and object geometry, identities, positions, camera viewpoint, motion, contact events, action sequence, timing, duration and frame order. Keep the same scene throughout the clip with temporally consistent appearance. Do not add or remove objects, introduce camera motion, retime motion, crop the scene, or add text or audio. Change only what the edit explicitly requests. Keep all unmentioned surfaces, materials, colours, lighting and backgrounds unchanged. The requested appearance change follows:\n",
+            "title": "Preservation Prompt",
+            "type": "string"
+          },
           "presets": {
             "items": {
               "$ref": "#/components/schemas/AugmentationPreset"
@@ -365,6 +370,16 @@
             "title": "Prompt",
             "type": "string"
           },
+          "source_clip": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AugmentationSourceClip"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "source_job_id": {
             "maxLength": 200,
             "minLength": 1,
@@ -454,6 +469,16 @@
             "title": "Revision",
             "type": "string"
           },
+          "source_clip": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AugmentationSourceClip"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "source_job_id": {
             "title": "Source Job Id",
             "type": "string"
@@ -476,6 +501,37 @@
           "warnings"
         ],
         "title": "AugmentationResult",
+        "type": "object"
+      },
+      "AugmentationSourceClip": {
+        "additionalProperties": false,
+        "properties": {
+          "clip_index": {
+            "minimum": 0.0,
+            "title": "Clip Index",
+            "type": "integer"
+          },
+          "job_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Job Id",
+            "type": "string"
+          },
+          "variant": {
+            "enum": [
+              "original",
+              "augmented"
+            ],
+            "title": "Variant",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "clip_index",
+          "variant"
+        ],
+        "title": "AugmentationSourceClip",
         "type": "object"
       },
       "CameraPreview": {

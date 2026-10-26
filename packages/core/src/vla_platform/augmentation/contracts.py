@@ -13,7 +13,8 @@ PRESETS = [
         "id": "texture",
         "label": "Change textures",
         "prompt": (
-            "Change the tabletop texture to matte light oak and the background to plain grey."
+            "Change only the tabletop surface to matte light oak. "
+            "Keep the background and all other surfaces unchanged."
         ),
     },
     {"id": "custom", "label": "Custom appearance", "prompt": ""},
@@ -24,7 +25,9 @@ PRESERVATION_PROMPT = (
     "motion, contact events, action sequence, timing, duration and frame order. "
     "Keep the same scene throughout the clip with temporally consistent appearance. "
     "Do not add or remove objects, introduce camera motion, retime motion, crop the scene, "
-    "or add text or audio. The requested appearance change follows:\n"
+    "or add text or audio. Change only what the edit explicitly requests. "
+    "Keep all unmentioned surfaces, materials, colours, lighting and backgrounds unchanged. "
+    "The requested appearance change follows:\n"
 )
 
 
@@ -32,9 +35,19 @@ class AugmentationRecord(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, allow_inf_nan=False)
 
 
+class AugmentationSourceClip(AugmentationRecord):
+    job_id: str = Field(min_length=1, max_length=200)
+    clip_index: int = Field(ge=0, strict=True)
+    variant: Literal["original", "augmented"]
+
+
 class AugmentationRequest(AugmentationRecord):
     operation: Literal["dataset.augment"] = "dataset.augment"
     source_job_id: str = Field(min_length=1, max_length=200)
+    # Keep legacy normalized requests and durable fingerprints byte-for-byte compatible.
+    source_clip: AugmentationSourceClip | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     episode_indices: list[Annotated[int, Field(ge=0, strict=True)]] = Field(
         min_length=1, max_length=4
     )
@@ -48,13 +61,15 @@ class AugmentationRequest(AugmentationRecord):
     def validate_selection(self):
         if len(set(self.episode_indices)) != len(self.episode_indices):
             raise ValueError("Select each episode only once")
+        if self.source_clip is not None and len(self.episode_indices) != 1:
+            raise ValueError("Choose one saved clip per variation or refinement")
         if self.preset == "custom" and not self.prompt:
             raise ValueError("Custom appearance requires a prompt")
         return self
 
     def resolved_prompt(self) -> str:
         preset = next(item["prompt"] for item in PRESETS if item["id"] == self.preset)
-        return PRESERVATION_PROMPT + "\n".join(part for part in (preset, self.prompt) if part)
+        return PRESERVATION_PROMPT + (self.prompt or preset)
 
 
 class AugmentationClip(AugmentationRecord):
@@ -75,6 +90,7 @@ class AugmentationResult(AugmentationRecord):
     google_cloud_project: str | None = None
     prompt: str
     source_job_id: str
+    source_clip: AugmentationSourceClip | None = None
     repo_id: str
     revision: str = Field(pattern=r"^[a-f0-9]{40}$")
     metadata_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
@@ -95,6 +111,7 @@ class AugmentationOptions(AugmentationRecord):
     auth_mode: Literal["google_cloud", "gemini_api_key", "unconfigured"] = "unconfigured"
     google_cloud_project: str | None = None
     auth_message: str | None = None
+    preservation_prompt: str = PRESERVATION_PROMPT
     max_clips: int = 4
     max_duration_seconds: int = 10
     presets: list[AugmentationPreset] = Field(

@@ -21,6 +21,8 @@ import { DatasetSubmissionRecovery } from '@/components/dataset-submission-recov
 import './augmentation-panel.css';
 
 type Preset = 'lighting' | 'texture' | 'custom';
+type ClipSource = NonNullable<AugmentationRequest['source_clip']>;
+type ReuseSelection = { job: AugmentationJob; clipIndex: number; variant: ClipSource['variant'] };
 const presetDetails = {
   lighting: { label: 'Change lighting', icon: 'spark' },
   texture: { label: 'Change textures', icon: 'layers' },
@@ -91,7 +93,21 @@ function RunStatus({ job }: { job: AugmentationJob }) {
   );
 }
 
-function AugmentationRun({ job, projectId }: { job: AugmentationJob; projectId: string }) {
+function AugmentationRun({
+  job,
+  projectId,
+  onReuse,
+  reuseDisabled,
+  sourceRunLabel,
+  onViewSource,
+}: {
+  job: AugmentationJob;
+  projectId: string;
+  onReuse: (job: AugmentationJob, clipIndex: number, variant: ClipSource['variant']) => void;
+  reuseDisabled: boolean;
+  sourceRunLabel?: string;
+  onViewSource: (id: string) => void;
+}) {
   const client = useQueryClient();
   const [clipIndex, setClipIndex] = useState(0);
   const [mediaErrors, setMediaErrors] = useState<Record<string, boolean>>({});
@@ -118,6 +134,19 @@ function AugmentationRun({ job, projectId }: { job: AugmentationJob; projectId: 
         </div>
         <RunStatus job={job} />
       </div>
+      {job.request.source_clip && (
+        <p className="augmentation-lineage">
+          {job.request.source_clip.variant === 'augmented' ? 'Refinement of' : 'Another variation from'}{' '}
+          {sourceRunLabel ? (
+            <button type="button" className="text-button" onClick={() => onViewSource(job.request.source_clip!.job_id)}>
+              {sourceRunLabel}
+            </button>
+          ) : (
+            'a saved augmentation'
+          )}
+          {' · '}Episode {job.request.episode_indices[0]}
+        </p>
+      )}
       {isActive(job) && (
         <div className="augmentation-progress" role="status">
           <span className="spinner" />
@@ -193,7 +222,7 @@ function AugmentationRun({ job, projectId }: { job: AugmentationJob; projectId: 
               </div>
               <div className="augmentation-comparison">
                 {[true, false].map((original) => {
-                  const label = original ? 'Original' : 'Augmented';
+                  const label = original ? (job.request.source_clip ? 'Input' : 'Original') : 'Augmented';
                   const url = augmentationClipUrl(job.id, clip.index, original);
                   return (
                     <figure key={`${clip.index}-${label}`}>
@@ -218,6 +247,30 @@ function AugmentationRun({ job, projectId }: { job: AugmentationJob; projectId: 
                     </figure>
                   );
                 })}
+              </div>
+              <div className="augmentation-iterate" aria-label="Create another augmentation">
+                <div>
+                  <h4>Continue with this clip</h4>
+                  <p>Make another variation from its input, or apply a new edit to this result.</p>
+                </div>
+                <div className="augmentation-iterate-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={reuseDisabled}
+                    onClick={() => onReuse(job, clip.index, 'original')}
+                  >
+                    {job.request.source_clip ? 'New variation from input' : 'New variation from original'}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={reuseDisabled}
+                    onClick={() => onReuse(job, clip.index, 'augmented')}
+                  >
+                    Refine this result
+                  </button>
+                </div>
               </div>
             </>
           )}
@@ -301,6 +354,13 @@ export function AugmentationPanel({
   const [preset, setPreset] = useState<Preset>('lighting');
   const [prompt, setPrompt] = useState('');
   const [selectedRunId, setSelectedRunId] = useState('');
+  const [reuse, setReuse] = useState<ReuseSelection | null>(null);
+  const sourceSelection = reuse?.job.project_id === projectId ? reuse : null;
+  const selectedSourceClip = sourceSelection?.job.result?.clips.find(
+    (item) => item.index === sourceSelection.clipIndex,
+  );
+  const formRef = useRef<HTMLFormElement>(null);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
   const submission = useDurableSubmission({ project: projectId, operation: 'dataset.augment' });
   const selection = useRef({ project: projectId, generation: 0 });
   if (selection.current.project !== projectId)
@@ -398,6 +458,15 @@ export function AugmentationPanel({
         prompt: prompt.trim(),
         start_seconds: Number(start),
         duration_seconds: Number(duration),
+        ...(sourceSelection
+          ? {
+              source_clip: {
+                job_id: sourceSelection.job.id,
+                clip_index: sourceSelection.clipIndex,
+                variant: sourceSelection.variant,
+              },
+            }
+          : {}),
       };
       const generation = selection.current.generation;
       const job = await submission.submit(body, validate);
@@ -407,6 +476,28 @@ export function AugmentationPanel({
   });
   const runs = (jobs.data ?? []).filter(isAugmentationJob).sort((a, b) => b.created_at.localeCompare(a.created_at));
   const selectedRun = runs.find((job) => job.id === selectedRunId) ?? runs[0];
+  const runLabel = (id: string) => {
+    const index = runs.findIndex((job) => job.id === id);
+    return index < 0 ? undefined : `Run ${runs.length - index}`;
+  };
+  const editToSend = prompt.trim() || options.data?.presets?.find((item) => item.id === preset)?.prompt || '';
+  function reuseClip(job: AugmentationJob, clipIndex: number, variant: ClipSource['variant']) {
+    const clip = job.result?.clips.find((item) => item.index === clipIndex);
+    if (!clip || job.project_id !== projectId) return;
+    setReuse({ job, clipIndex, variant });
+    setDatasetId(job.request.source_job_id);
+    setCameraKey(clip.camera_key);
+    setEpisodes(String(clip.episode_index));
+    setStart(String(job.request.start_seconds));
+    setDuration(String(job.request.duration_seconds));
+    setPreset(variant === 'augmented' ? 'custom' : job.request.preset);
+    setPrompt(variant === 'augmented' ? '' : (job.request.prompt ?? ''));
+    create.reset();
+    requestAnimationFrame(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      promptRef.current?.focus({ preventScroll: true });
+    });
+  }
   const toggleEpisode = (index: number) => {
     const valid = episodeIssue ? [] : indices;
     const next = valid.includes(index) ? valid.filter((value) => value !== index) : [...valid, index];
@@ -493,6 +584,7 @@ export function AugmentationPanel({
         </div>
       )}
       <form
+        ref={formRef}
         className="augmentation-form"
         onSubmit={(event) => {
           event.preventDefault();
@@ -521,97 +613,148 @@ export function AugmentationPanel({
               </button>
             </div>
           )}
-          {!!datasets.length && (
-            <>
-              <div className="augmentation-group-heading">
-                <h3 id="augmentation-datasets-title">Dataset</h3>
-                <span>{datasets.length} available</span>
+          {sourceSelection && selectedSourceClip ? (
+            <div className="augmentation-saved-source" aria-label="Selected source clip">
+              <video
+                controls
+                playsInline
+                preload="metadata"
+                aria-label="Selected source video"
+                src={augmentationClipUrl(
+                  sourceSelection.job.id,
+                  sourceSelection.clipIndex,
+                  sourceSelection.variant === 'original',
+                )}
+              />
+              <div>
+                <h3>
+                  {sourceSelection.variant === 'augmented'
+                    ? 'Refining the generated result'
+                    : 'New variation from the saved input'}
+                </h3>
+                <p>
+                  {runLabel(sourceSelection.job.id)} · Episode {selectedSourceClip.episode_index} ·{' '}
+                  {cameraLabel(selectedSourceClip.camera_key)} camera
+                </p>
+                <p>
+                  {selectedSourceClip.source_start_seconds}s–{selectedSourceClip.source_end_seconds}s ·{' '}
+                  {sourceSelection.job.result?.repo_id}
+                </p>
+                <p>
+                  {sourceSelection.variant === 'augmented'
+                    ? 'This edit starts from the augmented video, including its existing changes.'
+                    : 'This edit starts from the input video shown in that run.'}
+                </p>
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => {
+                    setReuse(null);
+                    create.reset();
+                  }}
+                >
+                  Choose a different source
+                </button>
               </div>
-              <div className="augmentation-datasets" role="radiogroup" aria-labelledby="augmentation-datasets-title">
-                {datasets.map((job) => (
-                  <label className="augmentation-choice augmentation-dataset" key={job.id}>
-                    <input
-                      type="radio"
-                      name="augmentation-dataset"
-                      aria-label={`${job.result.repo_id}, inspected ${dateLabel(job.created_at)}, revision ${job.result.revision.slice(0, 7)}`}
-                      value={job.id}
-                      checked={dataset?.id === job.id}
-                      onChange={() => {
-                        setDatasetId(job.id);
-                        setCameraKey('');
-                        setEpisodes('0');
-                        create.reset();
-                      }}
-                    />
-                    <span className="augmentation-source-icon">
-                      <Icon name="database" size={21} />
-                    </span>
-                    <span className="augmentation-choice-copy">
-                      <strong>{job.result.repo_id}</strong>
-                      <span>
-                        {job.result.total_episodes.toLocaleString()} episodes · {videoCameras(job.result).length} camera
-                        {videoCameras(job.result).length === 1 ? '' : 's'}
+            </div>
+          ) : (
+            !!datasets.length && (
+              <>
+                <div className="augmentation-group-heading">
+                  <h3 id="augmentation-datasets-title">Dataset</h3>
+                  <span>{datasets.length} available</span>
+                </div>
+                <div className="augmentation-datasets" role="radiogroup" aria-labelledby="augmentation-datasets-title">
+                  {datasets.map((job) => (
+                    <label className="augmentation-choice augmentation-dataset" key={job.id}>
+                      <input
+                        type="radio"
+                        name="augmentation-dataset"
+                        aria-label={`${job.result.repo_id}, inspected ${dateLabel(job.created_at)}, revision ${job.result.revision.slice(0, 7)}`}
+                        value={job.id}
+                        checked={dataset?.id === job.id}
+                        onChange={() => {
+                          setDatasetId(job.id);
+                          setCameraKey('');
+                          setEpisodes('0');
+                          create.reset();
+                        }}
+                      />
+                      <span className="augmentation-source-icon">
+                        <Icon name="database" size={21} />
                       </span>
-                      <small>
-                        Inspected {dateLabel(job.created_at)} · {job.result.revision.slice(0, 7)}
-                      </small>
-                    </span>
-                    <span className="augmentation-choice-dot" />
-                  </label>
-                ))}
-              </div>
-              <div className="augmentation-group-heading">
-                <h3 id="augmentation-cameras-title">Camera</h3>
-              </div>
-              <div className="augmentation-cameras" role="radiogroup" aria-labelledby="augmentation-cameras-title">
-                {cameras.map((key) => (
-                  <label className="augmentation-choice augmentation-camera" key={key}>
-                    <input
-                      type="radio"
-                      name="augmentation-camera"
-                      value={key}
-                      checked={camera === key}
-                      aria-label={`${cameraLabel(key)} camera`}
-                      onChange={() => {
-                        setCameraKey(key);
-                        create.reset();
-                      }}
-                    />
-                    <span className="augmentation-camera-icon" aria-hidden="true">
-                      <svg viewBox="0 0 32 24" fill="none">
-                        <rect x="3" y="5" width="20" height="15" rx="3" />
-                        <path d="m23 10 6-3v12l-6-3M9 5l2-3h6l2 3" />
-                        <circle cx="13" cy="12.5" r="3.5" />
-                      </svg>
-                    </span>
-                    <span className="augmentation-choice-copy">
-                      <strong>{cameraLabel(key)}</strong>
-                    </span>
-                    <span className="augmentation-choice-dot" />
-                  </label>
-                ))}
-              </div>
-              <div className="augmentation-group-heading">
-                <h3 id="augmentation-episodes-title">Episodes</h3>
-                <span>Up to {maxClips} per run</span>
-              </div>
-              <div className="augmentation-episode-choices" role="group" aria-labelledby="augmentation-episodes-title">
-                {Array.from({ length: Math.min(dataset.result.total_episodes, 8) }, (_, index) => (
-                  <button
-                    type="button"
-                    key={index}
-                    aria-label={`Episode ${index}`}
-                    aria-pressed={!episodeIssue && indices.includes(index)}
-                    disabled={!episodeIssue && !indices.includes(index) && indices.length >= maxClips}
-                    onClick={() => toggleEpisode(index)}
-                  >
-                    {index}
-                  </button>
-                ))}
-              </div>
-            </>
+                      <span className="augmentation-choice-copy">
+                        <strong>{job.result.repo_id}</strong>
+                        <span>
+                          {job.result.total_episodes.toLocaleString()} episodes · {videoCameras(job.result).length}{' '}
+                          camera
+                          {videoCameras(job.result).length === 1 ? '' : 's'}
+                        </span>
+                        <small>
+                          Inspected {dateLabel(job.created_at)} · {job.result.revision.slice(0, 7)}
+                        </small>
+                      </span>
+                      <span className="augmentation-choice-dot" />
+                    </label>
+                  ))}
+                </div>
+                <div className="augmentation-group-heading">
+                  <h3 id="augmentation-cameras-title">Camera</h3>
+                </div>
+                <div className="augmentation-cameras" role="radiogroup" aria-labelledby="augmentation-cameras-title">
+                  {cameras.map((key) => (
+                    <label className="augmentation-choice augmentation-camera" key={key}>
+                      <input
+                        type="radio"
+                        name="augmentation-camera"
+                        value={key}
+                        checked={camera === key}
+                        aria-label={`${cameraLabel(key)} camera`}
+                        onChange={() => {
+                          setCameraKey(key);
+                          create.reset();
+                        }}
+                      />
+                      <span className="augmentation-camera-icon" aria-hidden="true">
+                        <svg viewBox="0 0 32 24" fill="none">
+                          <rect x="3" y="5" width="20" height="15" rx="3" />
+                          <path d="m23 10 6-3v12l-6-3M9 5l2-3h6l2 3" />
+                          <circle cx="13" cy="12.5" r="3.5" />
+                        </svg>
+                      </span>
+                      <span className="augmentation-choice-copy">
+                        <strong>{cameraLabel(key)}</strong>
+                      </span>
+                      <span className="augmentation-choice-dot" />
+                    </label>
+                  ))}
+                </div>
+                <div className="augmentation-group-heading">
+                  <h3 id="augmentation-episodes-title">Episodes</h3>
+                  <span>Up to {maxClips} per run</span>
+                </div>
+                <div
+                  className="augmentation-episode-choices"
+                  role="group"
+                  aria-labelledby="augmentation-episodes-title"
+                >
+                  {Array.from({ length: Math.min(dataset.result.total_episodes, 8) }, (_, index) => (
+                    <button
+                      type="button"
+                      key={index}
+                      aria-label={`Episode ${index}`}
+                      aria-pressed={!episodeIssue && indices.includes(index)}
+                      disabled={!episodeIssue && !indices.includes(index) && indices.length >= maxClips}
+                      onClick={() => toggleEpisode(index)}
+                    >
+                      {index}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )
           )}
-          {dataset && (
+          {dataset && !sourceSelection && (
             <div className="augmentation-fields">
               <label className="augmentation-wide" htmlFor="augmentation-episodes">
                 Episode numbers
@@ -693,9 +836,10 @@ export function AugmentationPanel({
             ))}
           </div>
           <label className="augmentation-prompt-label" htmlFor="augmentation-prompt">
-            {preset === 'custom' ? 'Edit instructions' : 'Additional instructions (optional)'}
+            {preset === 'custom' ? 'Edit instructions' : 'Edit instructions (optional)'}
             <textarea
               id="augmentation-prompt"
+              ref={promptRef}
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               rows={3}
@@ -703,17 +847,27 @@ export function AugmentationPanel({
               required={preset === 'custom'}
               placeholder={
                 preset === 'texture'
-                  ? 'For example, give the tabletop a dark wood texture.'
+                  ? 'For example, make only the tabletop brushed silver metal. Keep the wall unchanged.'
                   : preset === 'custom'
                     ? 'Describe the visual change you want to see.'
                     : 'For example, use soft afternoon light from the left.'
               }
             />
           </label>
-          {preset !== 'custom' && options.data?.presets?.find((item) => item.id === preset)?.prompt && (
+          <p className="augmentation-hint">
+            Your instructions replace the preset example. Only the changes you describe will be requested.
+          </p>
+          <div className="augmentation-edit-preview" role="note" aria-label="Edit to send">
+            <strong>Edit to send</strong>
+            <p>{editToSend || 'Describe the edit you want to make.'}</p>
+          </div>
+          {options.data?.preservation_prompt && (
             <details className="augmentation-preset-prompt">
-              <summary>View preset instructions</summary>
-              <p>{options.data.presets?.find((item) => item.id === preset)!.prompt}</p>
+              <summary>Full prompt to send</summary>
+              <p>
+                {options.data.preservation_prompt}
+                {editToSend}
+              </p>
             </details>
           )}
         </fieldset>
@@ -813,7 +967,19 @@ export function AugmentationPanel({
                 ))}
               </div>
             )}
-            {selectedRun && <AugmentationRun key={selectedRun.id} job={selectedRun} projectId={projectId} />}
+            {selectedRun && (
+              <AugmentationRun
+                key={selectedRun.id}
+                job={selectedRun}
+                projectId={projectId}
+                onReuse={reuseClip}
+                reuseDisabled={!projectId || create.isPending || submission.busy || !!submission.attempt}
+                sourceRunLabel={
+                  selectedRun.request.source_clip ? runLabel(selectedRun.request.source_clip.job_id) : undefined
+                }
+                onViewSource={chooseRun}
+              />
+            )}
           </>
         )}
       </section>
