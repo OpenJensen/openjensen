@@ -1,10 +1,19 @@
 # Run a managed Teaching session
 
-## Explicit operator configuration
+In a managed session, OpenJensen starts a local Isaac Sim teaching process for you, lets you record episodes from the browser, and publishes the capture when you stop. You end up with recordings ready for [dataset preparation](recording-preparation.md). To drive an executor you start yourself, see [Connect the Teaching executor](teaching-connections.md).
 
-Prepare a local Linux Isaac installation and the pinned [Teaching worker](../workers/teaching/README.md). Configure the project's capture root with `JENSEN_RECORDING_CONFIG` using [recording setup](recording-preparation.md).
+## What you need
 
-Save a private session profile file and set `JENSEN_TEACHING_SESSION_CONFIG` to its absolute path before restarting the API:
+- A Linux application host with a local Isaac Sim 6.1 installation. Managed sessions run only on Linux; there is no remote runner.
+- The pinned [Teaching worker](../workers/teaching/README.md) and its strict Teaching settings file.
+- A capture root for the project in `JENSEN_RECORDING_CONFIG`, set up as in [recording preparation](recording-preparation.md#1-configure-the-capture-roots). It must not overlap the workspace's `jobs/` folder.
+- Accepted Isaac license terms.
+
+Voice and advice are not available in managed sessions; [set them up](teaching-intelligence.md) with an existing executor instead.
+
+## 1. Write a session profile
+
+Save a private session profile file, set `JENSEN_TEACHING_SESSION_CONFIG` to its absolute path, and restart the server:
 
 ```json
 {
@@ -25,27 +34,50 @@ Save a private session profile file and set `JENSEN_TEACHING_SESSION_CONFIG` to 
 }
 ```
 
-Replace the project, interpreter, worker, settings and lease paths. Supply the worker's strict Teaching settings file and size `max_capture_bytes` for available disk space. Set `accept_eula` after accepting Isaac's terms.
+Replace the project, interpreter, worker, settings and lease paths with your own.
 
-## Start and record
+| Field | What to set |
+| --- | --- |
+| `id` | 1–64 letters, digits, `_` or `-`. Unique within the file. |
+| `label` | Name shown in **Teaching profile**, up to 100 characters. |
+| `project_id` | The existing project allowed to use this profile. |
+| `isaac_python` | Isaac's Python launcher. |
+| `worker_root` | The `workers/teaching` directory. Keep the sibling `workers/isaac_sim` source present. |
+| `settings_path` | The worker's strict Teaching settings file. Its `scene` path is resolved relative to this file. |
+| `lease_path` | A private lock file that stops two sessions from using Isaac at once. Keep it apart from the settings file and outside the capture root. |
+| `control_port` | Local port for the session, 1024–65535. |
+| `accept_eula` | Must be `true`. Set it only after accepting Isaac's terms. |
+| `max_seconds` | Longest allowed session, 1–3600 seconds. Default 300. |
+| `max_capture_bytes` | Capture size cap, 1 KiB to 8 GiB. Default 512 MiB. Size it for your free disk space. |
 
-Open **Teaching**, choose the configured **Teaching profile**, set the duration,
-review the session consent, and select **Start teaching session**. Select the saved
-session to use its recording controls. After finishing the episodes, choose
-**Stop and publish**.
+The file holds 1–32 profiles and must stay under 64 KiB. Each profile has a hash that covers both configuration files, its settings and scene, the worker source and the Isaac interpreter. If any of them change, refresh the page before starting.
 
-For direct API requests:
+## 2. Start and record
 
-1. Read `GET /api/v1/projects/{project_id}/teaching/profiles` and select the profile ID/hash.
-2. Send `POST /api/v1/projects/{project_id}/teaching/sessions` with `operation: teaching.capture`, `profile_id`, `profile_sha256` and `timeout_seconds`.
-3. Read `GET /api/v1/projects/{project_id}/teaching/sessions/{job_id}` until the session is ready.
-4. Open Teaching to record and finish episodes through that session's state/frame/command routes.
-5. Send `POST /api/v1/projects/{project_id}/teaching/sessions/{job_id}/stop` for graceful finish and capture publication.
+1. Open **Teaching** and select **Managed session** under **Connection**. Choose a project first.
+2. Choose a **Teaching profile** and set **Session time limit (seconds)**: 1–3600, and no more than the profile's `max_seconds`.
+3. Tick **Start this session and record simulator observations.** and select **Start teaching session**. Isaac readiness is checked only after you start.
+4. Choose the session under **Saved teaching session**. Once it is ready, the recording controls appear. Record and finish each episode as described in [Record episodes](teaching-connections.md#2-record-episodes).
+5. Select **Stop and publish**, then **Confirm stop and publish**.
 
-Choose a duration of 1–3600 seconds within the profile's `max_seconds`. Finalize every recorded episode before graceful stop.
+> **Stop before the time limit.** Only a graceful stop publishes the recordings. If the time limit runs out, nothing is published. Finish every episode before you stop: the capture must hold 1–100 finished episodes.
 
-## Capture publication
+Leaving the page never stops a saved session. Use **Refresh teaching sessions** to update the list.
 
-After the worker exits, follow its job through capture validation. Published captures appear in the project's recording catalog. Select them in [recording preparation](recording-preparation.md) to create a dataset.
+## 3. Prepare the dataset
 
-Use job cancellation to abort the session. For interrupted or failed sessions, inspect the saved job's cleanup message and private logs before starting another. Prepare LiveKit and provider credentials separately for [voice](teaching-intelligence.md).
+After the stop, the job validates the capture and publishes it to the project's recording catalog. When the session has succeeded, select **Review for dataset preparation** and continue with [recording preparation](recording-preparation.md).
+
+## Cancel or recover
+
+- **Abort without publishing:** cancel the job with `jensen jobs cancel JOB_ID` or `POST /api/v1/jobs/{job_id}/cancel`.
+- **Failed or interrupted session:** read the saved job's error and cleanup message and the private logs before starting another. Raw evidence stays in the private job directory.
+- **Lost start response:** select **Check saved teaching request**, and **Retry same teaching request** if it is offered. See [submission recovery](job-submissions.md).
+
+## API
+
+1. `GET /api/v1/projects/{project_id}/teaching/profiles` returns each profile's `id` and `profile_sha256`.
+2. `POST /api/v1/projects/{project_id}/teaching/sessions` with `operation: teaching.capture`, `profile_id`, `profile_sha256` and `timeout_seconds` starts a session. It accepts an `Idempotency-Key` header.
+3. Poll `GET /api/v1/projects/{project_id}/teaching/sessions/{job_id}` until `ready` is true.
+4. Record through that session's routes under `/api/v1/projects/{project_id}/teaching/sessions/{job_id}`: `GET state`, `GET frame`, `POST commands` and `GET commands/{command_id}`. The **Teaching** page uses the same routes.
+5. `POST /api/v1/projects/{project_id}/teaching/sessions/{job_id}/stop` finishes gracefully and publishes the capture.

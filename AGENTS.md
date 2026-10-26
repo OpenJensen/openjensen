@@ -2,6 +2,8 @@
 
 Read the current issue/task record and source before editing. Preserve working configuration, user data and previously verified behavior. Keep application code and its documentation here. Local verification results, experiment outputs, benchmarks and run reports stay local: never commit them or put them in commit messages or pull requests. Upstream files never name the maintainers' machines, hardware, hostnames, usernames or local paths. Use the designated planning location for larger coordination records. The coordinator owns shared interfaces and integration.
 
+Write and edit documentation by the rules in [docs/writing-docs.md](docs/writing-docs.md), and run `python3 .github/scripts/check_doc_links.py` before committing documentation.
+
 ## Local verification and publication
 
 GitHub Actions runs the selected application, browser and worker checks. Inspect the current-head jobs and their actual results; a green contract suite does not establish GPU training, native desktop installation or simulator acceptance. Run applicable checks locally when practical. If hosted execution is unavailable, report that limitation and use explicit local evidence instead of assuming failure or success. Keep each independent change in its own focused commit, push a feature branch and open a pull request that describes the change. Do not merge or push directly to `main` unless the user explicitly requests it. Leave previously published runs and commit history as they are. Do not report resource-stopped or unexecuted checks as passing, and do not remove workflow definitions merely because hosted execution is unavailable.

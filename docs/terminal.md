@@ -1,65 +1,76 @@
-# Run the terminal workbench
+# Use the terminal UI and CLI
 
-## Install and start
+The terminal UI is a keyboard-driven view of projects, jobs, dataset intake and recipes. The `jensen` CLI covers the same jobs for scripts. Both talk to a running OpenJensen server.
 
-From the source checkout, install the optional TUI environment and start the API:
+## Start the terminal UI
+
+Install the optional terminal dependencies and start the server:
 
 ```sh
 uv sync --frozen --all-packages --extra tui
 uv run --frozen --extra tui jensen serve
 ```
 
-In a second interactive terminal:
+In a second terminal:
 
 ```sh
 uv run --frozen --extra tui jensen tui
 ```
 
-Set `JENSEN_API_URL` or use `jensen tui --api-url http://127.0.0.1:8001` for a different API address.
+For a server at another address, set `JENSEN_API_URL` or run `jensen tui --api-url http://127.0.0.1:8001`.
 
 | Key | Action |
 | --- | --- |
-| F1 / F2 / F3 | Projects / Jobs / Job details and events. |
-| F4 | Dataset intake. |
-| F5 | Review a lifecycle recipe. |
-| F6 | Save a policy archive. |
-| Ctrl+N / Ctrl+R | Create project / Refresh. |
-| F8 | Review cancellation of the selected job. |
-| Ctrl+Q | Quit. |
-| Tab / Shift+Tab | Move between controls. |
-| Up/Down, Enter | Highlight and open a project/job. |
-| Escape | Close the current form. |
+| F1 / F2 / F3 | Projects / Jobs / Job details and events |
+| F4 | Dataset intake |
+| F5 | Review a recipe |
+| F6 | Save a policy archive |
+| F8 | Review cancelling the selected job |
+| Ctrl+N / Ctrl+R | Create a project / Refresh |
+| Up/Down, Enter | Highlight and open a project or job |
+| Tab / Shift+Tab | Move between controls |
+| Escape | Close the current form |
+| Ctrl+Q | Quit |
 
-## Review and submit lifecycle recipes
+## Review and submit a recipe
 
-1. Select a project and open F5.
-2. Choose the workflow and registered inputs.
-3. Select **Build / replace draft**, then edit the labelled fields or full JSON recipe.
-4. Supply budgets, model/method, observations and thresholds required by that workflow.
-5. Select **Review exact recipe**, review source/compute and consent, then submit.
-6. Open F2/F3 to follow the accepted job.
+Install the workers the workflow needs first; see [policy setup](policy-workflow.md#configure-the-execution-host).
 
-For Resume, select a saved checkpoint/interrupted training job and set the new execution timeout. For Export, select the checkpoint and configured CPU exporter. Install the required workers using [policy setup](policy-workflow.md) before submitting.
+1. Select a project and press F5.
+2. Choose the workflow and its registered inputs.
+3. Select **Build / replace draft**, then edit the labelled fields or the full JSON recipe.
+4. Fill in what the workflow needs: budgets, model and method, observations and thresholds.
+5. Select **Review exact recipe**, check the source, compute and consent, and submit.
+6. Follow the accepted job in F2 and F3.
 
-For an uncertain submission, reopen F5 for the same endpoint/project, read fresh job history and reconcile the displayed attempt before another request. Attempt records are stored under `$XDG_STATE_HOME/openjensen/tui` (default `~/.local/state/openjensen/tui`) or `%LOCALAPPDATA%/OpenJensen/state/tui`.
+- **Resume:** select a saved checkpoint or interrupted training job and set a new execution timeout.
+- **Export:** select the checkpoint and the configured CPU exporter.
+- **Uncertain submission:** if a response was lost, reopen F5 for the same server and project, read the fresh job history and reconcile the shown attempt before submitting again. Attempt records live in `$XDG_STATE_HOME/openjensen/tui` (default `~/.local/state/openjensen/tui`) or `%LOCALAPPDATA%/OpenJensen/state/tui` on Windows.
 
-## Save an artifact from the terminal
+## Save an artifact
 
-Open F6, select the registered artifact and a new local destination file in an existing directory. Set the byte limit/deadline, optionally supply an independent archive SHA256, then select **Review download → Save archive**. Use **Stop transfer** or Escape to stop the download. Defaults are 4 GiB and 600 seconds.
+Press F6, select the registered artifact and a new file in an existing directory. Set the size limit and deadline (defaults 4 GiB and 600 seconds), optionally add an independent archive SHA-256, then select **Review download → Save archive**. **Stop transfer** or Escape stops the download.
 
 ## Follow lifecycle jobs from the CLI
+
+Replace `PROJECT`, `JOB` and `ARTIFACT` with the IDs the commands return:
 
 ```sh
 jensen policy options
 jensen policy submit PROJECT recipe.json
 jensen jobs wait JOB --timeout 600 --interval 2
 jensen jobs events JOB
+jensen jobs cancel JOB
 jensen policy artifacts PROJECT
 jensen policy download PROJECT ARTIFACT --output ./new-policy.tar
 ```
 
-Replace `PROJECT`, `JOB` and `ARTIFACT` with returned IDs. Use `jensen jobs cancel JOB` to cancel. For `jobs wait`, set `--timeout` from 1–86400 seconds and `--interval` from 0.1–30 seconds.
+| Option | Range |
+| --- | --- |
+| `jobs wait --timeout` | 1–86400 seconds |
+| `jobs wait --interval` | 0.1–30 seconds |
+| `policy download --max-bytes` | 1 byte to 100 GiB |
+| `policy download --timeout` | 1–3600 seconds |
+| `policy download --expected-sha256 HEX` | An independent checksum, when you have one |
 
-For downloads, use `--max-bytes` from 1 byte to 100 GiB, `--timeout` from 1–3600 seconds, and `--expected-sha256 HEX` when you have an independent checksum. Choose a new destination file and check the downloaded path, size and checksum after the transfer.
-
-If a write is interrupted or its response is lost, read the saved job/project before submitting again. Refresh F2/F3 after reconnecting to the API.
+Download to a new file, then check its path, size and checksum. If a write is interrupted or its response is lost, read the saved job or project before submitting again, and refresh F2 and F3 after reconnecting.
