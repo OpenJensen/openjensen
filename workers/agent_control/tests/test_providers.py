@@ -1,12 +1,15 @@
 """Transport and cancellation acceptance without a model, credentials, or actuator."""
 
 import asyncio
+import base64
 import copy
 import json
 import os
+import struct
 import subprocess
 import sys
 import unittest
+import zlib
 from pathlib import Path
 
 import httpx
@@ -269,6 +272,21 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
 
 
 class BoundaryTests(unittest.TestCase):
+    def test_synthetic_probe_is_a_valid_png(self):
+        raw = base64.b64decode(CHECK_IMAGE.split(",", 1)[1])
+        self.assertEqual(raw[:8], b"\x89PNG\r\n\x1a\n")
+        position = 8
+        while position < len(raw):
+            length = struct.unpack(">I", raw[position : position + 4])[0]
+            kind = raw[position + 4 : position + 8]
+            data = raw[position + 8 : position + 8 + length]
+            crc = struct.unpack(">I", raw[position + 8 + length : position + 12 + length])[0]
+            self.assertEqual(crc, zlib.crc32(kind + data) & 0xFFFFFFFF)
+            if kind == b"IDAT":
+                self.assertEqual(zlib.decompress(data), b"\0\xff\xff\xff")
+            position += length + 12
+        self.assertEqual(position, len(raw))
+
     def test_duplicate_keys_and_nonfinite_arguments_fail(self):
         for raw in ('{"x":1,"x":2}', '{"x":NaN}', '{"x":Infinity}'):
             with self.assertRaises(ProviderError):
