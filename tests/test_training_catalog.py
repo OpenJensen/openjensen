@@ -159,8 +159,6 @@ def test_custom_operator_module_executes_the_selected_pinned_model(tmp_path):
         }
 
 
-
-
 @pytest.mark.parametrize("model_id", ["openvla", "smolvla"])
 @pytest.mark.parametrize("resume_kind", ["job", "artifact"])
 @pytest.mark.parametrize("stored_recipe", [True, False])
