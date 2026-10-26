@@ -617,6 +617,47 @@ def checked_conversion(response, job, selection, destination, *, deadline, stop)
                     "source_trajectory_sha256": receipt["trajectory_sha256"],
                 }
             )
+            if meta["schema_version"] == 2:
+                raw = read(root / episode["episode_id"] / "trajectory.jsonl", 16 * 1024**2)
+                if digest(raw) != receipt.get("trajectory_sha256") or not raw.endswith(b"\n"):
+                    raise RecordingError("Agent source trajectory changed during promotion")
+                rows = [decode(line) for line in raw.splitlines()]
+                if len(rows) != receipt["frames"]:
+                    raise RecordingError("Agent source trajectory count differs")
+                if any(
+                    row.get("actor") not in {"human_operator", "llm_agent"}
+                    or row.get("environment_kind") != "simulation"
+                    for row in rows
+                ):
+                    raise RecordingError("Agent source actor or environment is unsupported")
+                expected_details[-1].update(
+                    {
+                        "capture_schema_version": 2,
+                        "environment_kind": "simulation",
+                        "actors": sorted({row["actor"] for row in rows}),
+                        "action_provenance": [
+                            {
+                                key: row[key]
+                                for key in (
+                                    "step",
+                                    "actor",
+                                    "environment_kind",
+                                    "agent_session_id",
+                                    "proposal_id",
+                                    "execution_id",
+                                    "provider_model",
+                                    "observation_id",
+                                    "observation_sha256",
+                                    "authority_epoch",
+                                    "clock_policy",
+                                    "skill_manifest_version",
+                                )
+                                if key in row
+                            }
+                            for row in rows
+                        ],
+                    }
+                )
     expected_coordinates = {
         key: common[key]
         for key in ("controller", "state_units", "action_units", "timebase", "camera_prim")

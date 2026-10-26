@@ -186,7 +186,8 @@ def inspect_capture(
 
     meta = read_json(root / "session.json")
     if (
-        meta.get("schema_version") not in {1, 2}
+        type(meta.get("schema_version")) is not int
+        or meta.get("schema_version") not in {1, 2}
         or meta.get("controller") != "joint_position_targets"
         or meta.get("state_units") != "radians"
         or meta.get("action_units") != "radians"
@@ -232,7 +233,8 @@ def inspect_capture(
         receipt = read_json(folder / "episode.json")
         count = integer(receipt.get("frames"), "frames", 1, 3600)
         if (
-            receipt.get("schema_version") != version
+            type(receipt.get("schema_version")) is not int
+            or receipt.get("schema_version") != version
             or receipt.get("episode_id") != ident
             or receipt.get("finalized") is not True
             or receipt.get("outcome") not in {"unknown", "operator_reported_failure"}
@@ -613,6 +615,14 @@ def convert_captures(
                         ],
                     }
                 )
+                if episode["source"]["meta"]["schema_version"] == 1:
+                    for key in (
+                        "capture_schema_version",
+                        "environment_kind",
+                        "actors",
+                        "action_provenance",
+                    ):
+                        del details[-1][key]
         finally:
             dataset.finalize()
         verify_statistics(staged)
