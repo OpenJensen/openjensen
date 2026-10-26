@@ -175,3 +175,36 @@ def test_schema_copies_identical_without_runtime_package_dependency():
         )
     ]
     assert len({hashlib.sha256(p.read_bytes()).hexdigest() for p in files}) == 1
+
+
+@pytest.mark.parametrize(
+    "name,maximum,accepted",
+    [
+        ("meta/firebird-demonstrations.json", 2 * 1024**2, True),
+        ("meta/firebird-demonstrations.json", 8 * 1024**2, False),
+        ("meta/info.json", 1024**2, False),
+    ],
+)
+def test_agent_provenance_metadata_bound_does_not_broaden_other_headers(
+    tmp_path, name, maximum, accepted
+):
+    root, manifest, job, recipe = snapshot(tmp_path)
+    value = json.loads((root / name).read_bytes())
+    value["capture_notes"] = "x" * maximum
+    raw = canonical(value)
+    (root / name).write_bytes(raw)
+    for entry in manifest["files"]:
+        if entry["path"] == name:
+            entry.update(size=len(raw), sha256=hashlib.sha256(raw).hexdigest())
+    if accepted:
+        record = derive(root, manifest, job["dataset_snapshot"], recipe)
+        assert record["source"]["demonstrations_sha256"] == hashlib.sha256(raw).hexdigest()
+        assert (
+            record["source"]["dataset_manifest_sha256"]
+            == job["dataset_snapshot"]["manifest_sha256"]
+        )
+        assert record["physical_calibration_verified"] is False
+        assert record["task_success_verified"] is False
+    else:
+        with pytest.raises(ValueError, match="differs from verified"):
+            derive(root, manifest, job["dataset_snapshot"], recipe)

@@ -17,11 +17,15 @@ def derive(root, manifest, pointer, recipe):
         return None
 
     def read(name):
+        # Per-frame agent provenance is larger than the coordinate header. Match
+        # the reviewed snapshot metadata bound only for demonstrations; other
+        # training metadata retains its existing one-MiB admission limit.
+        maximum = 8 * 1024**2 if name == "meta/firebird-demonstrations.json" else 1024**2
         with _open(root, name) as stream:
-            raw = stream.read(1024 * 1024 + 1)
+            raw = stream.read(maximum + 1)
         entry = files.get(name, {})
         if (
-            len(raw) > 1024 * 1024
+            len(raw) > maximum
             or len(raw) != entry.get("size")
             or hashlib.sha256(raw).hexdigest() != entry.get("sha256")
         ):

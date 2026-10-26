@@ -109,6 +109,146 @@ def rows(path, limits, features=None):
             yield from batch.to_pylist()
 
 
+AGENT_PROVENANCE_KEYS = {
+    "step",
+    "actor",
+    "environment_kind",
+    "agent_session_id",
+    "proposal_id",
+    "execution_id",
+    "provider_model",
+    "observation_id",
+    "observation_sha256",
+    "authority_epoch",
+    "clock_policy",
+    "skill_manifest_version",
+}
+
+
+def validate_demonstration_provenance(provenance, episodes):
+    """Validate actor semantics before captured trajectories become a training snapshot.
+
+    Source authenticity remains bound to the reviewed source inventory. These
+    checks prevent an imported or malformed v2 sidecar from silently changing the
+    interpretation or dropping provenance, not independent proof of task success.
+    """
+    details = provenance.get("episodes")
+    if details is None:
+        # Historical schema-1 sidecars were accepted as opaque coordinate
+        # metadata. New capture-v2 sidecars always carry explicit episode detail.
+        return
+    require(
+        isinstance(details, list) and len(details) == len(episodes),
+        "Demonstration provenance must cover every episode",
+    )
+    by_index = {}
+    for detail in details:
+        require(
+            isinstance(detail, dict) and integer(detail.get("episode_index")),
+            "Invalid demonstration episode identity",
+        )
+        index = detail["episode_index"]
+        require(
+            index not in by_index and index < len(episodes),
+            "Duplicate or unknown demonstration episode identity",
+        )
+        by_index[index] = detail
+    for index, episode in enumerate(episodes):
+        detail = by_index[index]
+        version = detail.get("capture_schema_version", 1)
+        require(
+            type(version) is int and version in {1, 2}, "Unsupported capture provenance version"
+        )
+        if version == 1:
+            require(
+                not any(
+                    key in detail for key in ("actors", "action_provenance", "environment_kind")
+                ),
+                "Legacy capture cannot claim unversioned agent provenance",
+            )
+            continue
+        require(
+            detail.get("environment_kind") == "simulation",
+            "Agent capture has unsupported environment semantics",
+        )
+        require(
+            provenance.get("task_success_verified") is False,
+            "Agent execution cannot verify task success",
+        )
+        actions = detail.get("action_provenance")
+        require(
+            isinstance(actions, list) and len(actions) == episode["length"],
+            "Agent provenance must cover every actual episode frame",
+        )
+        events = detail.get("events")
+        require(isinstance(events, list), "Agent intervention provenance is missing")
+        commands = {}
+        for event in events:
+            require(
+                isinstance(event, dict)
+                and isinstance(event.get("command_id"), str)
+                and event["command_id"] not in commands,
+                "Duplicate or invalid actor intervention identity",
+            )
+            commands[event["command_id"]] = event
+        actors = set()
+        for step, action in enumerate(actions):
+            require(
+                isinstance(action, dict)
+                and type(action.get("step")) is int
+                and action["step"] == step
+                and action.get("environment_kind") == "simulation",
+                "Agent provenance frame or environment differs",
+            )
+            actor = action.get("actor")
+            require(actor in {"human_operator", "llm_agent"}, "Unsupported capture actor")
+            actors.add(actor)
+            if actor == "human_operator":
+                require(
+                    set(action) == {"step", "actor", "environment_kind"},
+                    "Human frame cannot carry agent action provenance",
+                )
+                continue
+            require(set(action) == AGENT_PROVENANCE_KEYS, "Agent frame provenance is incomplete")
+            for key in ("agent_session_id", "proposal_id", "execution_id", "observation_id"):
+                require(
+                    isinstance(action[key], str)
+                    and re.fullmatch(r"[A-Za-z0-9_-]{1,96}", action[key]) is not None,
+                    "Invalid agent execution identity",
+                )
+            require(
+                isinstance(action["observation_sha256"], str)
+                and re.fullmatch(r"[a-f0-9]{64}", action["observation_sha256"]) is not None,
+                "Invalid agent observation fingerprint",
+            )
+            require(
+                integer(action["authority_epoch"], 1)
+                and action["clock_policy"] in {"stepped", "continuous"}
+                and type(action["skill_manifest_version"]) is int
+                and action["skill_manifest_version"] == 1,
+                "Unsupported agent authority, skill or clock contract",
+            )
+            require(
+                isinstance(action["provider_model"], str)
+                and 1 <= len(action["provider_model"]) <= 128
+                and action["provider_model"].isprintable(),
+                "Missing agent provider identity",
+            )
+            command = commands.get(action["execution_id"])
+            require(
+                command is not None
+                and command.get("source") == "agent_command"
+                and command.get("operation") == "correct"
+                and all(
+                    command.get(key) == action[key] for key in AGENT_PROVENANCE_KEYS - {"step"}
+                ),
+                "Agent frame differs from its original execution event",
+            )
+        require(
+            detail.get("actors") == sorted(actors), "Episode actor summary differs from its frames"
+        )
+
+
 def validate(root, limits):
     import pyarrow
 
@@ -462,6 +602,7 @@ def validate(root, limits):
             and provenance["schema_version"] == 1,
             "Unsupported demonstration provenance",
         )
+        validate_demonstration_provenance(provenance, episodes)
     if declared:
         lineage = read_json(root, "meta/firebird-lineage.json")
         require(
