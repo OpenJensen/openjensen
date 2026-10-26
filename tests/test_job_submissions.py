@@ -344,7 +344,7 @@ def test_existing_0001_job_survives_additive_migration(tmp_path):
 
     asyncio.run(exercise())
     with sqlite3.connect(tmp_path / "workspace.sqlite3") as db:
-        assert db.execute("SELECT version_num FROM alembic_version").fetchone() == ("0002",)
+        assert db.execute("SELECT version_num FROM alembic_version").fetchone() == ("0003",)
         assert db.execute("SELECT COUNT(*) FROM job_submissions").fetchone() == (0,)
 
 
