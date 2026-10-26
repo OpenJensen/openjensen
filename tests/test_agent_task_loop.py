@@ -1,5 +1,6 @@
 """Abstract goals produce bounded measured actions; assessments never verify tasks."""
 
+import asyncio
 import time
 
 import pytest
@@ -77,15 +78,27 @@ def test_bounded_abstract_goal_loop_observes_after_each_action_and_keeps_model_s
 ):
     client, executor = target
     records = []
+    relay = executor.agent_relay
+
+    async def delayed_release(project, job, operation, payload=None):
+        if operation == "/agent/release" and payload is not None:
+            # Completion is persisted before asynchronous local release finishes.
+            await asyncio.sleep(0.05)
+        return await relay(project, job, operation, payload)
+
+    executor.agent_relay = delayed_release
     client.app.state.agent_control.planner = planner(records)
     s = create(client, mode="bounded")
     path = "/api/v1/agent-sessions/" + s["id"]
     assert client.post(path + "/run").status_code == 202
-    done = wait(client, s, lambda x: x["status"] == "complete")
+    done = wait(client, s, lambda x: x["status"] == "complete" and not x["control_armed"])
     assert done["step_count"] == 2 and done["calls_used"] == 3
     assert done["model_assessment"]["outcome"] == "achieved"
     assert done["task_success_verified"] is False and not done["run_enabled"]
     assert len(executor.executions) == 2 and executor.release_count == 1
+    assert executor.owner is None
+    events = client.get(path + "/events").json()
+    assert sum(event["kind"] == "target_released" for event in events) == 1
     assert [p["completed_steps"] for p in records] == [0, 1, 2]
     assert [p["observation"]["joints"]["shoulder_pan"] for p in records] == [0.0, 0.01, 0.02]
     assert all(
