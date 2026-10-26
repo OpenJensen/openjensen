@@ -327,10 +327,8 @@ class AgentControl:
                 not profile.get("checked") or not payload.cloud_consent
             ):
                 raise AgentError(
-                    
-                        "Check provider capabilities and explicitly consent to sending "
-                        "task/state and any admitted image to OpenAI."
-                    
+                    "Check provider capabilities and explicitly consent to sending "
+                    "task/state and any admitted image to OpenAI."
                 )
             if payload.target_kind == "teaching":
                 active = await self.list(project_id)
