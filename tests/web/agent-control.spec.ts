@@ -10,9 +10,11 @@ async function fixture(
     physical?: boolean;
     deferManualHeartbeat?: boolean;
     holdAdmissionImages?: boolean;
+    emptyPorts?: boolean;
   } = {},
 ) {
   const requests: { path: string; body: Record<string, unknown> }[] = [];
+  const reads: string[] = [];
   const stamp = new Date().toISOString();
   const observation = {
     id: 'obs-fixture',
@@ -174,11 +176,12 @@ async function fixture(
     const request = route.request(),
       path = new URL(request.url()).pathname.replace('/api/v1', '');
     if (request.method() !== 'GET') requests.push({ path, body: request.postData() ? request.postDataJSON() : {} });
+    else reads.push(path);
     if (path === '/robot-lab/status') return route.fulfill({ json: robot });
     if (path === '/robot-lab/devices')
       return route.fulfill({
         json: {
-          ports: [{ device: '/dev/fixture', description: 'Synthetic USB' }],
+          ports: options.emptyPorts ? [] : [{ device: '/dev/fixture', description: 'Synthetic USB' }],
           cameras: [{ index: 0, name: 'Synthetic local camera', width: 1, height: 1 }],
           camera_error: null,
         },
@@ -375,12 +378,13 @@ async function fixture(
         : { status: 404, json: { detail: 'Not configured in this browser fixture' } },
     );
   });
-  return { requests, saved, robot, releaseAdmissionImages };
+  return { requests, reads, saved, robot, releaseAdmissionImages };
 }
 
 async function startReplay(page: Page) {
   await page.goto('/ai-teleoperation/');
-  await page.getByText('Agent Control', { exact: true }).click();
+  await page.getByRole('combobox', { name: 'Agent target', exact: true }).selectOption('replay');
+  await expect(page.getByRole('combobox', { name: 'Agent target', exact: true })).toBeVisible();
   await page.getByLabel('Task goal', { exact: true }).fill('Move shoulder by 0.03 radians');
   await page.getByRole('combobox', { name: 'Planning style', exact: true }).selectOption('joint');
   await page.getByRole('button', { name: 'Create agent session', exact: true }).click();
@@ -452,7 +456,8 @@ test('an abstract goal starts the bounded task loop and model completion needs s
 }) => {
   const { requests } = await fixture(page, { planningMode: 'task' });
   await page.goto('/ai-teleoperation/');
-  await page.getByText('Agent Control', { exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Agent target', exact: true })).toBeVisible();
+  await page.getByRole('combobox', { name: 'Agent target', exact: true }).selectOption('replay');
   const goal = 'Pick up the object and place it in the tray';
   await page.getByLabel('Task goal', { exact: true }).fill(goal);
   await page.getByRole('button', { name: 'Create agent session', exact: true }).click();
@@ -489,8 +494,9 @@ test('selecting physical control without a governed companion never enables moti
 }) => {
   const { requests } = await fixture(page);
   await page.goto('/ai-teleoperation/');
-  await page.getByText('Agent Control', { exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Agent target', exact: true })).toBeVisible();
   await page.getByLabel('Task goal', { exact: true }).fill('Pick up the object');
+  await page.getByRole('combobox', { name: 'Agent target', exact: true }).selectOption('replay');
   await page.getByRole('combobox', { name: 'Planning style', exact: true }).selectOption('joint');
   await page.getByRole('combobox', { name: 'Agent target', exact: true }).selectOption('robot_lab');
   await expect(page.getByRole('combobox', { name: 'Planning style', exact: true })).toHaveValue('task');
@@ -502,7 +508,7 @@ test('selecting physical control without a governed companion never enables moti
 
 async function connectPhysical(page: Page) {
   await page.goto('/ai-teleoperation/');
-  await page.getByText('Agent Control', { exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Agent target', exact: true })).toBeVisible();
   await page.getByLabel('Task goal', { exact: true }).fill('Pick up the object');
   await page.getByRole('combobox', { name: 'Agent target', exact: true }).selectOption('robot_lab');
   await page.getByRole('combobox', { name: 'Robot USB port', exact: true }).selectOption('/dev/fixture');
@@ -626,4 +632,72 @@ test('implicit preflight cleanup cannot stop an agent that took over the same ge
   });
   expect(robot.session.mode).toBe('agent');
   expect(robot.session.torque_enabled).toBe(true);
+});
+
+test('AI teleoperation opens physical preparation without starting a simulator, camera or controller', async ({
+  page,
+}) => {
+  const { requests, reads } = await fixture(page, { physical: true, emptyPorts: true });
+  await page.goto('/ai-teleoperation/');
+  await expect(page.getByRole('combobox', { name: 'Agent target', exact: true })).toHaveValue('robot_lab');
+  await expect(page.getByLabel('Task goal', { exact: true })).toBeVisible();
+  const preflight = page.getByRole('region', { name: 'Physical SO101 preflight' });
+  await expect(preflight).toBeVisible();
+  await expect(preflight).toContainText('Connect the follower USB adapter and refresh readiness');
+  await expect(page.getByText('The mock provider cannot plan a live physical task.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Settings → AI providers', exact: true })).toHaveAttribute(
+    'href',
+    '/settings/',
+  );
+  await expect(page.getByRole('combobox', { name: 'Calibrated follower', exact: true })).toHaveValue('');
+  await expect(page.getByLabel('Show the local camera preview', { exact: true })).not.toBeChecked();
+  await expect(page.getByRole('region', { name: 'Simulation tools' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Recording dataset preparation', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Connect arm and hold current pose', exact: true })).toBeDisabled();
+  expect(reads.some((path) => path.startsWith('/teaching') || path.includes('camera.jpg'))).toBe(false);
+  expect(requests).toEqual([]);
+  await page.getByRole('link', { name: 'Settings → AI providers', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Agent provider settings', exact: true })).toBeVisible();
+  expect(requests).toEqual([]);
+});
+
+test('simulation tools require explicit selection and closing the agent panel preserves that choice', async ({
+  page,
+}) => {
+  const { requests } = await fixture(page);
+  await page.goto('/ai-teleoperation/');
+  const target = page.getByRole('combobox', { name: 'Agent target', exact: true });
+  await target.selectOption('teaching');
+  await expect(page.getByRole('region', { name: 'Simulation tools', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'AI teleoperation connection', exact: true })).toBeVisible();
+  await page.getByText('Agent Control', { exact: true }).click();
+  await expect(target).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Simulation tools', exact: true })).toBeVisible();
+  await page.getByText('Agent Control', { exact: true }).click();
+  await expect(target).toHaveValue('teaching');
+  await target.selectOption('replay');
+  await expect(page.getByRole('region', { name: 'Simulation tools', exact: true })).toHaveCount(0);
+  await page.getByText('Agent Control', { exact: true }).click();
+  await page.getByText('Agent Control', { exact: true }).click();
+  await expect(target).toHaveValue('replay');
+  expect(requests).toEqual([]);
+});
+
+test('reopening physical preparation never restores operator or workspace confirmations', async ({ page }) => {
+  const { requests } = await fixture(page, { physical: true });
+  await page.goto('/ai-teleoperation/');
+  const present = page.getByLabel('I am at the arm, supporting it where needed, with Stop within reach.');
+  const clear = page.getByLabel(
+    'The arm and its full movement path are clear; the selected camera shows the intended workspace.',
+  );
+  await present.check();
+  await clear.check();
+  await page.getByText('Agent Control', { exact: true }).click();
+  await expect(present).toHaveCount(0);
+  await page.getByText('Agent Control', { exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Agent target', exact: true })).toHaveValue('robot_lab');
+  await expect(present).not.toBeChecked();
+  await expect(clear).not.toBeChecked();
+  await expect(page.getByLabel('Show the local camera preview', { exact: true })).not.toBeChecked();
+  expect(requests).toEqual([]);
 });

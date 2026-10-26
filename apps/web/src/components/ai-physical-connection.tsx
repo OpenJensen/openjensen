@@ -385,6 +385,11 @@ export function AiPhysicalConnection({ physical }: { physical: ReturnType<typeof
           arming physical control.
         </p>
       )}
+      {devices.isSuccess && devices.data.ports.length === 0 && (
+        <p role="status">
+          No follower USB adapter was detected. Connect the follower USB adapter and refresh readiness.
+        </p>
+      )}
       <div className="workbench-field-grid">
         <label className="workbench-field">
           Robot USB port

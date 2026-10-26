@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { agentApi, type AgentSession, type AgentSessionRequest } from '@/lib/agent-api';
 import { AiPhysicalConnection, useAiPhysicalConnection } from './ai-physical-connection';
@@ -13,14 +14,40 @@ const problemText = (problem: unknown) =>
   problem instanceof Error ? problem.message : 'Agent Control request could not be verified.';
 const secondsSince = (time: string, now: number) => Math.max(0, (now - Date.parse(time)) / 1000);
 
-export function TeachingAgentControl({ projectId }: { projectId: string }) {
-  const [open, setOpen] = useState(false);
+export type AgentTarget = 'replay' | 'teaching' | 'robot_lab';
+
+export function TeachingAgentControl({
+  projectId,
+  target,
+  onTargetChange,
+  initiallyOpen = false,
+  onOpenProviders,
+}: {
+  projectId: string;
+  target?: AgentTarget;
+  onTargetChange?: (target: AgentTarget) => void;
+  initiallyOpen?: boolean;
+  onOpenProviders?: () => void;
+}) {
+  const [open, setOpen] = useState(initiallyOpen);
+  const [localTarget, setLocalTarget] = useState<AgentTarget>('replay');
+  const selectedTarget = target ?? localTarget;
+  const changeTarget = (next: AgentTarget) => {
+    setLocalTarget(next);
+    onTargetChange?.(next);
+  };
   return (
-    <details className="panel agent-control-panel" onToggle={(event) => setOpen(event.currentTarget.open)}>
+    <details className="panel agent-control-panel" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary>Agent Control</summary>
       {open &&
         (projectId ? (
-          <AgentControls key={projectId} projectId={projectId} />
+          <AgentControls
+            key={projectId}
+            projectId={projectId}
+            target={selectedTarget}
+            onTargetChange={changeTarget}
+            onOpenProviders={onOpenProviders}
+          />
         ) : (
           <p>Select a project to start or review an agent session.</p>
         ))}
@@ -28,10 +55,19 @@ export function TeachingAgentControl({ projectId }: { projectId: string }) {
   );
 }
 
-function AgentControls({ projectId }: { projectId: string }) {
+function AgentControls({
+  projectId,
+  target,
+  onTargetChange,
+  onOpenProviders,
+}: {
+  projectId: string;
+  target: AgentTarget;
+  onTargetChange: (target: AgentTarget) => void;
+  onOpenProviders?: () => void;
+}) {
   const client = useQueryClient();
   const [providerId, setProviderId] = useState('mock');
-  const [target, setTarget] = useState<'replay' | 'teaching' | 'robot_lab'>('replay');
   const [teachingJob, setTeachingJob] = useState('');
   const [replayObservation, setReplayObservation] = useState('');
   const [mode, setMode] = useState<'advisory' | 'shadow' | 'supervised' | 'bounded'>('supervised');
@@ -371,7 +407,7 @@ function AgentControls({ projectId }: { projectId: string }) {
                 if (physical.owned || physical.connecting)
                   void physical.stop('The selected target changed. Stop was requested.');
                 const next = event.target.value as 'replay' | 'teaching' | 'robot_lab';
-                setTarget(next);
+                onTargetChange(next);
                 if (next === 'robot_lab') {
                   setMode('supervised');
                   setPlanningMode('task');
@@ -430,6 +466,15 @@ function AgentControls({ projectId }: { projectId: string }) {
             </label>
           ) : null}
         </div>
+        {target === 'robot_lab' && provider?.provider === 'mock' && (
+          <p role="status">
+            The mock provider cannot plan a live physical task. Configure Astra in{' '}
+            <Link href="/settings/" onClick={onOpenProviders}>
+              Settings → AI providers
+            </Link>{' '}
+            and check its capabilities before live planning.
+          </p>
+        )}
         {target === 'robot_lab' && <AiPhysicalConnection physical={physical} />}
         {target === 'teaching' && (
           <label className="workbench-field">

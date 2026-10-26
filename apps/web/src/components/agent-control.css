@@ -82,3 +82,9 @@
   border: 1px solid var(--line);
   border-radius: 10px;
 }
+
+.agent-simulation-tools {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}

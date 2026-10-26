@@ -55,6 +55,8 @@ test('prefixed export loads bundles, library media, API and docs without escapin
     (response) => new URL(response.url()).pathname === `${prefix}/api/v1/teaching/state`,
   );
   await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Agent target', exact: true })).toHaveValue('robot_lab');
+  await page.getByRole('combobox', { name: 'Agent target', exact: true }).selectOption('teaching');
   expect((await teachingState).status()).toBe(200);
   await expect(page.getByRole('heading', { name: 'AI teleoperation', exact: true, level: 1 })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start recording', exact: true })).toBeDisabled();
