@@ -137,6 +137,11 @@ class TaskControl:
             "min_duration_seconds": 0.5 if physical else 0.2,
             "max_duration_seconds": 5.0 if physical else 2.0,
         }
+        if not physical and raw.get("action_limits"):
+            local = raw["action_limits"]
+            maximum = min(2.0, local["max_duration_seconds"])
+            result["max_duration_seconds"] = maximum
+            result["min_duration_seconds"] = min(maximum, max(0.2, local["min_duration_seconds"]))
         if physical:
             result["trajectory_profile"] = {
                 "kind": "quintic-position",
