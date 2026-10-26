@@ -225,7 +225,7 @@ def validate_demonstration_provenance(provenance, episodes):
                 integer(action["authority_epoch"], 1)
                 and action["clock_policy"] in {"stepped", "continuous"}
                 and type(action["skill_manifest_version"]) is int
-                and action["skill_manifest_version"] == 1,
+                and action["skill_manifest_version"] in {1, 2},
                 "Unsupported agent authority, skill or clock contract",
             )
             require(
@@ -238,12 +238,45 @@ def validate_demonstration_provenance(provenance, episodes):
             require(
                 command is not None
                 and command.get("source") == "agent_command"
-                and command.get("operation") == "correct"
+                and (
+                    (
+                        command.get("operation") == "correct"
+                        and action["skill_manifest_version"] == 1
+                    )
+                    or (
+                        command.get("operation") == "segment"
+                        and action["skill_manifest_version"] == 2
+                    )
+                )
                 and all(
                     command.get(key) == action[key] for key in AGENT_PROVENANCE_KEYS - {"step"}
                 ),
                 "Agent frame differs from its original execution event",
             )
+            if action["skill_manifest_version"] == 2:
+                arguments = command.get("arguments")
+                targets = arguments.get("targets") if isinstance(arguments, dict) else None
+                duration = (
+                    arguments.get("duration_seconds") if isinstance(arguments, dict) else None
+                )
+                require(
+                    isinstance(arguments, dict)
+                    and set(arguments) == {"targets", "duration_seconds"}
+                    and isinstance(targets, dict)
+                    and 1 <= len(targets) <= 32
+                    and all(
+                        isinstance(name, str)
+                        and name.isidentifier()
+                        and type(target) in (int, float)
+                        and math.isfinite(target)
+                        for name, target in targets.items()
+                    )
+                    and type(duration) in (int, float)
+                    and 0.1 <= duration <= 2
+                    and integer(command.get("step"))
+                    and command["step"] <= step,
+                    "Invalid bounded segment intervention arguments",
+                )
         require(
             detail.get("actors") == sorted(actors), "Episode actor summary differs from its frames"
         )

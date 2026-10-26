@@ -241,3 +241,255 @@ def test_queued_acquire_cannot_cross_manual_pause_and_resume(session):
     with pytest.raises(ValueError, match="context"):
         session.agent.execute(acquire)
     assert session.agent.owner is None
+
+
+def segment(session, observation, targets=None, duration=0.1):
+    return agent_command(
+        session,
+        "segment",
+        {
+            "observation_id": observation["observation_id"],
+            "observation_sha256": observation["observation_sha256"],
+            "targets": targets or {"joint_0": 0.15},
+            "duration_seconds": duration,
+            "proposal_id": "segment_proposal",
+            "provider_model": "scripted-native-v1",
+        },
+    )
+
+
+def test_segment_runs_local_ticks_and_acknowledges_only_the_last_tick(session):
+    observed = start(session)
+    box = Mailbox()
+    box.publish(session)
+    command = segment(session, observed)
+    box.submit(payload(command), agent_operation="segment")
+    box.drain(session)
+    assert box.get(command.command_id)["status"] == "executing"
+    for tick in range(3):
+        session.tick()
+        box.publish(session)
+        receipt = box.get(command.command_id)
+        assert receipt["status"] == ("acknowledged" if tick == 2 else "executing")
+    evidence = receipt["execution"]
+    assert evidence["executed_ticks"] == 3
+    assert evidence["simulation_elapsed_seconds"] == pytest.approx(0.1)
+    assert evidence["requested_target_rad"][0] == 0.15
+    assert evidence["applied_target_rad"][0] == pytest.approx(0.15)
+    assert evidence["speed_limit_clipped"][0] is True
+    assert evidence["next_state_rad"][0] == pytest.approx(0.15)
+    session.tick()
+    assert len(session.sim.applications) == 3
+    assert box.submit(payload(command), agent_operation="segment")["status"] == "acknowledged"
+    assert len(session.sim.applications) == 3
+
+
+def test_named_hold_segment_is_local_bounded_wait(session):
+    observed = start(session)
+    command = segment(session, observed, targets={"joint_0": 0.0}, duration=0.2)
+    result = session.agent.execute(command)
+    for _ in range(6):
+        session.tick()
+    assert result["execution"]["status"] == "completed"
+    assert result["execution"]["executed_ticks"] == 6
+    assert session.sim.state == (0.0,) * 6
+    assert len(session.sim.applications) == 6
+
+
+def test_segment_manual_takeover_retains_partial_evidence_without_more_motion(session):
+    observed = start(session)
+    box = Mailbox()
+    box.publish(session)
+    command = segment(session, observed, duration=0.2)
+    box.submit(payload(command), agent_operation="segment")
+    box.drain(session)
+    session.tick()
+    box.publish(session)
+    act(session, "pause")
+    box.publish(session)
+    receipt = box.get(command.command_id)
+    assert receipt["status"] == "rejected" and receipt["execution"]["status"] == "stopped"
+    assert receipt["execution"]["executed_ticks"] == 1
+    assert receipt["execution"]["next_state_rad"][0] == pytest.approx(2 / 30)
+    session.tick()
+    assert len(session.sim.applications) == 1
+
+
+def test_segment_release_interrupts_in_flight_local_action(session):
+    observed = start(session)
+    command = segment(session, observed, duration=0.2)
+    result = session.agent.execute(command)
+    session.tick()
+    session.agent.execute(agent_command(session, "release"))
+    session.tick()
+    assert result["execution"]["status"] == "stopped" and session.mode == "paused"
+    assert len(session.sim.applications) == 1
+
+
+@pytest.mark.parametrize("damage", ["delta", "duration", "ticks", "names", "zero_targets"])
+def test_segment_contract_rejects_outside_local_envelope(session, damage):
+    observed = start(session)
+    with pytest.raises(ValueError):
+        if damage == "delta":
+            session.agent.execute(segment(session, observed, targets={"joint_0": 0.15001}))
+        elif damage == "duration":
+            segment(session, observed, duration=2.01)
+        elif damage == "ticks":
+            session.settings = dataclasses.replace(
+                session.settings, sim=dataclasses.replace(session.settings.sim, fps=60)
+            )
+            session.agent.execute(segment(session, observed, duration=1.1))
+        elif damage == "names":
+            session.agent.execute(segment(session, observed, targets={"invented": 0.03}))
+        else:
+            body = payload(segment(session, observed))
+            body["arguments"]["targets"] = {}
+            AgentCommand.parse("segment", body)
+    assert not session.sim.applications
+
+
+def test_heartbeat_renews_only_current_epoch_within_fixed_arming_budget(session):
+    clock = {"now": 1_000_000_000}
+    session.agent.clock_ns = lambda: clock["now"]
+    act(session, "task", {"instruction": "abstract fixture goal"})
+    act(session, "start")
+    session.agent.execute(
+        agent_command(
+            session,
+            "acquire",
+            {
+                "clock_policy": "stepped",
+                "expected_revision": session.revision,
+                "episode_id": session.episode_id,
+                "max_session_seconds": 120,
+            },
+        )
+    )
+    observed = session.agent.execute(agent_command(session, "observe"))["observation"]
+    initial_expiry = observed["valid_until_monotonic_ns"]
+    clock["now"] += 25_000_000_000
+    session.agent.execute(agent_command(session, "heartbeat"))
+    assert session.agent.lease_deadline_ns == clock["now"] + 30_000_000_000
+    assert observed["valid_until_monotonic_ns"] == initial_expiry
+    clock["now"] += 10_000_000_000
+    with pytest.raises(ValueError, match="expired"):
+        session.agent.execute(correction(session, observed))
+    with pytest.raises(ValueError, match="ownership"):
+        session.agent.execute(agent_command(session, "heartbeat", epoch=session.agent.epoch + 1))
+    clock["now"] = session.agent.lease_deadline_ns
+    with pytest.raises(ValueError, match="ownership"):
+        session.agent.execute(agent_command(session, "heartbeat"))
+    session.tick()
+    assert session.agent.owner is None and session.mode == "paused"
+
+
+def test_heartbeat_does_not_extend_past_arming_cap_or_reacquire_after_takeover(session):
+    clock = {"now": 1_000_000_000}
+    session.agent.clock_ns = lambda: clock["now"]
+    act(session, "task", {"instruction": "bounded fixture"})
+    act(session, "start")
+    session.agent.execute(
+        agent_command(
+            session,
+            "acquire",
+            {
+                "clock_policy": "stepped",
+                "expected_revision": session.revision,
+                "episode_id": session.episode_id,
+                "max_session_seconds": 45,
+            },
+        )
+    )
+    clock["now"] += 25_000_000_000
+    session.agent.execute(agent_command(session, "heartbeat"))
+    assert session.agent.lease_deadline_ns == session.agent.arm_deadline_ns
+    old_epoch = session.agent.epoch
+    act(session, "pause")
+    act(session, "start")
+    with pytest.raises(ValueError):
+        session.agent.execute(agent_command(session, "heartbeat", epoch=old_epoch))
+    assert session.agent.owner is None
+
+
+def test_segment_capture_preserves_skill_event_and_applied_actions(session):
+    observed = start(session)
+    ident = session.episode_id
+    session.agent.execute(segment(session, observed))
+    session.tick()
+    session.tick()
+    session.tick()
+    act(session, "finish")
+    _, episodes, _ = inspect_capture(session.journal.root, [ident])
+    rows = episodes[0]["rows"]
+    assert len(rows) == 3 and all(r["skill_manifest_version"] == 2 for r in rows)
+    assert rows[0]["applied_target_rad"][0] == pytest.approx(2 / 30)
+    assert rows[-1]["applied_target_rad"][0] == pytest.approx(0.15)
+    event = next(e for e in episodes[0]["receipt"]["events"] if e["source"] == "agent_command")
+    assert event["operation"] == "segment" and event["arguments"] == {
+        "targets": {"joint_0": 0.15},
+        "duration_seconds": 0.1,
+    }
+
+
+def test_extended_snapshot_stays_frozen_and_keeps_original_capture_age(session):
+    clock = {"now": 1_000_000_000}
+    session.agent.clock_ns = lambda: clock["now"]
+    act(session, "task", {"instruction": "Pick up the configured object"})
+    act(session, "start")
+    session.agent.execute(
+        agent_command(
+            session,
+            "acquire",
+            {
+                "clock_policy": "stepped",
+                "expected_revision": session.revision,
+                "episode_id": session.episode_id,
+                "max_session_seconds": 120,
+                "planning_snapshot_seconds": 120,
+            },
+        )
+    )
+    observed = session.agent.execute(agent_command(session, "observe"))["observation"]
+    assert observed["scene_frozen_for_planning"] is True
+    assert observed["snapshot_policy"] == "frozen_step_v1"
+    assert observed["joint_limits"] == {f"joint_{i}": [-0.2, 0.2] for i in range(6)}
+    for _ in range(4):
+        clock["now"] += 20_000_000_000
+        session.agent.execute(agent_command(session, "heartbeat"))
+        session.tick()
+    assert session.sim.counter == 0 and session.observation.sim_time == 0
+    assert observed["captured_monotonic_ns"] == 1_000_000_000
+    assert observed["valid_until_monotonic_ns"] == 121_000_000_000
+    result = session.agent.execute(correction(session, observed))
+    session.tick()
+    assert result["execution"]["status"] == "completed"
+    assert session.sim.counter == 1
+
+
+def test_frozen_admission_recaptures_real_state_instead_of_refreshing_old_binding(session):
+    observed = start(session)
+    # Simulate an out-of-band mutation without updating the session cache.
+    session.sim.state = (0.04,) * 6
+    with pytest.raises(ValueError, match="drift"):
+        session.agent.execute(correction(session, observed))
+    assert not session.sim.applications
+
+
+def test_continuous_snapshot_keeps_short_age_and_rejects_extended_policy(session):
+    observed = start(session, "continuous")
+    assert observed["scene_frozen_for_planning"] is False
+    assert observed["valid_until_monotonic_ns"] - observed["captured_monotonic_ns"] == 2_000_000_000
+    body = payload(
+        agent_command(
+            session,
+            "acquire",
+            {
+                "clock_policy": "continuous",
+                "expected_revision": session.revision,
+                "episode_id": session.episode_id,
+            },
+        )
+    )
+    body["arguments"]["planning_snapshot_seconds"] = 120
+    with pytest.raises(ValueError, match="frozen"):
+        AgentCommand.parse("acquire", body)

@@ -91,8 +91,27 @@ class Mailbox:
                                 "error": "Execution did not complete; motion outcome is unverified",
                             }
                         )
+            for receipt in self.receipts.values():
+                if (
+                    receipt["status"] == "executing"
+                    and receipt.get("execution", {}).get("status") == "stopped"
+                ):
+                    receipt.update(
+                        status="rejected",
+                        error=(
+                            "Agent action stopped before completion; "
+                            "partial execution evidence is retained"
+                        ),
+                    )
             applied = session.last_applied_command_id
-            if applied in self.receipts and self.receipts[applied]["status"] == "executing":
+            if (
+                applied in self.receipts
+                and self.receipts[applied]["status"] == "executing"
+                and (
+                    "execution" not in self.receipts[applied]
+                    or self.receipts[applied]["execution"].get("status") == "completed"
+                )
+            ):
                 self.receipts[applied].update(
                     {
                         "status": "acknowledged",
@@ -141,11 +160,11 @@ class Mailbox:
         else:
             update = {
                 "status": "executing"
-                if command.operation in {"correct", "execute"}
+                if command.operation in {"correct", "execute", "segment"}
                 else "acknowledged",
                 **(result if isinstance(command, AgentCommand) else {"state": result}),
             }
-            if command.operation not in {"correct", "execute"}:
+            if command.operation not in {"correct", "execute", "segment"}:
                 update["acknowledged_monotonic_ns"] = time.monotonic_ns()
         # Publish invalidation before acknowledging a changed command context.
         # Waiting for the next tick could otherwise expose old pixels as current.
@@ -205,7 +224,14 @@ def server(mailbox: Mailbox, token: str, port: int = 0) -> ThreadingHTTPServer:
                 agent_operation = (
                     self.path.removeprefix("/agent/")
                     if self.path
-                    in {"/agent/acquire", "/agent/observe", "/agent/execute", "/agent/release"}
+                    in {
+                        "/agent/acquire",
+                        "/agent/observe",
+                        "/agent/execute",
+                        "/agent/release",
+                        "/agent/heartbeat",
+                        "/agent/segment",
+                    }
                     else None
                 )
                 if (self.path != "/commands" and agent_operation is None) or self.headers.get(

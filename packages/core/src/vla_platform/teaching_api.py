@@ -191,18 +191,39 @@ def public_state(value):
     except ValidationError:
         raise HTTPException(503, "Teaching state is invalid.") from None
     caps = result["agent_capabilities"]
-    if caps and (
-        set(caps)
-        != {"schema_version", "named_joint_correction", "stepped_capture", "physical_execution"}
-        or type(caps.get("schema_version")) is not int
-        or caps["schema_version"] != 1
-        or any(
-            type(caps[key]) is not bool
-            for key in ("named_joint_correction", "stepped_capture", "physical_execution")
-        )
-        or caps["physical_execution"]
-    ):
-        raise HTTPException(503, "Teaching agent capabilities are invalid.")
+    if caps:
+        required = {
+            "schema_version",
+            "named_joint_correction",
+            "stepped_capture",
+            "physical_execution",
+        }
+        extended = {
+            "named_joint_segment",
+            "epoch_heartbeat",
+            "max_segment_ticks",
+            "max_segment_duration_ms",
+        }
+        if (
+            type(caps.get("schema_version")) is not int
+            or caps["schema_version"] not in {1, 2}
+            or set(caps) != (required if caps["schema_version"] == 1 else required | extended)
+            or any(
+                type(caps[key]) is not bool
+                for key in ("named_joint_correction", "stepped_capture", "physical_execution")
+            )
+            or caps["physical_execution"]
+        ):
+            raise HTTPException(503, "Teaching agent capabilities are invalid.")
+        if caps["schema_version"] == 2 and (
+            type(caps["named_joint_segment"]) is not bool
+            or type(caps["epoch_heartbeat"]) is not bool
+            or type(caps["max_segment_ticks"]) is not int
+            or not 1 <= caps["max_segment_ticks"] <= 60
+            or type(caps["max_segment_duration_ms"]) is not int
+            or not 100 <= caps["max_segment_duration_ms"] <= 2000
+        ):
+            raise HTTPException(503, "Teaching segment capabilities are invalid.")
     if result["fault"]:
         result["fault"] = "Executor stopped after a fault; inspect its local log."
     if not result["agent_capabilities"]:
@@ -453,7 +474,14 @@ from vla_platform.teaching_intelligence_api import router as intelligence_router
 router.include_router(intelligence_router)
 
 
-AGENT_PATHS = {"/agent/acquire", "/agent/observe", "/agent/execute", "/agent/release"}
+AGENT_PATHS = {
+    "/agent/acquire",
+    "/agent/observe",
+    "/agent/execute",
+    "/agent/release",
+    "/agent/heartbeat",
+    "/agent/segment",
+}
 AGENT_OBSERVATION_FIELDS = {
     "schema_version",
     "observation_id",
@@ -507,6 +535,15 @@ def validate_agent_request(path: str, payload: dict | None) -> None:
         "acquire": {"clock_policy", "expected_revision", "episode_id"},
         "observe": set(),
         "release": set(),
+        "heartbeat": set(),
+        "segment": {
+            "observation_id",
+            "observation_sha256",
+            "targets",
+            "duration_seconds",
+            "proposal_id",
+            "provider_model",
+        },
         "execute": {
             "observation_id",
             "observation_sha256",
@@ -516,26 +553,58 @@ def validate_agent_request(path: str, payload: dict | None) -> None:
             "provider_model",
         },
     }[operation]
-    if not isinstance(args, dict) or set(args) != expected:
+    optional = (
+        {"max_session_seconds", "planning_snapshot_seconds"} if operation == "acquire" else set()
+    )
+    if not isinstance(args, dict) or not expected <= set(args) or set(args) - expected - optional:
         raise ValueError("Unsupported agent executor arguments")
     if operation == "acquire" and (
         args["clock_policy"] not in {"stepped", "continuous"} or payload["authority_epoch"] != 0
     ):
         raise ValueError("Invalid agent acquire contract")
     if operation == "acquire":
+        if "max_session_seconds" in args and (
+            type(args["max_session_seconds"]) is not int
+            or not 1 <= args["max_session_seconds"] <= 600
+        ):
+            raise ValueError("Invalid maximum agent session duration")
+        if "planning_snapshot_seconds" in args and (
+            type(args["planning_snapshot_seconds"]) is not int
+            or not 1 <= args["planning_snapshot_seconds"] <= 120
+            or args["clock_policy"] != "stepped"
+        ):
+            raise ValueError("Invalid frozen planning snapshot duration")
         frame_integer(args["expected_revision"], 2**53 - 1)
         if not isinstance(args["episode_id"], str) or not re.fullmatch(
             IDENTITY, args["episode_id"]
         ):
             raise ValueError("Invalid acquire episode identity")
-    if operation == "execute":
-        TeachingCommand(
-            session_id=payload["session_id"],
-            command_id=payload["command_id"],
-            expected_revision=0,
-            operation="correct",
-            arguments={"joint": args["joint"], "delta_rad": args["delta_rad"]},
-        )
+    if operation in {"execute", "segment"}:
+        if operation == "execute":
+            TeachingCommand(
+                session_id=payload["session_id"],
+                command_id=payload["command_id"],
+                expected_revision=0,
+                operation="correct",
+                arguments={"joint": args["joint"], "delta_rad": args["delta_rad"]},
+            )
+        else:
+            targets, duration = args["targets"], args["duration_seconds"]
+            if (
+                not isinstance(targets, dict)
+                or not 1 <= len(targets) <= 32
+                or any(
+                    not isinstance(k, str)
+                    or not k.isidentifier()
+                    or type(v) not in (int, float)
+                    or not math.isfinite(v)
+                    for k, v in targets.items()
+                )
+                or type(duration) not in (int, float)
+                or not math.isfinite(duration)
+                or not 0.1 <= duration <= 2
+            ):
+                raise ValueError("Invalid simulator segment contract")
         for key in ("observation_id", "proposal_id"):
             if not isinstance(args[key], str) or not re.fullmatch(IDENTITY, args[key]):
                 raise ValueError("Invalid agent proposal identity")
@@ -551,8 +620,111 @@ def validate_agent_request(path: str, payload: dict | None) -> None:
             raise ValueError("Invalid provider model identity")
 
 
+def public_task_evidence(value, *, step, sim_time):
+    """Measured geometry is a named criterion, never a general grasp or physical claim."""
+    required = {
+        "schema_version",
+        "source",
+        "criteria",
+        "criteria_sha256",
+        "object_prim",
+        "step",
+        "sim_time",
+        "samples",
+        "whole_object_clearance_m",
+        "lift_hold_seconds",
+        "terminal_settle_seconds",
+        "geometric_success",
+        "grasp_and_release_verified",
+        "physical_transfer_verified",
+    }
+    criteria_fields = {
+        "task",
+        "object_prim",
+        "support_height_m",
+        "lift_clearance_m",
+        "lift_hold_seconds",
+        "settle_seconds",
+        "maximum_linear_speed_m_s",
+        "maximum_angular_speed_rad_s",
+        "placement_min_m",
+        "placement_max_m",
+    }
+    if not isinstance(value, dict) or set(value) != required:
+        raise ValueError("Invalid independent task evidence")
+    criteria = value["criteria"]
+    if (
+        type(value["schema_version"]) is not int
+        or value["schema_version"] != 1
+        or value["source"] != "isaac_object_bounds_v1"
+        or not isinstance(criteria, dict)
+        or set(criteria) != criteria_fields
+        or criteria["task"] not in {"lift_hold", "lift_place"}
+        or value["object_prim"] != criteria["object_prim"]
+        or not isinstance(value["object_prim"], str)
+        or not re.fullmatch(r"(/[A-Za-z_][A-Za-z_0-9]*)+", value["object_prim"])
+        or type(value["step"]) is not int
+        or value["step"] != step
+        or type(value["samples"]) is not int
+        or value["samples"] != step + 1
+        or type(value["sim_time"]) not in (int, float)
+        or value["sim_time"] != sim_time
+        or type(value["geometric_success"]) is not bool
+        or value["grasp_and_release_verified"] is not False
+        or value["physical_transfer_verified"] is not False
+    ):
+        raise ValueError("Independent task evidence does not match the observation")
+    for key in ("whole_object_clearance_m", "lift_hold_seconds", "terminal_settle_seconds"):
+        if type(value[key]) not in (int, float) or not math.isfinite(value[key]):
+            raise ValueError("Nonfinite independent task measurement")
+    for key, lower, upper in (
+        ("support_height_m", -1000, 1000),
+        ("lift_clearance_m", 0.001, 10),
+        ("lift_hold_seconds", 0.001, 600),
+        ("settle_seconds", 0.001, 600),
+        ("maximum_linear_speed_m_s", 0, 100),
+        ("maximum_angular_speed_rad_s", 0, 100),
+    ):
+        if (
+            type(criteria[key]) not in (int, float)
+            or not math.isfinite(criteria[key])
+            or not lower <= criteria[key] <= upper
+        ):
+            raise ValueError("Invalid independent task criteria")
+    if value["lift_hold_seconds"] < 0 or value["terminal_settle_seconds"] < 0:
+        raise ValueError("Negative independent task duration")
+    for key in ("placement_min_m", "placement_max_m"):
+        vector = criteria[key]
+        if criteria["task"] == "lift_hold":
+            if vector is not None:
+                raise ValueError("Lift-only criteria cannot claim placement")
+        elif (
+            not isinstance(vector, list)
+            or len(vector) != 3
+            or any(type(v) not in (int, float) or not math.isfinite(v) for v in vector)
+        ):
+            raise ValueError("Invalid placement criteria")
+    if criteria["task"] == "lift_place" and any(
+        lo >= hi
+        for lo, hi in zip(criteria["placement_min_m"], criteria["placement_max_m"], strict=True)
+    ):
+        raise ValueError("Placement criteria must have positive extent")
+    digest = hashlib.sha256(
+        json.dumps(criteria, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    ).hexdigest()
+    if value["criteria_sha256"] != digest:
+        raise ValueError("Independent task criteria fingerprint differs")
+    return dict(value)
+
+
 def public_agent_observation(value: dict, *, session_id: str | None) -> dict:
-    if not isinstance(value, dict) or set(value) != AGENT_OBSERVATION_FIELDS:
+    if (
+        not isinstance(value, dict)
+        or not AGENT_OBSERVATION_FIELDS <= set(value)
+        or set(value)
+        - AGENT_OBSERVATION_FIELDS
+        - {"task_evidence", "scene_frozen_for_planning", "snapshot_policy", "joint_limits"}
+    ):
         raise ValueError("Invalid agent observation fields")
     if (
         type(value["schema_version"]) is not int
@@ -582,7 +754,23 @@ def public_agent_observation(value: dict, *, session_id: str | None) -> dict:
         "step",
     ):
         frame_integer(value[key])
-    if not 0 < value["valid_until_monotonic_ns"] - value["captured_monotonic_ns"] <= 30_000_000_000:
+    frozen = value.get("scene_frozen_for_planning")
+    policy = value.get("snapshot_policy")
+    if frozen is not None or policy is not None:
+        if (
+            type(frozen) is not bool
+            or frozen != (value["clock_policy"] == "stepped")
+            or policy != ("frozen_step_v1" if frozen else "continuous_age_drift_v1")
+        ):
+            raise ValueError("Invalid simulator planning clock declaration")
+    maximum = (
+        120_000_000_000
+        if frozen is True
+        else 2_000_000_000
+        if value["clock_policy"] == "continuous"
+        else 30_000_000_000
+    )
+    if not 0 < value["valid_until_monotonic_ns"] - value["captured_monotonic_ns"] <= maximum:
         raise ValueError("Invalid agent observation validity interval")
     joints, state = value["joints"], value["state_rad"]
     if (
@@ -617,6 +805,22 @@ def public_agent_observation(value: dict, *, session_id: str | None) -> dict:
         or hashlib.sha256(pixels).hexdigest() != value["image_sha256"]
     ):
         raise ValueError("Agent image fingerprint differs")
+    if "joint_limits" in value:
+        limits = value["joint_limits"]
+        if (
+            not isinstance(limits, dict)
+            or set(limits) != set(value["joints"])
+            or any(
+                not isinstance(bounds, list)
+                or len(bounds) != 2
+                or any(type(v) not in (int, float) or not math.isfinite(v) for v in bounds)
+                or bounds[0] >= bounds[1]
+                for bounds in limits.values()
+            )
+        ):
+            raise ValueError("Invalid native named joint limits")
+    if "task_evidence" in value:
+        public_task_evidence(value["task_evidence"], step=value["step"], sim_time=value["sim_time"])
     immutable = {key: item for key, item in value.items() if key != "observation_sha256"}
     digest = hashlib.sha256(
         json.dumps(immutable, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
@@ -649,11 +853,16 @@ def public_agent_receipt(value: dict, *, session_id: str | None) -> dict:
             "joint_limit_clipped",
             "speed_limit_clipped",
             "task_success_verified",
+            "skill",
+            "requested_duration_seconds",
+            "executed_ticks",
+            "simulation_elapsed_seconds",
+            "stopped_monotonic_ns",
         }
         if (
             not isinstance(execution, dict)
             or not set(execution) <= allowed
-            or execution.get("status") not in {"started", "completed"}
+            or execution.get("status") not in {"started", "completed", "stopped"}
             or execution.get("execution_id") != result["command_id"]
         ):
             raise ValueError("Invalid agent execution receipt")
@@ -662,7 +871,7 @@ def public_agent_receipt(value: dict, *, session_id: str | None) -> dict:
                 IDENTITY, execution[key]
             ):
                 raise ValueError("Invalid agent execution identity")
-        for key in ("started_monotonic_ns", "completed_monotonic_ns"):
+        for key in ("started_monotonic_ns", "completed_monotonic_ns", "stopped_monotonic_ns"):
             if key in execution:
                 frame_integer(execution[key])
         for key in ("applied_target_rad", "requested_target_rad", "next_state_rad"):
@@ -679,6 +888,17 @@ def public_agent_receipt(value: dict, *, session_id: str | None) -> dict:
                 or any(type(v) is not bool for v in execution[key])
             ):
                 raise ValueError("Invalid agent clipping provenance")
+        if "skill" in execution:
+            if (
+                execution["skill"] != "joint_segment"
+                or type(execution.get("requested_duration_seconds")) not in (int, float)
+                or not 0.1 <= execution["requested_duration_seconds"] <= 2
+                or type(execution.get("executed_ticks")) is not int
+                or not 0 <= execution["executed_ticks"] <= 60
+                or type(execution.get("simulation_elapsed_seconds")) not in (int, float)
+                or not 0 <= execution["simulation_elapsed_seconds"] <= 2
+            ):
+                raise ValueError("Invalid simulator segment completion evidence")
         if execution.get("task_success_verified", False) is not False:
             raise ValueError("Agent completion cannot verify task success")
         if execution["status"] == "completed" and not {

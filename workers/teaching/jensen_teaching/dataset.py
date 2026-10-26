@@ -161,9 +161,15 @@ def _provenance(value: dict, version: int, *, event: bool = False) -> None:
     integer(value.get("authority_epoch"), "authority epoch", 1, 2**53 - 1)
     if (
         value.get("clock_policy") not in {"stepped", "continuous"}
-        or value.get("skill_manifest_version") != 1
+        or type(value.get("skill_manifest_version")) is not int
+        or value["skill_manifest_version"] not in {1, 2}
     ):
         raise ValueError("Unsupported agent skill or clock provenance")
+    if event and (
+        (value["skill_manifest_version"] == 1 and value.get("operation") != "correct")
+        or (value["skill_manifest_version"] == 2 and value.get("operation") != "segment")
+    ):
+        raise ValueError("Agent event does not match its declared skill manifest")
 
 
 def inspect_capture(
@@ -255,16 +261,46 @@ def inspect_capture(
         for event in events:
             from .contracts import Command
 
-            command = Command.parse(
-                {
-                    "command_id": event.get("command_id"),
-                    "session_id": meta.get("session_id"),
-                    "episode_id": ident,
-                    "expected_revision": 0,
-                    "operation": event.get("operation"),
-                    "arguments": event.get("arguments"),
-                }
-            )
+            if version == 2 and event.get("operation") == "segment":
+                from .agent import AgentCommand
+
+                if event.get("actor") != "llm_agent" or event.get("skill_manifest_version") != 2:
+                    raise ValueError("Segment events require the governed agent skill manifest")
+                args = event.get("arguments")
+                if not isinstance(args, dict) or set(args) != {"targets", "duration_seconds"}:
+                    raise ValueError("Segment event arguments differ")
+                command = AgentCommand.parse(
+                    "segment",
+                    {
+                        "command_id": event.get("command_id"),
+                        "session_id": meta.get("session_id"),
+                        "agent_session_id": event.get("agent_session_id"),
+                        "authority_epoch": event.get("authority_epoch"),
+                        "arguments": {
+                            **args,
+                            "observation_id": event.get("observation_id"),
+                            "observation_sha256": event.get("observation_sha256"),
+                            "proposal_id": event.get("proposal_id"),
+                            "provider_model": event.get("provider_model"),
+                        },
+                    },
+                )
+                if (
+                    not set(args["targets"]) <= set(names)
+                    or math.ceil(args["duration_seconds"] * fps) > 60
+                ):
+                    raise ValueError("Segment event exceeds its named local executor envelope")
+            else:
+                command = Command.parse(
+                    {
+                        "command_id": event.get("command_id"),
+                        "session_id": meta.get("session_id"),
+                        "episode_id": ident,
+                        "expected_revision": 0,
+                        "operation": event.get("operation"),
+                        "arguments": event.get("arguments"),
+                    }
+                )
             if command.command_id in command_ids:
                 raise ValueError("Invalid intervention identity/source")
             _provenance(event, version, event=True)
@@ -322,10 +358,23 @@ def inspect_capture(
                     raise ValueError("Invalid motion guard provenance")
             text(row.get("task"), "task")
             event = command_events.get(row.get("command_id"))
-            if event is None or event["operation"] not in {"start", "correct"}:
+            if event is None or event["operation"] not in {"start", "correct", "segment"}:
                 raise ValueError("Frame has no motion-target command provenance")
             if event["step"] > step or event["accepted_monotonic_ns"] > row["applied_monotonic_ns"]:
                 raise ValueError("Frame references a future motion-target command")
+            if event["operation"] == "segment":
+                initial = rows[event["step"]]["state_rad"]
+                requested = list(initial)
+                for joint, target in event["arguments"]["targets"].items():
+                    index = names.index(joint)
+                    if abs(target - initial[index]) > 0.15 + 1e-12:
+                        raise ValueError("Segment target exceeds its original observed state bound")
+                    requested[index] = target
+                if (
+                    step < event["step"] + math.ceil(event["arguments"]["duration_seconds"] * fps)
+                    and row["requested_target_rad"] != requested
+                ):
+                    raise ValueError("Recorded segment request differs from its original command")
             if step and rows[step - 1]["next_state_rad"] != row["state_rad"]:
                 raise ValueError("Adjacent simulator observations are discontinuous")
             _provenance(row, version)
@@ -540,6 +589,7 @@ def convert_captures(
                     e["command_id"]
                     for e in receipt.get("events", [])
                     if e.get("operation") == "correct"
+                    and e.get("actor", "human_operator") == "human_operator"
                 }
                 for row in episode["rows"]:
                     pixels = _read(

@@ -276,3 +276,152 @@ def test_agent_promotion_binds_exact_per_frame_provenance(tmp_path, damage):
     else:
         with pytest.raises(ValueError, match="provenance"):
             check()
+
+
+def rehash_observation(value):
+    value = {key: item for key, item in value.items() if key != "observation_sha256"}
+    return value | {"observation_sha256": hashlib.sha256(canonical(value)).hexdigest()}
+
+
+def test_explicit_frozen_snapshot_and_actual_limits_are_hash_bound():
+    value = rehash_observation(
+        observation()
+        | {
+            "scene_frozen_for_planning": True,
+            "snapshot_policy": "frozen_step_v1",
+            "valid_until_monotonic_ns": 120_000_000_001,
+            "joint_limits": {"joint_0": [-1.2, 1.5]},
+        }
+    )
+    assert teaching_api.public_agent_observation(value, session_id="executor_fixture") == value
+    for change in (
+        {"joint_limits": {"wrong": [-1, 1]}},
+        {"joint_limits": {"joint_0": [1, -1]}},
+        {"scene_frozen_for_planning": False},
+        {"clock_policy": "continuous"},
+        {"valid_until_monotonic_ns": 120_000_000_002},
+    ):
+        with pytest.raises(ValueError):
+            teaching_api.public_agent_observation(
+                rehash_observation(value | change), session_id="executor_fixture"
+            )
+    with pytest.raises(ValueError, match="fingerprint"):
+        teaching_api.public_agent_observation(
+            value | {"joint_limits": {"joint_0": [-1, 1]}}, session_id="executor_fixture"
+        )
+
+
+def test_independent_geometric_evidence_is_bound_to_exact_observation_and_criterion():
+    criteria = {
+        "task": "lift_hold",
+        "object_prim": "/World/Props/Cup",
+        "support_height_m": 0.2,
+        "lift_clearance_m": 0.01,
+        "lift_hold_seconds": 0.5,
+        "settle_seconds": 0.5,
+        "maximum_linear_speed_m_s": 0.02,
+        "maximum_angular_speed_rad_s": 0.1,
+        "placement_min_m": None,
+        "placement_max_m": None,
+    }
+    evidence = {
+        "schema_version": 1,
+        "source": "isaac_object_bounds_v1",
+        "criteria": criteria,
+        "criteria_sha256": hashlib.sha256(canonical(criteria)).hexdigest(),
+        "object_prim": criteria["object_prim"],
+        "step": 0,
+        "sim_time": 0.0,
+        "samples": 1,
+        "whole_object_clearance_m": 0.0,
+        "lift_hold_seconds": 0.0,
+        "terminal_settle_seconds": 0.0,
+        "geometric_success": False,
+        "grasp_and_release_verified": False,
+        "physical_transfer_verified": False,
+    }
+    value = rehash_observation(observation() | {"task_evidence": evidence})
+    assert teaching_api.public_agent_observation(value, session_id="executor_fixture") == value
+    for damage in (
+        {"step": 1},
+        {"samples": 2},
+        {"sim_time": 0.1},
+        {"grasp_and_release_verified": True},
+        {"physical_transfer_verified": True},
+        {"criteria_sha256": "f" * 64},
+        {"lift_hold_seconds": -1},
+    ):
+        changed = rehash_observation(value | {"task_evidence": evidence | damage})
+        with pytest.raises(ValueError):
+            teaching_api.public_agent_observation(changed, session_id="executor_fixture")
+
+
+def test_agent_heartbeat_and_segment_relay_preserve_bounded_original_arguments():
+    heartbeat = request()
+    assert teaching_api.validate_agent_request("/agent/heartbeat", heartbeat) is None
+    body = request() | {
+        "arguments": {
+            "observation_id": "observation_fixture",
+            "observation_sha256": "a" * 64,
+            "proposal_id": "proposal_fixture",
+            "provider_model": "mock-v1",
+            "targets": {"joint_0": 0.1},
+            "duration_seconds": 0.2,
+        }
+    }
+    assert teaching_api.validate_agent_request("/agent/segment", body) is None
+    for damage in (
+        {"duration_seconds": 2.001},
+        {"targets": {}},
+        {"targets": {"joint_0": float("nan")}},
+    ):
+        with pytest.raises(ValueError):
+            teaching_api.validate_agent_request(
+                "/agent/segment", body | {"arguments": body["arguments"] | damage}
+            )
+
+
+def test_snapshot_reader_preserves_segment_skill_and_rejects_malformed_arguments():
+    import copy
+
+    from vla_platform.datasets.snapshot_reader import validate_demonstration_provenance
+
+    action = {
+        "step": 0,
+        "actor": "llm_agent",
+        "environment_kind": "simulation",
+        "agent_session_id": "agent_fixture",
+        "proposal_id": "proposal_fixture",
+        "execution_id": "execution_fixture",
+        "provider_model": "fixture-v1",
+        "observation_id": "observation_fixture",
+        "observation_sha256": "a" * 64,
+        "authority_epoch": 1,
+        "clock_policy": "stepped",
+        "skill_manifest_version": 2,
+    }
+    event = action | {
+        "command_id": action["execution_id"],
+        "source": "agent_command",
+        "operation": "segment",
+        "arguments": {"targets": {"joint_0": 0.1}, "duration_seconds": 0.1},
+    }
+    value = {
+        "task_success_verified": False,
+        "episodes": [
+            {
+                "episode_index": 0,
+                "capture_schema_version": 2,
+                "environment_kind": "simulation",
+                "actors": ["llm_agent"],
+                "events": [event],
+                "action_provenance": [action],
+            }
+        ],
+    }
+    validate_demonstration_provenance(value, [{"length": 1}])
+    for change in ({"targets": {}}, {"duration_seconds": 2.01}, {"extra": 1}):
+        changed = copy.deepcopy(value)
+        changed["episodes"][0]["events"][0]["arguments"].update(change)
+        with pytest.raises(ValueError, match="segment"):
+            validate_demonstration_provenance(changed, [{"length": 1}])

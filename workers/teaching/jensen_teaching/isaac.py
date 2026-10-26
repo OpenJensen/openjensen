@@ -47,7 +47,7 @@ def main():
         from sim_worker.rollout.isaac import IsaacSim
 
         journal = Journal(args.output, settings)
-        with IsaacSim(settings.sim) as simulation:
+        with IsaacSim(settings.sim, settings.task_evaluation) as simulation:
             session = Session(settings, simulation, journal)
             session.prepare()
             mailbox.publish(session)
