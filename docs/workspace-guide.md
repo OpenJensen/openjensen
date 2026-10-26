@@ -1,6 +1,6 @@
 # Workspace guide
 
-Select or create a project from the project menu, then open a page from the sidebar. Use the [API reference](/docs/) for programmatic access.
+Select or create a project from the project menu, then open a page from the sidebar. Use the API reference in the navigation for programmatic access.
 
 ## Dashboard
 
