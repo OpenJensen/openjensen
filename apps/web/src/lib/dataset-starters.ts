@@ -12,7 +12,7 @@ export type DatasetStarter = {
 };
 
 // Counts and stills belong to these exact public dataset revisions. See
-// public/datasets/README.md for sources and the preview verification record.
+// public/datasets/README.md for source attribution.
 export const datasetStarters: DatasetStarter[] = [
   {
     id: 'so101-pickup',

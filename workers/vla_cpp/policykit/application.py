@@ -14,7 +14,7 @@ from importlib.util import find_spec
 from pathlib import Path
 
 from .acceptance import artifact_contract, memory_coverage, sanitize_measurement, satisfies_limits
-from .cuda_bench import measure, percentile
+from .measurement import measure, percentile
 from .provenance import runtime_identity
 from .worker import atomic_json, describe_runtime, sha256
 from .worker import run as quantize_job

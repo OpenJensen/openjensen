@@ -40,7 +40,7 @@ WEB_BOTH = {"desktop_lane", "mobile_lane"}
         (["tests/fixtures/browser_worker/worker.py"], PR_LANE),
         # Worker-only pull requests skip the Python adapter suite.
         (["workers/act_optimizer/src/jensen_act/application.py"], {"act"}),
-        (["workers/vla_cpp/src/quantize.py"], {"quantization", "benchmark"}),
+        (["workers/vla_cpp/src/quantize.py"], {"quantization"}),
         (["workers/jensen_quant/src/jensen_quant/codec.py"], {"unified_quantization"}),
         (
             ["workers/smolvla_qlora/src/jensen_vla/local_dataset.py"],
@@ -104,7 +104,6 @@ def test_rename_runs_both_old_and_new_scopes(tmp_path, monkeypatch):
     assert ci_scope.select(paths, adapters=True) == {
         "application",
         "quantization",
-        "benchmark",
         "teaching",
     }
 

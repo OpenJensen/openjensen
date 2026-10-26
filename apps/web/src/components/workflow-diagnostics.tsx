@@ -22,7 +22,6 @@ export function WorkflowDiagnostics({
     input,
     inputs,
     mutation,
-    options,
     policyJobs,
     preferences,
     ready,
@@ -95,18 +94,6 @@ export function WorkflowDiagnostics({
         {diagnosticBlocker && (
           <p className="warning-box" id="diagnostic-readiness" role="status">
             {diagnosticBlocker}
-          </p>
-        )}
-        {!runtime && !options.isPending && (
-          <p className="muted">
-            <a
-              className="text-link"
-              href="https://github.com/OpenJensen/openjensen/blob/main/docs/policy-workflow.md#configure-the-execution-host"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Worker setup instructions ↗
-            </a>
           </p>
         )}
         {!!runtime && !inputs.length && !artifacts.isPending && (

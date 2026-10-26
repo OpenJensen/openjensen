@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 
 from .acceptance import artifact_contract, memory_coverage
-from .cuda_bench import percentile
+from .measurement import percentile
 from .provenance import runtime_identity
 from .spatial_protocol import ASSETS_REVISION, digest, episode_ids, protocol, verify_assets
 from .worker import atomic_json, sha256

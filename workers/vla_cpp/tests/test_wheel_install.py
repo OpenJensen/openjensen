@@ -18,7 +18,7 @@ def test_installed_wheel_can_describe_runtime(tmp_path):
     source = Path(__file__).resolve().parents[1]
     project = tmp_path / "project"
     project.mkdir()
-    for name in ("pyproject.toml", "README.md"):
+    for name in ("pyproject.toml",):
         shutil.copy2(source / name, project / name)
     shutil.copytree(source / "policykit", project / "policykit",
                     ignore=shutil.ignore_patterns("__pycache__"))
@@ -53,11 +53,3 @@ with patch.object(worker, 'check_runtime'), patch.object(worker, 'version', retu
     expected_patch = source / "policykit/patches/vla-cpp-smolvla-packed.patch"
     assert runtime["patch_sha256"] == hashlib.sha256(expected_patch.read_bytes()).hexdigest()
     assert runtime["vendor_path"] == str(vendor.resolve())
-    # Experimental entry points must be inspectable from the installed wheel
-    # without importing optional CUDA/PyTorch/simulator dependencies.
-    for module in ("cuda_bench", "cuda_rollout", "modelopt_pilot"):
-        help_result = subprocess.run(
-            [str(python), "-I", "-m", f"policykit.{module}", "--help"],
-            cwd=tmp_path, check=True, capture_output=True, text=True,
-        )
-        assert "usage:" in help_result.stdout

@@ -1,6 +1,6 @@
 # Working safely in this repository
 
-Read the current issue/task record and source before editing. Preserve working configuration, user data and previously verified behavior. Keep application code and its documentation here. Local verification results, experiment outputs, benchmarks and run reports stay local: never commit them or put them in commit messages or pull requests. Upstream files never name the maintainers' machines, hardware, hostnames, usernames or local paths. Use the designated planning location for larger coordination records. The coordinator owns shared interfaces and integration.
+Read the current issue/task record and source before editing. Preserve working configuration, user data and previously verified behavior. Keep application code and concise in-app help here. Extended setup guides, standalone experiment/benchmark suites and unused configuration examples belong outside this repository. Local verification results, experiment outputs, benchmarks and run reports stay local: never commit them or put them in commit messages or pull requests. Upstream files never name the maintainers' machines, hardware, hostnames, usernames or local paths. Use the designated planning location for larger coordination records. The coordinator owns shared interfaces and integration.
 
 ## Local verification and publication
 
