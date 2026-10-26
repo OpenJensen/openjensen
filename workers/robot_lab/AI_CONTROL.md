@@ -11,6 +11,8 @@ The companion can execute one bounded joint-position segment for an explicitly a
 
 `generation` starts from a fresh random integer on each companion process and increments on controller transitions. This fences delayed preflight requests after restart. Authority epochs and command identities are private durable records. Manual heartbeat names `expected_generation`. Automatic manual cleanup names both `expected_generation` and `expected_mode:"manual"`; the mode fence also rejects cleanup after a same-generation transfer to AI ownership. An empty Stop request remains the unconditional emergency path. A manual heartbeat cannot renew an agent lease.
 
+Pause and Cancel inference revoke pending planning work while retaining the locally supervised pose hold and current ownership. A segment already in progress finishes its admitted bounded motion. Model/network failures also pause planning; they do not supply motor heartbeat. The operator must continue the browser presence lease. Explicit Stop, lease expiry or a local motion fault disables torque.
+
 The watchdog is software running in the companion. It does not establish a motor-firmware watchdog or guarantee torque-off after process death, USB failure or loss of motor power. The arm can fall when torque is disabled; support it and keep physical power removal available.
 
 ## Observation contract

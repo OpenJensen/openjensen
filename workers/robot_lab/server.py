@@ -1315,9 +1315,7 @@ class RobotLab:
                 type(expected_generation) is not int or expected_generation != self.generation
             ):
                 raise RequestError("Controller generation changed; stale cleanup was rejected")
-            if expected_mode is not None and (
-                expected_mode != "manual" or self.mode != expected_mode
-            ):
+            if expected_mode is not None and self.mode != expected_mode:
                 raise RequestError("Controller mode changed; stale manual cleanup was rejected")
             self.generation += 1
             self.agent.revoke(reason or "Stopped by operator")
@@ -1490,6 +1488,8 @@ class RobotLab:
                 if generation != self.generation:
                     return
                 raw = validate_raw(bus.positions(), self.calibration)
+                if generation != self.generation or self.mode != "agent":
+                    return
                 self.positions = {
                     j: normalized(j, value, self.calibration) for j, value in raw.items()
                 }
@@ -1617,31 +1617,48 @@ class RobotLab:
 
     def _loop(self):
         while not self.finished.wait(0.025):
+            generation, mode = self.generation, self.mode
             try:
                 self._tick()
                 self.camera.close_idle()
             except Exception as caught:
-                if self.writer and self.writer.episode_active:
-                    self.writer.episode_active = False
-                    self.recording_error = str(caught)
-                self.stop("Hardware session stopped: " + str(caught))
+                with self.lifecycle_lock:
+                    if generation != self.generation or mode != self.mode:
+                        continue
+                    if self.writer and self.writer.episode_active:
+                        self.writer.episode_active = False
+                        self.recording_error = str(caught)
+                try:
+                    self.stop(
+                        "Hardware session stopped: " + str(caught),
+                        expected_generation=generation,
+                        expected_mode=mode,
+                    )
+                except RequestError:
+                    pass  # An intervening takeover owns its independent lifecycle.
 
     def _watchdog(self):
         while not self.finished.wait(0.1):
-            # Calibration is unpowered and owned by this companion process. Browser
-            # connectivity must not discard a captured middle or joint ranges.
-            if self.mode == "agent":
+            # A delayed watchdog result cannot stop a later controller, including
+            # the manual-to-agent transfer that preserves the serial generation.
+            generation, mode = self.generation, self.mode
+            reason = None
+            if mode == "agent":
                 if self.agent.expired():
-                    self.stop("AI operator or execution lease expired; torque disabled")
-                continue
-            if self.mode not in {"idle", "calibration"} and time.monotonic() - self.heartbeat > (
-                10 if self.mode in {"setup", "verification"} else 2
+                    reason = "AI operator or execution lease expired; torque disabled"
+            elif mode not in {"idle", "calibration"} and time.monotonic() - self.heartbeat > (
+                10 if mode in {"setup", "verification"} else 2
             ):
-                self.stop(
+                reason = (
                     "Setup heartbeat timed out; ID work stopped"
-                    if self.mode == "setup"
+                    if mode == "setup"
                     else "Browser heartbeat timed out; motor torque disabled"
                 )
+            if reason:
+                try:
+                    self.stop(reason, expected_generation=generation, expected_mode=mode)
+                except RequestError:
+                    pass
 
     def close(self):
         self.finished.set()

@@ -14,6 +14,7 @@ import os
 import re
 import shutil
 import tempfile
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -165,6 +166,8 @@ class AgentExecutor:
         self.epoch += 1
         durable_json(self.state_path, {"epoch": self.epoch})
         self.cache = {}
+        self.evidence_lock = threading.RLock()
+        self.command_lock = threading.Lock()
         self.pending_revocations = []
         self.owner = None
         self.generation = None
@@ -248,8 +251,16 @@ class AgentExecutor:
         return json.loads(path.read_text())
 
     def _save(self, record):
-        self.cache[record["command_id"]] = json.loads(json.dumps(record))
-        durable_json(self.receipts_dir / (record["command_id"] + ".json"), record)
+        # Stop revokes in memory without waiting for disk. Serialize persistence
+        # afterwards, and never let a delayed "started" write replace a terminal
+        # receipt that has already been published by revocation/completion.
+        with self.evidence_lock:
+            existing = self.cache.get(record["command_id"])
+            if existing and existing["status"] in {"completed", "stopped", "rejected", "unknown"}:
+                record = existing
+            else:
+                self.cache[record["command_id"]] = dict(record)
+            durable_json(self.receipts_dir / (record["command_id"] + ".json"), record)
 
     def revoke(self, reason="Stopped by operator"):
         # This path performs no file or USB I/O. Stop first invalidates ownership
@@ -291,27 +302,28 @@ class AgentExecutor:
         if not isinstance(args, dict) or type(epoch) is not int or epoch < 0:
             raise ValueError("Invalid agent arguments or epoch")
         fingerprint = digest({"operation": operation, "payload": payload})
-        existing = self.receipts_dir / (command_id + ".json")
-        if existing.exists():
-            record = self.receipt(command_id)
-            if record["request_sha256"] != fingerprint:
-                raise ValueError("Command identity already belongs to another payload")
-            return record  # Duplicate heartbeat never renews a lease.
-        if len(list(self.receipts_dir.glob("*.json"))) >= 20000 and operation != "release":
-            raise ValueError("Agent evidence store needs archival before another session")
-        record = {
-            "schema_version": 1,
-            "command_id": command_id,
-            "agent_session_id": owner,
-            "authority_epoch": epoch,
-            "operation": operation,
-            "request_sha256": fingerprint,
-            "status": "accepted",
-            "created_monotonic_ns": time.monotonic_ns(),
-            "task_success_verified": False,
-        }
-        # Admission failures are durable too; the same ID can never dispatch later.
-        self._save(record)
+        with self.command_lock:
+            existing = self.receipts_dir / (command_id + ".json")
+            if existing.exists():
+                record = self.receipt(command_id)
+                if record["request_sha256"] != fingerprint:
+                    raise ValueError("Command identity already belongs to another payload")
+                return record  # Duplicate heartbeat never renews a lease.
+            if len(list(self.receipts_dir.glob("*.json"))) >= 20000 and operation != "release":
+                raise ValueError("Agent evidence store needs archival before another session")
+            record = {
+                "schema_version": 1,
+                "command_id": command_id,
+                "agent_session_id": owner,
+                "authority_epoch": epoch,
+                "operation": operation,
+                "request_sha256": fingerprint,
+                "status": "accepted",
+                "created_monotonic_ns": time.monotonic_ns(),
+                "task_success_verified": False,
+            }
+            # Admission failures are durable too; the same ID can never dispatch later.
+            self._save(record)
         try:
             with self.lab.lock:
                 if operation == "acquire":
@@ -329,23 +341,31 @@ class AgentExecutor:
                     elif operation == "execute":
                         result = self.execute(command_id, args)
                     elif operation == "heartbeat":
-                        result = self.heartbeat(args)
+                        with self.lab.lifecycle_lock:
+                            self.validate_owner(owner, epoch)
+                            result = self.heartbeat(args)
                     else:
                         if args:
                             raise ValueError("Release takes no model arguments")
-                        self.lab.stop("Agent session released; torque disabled")
+                        self.lab.stop(
+                            "Agent session released; torque disabled",
+                            expected_generation=self.generation,
+                            expected_mode="agent",
+                        )
                         result = {"state": self.status()}
-                if (
-                    operation != "release"
-                    and operation != "heartbeat"
-                    and self.generation != self.lab.generation
-                ):
-                    raise ValueError("Controller generation changed before command completion")
-                record.update(
-                    result,
-                    status="started" if operation == "execute" else "completed",
-                    authority_epoch=self.epoch,
-                )
+                with self.lab.lifecycle_lock:
+                    if (
+                        operation != "release"
+                        and operation != "heartbeat"
+                        and self.generation != self.lab.generation
+                    ):
+                        raise ValueError("Controller generation changed before command completion")
+                    record.update(
+                        result,
+                        status="started" if operation == "execute" else "completed",
+                        authority_epoch=self.epoch,
+                    )
+                    self.cache[command_id] = dict(record)
                 self._save(record)
                 return record
         except Exception as error:
@@ -582,6 +602,7 @@ class AgentExecutor:
         ):
             raise ValueError("Segment targets need exact embodiment joints and units")
         duration = number(args["duration_seconds"], 0.5, 5, "segment duration")
+        owner, epoch = self.owner, self.epoch
         with self.lab.bus.lock:
             raw = self.lab.bus.positions()
             initial = self.measured(raw)
@@ -597,10 +618,12 @@ class AgentExecutor:
                 if 1.875 * distance / duration > 10 or 5.774 * distance / duration**2 > 20:
                     raise ValueError("Segment speed or acceleration exceeds its profile")
                 admitted[j] = target
-            self.command_revision += 1
-            self.segment = Segment(initial, admitted, duration, self.clock())
-            self.active_id = command_id
-            self.last_applied = dict(initial)
+            with self.lab.lifecycle_lock:
+                self.validate_owner(owner, epoch)
+                self.command_revision += 1
+                self.segment = Segment(initial, admitted, duration, self.clock())
+                self.active_id = command_id
+                self.last_applied = dict(initial)
             return {
                 "admitted_arguments": dict(args),
                 "requested_targets": dict(admitted),

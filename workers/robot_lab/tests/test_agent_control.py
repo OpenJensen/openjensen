@@ -15,7 +15,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import test_robot_lab as fixtures
-from agent_control import AgentExecutor, Segment, digest, strict_json
+from agent_control import AgentExecutor, Segment, digest, durable_json, strict_json
 from hardware import JOINTS, HardwareError
 from server import create_server
 
@@ -296,6 +296,110 @@ class AgentTests(unittest.TestCase):
         self.assertFalse(thread.is_alive())
         self.assertTrue(errors)
 
+    def test_stop_during_encoder_admission_cannot_resurrect_a_segment(self):
+        self.arm()
+        observed = self.observe()
+        entered, release = threading.Event(), threading.Event()
+        bus = self.lab.bus
+        original = bus.positions
+        errors = []
+
+        def delayed_positions():
+            raw = original()
+            entered.set()
+            release.wait(2)
+            return raw
+
+        bus.positions = delayed_positions
+
+        def execute():
+            try:
+                self.command("execute", self.segment(observed))
+            except Exception as error:
+                errors.append(error)
+
+        command = threading.Thread(target=execute)
+        command.start()
+        self.assertTrue(entered.wait(1))
+        generation = self.lab.generation
+        stop = threading.Thread(target=self.lab.stop)
+        stop.start()
+        deadline = time.monotonic() + 1
+        while generation == self.lab.generation and time.monotonic() < deadline:
+            time.sleep(0.001)
+        self.assertGreater(self.lab.generation, generation)
+        release.set()
+        command.join(2)
+        stop.join(2)
+        self.assertFalse(command.is_alive() or stop.is_alive())
+        self.assertTrue(errors)
+        self.assertIsNone(self.lab.agent.segment)
+        self.assertIsNone(self.lab.agent.active_id)
+        self.assertFalse(self.lab.torque)
+
+    def test_late_receipt_write_cannot_overwrite_stop_evidence(self):
+        self.arm()
+        observed = self.observe()
+        entered, release = threading.Event(), threading.Event()
+        command_id = uuid.uuid4().hex
+
+        def delayed_write(path, record):
+            if record.get("status") == "started":
+                entered.set()
+                release.wait(2)
+            durable_json(path, record)
+
+        with patch("agent_control.durable_json", side_effect=delayed_write):
+            command = threading.Thread(
+                target=lambda: self.command("execute", self.segment(observed), ident=command_id)
+            )
+            command.start()
+            self.assertTrue(entered.wait(1))
+            stop = threading.Thread(target=self.lab.stop)
+            stop.start()
+            deadline = time.monotonic() + 1
+            while self.lab.torque and time.monotonic() < deadline:
+                time.sleep(0.001)
+            self.assertFalse(self.lab.torque)
+            release.set()
+            command.join(2)
+            stop.join(2)
+            self.assertFalse(command.is_alive() or stop.is_alive())
+        stored = self.lab.agent.receipts_dir / (command_id + ".json")
+        self.assertEqual(json.loads(stored.read_text())["status"], "stopped")
+        self.assertEqual(self.lab.agent.receipt(command_id)["status"], "stopped")
+
+    def test_parallel_duplicate_identity_is_claimed_once_before_usb_admission(self):
+        self.arm()
+        observed = self.observe()
+        entered, release = threading.Event(), threading.Event()
+        bus = self.lab.bus
+        original = bus.positions
+        command_id = uuid.uuid4().hex
+        arguments = self.segment(observed)
+
+        def delayed_positions():
+            raw = original()
+            entered.set()
+            release.wait(2)
+            return raw
+
+        bus.positions = delayed_positions
+        command = threading.Thread(
+            target=lambda: self.command("execute", arguments, ident=command_id)
+        )
+        command.start()
+        self.assertTrue(entered.wait(1))
+        duplicate = self.command("execute", arguments, ident=command_id)
+        self.assertEqual(duplicate["status"], "accepted")
+        with self.assertRaisesRegex(ValueError, "another payload"):
+            self.command("execute", dict(arguments, duration_seconds=3), ident=command_id)
+        release.set()
+        command.join(2)
+        self.assertFalse(command.is_alive())
+        self.assertEqual(self.lab.agent.command_revision, 1)
+        self.assertEqual(self.lab.agent.receipt(command_id)["status"], "started")
+
     def test_stop_during_completion_write_cannot_publish_late_completed_receipt(self):
         self.arm()
         observed = self.observe()
@@ -394,6 +498,54 @@ class AgentTests(unittest.TestCase):
         self.start()
         self.lab.stop(expected_generation=self.lab.generation, expected_mode="manual")
         self.assertFalse(self.lab.torque)
+
+    def test_late_hardware_loop_error_cannot_stop_a_new_manual_controller(self):
+        self.arm()
+        entered, release = threading.Event(), threading.Event()
+
+        def delayed_tick():
+            entered.set()
+            release.wait(2)
+            self.lab.finished.set()
+            raise HardwareError("Synthetic delayed old-controller error")
+
+        self.lab._tick = delayed_tick
+        worker = threading.Thread(target=self.lab._loop)
+        worker.start()
+        self.assertTrue(entered.wait(1))
+        self.lab.stop()
+        self.start()
+        generation = self.lab.generation
+        release.set()
+        worker.join(2)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(self.lab.generation, generation)
+        self.assertEqual(self.lab.mode, "manual")
+        self.assertTrue(self.lab.torque)
+
+    def test_late_watchdog_expiry_cannot_stop_a_new_manual_controller(self):
+        self.arm()
+        entered, release = threading.Event(), threading.Event()
+
+        def delayed_expiry():
+            entered.set()
+            release.wait(2)
+            self.lab.finished.set()
+            return True
+
+        self.lab.agent.expired = delayed_expiry
+        worker = threading.Thread(target=self.lab._watchdog)
+        worker.start()
+        self.assertTrue(entered.wait(1))
+        self.lab.stop()
+        self.start()
+        generation = self.lab.generation
+        release.set()
+        worker.join(2)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(self.lab.generation, generation)
+        self.assertEqual(self.lab.mode, "manual")
+        self.assertTrue(self.lab.torque)
 
     def test_local_watchdog_torque_off_does_not_depend_on_model_or_browser(self):
         self.arm()
