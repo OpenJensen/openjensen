@@ -30,7 +30,6 @@ export default function TeachingSection() {
         projectId={workflowProjectId}
         target={agentTarget}
         onTargetChange={setAgentTarget}
-        initiallyOpen
         onOpenProviders={() => setSettingsTab('providers')}
       />
       {agentTarget === 'teaching' && (

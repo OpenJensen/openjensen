@@ -661,29 +661,31 @@ test('AI teleoperation opens physical preparation without starting a simulator, 
   expect(requests).toEqual([]);
 });
 
-test('simulation tools require explicit selection and closing the agent panel preserves that choice', async ({
-  page,
-}) => {
+test('Agent Control stays visible while simulation and replay are selected', async ({ page }) => {
   const { requests } = await fixture(page);
   await page.goto('/ai-teleoperation/');
   const target = page.getByRole('combobox', { name: 'Agent target', exact: true });
   await target.selectOption('teaching');
   await expect(page.getByRole('region', { name: 'Simulation tools', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'AI teleoperation connection', exact: true })).toBeVisible();
-  await page.getByText('Agent Control', { exact: true }).click();
-  await expect(target).toHaveCount(0);
-  await expect(page.getByRole('region', { name: 'Simulation tools', exact: true })).toBeVisible();
-  await page.getByText('Agent Control', { exact: true }).click();
+  const controls = page.getByRole('region', { name: 'Agent Control', exact: true });
+  const heading = controls.getByRole('heading', { name: 'Agent Control', exact: true });
+  await expect(page.getByRole('button', { name: 'Agent Control', exact: true })).toHaveCount(0);
+  await page.getByRole('textbox', { name: 'Task goal', exact: true }).fill('Inspect the current scene');
+  await heading.click();
+  await expect(target).toBeVisible();
   await expect(target).toHaveValue('teaching');
+  await expect(page.getByRole('region', { name: 'Simulation tools', exact: true })).toBeVisible();
   await target.selectOption('replay');
   await expect(page.getByRole('region', { name: 'Simulation tools', exact: true })).toHaveCount(0);
-  await page.getByText('Agent Control', { exact: true }).click();
-  await page.getByText('Agent Control', { exact: true }).click();
+  await heading.click();
+  await expect(target).toBeVisible();
   await expect(target).toHaveValue('replay');
+  await expect(page.getByRole('textbox', { name: 'Task goal', exact: true })).toHaveValue('Inspect the current scene');
   expect(requests).toEqual([]);
 });
 
-test('switching targets or reopening physical preparation clears operator confirmations and preview', async ({
+test('switching targets or returning to physical preparation clears operator confirmations and preview', async ({
   page,
 }) => {
   const { requests } = await fixture(page, { physical: true });
@@ -706,9 +708,8 @@ test('switching targets or reopening physical preparation clears operator confir
   await expect(page.getByAltText('Local SO101 camera preview')).toHaveCount(0);
   await present.check();
   await clear.check();
-  await page.getByText('Agent Control', { exact: true }).click();
-  await expect(present).toHaveCount(0);
-  await page.getByText('Agent Control', { exact: true }).click();
+  await page.goto('/dashboard/');
+  await page.goto('/ai-teleoperation/');
   await expect(page.getByRole('combobox', { name: 'Agent target', exact: true })).toHaveValue('robot_lab');
   await expect(present).not.toBeChecked();
   await expect(clear).not.toBeChecked();

@@ -4,15 +4,14 @@
   gap: 24px;
   min-width: 0;
 }
-.agent-control-panel > summary {
-  cursor: pointer;
+.agent-control-panel > h2 {
+  margin: 0;
   font-size: var(--text-subsection);
   font-weight: 600;
 }
 .agent-control-body {
   display: grid;
   gap: 24px;
-  padding-top: 24px;
   min-width: 0;
 }
 .agent-control-body p,

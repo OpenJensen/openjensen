@@ -20,16 +20,13 @@ export function TeachingAgentControl({
   projectId,
   target,
   onTargetChange,
-  initiallyOpen = false,
   onOpenProviders,
 }: {
   projectId: string;
   target?: AgentTarget;
   onTargetChange?: (target: AgentTarget) => void;
-  initiallyOpen?: boolean;
   onOpenProviders?: () => void;
 }) {
-  const [open, setOpen] = useState(initiallyOpen);
   const [localTarget, setLocalTarget] = useState<AgentTarget>('replay');
   const selectedTarget = target ?? localTarget;
   const changeTarget = (next: AgentTarget) => {
@@ -37,21 +34,20 @@ export function TeachingAgentControl({
     onTargetChange?.(next);
   };
   return (
-    <details className="panel agent-control-panel" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary>Agent Control</summary>
-      {open &&
-        (projectId ? (
-          <AgentControls
-            key={projectId}
-            projectId={projectId}
-            target={selectedTarget}
-            onTargetChange={changeTarget}
-            onOpenProviders={onOpenProviders}
-          />
-        ) : (
-          <p>Select a project to start or review an agent session.</p>
-        ))}
-    </details>
+    <section className="panel agent-control-panel" aria-labelledby="agent-control-heading">
+      <h2 id="agent-control-heading">Agent Control</h2>
+      {projectId ? (
+        <AgentControls
+          key={projectId}
+          projectId={projectId}
+          target={selectedTarget}
+          onTargetChange={changeTarget}
+          onOpenProviders={onOpenProviders}
+        />
+      ) : (
+        <p>Select a project to start or review an agent session.</p>
+      )}
+    </section>
   );
 }
 
