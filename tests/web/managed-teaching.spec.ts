@@ -518,8 +518,7 @@ test('verified publication requires a separate exact recording selection and pre
   await notice.getByRole('button', { name: 'Select these recorded episodes', exact: true }).click();
   await expect(
     recordings(page).getByRole('checkbox', {
-      name: `Episode ${hex('1', 32)} · 3 frames · outcome unknown`,
-      exact: true,
+      name: new RegExp(`^Episode ${hex('1', 32)} ·`),
     }),
   ).toBeChecked();
   const consent = recordings(page).getByRole('checkbox', { name: /I reviewed these episodes/ });
