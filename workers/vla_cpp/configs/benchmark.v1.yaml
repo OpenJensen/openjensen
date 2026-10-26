@@ -1,5 +1,5 @@
 version: 1
-run_id: intel-mac-cpu-v1
+run_id: cpu-example-v1
 runtime:
   repository: https://github.com/VinRobotics/vla.cpp.git
   tag: v0.3.0
@@ -7,7 +7,7 @@ runtime:
   source_dir: artifacts/vendor/vla.cpp
   build_dir: artifacts/vendor/vla.cpp/build
   cache_dir: artifacts/cache
-machine_label: Intel i9 CPU / 16 GB RAM / Radeon Pro 5500M 4 GB
+machine_label: CPU benchmark target
 models:
   smolvla:
     source: HuggingFaceVLA/smolvla_libero

@@ -19,7 +19,7 @@ _CAMERA = "/World/Cameras/Front"
 _SCENE = "scene.experimental.usda"
 _MAP = "calibration.experimental.yaml"
 _REPORT = "experiment.json"
-_FIT = "evidence/calibration/report.json"
+_FIT = "evidence/calibration/scene-parameters.json"
 _JOINTS = (
     "shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"
 )
@@ -179,7 +179,7 @@ def _build(output):
 
     # Preserve observed mapping support; experimental runtime controls extrapolation.
     mapping["status"] = "unverified"
-    mapping["source"] = f"{_FIT}; experimental only; see {_REPORT}"
+    mapping["source"] = f"{_FIT}; unverified example parameters"
     (output / _MAP).write_text(
         "# Unverified fit. Only use with explicit experimental rollout mode.\n"
         + yaml.safe_dump(mapping, sort_keys=False)
@@ -196,7 +196,7 @@ def _build(output):
         "camera": camera,
         "urdf_limits_changed": False,
         "mapping_support_extended": False,
-        "limitations": fit["acceptance"]["failures"],
+        "limitations": fit["limitations"],
     }
     (output / _REPORT).write_text(json.dumps(report, indent=2) + "\n")
     return report

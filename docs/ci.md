@@ -1,6 +1,6 @@
 # Development checks
 
-GitHub Actions runs Linux application, browser and worker checks for pushes and pull requests. Windows application and browser checks can be run manually; simulation has a separate manual workflow. Check the jobs for your pull request and include relevant test results in its description.
+GitHub Actions runs Linux application, browser and worker checks for pushes and pull requests. Windows application and browser checks can be run manually; simulation has a separate manual workflow. Check the jobs for your pull request. Keep local test output and verification records outside the checkout.
 
 Browser tests cover desktop and mobile web layouts. GPU training, Isaac simulation and desktop installation require their own environments. Run the checks relevant to the code you change and report any you could not run.
 

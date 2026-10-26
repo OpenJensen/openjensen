@@ -530,7 +530,7 @@ def _main():
     scene = args.scene_dir.resolve()
     args.output.mkdir(parents=True, exist_ok=True)
     landmark_path = args.landmarks or scene / "evidence/calibration/landmarks.json"
-    prior_path = args.prior_report or scene / "evidence/calibration/report.json"
+    prior_path = args.prior_report or scene / "evidence/calibration/scene-parameters.json"
     data, prior = _read(landmark_path), _read(prior_path)
     provenance = args.provenance or scene / "evidence/dataset.json"
     source, source_audit = _recorded_source(args.dataset, provenance)

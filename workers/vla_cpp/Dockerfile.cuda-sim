@@ -1,4 +1,5 @@
-FROM firebird-quant-cuda:20260926
+ARG CUDA_WORKER_IMAGE=jensen-quant-cuda:local
+FROM ${CUDA_WORKER_IMAGE}
 RUN python3 -m pip install --no-cache-dir torch==2.7.1 torchvision==0.22.1 \
     --index-url https://download.pytorch.org/whl/cpu
 RUN apt-get update && apt-get install -y --no-install-recommends python3-dev \

@@ -1,5 +1,5 @@
 version: 1
-run_id: docker-linux-cpu-v1
+run_id: container-cpu-example-v1
 runtime:
   repository: https://github.com/VinRobotics/vla.cpp.git
   tag: v0.3.0
@@ -7,7 +7,7 @@ runtime:
   source_dir: artifacts/docker/vendor/vla.cpp
   build_dir: artifacts/docker/vendor/vla.cpp/build
   cache_dir: artifacts/docker/cache
-machine_label: Docker Linux CPU lane on Intel Mac host
+machine_label: Containerized CPU benchmark target
 models:
   smolvla:
     source: HuggingFaceVLA/smolvla_libero

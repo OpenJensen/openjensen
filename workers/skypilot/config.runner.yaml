@@ -11,11 +11,11 @@ gcp:
   ssh_proxy_command:
     us-east4: >-
       gcloud compute start-iap-tunnel %h %p --listen-on-stdin
-      --project=project-5693e83a-db3a-43e1-98c
+      --project=CHANGE_ME_PROJECT_ID
       --region=us-east4 --network=sim-network --dest-group=sim-ssh
     us-central1: >-
       gcloud compute start-iap-tunnel %h %p --listen-on-stdin
-      --project=project-5693e83a-db3a-43e1-98c
+      --project=CHANGE_ME_PROJECT_ID
       --region=us-central1 --network=sim-network --dest-group=sim-ssh
 
 jobs:

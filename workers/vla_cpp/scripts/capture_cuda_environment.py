@@ -1,10 +1,17 @@
 """Record explicit environment provenance on the remote Docker host (no credentials)."""
 
+import argparse
 import json
 import subprocess
 from pathlib import Path
 
-out = Path("artifacts/cuda/setup")
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--cuda-image", default="jensen-quant-cuda:local")
+parser.add_argument("--sim-image", default="jensen-quant-sim:local")
+parser.add_argument("--modelopt-image", default="jensen-modelopt:local")
+parser.add_argument("--output", type=Path, default=Path("artifacts/cuda/setup"))
+args = parser.parse_args()
+out = args.output
 out.mkdir(parents=True, exist_ok=True)
 
 
@@ -24,12 +31,11 @@ result = {
     ),
     "images": [],
 }
-for name, python in [
-    ("firebird-quant-cuda", "python3"),
-    ("firebird-quant-sim", "python3"),
-    ("firebird-modelopt", "python"),
+for name, tag, python in [
+    ("cuda", args.cuda_image, "python3"),
+    ("sim", args.sim_image, "python3"),
+    ("modelopt", args.modelopt_image, "python"),
 ]:
-    tag = name + ":20260926"
     data = json.loads(command(["docker", "image", "inspect", tag]))[0]
     result["images"].append(
         {

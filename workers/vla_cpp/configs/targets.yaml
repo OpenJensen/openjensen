@@ -1,13 +1,13 @@
 # Execution targets are separate benchmark lanes. Never merge their latency or
 # memory figures: only compare quantization quality within the same target.
 version: 1
-default_target: mac_cpu
+default_target: cpu
 targets:
-  mac_cpu:
-    label: macOS x86-64 CPU
+  cpu:
+    label: CPU
     runtime_backend: cpu
     artifact_format: gguf
-    benchmark_lane: intel-mac-cpu
+    benchmark_lane: cpu
     deployment: local
     notes: CPU feasibility target.
   cuda_gpu:

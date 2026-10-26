@@ -115,9 +115,9 @@ horizon from a complete export:
 
 ```bash
 bash launch-rollout.sh rollout.experimental.local.yaml \
-  --checkpoint ~/Downloads/act_step29000 --experimental --validate-only
+  --checkpoint /absolute/path/to/complete-act-export --experimental --validate-only
 bash launch-rollout.sh rollout.experimental.local.yaml \
-  --checkpoint ~/Downloads/smolvla_step20000 --experimental --validate-only
+  --checkpoint /absolute/path/to/complete-smolvla-export --experimental --validate-only
 ```
 
 Replace those example directories with your exports. Remove `--validate-only`

@@ -3,7 +3,7 @@
     customLayerData = {
         string calibration = "unverified"
         string purpose = "bounded ACT motion experiment; no task-success claim"
-        string source = "evidence/calibration/report.json"
+        string source = "evidence/calibration/scene-parameters.json"
     }
     defaultPrim = "World"
     endTimeCode = 150

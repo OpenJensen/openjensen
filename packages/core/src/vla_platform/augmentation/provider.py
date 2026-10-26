@@ -1,7 +1,7 @@
 """Bounded Gemini Omni video editing through the official Interactions API.
 
-Verified against https://ai.google.dev/gemini-api/docs/omni and
-https://ai.google.dev/api/interactions-api on 2026-09-26. Cloud login uses
+API references: https://ai.google.dev/gemini-api/docs/omni and
+https://ai.google.dev/api/interactions-api. Cloud login uses
 https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/video/edit-videos
 and its global Interactions endpoint with short-lived gcloud bearer tokens.
 Uploaded editing clips must be at most 10 seconds (the caller validates duration).

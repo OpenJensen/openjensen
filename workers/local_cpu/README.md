@@ -12,7 +12,7 @@ The installer creates `act-model/` and `dataset-reader/` beneath it.
 
 ```sh
 python3 workers/local_cpu/manage.py plan \
-  --root /absolute/persistent/cpu-20260927 \
+  --root /absolute/persistent/act-cpu \
   --python /absolute/existing/python3.12 \
   --uv /absolute/existing/uv
 ```
@@ -21,7 +21,7 @@ python3 workers/local_cpu/manage.py plan \
 
 ```sh
 python3 workers/local_cpu/manage.py install --execute \
-  --root /absolute/persistent/cpu-20260927 \
+  --root /absolute/persistent/act-cpu \
   --python /absolute/existing/python3.12 \
   --uv /absolute/existing/uv
 ```
@@ -29,7 +29,7 @@ python3 workers/local_cpu/manage.py install --execute \
 Verify the installed environments:
 
 ```sh
-python3 workers/local_cpu/manage.py verify --root /absolute/persistent/cpu-20260927
+python3 workers/local_cpu/manage.py verify --root /absolute/persistent/act-cpu
 ```
 
 To reuse a uv download cache, add the same
@@ -57,7 +57,7 @@ Choose a new output file; `--base` supplies an existing configuration to extend:
 
 ```sh
 python3 workers/local_cpu/manage.py config \
-  --root /absolute/persistent/cpu-20260927 \
+  --root /absolute/persistent/act-cpu \
   --base /absolute/existing/runtimes.json \
   --output /absolute/new/runtimes-with-local-cpu.json
 ```

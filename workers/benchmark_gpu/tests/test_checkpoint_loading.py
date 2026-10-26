@@ -1,4 +1,4 @@
-"""Regression checks for real checkpoint loading failures found on the RTX host."""
+"""Regression checks for checkpoint loading and model-type dispatch."""
 
 import pytest
 

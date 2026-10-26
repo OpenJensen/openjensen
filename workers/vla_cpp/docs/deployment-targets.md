@@ -5,7 +5,7 @@ building or running the configured benchmark:
 
 | Target key | Build backend | Artifact |
 | --- | --- | --- |
-| `mac_cpu` | CPU | GGUF |
+| `cpu` | CPU | GGUF |
 | `cuda_gpu` | CUDA | GGUF |
 | `gcloud_gpu` | CUDA | GGUF |
 
