@@ -91,6 +91,8 @@ class RecordingEpisodeOption(RecordingEpisode):
 
 
 class RecordingCaptureOption(RecordingRecord):
+    schema_version: Literal[1, 2] = 1
+    environment_kind: Literal["simulation"] = "simulation"
     session_id: Identity
     session_sha256: Digest
     origin: Literal["recorded", "synthetic"]

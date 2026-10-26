@@ -231,8 +231,10 @@ def integer(value, low, high):
 
 
 def metadata(value):
-    if type(value.get("schema_version")) is not int or value["schema_version"] != 1:
+    if type(value.get("schema_version")) is not int or value["schema_version"] not in {1, 2}:
         raise RecordingError("Unsupported capture schema")
+    if value["schema_version"] == 2 and value.get("environment_kind") != "simulation":
+        raise RecordingError("Unsupported capture environment")
     if not isinstance(value.get("session_id"), str) or not ID.fullmatch(value["session_id"]):
         raise RecordingError("Invalid capture session identity")
     for name, expected in {
@@ -269,24 +271,28 @@ def metadata(value):
     if not isinstance(camera, str) or not 1 <= len(camera) <= 256 or not camera.isprintable():
         raise RecordingError("Invalid capture camera prim")
     return {
-        key: value[key]
-        for key in (
-            "session_id",
-            "origin",
-            "lineage_group",
-            "controller",
-            "state_units",
-            "action_units",
-            "timebase",
-            "camera_key",
-            "joint_names",
-            "width",
-            "height",
-            "fps",
-            "physics_hz",
-            "scene_sha256",
-            "camera_prim",
-        )
+        "environment_kind": "simulation",
+        **{
+            key: value[key]
+            for key in (
+                "schema_version",
+                "session_id",
+                "origin",
+                "lineage_group",
+                "controller",
+                "state_units",
+                "action_units",
+                "timebase",
+                "camera_key",
+                "joint_names",
+                "width",
+                "height",
+                "fps",
+                "physics_hz",
+                "scene_sha256",
+                "camera_prim",
+            )
+        },
     }
 
 
@@ -327,7 +333,7 @@ def _catalog(loaded, project):
             receipt = decode(receipt_raw)
             if (
                 type(receipt.get("schema_version")) is not int
-                or receipt["schema_version"] != 1
+                or receipt["schema_version"] != meta["schema_version"]
                 or receipt.get("episode_id") != name
                 or receipt.get("finalized") is not True
                 or not isinstance(receipt.get("outcome"), str)

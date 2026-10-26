@@ -178,6 +178,10 @@ class PublicState(BaseModel):
     session_id: str | None = Field(default=None, pattern=IDENTITY)
     last_applied_command_id: str | None = Field(default=None, pattern=IDENTITY)
     last_applied_step: int | None = Field(default=None, ge=0)
+    agent_owner: str | None = Field(default=None, pattern=IDENTITY)
+    authority_epoch: int = Field(default=0, ge=0, le=2**53 - 1)
+    agent_clock_policy: Literal["stepped", "continuous"] | None = None
+    agent_capabilities: dict[str, bool | int] = Field(default_factory=dict)
 
 
 def public_state(value):
@@ -186,8 +190,24 @@ def public_state(value):
         result = PublicState.model_validate(value).model_dump()
     except ValidationError:
         raise HTTPException(503, "Teaching state is invalid.") from None
+    caps = result["agent_capabilities"]
+    if caps and (
+        set(caps)
+        != {"schema_version", "named_joint_correction", "stepped_capture", "physical_execution"}
+        or type(caps.get("schema_version")) is not int
+        or caps["schema_version"] != 1
+        or any(
+            type(caps[key]) is not bool
+            for key in ("named_joint_correction", "stepped_capture", "physical_execution")
+        )
+        or caps["physical_execution"]
+    ):
+        raise HTTPException(503, "Teaching agent capabilities are invalid.")
     if result["fault"]:
         result["fault"] = "Executor stopped after a fault; inspect its local log."
+    if not result["agent_capabilities"]:
+        for key in ("agent_owner", "authority_epoch", "agent_clock_policy", "agent_capabilities"):
+            result.pop(key, None)
     return result
 
 
@@ -431,3 +451,277 @@ async def voice_join(payload: VoiceJoin, response: Response):
 from vla_platform.teaching_intelligence_api import router as intelligence_router  # noqa: E402
 
 router.include_router(intelligence_router)
+
+
+AGENT_PATHS = {"/agent/acquire", "/agent/observe", "/agent/execute", "/agent/release"}
+AGENT_OBSERVATION_FIELDS = {
+    "schema_version",
+    "observation_id",
+    "observation_sha256",
+    "target_session_id",
+    "agent_session_id",
+    "episode_id",
+    "authority_epoch",
+    "revision",
+    "embodiment_manifest_id",
+    "scene_sha256",
+    "calibration_id",
+    "clock_policy",
+    "captured_monotonic_ns",
+    "valid_until_monotonic_ns",
+    "source_age_ms",
+    "step",
+    "sim_time",
+    "joints",
+    "state_rad",
+    "units",
+    "image_data_url",
+    "image_sha256",
+}
+
+
+def validate_agent_request(path: str, payload: dict | None) -> None:
+    """Private host-to-executor protocol; no URLs or unbounded tools from a model."""
+    if payload is None:
+        if path == "/state" or (
+            path.startswith("/agent/executions/")
+            and re.fullmatch(IDENTITY, path.removeprefix("/agent/executions/"))
+        ):
+            return
+        raise ValueError("Unsupported agent executor query")
+    if path not in AGENT_PATHS or set(payload) != {
+        "command_id",
+        "session_id",
+        "agent_session_id",
+        "authority_epoch",
+        "arguments",
+    }:
+        raise ValueError("Unsupported agent executor operation")
+    for key in ("command_id", "session_id", "agent_session_id"):
+        if not isinstance(payload[key], str) or not re.fullmatch(IDENTITY, payload[key]):
+            raise ValueError("Invalid agent executor identity")
+    frame_integer(payload["authority_epoch"], 2**53 - 1)
+    args = payload["arguments"]
+    operation = path.rsplit("/", 1)[-1]
+    expected = {
+        "acquire": {"clock_policy", "expected_revision", "episode_id"},
+        "observe": set(),
+        "release": set(),
+        "execute": {
+            "observation_id",
+            "observation_sha256",
+            "joint",
+            "delta_rad",
+            "proposal_id",
+            "provider_model",
+        },
+    }[operation]
+    if not isinstance(args, dict) or set(args) != expected:
+        raise ValueError("Unsupported agent executor arguments")
+    if operation == "acquire" and (
+        args["clock_policy"] not in {"stepped", "continuous"} or payload["authority_epoch"] != 0
+    ):
+        raise ValueError("Invalid agent acquire contract")
+    if operation == "acquire":
+        frame_integer(args["expected_revision"], 2**53 - 1)
+        if not isinstance(args["episode_id"], str) or not re.fullmatch(
+            IDENTITY, args["episode_id"]
+        ):
+            raise ValueError("Invalid acquire episode identity")
+    if operation == "execute":
+        TeachingCommand(
+            session_id=payload["session_id"],
+            command_id=payload["command_id"],
+            expected_revision=0,
+            operation="correct",
+            arguments={"joint": args["joint"], "delta_rad": args["delta_rad"]},
+        )
+        for key in ("observation_id", "proposal_id"):
+            if not isinstance(args[key], str) or not re.fullmatch(IDENTITY, args[key]):
+                raise ValueError("Invalid agent proposal identity")
+        if not isinstance(args["observation_sha256"], str) or not re.fullmatch(
+            r"[a-f0-9]{64}", args["observation_sha256"]
+        ):
+            raise ValueError("Invalid original observation fingerprint")
+        if (
+            not isinstance(args["provider_model"], str)
+            or not 1 <= len(args["provider_model"]) <= 128
+            or not args["provider_model"].isprintable()
+        ):
+            raise ValueError("Invalid provider model identity")
+
+
+def public_agent_observation(value: dict, *, session_id: str | None) -> dict:
+    if not isinstance(value, dict) or set(value) != AGENT_OBSERVATION_FIELDS:
+        raise ValueError("Invalid agent observation fields")
+    if (
+        type(value["schema_version"]) is not int
+        or value["schema_version"] != 1
+        or value["units"] != "rad"
+    ):
+        raise ValueError("Unsupported agent observation contract")
+    for key in ("observation_id", "target_session_id", "agent_session_id", "episode_id"):
+        if not isinstance(value[key], str) or not re.fullmatch(IDENTITY, value[key]):
+            raise ValueError("Invalid agent observation identity")
+    if session_id is not None and value["target_session_id"] != session_id:
+        raise ValueError("Agent observation belongs to another executor")
+    for key in ("observation_sha256", "embodiment_manifest_id", "scene_sha256", "image_sha256"):
+        if not isinstance(value[key], str) or not re.fullmatch(r"[a-f0-9]{64}", value[key]):
+            raise ValueError("Invalid agent observation fingerprint")
+    if value["calibration_id"] is not None or value["clock_policy"] not in {
+        "stepped",
+        "continuous",
+    }:
+        raise ValueError("Unsupported simulator clock/calibration contract")
+    for key in (
+        "authority_epoch",
+        "revision",
+        "captured_monotonic_ns",
+        "valid_until_monotonic_ns",
+        "source_age_ms",
+        "step",
+    ):
+        frame_integer(value[key])
+    if not 0 < value["valid_until_monotonic_ns"] - value["captured_monotonic_ns"] <= 30_000_000_000:
+        raise ValueError("Invalid agent observation validity interval")
+    joints, state = value["joints"], value["state_rad"]
+    if (
+        not isinstance(joints, list)
+        or not 1 <= len(joints) <= 32
+        or any(not isinstance(j, str) or not j.isidentifier() for j in joints)
+        or len(set(joints)) != len(joints)
+    ):
+        raise ValueError("Invalid agent embodiment joint names")
+    if (
+        not isinstance(state, list)
+        or len(state) != len(joints)
+        or any(type(v) not in (int, float) or not math.isfinite(v) for v in state)
+    ):
+        raise ValueError("Invalid agent measured state")
+    if (
+        type(value["sim_time"]) not in (int, float)
+        or not math.isfinite(value["sim_time"])
+        or value["sim_time"] < 0
+    ):
+        raise ValueError("Invalid agent simulation time")
+    encoded = value["image_data_url"]
+    if (
+        not isinstance(encoded, str)
+        or not encoded.startswith("data:image/png;base64,")
+        or len(encoded) > 16 * 1024**2
+    ):
+        raise ValueError("Invalid agent image encoding")
+    pixels = base64.b64decode(encoded.removeprefix("data:image/png;base64,"), validate=True)
+    if (
+        not pixels.startswith(b"\x89PNG\r\n\x1a\n")
+        or hashlib.sha256(pixels).hexdigest() != value["image_sha256"]
+    ):
+        raise ValueError("Agent image fingerprint differs")
+    immutable = {key: item for key, item in value.items() if key != "observation_sha256"}
+    digest = hashlib.sha256(
+        json.dumps(immutable, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    ).hexdigest()
+    if digest != value["observation_sha256"]:
+        raise ValueError("Original agent observation fingerprint differs")
+    return dict(value)
+
+
+def public_agent_receipt(value: dict, *, session_id: str | None) -> dict:
+    result = public_receipt(value)
+    if result.get("state") and result["state"]["session_id"] != session_id:
+        raise ValueError("Agent acknowledgment belongs to another executor")
+    if "observation" in value:
+        result["observation"] = public_agent_observation(
+            value["observation"], session_id=session_id
+        )
+        result["observation_age_ms"] = frame_integer(value.get("observation_age_ms", 0))
+    if "execution" in value:
+        execution = value["execution"]
+        allowed = {
+            "status",
+            "execution_id",
+            "observation_id",
+            "started_monotonic_ns",
+            "completed_monotonic_ns",
+            "applied_target_rad",
+            "requested_target_rad",
+            "next_state_rad",
+            "joint_limit_clipped",
+            "speed_limit_clipped",
+            "task_success_verified",
+        }
+        if (
+            not isinstance(execution, dict)
+            or not set(execution) <= allowed
+            or execution.get("status") not in {"started", "completed"}
+            or execution.get("execution_id") != result["command_id"]
+        ):
+            raise ValueError("Invalid agent execution receipt")
+        for key in ("execution_id", "observation_id"):
+            if not isinstance(execution.get(key), str) or not re.fullmatch(
+                IDENTITY, execution[key]
+            ):
+                raise ValueError("Invalid agent execution identity")
+        for key in ("started_monotonic_ns", "completed_monotonic_ns"):
+            if key in execution:
+                frame_integer(execution[key])
+        for key in ("applied_target_rad", "requested_target_rad", "next_state_rad"):
+            if key in execution and (
+                not isinstance(execution[key], list)
+                or not 1 <= len(execution[key]) <= 32
+                or any(type(v) not in (int, float) or not math.isfinite(v) for v in execution[key])
+            ):
+                raise ValueError("Invalid applied agent action")
+        for key in ("joint_limit_clipped", "speed_limit_clipped"):
+            if key in execution and (
+                not isinstance(execution[key], list)
+                or not 1 <= len(execution[key]) <= 32
+                or any(type(v) is not bool for v in execution[key])
+            ):
+                raise ValueError("Invalid agent clipping provenance")
+        if execution.get("task_success_verified", False) is not False:
+            raise ValueError("Agent completion cannot verify task success")
+        if execution["status"] == "completed" and not {
+            "applied_target_rad",
+            "requested_target_rad",
+            "next_state_rad",
+            "joint_limit_clipped",
+            "speed_limit_clipped",
+            "completed_monotonic_ns",
+            "task_success_verified",
+        } <= set(execution):
+            raise ValueError("Agent completed receipt has no measured outcome")
+        result["execution"] = dict(execution)
+    return result
+
+
+async def agent_relay(path: str, payload: dict | None = None) -> dict:
+    """Configured local executor adapter, called by Agent Control rather than a browser route."""
+    try:
+        validate_agent_request(path, payload)
+        raw = await relay(path, payload, maximum=16 * 1024**2)
+        if path == "/state":
+            return public_state(raw)
+        session_id = (
+            payload["session_id"] if payload is not None else raw.get("state", {}).get("session_id")
+        )
+        result = public_agent_receipt(raw, session_id=session_id)
+        if payload is not None:
+            expected = hashlib.sha256(
+                json.dumps(
+                    {"operation": path.rsplit("/", 1)[-1], "payload": payload},
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                ).encode()
+            ).hexdigest()
+            if (
+                result["command_id"] != payload["command_id"]
+                or result["request_sha256"] != expected
+            ):
+                raise ValueError("Agent acknowledgment request identity differs")
+        elif result["command_id"] != path.rsplit("/", 1)[-1]:
+            raise ValueError("Agent acknowledgment command identity differs")
+        return result
+    except ValueError, TypeError, KeyError, binascii.Error:
+        raise HTTPException(503, "Teaching agent executor returned an invalid response.") from None

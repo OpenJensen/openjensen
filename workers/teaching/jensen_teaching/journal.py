@@ -40,7 +40,12 @@ class Journal:
         self.session_id = uuid.uuid4().hex
         atomic_new(
             root / "session.json",
-            {"schema_version": 1, "session_id": self.session_id, **settings.metadata()},
+            {
+                "schema_version": 2,
+                "session_id": self.session_id,
+                "environment_kind": "simulation",
+                **settings.metadata(),
+            },
         )
         self.current = None
         self.count = 0
@@ -63,7 +68,7 @@ class Journal:
         self.events = []
         atomic_new(
             self.current / "started.json",
-            {"schema_version": 1, "episode_id": episode, "instruction": task},
+            {"schema_version": 2, "episode_id": episode, "instruction": task},
         )
 
     def event(self, value: dict) -> None:
@@ -111,7 +116,7 @@ class Journal:
         atomic_new(
             self.current / "episode.json",
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "episode_id": self.current.name,
                 "finalized": True,
                 "frames": self.count,

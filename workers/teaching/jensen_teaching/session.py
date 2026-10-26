@@ -10,6 +10,7 @@ import uuid
 from sim_worker.rollout.contracts import Observation, Simulation
 from sim_worker.rollout.experimental import MotionGuard
 
+from .agent import AgentAuthority
 from .contracts import Command, Settings
 from .frame_snapshot import ObservationSnapshot
 from .journal import Journal
@@ -36,6 +37,8 @@ class Session:
         self.last_applied_step = None
         self.guard = None
         self.fault = None
+        self.target_actor = {"actor": "human_operator", "environment_kind": "simulation"}
+        self.agent = AgentAuthority(self)
 
     def _owned(self) -> None:
         if threading.get_ident() != self.owner:
@@ -114,6 +117,7 @@ class Session:
             "session_id": self.journal.session_id,
             "last_applied_command_id": self.last_applied_command_id,
             "last_applied_step": self.last_applied_step,
+            **self.agent.status(),
         }
 
     def execute(self, command: Command) -> dict:
@@ -124,6 +128,7 @@ class Session:
             raise ValueError("Stale episode or command revision; refresh session state")
         if self.mode in {"faulted", "closed"}:
             raise ValueError("Session faulted; preserve capture and start a new process")
+        self.agent.revoke()
         prior_observation = self.observation
         op = command.operation
         if self.journal.current is not None and len(self.journal.events) >= 512:
@@ -197,14 +202,15 @@ class Session:
             self._freeze_observation()
         return self.snapshot()
 
-    def _event(self, command: Command) -> None:
+    def _event(self, command: Command, *, actor: dict | None = None) -> None:
         try:
             self.journal.event(
                 {
                     "command_id": command.command_id,
                     "operation": command.operation,
                     "arguments": command.arguments,
-                    "source": "operator_command",
+                    "source": "agent_command" if actor else "operator_command",
+                    **(actor or {"actor": "human_operator", "environment_kind": "simulation"}),
                     "step": self.observation.step if self.observation else 0,
                     "sim_time": self.observation.sim_time if self.observation else 0,
                     "accepted_monotonic_ns": time.monotonic_ns(),
@@ -216,7 +222,7 @@ class Session:
 
     def tick(self) -> None:
         self._owned()
-        if self.mode != "running":
+        if self.mode != "running" or not self.agent.can_tick():
             return
         obs = self.observation
         try:
@@ -234,25 +240,29 @@ class Session:
             self.sim.apply(limited.target)
             self.sim.step()
             following, received_ns = self._observe(obs.step + 1)
-            self.journal.append(
-                {
-                    "episode_id": self.episode_id,
-                    "step": obs.step,
-                    "sim_time": obs.sim_time,
-                    "next_sim_time": following.sim_time,
-                    "applied_monotonic_ns": time.monotonic_ns(),
-                    "state_rad": obs.state,
-                    "requested_target_rad": target,
-                    "applied_target_rad": limited.target,
-                    "next_state_rad": following.state,
-                    "task": self.instruction,
-                    "command_id": self.target_command,
-                    "action_source": "operator_joint_position",
-                    "joint_limit_clipped": limited.limit_clipped,
-                    "speed_limit_clipped": limited.speed_clipped,
-                },
-                obs.frame.rgb,
-            )
+            record = {
+                "episode_id": self.episode_id,
+                "step": obs.step,
+                "sim_time": obs.sim_time,
+                "next_sim_time": following.sim_time,
+                "applied_monotonic_ns": time.monotonic_ns(),
+                "state_rad": obs.state,
+                "requested_target_rad": target,
+                "applied_target_rad": limited.target,
+                "next_state_rad": following.state,
+                "task": self.instruction,
+                "command_id": self.target_command,
+                "action_source": (
+                    "agent_joint_position"
+                    if self.target_actor["actor"] == "llm_agent"
+                    else "operator_joint_position"
+                ),
+                **self.target_actor,
+                "joint_limit_clipped": limited.limit_clipped,
+                "speed_limit_clipped": limited.speed_clipped,
+            }
+            self.journal.append(record, obs.frame.rgb)
+            self.agent.completed_step(record)
             self.observation = following
             self.observation_received_monotonic_ns = received_ns
             self._freeze_observation()
@@ -264,6 +274,7 @@ class Session:
 
     def fail(self, error: BaseException) -> None:
         self._owned()
+        self.agent.revoke()
         self.mode = "faulted"
         self.fault = type(error).__name__ + ": " + str(error)
         self.target = None
@@ -272,6 +283,7 @@ class Session:
 
     def close(self) -> None:
         self._owned()
+        self.agent.revoke()
         if self.mode != "faulted":
             self.journal.finish("shutdown", self.outcome)
         self.mode = "closed"

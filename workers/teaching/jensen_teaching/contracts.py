@@ -61,9 +61,15 @@ def integer(value: object, label: str, low: int, high: int) -> int:
 
 
 def finite(value: object, label: str) -> float:
-    if type(value) not in (float, int) or not math.isfinite(value):
+    if type(value) not in (float, int):
         raise ValueError(f"{label} must be finite")
-    return float(value)
+    try:
+        result = float(value)
+    except OverflowError:
+        raise ValueError(f"{label} must be finite") from None
+    if not math.isfinite(result):
+        raise ValueError(f"{label} must be finite")
+    return result
 
 
 @dataclass(frozen=True)

@@ -132,6 +132,40 @@ def _inventory(root: Path, budget: InventoryBudget | None = None) -> dict:
     return result
 
 
+def _provenance(value: dict, version: int, *, event: bool = False) -> None:
+    key = "source" if event else "action_source"
+    human = "operator_command" if event else "operator_joint_position"
+    agent = "agent_command" if event else "agent_joint_position"
+    if version == 1:
+        if value.get(key) != human:
+            raise ValueError("Unknown legacy supervision source")
+        return
+    if value.get("environment_kind") != "simulation":
+        raise ValueError("Unsupported provenance environment")
+    actor = value.get("actor")
+    if actor == "human_operator" and value.get(key) == human:
+        if any(name in value for name in ("agent_session_id", "proposal_id", "execution_id")):
+            raise ValueError("Human source cannot carry agent execution identity")
+        return
+    if actor != "llm_agent" or value.get(key) != agent:
+        raise ValueError("Unknown actor or supervision source")
+    for name in ("agent_session_id", "proposal_id", "execution_id", "observation_id"):
+        if not isinstance(value.get(name), str) or not IDENTITY.fullmatch(value[name]):
+            raise ValueError("Missing agent provenance identity")
+    if value["execution_id"] != value.get("command_id"):
+        raise ValueError("Agent execution and command identities differ")
+    digest = value.get("observation_sha256")
+    if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+        raise ValueError("Missing original observation fingerprint")
+    text(value.get("provider_model"), "provider model", 128)
+    integer(value.get("authority_epoch"), "authority epoch", 1, 2**53 - 1)
+    if (
+        value.get("clock_policy") not in {"stepped", "continuous"}
+        or value.get("skill_manifest_version") != 1
+    ):
+        raise ValueError("Unsupported agent skill or clock provenance")
+
+
 def inspect_capture(
     root: Path, episodes: list[str], *, budget: InventoryBudget | None = None
 ) -> tuple[dict, list[dict], dict]:
@@ -152,13 +186,16 @@ def inspect_capture(
 
     meta = read_json(root / "session.json")
     if (
-        meta.get("schema_version") != 1
+        meta.get("schema_version") not in {1, 2}
         or meta.get("controller") != "joint_position_targets"
         or meta.get("state_units") != "radians"
         or meta.get("action_units") != "radians"
         or meta.get("timebase") != "simulation_seconds"
     ):
         raise ValueError("Unsupported teaching coordinate/time contract")
+    version = meta["schema_version"]
+    if version == 2 and meta.get("environment_kind") != "simulation":
+        raise ValueError("Unsupported agent capture environment")
     names = meta.get("joint_names")
     if (
         not isinstance(names, list)
@@ -195,7 +232,7 @@ def inspect_capture(
         receipt = read_json(folder / "episode.json")
         count = integer(receipt.get("frames"), "frames", 1, 3600)
         if (
-            receipt.get("schema_version") != 1
+            receipt.get("schema_version") != version
             or receipt.get("episode_id") != ident
             or receipt.get("finalized") is not True
             or receipt.get("outcome") not in {"unknown", "operator_reported_failure"}
@@ -226,8 +263,9 @@ def inspect_capture(
                     "arguments": event.get("arguments"),
                 }
             )
-            if command.command_id in command_ids or event.get("source") != "operator_command":
+            if command.command_id in command_ids:
                 raise ValueError("Invalid intervention identity/source")
+            _provenance(event, version, event=True)
             command_ids.add(command.command_id)
             command_events[command.command_id] = event
             step = integer(event.get("step"), "intervention step", 0, count)
@@ -288,8 +326,24 @@ def inspect_capture(
                 raise ValueError("Frame references a future motion-target command")
             if step and rows[step - 1]["next_state_rad"] != row["state_rad"]:
                 raise ValueError("Adjacent simulator observations are discontinuous")
-            if row.get("action_source") != "operator_joint_position":
-                raise ValueError("Unknown action supervision source")
+            _provenance(row, version)
+            if version == 2 and any(
+                row.get(key) != event.get(key)
+                for key in (
+                    "actor",
+                    "environment_kind",
+                    "agent_session_id",
+                    "proposal_id",
+                    "execution_id",
+                    "provider_model",
+                    "observation_id",
+                    "observation_sha256",
+                    "authority_epoch",
+                    "clock_policy",
+                    "skill_manifest_version",
+                )
+            ):
+                raise ValueError("Frame actor and execution provenance differ from its command")
             expected_name = f"frames/{step:06d}.rgb"
             if row.get("frame") != expected_name:
                 raise ValueError("Unexpected frame path")
@@ -531,6 +585,32 @@ def convert_captures(
                         "termination": receipt["termination"],
                         "events": receipt.get("events", []),
                         "source_trajectory_sha256": receipt["trajectory_sha256"],
+                        "capture_schema_version": episode["source"]["meta"]["schema_version"],
+                        "environment_kind": "simulation",
+                        "actors": sorted(
+                            {row.get("actor", "human_operator") for row in episode["rows"]}
+                        ),
+                        "action_provenance": [
+                            {
+                                key: row[key]
+                                for key in (
+                                    "step",
+                                    "actor",
+                                    "environment_kind",
+                                    "agent_session_id",
+                                    "proposal_id",
+                                    "execution_id",
+                                    "provider_model",
+                                    "observation_id",
+                                    "observation_sha256",
+                                    "authority_epoch",
+                                    "clock_policy",
+                                    "skill_manifest_version",
+                                )
+                                if key in row
+                            }
+                            for row in episode["rows"]
+                        ],
                     }
                 )
         finally:

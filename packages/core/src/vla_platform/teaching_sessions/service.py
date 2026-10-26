@@ -15,7 +15,13 @@ import httpx
 
 from vla_platform.contracts import TERMINAL
 from vla_platform.datasets import recordings
-from vla_platform.teaching_api import public_frame, public_receipt, public_state
+from vla_platform.teaching_api import (
+    public_agent_receipt,
+    public_frame,
+    public_receipt,
+    public_state,
+    validate_agent_request,
+)
 from vla_platform.worker_paths import worker_module
 
 from . import publication
@@ -251,6 +257,45 @@ class TeachingSessions:
         if body is None and result["command_id"] != path.rsplit("/", 1)[-1]:
             raise TeachingError("Teaching acknowledgment identity differs", 503)
         return result
+
+    async def agent_relay(
+        self, project_id: str, job_id: str, path: str, payload: dict | None = None
+    ):
+        """Keep agent execution on the same owned job/transport as manual controls."""
+        job = await self.owned_job(project_id, job_id)
+        live = self.live.get(job.id)
+        if (
+            job.status != "running"
+            or live is None
+            or live.session_id is None
+            or live.stop.is_set()
+            or live.process.returncode is not None
+        ):
+            raise TeachingError("This teaching session is not ready for agent control", 409)
+        try:
+            validate_agent_request(path, payload)
+            if payload is not None and payload["session_id"] != live.session_id:
+                raise ValueError("Agent request belongs to a different executor")
+            raw = await self.upstream(live, path, payload, 16 * 1024**2)
+            if path == "/state":
+                result = public_state(raw)
+                if result["session_id"] != live.session_id:
+                    raise ValueError("Agent executor session identity changed")
+                return result
+            result = public_agent_receipt(raw, session_id=live.session_id)
+            if payload is not None:
+                bound = {"operation": path.rsplit("/", 1)[-1], "payload": payload}
+                if (
+                    result["command_id"] != payload["command_id"]
+                    or result["request_sha256"]
+                    != hashlib.sha256(recordings.canonical(bound)).hexdigest()
+                ):
+                    raise ValueError("Agent acknowledgment does not match the submitted command")
+            elif result["command_id"] != path.rsplit("/", 1)[-1]:
+                raise ValueError("Agent acknowledgment command identity differs")
+            return result
+        except ValueError, TypeError, KeyError:
+            raise TeachingError("Owned agent executor returned an invalid response", 503) from None
 
     async def ready(self, live: Live):
         raw = live.directory / "capture" / "session.json"
