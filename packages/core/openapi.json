@@ -4480,6 +4480,32 @@
             "title": "Observation Sha256",
             "type": "string"
           },
+          "prompt_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Sha256"
+          },
+          "prompt_version": {
+            "anyOf": [
+              {
+                "maxLength": 96,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9_.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Version"
+          },
           "provider_revision": {
             "title": "Provider Revision",
             "type": "string"
@@ -5115,6 +5141,27 @@
             "title": "Action Units",
             "type": "string"
           },
+          "actor_summary_source": {
+            "default": "unavailable",
+            "enum": [
+              "declared_events",
+              "legacy_operator",
+              "unavailable"
+            ],
+            "title": "Actor Summary Source",
+            "type": "string"
+          },
+          "actors": {
+            "items": {
+              "enum": [
+                "human_operator",
+                "llm_agent"
+              ],
+              "type": "string"
+            },
+            "title": "Actors",
+            "type": "array"
+          },
           "camera_key": {
             "const": "observation.images.front",
             "title": "Camera Key",
@@ -5304,6 +5351,27 @@
       "RecordingEpisodeOption": {
         "additionalProperties": false,
         "properties": {
+          "actor_summary_source": {
+            "default": "unavailable",
+            "enum": [
+              "declared_events",
+              "legacy_operator",
+              "unavailable"
+            ],
+            "title": "Actor Summary Source",
+            "type": "string"
+          },
+          "actors": {
+            "items": {
+              "enum": [
+                "human_operator",
+                "llm_agent"
+              ],
+              "type": "string"
+            },
+            "title": "Actors",
+            "type": "array"
+          },
           "episode_id": {
             "maxLength": 32,
             "minLength": 32,
@@ -5323,6 +5391,15 @@
               "operator_reported_failure"
             ],
             "title": "Outcome",
+            "type": "string"
+          },
+          "outcome_source": {
+            "default": "unknown",
+            "enum": [
+              "operator_reported",
+              "unknown"
+            ],
+            "title": "Outcome Source",
             "type": "string"
           },
           "receipt_sha256": {

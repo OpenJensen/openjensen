@@ -891,3 +891,98 @@ def test_cleanup_failure_is_visible_on_already_cancelled_saved_job(tmp_path):
         assert saved[-1][2] is None
 
     asyncio.run(run())
+
+
+def test_catalog_distinguishes_declared_event_actors_and_explicit_outcome_source(tmp_path):
+    from vla_platform.datasets.recording_contracts import RecordingCatalog
+    from vla_platform.datasets.recordings import catalog, load_config
+
+    config, root = configuration(tmp_path)
+    capture(root)
+    folder = root / "session"
+    meta = json.loads((folder / "session.json").read_bytes())
+    meta.update(schema_version=2, environment_kind="simulation")
+    write(folder / "session.json", meta)
+    receipt_path = folder / ("d" * 32) / "episode.json"
+    receipt = json.loads(receipt_path.read_bytes())
+    receipt.update(
+        schema_version=2,
+        outcome="operator_reported_failure",
+        events=[
+            {
+                "actor": "human_operator",
+                "source": "operator_command",
+                "environment_kind": "simulation",
+                "operation": "start",
+            },
+            {
+                "actor": "llm_agent",
+                "source": "agent_command",
+                "environment_kind": "simulation",
+                "operation": "segment",
+            },
+            {
+                "actor": "human_operator",
+                "source": "operator_command",
+                "environment_kind": "simulation",
+                "operation": "mark_failure",
+            },
+        ],
+    )
+    write(receipt_path, receipt)
+    result = RecordingCatalog.model_validate(catalog(load_config(config), "project"))
+    selected = result.captures[0]
+    assert selected.environment_kind == "simulation"
+    assert selected.actors == ["human_operator", "llm_agent"]
+    assert selected.actor_summary_source == "declared_events"
+    assert selected.episodes[0].actors == selected.actors
+    assert selected.episodes[0].outcome_source == "operator_reported"
+    assert selected.content_verified is False
+
+
+@pytest.mark.parametrize(
+    "events",
+    [
+        [],
+        [{"actor": "unknown", "source": "agent_command", "environment_kind": "simulation"}],
+        [{"actor": "llm_agent", "source": "operator_command", "environment_kind": "simulation"}],
+        [{"actor": "llm_agent", "source": "agent_command", "environment_kind": "physical"}],
+    ],
+)
+def test_catalog_does_not_invent_schema_two_actor_provenance(tmp_path, events):
+    from vla_platform.datasets.recordings import catalog, load_config
+
+    config, root = configuration(tmp_path)
+    capture(root)
+    folder = root / "session"
+    meta = json.loads((folder / "session.json").read_bytes())
+    meta.update(schema_version=2, environment_kind="simulation")
+    write(folder / "session.json", meta)
+    receipt_path = folder / ("d" * 32) / "episode.json"
+    receipt = json.loads(receipt_path.read_bytes())
+    receipt.update(schema_version=2, outcome="operator_reported_failure", events=events)
+    write(receipt_path, receipt)
+    selected = catalog(load_config(config), "project")["captures"][0]
+    assert selected["actors"] == []
+    assert selected["actor_summary_source"] == "unavailable"
+    assert selected["episodes"][0]["outcome_source"] == "unknown"
+
+
+def test_legacy_catalog_inference_does_not_relabel_agent_fields_as_human(tmp_path):
+    from vla_platform.datasets.recordings import catalog, load_config
+
+    config, root = configuration(tmp_path)
+    capture(root)
+    selected = catalog(load_config(config), "project")["captures"][0]
+    assert selected["actors"] == ["human_operator"]
+    assert selected["actor_summary_source"] == "legacy_operator"
+    assert selected["episodes"][0]["outcome_source"] == "unknown"
+    receipt_path = root / "session" / ("d" * 32) / "episode.json"
+    receipt = json.loads(receipt_path.read_bytes())
+    receipt["events"] = [
+        {"actor": "llm_agent", "source": "agent_command", "agent_session_id": "a" * 32}
+    ]
+    write(receipt_path, receipt)
+    selected = catalog(load_config(config), "project")["captures"][0]
+    assert selected["actors"] == []
+    assert selected["actor_summary_source"] == "unavailable"

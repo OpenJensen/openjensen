@@ -84,10 +84,17 @@ class RecordingOptions(RecordingRecord):
     setup_message: str
 
 
+Actor = Literal["human_operator", "llm_agent"]
+ActorSummarySource = Literal["declared_events", "legacy_operator", "unavailable"]
+
+
 class RecordingEpisodeOption(RecordingEpisode):
     frames: int = Field(ge=1, le=3600)
     outcome: Literal["unknown", "operator_reported_failure"]
     termination: Literal["finish", "reset", "step_limit", "shutdown"]
+    actors: list[Actor] = Field(default_factory=list)
+    actor_summary_source: ActorSummarySource = "unavailable"
+    outcome_source: Literal["operator_reported", "unknown"] = "unknown"
 
 
 class RecordingCaptureOption(RecordingRecord):
@@ -110,6 +117,8 @@ class RecordingCaptureOption(RecordingRecord):
     scene_sha256: Digest
     camera_prim: str
     episodes: list[RecordingEpisodeOption]
+    actors: list[Actor] = Field(default_factory=list)
+    actor_summary_source: ActorSummarySource = "unavailable"
     content_verified: Literal[False] = False
 
 

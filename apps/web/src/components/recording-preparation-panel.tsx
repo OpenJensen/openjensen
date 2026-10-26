@@ -43,6 +43,16 @@ import {
 import { WorkbenchDisclosure } from './workbench-disclosure';
 
 const isRecording = (job: Job) => 'recordings' in job.request && job.request.recordings != null;
+const actorNames = (actors: string[] = []) =>
+  actors
+    .map((actor) => (actor === 'human_operator' ? 'Human operator' : actor === 'llm_agent' ? 'LLM agent' : 'Unknown'))
+    .join(' + ') || 'Unavailable';
+const actorSource = (source?: string) =>
+  source === 'declared_events'
+    ? 'declared command events'
+    : source === 'legacy_operator'
+      ? 'legacy operator contract'
+      : 'metadata unavailable';
 const active = (job: RecordingJob) => job.status === 'queued' || job.status === 'running';
 const message = (cause: unknown) => (cause instanceof Error ? cause.message : 'Recording preparation is unavailable.');
 
@@ -855,6 +865,14 @@ export function RecordingPreparationPanel({
               <p>
                 Group {c.lineage_group} · {c.width} × {c.height} · {c.fps} fps · radians
               </p>
+              <p>
+                Environment: {c.environment_kind ?? 'simulation'}. Command actors:{' '}
+                {c.actor_summary_source === 'unavailable' ? 'Unavailable' : actorNames(c.actors)} (
+                {actorSource(c.actor_summary_source)}).
+              </p>
+              <p>
+                Actor labels summarize command metadata. Frame authorship and provenance are checked during preparation.
+              </p>
               {c.episodes.map((e) => (
                 <label key={e.episode_id} className="native-confirm">
                   <input
@@ -869,7 +887,10 @@ export function RecordingPreparationPanel({
                     onChange={(event) => toggle(c.session_id, e.episode_id, event.target.checked)}
                   />
                   Episode {e.episode_id} · {e.frames} frames ·{' '}
-                  {e.outcome === 'unknown' ? 'outcome unknown' : 'operator-reported failure'}
+                  {e.outcome === 'unknown' ? 'outcome unknown' : 'operator-reported failure'} · command actors:{' '}
+                  {e.actor_summary_source === 'unavailable' ? 'Unavailable' : actorNames(e.actors)} (
+                  {actorSource(e.actor_summary_source)}) · outcome source:{' '}
+                  {e.outcome_source === 'operator_reported' ? 'operator annotation' : 'unknown'}
                 </label>
               ))}
             </fieldset>

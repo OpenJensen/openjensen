@@ -4065,6 +4065,10 @@ export interface components {
             observation_id: string;
             /** Observation Sha256 */
             observation_sha256: string;
+            /** Prompt Sha256 */
+            prompt_sha256?: string | null;
+            /** Prompt Version */
+            prompt_version?: string | null;
             /** Provider Revision */
             provider_revision: string;
             /**
@@ -4325,6 +4329,14 @@ export interface components {
              */
             action_units: "radians";
             /**
+             * Actor Summary Source
+             * @default unavailable
+             * @enum {string}
+             */
+            actor_summary_source: "declared_events" | "legacy_operator" | "unavailable";
+            /** Actors */
+            actors?: ("human_operator" | "llm_agent")[];
+            /**
              * Camera Key
              * @constant
              */
@@ -4408,6 +4420,14 @@ export interface components {
         };
         /** RecordingEpisodeOption */
         RecordingEpisodeOption: {
+            /**
+             * Actor Summary Source
+             * @default unavailable
+             * @enum {string}
+             */
+            actor_summary_source: "declared_events" | "legacy_operator" | "unavailable";
+            /** Actors */
+            actors?: ("human_operator" | "llm_agent")[];
             /** Episode Id */
             episode_id: string;
             /** Frames */
@@ -4417,6 +4437,12 @@ export interface components {
              * @enum {string}
              */
             outcome: "unknown" | "operator_reported_failure";
+            /**
+             * Outcome Source
+             * @default unknown
+             * @enum {string}
+             */
+            outcome_source: "operator_reported" | "unknown";
             /** Receipt Sha256 */
             receipt_sha256: string;
             /**

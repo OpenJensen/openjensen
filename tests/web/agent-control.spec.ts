@@ -382,7 +382,7 @@ async function startReplay(page: Page) {
   await page.goto('/ai-teleoperation/');
   await page.getByText('Agent Control', { exact: true }).click();
   await page.getByLabel('Task goal', { exact: true }).fill('Move shoulder by 0.03 radians');
-  await page.getByLabel('Planning style', { exact: true }).selectOption('joint');
+  await page.getByRole('combobox', { name: 'Planning style', exact: true }).selectOption('joint');
   await page.getByRole('button', { name: 'Create agent session', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Agent session evidence' })).toBeVisible();
   await page.getByRole('button', { name: 'Plan one correction', exact: true }).click();
@@ -471,7 +471,7 @@ test('an abstract goal starts the bounded task loop and model completion needs s
   expect(requests.filter((request) => request.path.endsWith('/run'))).toHaveLength(1);
   expect(requests.filter((request) => request.path.endsWith('/review'))).toEqual([]);
   await page.getByText('Review task outcome', { exact: true }).click();
-  await page.getByLabel('Reviewed outcome', { exact: true }).selectOption('success');
+  await page.getByRole('combobox', { name: 'Reviewed outcome', exact: true }).selectOption('success');
   const save = page.getByRole('button', { name: 'Save operator review', exact: true });
   await expect(save).toBeDisabled();
   await page.getByLabel('I reviewed this retained observation and am reporting the task outcome myself.').check();
@@ -491,9 +491,9 @@ test('selecting physical control without a governed companion never enables moti
   await page.goto('/ai-teleoperation/');
   await page.getByText('Agent Control', { exact: true }).click();
   await page.getByLabel('Task goal', { exact: true }).fill('Pick up the object');
-  await page.getByLabel('Planning style', { exact: true }).selectOption('joint');
-  await page.getByLabel('Agent target', { exact: true }).selectOption('robot_lab');
-  await expect(page.getByLabel('Planning style', { exact: true })).toHaveValue('task');
+  await page.getByRole('combobox', { name: 'Planning style', exact: true }).selectOption('joint');
+  await page.getByRole('combobox', { name: 'Agent target', exact: true }).selectOption('robot_lab');
+  await expect(page.getByRole('combobox', { name: 'Planning style', exact: true })).toHaveValue('task');
   await expect(page.getByRole('region', { name: 'Physical SO101 preflight' })).toContainText('has not advertised');
   await expect(page.getByRole('button', { name: 'Connect arm and hold current pose', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Arm AI session', exact: true })).toBeDisabled();
@@ -504,10 +504,10 @@ async function connectPhysical(page: Page) {
   await page.goto('/ai-teleoperation/');
   await page.getByText('Agent Control', { exact: true }).click();
   await page.getByLabel('Task goal', { exact: true }).fill('Pick up the object');
-  await page.getByLabel('Agent target', { exact: true }).selectOption('robot_lab');
-  await page.getByLabel('Robot USB port', { exact: true }).selectOption('/dev/fixture');
-  await page.getByLabel('Calibrated follower', { exact: true }).selectOption('fixture-arm');
-  await page.getByLabel('Physical camera', { exact: true }).selectOption('0');
+  await page.getByRole('combobox', { name: 'Agent target', exact: true }).selectOption('robot_lab');
+  await page.getByRole('combobox', { name: 'Robot USB port', exact: true }).selectOption('/dev/fixture');
+  await page.getByRole('combobox', { name: 'Calibrated follower', exact: true }).selectOption('fixture-arm');
+  await page.getByRole('combobox', { name: 'Physical camera', exact: true }).selectOption('0');
   await page.getByLabel('Show the local camera preview', { exact: true }).check();
   await expect
     .poll(() =>
@@ -573,7 +573,7 @@ test('physical arming, current-image admission and focus loss retain explicit op
   ).toBe(true);
   await page.getByText('Review task outcome', { exact: true }).click();
   await expect(page.getByAltText('Task outcome review observation')).toBeVisible();
-  await page.getByLabel('Reviewed outcome', { exact: true }).selectOption('failure');
+  await page.getByRole('combobox', { name: 'Reviewed outcome', exact: true }).selectOption('failure');
   await page.getByLabel('I reviewed this retained observation and am reporting the task outcome myself.').check();
   await page.getByRole('button', { name: 'Save operator review', exact: true }).click();
   expect(String(requests.find((request) => request.path.endsWith('/review'))?.body.observation_id)).toMatch(

@@ -307,6 +307,68 @@ def _catalog(loaded, project):
         remaining -= len(raw)
         return raw
 
+    def actor_metadata(receipt, version):
+        # Catalog summaries describe finalized command metadata, not frame authorship.
+        # Full event/frame bindings remain a preparation-time verification boundary.
+        events = receipt.get("events", [])
+        source = "legacy_operator" if version == 1 else "declared_events"
+        valid = isinstance(events, list) and len(events) <= 512
+        if version == 2:
+            valid = valid and bool(events)
+        if valid:
+            for event in events:
+                if not isinstance(event, dict):
+                    valid = False
+                    break
+                if version == 1:
+                    if (
+                        event.get("source") != "operator_command"
+                        or event.get("actor", "human_operator") != "human_operator"
+                        or event.get("environment_kind", "simulation") != "simulation"
+                        or any(
+                            key in event
+                            for key in ("agent_session_id", "proposal_id", "execution_id")
+                        )
+                    ):
+                        valid = False
+                        break
+                elif (
+                    event.get("environment_kind") != "simulation"
+                    or event.get("actor") not in {"human_operator", "llm_agent"}
+                    or event.get("source")
+                    != (
+                        "operator_command"
+                        if event.get("actor") == "human_operator"
+                        else "agent_command"
+                    )
+                ):
+                    valid = False
+                    break
+        if version == 1 and any(
+            key in receipt for key in ("actor", "agent_session_id", "proposal_id", "execution_id")
+        ):
+            valid = False
+        if not valid:
+            return {
+                "actors": [],
+                "actor_summary_source": "unavailable",
+                "outcome_source": "unknown",
+            }
+        actors = (
+            ["human_operator"] if version == 1 else sorted({event["actor"] for event in events})
+        )
+        failure_annotation = receipt["outcome"] == "operator_reported_failure" and any(
+            event.get("operation") == "mark_failure"
+            and event.get("source") == "operator_command"
+            and event.get("actor", "human_operator") == "human_operator"
+            for event in events
+        )
+        return {
+            "actors": actors,
+            "actor_summary_source": source,
+            "outcome_source": "operator_reported" if failure_annotation else "unknown",
+        }
+
     for folder, is_dir in entries(root, 100):
         if not is_dir:
             raise RecordingError("Published capture roots may contain session directories only")
@@ -349,6 +411,7 @@ def _catalog(loaded, project):
                     "frames": integer(receipt.get("frames"), 1, 3600),
                     "outcome": receipt["outcome"],
                     "termination": receipt["termination"],
+                    **actor_metadata(receipt, meta["schema_version"]),
                 }
             )
         if episodes:
@@ -357,6 +420,18 @@ def _catalog(loaded, project):
                     **meta,
                     "session_sha256": digest(raw),
                     "episodes": episodes,
+                    "actors": []
+                    if any(episode["actor_summary_source"] == "unavailable" for episode in episodes)
+                    else sorted({actor for episode in episodes for actor in episode["actors"]}),
+                    "actor_summary_source": (
+                        "unavailable"
+                        if any(
+                            episode["actor_summary_source"] == "unavailable" for episode in episodes
+                        )
+                        else "legacy_operator"
+                        if meta["schema_version"] == 1
+                        else "declared_events"
+                    ),
                     "content_verified": False,
                 }
             )

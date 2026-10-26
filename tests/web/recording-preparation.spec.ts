@@ -16,6 +16,10 @@ const options = {
 };
 function capture(c: string, e: string) {
   return {
+    schema_version: 2,
+    environment_kind: 'simulation',
+    actors: c === 'b' ? ['human_operator', 'llm_agent'] : ['human_operator'],
+    actor_summary_source: 'declared_events',
     session_id: hex(c, 32),
     session_sha256: hex(c),
     origin: 'synthetic',
@@ -34,7 +38,16 @@ function capture(c: string, e: string) {
     camera_prim: '/World/Camera',
     content_verified: false,
     episodes: [
-      { episode_id: hex(e, 32), receipt_sha256: hex(e), frames: 12, outcome: 'unknown', termination: 'finish' },
+      {
+        episode_id: hex(e, 32),
+        receipt_sha256: hex(e),
+        frames: 12,
+        outcome: 'unknown',
+        termination: 'finish',
+        actors: c === 'b' ? ['human_operator', 'llm_agent'] : ['human_operator'],
+        actor_summary_source: 'declared_events',
+        outcome_source: 'unknown',
+      },
     ],
   };
 }
@@ -329,6 +342,17 @@ test('configured catalog is metadata only with zero automatic selection or submi
   await expect(submit(page)).toBeDisabled();
   await expect(panel(page).getByText(/Synthetic capture/)).toHaveCount(2);
   await expect(panel(page).getByRole('checkbox', { checked: true })).toHaveCount(0);
+  await expect(panel(page).getByText(/Environment: simulation/)).toHaveCount(2);
+  await expect(
+    panel(page).getByRole('checkbox', {
+      name: /Episode .*Human operator \+ LLM agent.*declared command events.*outcome source: unknown/,
+    }),
+  ).toHaveCount(1);
+  await expect(
+    panel(page).getByText(
+      'Actor labels summarize command metadata. Frame authorship and provenance are checked during preparation.',
+    ),
+  ).toHaveCount(2);
   expect(s.posts).toEqual([]);
   await page.setViewportSize({ width: 320, height: 800 });
   const [w, v] = await page.evaluate(() => [
