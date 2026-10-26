@@ -155,3 +155,59 @@ def test_mock_profiles_never_keep_unused_credentials(tmp_path):
     assert status.model == "deterministic-mock-v1"
     assert profiles.get("offline")["api_key"] is None
     assert "unused-private-credential" not in profiles.path.read_text()
+
+
+def test_actual_runtime_abstract_task_assessment_is_unverified():
+    value = payload(
+        planning_mode="task",
+        task="Pick up the object",
+        action_space={
+            "kind": "simulation",
+            "joint_units": {"shoulder_pan": "rad"},
+            "joint_limits": {"shoulder_pan": [-1, 1]},
+            "max_delta": {"shoulder_pan": 0.15},
+            "min_duration_seconds": 0.1,
+            "max_duration_seconds": 2,
+        },
+    )
+    result = asyncio.run(runtime.run(profile(), value))
+    assert result["status"] == "assessed" and result["assessment"]["outcome"] == "needs_help"
+    assert result["continuation"] is None and result["usage"]["total_tokens"] == 0
+    assert result.get("task_success_verified") is not True
+
+
+@pytest.mark.parametrize(
+    "usage",
+    [
+        {"input_tokens": 17, "output_tokens": 9, "total_tokens": 26},
+        {"input_tokens": True, "output_tokens": 9},
+        {"input_tokens": -1, "output_tokens": 9},
+        {"input_tokens": 1000001, "output_tokens": 9},
+        None,
+    ],
+)
+def test_runtime_error_preserves_only_bounded_known_usage(tmp_path, monkeypatch, usage):
+    executable = tmp_path / "planner-error-stub"
+    result = {
+        "status": "error",
+        "code": "provider_failed",
+        "error": "private-body-credential",
+        "usage": usage,
+        "api_key": "private-body-credential",
+    }
+    executable.write_text(
+        f"#!{sys.executable}\nimport sys\nsys.stdin.buffer.read()\n"
+        + "print("
+        + repr(json.dumps(result))
+        + ")\nsys.exit(2)\n"
+    )
+    executable.chmod(0o700)
+    monkeypatch.setattr(runtime.sys, "executable", str(executable))
+    if usage and type(usage["input_tokens"]) is int and 0 <= usage["input_tokens"] <= 1000000:
+        received = asyncio.run(runtime.run(profile(), payload()))
+        assert received == {"status": "error", "usage": {"input_tokens": 17, "output_tokens": 9}}
+        assert "private-body-credential" not in json.dumps(received)
+    else:
+        with pytest.raises(runtime.RuntimeError) as caught:
+            asyncio.run(runtime.run(profile(), payload()))
+        assert "private-body-credential" not in str(caught.value)

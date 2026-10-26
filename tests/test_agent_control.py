@@ -141,7 +141,12 @@ def test_stop_blocks_delayed_provider_even_if_it_swallows_cancellation(app):
     assert stopped["pending_proposal"] is None and stopped["receipts"] == []
     assert app.post(path + "/proposals", json={"request_id": "late"}).json()["calls_used"] == 1
     assert app.post(path + "/proposals", json={"request_id": "new"}).status_code == 409
-    assert any(e["kind"] == "late_result_rejected" for e in app.get(path + "/events").json())
+    for _ in range(200):
+        events = app.get(path + "/events").json()
+        if any(e["kind"] == "late_result_rejected" for e in events):
+            break
+        time.sleep(0.01)
+    assert any(e["kind"] == "late_result_rejected" for e in events)
 
 
 def test_private_settings_and_validation_never_echo_credentials(app, tmp_path):

@@ -331,5 +331,9 @@ def test_stopped_owner_rejects_provider_result_that_swallows_cancellation(app):
     assert stopped["status"] == "stopped" and stopped["pending_proposal"] is None
     assert target.executions == [] and target.owner is None
     assert target.release_count == 1
-    events = client.get(path + "/events").json()
+    for _ in range(200):
+        events = client.get(path + "/events").json()
+        if any(event["kind"] == "late_result_rejected" for event in events):
+            break
+        time.sleep(0.01)
     assert any(event["kind"] == "late_result_rejected" for event in events)
