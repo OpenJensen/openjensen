@@ -137,12 +137,24 @@ def _provenance(value: dict, version: int, *, event: bool = False) -> None:
     human = "operator_command" if event else "operator_joint_position"
     agent = "agent_command" if event else "agent_joint_position"
     if version == 1:
+        if any(k in value for k in ("prompt_version", "prompt_sha256")):
+            raise ValueError("Legacy capture cannot claim prompt provenance")
         if value.get(key) != human:
             raise ValueError("Unknown legacy supervision source")
         return
     if value.get("environment_kind") != "simulation":
         raise ValueError("Unsupported provenance environment")
     actor = value.get("actor")
+    prompt_keys = {"prompt_version", "prompt_sha256"}
+    if prompt_keys & set(value) and (
+        not prompt_keys <= set(value)
+        or not isinstance(value["prompt_version"], str)
+        or re.fullmatch(r"[A-Za-z0-9_.-]{1,96}", value["prompt_version"]) is None
+        or not isinstance(value["prompt_sha256"], str)
+        or re.fullmatch(r"[a-f0-9]{64}", value["prompt_sha256"]) is None
+        or actor != "llm_agent"
+    ):
+        raise ValueError("Invalid prompt provenance")
     if actor == "human_operator" and value.get(key) == human:
         if any(name in value for name in ("agent_session_id", "proposal_id", "execution_id")):
             raise ValueError("Human source cannot carry agent execution identity")
@@ -282,6 +294,11 @@ def inspect_capture(
                             "observation_sha256": event.get("observation_sha256"),
                             "proposal_id": event.get("proposal_id"),
                             "provider_model": event.get("provider_model"),
+                            **{
+                                key: event[key]
+                                for key in ("prompt_version", "prompt_sha256")
+                                if key in event
+                            },
                         },
                     },
                 )
@@ -387,6 +404,8 @@ def inspect_capture(
                     "proposal_id",
                     "execution_id",
                     "provider_model",
+                    "prompt_version",
+                    "prompt_sha256",
                     "observation_id",
                     "observation_sha256",
                     "authority_epoch",
@@ -653,6 +672,8 @@ def convert_captures(
                                     "proposal_id",
                                     "execution_id",
                                     "provider_model",
+                                    "prompt_version",
+                                    "prompt_sha256",
                                     "observation_id",
                                     "observation_sha256",
                                     "authority_epoch",

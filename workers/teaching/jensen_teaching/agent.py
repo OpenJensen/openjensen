@@ -88,6 +88,8 @@ class AgentCommand:
         optional = (
             {"max_session_seconds", "planning_snapshot_seconds"}
             if operation == "acquire"
+            else {"prompt_version", "prompt_sha256"}
+            if operation in {"execute", "segment"}
             else set()
         )
         if (
@@ -122,6 +124,20 @@ class AgentCommand:
             ):
                 raise ValueError("Invalid observation fingerprint")
             args["provider_model"] = text(args["provider_model"], "provider model", 128)
+            prompt_keys = {"prompt_version", "prompt_sha256"}
+            if prompt_keys & set(args) and (
+                not prompt_keys <= set(args)
+                or not isinstance(args["prompt_version"], str)
+                or not 1 <= len(args["prompt_version"]) <= 96
+                or any(
+                    c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-"
+                    for c in args["prompt_version"]
+                )
+                or not isinstance(args["prompt_sha256"], str)
+                or len(args["prompt_sha256"]) != 64
+                or any(c not in "0123456789abcdef" for c in args["prompt_sha256"])
+            ):
+                raise ValueError("Invalid prompt provenance")
             if operation == "execute":
                 args["joint"] = text(args["joint"], "joint", 96)
                 delta = finite(args["delta_rad"], "delta_rad")
@@ -366,6 +382,11 @@ class AgentAuthority:
                     name: list(bounds)
                     for name, bounds in zip(frame.joints, session.sim.joint_limits, strict=True)
                 },
+                "action_limits": {
+                    "min_duration_seconds": 0.1,
+                    "max_duration_seconds": min(2.0, 60 / session.settings.sim.fps),
+                    "max_ticks": 60,
+                },
                 "units": "rad",
                 "image_data_url": "data:image/png;base64,"
                 + base64.b64encode(image).decode("ascii"),
@@ -448,6 +469,9 @@ class AgentAuthority:
             "clock_policy": self.clock_policy,
             "skill_manifest_version": 2 if command.operation == "segment" else 1,
         }
+        session.target_actor.update(
+            {key: args[key] for key in ("prompt_version", "prompt_sha256") if key in args}
+        )
         event = Command(
             command.command_id,
             command.session_id,

@@ -573,11 +573,22 @@ class AgentExecutor:
             "provider_model",
             "model_observation_id",
             "model_observation_sha256",
+            "prompt_version",
+            "prompt_sha256",
         }
         if not required <= set(args) or set(args) - required - optional:
             raise ValueError(
                 "A segment needs its original observation, named targets, units and duration"
             )
+        prompt_keys = {"prompt_version", "prompt_sha256"}
+        if prompt_keys & set(args) and (
+            not prompt_keys <= set(args)
+            or not isinstance(args["prompt_version"], str)
+            or re.fullmatch(r"[A-Za-z0-9_.-]{1,96}", args["prompt_version"]) is None
+            or not isinstance(args["prompt_sha256"], str)
+            or re.fullmatch(r"[a-f0-9]{64}", args["prompt_sha256"]) is None
+        ):
+            raise ValueError("Invalid prompt provenance")
         if "proposal_id" in args:
             identity(args["proposal_id"])
         if "provider_model" in args and (

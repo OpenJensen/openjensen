@@ -48,6 +48,8 @@ def test_replay_records_no_applied_training_label_and_duplicate_request_executes
     s = propose(app, s)
     assert s["status"] == "waiting_for_acceptance", s
     proposal = s["pending_proposal"]
+    assert proposal["prompt_version"] == "mock-relative-v1"
+    assert len(proposal["prompt_sha256"]) == 64
     assert proposal["observation_sha256"] == s["observation"]["sha256"]
     path = f"/api/v1/agent-sessions/{s['id']}"
     approval = {"proposal_id": proposal["id"], "authority_epoch": s["authority_epoch"]}

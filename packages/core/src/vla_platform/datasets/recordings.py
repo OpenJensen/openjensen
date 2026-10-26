@@ -721,6 +721,8 @@ def checked_conversion(response, job, selection, destination, *, deadline, stop)
                                     "proposal_id",
                                     "execution_id",
                                     "provider_model",
+                                    "prompt_version",
+                                    "prompt_sha256",
                                     "observation_id",
                                     "observation_sha256",
                                     "authority_epoch",

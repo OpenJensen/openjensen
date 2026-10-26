@@ -173,7 +173,15 @@ def test_continuous_contract_tolerates_tick_and_rejects_drift(session):
 def test_agent_capture_v2_truthful_applied_action_and_actor(session):
     observed = start(session)
     ident = session.episode_id
-    session.agent.execute(correction(session, observed, delta_rad=0.15))
+    session.agent.execute(
+        correction(
+            session,
+            observed,
+            delta_rad=0.15,
+            prompt_version="agent-joint-v1",
+            prompt_sha256="d" * 64,
+        )
+    )
     session.tick()
     act(session, "finish")
     meta, episodes, _ = inspect_capture(session.journal.root, [ident])
@@ -184,6 +192,7 @@ def test_agent_capture_v2_truthful_applied_action_and_actor(session):
     assert row["applied_target_rad"][0] == pytest.approx(2 / 30)
     assert row["next_state_rad"][0] == row["applied_target_rad"][0]
     assert row["observation_sha256"] == observed["observation_sha256"]
+    assert row["prompt_version"] == "agent-joint-v1" and row["prompt_sha256"] == "d" * 64
     assert episodes[0]["receipt"]["outcome"] == "unknown"
 
 
@@ -493,3 +502,19 @@ def test_continuous_snapshot_keeps_short_age_and_rejects_extended_policy(session
     body["arguments"]["planning_snapshot_seconds"] = 120
     with pytest.raises(ValueError, match="frozen"):
         AgentCommand.parse("acquire", body)
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        {"prompt_version": "agent-goal-v1"},
+        {"prompt_sha256": "d" * 64},
+        {"prompt_version": "bad version", "prompt_sha256": "d" * 64},
+        {"prompt_version": "agent-goal-v1", "prompt_sha256": "not-a-hash"},
+    ],
+)
+def test_invalid_prompt_provenance_never_dispatches(session, metadata):
+    observed = start(session)
+    with pytest.raises(ValueError, match="prompt provenance"):
+        correction(session, observed, **metadata)
+    assert not session.sim.applications

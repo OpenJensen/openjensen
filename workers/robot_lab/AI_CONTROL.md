@@ -31,7 +31,7 @@ Observations are private evidence, bounded to 128 MiB per session, 512 MiB in th
 
 ## Segment contract
 
-`agent/execute` accepts the fresh observation ID/hash, named absolute `targets`, exact per-target `units`, and `duration_seconds`. Optional host provenance records the proposal, provider/model and original model observation ID/hash. The executor rechecks ownership, calibration, source age, current measured state and the admitted joint manifest before creating a segment.
+`agent/execute` accepts the fresh observation ID/hash, named absolute `targets`, exact per-target `units`, and `duration_seconds`. Optional host provenance records the proposal, provider/model, instruction version/SHA256 and original model observation ID/hash. A present instruction identity requires both validated fields. The executor rechecks ownership, calibration, source age, current measured state and the admitted joint manifest before creating a segment.
 
 Every target lies inside the calibrated margin. A segment may change an arm joint by at most 5 degrees or the gripper by at most 10 percent. Duration is 0.5–5 seconds. A quintic position interpolation is admitted only if its commanded speed is at most 10 units/s and commanded acceleration at most 20 units/s². Delayed ticks advance by at most 75 ms, preventing a large catch-up goal.
 

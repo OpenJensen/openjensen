@@ -123,6 +123,12 @@ class TaskPlanningTests(unittest.IsolatedAsyncioTestCase):
             content[1], {"type": "input_image", "image_url": CHECK_IMAGE, "detail": "low"}
         )
         self.assertIn("abstract goal", sent["instructions"])
+        import hashlib
+
+        self.assertEqual(result["prompt_version"], "agent-goal-v1")
+        self.assertEqual(
+            result["prompt_sha256"], hashlib.sha256(sent["instructions"].encode()).hexdigest()
+        )
         self.assertFalse(sent["parallel_tool_calls"])
         self.assertFalse(sent["store"])
         schemas = {tool["name"]: tool for tool in sent["tools"]}

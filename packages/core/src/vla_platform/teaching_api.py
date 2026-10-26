@@ -554,7 +554,11 @@ def validate_agent_request(path: str, payload: dict | None) -> None:
         },
     }[operation]
     optional = (
-        {"max_session_seconds", "planning_snapshot_seconds"} if operation == "acquire" else set()
+        {"max_session_seconds", "planning_snapshot_seconds"}
+        if operation == "acquire"
+        else {"prompt_version", "prompt_sha256"}
+        if operation in {"execute", "segment"}
+        else set()
     )
     if not isinstance(args, dict) or not expected <= set(args) or set(args) - expected - optional:
         raise ValueError("Unsupported agent executor arguments")
@@ -580,6 +584,15 @@ def validate_agent_request(path: str, payload: dict | None) -> None:
         ):
             raise ValueError("Invalid acquire episode identity")
     if operation in {"execute", "segment"}:
+        prompt_keys = {"prompt_version", "prompt_sha256"}
+        if prompt_keys & set(args) and (
+            not prompt_keys <= set(args)
+            or not isinstance(args["prompt_version"], str)
+            or re.fullmatch(r"[A-Za-z0-9_.-]{1,96}", args["prompt_version"]) is None
+            or not isinstance(args["prompt_sha256"], str)
+            or re.fullmatch(r"[a-f0-9]{64}", args["prompt_sha256"]) is None
+        ):
+            raise ValueError("Invalid prompt provenance")
         if operation == "execute":
             TeachingCommand(
                 session_id=payload["session_id"],
@@ -723,7 +736,13 @@ def public_agent_observation(value: dict, *, session_id: str | None) -> dict:
         or not AGENT_OBSERVATION_FIELDS <= set(value)
         or set(value)
         - AGENT_OBSERVATION_FIELDS
-        - {"task_evidence", "scene_frozen_for_planning", "snapshot_policy", "joint_limits"}
+        - {
+            "task_evidence",
+            "scene_frozen_for_planning",
+            "snapshot_policy",
+            "joint_limits",
+            "action_limits",
+        }
     ):
         raise ValueError("Invalid agent observation fields")
     if (
@@ -819,6 +838,20 @@ def public_agent_observation(value: dict, *, session_id: str | None) -> dict:
             )
         ):
             raise ValueError("Invalid native named joint limits")
+    if "action_limits" in value:
+        limits = value["action_limits"]
+        if (
+            not isinstance(limits, dict)
+            or set(limits) != {"min_duration_seconds", "max_duration_seconds", "max_ticks"}
+            or type(limits["max_ticks"]) is not int
+            or limits["max_ticks"] != 60
+            or any(
+                type(limits[key]) not in (int, float) or not math.isfinite(limits[key])
+                for key in ("min_duration_seconds", "max_duration_seconds")
+            )
+            or not 0.1 <= limits["min_duration_seconds"] <= limits["max_duration_seconds"] <= 2
+        ):
+            raise ValueError("Invalid native segment duration limits")
     if "task_evidence" in value:
         public_task_evidence(value["task_evidence"], step=value["step"], sim_time=value["sim_time"])
     immutable = {key: item for key, item in value.items() if key != "observation_sha256"}

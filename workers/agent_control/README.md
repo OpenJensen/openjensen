@@ -1,49 +1,32 @@
 # Agent Control planner worker
 
-This isolated, small planning runtime proposes one named simulated joint correction per turn.
-It has no actuator, serial-port, shell, arbitrary HTTP, or physical robot tool. Local core and
-executor admission remain authoritative. The deterministic mock only proposes an explicit
-relative instruction such as `shoulder_pan +0.03 rad`; vague manipulation tasks request help.
+This isolated runtime turns an operator task into typed proposals above a separately owned executor. It accepts abstract goals in task mode and selects only the host's admitted skills. The model has no serial port, actuator credential, shell, arbitrary HTTP or generated-code tool.
 
-The OpenAI adapter uses the Responses API with strict function schemas, inline admitted image
-input, `parallel_tool_calls=false` and `store=false`. Provider output items, including opaque
-reasoning context, are preserved privately for tool-result continuation with the original
-`call_id`. A later observation is supplied explicitly with the receipt. Model identity, token
-usage, deadline, maximum output, and returned token budget are validated. No automatic fallback
-changes providers. A capability check uses a synthetic image and a synthetic receipt; it proves
-only the selected transport's image/tool protocol, never access to a robot or motion readiness.
+## Planning modes
 
-## Process protocol
+- `joint`: one explicit named simulated joint correction in radians, at most 0.15.
+- `task`: choose a named correction (simulation), coordinated joint segment, or `finish_task` assessment (`achieved`, `needs_help`, `cannot_proceed`). Physical targets expose segments only, in the declared degrees/percent units.
 
-Run `python -m jensen_agent_control` with this directory's `src` on `PYTHONPATH`, or install the
-package in an isolated environment. Send one JSON object on stdin; receive one JSON object on
-stdout. A sanitized error exits with status 2. The caller owns and cancels the process.
+The host action-space manifest supplies exact joint names, units, calibrated limits, delta and duration bounds, plus the physical commanded speed/acceleration profile. The worker validates proposals against measured state before returning them; the local executor repeats admission at dispatch. The planner must ask for help when images, calibration or registered skills cannot ground an action. There is no Cartesian grasp, object-pose, inverse-kinematics, collision or policy-execution tool.
 
-Requests accept `operation` (`plan`, `continue`, `check`), `provider` (`mock`,
-`openai_responses`), `model`, `task`, `observation`, `joint_names`, `reasoning_effort`,
-`max_output_tokens`, `max_total_tokens`, and `timeout_seconds`. The host creates observations;
-only an admitted `observation.image_data_url` in PNG or JPEG format becomes image input.
-Credentials are accepted only from `OPENJENSEN_AGENT_API_KEY` in the process environment.
-The provider endpoint is fixed to the OpenAI Responses API.
+The deterministic mock parses explicit relative-radian instructions and cannot visually ground object manipulation. It does not call a provider or touch an executor.
 
-A proposed result includes `arguments` (`joint`, `delta_rad`), `call_id`, actual `model`,
-`usage`, and private `continuation`. A complete result includes a compact `summary`. Neither
-is an execution receipt or verified task outcome. Send `operation=continue`, the original
-`continuation`, the host's `receipt`, and the next admitted observation for another turn.
-Continuation contains observation and provider context and must never be returned through a
-public API or shown as an explanation. The host must bind it to its original session/profile.
+## Provider and process protocol
 
-The overall timeout includes a capability check's two requests. The caller must reserve the
-input and output budget before launching each turn and account for failed calls; returned
-usage checks cannot prevent charges already incurred. Capability checks are paid requests for
-the OpenAI transport. Mock checks have no network, usage, or image capability.
+Run `python -m jensen_agent_control` with this directory's `src` on `PYTHONPATH`, or install it in an isolated environment. Send one JSON object on stdin and receive one on stdout. A sanitized failure exits with status 2. The core owns and cancels the process.
 
-## Tests
+Requests include `operation` (`plan`, `continue`, `check`), `provider` (`mock`, `openai_responses`), model, task, admitted observation, joint names, reasoning effort and token/time limits. Task mode additionally requires `planning_mode:task`, the exact `action_space` and completed-step count. Only host-admitted inline PNG/JPEG data becomes image input. Credentials arrive through `OPENJENSEN_AGENT_API_KEY`; the endpoint is fixed to OpenAI Responses.
 
-`python -m unittest discover -s workers/agent_control/tests -v` exercises HTTP-mocked
-Responses transport, strict action parsing, image input, private continuation, model identity,
-replayed call IDs, bounded cancellation, budget errors, and the JSON process boundary. No test
-calls a paid provider or touches an executor.
+The Responses adapter uses strict function schemas, `parallel_tool_calls=false` and `store=false`. It preserves opaque provider context privately for tool-result continuation with the original `call_id`. A new observation is supplied explicitly after the measured receipt. Old images are removed from bounded historical turns rather than relabeled as current. Model identity, usage, tool identity, deadlines and token budgets are validated; there is no automatic fallback.
 
-References: [Function calling](https://developers.openai.com/api/docs/guides/function-calling),
-[GPT-6 Astra](https://developers.openai.com/api/docs/models/gpt-6-astra).
+A proposal returns skill, typed arguments, concise purpose, model, usage, call ID and private continuation. Decisions also retain `prompt_version` and the exact instruction UTF-8 `prompt_sha256`; the mock identifies its deterministic decision contract. An assessment or final response is not an execution receipt or independent task verification.
+
+For `continue`, supply the original continuation, measured receipt and new admitted observation. The continuation is bound to model, embodiment and task action space, and must stay private. The core must reserve input/output capacity before each call and account for failures: returned usage cannot prevent charges already incurred.
+
+## Capability checks and acceptance
+
+An explicit OpenAI capability check uses a synthetic image and synthetic tool result. It is a paid transport test for image input and tool continuation, not motion readiness. The mock check does not claim vision or physical capability. Provider keys, configured status, capability checks and target readiness remain separate.
+
+The tests use HTTP mocks and deterministic executors for strict tools, exact prompt fingerprints, image input, continuation, usage, cancellation and malformed responses. No test calls a paid provider or moves hardware.
+
+See [AI teleoperation guide](../../docs/agent-control.md), [simulator protocol](../teaching/AGENT_CONTROL.md), [native simulator acceptance](../teaching/NATIVE_ACCEPTANCE.md), and [physical executor contract](../robot_lab/AI_CONTROL.md).

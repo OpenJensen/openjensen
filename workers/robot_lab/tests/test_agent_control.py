@@ -243,6 +243,17 @@ class AgentTests(unittest.TestCase):
         self.assertFalse(self.lab.torque)
         self.assertIsNone(self.lab.agent.owner)
 
+    def test_prompt_identity_is_retained_and_partial_identity_rejected(self):
+        self.arm()
+        observed = self.observe()
+        with self.assertRaisesRegex(ValueError, "prompt provenance"):
+            self.command("execute", self.segment(observed, prompt_version="agent-goal-v1"))
+        receipt = self.command(
+            "execute",
+            self.segment(observed, prompt_version="agent-goal-v1", prompt_sha256="d" * 64),
+        )
+        self.assertEqual(receipt["admitted_arguments"]["prompt_sha256"], "d" * 64)
+
     def test_held_pose_is_measured_and_health_cannot_be_renewed_by_network_alone(self):
         self.arm()
         self.lab._tick()

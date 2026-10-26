@@ -24,6 +24,7 @@ from .contracts import (
     Assessment,
     Event,
     ExecutionEvidence,
+    PromptProvenance,
     Proposal,
     Receipt,
     SegmentArguments,
@@ -434,7 +435,11 @@ class AgentControl(TaskControl):
                         "expected_revision": state["revision"],
                         "episode_id": state["episode_id"],
                         "max_session_seconds": s.max_seconds,
-                        "planning_snapshot_seconds": p["planning_snapshot_seconds"],
+                        **(
+                            {"planning_snapshot_seconds": p["planning_snapshot_seconds"]}
+                            if payload.clock_policy == "stepped"
+                            else {}
+                        ),
                     },
                     epoch=0,
                     command_id=p["acquire_command_id"],
@@ -831,6 +836,12 @@ class AgentControl(TaskControl):
                     )
                     await self.save(s, p, "provider_failed")
                     return
+                prompt = {
+                    key: result[key] for key in ("prompt_version", "prompt_sha256") if key in result
+                }
+                if prompt:
+                    prompt = PromptProvenance.model_validate(prompt).model_dump()
+                p["last_prompt_provenance"] = prompt
                 p["continuation"] = result.get("continuation")
                 if (
                     datetime.now(UTC)
@@ -866,7 +877,9 @@ class AgentControl(TaskControl):
                         s.model_assessment.summary
                         + " Task verification is separate from this model assessment."
                     )
-                    await self.save(s, p, "model_task_assessment", s.model_assessment.model_dump())
+                    await self.save(
+                        s, p, "model_task_assessment", {**s.model_assessment.model_dump(), **prompt}
+                    )
                     return
                 if result.get("status") == "complete":
                     p.pop("continuation", None)
@@ -910,6 +923,7 @@ class AgentControl(TaskControl):
                     expected_revision=s.observation.revision,
                     provider_revision=s.provider_revision,
                     model=model,
+                    **prompt,
                     arguments=args,
                     skill=skill,
                     purpose=str(result.get("purpose", result.get("summary", "")))[:512],
@@ -1104,6 +1118,16 @@ class AgentControl(TaskControl):
                     proposal.model,
                     execution_id,
                     model_observation=raw,
+                    **(
+                        {
+                            "prompt_provenance": {
+                                "prompt_version": proposal.prompt_version,
+                                "prompt_sha256": proposal.prompt_sha256,
+                            }
+                        }
+                        if proposal.prompt_version is not None
+                        else {}
+                    ),
                 )
                 if result.get("status") != "completed":
                     outcome = (
@@ -1167,6 +1191,14 @@ class AgentControl(TaskControl):
                         "observation_sha256": raw["observation_sha256"],
                         "proposal_id": proposal.id,
                         "provider_model": proposal.model,
+                        **(
+                            {
+                                "prompt_version": proposal.prompt_version,
+                                "prompt_sha256": proposal.prompt_sha256,
+                            }
+                            if proposal.prompt_version is not None
+                            else {}
+                        ),
                         **proposal.arguments.model_dump(),
                     },
                     command_id=execution_id,

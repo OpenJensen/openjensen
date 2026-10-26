@@ -209,7 +209,21 @@ def validate_demonstration_provenance(provenance, episodes):
                     "Human frame cannot carry agent action provenance",
                 )
                 continue
-            require(set(action) == AGENT_PROVENANCE_KEYS, "Agent frame provenance is incomplete")
+            prompt_keys = {"prompt_version", "prompt_sha256"}
+            expected = (
+                AGENT_PROVENANCE_KEYS | prompt_keys
+                if prompt_keys & set(action)
+                else AGENT_PROVENANCE_KEYS
+            )
+            require(set(action) == expected, "Agent frame provenance is incomplete")
+            if prompt_keys & set(action):
+                require(
+                    isinstance(action["prompt_version"], str)
+                    and re.fullmatch(r"[A-Za-z0-9_.-]{1,96}", action["prompt_version"]) is not None
+                    and isinstance(action["prompt_sha256"], str)
+                    and re.fullmatch(r"[a-f0-9]{64}", action["prompt_sha256"]) is not None,
+                    "Invalid prompt provenance",
+                )
             for key in ("agent_session_id", "proposal_id", "execution_id", "observation_id"):
                 require(
                     isinstance(action[key], str)
@@ -248,9 +262,7 @@ def validate_demonstration_provenance(provenance, episodes):
                         and action["skill_manifest_version"] == 2
                     )
                 )
-                and all(
-                    command.get(key) == action[key] for key in AGENT_PROVENANCE_KEYS - {"step"}
-                ),
+                and all(command.get(key) == action[key] for key in expected - {"step"}),
                 "Agent frame differs from its original execution event",
             )
             if action["skill_manifest_version"] == 2:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import copy
+import hashlib
 import json
 import os
 import re
@@ -32,6 +33,24 @@ An execution receipt is evidence of a local action, never proof of task success.
 physical motion, grasping, collision avoidance, or successful task completion without a verifier.
 Do not emit shell commands, arbitrary endpoints, or controller code. After an execution receipt,
 reason from the next observation rather than repeating the action automatically."""
+
+
+def prompt_metadata(request, *, mock=False):
+    if mock:
+        version = "mock-relative-v1"
+        instruction = (
+            "Deterministic explicit named relative-radian correction parser; "
+            "unsupported or abstract manipulation requests return needs_help."
+        )
+    else:
+        task = request.get("planning_mode") == "task"
+        version = "agent-goal-v1" if task else "agent-joint-v1"
+        instruction = task_tools.TASK_PROMPT if task else SYSTEM_PROMPT
+    return {
+        "prompt_version": version,
+        "prompt_sha256": hashlib.sha256(instruction.encode("utf-8")).hexdigest(),
+    }
+
 
 # A generated one-pixel PNG used only for the explicit transport capability check.
 CHECK_IMAGE = (
@@ -122,7 +141,12 @@ class MockProvider:
     async def plan(self, request: dict) -> dict:
         await asyncio.sleep(self.delay_seconds)
         usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
-        common = {"model": "deterministic-mock-v1", "usage": usage, "continuation": None}
+        common = {
+            "model": "deterministic-mock-v1",
+            "usage": usage,
+            "continuation": None,
+            **prompt_metadata(request, mock=True),
+        }
         if request["operation"] == "check":
             return {
                 **common,
@@ -295,7 +319,12 @@ class OpenAIResponsesProvider:
             raise ProviderError(
                 "invalid_response", "Parallel or duplicate action proposals are not accepted."
             )
-        common = {"model": response["model"], "usage": usage, "continuation": None}
+        common = {
+            "model": response["model"],
+            "usage": usage,
+            "continuation": None,
+            **prompt_metadata(request),
+        }
         summary = ""
         for item in output:
             if item.get("type") == "message":

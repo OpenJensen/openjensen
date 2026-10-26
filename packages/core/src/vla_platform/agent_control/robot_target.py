@@ -178,6 +178,7 @@ class RobotTarget:
         execution_id,
         *,
         model_observation=None,
+        prompt_provenance=None,
     ):
         args = args.model_dump() if hasattr(args, "model_dump") else dict(args)
         targets = args["targets"]
@@ -195,6 +196,8 @@ class RobotTarget:
                 model_observation_id=model_observation["observation_id"],
                 model_observation_sha256=model_observation["observation_sha256"],
             )
+        if prompt_provenance is not None:
+            body.update(prompt_provenance)
         value = await self.command("execute", session_id, epoch, body, execution_id)
         deadline = time.monotonic() + args["duration_seconds"] + 4
         while value.get("status") in {"accepted", "started"}:

@@ -116,6 +116,13 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(first["status"], "proposed")
         self.assertEqual(second["status"], "complete")
+        import hashlib
+
+        self.assertEqual(first["prompt_version"], "agent-joint-v1")
+        self.assertEqual(
+            first["prompt_sha256"], hashlib.sha256(sent[0]["instructions"].encode()).hexdigest()
+        )
+        self.assertEqual(second["prompt_sha256"], first["prompt_sha256"])
         self.assertFalse(sent[0]["parallel_tool_calls"])
         self.assertFalse(sent[0]["store"])
         self.assertEqual(sent[0]["include"], ["reasoning.encrypted_content"])

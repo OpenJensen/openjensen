@@ -137,10 +137,12 @@ def test_lost_segment_ack_is_reconciled_once_without_a_second_post():
             "model",
             "execution",
             model_observation=raw,
+            prompt_provenance={"prompt_version": "agent-goal-v1", "prompt_sha256": "d" * 64},
         )
         assert receipt["status"] == "completed"
         assert len([c for c in bridge.calls if c[0] == "POST" and c[1] == "agent/execute"]) == 1
         sent = bridge.calls[0][2]["arguments"]
+        assert sent["prompt_version"] == "agent-goal-v1" and sent["prompt_sha256"] == "d" * 64
         assert sent["units"] == {"shoulder_pan": "degrees"}
         assert sent["model_observation_id"] == raw["observation_id"]
         assert sent["observation_sha256"] == raw["observation_sha256"]

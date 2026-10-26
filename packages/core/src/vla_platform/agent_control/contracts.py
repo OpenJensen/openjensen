@@ -154,6 +154,11 @@ class TaskReviewRecord(TaskReview):
     reviewed_at: str
 
 
+class PromptProvenance(Strict):
+    prompt_version: str = Field(min_length=1, max_length=96, pattern=r"^[A-Za-z0-9_.-]+$")
+    prompt_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
 class Proposal(Strict):
     id: str
     request_id: str
@@ -164,6 +169,10 @@ class Proposal(Strict):
     expected_revision: int
     provider_revision: str
     model: str
+    prompt_version: str | None = Field(
+        default=None, min_length=1, max_length=96, pattern=r"^[A-Za-z0-9_.-]+$"
+    )
+    prompt_sha256: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     skill: Literal["joint_correction", "joint_segment"] = "joint_correction"
     purpose: str = ""
     arguments: Arguments | SegmentArguments
@@ -172,6 +181,12 @@ class Proposal(Strict):
     ]
     created_at: str
     expires_at: str
+
+    @model_validator(mode="after")
+    def prompt_pair(self):
+        if (self.prompt_version is None) != (self.prompt_sha256 is None):
+            raise ValueError("Prompt provenance requires both version and fingerprint")
+        return self
 
 
 class ExecutionEvidence(Strict):

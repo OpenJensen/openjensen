@@ -194,7 +194,7 @@ def test_private_agent_adapter_is_closed(path, body):
         teaching_api.validate_agent_request(path, body)
 
 
-@pytest.mark.parametrize("damage", [None, "actor", "proposal", "missing"])
+@pytest.mark.parametrize("damage", [None, "actor", "proposal", "missing", "prompt"])
 def test_agent_promotion_binds_exact_per_frame_provenance(tmp_path, damage):
     import threading
     import time
@@ -221,6 +221,8 @@ def test_agent_promotion_binds_exact_per_frame_provenance(tmp_path, damage):
             "proposal_id": "proposal_fixture",
             "execution_id": "execution_fixture",
             "provider_model": "mock-v1",
+            "prompt_version": "agent-joint-v1",
+            "prompt_sha256": "d" * 64,
             "observation_id": "observation_fixture",
             "observation_sha256": "a" * 64,
             "authority_epoch": 1,
@@ -260,6 +262,8 @@ def test_agent_promotion_binds_exact_per_frame_provenance(tmp_path, damage):
         provenance["episodes"][0]["action_provenance"][0]["proposal_id"] = "invented"
     elif damage == "missing":
         del provenance["episodes"][0]["action_provenance"]
+    elif damage == "prompt":
+        provenance["episodes"][0]["action_provenance"][0]["prompt_sha256"] = "e" * 64
     provenance_path.write_bytes(canonical(provenance))
     response["files"] = inventory(output)
     response["selection_sha256"] = hashlib.sha256(
@@ -425,3 +429,30 @@ def test_snapshot_reader_preserves_segment_skill_and_rejects_malformed_arguments
         changed["episodes"][0]["events"][0]["arguments"].update(change)
         with pytest.raises(ValueError, match="segment"):
             validate_demonstration_provenance(changed, [{"length": 1}])
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        {"prompt_version": "agent-goal-v1", "prompt_sha256": "d" * 64},
+        {"prompt_version": "agent-goal-v1"},
+        {"prompt_version": "bad version", "prompt_sha256": "d" * 64},
+    ],
+)
+def test_private_executor_prompt_identity_is_validated(metadata):
+    body = request() | {
+        "arguments": {
+            "observation_id": "observation_fixture",
+            "observation_sha256": "a" * 64,
+            "joint": "joint_0",
+            "delta_rad": 0.03,
+            "proposal_id": "proposal_fixture",
+            "provider_model": "mock-v1",
+            **metadata,
+        }
+    }
+    if metadata.get("prompt_version") == "agent-goal-v1" and "prompt_sha256" in metadata:
+        teaching_api.validate_agent_request("/agent/execute", body)
+    else:
+        with pytest.raises(ValueError, match="prompt provenance"):
+            teaching_api.validate_agent_request("/agent/execute", body)

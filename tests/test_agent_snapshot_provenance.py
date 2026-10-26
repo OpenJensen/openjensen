@@ -105,3 +105,26 @@ def test_actor_metadata_cannot_be_dropped_or_reinterpreted(damage):
 def test_legacy_sidecar_retains_previous_interpretation():
     validate_demonstration_provenance({"schema_version": 1}, [{"length": 2}])
     validate_demonstration_provenance({"episodes": [{"episode_index": 0}]}, [{"length": 2}])
+
+
+@pytest.mark.parametrize("fault", [None, "partial", "hash", "version", "event"])
+def test_prompt_provenance_survives_snapshot_and_matches_execution(fault):
+    provenance, episodes = fixture()
+    action = provenance["episodes"][0]["action_provenance"][1]
+    event = provenance["episodes"][0]["events"][0]
+    metadata = {"prompt_version": "agent-goal-v1", "prompt_sha256": "d" * 64}
+    action.update(metadata)
+    event.update(metadata)
+    if fault == "partial":
+        del action["prompt_sha256"]
+    elif fault == "hash":
+        action["prompt_sha256"] = "invalid"
+    elif fault == "version":
+        action["prompt_version"] = "bad version"
+    elif fault == "event":
+        event["prompt_sha256"] = "e" * 64
+    if fault:
+        with pytest.raises(ValueError):
+            validate_demonstration_provenance(provenance, episodes)
+    else:
+        validate_demonstration_provenance(provenance, episodes)
