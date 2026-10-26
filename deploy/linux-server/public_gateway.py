@@ -337,6 +337,10 @@ class PublicGateway:
             return self.error(
                 request.scope, 403, "Server updates are available in the private workspace"
             )
+        if {"agent", "agent-sessions"}.intersection(decoded.split("/")):
+            return self.error(
+                request.scope, 403, "Agent Control is available in the private workspace"
+            )
         if "robot-lab" in decoded.split("/"):
             return self.error(request.scope, 403, "Robot Lab is available in the private workspace")
         if request.scope["path"] == self.prefix:

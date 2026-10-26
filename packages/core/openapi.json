@@ -148,6 +148,50 @@
         "title": "ApplicationVersion",
         "type": "object"
       },
+      "Approval": {
+        "additionalProperties": false,
+        "properties": {
+          "authority_epoch": {
+            "minimum": 1.0,
+            "title": "Authority Epoch",
+            "type": "integer"
+          },
+          "proposal_id": {
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Proposal Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "authority_epoch"
+        ],
+        "title": "Approval",
+        "type": "object"
+      },
+      "Arguments": {
+        "additionalProperties": false,
+        "properties": {
+          "delta_rad": {
+            "maximum": 0.15,
+            "minimum": -0.15,
+            "title": "Delta Rad",
+            "type": "number"
+          },
+          "joint": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Joint",
+            "type": "string"
+          }
+        },
+        "required": [
+          "joint",
+          "delta_rad"
+        ],
+        "title": "Arguments",
+        "type": "object"
+      },
       "AugmentationClip": {
         "additionalProperties": false,
         "properties": {
@@ -2175,6 +2219,115 @@
         "title": "Evaluation",
         "type": "object"
       },
+      "Event": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "record": {
+            "additionalProperties": true,
+            "title": "Record",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "created_at",
+          "record"
+        ],
+        "title": "Event",
+        "type": "object"
+      },
+      "ExecutionEvidence": {
+        "additionalProperties": false,
+        "properties": {
+          "applied_targets": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Applied Targets",
+            "type": "object"
+          },
+          "execution_elapsed_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Elapsed Seconds"
+          },
+          "joint_limit_clipped": {
+            "items": {
+              "type": "boolean"
+            },
+            "title": "Joint Limit Clipped",
+            "type": "array"
+          },
+          "joint_names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Joint Names",
+            "type": "array"
+          },
+          "observed_next_state": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Observed Next State",
+            "type": "object"
+          },
+          "requested_targets": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Requested Targets",
+            "type": "object"
+          },
+          "simulated_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Simulated Seconds"
+          },
+          "speed_limit_clipped": {
+            "items": {
+              "type": "boolean"
+            },
+            "title": "Speed Limit Clipped",
+            "type": "array"
+          }
+        },
+        "required": [
+          "joint_names",
+          "requested_targets",
+          "applied_targets",
+          "observed_next_state",
+          "joint_limit_clipped",
+          "speed_limit_clipped"
+        ],
+        "title": "ExecutionEvidence",
+        "type": "object"
+      },
       "FrameIdentity": {
         "additionalProperties": false,
         "properties": {
@@ -3718,32 +3871,6 @@
         "title": "NativeReplay",
         "type": "object"
       },
-      "Observation": {
-        "additionalProperties": false,
-        "properties": {
-          "box": {
-            "items": {
-              "type": "number"
-            },
-            "maxItems": 4,
-            "minItems": 4,
-            "title": "Box",
-            "type": "array"
-          },
-          "label": {
-            "maxLength": 64,
-            "minLength": 1,
-            "title": "Label",
-            "type": "string"
-          }
-        },
-        "required": [
-          "label",
-          "box"
-        ],
-        "title": "Observation",
-        "type": "object"
-      },
       "ParityLimits": {
         "additionalProperties": false,
         "description": "Operator-declared tolerances; no unmeasured universal default.",
@@ -3778,7 +3905,7 @@
         "properties": {
           "observations": {
             "items": {
-              "$ref": "#/components/schemas/Observation"
+              "$ref": "#/components/schemas/vla_platform__teaching_intelligence_api__Observation"
             },
             "maxItems": 16,
             "title": "Observations",
@@ -3805,6 +3932,21 @@
           "receipt"
         ],
         "title": "PerceptionProposal",
+        "type": "object"
+      },
+      "PlanRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "request_id": {
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id"
+        ],
+        "title": "PlanRequest",
         "type": "object"
       },
       "PolicyArtifact": {
@@ -4172,6 +4314,94 @@
         "title": "ProjectCreate",
         "type": "object"
       },
+      "Proposal": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_session_id": {
+            "title": "Agent Session Id",
+            "type": "string"
+          },
+          "arguments": {
+            "$ref": "#/components/schemas/Arguments"
+          },
+          "authority_epoch": {
+            "title": "Authority Epoch",
+            "type": "integer"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "expected_revision": {
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "observation_id": {
+            "title": "Observation Id",
+            "type": "string"
+          },
+          "observation_sha256": {
+            "title": "Observation Sha256",
+            "type": "string"
+          },
+          "provider_revision": {
+            "title": "Provider Revision",
+            "type": "string"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "skill": {
+            "const": "joint_correction",
+            "default": "joint_correction",
+            "title": "Skill",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "proposed",
+              "rejected",
+              "accepted",
+              "started",
+              "completed",
+              "stopped",
+              "unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "request_id",
+          "agent_session_id",
+          "observation_id",
+          "observation_sha256",
+          "authority_epoch",
+          "expected_revision",
+          "provider_revision",
+          "model",
+          "arguments",
+          "status",
+          "created_at",
+          "expires_at"
+        ],
+        "title": "Proposal",
+        "type": "object"
+      },
       "Provenance": {
         "additionalProperties": false,
         "properties": {
@@ -4252,6 +4482,118 @@
           "generated_proposal"
         ],
         "title": "Provenance",
+        "type": "object"
+      },
+      "ProviderInput": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "format": "password",
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "model": {
+            "default": "gpt-6-astra",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "mock",
+              "openai_responses"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "reasoning_effort": {
+            "default": "low",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "title": "Reasoning Effort",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider"
+        ],
+        "title": "ProviderInput",
+        "type": "object"
+      },
+      "ProviderStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "checked": {
+            "title": "Checked",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "mock",
+              "openai_responses"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "reasoning_effort": {
+            "title": "Reasoning Effort",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "saved": {
+            "title": "Saved",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "model",
+          "reasoning_effort",
+          "revision",
+          "saved",
+          "checked",
+          "capabilities",
+          "message"
+        ],
+        "title": "ProviderStatus",
         "type": "object"
       },
       "PublicRuntime": {
@@ -4463,6 +4805,92 @@
         "title": "PublicRuntime",
         "type": "object"
       },
+      "Receipt": {
+        "additionalProperties": false,
+        "properties": {
+          "applied_targets": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Applied Targets",
+            "type": "object"
+          },
+          "arguments": {
+            "$ref": "#/components/schemas/Arguments"
+          },
+          "elapsed_seconds": {
+            "title": "Elapsed Seconds",
+            "type": "number"
+          },
+          "executor_evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExecutionEvidence"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "post_observation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Post Observation Id"
+          },
+          "pre_observation_id": {
+            "title": "Pre Observation Id",
+            "type": "string"
+          },
+          "proposal_id": {
+            "title": "Proposal Id",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "rejected",
+              "completed",
+              "stopped",
+              "unknown",
+              "replayed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "task_success_verified": {
+            "const": false,
+            "default": false,
+            "title": "Task Success Verified",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "proposal_id",
+          "status",
+          "arguments",
+          "applied_targets",
+          "pre_observation_id",
+          "post_observation_id",
+          "elapsed_seconds",
+          "reason"
+        ],
+        "title": "Receipt",
+        "type": "object"
+      },
       "RecordingCapture": {
         "additionalProperties": false,
         "properties": {
@@ -4526,6 +4954,12 @@
             "title": "Controller",
             "type": "string"
           },
+          "environment_kind": {
+            "const": "simulation",
+            "default": "simulation",
+            "title": "Environment Kind",
+            "type": "string"
+          },
           "episodes": {
             "items": {
               "$ref": "#/components/schemas/RecordingEpisodeOption"
@@ -4570,6 +5004,15 @@
             "pattern": "^[a-f0-9]{64}$",
             "title": "Scene Sha256",
             "type": "string"
+          },
+          "schema_version": {
+            "default": 1,
+            "enum": [
+              1,
+              2
+            ],
+            "title": "Schema Version",
+            "type": "integer"
           },
           "session_id": {
             "maxLength": 32,
@@ -5086,6 +5529,292 @@
           "caveats"
         ],
         "title": "ScoreResult",
+        "type": "object"
+      },
+      "Session": {
+        "additionalProperties": false,
+        "properties": {
+          "authority_epoch": {
+            "title": "Authority Epoch",
+            "type": "integer"
+          },
+          "calls_used": {
+            "default": 0,
+            "title": "Calls Used",
+            "type": "integer"
+          },
+          "clock_policy": {
+            "title": "Clock Policy",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "input_tokens": {
+            "default": 0,
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "max_calls": {
+            "title": "Max Calls",
+            "type": "integer"
+          },
+          "max_output_tokens": {
+            "title": "Max Output Tokens",
+            "type": "integer"
+          },
+          "max_seconds": {
+            "title": "Max Seconds",
+            "type": "integer"
+          },
+          "max_total_tokens": {
+            "title": "Max Total Tokens",
+            "type": "integer"
+          },
+          "message": {
+            "default": "",
+            "title": "Message",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "advisory",
+              "shadow",
+              "supervised",
+              "bounded"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "observation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/vla_platform__agent_control__contracts__Observation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "output_tokens": {
+            "default": 0,
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "pending_proposal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Proposal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "provider_id": {
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "provider_revision": {
+            "title": "Provider Revision",
+            "type": "string"
+          },
+          "receipts": {
+            "items": {
+              "$ref": "#/components/schemas/Receipt"
+            },
+            "title": "Receipts",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "observing",
+              "ready",
+              "planning",
+              "waiting_for_acceptance",
+              "executing",
+              "paused",
+              "stopping",
+              "interrupted",
+              "complete",
+              "stopped",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "target_kind": {
+            "enum": [
+              "replay",
+              "teaching"
+            ],
+            "title": "Target Kind",
+            "type": "string"
+          },
+          "task": {
+            "title": "Task",
+            "type": "string"
+          },
+          "task_success_verified": {
+            "const": false,
+            "default": false,
+            "title": "Task Success Verified",
+            "type": "boolean"
+          },
+          "teaching_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Teaching Job Id"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "provider_id",
+          "provider_revision",
+          "task",
+          "target_kind",
+          "teaching_job_id",
+          "mode",
+          "clock_policy",
+          "status",
+          "authority_epoch",
+          "created_at",
+          "updated_at",
+          "max_calls",
+          "max_seconds",
+          "max_output_tokens",
+          "max_total_tokens"
+        ],
+        "title": "Session",
+        "type": "object"
+      },
+      "SessionCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "clock_policy": {
+            "default": "replay",
+            "enum": [
+              "replay",
+              "stepped",
+              "continuous"
+            ],
+            "title": "Clock Policy",
+            "type": "string"
+          },
+          "cloud_consent": {
+            "default": false,
+            "title": "Cloud Consent",
+            "type": "boolean"
+          },
+          "max_calls": {
+            "default": 4,
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Max Calls",
+            "type": "integer"
+          },
+          "max_output_tokens": {
+            "default": 1024,
+            "maximum": 4096.0,
+            "minimum": 128.0,
+            "title": "Max Output Tokens",
+            "type": "integer"
+          },
+          "max_seconds": {
+            "default": 120,
+            "maximum": 600.0,
+            "minimum": 1.0,
+            "title": "Max Seconds",
+            "type": "integer"
+          },
+          "max_total_tokens": {
+            "default": 16000,
+            "maximum": 100000.0,
+            "minimum": 1024.0,
+            "title": "Max Total Tokens",
+            "type": "integer"
+          },
+          "mode": {
+            "default": "supervised",
+            "enum": [
+              "advisory",
+              "shadow",
+              "supervised",
+              "bounded"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "provider_id": {
+            "default": "mock",
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "replay_observation_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{1,96}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replay Observation Id"
+          },
+          "target_kind": {
+            "default": "replay",
+            "enum": [
+              "replay",
+              "teaching"
+            ],
+            "title": "Target Kind",
+            "type": "string"
+          },
+          "task": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Task",
+            "type": "string"
+          },
+          "teaching_job_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{1,96}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Teaching Job Id"
+          }
+        },
+        "required": [
+          "task"
+        ],
+        "title": "SessionCreate",
         "type": "object"
       },
       "SessionStatus": {
@@ -6025,15 +6754,684 @@
         ],
         "title": "WorkspaceModule",
         "type": "object"
+      },
+      "vla_platform__agent_control__contracts__Observation": {
+        "additionalProperties": false,
+        "properties": {
+          "authority_epoch": {
+            "title": "Authority Epoch",
+            "type": "integer"
+          },
+          "captured_at": {
+            "title": "Captured At",
+            "type": "string"
+          },
+          "clock_policy": {
+            "title": "Clock Policy",
+            "type": "string"
+          },
+          "embodiment_manifest_id": {
+            "title": "Embodiment Manifest Id",
+            "type": "string"
+          },
+          "environment_kind": {
+            "enum": [
+              "replay",
+              "simulation"
+            ],
+            "title": "Environment Kind",
+            "type": "string"
+          },
+          "episode_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Id"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "image_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Sha256"
+          },
+          "joints": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Joints",
+            "type": "object"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "scene_id": {
+            "title": "Scene Id",
+            "type": "string"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "step": {
+            "title": "Step",
+            "type": "integer"
+          },
+          "target_session_id": {
+            "title": "Target Session Id",
+            "type": "string"
+          },
+          "units": {
+            "const": "radians",
+            "default": "radians",
+            "title": "Units",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sha256",
+          "target_session_id",
+          "episode_id",
+          "authority_epoch",
+          "revision",
+          "step",
+          "captured_at",
+          "expires_at",
+          "clock_policy",
+          "environment_kind",
+          "embodiment_manifest_id",
+          "scene_id",
+          "joints",
+          "source"
+        ],
+        "title": "Observation",
+        "type": "object"
+      },
+      "vla_platform__teaching_intelligence_api__Observation": {
+        "additionalProperties": false,
+        "properties": {
+          "box": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 4,
+            "minItems": 4,
+            "title": "Box",
+            "type": "array"
+          },
+          "label": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "box"
+        ],
+        "title": "Observation",
+        "type": "object"
       }
     }
   },
   "info": {
     "title": "OPEN JENSEN local VLA application",
-    "version": "0.1.2"
+    "version": "0.1.3"
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/agent-sessions/{session_id}": {
+      "get": {
+        "operationId": "session_api_v1_agent_sessions__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Session",
+        "tags": [
+          "Agent Control"
+        ]
+      }
+    },
+    "/api/v1/agent-sessions/{session_id}/approve": {
+      "post": {
+        "operationId": "approve_api_v1_agent_sessions__session_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Approval"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve",
+        "tags": [
+          "Agent Control"
+        ]
+      }
+    },
+    "/api/v1/agent-sessions/{session_id}/cancel-inference": {
+      "post": {
+        "operationId": "cancel_api_v1_agent_sessions__session_id__cancel_inference_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel",
+        "tags": [
+          "Agent Control"
+        ]
+      }
+    },
+    "/api/v1/agent-sessions/{session_id}/events": {
+      "get": {
+        "operationId": "events_api_v1_agent_sessions__session_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "After",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Event"
+                  },
+                  "title": "Response Events Api V1 Agent Sessions  Session Id  Events Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Events",
+        "tags": [
+          "Agent Control"
+        ]
+      }
+    },
+    "/api/v1/agent-sessions/{session_id}/observe": {
+      "post": {
+        "operationId": "observe_api_v1_agent_sessions__session_id__observe_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Observe",
+        "tags": [
+          "Agent Control"
+        ]
+      }
+    },
+    "/api/v1/agent-sessions/{session_id}/pause": {
+      "post": {
+        "operationId": "pause_api_v1_agent_sessions__session_id__pause_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pause",
+        "tags": [
+          "Agent Control"
+        ]
+      }
+    },
+    "/api/v1/agent-sessions/{session_id}/proposals": {
+      "post": {
+        "operationId": "propose_api_v1_agent_sessions__session_id__proposals_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Propose",
+        "tags": [
+          "Agent Control"
+        ]
+      }
+    },
+    "/api/v1/agent-sessions/{session_id}/stop": {
+      "post": {
+        "operationId": "stop_api_v1_agent_sessions__session_id__stop_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stop",
+        "tags": [
+          "Agent Control"
+        ]
+      }
+    },
+    "/api/v1/agent/providers": {
+      "get": {
+        "operationId": "providers_api_v1_agent_providers_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderStatus"
+                  },
+                  "title": "Response Providers Api V1 Agent Providers Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Providers",
+        "tags": [
+          "Agent Control"
+        ]
+      }
+    },
+    "/api/v1/agent/providers/{provider_id}": {
+      "delete": {
+        "operationId": "delete_provider_api_v1_agent_providers__provider_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "title": "Provider Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Provider",
+        "tags": [
+          "Agent Control"
+        ]
+      },
+      "put": {
+        "operationId": "save_provider_api_v1_agent_providers__provider_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "title": "Provider Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Provider",
+        "tags": [
+          "Agent Control"
+        ]
+      }
+    },
+    "/api/v1/agent/providers/{provider_id}/check": {
+      "post": {
+        "operationId": "check_provider_api_v1_agent_providers__provider_id__check_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "title": "Provider Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check Provider",
+        "tags": [
+          "Agent Control"
+        ]
+      }
+    },
     "/api/v1/augmentation-options": {
       "get": {
         "operationId": "augmentation_options_api_v1_augmentation_options_get",
@@ -7941,6 +9339,102 @@
           }
         },
         "summary": "Create Project"
+      }
+    },
+    "/api/v1/projects/{project_id}/agent-sessions": {
+      "get": {
+        "operationId": "sessions_api_v1_projects__project_id__agent_sessions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Session"
+                  },
+                  "title": "Response Sessions Api V1 Projects  Project Id  Agent Sessions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sessions",
+        "tags": [
+          "Agent Control"
+        ]
+      },
+      "post": {
+        "operationId": "create_session_api_v1_projects__project_id__agent_sessions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Session",
+        "tags": [
+          "Agent Control"
+        ]
       }
     },
     "/api/v1/projects/{project_id}/artifacts": {

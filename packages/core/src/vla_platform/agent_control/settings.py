@@ -110,7 +110,7 @@ class Profiles:
             model=item["model"],
             reasoning_effort=item["reasoning_effort"],
             revision=item["revision"],
-            saved=True,
+            saved=identity != "mock",
             checked=item.get("checked", False),
             capabilities=item.get("capabilities", []),
             message="Transport capability check passed; target admission is separate."
