@@ -19,6 +19,7 @@
 | `POST /v1/mapping/wiggle`, `POST /v1/mapping/confirm` | Check a saved mapping joint by joint |
 | `POST /v1/calibration/{start,center,finish,cancel}` | Staged calibration |
 | `POST /v1/control/{start,jog,heartbeat,stop}`, `POST /v1/stop` | Powered control, watchdog and Stop |
+| `POST /v1/agent/{acquire,observe,execute,heartbeat,release}`, `GET /v1/agent/executions/{command_id}` | Governed AI ownership, observation and segment receipts; see [AI control](AI_CONTROL.md) |
 | `POST /v1/recording/{start,finish}`, `POST /v1/recording/episode/{start,save,discard}` | Recording |
 | `GET /v1/datasets`, `GET /v1/datasets/{id}/manifest`, `GET /v1/datasets/{id}/files/{path}` | Finalized datasets for import |
 
@@ -32,9 +33,10 @@ Joint names and canonical IDs are fixed: `shoulder_pan` 1, `shoulder_lift` 2, `e
 {"ok":true,"version":"1","platform":"Darwin","dependencies":{"lerobot":{"installed":true,"version":"0.4.4"},"serial":{"installed":true,"version":"3.5"},"cv2":{"installed":true,"version":"4.12.0"},"scservo_sdk":{"installed":true,"version":"1.0.0"}},"capabilities":{"probe":true,"camera":true,"motor_setup":true,"calibration":true,"control":true,"recording":true},"session":{"mode":"idle","robot_id":null,"port":null,"role":null,"positions":{},"torque_enabled":false,"watchdog_seconds":2.0,"error":null},"calibration":{"phase":"idle","mins":{},"maxes":{},"offsets":{},"path":null},"recording":{"active":false,"dataset_id":null,"episode_active":false,"frames":0,"episodes":0,"fps":10,"error":null},"calibrations":[],"datasets":[],"joints":[{"name":"shoulder_pan","id":1,"label":"Shoulder pan","unit":"degrees"}],"setup_order":["gripper","wrist_roll","wrist_flex","elbow_flex","shoulder_lift","shoulder_pan"]}
 ```
 
-- `session.mode`: idle, setup, verification, calibration, manual, leader or handguide. `calibration.phase`: idle, center, ranges, saved or interrupted.
+- `session.mode`: idle, setup, verification, calibration, manual, leader, handguide or agent. `calibration.phase`: idle, center, ranges, saved or interrupted.
 - Also reported: `backend:"feetech-sdk"`, `dataset_format:"lerobot-v3"`, `controller` (the active control profile, see [Control](#control)), dependency entries for `numpy`, `PIL` and `pyarrow`, and `recording.actual_fps` (number or null).
 - `dependencies.lerobot.installed:false` is expected on the lightweight hardware runtime and does not disable any capability.
+- `session.generation` fences controller handoffs. `agent_control` reports the owner, epoch, units, limits and two-second lease separately from hardware readiness; `capabilities.agent_control` advertises protocol support. See [AI control](AI_CONTROL.md) for explicit arming and physical acceptance boundaries.
 - `capabilities` also include `assembled_setup`, `mapping_verification`, `arm_readiness`, `calibration_persistence`, `lerobot_position_control`, `move_to_middle`, `middle_tolerance`, `partial_control`, `joint_sliders` and `large_joint_steps`. The app hides controls an older companion does not advertise.
 - `calibrations` entries are `{robot_id, role, path}` plus `valid`, `sha256`, `setup_port`, `setup_fresh` and `error`. All six joints are validated and backup files are excluded. These describe the files, not whether the connected hardware matches.
 
@@ -166,3 +168,7 @@ block both operations. Calibration changes invalidate the saved pose. Stop, brow
 visibility/disconnect safety, and shutdown retain their immediate torque-off behavior.
 `session.rest_position` reports saved/phase/progress/targets; `capabilities.rest_position`
 allows older companions to be detected without issuing unsupported commands.
+
+## Governed AI segments
+
+The fixed private agent protocol, units, observation bounds, commanded segment profile and reconciliation semantics are specified in [AI_CONTROL.md](AI_CONTROL.md). `control/heartbeat` accepts optional `expected_generation`; both Stop routes accept the same optional fence for automatic cleanup. Omit it only for an unconditional operator Stop.

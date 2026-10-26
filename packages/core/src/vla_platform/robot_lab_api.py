@@ -104,6 +104,11 @@ PROTOCOL = {
         "calibration/center",
         "calibration/finish",
         "calibration/cancel",
+        "agent/acquire",
+        "agent/observe",
+        "agent/execute",
+        "agent/heartbeat",
+        "agent/release",
         "control/start",
         "control/rest/save",
         "control/rest/return",
@@ -153,6 +158,19 @@ for method, protocol_paths in PROTOCOL.items():
             if protocol_path == "recording/finish"
             else None,
         )
+
+
+@router.get("/robot-lab/agent/executions/{command_id}")
+async def agent_execution(command_id: str, request: Request):
+    import re
+
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,96}", command_id):
+        raise HTTPException(422, "Invalid agent command identity")
+    try:
+        value = await request.app.state.robot_lab.request("GET", "agent/executions/" + command_id)
+        return JSONResponse(value, headers={"Cache-Control": "no-store"})
+    except RobotLabError as error:
+        raise HTTPException(error.status, str(error)) from None
 
 
 @router.post("/projects/{project_id}/robot-lab/datasets/{dataset_id}/import", status_code=201)
