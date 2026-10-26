@@ -46,7 +46,7 @@ const isRecording = (job: Job) => 'recordings' in job.request && job.request.rec
 const active = (job: RecordingJob) => job.status === 'queued' || job.status === 'running';
 const message = (cause: unknown) => (cause instanceof Error ? cause.message : 'Recording preparation is unavailable.');
 
-/** Mount with key=projectId. This owns no live Teaching executor or microphone state. */
+/** Mount with key=projectId. This owns no live AI teleoperation executor or microphone state. */
 export function RecordingPreparationPanel({
   projectId,
   onInspect,
@@ -618,8 +618,8 @@ export function RecordingPreparationPanel({
       {teachingCapture?.project_id === projectId && (
         <aside className="warning-box" aria-label="Published teaching capture">
           <p>
-            Teaching session {teachingCapture.session_id.slice(0, 8)} published {teachingCapture.episodes.length}{' '}
-            episodes.
+            AI teleoperation session {teachingCapture.session_id.slice(0, 8)} published{' '}
+            {teachingCapture.episodes.length} episodes.
           </p>
           <p>Selecting them replaces the current selection.</p>
           <div className="native-result-actions">

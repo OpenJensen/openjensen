@@ -54,9 +54,9 @@ test('prefixed export loads bundles, library media, API and docs without escapin
   const teachingState = page.waitForResponse(
     (response) => new URL(response.url()).pathname === `${prefix}/api/v1/teaching/state`,
   );
-  await page.getByRole('link', { name: 'Teaching', exact: true }).click();
+  await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
   expect((await teachingState).status()).toBe(200);
-  await expect(page.getByRole('heading', { name: 'Teaching', exact: true, level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'AI teleoperation', exact: true, level: 1 })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start recording', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Connect voice', exact: true })).toBeDisabled();
   const decisionState = page.waitForResponse(
@@ -65,7 +65,7 @@ test('prefixed export loads bundles, library media, API and docs without escapin
   await page.getByRole('link', { name: 'Decision Lab', exact: true }).click();
   expect((await decisionState).status()).toBe(200);
   await expect(page.getByRole('region', { name: 'Decision advisory', exact: true })).toBeVisible();
-  await page.getByRole('link', { name: 'Teaching', exact: true }).click();
+  await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
   await page.locator('.page-heading .page-guide').click();
   await expect(page).toHaveURL(new RegExp(`${prefix}/guide/#teaching$`));
   await expect(page.getByRole('heading', { name: 'Workspace guide', exact: true })).toBeVisible();

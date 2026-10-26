@@ -13,10 +13,10 @@ const destinations = [
   ['settings', 'Settings'],
   ['cloud-runs', 'Cloud runs'],
   ['augmentation', 'Augmentation'],
-  ['teaching', 'Teaching'],
+  ['ai-teleoperation', 'AI teleoperation'],
   ['decision-lab', 'Decision Lab'],
   ['models', 'Models'],
-  ['robot-lab', 'Robot Lab'],
+  ['robot-lab', 'Initial setup'],
 ] as const;
 
 async function fixture(page: Page) {
@@ -80,8 +80,8 @@ test('the sidebar lists installed modules and Settings shows how to add the rest
   await page.route('**/api/v1/modules', (route) =>
     route.fulfill({
       json: [
-        { id: 'robot-lab', name: 'Robot Lab', installed: true, setup: 'Install the robot profile.' },
-        { id: 'teaching', name: 'Teaching', installed: false, setup: 'Set JENSEN_TEACHING_URL.' },
+        { id: 'robot-lab', name: 'Initial setup', installed: true, setup: 'Install the robot profile.' },
+        { id: 'teaching', name: 'AI teleoperation', installed: false, setup: 'Set JENSEN_TEACHING_URL.' },
         { id: 'augmentation', name: 'Augmentation', installed: false, setup: 'Connect Google Cloud.' },
         { id: 'decision-lab', name: 'Decision Lab', installed: false, setup: 'Configure the scorer.' },
         { id: 'cloud-runs', name: 'Cloud runs', installed: false, setup: 'Set JENSEN_CLOUD_RUNS_DIR.' },
@@ -90,23 +90,26 @@ test('the sidebar lists installed modules and Settings shows how to add the rest
   );
   await page.goto('/dashboard/');
   const nav = page.getByRole('navigation', { name: 'Policy lifecycle' });
-  await expect(nav.getByRole('group', { name: 'Robot' }).getByRole('link')).toHaveText(['Robot Lab']);
+  await expect(nav.getByRole('group', { name: 'Robot Lab' }).getByRole('link')).toHaveText(['Initial setup']);
   await expect(nav.getByRole('group', { name: 'Data' }).getByRole('link')).toHaveText(['Datasets']);
-  for (const name of ['Teaching', 'Augmentation', 'Decision Lab', 'Cloud runs']) {
+  for (const name of ['AI teleoperation', 'Augmentation', 'Decision Lab', 'Cloud runs']) {
     await expect(nav.getByRole('link', { name, exact: true })).toHaveCount(0);
   }
   await nav.getByRole('link', { name: 'Settings', exact: true }).click();
   await page.getByRole('button', { name: 'Modules', exact: true }).click();
   const modules = page.getByRole('list', { name: 'Workspace modules' }).getByRole('listitem');
   await expect(modules).toHaveCount(5);
-  await expect(modules.filter({ hasText: 'Robot Lab' })).toContainText('Added');
-  const teaching = modules.filter({ hasText: 'Teaching' });
+  await expect(modules.filter({ hasText: 'Initial setup' })).toContainText('Added');
+  const teaching = modules.filter({ hasText: 'AI teleoperation' });
   await expect(teaching).toContainText('Available');
   await teaching.getByText('Setup required', { exact: true }).click();
   await expect(teaching).toContainText('Set JENSEN_TEACHING_URL.');
   // An uninstalled module stays reachable by URL and is listed while open.
   await page.goto('/teaching/');
-  await expect(nav.getByRole('link', { name: 'Teaching', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(nav.getByRole('link', { name: 'AI teleoperation', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
   expect(writes).toEqual([]);
   expect(errors).toEqual([]);
 });

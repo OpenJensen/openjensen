@@ -102,11 +102,12 @@ const executorState = () => ({
   state_rad: [0.1],
   fault: null,
 });
-const managed = (page: Page) => page.getByRole('region', { name: 'Managed teaching sessions', exact: true });
+const managed = (page: Page) => page.getByRole('region', { name: 'Managed simulation sessions', exact: true });
 const recordings = (page: Page) => page.getByRole('region', { name: 'Recording dataset preparation', exact: true });
-const start = (page: Page) => managed(page).getByRole('button', { name: 'Start teaching session', exact: true });
-const check = (page: Page) => managed(page).getByRole('button', { name: 'Check saved teaching request', exact: true });
-const retry = (page: Page) => managed(page).getByRole('button', { name: 'Retry same teaching request', exact: true });
+const start = (page: Page) => managed(page).getByRole('button', { name: 'Start simulation session', exact: true });
+const check = (page: Page) =>
+  managed(page).getByRole('button', { name: 'Check saved simulation request', exact: true });
+const retry = (page: Page) => managed(page).getByRole('button', { name: 'Retry same simulation request', exact: true });
 function deferred() {
   let release!: () => void;
   const promise = new Promise<void>((resolve) => {
@@ -181,9 +182,9 @@ function prepared(body: any) {
   };
 }
 async function enterManaged(page: Page) {
-  await page.getByRole('link', { name: 'Teaching', exact: true }).click();
+  await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
   await page
-    .getByRole('group', { name: 'Teaching mode', exact: true })
+    .getByRole('group', { name: 'AI teleoperation mode', exact: true })
     .getByRole('button', { name: 'Managed session', exact: true })
     .click();
   await expect(managed(page)).toBeVisible();
@@ -319,7 +320,7 @@ async function fixture(page: Page, initial: any[] = []) {
     }
     const replies: Record<string, unknown> = {
       '/api/v1/health': { status: 'ok', version: 'fixture' },
-      '/api/v1/projects': ['alpha', 'beta'].map((id) => ({ id, name: `Teaching ${id}`, created_at: stamp })),
+      '/api/v1/projects': ['alpha', 'beta'].map((id) => ({ id, name: `AI teleoperation ${id}`, created_at: stamp })),
       '/api/v1/capabilities': [],
       '/api/v1/modules': installedModules,
       '/api/v1/datasets': [],
@@ -343,14 +344,14 @@ async function fixture(page: Page, initial: any[] = []) {
   return s;
 }
 async function reviewStart(page: Page) {
-  await managed(page).getByLabel('Teaching profile', { exact: true }).selectOption('local-isaac');
+  await managed(page).getByLabel('AI teleoperation profile', { exact: true }).selectOption('local-isaac');
   await managed(page)
     .getByRole('checkbox', { name: /Start this session/ })
     .check();
   await expect(start(page)).toBeEnabled();
 }
 async function chooseSaved(page: Page, id = 'capture-a') {
-  await managed(page).getByLabel('Saved teaching session', { exact: true }).selectOption(id);
+  await managed(page).getByLabel('Saved simulation session', { exact: true }).selectOption(id);
 }
 
 test('managed start is explicit and scoped controls never call manual voice or intelligence', async ({ page }) => {
@@ -360,7 +361,7 @@ test('managed start is explicit and scoped controls never call manual voice or i
   s.manual.length = 0;
   await reviewStart(page);
   await start(page).click();
-  const controls = managed(page).getByRole('region', { name: 'Teaching controls', exact: true });
+  const controls = managed(page).getByRole('region', { name: 'AI teleoperation controls', exact: true });
   await expect(controls.getByRole('button', { name: '+ 0.05 rad', exact: true })).toBeEnabled();
   await controls.getByRole('button', { name: '+ 0.05 rad', exact: true }).click();
   await expect(controls.getByText('Command: acknowledged', { exact: true })).toBeVisible();
@@ -378,8 +379,8 @@ test('managed start is explicit and scoped controls never call manual voice or i
 test('unavailable configured profiles never pretend runtime readiness', async ({ page }) => {
   const s = await fixture(page);
   s.options.available = false;
-  await managed(page).getByRole('button', { name: 'Refresh teaching sessions', exact: true }).click();
-  await expect(managed(page).getByLabel('Teaching profile', { exact: true })).toBeDisabled();
+  await managed(page).getByRole('button', { name: 'Refresh simulation sessions', exact: true }).click();
+  await expect(managed(page).getByLabel('AI teleoperation profile', { exact: true })).toBeDisabled();
   await expect(start(page)).toBeDisabled();
   expect(s.posts).toEqual([]);
 });
@@ -400,7 +401,7 @@ test('lost start retains exact key through reload; 404 permits only explicit sam
   expect(s.posts).toHaveLength(1);
   s.lostStart = false;
   await retry(page).click();
-  await expect(managed(page).getByLabel('Saved teaching session', { exact: true })).toHaveValue('capture-a');
+  await expect(managed(page).getByLabel('Saved simulation session', { exact: true })).toHaveValue('capture-a');
   expect(s.posts).toEqual([original, original]);
 });
 test('completed reconciliation retains minimal accepted identity when history and status fail after remount', async ({
@@ -418,7 +419,7 @@ test('completed reconciliation retains minimal accepted identity when history an
   s.failHistory = true;
   s.failStatus = true;
   await check(page).click();
-  await expect(managed(page).getByLabel('Saved teaching session', { exact: true })).toHaveValue('capture-a');
+  await expect(managed(page).getByLabel('Saved simulation session', { exact: true })).toHaveValue('capture-a');
   await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await enterManaged(page);
   await expect(managed(page).getByText(/Request accepted as job capture-a/)).toBeVisible();
@@ -427,7 +428,7 @@ test('completed reconciliation retains minimal accepted identity when history an
   await expect(managed(page).getByRole('button', { name: 'Review for dataset preparation', exact: true })).toHaveCount(
     0,
   );
-  await expect(managed(page).getByRole('region', { name: 'Teaching controls', exact: true })).toHaveCount(0);
+  await expect(managed(page).getByRole('region', { name: 'AI teleoperation controls', exact: true })).toHaveCount(0);
   expect(s.posts).toHaveLength(1);
 });
 test('denied durable journal storage prevents the first start request', async ({ page }) => {
@@ -465,12 +466,12 @@ test('late start acknowledgement never moves a different project or stops a sess
   await enterManaged(page);
   await expect(managed(page)).toHaveCount(1);
   await expect(recordings(page)).toHaveCount(1);
-  await expect(managed(page).getByLabel('Saved teaching session', { exact: true })).toHaveValue('');
+  await expect(managed(page).getByLabel('Saved simulation session', { exact: true })).toHaveValue('');
   gate.release();
   await expect.poll(() => s.bindings.size).toBe(1);
   await expect(managed(page)).toHaveCount(1);
   await expect(recordings(page)).toHaveCount(1);
-  await expect(managed(page).getByLabel('Saved teaching session', { exact: true })).toHaveValue('');
+  await expect(managed(page).getByLabel('Saved simulation session', { exact: true })).toHaveValue('');
   expect(s.posts).toHaveLength(1);
   await selectProject(page, 'alpha');
   await enterManaged(page);
@@ -503,7 +504,7 @@ test('interrupted history is visible but never offers controls or published hand
   const s = await fixture(page, [job('capture-a', 'alpha', 'interrupted')]);
   await chooseSaved(page);
   await expect(managed(page).getByText(/Recordings were not published/)).toBeVisible();
-  await expect(managed(page).getByRole('region', { name: 'Teaching controls', exact: true })).toHaveCount(0);
+  await expect(managed(page).getByRole('region', { name: 'AI teleoperation controls', exact: true })).toHaveCount(0);
   expect(s.posts).toEqual([]);
 });
 test('verified publication requires a separate exact recording selection and preparation consent', async ({ page }) => {

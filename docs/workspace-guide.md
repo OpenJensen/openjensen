@@ -1,20 +1,22 @@
 # Workspace guide
 
-Open the project menu and select or create a project. Use the sidebar to open a page; bookmark its address to return directly. Robot Lab, Teaching, Augmentation, Decision Lab and Cloud runs appear once they are set up on the app host; **Settings → Modules** lists what each needs. Open **Guide** at `/guide/` and the API reference at `/docs/`.
+Open the project menu and select or create a project. Use the sidebar to open a page; bookmark its address to return directly. Initial setup, AI teleoperation, Augmentation, Decision Lab and Cloud runs appear once they are set up on the app host; **Settings → Modules** lists what each needs. Open **Guide** at `/guide/` and the API reference at `/docs/`.
 
 ## Dashboard
 
 Select **Check resources**, then open **Models**, **Datasets**, or a compute setup card.
 
-## Robot Lab
+## Initial setup
 
 Connect the computer beside your SO-101, preview its camera, and work through **Connect → Motor IDs → Calibrate → Teleoperate → Record**. USB access stays on that computer; captures stay there until you add them to a project.
 
 Select a joint in the SO-101 view to identify it; the view never moves the real arm. Assign all six motor IDs, then calibrate by capturing the middle pose and moving each joint through its range. Enable movement explicitly and keep **Stop** within reach; a lost control heartbeat stops the session. To record, name the dataset and task, choose the camera and frame rate, then save or discard each episode. Robot Lab is available only in the private workspace. [SO-101 setup](so101-robot-lab.md)
 
-## Teaching
+## AI teleoperation
 
-Start the configured executor, open Teaching, wait for a camera frame, set an instruction, and select **Start recording**. Use pause, joint corrections or failure markers as needed. Select **Finish episode**, then prepare the recording as a dataset. [Executor setup](teaching-connections.md) · [Recording](local-training.md#teach-in-simulation) · [Voice and advice](teaching-intelligence.md)
+Open **Robot Lab → AI teleoperation** and describe the intended task in **Agent Control**. Review the selected target, enabled skills, current observation and run limits before starting. A proposed action is separate from measured execution and verified task completion.
+
+For simulation recording, start the configured executor, wait for a camera frame, set an instruction, and select **Start recording**. Use pause, joint corrections or failure markers as needed. Select **Finish episode**, then prepare the recording as a dataset. [Executor setup](teaching-connections.md) · [Recording](local-training.md#teach-in-simulation) · [Voice and advice](teaching-intelligence.md)
 
 ## Datasets
 

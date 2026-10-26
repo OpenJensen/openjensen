@@ -22,9 +22,10 @@ export default function TeachingSection() {
   } = useWorkspace();
   return (
     <>
-      <section className="panel" aria-label="Teaching connection">
+      <TeachingAgentControl key={`agent:${workflowProjectId}`} projectId={workflowProjectId} />
+      <section className="panel" aria-label="AI teleoperation connection">
         <h2>Connection</h2>
-        <div className="workbench-actions" role="group" aria-label="Teaching mode">
+        <div className="workbench-actions" role="group" aria-label="AI teleoperation mode">
           <button
             type="button"
             className={teachingMode === 'manual' ? 'primary-button' : 'secondary-button'}
@@ -59,7 +60,6 @@ export default function TeachingSection() {
       ) : (
         <TeachingPanel key="manual-teaching" />
       )}
-      <TeachingAgentControl key={`agent:${workflowProjectId}`} projectId={workflowProjectId} />
       <RecordingPreparationPanel
         isActive={() => isSectionCurrent('teaching')}
         key={`recording:${workflowProjectId}`}

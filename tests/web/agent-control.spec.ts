@@ -172,7 +172,7 @@ async function fixture(page: Page) {
 async function startReplay(page: Page) {
   await page.goto('/teaching/');
   await page.getByText('Agent Control', { exact: true }).click();
-  await page.getByLabel('Agent task', { exact: true }).fill('Move shoulder by 0.03 radians');
+  await page.getByLabel('Task goal', { exact: true }).fill('Move shoulder by 0.03 radians');
   await page.getByRole('button', { name: 'Create agent session', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Agent session evidence' })).toBeVisible();
   await page.getByRole('button', { name: 'Plan one correction', exact: true }).click();

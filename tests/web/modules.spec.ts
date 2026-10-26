@@ -10,8 +10,8 @@ async function fixture(page: Page) {
     installs: [] as any[],
   };
   const modules = [
-    { id: 'robot-lab', name: 'Robot Lab' },
-    { id: 'teaching', name: 'Teaching' },
+    { id: 'robot-lab', name: 'Initial setup' },
+    { id: 'teaching', name: 'AI teleoperation' },
     { id: 'augmentation', name: 'Augmentation' },
     { id: 'decision-lab', name: 'Decision Lab' },
     { id: 'cloud-runs', name: 'Cloud runs' },
@@ -90,14 +90,14 @@ async function fixture(page: Page) {
 test('add and hide modules update navigation and survive reload without installation', async ({ page }) => {
   const state = await fixture(page);
   const nav = page.getByRole('navigation', { name: 'Policy lifecycle' });
-  await expect(nav.getByRole('link', { name: 'Teaching', exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Add Teaching', exact: true }).click();
-  await expect(nav.getByRole('link', { name: 'Teaching', exact: true })).toBeVisible();
+  await expect(nav.getByRole('link', { name: 'AI teleoperation', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Add AI teleoperation', exact: true }).click();
+  await expect(nav.getByRole('link', { name: 'AI teleoperation', exact: true })).toBeVisible();
   await page.reload();
   await page.getByRole('button', { name: 'Modules', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Hide Teaching' })).toBeVisible();
-  await page.getByRole('button', { name: 'Hide Teaching' }).click();
-  await expect(nav.getByRole('link', { name: 'Teaching', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Hide AI teleoperation' })).toBeVisible();
+  await page.getByRole('button', { name: 'Hide AI teleoperation' }).click();
+  await expect(nav.getByRole('link', { name: 'AI teleoperation', exact: true })).toHaveCount(0);
   expect(state.installs).toEqual([]);
   expect(state.writes).toEqual(['/api/v1/modules/teaching', '/api/v1/modules/teaching']);
 });

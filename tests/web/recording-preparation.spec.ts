@@ -283,7 +283,7 @@ async function fixture(page: Page) {
   });
   await page.goto('/datasets/');
   await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
-  await page.getByRole('link', { name: 'Teaching', exact: true }).click();
+  await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
   await expect(panel(page)).toBeVisible();
   await expect(panel(page).getByText(options.setup_message)).toBeVisible();
   return state;
@@ -344,7 +344,7 @@ test('exact preparation submits once and minimal acknowledgement survives reload
   await expect(panel(page).getByRole('article')).toHaveAttribute('data-job-id', 'new-preparation');
   expect(s.posts).toEqual([{ path: '/api/v1/projects/alpha/intakes', body: request() }]);
   await page.reload();
-  await page.getByRole('link', { name: 'Teaching', exact: true }).click();
+  await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
   await expect(panel(page).getByRole('article')).toHaveAttribute('data-job-id', 'new-preparation');
   await expect(panel(page).getByRole('button', { name: 'Train on this dataset' })).toHaveCount(0);
   expect(s.posts).toHaveLength(1);
@@ -394,7 +394,7 @@ for (const bad of ['array', 'foreign', 'recipe'])
     await submit(page).click();
     await expect(checkSaved(page)).toBeEnabled();
     await page.reload();
-    await page.getByRole('link', { name: 'Teaching', exact: true }).click();
+    await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
     await expect(checkSaved(page)).toBeEnabled();
     await expect(ack(page)).toHaveCount(0);
     await expect(submit(page)).toBeDisabled();
@@ -414,7 +414,7 @@ test('lost recording response keeps the saved key despite empty history and retr
   expect(s.posts).toHaveLength(1);
   const key = s.keys[0];
   await page.reload();
-  await page.getByRole('link', { name: 'Teaching', exact: true }).click();
+  await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
   await expect(retrySaved(page)).toHaveCount(0);
   await checkSaved(page).click();
   await expect(retrySaved(page)).toBeEnabled();
@@ -438,7 +438,7 @@ for (const failure of ['first pending write', 'journal read'])
     expect(s.lookupReads).toBe(reads);
     await page.evaluate(() => (window as any).__restoreRecordingStorage());
     await page.reload();
-    await page.getByRole('link', { name: 'Teaching', exact: true }).click();
+    await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
     await expect(submit(page)).toBeDisabled();
     await panel(page)
       .getByRole('checkbox', { name: /I reviewed these episodes/ })
@@ -471,7 +471,7 @@ for (const outcome of ['ack', 'error'])
     await expect.poll(() => s.posts.length).toBe(1);
     await page.getByRole('link', { name: 'Datasets', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Checking dataset…', exact: true })).toBeDisabled();
-    await page.getByRole('link', { name: 'Teaching', exact: true }).click();
+    await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
     await expect(submit(page)).toBeDisabled();
     await expect(checkSaved(page)).toBeDisabled();
     await expect(ack(page)).toHaveCount(0);
@@ -569,14 +569,14 @@ test('lost cancellation preserves exact original job across reload and blocks du
   await panel(page).getByRole('button', { name: 'Confirm preparation cancellation' }).click();
   await expect(ack(page)).toBeDisabled();
   await page.reload();
-  await page.getByRole('link', { name: 'Teaching', exact: true }).click();
+  await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
   await expect(panel(page).getByRole('alert').filter({ hasText: 'Cancel job running-job' })).toBeVisible();
   await refresh(page).click();
   await expect(ack(page)).toBeDisabled();
   expect(s.posts).toEqual([{ path: '/api/v1/jobs/running-job/cancel', body: {} }]);
 });
 
-test('Teaching draft is not remounted by recording project changes', async ({ page }) => {
+test('AI teleoperation draft is not remounted by recording project changes', async ({ page }) => {
   const s = await fixture(page);
   await page.route('**/api/v1/teaching/state', (route) =>
     route.fulfill({
@@ -649,7 +649,7 @@ test('lost ACK committed before reload recovers its exact job without a second P
   await submit(page).click();
   await expect(checkSaved(page)).toBeEnabled();
   await page.reload();
-  await page.getByRole('link', { name: 'Teaching', exact: true }).click();
+  await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
   s.failCatalog = true;
   await checkSaved(page).click();
   await expect(panel(page).getByRole('article')).toHaveAttribute('data-job-id', 'new-preparation');
@@ -702,7 +702,7 @@ test('generic Dataset recovers a recording key and Recording recovers a generic 
   await page.getByRole('button', { name: 'Inspect dataset', exact: true }).click();
   await expect.poll(() => s.posts.length).toBe(2);
   await expect(page.getByRole('button', { name: 'Check saved request', exact: true })).toBeEnabled();
-  await page.getByRole('link', { name: 'Teaching', exact: true }).click();
+  await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
   await checkSaved(page).click();
   await expect(panel(page).getByText(/Recovered dataset import generic-intake/)).toBeVisible();
   expect(s.posts).toHaveLength(2);
@@ -748,7 +748,7 @@ for (const kind of ['generic', 'recording'])
     await expect(allow).toBeEnabled();
     await allow.click();
     await expect(page.getByRole('button', { name: 'Inspect dataset', exact: true })).toBeEnabled();
-    await page.getByRole('link', { name: 'Teaching', exact: true }).click();
+    await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
     await expect(panel(page).getByRole('checkbox', { checked: true })).toHaveCount(2);
     await expect(submit(page)).toBeDisabled();
     expect(s.posts).toEqual([]);
@@ -767,7 +767,7 @@ test('Dataset retry of an unresolved recording request fences navigation during 
   s.catalogGate = gate;
   await page.getByRole('button', { name: 'Retry same request', exact: true }).click();
   await expect.poll(() => s.lookupReads).toBe(2);
-  await page.getByRole('link', { name: 'Teaching', exact: true }).click();
+  await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
   gate.release();
   await expect(
     recovery(page).getByText('Selection changed; the saved request was not retried.', { exact: true }),
@@ -818,7 +818,7 @@ test('remount preserves newer cancellation receipt instead of replacing it with 
     .toBe('cancelled');
   await panel(page).getByLabel('Saved recording preparation', { exact: true }).selectOption('other-saved');
   await page.getByRole('link', { name: 'Datasets', exact: true }).click();
-  await page.getByRole('link', { name: 'Teaching', exact: true }).click();
+  await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
   await expect(panel(page).getByText(/Job new-preparation accepted · cancelled/)).toBeVisible();
   await expect(panel(page).getByText(/Job new-preparation accepted · queued/)).toHaveCount(0);
   expect(s.posts).toHaveLength(2);

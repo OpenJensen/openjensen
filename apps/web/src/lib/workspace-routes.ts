@@ -16,12 +16,12 @@ export type StageId =
   | ModuleId;
 export type WorkspaceRoute = { name: string; icon: IconName; path: string; module?: true };
 
-// Route keys match the URL segment. Optional modules use the same id as
-// GET /api/v1/modules and only appear in navigation once installed.
+// Stage keys preserve saved module IDs. Canonical addresses may differ from
+// those IDs; legacy addresses stay mapped to the same workspace state.
 export const workspaceRoutes: Record<StageId, WorkspaceRoute> = {
   dashboard: { name: 'Dashboard', icon: 'home', path: '/dashboard/' },
-  'robot-lab': { name: 'Robot Lab', icon: 'robot', path: '/robot-lab/', module: true },
-  teaching: { name: 'Teaching', icon: 'record', path: '/teaching/', module: true },
+  'robot-lab': { name: 'Initial setup', icon: 'robot', path: '/robot-lab/', module: true },
+  teaching: { name: 'AI teleoperation', icon: 'record', path: '/ai-teleoperation/', module: true },
   datasets: { name: 'Datasets', icon: 'database', path: '/datasets/' },
   augmentation: { name: 'Augmentation', icon: 'spark', path: '/augmentation/', module: true },
   training: { name: 'Fine-tune', icon: 'sliders', path: '/training/' },
@@ -39,7 +39,7 @@ export const isModule = (id: StageId): id is ModuleId => !!workspaceRoutes[id].m
 
 export const navigationGroups: { name?: string; items: StageId[] }[] = [
   { items: ['dashboard'] },
-  { name: 'Robot', items: ['robot-lab', 'teaching'] },
+  { name: 'Robot Lab', items: ['robot-lab', 'teaching'] },
   { name: 'Data', items: ['datasets', 'augmentation'] },
   { name: 'Train', items: ['training', 'distillation', 'quantization'] },
   { name: 'Test', items: ['evaluation', 'simulation', 'decision-lab'] },
@@ -52,6 +52,7 @@ export function workspaceStage(pathname: string): StageId {
       ? pathname.slice(basePath.length)
       : pathname;
   const path = `${local.replace(/\/+$/, '')}/`;
+  if (path === '/teaching/') return 'teaching';
   const match = (Object.keys(workspaceRoutes) as StageId[]).find((id) => workspaceRoutes[id].path === path);
   return match ?? 'dashboard';
 }

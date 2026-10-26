@@ -154,8 +154,9 @@ function AgentControls({ projectId }: { projectId: string }) {
   return (
     <div className="agent-control-body">
       <p>
-        Propose one named joint correction at a time, up to 0.15 radians. Replay uses a saved observation or a labeled
-        synthetic fixture. Simulation requires a managed Teaching session.
+        Describe the intended outcome. Astra can choose only the skills enabled for the selected target and must ask for
+        help when observations or calibration are missing. Replay uses a saved observation or a labeled synthetic
+        fixture.
       </p>
       <form
         className="workbench-form"
@@ -164,6 +165,18 @@ function AgentControls({ projectId }: { projectId: string }) {
           create();
         }}
       >
+        <label className="workbench-field">
+          Task goal
+          <textarea
+            value={task}
+            maxLength={2048}
+            rows={3}
+            required
+            disabled={busy}
+            placeholder="Pick up the object and place it in the tray"
+            onChange={(event) => setTask(event.target.value)}
+          />
+        </label>
         <div className="workbench-field-grid">
           <label className="workbench-field">
             Agent provider profile
@@ -194,7 +207,7 @@ function AgentControls({ projectId }: { projectId: string }) {
               }}
             >
               <option value="replay">Replay observation</option>
-              <option value="teaching">Teaching simulation</option>
+              <option value="teaching">AI teleoperation simulation</option>
             </select>
           </label>
           <label className="workbench-field">
@@ -229,7 +242,7 @@ function AgentControls({ projectId }: { projectId: string }) {
         </div>
         {target === 'teaching' && (
           <label className="workbench-field">
-            Managed Teaching job ID
+            Managed AI teleoperation job ID
             <input
               value={teachingJob}
               maxLength={96}
@@ -240,18 +253,6 @@ function AgentControls({ projectId }: { projectId: string }) {
             />
           </label>
         )}
-        <label className="workbench-field">
-          Agent task
-          <textarea
-            value={task}
-            maxLength={2048}
-            rows={2}
-            required
-            disabled={busy}
-            placeholder="Move shoulder_pan by 0.03 radians"
-            onChange={(event) => setTask(event.target.value)}
-          />
-        </label>
         <p>
           {mode === 'bounded'
             ? 'Each planning turn may execute one valid correction within this session’s limits.'

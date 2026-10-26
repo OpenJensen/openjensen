@@ -382,7 +382,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin') 
     return route.fulfill({ json: [] });
   });
   await page.goto('/robot-lab/');
-  await expect(page.getByRole('heading', { level: 1, name: 'Robot Lab', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Initial setup', exact: true })).toBeVisible();
   await expect(page.getByLabel('Robot USB port')).toHaveValue(hostPlatform === 'Linux' ? '/dev/ttyACM0' : port);
   return state;
 }
