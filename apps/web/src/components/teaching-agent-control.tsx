@@ -491,6 +491,28 @@ function AgentControls({ projectId }: { projectId: string }) {
               <p>
                 Receipt <code>{latestReceipt.id}</code> · task success remains unverified.
               </p>
+              <dl className="dataset-facts">
+                <div>
+                  <dt>Source observation</dt>
+                  <dd>{latestReceipt.pre_observation_id}</dd>
+                </div>
+                <div>
+                  <dt>Next observation</dt>
+                  <dd>{latestReceipt.post_observation_id ?? 'Unavailable'}</dd>
+                </div>
+              </dl>
+              {latestReceipt.executor_evidence && (
+                <details>
+                  <summary>Executor measurements and limits</summary>
+                  <div className="agent-control-body">
+                    <p>
+                      Requested targets, applied targets and measured next state are separate fields. Joint values are
+                      in radians; wall and simulation durations are in seconds.
+                    </p>
+                    <pre className="agent-control-json">{JSON.stringify(latestReceipt.executor_evidence, null, 2)}</pre>
+                  </div>
+                </details>
+              )}
             </section>
           )}
           <div className="workbench-actions">
