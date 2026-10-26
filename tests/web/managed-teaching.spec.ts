@@ -4,6 +4,10 @@ import { expect, test, type Page } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { installedModules } from './module-fixtures';
 
+async function selectSimulation(page: Page) {
+  await page.getByRole('combobox', { name: 'Agent target', exact: true }).selectOption('teaching');
+}
+
 // Browser fixtures prove request and identity boundaries, not an Isaac runtime.
 const stamp = '2026-09-28T00:00:00Z',
   hex = (c: string, size = 64) => c.repeat(size);
@@ -183,6 +187,7 @@ function prepared(body: any) {
 }
 async function enterManaged(page: Page) {
   await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
+  await selectSimulation(page);
   await page
     .getByRole('group', { name: 'AI teleoperation mode', exact: true })
     .getByRole('button', { name: 'Managed session', exact: true })
@@ -212,6 +217,12 @@ async function fixture(page: Page, initial: any[] = []) {
     const request = route.request(),
       path = new URL(request.url()).pathname,
       project = path.split('/')[4];
+    if (request.method() === 'GET' && (path === '/api/v1/agent/providers' || path.endsWith('/agent-sessions')))
+      return route.fulfill({ json: [] });
+    if (request.method() === 'GET' && path === '/api/v1/robot-lab/status')
+      return route.fulfill({
+        json: { ok: false, connected: false, message: 'No physical control in this simulator fixture.' },
+      });
     if (path.startsWith('/api/v1/teaching/')) {
       s.manual.push(path);
       if (path.endsWith('/state'))
