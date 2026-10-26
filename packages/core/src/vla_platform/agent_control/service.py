@@ -762,7 +762,12 @@ class AgentControl(TaskControl):
                 "max_output_tokens": snapshot.max_output_tokens,
                 "max_total_tokens": snapshot.max_total_tokens
                 - snapshot.input_tokens
-                - snapshot.output_tokens,
+                - snapshot.output_tokens
+                - sum(
+                    count
+                    for key, count in private.get("token_reservations", {}).items()
+                    if key != request_id
+                ),
                 "timeout_seconds": min(90 if snapshot.planning_mode == "task" else 30, remaining),
                 "planning_mode": snapshot.planning_mode,
                 "completed_steps": snapshot.step_count,
@@ -830,7 +835,10 @@ class AgentControl(TaskControl):
                 if (
                     datetime.now(UTC)
                     >= datetime.fromisoformat(s.created_at) + timedelta(seconds=s.max_seconds)
-                    or s.input_tokens + s.output_tokens > s.max_total_tokens
+                    or s.input_tokens
+                    + s.output_tokens
+                    + sum(p.get("token_reservations", {}).values())
+                    > s.max_total_tokens
                 ):
                     s.status = "paused" if s.target_kind == "robot_lab" else "error"
                     s.run_enabled = False
