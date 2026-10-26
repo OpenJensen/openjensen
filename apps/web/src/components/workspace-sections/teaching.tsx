@@ -1,5 +1,6 @@
 'use client';
 
+import { TeachingAgentControl } from '@/components/teaching-agent-control';
 import { TeachingPanel } from '@/components/teaching-panel';
 import { ManagedTeachingPanel } from '@/components/managed-teaching-panel';
 import { RecordingPreparationPanel } from '@/components/recording-preparation-panel';
@@ -58,6 +59,7 @@ export default function TeachingSection() {
       ) : (
         <TeachingPanel key="manual-teaching" />
       )}
+      <TeachingAgentControl key={`agent:${workflowProjectId}`} projectId={workflowProjectId} />
       <RecordingPreparationPanel
         isActive={() => isSectionCurrent('teaching')}
         key={`recording:${workflowProjectId}`}

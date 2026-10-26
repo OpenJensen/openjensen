@@ -1,0 +1,74 @@
+.agent-control-panel,
+.agent-provider-settings {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+.agent-control-panel > summary {
+  cursor: pointer;
+  font-size: var(--text-subsection);
+  font-weight: 600;
+}
+.agent-control-body {
+  display: grid;
+  gap: 24px;
+  padding-top: 24px;
+  min-width: 0;
+}
+.agent-control-body p,
+.agent-provider-settings p {
+  margin: 0;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.agent-control-body :is(h3, h4),
+.agent-provider-settings h3 {
+  margin: 0;
+}
+.agent-control-evidence {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.agent-control-evidence :is(code, dd) {
+  overflow-wrap: anywhere;
+}
+.agent-control-events {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding-left: 22px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.agent-control-events li {
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+.agent-control-json {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.agent-provider-card {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+@media (max-width: 700px) {
+  .agent-control-evidence {
+    padding: 16px;
+  }
+  .agent-control-body .workbench-actions > button,
+  .agent-provider-settings .workbench-actions > button {
+    max-width: 100%;
+    white-space: normal;
+  }
+}

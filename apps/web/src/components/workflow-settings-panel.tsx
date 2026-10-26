@@ -2,6 +2,7 @@
 
 import { CloudConnectionsPanel } from '@/components/cloud-connections';
 import { ModulesPanel } from '@/components/modules-panel';
+import { ProviderSettings } from './provider-settings';
 import { WorkflowDiagnostics } from './workflow-diagnostics';
 import { WorkflowSettingsForm } from './workflow-settings-form';
 import type { SettingsTab } from './workflow-shared';
@@ -30,6 +31,9 @@ export function WorkflowSettingsPanel({
         <button className={`section-tab ${tab === 'modules' ? 'active' : ''}`} onClick={() => setTab('modules')}>
           Modules
         </button>
+        <button className={`section-tab ${tab === 'providers' ? 'active' : ''}`} onClick={() => setTab('providers')}>
+          AI providers
+        </button>
         <button className={`section-tab ${tab === 'settings' ? 'active' : ''}`} onClick={() => setTab('settings')}>
           Workflow settings
         </button>
@@ -49,6 +53,8 @@ export function WorkflowSettingsPanel({
         <CloudConnectionsPanel />
       ) : tab === 'modules' ? (
         <ModulesPanel />
+      ) : tab === 'providers' ? (
+        <ProviderSettings />
       ) : tab === 'settings' ? (
         <WorkflowSettingsForm
           preferences={preferences}
