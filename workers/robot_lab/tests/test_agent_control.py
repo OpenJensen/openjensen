@@ -296,6 +296,45 @@ class AgentTests(unittest.TestCase):
         self.assertFalse(thread.is_alive())
         self.assertTrue(errors)
 
+    def test_stop_during_completion_write_cannot_publish_late_completed_receipt(self):
+        self.arm()
+        observed = self.observe()
+        receipt = self.command(
+            "execute",
+            self.segment(
+                observed, targets={"shoulder_pan": observed["joints"]["shoulder_pan"] + 0.1}
+            ),
+        )
+        self.lab.agent.segment.progress_time = self.lab.agent.segment.duration
+        entered, release = threading.Event(), threading.Event()
+        original = self.lab.controller.command_raw
+
+        def blocked(targets):
+            sent = original(targets)
+            entered.set()
+            release.wait(2)
+            return sent
+
+        self.lab.controller.command_raw = blocked
+        tick = threading.Thread(target=self.lab._tick)
+        tick.start()
+        self.assertTrue(entered.wait(1))
+        generation = self.lab.generation
+        stop = threading.Thread(target=self.lab.stop)
+        stop.start()
+        deadline = time.monotonic() + 1
+        while generation == self.lab.generation and time.monotonic() < deadline:
+            time.sleep(0.001)
+        self.assertGreater(self.lab.generation, generation)
+        release.set()
+        tick.join(2)
+        stop.join(2)
+        self.assertFalse(tick.is_alive() or stop.is_alive())
+        final = self.lab.agent.receipt(receipt["command_id"])
+        self.assertEqual(final["status"], "stopped")
+        self.assertFalse(final["measured_completion_verified"])
+        self.assertFalse(self.lab.torque)
+
     def test_restart_keeps_identity_unknown_and_fences_old_acquire_generation(self):
         self.arm()
         observed = self.observe()
@@ -344,6 +383,18 @@ class AgentTests(unittest.TestCase):
         self.lab.stop()
         self.assertFalse(self.lab.torque)
 
+    def test_manual_cleanup_fence_rejects_same_generation_agent_takeover(self):
+        self.arm()
+        generation = self.lab.generation
+        with self.assertRaisesRegex(ValueError, "mode changed"):
+            self.lab.stop(expected_generation=generation, expected_mode="manual")
+        self.assertTrue(self.lab.torque)
+        self.assertEqual(self.lab.mode, "agent")
+        self.lab.stop()
+        self.start()
+        self.lab.stop(expected_generation=self.lab.generation, expected_mode="manual")
+        self.assertFalse(self.lab.torque)
+
     def test_local_watchdog_torque_off_does_not_depend_on_model_or_browser(self):
         self.arm()
         self.lab.agent.lease_deadline = self.lab.agent.clock() - 0.1
@@ -370,6 +421,8 @@ class AgentTests(unittest.TestCase):
             for path, payload in (
                 ("/v1/control/heartbeat", {}),
                 ("/v1/stop", {"expected_generation": None}),
+                ("/v1/stop", {"expected_mode": None}),
+                ("/v1/stop", {"expected_mode": "agent"}),
             ):
                 connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=2)
                 connection.request(

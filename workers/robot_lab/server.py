@@ -1298,21 +1298,27 @@ class RobotLab:
                 self.last_jog = time.monotonic()
         return self.status()
 
-    def stop(self, reason=None, *, expected_generation=None):
+    def stop(self, reason=None, *, expected_generation=None, expected_mode=None):
         with self.stop_lock:
             self.stopping = True
             try:
-                return self._stop(reason, expected_generation=expected_generation)
+                return self._stop(
+                    reason, expected_generation=expected_generation, expected_mode=expected_mode
+                )
             finally:
                 self.stopping = False
 
-    def _stop(self, reason=None, *, expected_generation=None):
+    def _stop(self, reason=None, *, expected_generation=None, expected_mode=None):
         # Invalidate in-flight capture before waiting on any camera/serialization.
         with self.lifecycle_lock:
             if expected_generation is not None and (
                 type(expected_generation) is not int or expected_generation != self.generation
             ):
                 raise RequestError("Controller generation changed; stale cleanup was rejected")
+            if expected_mode is not None and (
+                expected_mode != "manual" or self.mode != expected_mode
+            ):
+                raise RequestError("Controller mode changed; stale manual cleanup was rejected")
             self.generation += 1
             self.agent.revoke(reason or "Stopped by operator")
             verification = self.verification_session
@@ -1792,12 +1798,18 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/v1/calibration/cancel":
                 result = lab.calibration_cancel()
             elif path in ("/v1/control/stop", "/v1/stop"):
-                if set(payload) - {"expected_generation"} or (
-                    "expected_generation" in payload
+                if (
+                    set(payload) - {"expected_generation", "expected_mode"}
+                    or "expected_generation" in payload
                     and type(payload["expected_generation"]) is not int
+                    or "expected_mode" in payload
+                    and payload["expected_mode"] != "manual"
                 ):
                     raise RequestError("Invalid Stop request")
-                result = lab.stop(expected_generation=payload.get("expected_generation"))
+                result = lab.stop(
+                    expected_generation=payload.get("expected_generation"),
+                    expected_mode=payload.get("expected_mode"),
+                )
             elif path == "/v1/control/start":
                 result = lab.control_start(payload)
             elif path == "/v1/control/rest/save":

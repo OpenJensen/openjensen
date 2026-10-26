@@ -171,4 +171,4 @@ allows older companions to be detected without issuing unsupported commands.
 
 ## Governed AI segments
 
-The fixed private agent protocol, units, observation bounds, commanded segment profile and reconciliation semantics are specified in [AI_CONTROL.md](AI_CONTROL.md). `control/heartbeat` accepts optional `expected_generation`; both Stop routes accept the same optional fence for automatic cleanup. Omit it only for an unconditional operator Stop.
+The fixed private agent protocol, units, observation bounds, commanded segment profile and reconciliation semantics are specified in [AI_CONTROL.md](AI_CONTROL.md). `control/heartbeat` accepts optional `expected_generation`; both Stop routes accept that optional fence plus `expected_mode:"manual"` for automatic manual cleanup. Supply both to fence a same-generation transfer to AI ownership. An empty Stop request remains the unconditional operator Stop.

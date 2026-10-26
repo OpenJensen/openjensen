@@ -616,31 +616,46 @@ class AgentExecutor:
             }
 
     def tick(self, raw):
-        self.validate_owner(self.owner, self.epoch)
-        measured = {j: normalized(j, raw[j], self.lab.calibration) for j in JOINTS}
-        if self.segment is None:
-            self.lab.controller.repeat()
+        owner, epoch = self.owner, self.epoch
+        generation, segment, active_id = self.generation, self.segment, self.active_id
+        controller = self.lab.controller
+        self.validate_owner(owner, epoch)
+        measured = self.measured(raw)
+        if segment is None:
+            controller.repeat()
             return
-        targets, arrived = self.segment.step(measured, self.clock())
-        sent = self.lab.controller.command_raw(
+        targets, arrived = segment.step(measured, self.clock())
+        # Stop may revoke this tick while a USB write is in progress. It must
+        # acquire only the short lifecycle publication lock, never this I/O.
+        self.validate_owner(owner, epoch)
+        sent = controller.command_raw(
             {j: denormalized(j, targets[j], self.lab.calibration) for j in JOINTS}
         )
-        self.lab.commanded_raw = dict(sent)
-        self.lab.action = {j: normalized(j, sent[j], self.lab.calibration) for j in JOINTS}
-        self.last_applied = dict(self.lab.action)
-        record = self.receipt(self.active_id)
-        record.update(applied_targets=dict(self.last_applied), final_measured_state=measured)
-        if arrived:
-            record.update(
-                status="completed",
-                measured_completion_verified=True,
-                completed_monotonic_ns=time.monotonic_ns(),
-                elapsed_seconds=self.clock() - self.segment.started,
-                reason="Measured segment target reached; task success remains unverified",
-            )
-            self.segment = None
-            self.active_id = None
+        with self.lab.lifecycle_lock:
+            if (
+                generation != self.lab.generation
+                or self.owner != owner
+                or self.epoch != epoch
+                or self.active_id != active_id
+                or self.segment is not segment
+            ):
+                return None
+            self.lab.commanded_raw = dict(sent)
+            self.lab.action = {j: normalized(j, sent[j], self.lab.calibration) for j in JOINTS}
+            self.last_applied = dict(self.lab.action)
+            record = self.receipt(active_id)
+            record.update(applied_targets=dict(self.last_applied), final_measured_state=measured)
+            if arrived:
+                record.update(
+                    status="completed",
+                    measured_completion_verified=True,
+                    completed_monotonic_ns=time.monotonic_ns(),
+                    elapsed_seconds=self.clock() - segment.started,
+                    reason="Measured segment target reached; task success remains unverified",
+                )
+                self.segment = None
+                self.active_id = None
+                self.cache[record["command_id"]] = record
+                return record
             self.cache[record["command_id"]] = record
-            return record
-        self.cache[record["command_id"]] = record
-        return None
+            return None
