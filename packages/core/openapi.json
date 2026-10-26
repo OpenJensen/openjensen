@@ -156,10 +156,39 @@
             "title": "Authority Epoch",
             "type": "integer"
           },
+          "execution_observation_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{1,96}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Observation Id"
+          },
+          "execution_observation_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Observation Sha256"
+          },
           "proposal_id": {
             "pattern": "^[A-Za-z0-9_-]{1,96}$",
             "title": "Proposal Id",
             "type": "string"
+          },
+          "scene_unchanged_confirmed": {
+            "default": false,
+            "title": "Scene Unchanged Confirmed",
+            "type": "boolean"
           }
         },
         "required": [
@@ -190,6 +219,32 @@
           "delta_rad"
         ],
         "title": "Arguments",
+        "type": "object"
+      },
+      "Assessment": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "enum": [
+              "achieved",
+              "needs_help",
+              "cannot_proceed"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome",
+          "summary"
+        ],
+        "title": "Assessment",
         "type": "object"
       },
       "AugmentationClip": {
@@ -2583,6 +2638,27 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "Heartbeat": {
+        "additionalProperties": false,
+        "properties": {
+          "authority_epoch": {
+            "minimum": 1.0,
+            "title": "Authority Epoch",
+            "type": "integer"
+          },
+          "operator_present": {
+            "const": true,
+            "title": "Operator Present",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "authority_epoch",
+          "operator_present"
+        ],
+        "title": "Heartbeat",
+        "type": "object"
+      },
       "HuggingFaceStatus": {
         "properties": {
           "checked_at": {
@@ -3934,6 +4010,46 @@
         "title": "PerceptionProposal",
         "type": "object"
       },
+      "PhysicalArming": {
+        "additionalProperties": false,
+        "properties": {
+          "camera_index": {
+            "maximum": 31.0,
+            "minimum": 0.0,
+            "title": "Camera Index",
+            "type": "integer"
+          },
+          "confirm": {
+            "const": "ARM AI CONTROL",
+            "title": "Confirm",
+            "type": "string"
+          },
+          "expected_generation": {
+            "minimum": 0.0,
+            "title": "Expected Generation",
+            "type": "integer"
+          },
+          "operator_present": {
+            "const": true,
+            "title": "Operator Present",
+            "type": "boolean"
+          },
+          "workspace_clear": {
+            "const": true,
+            "title": "Workspace Clear",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "confirm",
+          "expected_generation",
+          "camera_index",
+          "operator_present",
+          "workspace_clear"
+        ],
+        "title": "PhysicalArming",
+        "type": "object"
+      },
       "PlanRequest": {
         "additionalProperties": false,
         "properties": {
@@ -4322,7 +4438,15 @@
             "type": "string"
           },
           "arguments": {
-            "$ref": "#/components/schemas/Arguments"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Arguments"
+              },
+              {
+                "$ref": "#/components/schemas/SegmentArguments"
+              }
+            ],
+            "title": "Arguments"
           },
           "authority_epoch": {
             "title": "Authority Epoch",
@@ -4360,13 +4484,21 @@
             "title": "Provider Revision",
             "type": "string"
           },
+          "purpose": {
+            "default": "",
+            "title": "Purpose",
+            "type": "string"
+          },
           "request_id": {
             "title": "Request Id",
             "type": "string"
           },
           "skill": {
-            "const": "joint_correction",
             "default": "joint_correction",
+            "enum": [
+              "joint_correction",
+              "joint_segment"
+            ],
             "title": "Skill",
             "type": "string"
           },
@@ -4808,6 +4940,17 @@
       "Receipt": {
         "additionalProperties": false,
         "properties": {
+          "admission_observation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admission Observation Id"
+          },
           "applied_targets": {
             "additionalProperties": {
               "type": "number"
@@ -4816,11 +4959,31 @@
             "type": "object"
           },
           "arguments": {
-            "$ref": "#/components/schemas/Arguments"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Arguments"
+              },
+              {
+                "$ref": "#/components/schemas/SegmentArguments"
+              }
+            ],
+            "title": "Arguments"
           },
           "elapsed_seconds": {
             "title": "Elapsed Seconds",
             "type": "number"
+          },
+          "execution_provenance": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Provenance"
           },
           "executor_evidence": {
             "anyOf": [
@@ -4835,6 +4998,24 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "joint_units": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Joint Units",
+            "type": "object"
+          },
+          "original_model_observation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Model Observation Id"
           },
           "post_observation_id": {
             "anyOf": [
@@ -5531,6 +5712,32 @@
         "title": "ScoreResult",
         "type": "object"
       },
+      "SegmentArguments": {
+        "additionalProperties": false,
+        "properties": {
+          "duration_seconds": {
+            "maximum": 10.0,
+            "minimum": 0.2,
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "targets": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "maxProperties": 6,
+            "minProperties": 1,
+            "title": "Targets",
+            "type": "object"
+          }
+        },
+        "required": [
+          "targets",
+          "duration_seconds"
+        ],
+        "title": "SegmentArguments",
+        "type": "object"
+      },
       "Session": {
         "additionalProperties": false,
         "properties": {
@@ -5547,9 +5754,24 @@
             "title": "Clock Policy",
             "type": "string"
           },
+          "control_armed": {
+            "default": false,
+            "title": "Control Armed",
+            "type": "boolean"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"
+          },
+          "execution_observation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/vla_platform__agent_control__contracts__Observation"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "id": {
             "title": "Id",
@@ -5572,6 +5794,11 @@
             "title": "Max Seconds",
             "type": "integer"
           },
+          "max_steps": {
+            "default": 12,
+            "title": "Max Steps",
+            "type": "integer"
+          },
           "max_total_tokens": {
             "title": "Max Total Tokens",
             "type": "integer"
@@ -5590,6 +5817,16 @@
             ],
             "title": "Mode",
             "type": "string"
+          },
+          "model_assessment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Assessment"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "observation": {
             "anyOf": [
@@ -5616,6 +5853,15 @@
               }
             ]
           },
+          "planning_mode": {
+            "default": "task",
+            "enum": [
+              "joint",
+              "task"
+            ],
+            "title": "Planning Mode",
+            "type": "string"
+          },
           "project_id": {
             "title": "Project Id",
             "type": "string"
@@ -5635,6 +5881,16 @@
             "title": "Receipts",
             "type": "array"
           },
+          "reserved_tokens": {
+            "default": 0,
+            "title": "Reserved Tokens",
+            "type": "integer"
+          },
+          "run_enabled": {
+            "default": false,
+            "title": "Run Enabled",
+            "type": "boolean"
+          },
           "status": {
             "enum": [
               "observing",
@@ -5652,10 +5908,23 @@
             "title": "Status",
             "type": "string"
           },
+          "step_count": {
+            "default": 0,
+            "title": "Step Count",
+            "type": "integer"
+          },
+          "supported_skills": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Supported Skills",
+            "type": "array"
+          },
           "target_kind": {
             "enum": [
               "replay",
-              "teaching"
+              "teaching",
+              "robot_lab"
             ],
             "title": "Target Kind",
             "type": "string"
@@ -5664,8 +5933,17 @@
             "title": "Task",
             "type": "string"
           },
+          "task_review": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskReviewRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "task_success_verified": {
-            "const": false,
             "default": false,
             "title": "Task Success Verified",
             "type": "boolean"
@@ -5716,7 +5994,8 @@
             "enum": [
               "replay",
               "stepped",
-              "continuous"
+              "continuous",
+              "physical"
             ],
             "title": "Clock Policy",
             "type": "string"
@@ -5728,7 +6007,7 @@
           },
           "max_calls": {
             "default": 4,
-            "maximum": 20.0,
+            "maximum": 100.0,
             "minimum": 1.0,
             "title": "Max Calls",
             "type": "integer"
@@ -5747,9 +6026,16 @@
             "title": "Max Seconds",
             "type": "integer"
           },
+          "max_steps": {
+            "default": 12,
+            "maximum": 60.0,
+            "minimum": 1.0,
+            "title": "Max Steps",
+            "type": "integer"
+          },
           "max_total_tokens": {
             "default": 16000,
-            "maximum": 100000.0,
+            "maximum": 1000000.0,
             "minimum": 1024.0,
             "title": "Max Total Tokens",
             "type": "integer"
@@ -5763,6 +6049,25 @@
               "bounded"
             ],
             "title": "Mode",
+            "type": "string"
+          },
+          "physical": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PhysicalArming"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "planning_mode": {
+            "default": "task",
+            "enum": [
+              "joint",
+              "task"
+            ],
+            "title": "Planning Mode",
             "type": "string"
           },
           "provider_id": {
@@ -5787,7 +6092,8 @@
             "default": "replay",
             "enum": [
               "replay",
-              "teaching"
+              "teaching",
+              "robot_lab"
             ],
             "title": "Target Kind",
             "type": "string"
@@ -5936,6 +6242,91 @@
           "source_manifest_sha256"
         ],
         "title": "SimulationTarget",
+        "type": "object"
+      },
+      "TaskReview": {
+        "additionalProperties": false,
+        "properties": {
+          "authority_epoch": {
+            "minimum": 1.0,
+            "title": "Authority Epoch",
+            "type": "integer"
+          },
+          "note": {
+            "default": "",
+            "maxLength": 1024,
+            "title": "Note",
+            "type": "string"
+          },
+          "observation_id": {
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Observation Id",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "success",
+              "failure",
+              "unknown"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "authority_epoch",
+          "observation_id",
+          "outcome"
+        ],
+        "title": "TaskReview",
+        "type": "object"
+      },
+      "TaskReviewRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "authority_epoch": {
+            "minimum": 1.0,
+            "title": "Authority Epoch",
+            "type": "integer"
+          },
+          "note": {
+            "default": "",
+            "maxLength": 1024,
+            "title": "Note",
+            "type": "string"
+          },
+          "observation_id": {
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Observation Id",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "success",
+              "failure",
+              "unknown"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "reviewed_at": {
+            "title": "Reviewed At",
+            "type": "string"
+          },
+          "source": {
+            "const": "operator",
+            "default": "operator",
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "authority_epoch",
+          "observation_id",
+          "outcome",
+          "reviewed_at"
+        ],
+        "title": "TaskReviewRecord",
         "type": "object"
       },
       "TeachingCaptureRequest": {
@@ -6762,6 +7153,17 @@
             "title": "Authority Epoch",
             "type": "integer"
           },
+          "calibration_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calibration Sha256"
+          },
           "captured_at": {
             "title": "Captured At",
             "type": "string"
@@ -6777,7 +7179,8 @@
           "environment_kind": {
             "enum": [
               "replay",
-              "simulation"
+              "simulation",
+              "physical"
             ],
             "title": "Environment Kind",
             "type": "string"
@@ -6812,6 +7215,13 @@
             ],
             "title": "Image Sha256"
           },
+          "joint_units": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Joint Units",
+            "type": "object"
+          },
           "joints": {
             "additionalProperties": {
               "type": "number"
@@ -6843,9 +7253,24 @@
             "title": "Target Session Id",
             "type": "string"
           },
+          "task_evidence": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Evidence"
+          },
           "units": {
-            "const": "radians",
             "default": "radians",
+            "enum": [
+              "radians",
+              "mixed"
+            ],
             "title": "Units",
             "type": "string"
           }
@@ -7097,6 +7522,149 @@
         ]
       }
     },
+    "/api/v1/agent-sessions/{session_id}/execution-observation": {
+      "post": {
+        "operationId": "execution_observation_api_v1_agent_sessions__session_id__execution_observation_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Execution Observation",
+        "tags": [
+          "Agent Control"
+        ]
+      }
+    },
+    "/api/v1/agent-sessions/{session_id}/heartbeat": {
+      "post": {
+        "operationId": "heartbeat_api_v1_agent_sessions__session_id__heartbeat_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Heartbeat"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Heartbeat",
+        "tags": [
+          "Agent Control"
+        ]
+      }
+    },
+    "/api/v1/agent-sessions/{session_id}/observations/{observation_id}/image": {
+      "get": {
+        "operationId": "observation_image_api_v1_agent_sessions__session_id__observations__observation_id__image_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "observation_id",
+            "required": true,
+            "schema": {
+              "title": "Observation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Observation Image",
+        "tags": [
+          "Agent Control"
+        ]
+      }
+    },
     "/api/v1/agent-sessions/{session_id}/observe": {
       "post": {
         "operationId": "observe_api_v1_agent_sessions__session_id__observe_post",
@@ -7228,6 +7796,100 @@
           }
         },
         "summary": "Propose",
+        "tags": [
+          "Agent Control"
+        ]
+      }
+    },
+    "/api/v1/agent-sessions/{session_id}/review": {
+      "post": {
+        "operationId": "review_task_api_v1_agent_sessions__session_id__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskReview"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Task",
+        "tags": [
+          "Agent Control"
+        ]
+      }
+    },
+    "/api/v1/agent-sessions/{session_id}/run": {
+      "post": {
+        "operationId": "run_task_api_v1_agent_sessions__session_id__run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Task",
         "tags": [
           "Agent Control"
         ]
@@ -10721,6 +11383,141 @@
           }
         },
         "summary": "Training Plan"
+      }
+    },
+    "/api/v1/robot-lab/agent/acquire": {
+      "post": {
+        "operationId": "robot_lab_post_agent_acquire",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Agent Acquire",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/agent/execute": {
+      "post": {
+        "operationId": "robot_lab_post_agent_execute",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Agent Execute",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/agent/executions/{command_id}": {
+      "get": {
+        "operationId": "agent_execution_api_v1_robot_lab_agent_executions__command_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "command_id",
+            "required": true,
+            "schema": {
+              "title": "Command Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Agent Execution",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/agent/heartbeat": {
+      "post": {
+        "operationId": "robot_lab_post_agent_heartbeat",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Agent Heartbeat",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/agent/observe": {
+      "post": {
+        "operationId": "robot_lab_post_agent_observe",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Agent Observe",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/agent/release": {
+      "post": {
+        "operationId": "robot_lab_post_agent_release",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Post Agent Release",
+        "tags": [
+          "Robot Lab"
+        ]
       }
     },
     "/api/v1/robot-lab/calibration/cancel": {
