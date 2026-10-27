@@ -118,6 +118,92 @@
         "title": "AdviceResult",
         "type": "object"
       },
+      "ApiConnectionStatus": {
+        "properties": {
+          "configured": {
+            "default": false,
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "id": {
+            "enum": [
+              "openai",
+              "gemini"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "saved",
+                  "environment",
+                  "profile"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "ApiConnectionStatus",
+        "type": "object"
+      },
+      "ApiConnectionsStatus": {
+        "properties": {
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/ApiConnectionStatus"
+            },
+            "title": "Providers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "providers"
+        ],
+        "title": "ApiConnectionsStatus",
+        "type": "object"
+      },
+      "ApiKeyInput": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "format": "password",
+            "title": "Api Key",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "api_key"
+        ],
+        "title": "ApiKeyInput",
+        "type": "object"
+      },
       "ApplicationVersion": {
         "properties": {
           "commit": {
@@ -5792,6 +5878,28 @@
       },
       "RuntimePackage": {
         "properties": {
+          "connected": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connected"
+          },
+          "host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host"
+          },
           "id": {
             "enum": [
               "robot",
@@ -5804,6 +5912,15 @@
           "installable": {
             "title": "Installable",
             "type": "boolean"
+          },
+          "location": {
+            "default": "server",
+            "enum": [
+              "server",
+              "companion"
+            ],
+            "title": "Location",
+            "type": "string"
           },
           "message": {
             "title": "Message",
@@ -7364,18 +7481,56 @@
       "WorkspaceModule": {
         "additionalProperties": false,
         "properties": {
+          "available": {
+            "default": true,
+            "title": "Available",
+            "type": "boolean"
+          },
           "configured": {
             "default": false,
             "title": "Configured",
             "type": "boolean"
           },
+          "default_installed": {
+            "default": false,
+            "title": "Default Installed",
+            "type": "boolean"
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "group": {
+            "enum": [
+              "Robot Lab",
+              "Data",
+              "Train",
+              "Test",
+              "Workspace",
+              "Cloud & APIs"
+            ],
+            "title": "Group",
+            "type": "string"
+          },
           "id": {
             "enum": [
+              "datasets",
+              "models",
               "robot-lab",
               "teaching",
               "augmentation",
+              "training",
+              "distillation",
+              "quantization",
+              "evaluation",
+              "simulation",
               "decision-lab",
-              "cloud-runs"
+              "cloud-runs",
+              "google-cloud",
+              "openai",
+              "gemini",
+              "huggingface"
             ],
             "title": "Id",
             "type": "string"
@@ -7408,6 +7563,7 @@
         "required": [
           "id",
           "name",
+          "group",
           "installed",
           "setup"
         ],
@@ -8359,6 +8515,127 @@
         "summary": "Check Provider",
         "tags": [
           "Agent Control"
+        ]
+      }
+    },
+    "/api/v1/api-connections": {
+      "get": {
+        "operationId": "connections_api_v1_api_connections_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiConnectionsStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Connections",
+        "tags": [
+          "Cloud and APIs"
+        ]
+      }
+    },
+    "/api/v1/api-connections/{ident}": {
+      "delete": {
+        "operationId": "disconnect_api_v1_api_connections__ident__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "enum": [
+                "openai",
+                "gemini"
+              ],
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiConnectionStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Disconnect",
+        "tags": [
+          "Cloud and APIs"
+        ]
+      },
+      "put": {
+        "operationId": "save_api_v1_api_connections__ident__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "enum": [
+                "openai",
+                "gemini"
+              ],
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiKeyInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiConnectionStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save",
+        "tags": [
+          "Cloud and APIs"
         ]
       }
     },
@@ -10115,7 +10392,7 @@
     },
     "/api/v1/modules": {
       "get": {
-        "description": "Report which optional modules this host has set up; nothing is contacted.",
+        "description": "List registered features and setup readiness without contacting providers.",
         "operationId": "modules_api_v1_modules_get",
         "responses": {
           "200": {
@@ -10137,6 +10414,62 @@
       }
     },
     "/api/v1/modules/{ident}": {
+      "delete": {
+        "operationId": "uninstall_feature_api_v1_modules__ident__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "enum": [
+                "datasets",
+                "models",
+                "robot-lab",
+                "teaching",
+                "augmentation",
+                "training",
+                "distillation",
+                "quantization",
+                "evaluation",
+                "simulation",
+                "decision-lab",
+                "cloud-runs",
+                "google-cloud",
+                "openai",
+                "gemini",
+                "huggingface"
+              ],
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Uninstall Feature",
+        "tags": [
+          "Workspace modules"
+        ]
+      },
       "put": {
         "operationId": "enable_api_v1_modules__ident__put",
         "parameters": [
@@ -10146,11 +10479,22 @@
             "required": true,
             "schema": {
               "enum": [
+                "datasets",
+                "models",
                 "robot-lab",
                 "teaching",
                 "augmentation",
+                "training",
+                "distillation",
+                "quantization",
+                "evaluation",
+                "simulation",
                 "decision-lab",
-                "cloud-runs"
+                "cloud-runs",
+                "google-cloud",
+                "openai",
+                "gemini",
+                "huggingface"
               ],
               "title": "Ident",
               "type": "string"
@@ -10188,6 +10532,64 @@
           }
         },
         "summary": "Enable",
+        "tags": [
+          "Workspace modules"
+        ]
+      }
+    },
+    "/api/v1/modules/{ident}/install": {
+      "post": {
+        "operationId": "install_feature_api_v1_modules__ident__install_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "enum": [
+                "datasets",
+                "models",
+                "robot-lab",
+                "teaching",
+                "augmentation",
+                "training",
+                "distillation",
+                "quantization",
+                "evaluation",
+                "simulation",
+                "decision-lab",
+                "cloud-runs",
+                "google-cloud",
+                "openai",
+                "gemini",
+                "huggingface"
+              ],
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Install Feature",
         "tags": [
           "Workspace modules"
         ]

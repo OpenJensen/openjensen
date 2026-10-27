@@ -152,6 +152,7 @@ def test_stop_blocks_delayed_provider_even_if_it_swallows_cancellation(app):
 
 
 def test_private_settings_and_validation_never_echo_credentials(app, tmp_path):
+    app.post("/api/v1/modules/openai/install").raise_for_status()
     key = "secret_agent_key_123456789"
     response = app.put(
         "/api/v1/agent/providers/astra",

@@ -1,38 +1,68 @@
 import { expect, test, type Page } from '@playwright/test';
 import { fulfillApplicationUpdateRead } from './application-update-controls';
 
-async function fixture(page: Page) {
-  const state = {
-    ready: false,
-    cancelled: false,
-    operation: null as any,
-    writes: [] as string[],
-    installs: [] as any[],
-  };
-  const modules = [
-    { id: 'robot-lab', name: 'Initial setup' },
-    { id: 'teaching', name: 'AI teleoperation' },
-    { id: 'augmentation', name: 'Augmentation' },
-    { id: 'decision-lab', name: 'Decision Lab' },
-    { id: 'cloud-runs', name: 'Cloud runs' },
-  ].map((item) => ({
-    ...item,
-    installed: false,
-    configured: false,
+const catalog = [
+  ['robot-lab', 'Initial setup', 'Robot Lab'],
+  ['teaching', 'AI teleoperation', 'Robot Lab'],
+  ['datasets', 'Datasets', 'Data'],
+  ['augmentation', 'Augmentation', 'Data'],
+  ['training', 'Fine-tuning', 'Train'],
+  ['distillation', 'Distillation', 'Train'],
+  ['quantization', 'Quantization', 'Train'],
+  ['evaluation', 'Evaluation', 'Test'],
+  ['simulation', 'Simulation', 'Test'],
+  ['decision-lab', 'Decision Lab', 'Test'],
+  ['models', 'Models', 'Workspace'],
+  ['cloud-runs', 'Cloud runs', 'Workspace'],
+  ['google-cloud', 'Google Cloud', 'Cloud & APIs'],
+  ['openai', 'OpenAI', 'Cloud & APIs'],
+  ['gemini', 'Gemini', 'Cloud & APIs'],
+  ['huggingface', 'Hugging Face', 'Cloud & APIs'],
+] as const;
+
+async function fixture(page: Page, options: { companion?: 'connected' | 'offline'; modulesError?: boolean } = {}) {
+  const modules = catalog.map(([id, name, group]) => ({
+    id,
+    name,
+    group,
+    installed: ['datasets', 'models'].includes(id) || (id === 'robot-lab' && Boolean(options.companion)),
+    enabled: ['datasets', 'models'].includes(id) || (id === 'robot-lab' && Boolean(options.companion)),
+    available: true,
+    configured: ['datasets', 'models'].includes(id) || (id === 'robot-lab' && Boolean(options.companion)),
+    default_installed: ['datasets', 'models'].includes(id),
     managed: false,
     setup: 'Configure the external service.',
     setup_url: '/guide/',
   }));
+  const state = {
+    modules,
+    ready: false,
+    modulesError: options.modulesError ?? false,
+    cancelled: false,
+    operation: null as any,
+    writes: [] as string[],
+    runtimeInstalls: [] as any[],
+  };
   await page.route('**/api/v1/**', async (route) => {
     if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request();
     const path = new URL(request.url()).pathname;
-    if (request.method() !== 'GET') state.writes.push(path);
-    if (path === '/api/v1/modules') return route.fulfill({ json: modules });
+    if (request.method() !== 'GET') state.writes.push(`${request.method()} ${path}`);
+    if (path === '/api/v1/modules')
+      return state.modulesError
+        ? route.fulfill({ status: 503, json: { detail: 'Module list unavailable.' } })
+        : route.fulfill({ json: modules });
     if (path.startsWith('/api/v1/modules/')) {
-      const item = modules.find((item) => path.endsWith('/' + item.id))!;
-      item.installed = request.postDataJSON().enabled;
-      return route.fulfill({ json: { enabled: item.installed } });
+      const id = path.split('/')[4];
+      const item = modules.find((item) => item.id === id)!;
+      if (request.method() === 'DELETE') {
+        item.installed = item.enabled = false;
+      } else if (path.endsWith('/install')) {
+        item.installed = item.enabled = true;
+      } else {
+        item.enabled = request.postDataJSON().enabled;
+      }
+      return route.fulfill({ json: item });
     }
     if (path === '/api/v1/module-installations/cancel') {
       state.cancelled = true;
@@ -46,7 +76,7 @@ async function fixture(page: Page) {
     if (path === '/api/v1/module-installations') {
       if (request.method() === 'POST') {
         const payload = request.postDataJSON();
-        state.installs.push(payload);
+        state.runtimeInstalls.push(payload);
         state.operation = {
           id: payload.operation_id,
           profile: payload.profile,
@@ -65,6 +95,21 @@ async function fixture(page: Page) {
           host: 'fixture-server',
           operation: state.operation,
           profiles: [
+            ...(options.companion
+              ? [
+                  {
+                    id: 'robot',
+                    name: 'Robot Lab',
+                    ready: true,
+                    installable: false,
+                    location: 'companion',
+                    host: 'Paired computer',
+                    connected: options.companion === 'connected',
+                    message: 'Reconnect the paired computer to use the arm.',
+                    minimum_free_gib: 11,
+                  },
+                ]
+              : []),
             {
               id: 'datasets',
               name: 'Dataset tools',
@@ -82,53 +127,174 @@ async function fixture(page: Page) {
     if (path === '/api/v1/projects' || path === '/api/v1/datasets') return route.fulfill({ json: [] });
     return route.continue();
   });
-  await page.goto('/settings/');
-  await page.getByRole('button', { name: 'Modules', exact: true }).click();
+  await page.goto('/modules/');
   return state;
 }
 
-test('add and hide modules update navigation and survive reload without installation', async ({ page }) => {
+function moduleCard(page: Page, name: string) {
+  return page
+    .getByLabel('Workspace modules', { exact: true })
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('heading', { name, exact: true }) });
+}
+
+test('module manager groups every feature and clearly marks the fresh defaults', async ({ page }) => {
   const state = await fixture(page);
+  for (const group of ['Robot Lab', 'Data', 'Train', 'Test', 'Workspace', 'Cloud & APIs']) {
+    await expect(page.getByRole('list', { name: `${group} modules`, exact: true })).toBeVisible();
+  }
+  await expect(page.getByRole('list', { name: 'Train modules' }).getByRole('heading')).toHaveText([
+    'Fine-tuning',
+    'Distillation',
+    'Quantization',
+  ]);
+  for (const name of ['Datasets', 'Models']) await expect(moduleCard(page, name)).toContainText('Included by default');
   const nav = page.getByRole('navigation', { name: 'Policy lifecycle' });
-  await expect(nav.getByRole('link', { name: 'AI teleoperation', exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Add AI teleoperation', exact: true }).click();
-  await expect(nav.getByRole('link', { name: 'AI teleoperation', exact: true })).toBeVisible();
-  await page.reload();
-  await page.getByRole('button', { name: 'Modules', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Hide AI teleoperation' })).toBeVisible();
-  await page.getByRole('button', { name: 'Hide AI teleoperation' }).click();
-  await expect(nav.getByRole('link', { name: 'AI teleoperation', exact: true })).toHaveCount(0);
-  expect(state.installs).toEqual([]);
-  expect(state.writes).toEqual(['/api/v1/modules/teaching', '/api/v1/modules/teaching']);
+  for (const name of ['Dashboard', 'Datasets', 'Models', 'Modules', 'Cloud & APIs', 'Settings'])
+    await expect(nav.getByRole('link', { name, exact: true })).toBeVisible();
+  for (const name of [
+    'Initial setup',
+    'AI teleoperation',
+    'Fine-tune',
+    'Distill',
+    'Quantize',
+    'Evaluate',
+    'Run',
+    'Cloud runs',
+  ])
+    await expect(nav.getByRole('link', { name, exact: true })).toHaveCount(0);
+  const robot = moduleCard(page, 'Initial setup');
+  await expect(robot.getByRole('button', { name: 'Install module Initial setup', exact: true })).toBeVisible();
+  await expect(robot.getByText('Setup required', { exact: true })).toHaveCount(0);
+  await expect(robot.getByRole('link')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Install Training', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('list', { name: 'Runtime dependencies' }).getByRole('listitem')).toHaveCount(1);
+  expect(state.writes).toEqual([]);
 });
 
-test('installation names its server, reports progress and survives navigation', async ({ page }) => {
+test('install, hide, show and uninstall persist independently of readiness and dependencies', async ({ page }) => {
+  const state = await fixture(page);
+  const card = moduleCard(page, 'AI teleoperation');
+  const nav = page.getByRole('navigation', { name: 'Policy lifecycle' });
+  await card.getByRole('button', { name: 'Install module AI teleoperation', exact: true }).click();
+  await expect(nav.getByRole('link', { name: 'AI teleoperation', exact: true })).toBeVisible();
+  await expect(card.getByText('Setup required', { exact: true })).toBeVisible();
+  expect(state.modules.find((item) => item.id === 'teaching')?.configured).toBe(false);
+  await page.reload();
+  await card.getByRole('button', { name: 'Hide AI teleoperation', exact: true }).click();
+  await expect(card).toContainText('Installed · Hidden');
+  await expect(nav.getByRole('link', { name: 'AI teleoperation', exact: true })).toHaveCount(0);
+  await page.reload();
+  await expect(card.getByRole('button', { name: 'Show AI teleoperation', exact: true })).toBeVisible();
+  await card.getByRole('button', { name: 'Show AI teleoperation', exact: true }).click();
+  await expect(nav.getByRole('link', { name: 'AI teleoperation', exact: true })).toBeVisible();
+  await card.getByRole('button', { name: 'Uninstall AI teleoperation', exact: true }).click();
+  await expect(nav.getByRole('link', { name: 'AI teleoperation', exact: true })).toHaveCount(0);
+  await expect(card.getByRole('button', { name: 'Install module AI teleoperation', exact: true })).toBeVisible();
+  await expect(card.getByText('Setup required', { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Your data and runtime dependencies are kept.' }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(card.getByRole('button', { name: 'Install module AI teleoperation', exact: true })).toBeVisible();
+  expect(state.runtimeInstalls).toEqual([]);
+  expect(state.writes).toEqual([
+    'POST /api/v1/modules/teaching/install',
+    'PUT /api/v1/modules/teaching',
+    'PUT /api/v1/modules/teaching',
+    'DELETE /api/v1/modules/teaching',
+  ]);
+});
+
+test('all feature pages require installation while Modules stays reachable', async ({ page }) => {
+  const state = await fixture(page);
+  await moduleCard(page, 'Datasets').getByRole('button', { name: 'Uninstall Datasets', exact: true }).click();
+  await page.goto('/datasets/');
+  const nav = page.getByRole('navigation', { name: 'Policy lifecycle' });
+  await expect(nav.getByRole('link', { name: 'Datasets', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: 'Dataset repository', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Module setup' })).toBeVisible();
+  await page.getByRole('button', { name: 'Manage modules', exact: true }).click();
+  await expect(page).toHaveURL(/\/modules\/$/);
+  await expect(
+    moduleCard(page, 'Datasets').getByRole('button', { name: 'Install module Datasets', exact: true }),
+  ).toBeVisible();
+  expect(state.runtimeInstalls).toEqual([]);
+});
+
+test('integration modules install separately and open the permanent Cloud & APIs page', async ({ page }) => {
+  const state = await fixture(page);
+  const card = moduleCard(page, 'OpenAI');
+  await expect(card.getByText('Setup required', { exact: true })).toHaveCount(0);
+  await card.getByRole('button', { name: 'Install module OpenAI', exact: true }).click();
+  await expect(card.getByRole('button', { name: 'Hide OpenAI', exact: true })).toHaveCount(0);
+  await card.getByRole('button', { name: 'Open OpenAI', exact: true }).click();
+  await expect(page).toHaveURL(/\/cloud-apis\/$/);
+  await expect(page.getByRole('heading', { name: 'Cloud & APIs', level: 1, exact: true })).toBeVisible();
+  expect(state.runtimeInstalls).toEqual([]);
+});
+
+test('runtime installation reports its server and progress without a duplicate request', async ({ page }) => {
   const state = await fixture(page);
   await expect(page.getByText('Server: fixture-server')).toBeVisible();
-  expect(state.writes).toEqual([]);
-  await page.getByRole('button', { name: 'Install Dataset tools' }).click();
+  await page.getByRole('button', { name: 'Install Dataset tools', exact: true }).click();
   await expect(page.getByText('Installing dataset readers', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Compute', exact: true }).click();
-  await page.getByRole('button', { name: 'Modules', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Cancel installation' })).toBeVisible();
+  await page.getByRole('link', { name: 'Settings', exact: true }).click();
+  await page.getByRole('link', { name: 'Modules', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Cancel installation', exact: true })).toBeVisible();
   state.ready = true;
   await expect(page.getByText('Dataset readers installed.', { exact: true })).toBeVisible();
-  expect(state.installs).toHaveLength(1);
-  expect(state.installs[0].profile).toBe('datasets');
-  expect(state.installs[0].operation_id).toMatch(/^[a-f0-9]{32}$/);
-  expect(Object.keys(state.installs[0]).sort()).toEqual(['operation_id', 'profile']);
-  await expect(page.getByRole('button', { name: 'Install Dataset tools' })).toHaveCount(0);
+  expect(state.runtimeInstalls).toHaveLength(1);
+  expect(state.runtimeInstalls[0].profile).toBe('datasets');
+  expect(state.runtimeInstalls[0].operation_id).toMatch(/^[a-f0-9]{32}$/);
+  await expect(page.getByRole('button', { name: 'Install Dataset tools', exact: true })).toHaveCount(0);
 });
 
-test('cancel stops installation without hiding the module or reloading the page', async ({ page }) => {
+test('cancel stops only the dependency installation', async ({ page }) => {
   const state = await fixture(page);
-  await page.evaluate(() => {
-    (window as any).__moduleDocument = 'same';
-  });
-  await page.getByRole('button', { name: 'Install Dataset tools' }).click();
-  await page.getByRole('button', { name: 'Cancel installation' }).click();
+  await page.getByRole('button', { name: 'Install Dataset tools', exact: true }).click();
+  await page.getByRole('button', { name: 'Cancel installation', exact: true }).click();
   await expect(page.getByText('Installation stopped; dependencies kept.')).toBeVisible();
   expect(state.cancelled).toBe(true);
-  expect(await page.evaluate(() => (window as any).__moduleDocument)).toBe('same');
-  await expect(page.getByRole('button', { name: 'Install Dataset tools' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Install Dataset tools', exact: true })).toBeEnabled();
+  expect(state.modules.find((item) => item.id === 'datasets')?.installed).toBe(true);
+});
+
+for (const connection of ['connected', 'offline'] as const) {
+  test(`paired Robot Lab stays installed when the companion is ${connection}`, async ({ page }) => {
+    const state = await fixture(page, { companion: connection });
+    const robot = page
+      .getByRole('list', { name: 'Runtime dependencies' })
+      .getByRole('listitem')
+      .filter({ hasText: 'Robot Lab' });
+    await expect(robot).toContainText('Installed on Paired computer.');
+    await expect(robot).toContainText(connection === 'connected' ? 'Companion connected.' : 'Installed · Offline');
+    await expect(page.getByRole('button', { name: 'Install Robot Lab', exact: true })).toHaveCount(0);
+    expect(state.runtimeInstalls).toEqual([]);
+  });
+}
+
+test('unreadable module state reveals no feature navigation from stale browser history', async ({ page }) => {
+  await page.addInitScript(
+    (ids) => localStorage.setItem('jensen.modules', JSON.stringify(ids)),
+    catalog.map(([id]) => id),
+  );
+  const state = await fixture(page, { modulesError: true });
+  await expect(page.getByText('Module list unavailable.', { exact: true })).toBeVisible();
+  const nav = page.getByRole('navigation', { name: 'Policy lifecycle' });
+  for (const name of [
+    'Initial setup',
+    'AI teleoperation',
+    'Datasets',
+    'Models',
+    'Fine-tune',
+    'Distill',
+    'Quantize',
+    'Evaluate',
+    'Run',
+  ])
+    await expect(nav.getByRole('link', { name, exact: true })).toHaveCount(0);
+  for (const name of ['Modules', 'Cloud & APIs', 'Settings'])
+    await expect(nav.getByRole('link', { name, exact: true })).toBeVisible();
+  expect(state.writes).toEqual([]);
 });

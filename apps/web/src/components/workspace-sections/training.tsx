@@ -6,6 +6,7 @@ import { useWorkspace } from '@/components/workspace-context';
 export default function TrainingSection() {
   const {
     activeStage,
+    modules,
     projectId,
     workflowProjectId,
     startTraining,
@@ -43,8 +44,12 @@ export default function TrainingSection() {
             openStage('settings');
           }}
           onComputeSettings={() => {
-            setSettingsTab('compute');
-            openStage('settings');
+            if (modules.data?.some((item) => item.id === 'google-cloud' && item.installed)) {
+              openStage('cloud-apis');
+            } else {
+              setSettingsTab('compute');
+              openStage('settings');
+            }
           }}
           onQuantize={(artifactId) => {
             chooseQuantize('gguf', 'handoff');

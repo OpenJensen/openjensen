@@ -1,12 +1,13 @@
 'use client';
 
-import { CloudConnectionsPanel } from '@/components/cloud-connections';
-import { ModulesPanel } from '@/components/modules-panel';
-import { ProviderSettings } from './provider-settings';
+import { useEffect } from 'react';
+import { LocalComputeSettingsPanel } from '@/components/local-compute-settings';
+import { useWorkspace } from '@/components/workspace-context';
 import { WorkflowDiagnostics } from './workflow-diagnostics';
 import { WorkflowSettingsForm } from './workflow-settings-form';
 import type { SettingsTab } from './workflow-shared';
 import type { WorkflowState } from './workflow-state';
+import './cloud-connections.css';
 
 export function WorkflowSettingsPanel({
   workflow,
@@ -20,19 +21,18 @@ export function WorkflowSettingsPanel({
   onOpenQuantize: () => void;
 }) {
   const { language, preferences, preferencesBlocker, ready, setPreferences, update } = workflow;
+  const { modules, navigateStage } = useWorkspace();
+  const trainingInstalled = modules.data?.some((item) => item.id === 'training' && item.installed) ?? false;
+  const redirect = tab === 'modules' ? 'modules' : tab === 'providers' || tab === 'cloud-apis' ? 'cloud-apis' : null;
+  useEffect(() => {
+    if (redirect) navigateStage(redirect);
+  }, [redirect, navigateStage]);
+  if (redirect) return <p role="status">Opening {redirect === 'modules' ? 'Modules' : 'Cloud & APIs'}…</p>;
   return (
-    <section
-      className={`panel ${tab === 'compute' || tab === 'modules' ? 'compute-settings-panel' : 'workflow-panel'}`}
-    >
+    <section className={`panel ${tab === 'compute' ? 'compute-settings-panel' : 'workflow-panel'}`}>
       <div className="section-tabs settings-tabs">
         <button className={`section-tab ${tab === 'compute' ? 'active' : ''}`} onClick={() => setTab('compute')}>
-          Compute
-        </button>
-        <button className={`section-tab ${tab === 'modules' ? 'active' : ''}`} onClick={() => setTab('modules')}>
-          Modules
-        </button>
-        <button className={`section-tab ${tab === 'providers' ? 'active' : ''}`} onClick={() => setTab('providers')}>
-          AI providers
+          Local compute
         </button>
         <button className={`section-tab ${tab === 'settings' ? 'active' : ''}`} onClick={() => setTab('settings')}>
           Workflow settings
@@ -50,11 +50,17 @@ export function WorkflowSettingsPanel({
         </p>
       )}
       {tab === 'compute' ? (
-        <CloudConnectionsPanel />
-      ) : tab === 'modules' ? (
-        <ModulesPanel />
-      ) : tab === 'providers' ? (
-        <ProviderSettings />
+        trainingInstalled ? (
+          <LocalComputeSettingsPanel />
+        ) : (
+          <div className="cloud-settings">
+            <h2>Local compute</h2>
+            <p>Install Training from Modules to configure local runs.</p>
+            <button className="secondary-button" onClick={() => navigateStage('modules')}>
+              Open Modules
+            </button>
+          </div>
+        )
       ) : tab === 'settings' ? (
         <WorkflowSettingsForm
           preferences={preferences}

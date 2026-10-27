@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { api, isActive, isDatasetJob, type PolicyArtifact, type Project } from '@/lib/api';
 import { quantizeModeFor, type ModelAction } from '@/lib/model-library';
@@ -25,6 +25,7 @@ import type { ManagedPublishedCapture } from '@/lib/managed-teaching';
 import type { LibraryDataset } from '@/lib/dataset-library';
 import { workspaceRoutes, workspaceStage, type ModuleId, type StageId } from '@/lib/workspace-routes';
 import { readPublicPreference, writePublicPreference } from '@/lib/public-preferences';
+import { projectHistoryView, validProjectHistory } from '@/lib/project-history';
 
 export function useWorkbenchState() {
   const queryClient = useQueryClient();
@@ -72,33 +73,9 @@ export function useWorkbenchState() {
   const projects = useQuery({ queryKey: ['projects'], queryFn: api.projects, retry: false });
   const capabilities = useQuery({ queryKey: ['capabilities'], queryFn: api.capabilities, retry: false });
   const modules = useQuery({ queryKey: ['modules'], queryFn: api.modules, retry: false, staleTime: 60_000 });
-  // Until the list arrives, the browser's last list keeps the sidebar from shifting.
-  const [rememberedModules, setRememberedModules] = useState<string[]>([]);
-  useLayoutEffect(() => {
-    try {
-      const saved: unknown = JSON.parse(readPublicPreference(localStorage, 'modules') ?? '[]');
-      if (Array.isArray(saved)) setRememberedModules(saved.filter((item) => typeof item === 'string'));
-    } catch {
-      /* Storage may be unavailable. */
-    }
-  }, []);
-  useEffect(() => {
-    if (!modules.data) return;
-    try {
-      writePublicPreference(
-        localStorage,
-        'modules',
-        JSON.stringify(modules.data.filter((item) => item.installed).map((item) => item.id)),
-      );
-    } catch {
-      /* Storage may be unavailable. */
-    }
-  }, [modules.data]);
-  // An unreadable module list shows every module rather than hiding working pages.
+  // Navigation follows the server's current availability, never a stale browser list.
   const moduleInstalled = (id: ModuleId) =>
-    modules.data
-      ? modules.data.some((item) => item.id === id && item.installed)
-      : modules.isError || rememberedModules.includes(id);
+    modules.data?.some((item) => item.id === id && item.installed && item.enabled !== false) ?? false;
   useEffect(() => {
     if (!health.isSuccess || health.isError) return;
     // A successful health poll can be the first request after API startup or
@@ -107,13 +84,15 @@ export function useWorkbenchState() {
     void queryClient.invalidateQueries({ queryKey: ['capabilities'] });
     void queryClient.invalidateQueries({ queryKey: ['modules'] });
   }, [health.isSuccess, health.isError, queryClient]);
-  const jobs = useQuery({
+  const jobQuery = useQuery({
     queryKey: ['jobs', projectId],
     queryFn: () => api.jobs(projectId),
     enabled: !!projectId,
-    refetchInterval: (query) => (query.state.data?.some(isActive) ? 1_000 : 5_000),
+    refetchInterval: (query) =>
+      validProjectHistory(query.state.data, projectId) && query.state.data.some(isActive) ? 1_000 : 5_000,
     retry: false,
   });
+  const jobs = projectHistoryView(jobQuery, projectId);
   useEffect(() => {
     if (!projects.data || projects.data.some((project) => project.id === projectId)) return;
     let stored = '';
@@ -270,7 +249,10 @@ export function useWorkbenchState() {
     setTeachingCapture(capture);
   }
   const choosingWorkflow =
-    activeStage === 'quantization' || activeStage === 'evaluation' || activeStage === 'simulation';
+    (activeStage === 'quantization' || activeStage === 'evaluation' || activeStage === 'simulation') &&
+    moduleInstalled(activeStage);
+  const choosingSimulation =
+    (activeStage === 'evaluation' || activeStage === 'simulation') && moduleInstalled(activeStage);
   const options = useQuery({
     queryKey: ['policy-options'],
     queryFn: api.policyOptions,
@@ -281,9 +263,9 @@ export function useWorkbenchState() {
   const simulation = useQuery({
     queryKey: ['simulation-options'],
     queryFn: simulationOptions,
-    enabled: activeStage === 'evaluation' || activeStage === 'simulation',
+    enabled: choosingSimulation,
     retry: false,
-    refetchInterval: activeStage === 'evaluation' || activeStage === 'simulation' ? 10_000 : false,
+    refetchInterval: choosingSimulation ? 10_000 : false,
   });
   const context = workflowProjectId ? entries[workflowProjectId] : undefined;
   const quantizeMode = context?.quantize?.mode;

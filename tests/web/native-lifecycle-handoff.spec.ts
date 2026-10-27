@@ -318,7 +318,8 @@ async function fixture(page: Page) {
         },
       });
     if (path.endsWith('/artifacts')) return route.fulfill({ json: state.artifacts }); // Deliberately includes foreign project records; clients must filter them.
-    if (path.endsWith('/jobs') && path.includes('/projects/')) return route.fulfill({ json: state.jobs });
+    if (path.endsWith('/jobs') && path.includes('/projects/'))
+      return route.fulfill({ json: state.jobs.filter((item) => item.project_id === path.split('/')[4]) });
     if (path.endsWith('/events')) return route.fulfill({ json: [] });
     if (path.endsWith('/replay')) {
       const job = state.jobs.find((item) => item.id === 'replay-job')!;

@@ -11,6 +11,8 @@ const destinations = [
   ['evaluation', 'Evaluate'],
   ['simulation', 'Run'],
   ['settings', 'Settings'],
+  ['modules', 'Modules'],
+  ['cloud-apis', 'Cloud & APIs'],
   ['cloud-runs', 'Cloud runs'],
   ['augmentation', 'Augmentation'],
   ['ai-teleoperation', 'AI teleoperation'],
@@ -18,6 +20,37 @@ const destinations = [
   ['models', 'Models'],
   ['robot-lab', 'Initial setup'],
 ] as const;
+
+const moduleGroups: Record<string, string> = {
+  'robot-lab': 'Robot Lab',
+  'ai-teleoperation': 'Robot Lab',
+  datasets: 'Data',
+  augmentation: 'Data',
+  training: 'Train',
+  distillation: 'Train',
+  quantization: 'Train',
+  evaluation: 'Test',
+  simulation: 'Test',
+  'decision-lab': 'Test',
+  models: 'Workspace',
+  'cloud-runs': 'Workspace',
+};
+const moduleFixture = (visible?: string[]) =>
+  destinations
+    .filter(([id]) => id in moduleGroups)
+    .map(([id, name]) => ({
+      id: id === 'ai-teleoperation' ? 'teaching' : id,
+      name,
+      group: moduleGroups[id],
+      installed: !visible || visible.includes(id),
+      available: true,
+      enabled: !visible || visible.includes(id),
+      configured: !visible || visible.includes(id),
+      managed: false,
+      setup: 'Configure this feature.',
+      setup_url: '/guide/',
+      default_installed: ['datasets', 'models'].includes(id),
+    }));
 
 async function fixture(page: Page) {
   const writes: string[] = [];
@@ -31,6 +64,7 @@ async function fixture(page: Page) {
       writes.push(path);
       return route.fulfill({ status: 405, json: { detail: 'Navigation must not submit work' } });
     }
+    if (path === '/api/v1/modules') return route.fulfill({ json: moduleFixture() });
     if (path === '/api/v1/projects')
       return route.fulfill({
         json: [
@@ -75,19 +109,9 @@ test('home opens the dashboard and every section supports a direct visit and ref
   expect(errors).toEqual([]);
 });
 
-test('the sidebar lists installed modules and Settings shows how to add the rest', async ({ page }) => {
+test('the sidebar lists installed modules and Modules shows how to install the rest', async ({ page }) => {
   const { writes, errors } = await fixture(page);
-  await page.route('**/api/v1/modules', (route) =>
-    route.fulfill({
-      json: [
-        { id: 'robot-lab', name: 'Initial setup', installed: true, setup: 'Install the robot profile.' },
-        { id: 'teaching', name: 'AI teleoperation', installed: false, setup: 'Set JENSEN_TEACHING_URL.' },
-        { id: 'augmentation', name: 'Augmentation', installed: false, setup: 'Connect Google Cloud.' },
-        { id: 'decision-lab', name: 'Decision Lab', installed: false, setup: 'Configure the scorer.' },
-        { id: 'cloud-runs', name: 'Cloud runs', installed: false, setup: 'Set JENSEN_CLOUD_RUNS_DIR.' },
-      ],
-    }),
-  );
+  await page.route('**/api/v1/modules', (route) => route.fulfill({ json: moduleFixture(['robot-lab', 'datasets']) }));
   await page.goto('/dashboard/');
   const nav = page.getByRole('navigation', { name: 'Policy lifecycle' });
   await expect(nav.getByRole('group', { name: 'Robot Lab' }).getByRole('link')).toHaveText(['Initial setup']);
@@ -95,21 +119,18 @@ test('the sidebar lists installed modules and Settings shows how to add the rest
   for (const name of ['AI teleoperation', 'Augmentation', 'Decision Lab', 'Cloud runs']) {
     await expect(nav.getByRole('link', { name, exact: true })).toHaveCount(0);
   }
-  await nav.getByRole('link', { name: 'Settings', exact: true }).click();
-  await page.getByRole('button', { name: 'Modules', exact: true }).click();
-  const modules = page.getByRole('list', { name: 'Workspace modules' }).getByRole('listitem');
-  await expect(modules).toHaveCount(5);
-  await expect(modules.filter({ hasText: 'Initial setup' })).toContainText('Added');
+  await nav.getByRole('link', { name: 'Modules', exact: true }).click();
+  const modules = page.getByLabel('Workspace modules', { exact: true }).getByRole('listitem');
+  await expect(modules).toHaveCount(12);
+  await expect(modules.filter({ hasText: 'Initial setup' })).toContainText('Installed');
   const teaching = modules.filter({ hasText: 'AI teleoperation' });
-  await expect(teaching).toContainText('Available');
-  await teaching.getByText('Setup required', { exact: true }).click();
-  await expect(teaching).toContainText('Set JENSEN_TEACHING_URL.');
-  // An uninstalled module stays reachable by URL and is listed while open.
+  await expect(teaching).toContainText('Not installed');
+  await expect(teaching.getByText('Setup required', { exact: true })).toHaveCount(0);
+  await expect(teaching.getByRole('button', { name: 'Install module AI teleoperation', exact: true })).toBeVisible();
+  // The legacy teaching URL explains setup without exposing an uninstalled module in navigation.
   await page.goto('/teaching/');
-  await expect(nav.getByRole('link', { name: 'AI teleoperation', exact: true })).toHaveAttribute(
-    'aria-current',
-    'page',
-  );
+  await expect(nav.getByRole('link', { name: 'AI teleoperation', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Manage modules', exact: true })).toBeVisible();
   expect(writes).toEqual([]);
   expect(errors).toEqual([]);
 });
@@ -173,6 +194,19 @@ test('section links can open in a new tab and unknown pages remain 404s', async 
   await other.close();
   const response = await page.request.get('/training/missing-page/');
   expect(response.status()).toBe(404);
+  expect(writes).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('legacy teaching URL keeps the canonical AI teleoperation navigation', async ({ page }) => {
+  const { writes, errors } = await fixture(page);
+  await page.goto('/teaching/');
+  await expect(page.getByRole('heading', { name: 'AI teleoperation', level: 1, exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole('navigation', { name: 'Policy lifecycle' })
+      .getByRole('link', { name: 'AI teleoperation', exact: true }),
+  ).toHaveAttribute('href', '/ai-teleoperation/');
   expect(writes).toEqual([]);
   expect(errors).toEqual([]);
 });

@@ -242,6 +242,16 @@ export const augmentationDownloadUrl = (jobId: string) =>
 
 export type ApplicationUpdateStatus = components['schemas']['UpdateStatus'];
 
+export type ApiProviderId = 'openai' | 'gemini';
+export type ApiConnection = {
+  id: ApiProviderId;
+  name: string;
+  configured: boolean;
+  source: 'saved' | 'environment' | 'profile' | null;
+  message?: string | null;
+};
+export type ApiConnections = { providers: ApiConnection[] };
+
 export const api = {
   applicationUpdates: () => request<ApplicationUpdateStatus>('/updates'),
   checkApplicationUpdates: (refresh = false) =>
@@ -255,6 +265,14 @@ export const api = {
       },
       30_000,
     ),
+  apiConnections: () => request<ApiConnections>('/api-connections'),
+  saveApiConnection: (provider: ApiProviderId, apiKey: string) =>
+    request<ApiConnection>(`/api-connections/${provider}`, {
+      method: 'PUT',
+      body: JSON.stringify({ api_key: apiKey }),
+    }),
+  removeApiConnection: (provider: ApiProviderId) =>
+    request<ApiConnection>(`/api-connections/${provider}`, { method: 'DELETE' }),
   huggingFaceStatus: () => request<HuggingFaceConnectionStatus>('/huggingface-connection'),
   saveHuggingFaceToken: (token: string) =>
     request<HuggingFaceConnectionStatus>(
@@ -327,6 +345,10 @@ export const api = {
   modules: () => request<WorkspaceModule[]>('/modules'),
   setModuleEnabled: (id: WorkspaceModule['id'], enabled: boolean) =>
     request<{ enabled: boolean }>(`/modules/${id}`, { method: 'PUT', body: JSON.stringify({ enabled }) }),
+  installWorkspaceModule: (id: WorkspaceModule['id']) =>
+    request<{ installed: boolean }>(`/modules/${id}/install`, { method: 'POST' }),
+  uninstallWorkspaceModule: (id: WorkspaceModule['id']) =>
+    request<{ installed: boolean }>(`/modules/${id}`, { method: 'DELETE' }),
   moduleInstallations: () => request<ModuleInstallationStatus>('/module-installations', undefined, 60_000),
   installModule: (profile: InstallableProfile, operationId: string) =>
     request<InstallOperation>(

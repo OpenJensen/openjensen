@@ -1,32 +1,9 @@
-import type { DatasetJob, DatasetProfile, Job } from '@/lib/api';
+import type { DatasetJob, DatasetProfile } from '@/lib/api';
 import type { TrainingModel } from '@/lib/training-models';
 import { defaultRecipe, type Recipe } from '@/lib/training-recipe';
 
-export function validTrainingHistory(value: unknown, project: string): value is Job[] {
-  return (
-    Array.isArray(value) &&
-    value.every(
-      (item) =>
-        item &&
-        typeof item === 'object' &&
-        !Array.isArray(item) &&
-        typeof item.id === 'string' &&
-        item.id.length > 0 &&
-        item.project_id === project &&
-        typeof item.kind === 'string' &&
-        item.kind.length > 0 &&
-        typeof item.status === 'string' &&
-        ['queued', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted'].includes(item.status) &&
-        typeof item.created_at === 'string' &&
-        Number.isFinite(Date.parse(item.created_at)) &&
-        typeof item.updated_at === 'string' &&
-        Number.isFinite(Date.parse(item.updated_at)) &&
-        item.request &&
-        typeof item.request === 'object' &&
-        !Array.isArray(item.request),
-    )
-  );
-}
+export { validProjectHistory as validTrainingHistory } from '@/lib/project-history';
+
 export type InspectedDataset = DatasetJob & { result: DatasetProfile };
 
 export function positiveInteger(value: unknown): value is number {
@@ -159,10 +136,10 @@ export function modelDatasetIssue(
   }
   return null;
 }
-export function modelStatusLabel(model: TrainingModel, supported: boolean): string | null {
+export function modelStatusLabel(model: TrainingModel, supported: boolean, cloudInstalled = true): string | null {
   switch (model.status) {
     case 'connect_account':
-      return 'Connect Google Cloud';
+      return cloudInstalled ? 'Connect Google Cloud' : 'Compute unavailable';
     case 'setup_required':
       return 'Setup required';
     case 'coming_soon':

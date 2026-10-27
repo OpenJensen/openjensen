@@ -2,13 +2,13 @@ import asyncio
 import hashlib
 import json
 import math
-import os
 import shutil
 import zipfile
 from pathlib import Path
 
 import httpx
 
+from vla_platform.api_connections import ApiConnections, ApiKeyError
 from vla_platform.augmentation.contracts import (
     AugmentationClip,
     AugmentationOptions,
@@ -28,12 +28,28 @@ from vla_platform.augmentation.source import download_video
 from vla_platform.cloud_connections import CloudConnections, GcpConnectionConfig
 from vla_platform.contracts import TERMINAL
 from vla_platform.datasets.explore import DatasetExplorer, source_profile
+from vla_platform.modules import read_registry
 
 
 class Augmentation:
     def __init__(self, execution):
         self.execution = execution
         self.slots = asyncio.Semaphore(1)
+
+    def integration_installed(self, ident: str) -> bool:
+        try:
+            registry = read_registry(self.execution.settings.data_dir)
+            return registry is None or ident in registry.installed
+        except ValueError:
+            return False
+
+    def api_key(self) -> str | None:
+        if not self.integration_installed("gemini"):
+            return None
+        try:
+            return ApiConnections(self.execution.settings.data_dir).key("gemini")
+        except ApiKeyError, OSError:
+            return None
 
     def options(self) -> AugmentationOptions:
         missing = []
@@ -42,9 +58,14 @@ class Augmentation:
         connections = CloudConnections(self.execution.settings.data_dir).list()
         cloud = next((item for item in connections.providers if item.provider == "gcp"), None)
         config = cloud.config if cloud else None
-        project = config.project_id if isinstance(config, GcpConnectionConfig) else None
+        project = (
+            config.project_id
+            if isinstance(config, GcpConnectionConfig)
+            and self.integration_installed("google-cloud")
+            else None
+        )
         auth_mode = "unconfigured"
-        auth_message = "Connect Google Cloud in Settings to use Gemini Omni without an API key."
+        auth_message = "Connect Google Cloud in Cloud & APIs to use Gemini Omni without an API key."
         if project:
             auth_mode = "google_cloud"
             auth_message = (
@@ -52,15 +73,24 @@ class Augmentation:
                 "Model access and billing are checked when a run starts."
             )
             if not shutil.which("gcloud"):
-                missing.append("Google Cloud CLI on PATH and reconnect Google Cloud in Settings")
-        elif os.getenv("GEMINI_API_KEY", "").strip():
+                missing.append(
+                    "Google Cloud CLI on PATH and reconnect Google Cloud in Cloud & APIs"
+                )
+        elif self.api_key():
             auth_mode = "gemini_api_key"
             auth_message = (
-                "Gemini API key on the application server. "
-                "Connect Google Cloud in Settings to use your login."
+                "Gemini Omni API key configured. "
+                "Connect Google Cloud in Cloud & APIs to use your login."
             )
         else:
-            missing.append("Google Cloud in Settings or GEMINI_API_KEY on the application server")
+            if not self.integration_installed("google-cloud") and not self.integration_installed(
+                "gemini"
+            ):
+                missing.append("a Google Cloud or Gemini Omni integration from Modules")
+            elif self.integration_installed("gemini"):
+                missing.append("a Gemini Omni key in Cloud & APIs")
+            else:
+                missing.append("Google Cloud in Cloud & APIs")
         for binary in ("ffmpeg", "ffprobe"):
             if not shutil.which(binary):
                 missing.append(binary + " on PATH")
@@ -326,7 +356,7 @@ class Augmentation:
                     provider = (
                         GeminiOmniProvider(google_cloud_project=options.google_cloud_project)
                         if options.auth_mode == "google_cloud"
-                        else GeminiOmniProvider(os.environ["GEMINI_API_KEY"])
+                        else GeminiOmniProvider(self.api_key())
                     )
                     plan = None
                     if request.dataset_scope:

@@ -25,7 +25,12 @@ def no_override(monkeypatch):
 
 
 def test_add_hide_survive_restart_and_keep_configuration(tmp_path):
-    (tmp_path / "robot-lab-connection.json").write_text("{}")
+    config = tmp_path / "robot-lab-connection.json"
+    saved_pairing = json.dumps(
+        {"url": "http://127.0.0.1:8765", "token": "a" * 32, "label": "USB computer"}
+    )
+    config.write_text(saved_pairing)
+    config.chmod(0o600)
     for enabled in (True, False):
         with TestClient(create_app(Settings(data_dir=tmp_path))) as client:
             response = client.put("/api/v1/modules/robot-lab", json={"enabled": enabled})
@@ -34,9 +39,10 @@ def test_add_hide_survive_restart_and_keep_configuration(tmp_path):
             robot = next(
                 item for item in client.get("/api/v1/modules").json() if item["id"] == "robot-lab"
             )
-            assert robot["installed"] is enabled
+            assert robot["installed"] is True
+            assert robot["enabled"] is enabled
             assert robot["configured"] is True
-        assert (tmp_path / "robot-lab-connection.json").read_text() == "{}"
+        assert config.read_text() == saved_pairing
 
 
 def test_operator_override_and_invalid_inputs_are_rejected(tmp_path, monkeypatch):
@@ -232,7 +238,7 @@ def test_invalid_optional_state_does_not_take_down_core(tmp_path):
 
 def test_cloud_snapshots_work_after_adding_module(tmp_path):
     with TestClient(create_app(Settings(data_dir=tmp_path))) as client:
-        assert client.put("/api/v1/modules/cloud-runs", json={"enabled": True}).status_code == 200
+        assert client.post("/api/v1/modules/cloud-runs/install").status_code == 200
         module = next(
             item for item in client.get("/api/v1/modules").json() if item["id"] == "cloud-runs"
         )
@@ -240,3 +246,164 @@ def test_cloud_snapshots_work_after_adding_module(tmp_path):
         response = client.get("/api/v1/cloud-runs")
         assert response.status_code == 200
         assert (tmp_path / "cloud-runs").is_dir()
+
+
+def test_paired_companion_is_installed_without_local_environment(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    config = tmp_path / "robot-lab-connection.json"
+    config.write_text(
+        json.dumps({"url": "http://127.0.0.1:8765", "token": "a" * 32, "label": "USB computer"})
+    )
+    config.chmod(0o600)
+    service = ModuleInstallations(tmp_path)
+    package = service.inspect("robot")
+    assert package.ready and not package.installable
+    assert package.location == "companion" and package.host == "USB computer"
+    assert package.connected is None
+
+    async def run():
+        async def disconnected():
+            return {"connected": False}
+
+        async def connected():
+            return {"connected": True}
+
+        for callback, expected in ((disconnected, False), (connected, True)):
+            status = await service.status(SimpleNamespace(status=callback))
+            robot = next(item for item in status.profiles if item.id == "robot")
+            assert robot.ready and robot.connected is expected
+            assert robot.location == "companion"
+        with pytest.raises(ValueError, match="paired computer"):
+            await service.start(InstallRequest(profile="robot", operation_id="a" * 32))
+        assert not service.target("robot").exists()
+
+    asyncio.run(run())
+
+
+def test_navigation_checks_never_contact_companion(tmp_path, monkeypatch):
+    from vla_platform.robot_lab_bridge import RobotLabBridge
+
+    config = tmp_path / "robot-lab-connection.json"
+    config.write_text(json.dumps({"url": "http://127.0.0.1:8765", "token": "a" * 32}))
+    config.chmod(0o600)
+
+    async def forbidden(self):
+        raise AssertionError("Navigation contacted the companion")
+
+    monkeypatch.setattr(RobotLabBridge, "status", forbidden)
+    with TestClient(create_app(Settings(data_dir=tmp_path))) as client:
+        modules = client.get("/api/v1/modules").json()
+        assert next(item for item in modules if item["id"] == "robot-lab")["installed"]
+
+
+def test_installed_runtime_does_not_require_installer_tool(tmp_path, monkeypatch):
+    import vla_platform.module_installations as module
+
+    service = ModuleInstallations(tmp_path, root=tmp_path / "source")
+    (service.root / "workers/robot_lab").mkdir(parents=True)
+    target = service.target("robot")
+    target.mkdir(parents=True)
+    (target / ".openjensen-installed.json").write_text("{}")
+    monkeypatch.setattr(module.shutil, "which", lambda name: None)
+    monkeypatch.setattr(
+        module,
+        "check_profile",
+        lambda *args: {
+            "ready": False,
+            "supported_platform": True,
+            "python_matches": True,
+            "package_versions_match": True,
+            "external_tools": {"uv": False},
+            "message": "uv missing",
+        },
+    )
+    package = service.inspect("robot")
+    assert package.ready and not package.installable
+    assert package.location == "server"
+
+
+def test_runtime_tools_still_required_without_installer(tmp_path, monkeypatch):
+    import vla_platform.module_installations as module
+
+    service = ModuleInstallations(tmp_path, root=tmp_path / "source")
+    (service.root / "workers/_cpu_readers").mkdir(parents=True)
+    monkeypatch.setattr(module.shutil, "which", lambda name: None)
+    monkeypatch.setattr(
+        module,
+        "check_profile",
+        lambda *args: {
+            "ready": False,
+            "supported_platform": True,
+            "python_matches": True,
+            "package_versions_match": True,
+            "external_tools": {"uv": False, "ffmpeg": False, "ffprobe": True},
+            "message": "Tools missing",
+        },
+    )
+    assert not service.inspect("datasets").ready
+
+
+def test_verified_runtime_available_before_optional_configuration(tmp_path, monkeypatch):
+    monkeypatch.setattr(ModuleInstallations, "inspect", lambda self, ident: ready(ident, True))
+    with TestClient(create_app(Settings(data_dir=tmp_path))) as client:
+        values = {item["id"]: item for item in client.get("/api/v1/modules").json()}
+        assert values["robot-lab"]["available"] and not values["robot-lab"]["installed"]
+        assert values["decision-lab"]["available"] and not values["decision-lab"]["installed"]
+        assert client.post("/api/v1/modules/robot-lab/install").status_code == 200
+        assert client.post("/api/v1/modules/decision-lab/install").status_code == 200
+        assert not values["robot-lab"]["configured"] and not values["decision-lab"]["configured"]
+
+
+def test_status_refreshes_cached_local_runtime_readiness(tmp_path, monkeypatch):
+    import vla_platform.module_installations as module
+
+    service = ModuleInstallations(tmp_path, root=tmp_path / "source")
+    for name in ("robot_lab", "_cpu_readers", "decision"):
+        (service.root / "workers" / name).mkdir(parents=True)
+    current = {"ready": True}
+    monkeypatch.setattr(module.shutil, "which", lambda name: "/trusted/" + name)
+    monkeypatch.setattr(
+        module,
+        "check_profile",
+        lambda *args: {
+            "ready": current["ready"],
+            "external_tools": {"uv": True},
+            "message": "fixture",
+        },
+    )
+    # A legacy source environment can be inspected without a managed-install receipt.
+    assert service.inspect("robot").ready
+    current["ready"] = False
+    assert service.inspect("robot").ready
+    status = asyncio.run(service.status())
+    assert not next(item for item in status.profiles if item.id == "robot").ready
+
+
+def test_runtime_install_keeps_feature_uninstalled_and_preserves_visibility(tmp_path, monkeypatch):
+    from vla_platform.modules import (
+        initialize_modules,
+        module_installed,
+        set_module_enabled,
+        set_module_installed,
+    )
+
+    settings = Settings(data_dir=tmp_path)
+    initialize_modules(settings, tmp_path / "robot.json", existing=False)
+    service = ModuleInstallations(tmp_path)
+    monkeypatch.setattr(service, "inspect", lambda ident: ready(ident, True))
+
+    async def run():
+        await service.start(InstallRequest(profile="decision", operation_id="a" * 32))
+        await service.task
+        assert service.operation.status == "succeeded"
+        assert not module_installed(tmp_path, "decision-lab")
+        set_module_installed(tmp_path, "decision-lab", True)
+        set_module_enabled(tmp_path, "decision-lab", False)
+        await service.start(InstallRequest(profile="decision", operation_id="b" * 32))
+        await service.task
+        from vla_platform.modules import read_registry
+
+        assert not read_registry(tmp_path).enabled["decision-lab"]
+
+    asyncio.run(run())

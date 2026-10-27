@@ -91,10 +91,27 @@ function Workbench({ children }: { children: ReactNode }) {
               className="stage-navigation grouped-navigation"
               aria-label="Policy lifecycle"
               aria-busy={modules.isPending}
+              onFocusCapture={(event) => {
+                const navigation = event.currentTarget;
+                const link = event.target.closest<HTMLElement>('.stage-button');
+                if (!link || navigation.scrollWidth <= navigation.clientWidth) return;
+                const reveal = () => {
+                  if (!link.isConnected || document.activeElement !== link) return;
+                  const viewport = navigation.getBoundingClientRect();
+                  const bounds = link.getBoundingClientRect();
+                  const left = viewport.left + navigation.clientLeft + 6;
+                  const right = viewport.left + navigation.clientLeft + navigation.clientWidth - 6;
+                  const delta =
+                    bounds.left < left ? bounds.left - left : bounds.right > right ? bounds.right - right : 0;
+                  if (delta) navigation.scrollBy({ left: delta, behavior: 'instant' });
+                };
+                reveal();
+                // Reconcile the browser's own focus scroll without moving the page.
+                requestAnimationFrame(reveal);
+              }}
             >
               {navigationGroups.map((group) => {
-                // Uninstalled modules stay reachable by URL; only an open one is listed.
-                const items = group.items.filter((id) => !isModule(id) || moduleInstalled(id) || activeStage === id);
+                const items = group.items.filter((id) => !isModule(id) || moduleInstalled(id));
                 return (
                   items.length > 0 && (
                     <div
@@ -172,34 +189,67 @@ function Workbench({ children }: { children: ReactNode }) {
           </div>
         )}
         {/* Retain intake drafts and pending uploads when another section opens. */}
-        {(datasetsVisited || activeStage === 'datasets') && <DatasetsSection />}
-        {/* A compute-settings detour retains the exact unfinished training recipe. */}
-        {(activeStage === 'training' || activeStage === 'settings') && <TrainingSection />}
-        {entryPending && (!workflowProjectId || jobs.isPending || entryFailed || recoveryError) && (
-          <section className="panel" aria-label="Workflow selection status">
-            <p role={entryFailed || recoveryError ? 'alert' : 'status'}>
-              {!workflowProjectId
-                ? 'Select a project to see its workflow history.'
-                : (recoveryError ??
-                  (entryFailed
-                    ? 'Workflow availability or history could not be loaded. Choose a mode to inspect it, or retry these reads.'
-                    : 'Loading this project’s workflow history and configured workers…'))}
-            </p>
-            {entryFailed && (
-              <button
-                className="secondary-button"
-                onClick={() => {
-                  void jobs.refetch();
-                  void options.refetch();
-                  if (activeStage === 'simulation') void simulation.refetch();
-                }}
-              >
-                Retry workflow context
-              </button>
+        {moduleInstalled('datasets') && (datasetsVisited || activeStage === 'datasets') && <DatasetsSection />}
+        {/* Configuration detours retain the exact unfinished training recipe. */}
+        {moduleInstalled('training') && ['training', 'settings', 'cloud-apis', 'modules'].includes(activeStage) && (
+          <TrainingSection />
+        )}
+        {(!isModule(activeStage) || moduleInstalled(activeStage)) &&
+          entryPending &&
+          (!workflowProjectId || jobs.isPending || entryFailed || recoveryError) && (
+            <section className="panel" aria-label="Workflow selection status">
+              <p role={entryFailed || recoveryError ? 'alert' : 'status'}>
+                {!workflowProjectId
+                  ? 'Select a project to see its workflow history.'
+                  : (recoveryError ??
+                    (entryFailed
+                      ? 'Workflow availability or history could not be loaded. Choose a mode to inspect it, or retry these reads.'
+                      : 'Loading this project’s workflow history and configured workers…'))}
+              </p>
+              {entryFailed && (
+                <button
+                  className="secondary-button"
+                  onClick={() => {
+                    void jobs.refetch();
+                    void options.refetch();
+                    if (activeStage === 'simulation') void simulation.refetch();
+                  }}
+                >
+                  Retry workflow context
+                </button>
+              )}
+            </section>
+          )}
+        {isModule(activeStage) && !moduleInstalled(activeStage) ? (
+          <section className="panel" aria-label="Module setup">
+            {modules.isPending ? (
+              <p role="status">Checking module availability…</p>
+            ) : modules.isError ? (
+              <>
+                <ErrorNotice error={modules.error} />
+                <button className="secondary-button" onClick={() => void modules.refetch()}>
+                  Retry modules
+                </button>
+              </>
+            ) : (
+              <>
+                <p>Install or show this feature in Modules to open it.</p>
+                <button
+                  className="secondary-button"
+                  onClick={() => {
+                    navigateStage('modules');
+                  }}
+                >
+                  Manage modules
+                </button>
+              </>
             )}
           </section>
+        ) : state.isSectionCurrent(activeStage) ? (
+          children
+        ) : (
+          <p role="status">Opening workspace section…</p>
         )}
-        {state.isSectionCurrent(activeStage) ? children : <p role="status">Opening workspace section…</p>}
       </WorkspaceShell>
     </WorkspaceContext.Provider>
   );

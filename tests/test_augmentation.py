@@ -23,6 +23,7 @@ from vla_platform.augmentation.contracts import (
 from vla_platform.contracts import IntakeRequest, Job, now
 from vla_platform.datasets.inspect import profile
 from vla_platform.lifecycle.contracts import LifecycleResult, PolicyRequest
+from vla_platform.modules import initialize_modules, set_module_installed
 from vla_platform.settings import Settings
 from vla_platform.storage import jobs
 
@@ -111,7 +112,12 @@ def wait(client, job_id):
 
 
 @pytest.fixture
-def doubles(monkeypatch):
+def doubles(monkeypatch, tmp_path):
+    initialize_modules(
+        Settings(data_dir=tmp_path), tmp_path / "robot-lab-connection.json", existing=False
+    )
+    set_module_installed(tmp_path, "augmentation", True)
+    set_module_installed(tmp_path, "gemini", True)
     state = SimpleNamespace(
         events=[],
         missing_camera=None,
@@ -308,6 +314,7 @@ def test_missing_server_configuration_rejects_before_scheduling(
 def test_saved_cloud_login_is_used_without_gemini_key(
     tmp_path, monkeypatch, doubles, api_key_present
 ):
+    set_module_installed(tmp_path, "google-cloud", True)
     if not api_key_present:
         monkeypatch.delenv("GEMINI_API_KEY")
     (tmp_path / "cloud-connections.json").write_text(
@@ -349,6 +356,7 @@ def test_saved_cloud_login_is_used_without_gemini_key(
 def test_saved_cloud_config_does_not_fall_back_to_key_when_cli_missing(
     tmp_path, monkeypatch, doubles
 ):
+    set_module_installed(tmp_path, "google-cloud", True)
     (tmp_path / "cloud-connections.json").write_text(
         json.dumps(
             {

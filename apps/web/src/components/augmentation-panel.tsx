@@ -490,7 +490,7 @@ export function AugmentationPanel({
             <div className="augmentation-setup-actions">
               {onOpenSettings && (
                 <button type="button" className="secondary-button" onClick={onOpenSettings}>
-                  Open settings <Icon name="arrow" size={14} />
+                  Cloud &amp; APIs <Icon name="arrow" size={14} />
                 </button>
               )}
               <button

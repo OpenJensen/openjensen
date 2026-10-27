@@ -1,0 +1,164 @@
+.cloud-apis {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.cloud-api-card {
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  min-width: 0;
+}
+.cloud-api-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.cloud-api-mark,
+.cloud-api-heading .cloud-provider-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  background: var(--subtle);
+}
+.cloud-api-heading .cloud-provider-mark svg {
+  width: 22px;
+  height: 22px;
+}
+.cloud-api-heading h2 {
+  margin: 0;
+  font-size: var(--text-section);
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  min-width: 0;
+}
+.cloud-api-heading .cloud-status {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--subtle);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.cloud-api-card p {
+  margin: 0;
+}
+.cloud-api-description {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.cloud-api-card > form {
+  display: grid;
+  gap: 12px;
+}
+.cloud-api-card > form > label {
+  display: grid;
+  gap: 8px;
+  max-width: 520px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 500;
+}
+.cloud-api-card > form > label > input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  color: var(--ink);
+  background: var(--canvas);
+  font: inherit;
+  font-weight: 400;
+}
+.cloud-api-card .cloud-provider-actions {
+  gap: 12px;
+  padding-top: 0;
+  margin-top: 0;
+}
+.cloud-api-card .cloud-provider-actions button {
+  min-height: 40px;
+  font-size: 12px;
+}
+.cloud-api-card .cloud-provider-details {
+  margin: 0;
+  gap: 10px;
+}
+.cloud-api-card .cloud-provider-details dt,
+.cloud-api-card .cloud-provider-details dd {
+  font-size: 12px;
+}
+.cloud-api-account {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  font-size: 12px;
+}
+.cloud-api-account span {
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+.cloud-api-disclosure,
+.cloud-api-card .cloud-gpu-settings {
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  margin: 0;
+  padding-top: 16px;
+  min-width: 0;
+}
+.cloud-api-disclosure > summary,
+.cloud-api-card .cloud-gpu-settings > summary {
+  padding: 0;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.cloud-api-disclosure[open] > summary {
+  margin-bottom: 16px;
+}
+.cloud-api-card .cloud-gpu-settings-body {
+  padding: 16px 0 0;
+}
+.cloud-api-card .cloud-auth-note a {
+  color: var(--ink);
+  white-space: nowrap;
+  text-underline-offset: 3px;
+}
+.cloud-api-card .cloud-auth-note a svg {
+  vertical-align: -1px;
+}
+@media (max-width: 600px) {
+  .cloud-api-card {
+    padding: 16px;
+  }
+  .cloud-api-heading {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .cloud-api-heading .cloud-status {
+    margin-left: auto;
+  }
+  .cloud-api-card > form > label > input {
+    font-size: 16px;
+  }
+  .cloud-api-card .cloud-provider-actions button {
+    min-height: 44px;
+  }
+}

@@ -20,6 +20,7 @@ from vla_platform import __version__
 from vla_platform.agent_control.service import AgentControl
 from vla_platform.agent_control_api import register_errors as register_agent_errors
 from vla_platform.agent_control_api import router as agent_control_router
+from vla_platform.api_connections_api import router as api_connections_router
 from vla_platform.application_updates import ApplicationUpdates
 from vla_platform.augmentation.contracts import (
     AugmentationOptions,
@@ -58,7 +59,13 @@ from vla_platform.lifecycle.contracts import (
 from vla_platform.lifecycle.model_names import ModelRunName
 from vla_platform.lifecycle.training_catalog import public_training_models
 from vla_platform.module_installations import ModuleInstallations
-from vla_platform.modules import WorkspaceModule, workspace_modules
+from vla_platform.modules import (
+    WorkspaceModule,
+    initialize_modules,
+    module_workspace_exists,
+    runtime_feature_readiness,
+    workspace_modules,
+)
 from vla_platform.modules_api import router as modules_router
 from vla_platform.projects import Projects
 from vla_platform.recordings_api import router as recordings_router
@@ -121,6 +128,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        module_workspace_existing = module_workspace_exists(settings.data_dir)
         settings.data_dir.mkdir(parents=True, exist_ok=True)
         lock = FileLock(settings.data_dir / "owner.lock")
         try:
@@ -149,6 +157,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 storage, settings, execution, robot_bridge=app.state.robot_lab
             )
             await app.state.agent_control.reconcile()
+            try:
+                await asyncio.to_thread(
+                    lambda: initialize_modules(
+                        settings,
+                        app.state.robot_lab.config_path,
+                        existing=module_workspace_existing,
+                        runtime_ready={
+                            **runtime_feature_readiness(execution.lifecycle.catalog, settings),
+                            **{
+                                ident: app.state.module_installations.inspect(ident).ready
+                                for ident in ("robot", "decision")
+                            },
+                        }
+                        if module_workspace_existing
+                        else {},
+                    )
+                )
+            except OSError, ValueError:
+                # Preserve the saved registry for repair while keeping Core available.
+                pass
             yield
         finally:
             try:
@@ -203,6 +231,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse({"detail": str(exc)}, status_code=503)
 
     app.include_router(agent_control_router)
+    app.include_router(api_connections_router)
     app.include_router(cloud_connections_router)
     app.include_router(compute_settings_router)
     app.include_router(huggingface_router)
@@ -315,10 +344,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/v1/modules", response_model=list[WorkspaceModule])
     async def modules(request: Request) -> list[WorkspaceModule]:
-        """Report which optional modules this host has set up; nothing is contacted."""
-        return await asyncio.to_thread(
-            workspace_modules, settings, request.app.state.robot_lab.config_path
-        )
+        """List registered features and setup readiness without contacting providers."""
+        try:
+            return await asyncio.to_thread(
+                lambda: workspace_modules(
+                    settings,
+                    request.app.state.robot_lab.config_path,
+                    {
+                        **runtime_feature_readiness(
+                            request.app.state.execution.lifecycle.catalog, settings
+                        ),
+                        **{
+                            ident: request.app.state.module_installations.inspect(ident).ready
+                            for ident in ("robot", "decision")
+                        },
+                    },
+                )
+            )
+        except OSError, ValueError:
+            raise HTTPException(
+                409, "The saved module registry needs administrator attention."
+            ) from None
 
     @app.get("/api/v1/capabilities", response_model=list[Capability])
     async def capabilities(execution: ExecutionDep) -> list[Capability]:

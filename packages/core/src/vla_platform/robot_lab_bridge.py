@@ -58,8 +58,13 @@ class RobotLabBridge:
         await self.client.aclose()
 
     def config(self):
+        return self.read_config(self.config_path)
+
+    @staticmethod
+    def read_config(path: Path):
+        """Validate saved pairing without opening a client or contacting hardware."""
         try:
-            descriptor = os.open(self.config_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
             with os.fdopen(descriptor, "rb") as handle:
                 info = os.fstat(handle.fileno())
                 if (

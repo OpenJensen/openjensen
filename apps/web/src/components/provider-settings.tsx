@@ -1,18 +1,18 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { agentApi, type AgentProvider, type AgentProviderRequest } from '@/lib/agent-api';
 import './workbench-form.css';
 import './agent-control.css';
 
 export function ProviderSettings() {
+  const client = useQueryClient();
   const providers = useQuery({ queryKey: ['agent-providers'], queryFn: agentApi.providers, retry: false });
   const [id, setId] = useState('openai');
   const [provider, setProvider] = useState<'mock' | 'openai_responses'>('openai_responses');
   const [model, setModel] = useState('gpt-6-astra');
   const [reasoning, setReasoning] = useState('medium');
-  const [key, setKey] = useState('');
   const [busy, setBusy] = useState(false);
   const [checkConsent, setCheckConsent] = useState(false);
   const [message, setMessage] = useState('');
@@ -28,6 +28,8 @@ export function ProviderSettings() {
     try {
       await action();
       await providers.refetch();
+      void client.invalidateQueries({ queryKey: ['api-connections'] });
+      void client.invalidateQueries({ queryKey: ['modules'] });
       setMessage(done);
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : 'Provider settings could not be verified.');
@@ -41,7 +43,6 @@ export function ProviderSettings() {
     setProvider(profile.provider);
     setModel(profile.model);
     setReasoning(profile.reasoning_effort);
-    setKey('');
     setCheckConsent(false);
     setMessage('');
     setError('');
@@ -65,9 +66,7 @@ export function ProviderSettings() {
             provider,
             model: model.trim(),
             reasoning_effort: reasoning,
-            ...(key ? { api_key: key } : {}),
           } as AgentProviderRequest;
-          setKey('');
           setCheckConsent(false);
           void run(
             () => agentApi.saveProvider(id, body),
@@ -99,7 +98,6 @@ export function ProviderSettings() {
                 const value = event.target.value as 'mock' | 'openai_responses';
                 setProvider(value);
                 setModel(value === 'mock' ? 'deterministic-mock' : 'gpt-6-astra');
-                setKey('');
               }}
             >
               <option value="openai_responses">OpenAI Responses</option>
@@ -128,21 +126,7 @@ export function ProviderSettings() {
             </select>
           </label>
         </div>
-        {provider === 'openai_responses' && (
-          <label className="workbench-field">
-            OpenAI API key
-            <input
-              type="password"
-              value={key}
-              maxLength={512}
-              autoComplete="new-password"
-              disabled={busy}
-              placeholder="Leave blank to keep the saved key"
-              onChange={(event) => setKey(event.target.value)}
-            />
-          </label>
-        )}
-        <p>Credentials stay in the private server profile store. The password field is cleared when you save.</p>
+        {provider === 'openai_responses' && <p>Uses the OpenAI API key configured above.</p>}
         <div className="workbench-actions">
           <button
             type="submit"
