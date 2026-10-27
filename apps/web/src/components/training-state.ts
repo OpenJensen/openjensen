@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, isActive, isDatasetJob, type Job, type PolicyRequest } from '@/lib/api';
 import { datasetLibrary } from '@/lib/dataset-library';
+import { projectHistoryView } from '@/lib/project-history';
 import { readPublicPreference, writePublicPreference } from '@/lib/public-preferences';
 import { gradientAccumulationAvailable, trainingModels, type TrainingModel } from '@/lib/training-models';
 import { checkpointStep, trainingRunModelLabel } from '@/lib/checkpoints';
@@ -121,7 +122,7 @@ export function useTrainingPanel({
     enabled: active,
     refetchInterval: active ? 15000 : false,
   });
-  const jobs = useQuery({
+  const jobQuery = useQuery({
     queryKey: ['jobs', projectId],
     queryFn: async () => {
       const history = await api.jobs(projectId);
@@ -131,8 +132,14 @@ export function useTrainingPanel({
     },
     enabled: active && !!projectId,
     retry: false,
-    refetchInterval: (query) => (active ? (query.state.data?.some(isActive) ? 1000 : 5000) : false),
+    refetchInterval: (query) =>
+      active
+        ? validTrainingHistory(query.state.data, projectId) && query.state.data.some(isActive)
+          ? 1000
+          : 5000
+        : false,
   });
+  const jobs = projectHistoryView(jobQuery, projectId);
   const library = useQuery({
     queryKey: ['datasets', projectId],
     queryFn: ({ signal }) => datasetLibrary.list(projectId, signal),

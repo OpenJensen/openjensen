@@ -1710,8 +1710,27 @@ test('ACT export ignores another project receipt and download ancestry', async (
     format: 'inference_export',
     parent_ids: ['foreign-copy'],
   });
-  // A direct training reload must reject a mixed-project canonical history.
-  await page.reload();
+  // Populate a fresh shared cache before the module gate mounts TrainingPanel.
+  // The panel must reject this data even when its own query function never ran.
+  let allowModules!: () => void;
+  const moduleGate = new Promise<void>((resolve) => {
+    allowModules = resolve;
+  });
+  await page.route('**/api/v1/modules', async (route) => {
+    await moduleGate;
+    await route.fulfill({ json: installedModules });
+  });
+  const mixedHistory = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === `/api/v1/projects/${projectId}/jobs`,
+  );
+  try {
+    await page.reload();
+    await (await mixedHistory).finished();
+    await expect(page.getByRole('region', { name: 'Module setup' })).toContainText('Checking module availability');
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+  } finally {
+    allowModules();
+  }
   await expect(page.getByRole('region', { name: 'Fine-tuning jobs', exact: true }).getByRole('alert')).toContainText(
     'contains another project',
   );
