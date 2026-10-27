@@ -158,6 +158,13 @@ async function fixture(
     };
   }
   let sessions: (typeof saved)[] = [];
+  let openaiKeySaved = false;
+  const apiConnection = (id: string) => ({
+    id,
+    configured: id === 'openai' && openaiKeySaved,
+    source: id === 'openai' && openaiKeySaved ? 'saved' : null,
+    message: null,
+  });
   let profiles = [
     {
       id: 'mock',
@@ -220,6 +227,12 @@ async function fixture(
       robot.session.torque_enabled = false;
       robot.session.generation += 1;
       return route.fulfill({ json: robot });
+    }
+    if (path === '/api-connections')
+      return route.fulfill({ json: { providers: ['openai', 'gemini'].map(apiConnection) } });
+    if (path === '/api-connections/openai' && request.method() === 'PUT') {
+      openaiKeySaved = true;
+      return route.fulfill({ json: apiConnection('openai') });
     }
     if (path === '/agent/providers') return route.fulfill({ json: profiles });
     if (path === '/agent/providers/openai' && request.method() === 'PUT') {
@@ -426,25 +439,28 @@ test('a stale controller epoch disables acceptance even if the old proposal rema
   expect(requests.filter((request) => request.path.endsWith('/approve'))).toEqual([]);
 });
 
-test('provider save clears the password and never implies a capability check or stores the key in browser storage', async ({
+test('shared OpenAI key stays private and saving a provider profile does not imply a capability check', async ({
   page,
 }) => {
   const { requests } = await fixture(page);
-  await page.goto('/settings/');
-  await page.getByRole('button', { name: 'AI providers', exact: true }).click();
-  const panel = page.getByRole('region', { name: 'Agent provider settings', exact: true });
-  const key = panel.getByLabel('OpenAI API key', { exact: true });
+  await page.goto('/cloud-apis/');
+  const card = page.getByRole('region', { name: 'OpenAI', exact: true });
+  const key = card.getByLabel('OpenAI API key', { exact: true });
   const fakeKey = 'sk-BrowserFixtureOnlyNotARealKey12345678';
   await expect(key).toHaveAttribute('type', 'password');
   await key.fill(fakeKey);
-  await panel.getByRole('button', { name: 'Save provider profile', exact: true }).click();
+  await card.getByRole('button', { name: 'Save API key', exact: true }).click();
   await expect(key).toHaveValue('');
+  await card.getByText('Advanced OpenAI profiles', { exact: true }).click();
+  const panel = card.getByRole('region', { name: 'Agent provider settings', exact: true });
+  await panel.getByRole('button', { name: 'Save provider profile', exact: true }).click();
   await expect(panel.getByRole('region', { name: 'Provider openai', exact: true })).toContainText(
     'Capabilities unverified',
   );
   await expect(panel.getByRole('button', { name: 'Check openai', exact: true })).toBeDisabled();
   expect(requests.filter((request) => request.path.endsWith('/check'))).toEqual([]);
-  expect(requests.find((request) => request.path === '/agent/providers/openai')?.body.api_key).toBe(fakeKey);
+  expect(requests.find((request) => request.path === '/api-connections/openai')?.body.api_key).toBe(fakeKey);
+  expect(requests.find((request) => request.path === '/agent/providers/openai')?.body).not.toHaveProperty('api_key');
   expect(
     await page.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } })),
   ).not.toContain(fakeKey);
@@ -645,9 +661,9 @@ test('AI teleoperation opens physical preparation without starting a simulator, 
   await expect(preflight).toBeVisible();
   await expect(preflight).toContainText('Connect the follower USB adapter and refresh readiness');
   await expect(page.getByText('The mock provider cannot plan a live physical task.', { exact: false })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Settings → AI providers', exact: true })).toHaveAttribute(
+  await expect(page.getByRole('link', { name: 'Cloud & APIs → OpenAI', exact: true })).toHaveAttribute(
     'href',
-    '/settings/',
+    '/cloud-apis/',
   );
   await expect(page.getByRole('combobox', { name: 'Calibrated follower', exact: true })).toHaveValue('');
   await expect(page.getByLabel('Show the local camera preview', { exact: true })).not.toBeChecked();
@@ -656,7 +672,10 @@ test('AI teleoperation opens physical preparation without starting a simulator, 
   await expect(page.getByRole('button', { name: 'Connect arm and hold current pose', exact: true })).toBeDisabled();
   expect(reads.some((path) => path.startsWith('/teaching') || path.includes('camera.jpg'))).toBe(false);
   expect(requests).toEqual([]);
-  await page.getByRole('link', { name: 'Settings → AI providers', exact: true }).click();
+  await page.getByRole('link', { name: 'Cloud & APIs → OpenAI', exact: true }).click();
+  await expect(page).toHaveURL(/\/cloud-apis\/$/);
+  const openai = page.getByRole('region', { name: 'OpenAI', exact: true });
+  await openai.getByText('Advanced OpenAI profiles', { exact: true }).click();
   await expect(page.getByRole('region', { name: 'Agent provider settings', exact: true })).toBeVisible();
   expect(requests).toEqual([]);
 });

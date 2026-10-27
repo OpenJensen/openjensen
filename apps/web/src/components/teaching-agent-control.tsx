@@ -468,8 +468,8 @@ function AgentControls({
         {target === 'robot_lab' && provider?.provider === 'mock' && (
           <p role="status">
             The mock provider cannot plan a live physical task. Configure Astra in{' '}
-            <Link href="/settings/" onClick={onOpenProviders}>
-              Settings → AI providers
+            <Link href="/cloud-apis/" onClick={onOpenProviders}>
+              Cloud & APIs → OpenAI
             </Link>{' '}
             and check its capabilities before live planning.
           </p>
@@ -578,9 +578,9 @@ function AgentControls({
             Responses, within the displayed run limits. Provider charges apply.
           </label>
         )}
-        {!providers.isPending && !provider && <p role="status">Configure a provider in Settings → AI providers.</p>}
+        {!providers.isPending && !provider && <p role="status">Configure a provider in Cloud & APIs → OpenAI.</p>}
         {provider && !provider.checked && provider.provider !== 'mock' && (
-          <p role="status">Run a capability check in Settings → AI providers before creating this session.</p>
+          <p role="status">Run a capability check in Cloud & APIs → OpenAI before creating this session.</p>
         )}
         {providers.error && <p role="alert">Saved provider profiles could not be checked.</p>}
         <div className="workbench-actions">

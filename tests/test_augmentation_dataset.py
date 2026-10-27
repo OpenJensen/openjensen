@@ -26,8 +26,8 @@ FRONT = "observation.images.front"
 
 
 @pytest.fixture
-def doubles(monkeypatch):
-    return augmentation_doubles.__wrapped__(monkeypatch)
+def doubles(monkeypatch, tmp_path):
+    return augmentation_doubles.__wrapped__(monkeypatch, tmp_path)
 
 
 def make_recipe(client, app, pid):
@@ -53,6 +53,8 @@ def full_request(recipe, cameras=None):
 def full_doubles(monkeypatch, state, lengths=(21, 5, 11)):
     original_explorer = service.DatasetExplorer
     original_download = service.download_video
+    # Mock media uses tiny byte strings, so capacity admission must be synthetic too.
+    monkeypatch.setattr(service.shutil, "disk_usage", lambda _: SimpleNamespace(free=100 * 1024**3))
 
     class Explorer(original_explorer):
         async def preview(self, source, episode):

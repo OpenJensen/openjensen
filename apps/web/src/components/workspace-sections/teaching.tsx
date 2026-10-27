@@ -11,7 +11,6 @@ export default function TeachingSection() {
   const [agentTarget, setAgentTarget] = useState<AgentTarget>('robot_lab');
   const {
     teachingMode,
-    setSettingsTab,
     setTeachingCapture,
     setTeachingMode,
     workflowProjectId,
@@ -30,7 +29,7 @@ export default function TeachingSection() {
         projectId={workflowProjectId}
         target={agentTarget}
         onTargetChange={setAgentTarget}
-        onOpenProviders={() => setSettingsTab('providers')}
+        onOpenProviders={() => navigateStage('cloud-apis')}
       />
       {agentTarget === 'teaching' && (
         <section className="agent-simulation-tools" aria-label="Simulation tools">
