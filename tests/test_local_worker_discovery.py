@@ -422,12 +422,12 @@ def test_gpu_uuid_disappearing_before_add_never_registers_numeric_fallback(local
     "raw,expected",
     [
         (
-            "d18657c5-f98c-5caa-ae46-72f0ec25315f",
-            "GPU-d18657c5-f98c-5caa-ae46-72f0ec25315f",
+            "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+            "GPU-aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
         ),
         (
-            "GPU-D18657C5-F98C-5CAA-AE46-72F0EC25315F",
-            "GPU-d18657c5-f98c-5caa-ae46-72f0ec25315f",
+            "GPU-AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE",
+            "GPU-aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
         ),
         (None, None),
         ("0", None),

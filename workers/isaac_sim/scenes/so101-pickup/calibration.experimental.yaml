@@ -1,7 +1,7 @@
 # Unverified fit. Only use with explicit experimental rollout mode.
 api_version: simulation.joints/v1alpha1
 status: unverified
-source: evidence/calibration/report.json; experimental only; see experiment.json
+source: evidence/calibration/scene-parameters.json; unverified example parameters
 joints:
   shoulder_pan:
     sim_rad:

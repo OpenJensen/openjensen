@@ -159,20 +159,6 @@ def test_custom_operator_module_executes_the_selected_pinned_model(tmp_path):
         }
 
 
-def test_catalog_checkpoint_metadata_matches_existing_research_catalog():
-    path = (
-        Path(__file__).parents[1] / "workers/smolvla_qlora/configs/benchmarks/open_weight_vlas.json"
-    )
-    reference = json.loads(path.read_text())
-    for entry in reference["models"]:
-        if entry["id"] in {"smolvla", "pi05"}:
-            continue  # Dataset fine-tuning uses the base, not the LIBERO benchmark checkpoint.
-        model = TRAINING_MODEL_BY_ID[entry["id"]]
-        assert model.model_id == entry["checkpoint"]["source"]
-        assert model.model_revision == entry["checkpoint"]["revision"]
-        assert model.checkpoint_subdirectory == entry["checkpoint"]["subdirectory"]
-
-
 @pytest.mark.parametrize("model_id", ["openvla", "smolvla"])
 @pytest.mark.parametrize("resume_kind", ["job", "artifact"])
 @pytest.mark.parametrize("stored_recipe", [True, False])

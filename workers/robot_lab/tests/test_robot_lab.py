@@ -155,7 +155,7 @@ class SafetyTests(unittest.TestCase):
         for name in ("/dev/cu.Bluetooth-Incoming-Port", "/dev/cu.debug-console", "COM1"):
             self.assertFalse(is_usb_serial(SimpleNamespace(device=name, vid=None)))
         for name in (
-            "/dev/cu.usbmodem5B901482131",
+            "/dev/cu.usbmodem-test",
             "/dev/cu.wchusbserial123",
             "/dev/ttyUSB0",
             "/dev/ttyACM0",

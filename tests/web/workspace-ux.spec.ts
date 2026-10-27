@@ -160,10 +160,7 @@ test('the contextual guide covers every section and keeps API docs separate', as
     await expect(sections.getByRole('heading', { name, exact: true })).toBeVisible();
   }
   await expect(page.locator('#distill')).toContainText('ACT256');
-  await expect(page.locator('#distill').getByRole('link', { name: 'Adapter setup', exact: true })).toHaveAttribute(
-    'href',
-    'https://github.com/OpenJensen/openjensen/blob/main/workers/policy_distillation/README.md',
-  );
+  await expect(page.locator('#distill').getByRole('link', { name: 'Adapter setup', exact: true })).toHaveCount(0);
   await page.reload();
   await expect(page.locator('#distill')).toContainText('ACT256');
   await page.setViewportSize({ width: 320, height: 900 });

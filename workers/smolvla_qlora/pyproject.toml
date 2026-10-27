@@ -28,11 +28,9 @@ dev = ["pytest==8.4.2", "ruff==0.13.2", "datasets==4.8.5", "numpy==2.2.6"]
 [project.scripts]
 jensen-finetune = "jensen_vla.train:main"
 jensen-verify = "jensen_vla.verify:main"
-jensen-check-qlora = "jensen_vla.checks.cli:main"
 # Compatibility commands for alpha installations.
 firebird-finetune = "jensen_vla.train:main"
 firebird-verify = "jensen_vla.verify:main"
-firebird-check-qlora = "jensen_vla.checks.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

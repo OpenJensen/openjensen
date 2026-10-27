@@ -10,8 +10,7 @@ export type Recipe = {
   evalEvery: number;
 };
 
-// KiteML SmolVLA form defaults, verified in its signed-in UI on 2026-09-26.
-// Its automatic save cadence targets about five checkpoints across the run.
+// SmolVLA recipe defaults; automatic saving targets five checkpoints per run.
 export const defaultRecipe: Recipe = {
   trainingSteps: 20000,
   batchSize: 64,

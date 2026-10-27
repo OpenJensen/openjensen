@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "status": "unverified",
+  "scope": "Authored example scene parameters derived from the attributed public dataset. These values are not a validated robot calibration.",
+  "parameter_names": [
+    "camera_rx",
+    "camera_ry",
+    "camera_rz",
+    "camera_tx",
+    "camera_ty",
+    "camera_tz",
+    "focal_px",
+    "shoulder_lift_offset",
+    "elbow_flex_offset",
+    "wrist_flex_offset",
+    "wrist_roll_offset",
+    "gripper_offset",
+    "gripper_slope",
+    "frame_lag"
+  ],
+  "parameters": [
+    1.9035400932716713,
+    0.20251141307800818,
+    -0.04229454343804629,
+    -0.3639314006379117,
+    0.08348574709468853,
+    2.25714408965991,
+    3208.2141231027977,
+    -0.1272393201285973,
+    -0.09574311655135799,
+    0.026851899639899333,
+    1.7434504580533994,
+    0.04732619903995551,
+    0.01339102949077318,
+    -2.6733349882040764
+  ],
+  "lag_frames": -2.6733349882040764,
+  "limitations": [
+    "Jaw tips use approximate geometry; reported covariance excludes landmark geometry errors.",
+    "Local uncertainty assumes fixed signs, centered principal point and no lens distortion.",
+    "Joint-map support remains limited to observed calibration poses.",
+    "Independent landmark geometry and its propagated uncertainty remain unproven",
+    "Competing joint-sign hypotheses have not been independently resolved",
+    "state.shoulder_lift mapped support must lie inside its URDF limits",
+    "state.wrist_roll mapped support must lie inside its URDF limits",
+    "action.shoulder_lift mapped support must lie inside its URDF limits",
+    "action.wrist_roll mapped support must lie inside its URDF limits",
+    "shoulder_lift_offset standard error exceeds 2 degrees or is unavailable",
+    "Gripper standard error exceeds 2 degrees over full support or is unavailable"
+  ]
+}

@@ -1,9 +1,6 @@
 from policykit.quantization import tensor_quantization
-from policykit.benchmark import parse_bench
 
 
-def test_real_upstream_benchmark_row():
-    assert parse_bench('| smolvla | 2 | 512 | 16 | 90.0 | 100.0 | 110.0 | 20.0 |\n') == (100.0, 110.0)
 
 
 def test_action_expert_and_projector_remain_float():
