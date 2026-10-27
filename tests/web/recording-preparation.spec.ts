@@ -250,7 +250,7 @@ async function fixture(page: Page) {
     const replies: Record<string, unknown> = {
       '/api/v1/health': { status: 'ok', version: 'test' },
       '/api/v1/capabilities': [],
-      '/api/v1/modules': installedModules.filter((item) => ['datasets', 'teaching'].includes(item.id)),
+      '/api/v1/modules': installedModules.filter((item) => ['datasets', 'teaching', 'training'].includes(item.id)),
       '/api/v1/projects': ['alpha', 'beta'].map((id) => ({ id, name: `Recording ${id}`, created_at: stamp })),
       '/api/v1/policy-options': {
         runtimes: [],

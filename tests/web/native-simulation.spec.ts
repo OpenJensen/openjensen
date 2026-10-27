@@ -621,10 +621,14 @@ for (const width of [320, 390])
     await page.keyboard.press('Tab');
     const cloud = page.getByRole('link', { name: 'Cloud runs', exact: true });
     await expect(cloud).toBeFocused();
-    await page.keyboard.press('Tab');
-    await expect(page.getByRole('link', { name: 'Settings', exact: true })).toBeFocused();
-    await page.keyboard.press('Shift+Tab');
-    await expect(cloud).toBeFocused();
+    for (const name of ['Modules', 'Cloud & APIs', 'Settings']) {
+      await page.keyboard.press('Tab');
+      await expect(navigation.getByRole('link', { name, exact: true })).toBeFocused();
+    }
+    for (const name of ['Cloud & APIs', 'Modules', 'Cloud runs']) {
+      await page.keyboard.press('Shift+Tab');
+      await expect(navigation.getByRole('link', { name, exact: true })).toBeFocused();
+    }
     const buttonBounds = await cloud.boundingBox();
     expect(buttonBounds!.x).toBeGreaterThanOrEqual(0);
     expect(buttonBounds!.x + buttonBounds!.width).toBeLessThanOrEqual(width);
