@@ -1,6 +1,7 @@
 import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { openCreateProject, selectProject } from './project-controls';
+import { installedModules } from './module-fixtures';
 
 async function fixture(page: Page, empty = false) {
   const projects = empty
@@ -29,6 +30,8 @@ async function fixture(page: Page, empty = false) {
     }
     if (path === '/api/v1/health') return route.fulfill({ json: { status: 'ok', version: 'project-menu-fixture' } });
     if (path === '/api/v1/projects') return route.fulfill({ json: projects });
+    if (path === '/api/v1/modules')
+      return route.fulfill({ json: installedModules.filter((item) => item.id === 'datasets') });
     return route.fulfill({ json: [] });
   });
   await page.goto('/datasets/');
@@ -70,7 +73,15 @@ test('project switching and keyboard navigation preserve scope without creating 
   await expect(menu(page)).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Dashboard', exact: true })).toBeFocused();
   await current(page).click();
-  await page.getByRole('heading', { name: 'Datasets', exact: true, level: 1 }).click();
+  // The popover may cover the page heading on a narrow screen. Exercise a
+  // genuine outside click at a visible content point below its bounded menu.
+  const bounds = await menu(page).boundingBox();
+  const outside = await page.evaluate(() => ({
+    x: document.documentElement.clientWidth - 8,
+    y: window.innerHeight - 8,
+  }));
+  expect(outside.y).toBeGreaterThan(bounds!.y + bounds!.height);
+  await page.mouse.click(outside.x, outside.y);
   await expect(menu(page)).toHaveCount(0);
   expect(writes).toEqual([]);
 });
