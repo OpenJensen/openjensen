@@ -91,6 +91,24 @@ function Workbench({ children }: { children: ReactNode }) {
               className="stage-navigation grouped-navigation"
               aria-label="Policy lifecycle"
               aria-busy={modules.isPending}
+              onFocusCapture={(event) => {
+                const navigation = event.currentTarget;
+                const link = event.target.closest<HTMLElement>('.stage-button');
+                if (!link || navigation.scrollWidth <= navigation.clientWidth) return;
+                const reveal = () => {
+                  if (!link.isConnected || document.activeElement !== link) return;
+                  const viewport = navigation.getBoundingClientRect();
+                  const bounds = link.getBoundingClientRect();
+                  const left = viewport.left + navigation.clientLeft + 6;
+                  const right = viewport.left + navigation.clientLeft + navigation.clientWidth - 6;
+                  const delta =
+                    bounds.left < left ? bounds.left - left : bounds.right > right ? bounds.right - right : 0;
+                  if (delta) navigation.scrollBy({ left: delta, behavior: 'instant' });
+                };
+                reveal();
+                // Reconcile the browser's own focus scroll without moving the page.
+                requestAnimationFrame(reveal);
+              }}
             >
               {navigationGroups.map((group) => {
                 const items = group.items.filter((id) => !isModule(id) || moduleInstalled(id));
