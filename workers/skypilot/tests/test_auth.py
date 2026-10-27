@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
-_PROJECT = "project-5693e83a-db3a-43e1-98c"
+_PROJECT = "example-simulation-project"
 _ACCOUNT = f"sim-rollout-runner@{_PROJECT}.iam.gserviceaccount.com"
 _GCLOUD_STUB = r"""#!/usr/bin/env bash
 set -euo pipefail
@@ -64,6 +64,7 @@ class AuthTests(unittest.TestCase):
             CLOUDSDK_ACTIVE_CONFIG_NAME="personal-profile",
             CLOUDSDK_CORE_ACCOUNT="previous-account",
             SIM_PROJECT_ID="previous-project",
+            SIM_AUTH_PROJECT_ID=_PROJECT,
         )
 
     def _source(self, key="/unused/dedicated-runner-key.json"):
@@ -91,6 +92,30 @@ printf 'STATUS=%s\nPROJECT=%s\nACTIVE=%s\nACCOUNT=%s\n' \
         calls = (self.directory / "calls.log").read_text().splitlines()
         self.assertTrue(calls[0].startswith("config configurations list"))
         self.assertTrue(calls[1].startswith("auth activate-service-account"))
+
+    def test_project_is_required(self):
+        self.environment.pop("SIM_AUTH_PROJECT_ID")
+        result = self._source()
+        self.assertIn("STATUS=1", result.stdout)
+        self.assertIn("PROJECT=unset", result.stdout)
+        self.assertIn("Set SIM_AUTH_PROJECT_ID", result.stderr)
+        self.assertFalse((self.directory / "calls.log").exists())
+
+    def test_key_project_must_match_selection(self):
+        with tempfile.TemporaryDirectory(prefix="runner-key-test-") as directory:
+            key = Path(directory) / "key.json"
+            key.write_text(json.dumps({
+                "type": "service_account",
+                "client_email": _ACCOUNT,
+                "project_id": "another-example-project",
+                "private_key": "test-only-placeholder",
+            }))
+            self.environment["SIM_PYTHON"] = sys.executable
+            result = self._source(key)
+        self.assertIn("STATUS=1", result.stdout)
+        self.assertIn("PROJECT=unset", result.stdout)
+        self.assertIn("dedicated", result.stderr)
+        self.assertFalse((self.directory / "calls.log").exists())
 
     def test_repo_key_is_rejected(self):
         # Reject keys anywhere in the checkout, including outside this worker.

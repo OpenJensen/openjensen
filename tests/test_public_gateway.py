@@ -455,12 +455,20 @@ else:
 @pytest.mark.parametrize(
     "path",
     [
+        "/api/v1/api-connections",
+        "/api/v1/api-connections/openai",
+        "/api/v1/%2561pi-connections/gemini",
         "/api/v1/module-installations",
         "/api/v1/module-installations/cancel",
         "/api/v1/%256dodule-installations",
         "/api/v1/updates",
         "/api/v1/updates/apply",
         "/api/v1/%2575pdates/apply",
+        "/api/v1/agent/providers",
+        "/api/v1/agent/providers/astra/check",
+        "/api/v1/agent-sessions/run/approve",
+        "/api/v1/projects/project/agent-sessions",
+        "/api/v1/%2561gent/providers",
         "/api/v1/robot-lab/status",
         "/api/v1/robot-lab/camera.jpg",
         "/api/v1/robot-lab/control/start",
@@ -495,3 +503,26 @@ def test_public_gateway_cannot_enable_modules(config, method, path):
         headers={"Authorization": AUTH, "Origin": ORIGIN},
     ) as client:
         assert client.request(method, "/firebird/api/v1" + path).status_code == 403
+
+
+@pytest.mark.parametrize("method", ["PUT", "PATCH", "DELETE"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v1/api-connections/openai",
+        "/api/v1/api-connections/gemini",
+        "/api/v1/%2561pi-connections/gemini",
+    ],
+)
+def test_public_gateway_never_forwards_api_key_mutations(config, method, path):
+    def forbidden(_request):
+        raise AssertionError("API credentials must remain private")
+
+    with TestClient(
+        gateway.PublicGateway(config[0], transport=httpx.MockTransport(forbidden)),
+        base_url=ORIGIN,
+        headers={"Authorization": AUTH, "Origin": ORIGIN},
+    ) as client:
+        response = client.request(method, "/firebird" + path)
+        assert response.status_code == 403
+        assert "private workspace" in response.text

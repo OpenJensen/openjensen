@@ -6,7 +6,7 @@ manual dispatch and on schedule. Edits to CI itself run everything.
 
 Outputs (all single-line, written to GITHUB_OUTPUT):
 
-* the eight scope flags in ``SCOPES`` (unchanged names; ``application`` = Python job);
+* the seven scope flags in ``SCOPES`` (``application`` = Python job);
 * ``desktop_lane`` / ``mobile_lane`` / ``web_lane``: which Playwright projects run;
 * ``docs_only``: a valid diff that needs no job at all;
 * ``full``: true for main pushes, tags, manual dispatch and schedule;
@@ -24,7 +24,6 @@ SCOPES = (
     "quantization",
     "unified_quantization",
     "training",
-    "benchmark",
     "act",
     "teaching",
     "decision",
@@ -34,7 +33,6 @@ WORKERS = {
     "quantization": "workers/vla_cpp/",
     "unified_quantization": "workers/jensen_quant/",
     "training": "workers/smolvla_qlora/",
-    "benchmark": "workers/benchmark_gpu/",
     "act": "workers/act_optimizer/",
     "teaching": "workers/teaching/",
     "decision": "workers/decision/",
@@ -110,8 +108,6 @@ def path_scopes(path, adapters):
             scopes.add("application")  # Adapters exercise worker boundaries; PRs skip this.
         if path.startswith("workers/smolvla_qlora/"):
             scopes.update(("act", "teaching"))  # Native-source export, local dataset producer.
-        if path.startswith("workers/vla_cpp/"):
-            scopes.add("benchmark")  # Cross-stack benchmark imports policykit.spatial_runtime.
     elif path in DOC_FILES or path.startswith(("docs/", ".github/")):
         pass  # Documentation and repository metadata need no job.
     else:

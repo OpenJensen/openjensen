@@ -326,107 +326,6 @@
   color: var(--error);
   font-size: 12px;
 }
-.augmentation-presets {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-.augmentation-preset {
-  overflow: hidden;
-}
-.augmentation-look {
-  display: block;
-  overflow: hidden;
-  border-bottom: 1px solid var(--line);
-  border-radius: 11px 11px 0 0;
-}
-.augmentation-look > svg {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-.augmentation-look-room {
-  fill: color-mix(in srgb, var(--ink) 3%, var(--surface));
-}
-.augmentation-look-wall {
-  fill: color-mix(in srgb, var(--ink) 6%, var(--surface));
-}
-.augmentation-look-table {
-  fill: color-mix(in srgb, var(--ink) 11%, var(--surface));
-}
-.augmentation-look-table-edge {
-  fill: color-mix(in srgb, var(--ink) 19%, var(--surface));
-}
-.augmentation-look-shadow {
-  fill: color-mix(in srgb, var(--ink) 14%, transparent);
-}
-.augmentation-look-object {
-  fill: #7395b9;
-  stroke: #577ba1;
-  stroke-width: 1;
-}
-.augmentation-look-object-edge {
-  stroke: #56779a;
-  stroke-width: 1;
-}
-.augmentation-look-arm {
-  stroke: #8b98a6;
-  stroke-width: 7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.augmentation-look-joint {
-  fill: #d2d7df;
-  stroke: #8b98a6;
-  stroke-width: 1.5;
-}
-.augmentation-look-gripper {
-  stroke: #6b7b8d;
-  stroke-width: 2.5;
-  stroke-linecap: round;
-}
-.augmentation-look-light {
-  fill: #e4bc65;
-  opacity: 0.13;
-}
-.augmentation-look-sun {
-  fill: #e3bf74;
-}
-.augmentation-look-texture .augmentation-look-table {
-  fill: #bda58e;
-}
-.augmentation-look-texture .augmentation-look-table-edge {
-  fill: #9d826d;
-}
-.augmentation-look-grain {
-  stroke: #967961;
-  stroke-width: 1;
-  opacity: 0.45;
-}
-.augmentation-look-custom .augmentation-look-object {
-  fill: #9a8bc0;
-  stroke: #8173a8;
-}
-.augmentation-look-custom .augmentation-look-object-edge {
-  stroke: #8173a8;
-}
-.augmentation-look-spark {
-  fill: #a797cb;
-}
-.augmentation-preset-copy {
-  display: block;
-  padding: 15px;
-}
-.augmentation-preset-heading {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.augmentation-preset-heading strong {
-  font-size: 12px;
-  font-weight: 550;
-  line-height: 1.5;
-}
 .augmentation-prompt-label {
   margin-top: 22px;
 }
@@ -879,4 +778,371 @@
 .augmentation-submit {
   margin-top: 24px;
   padding-top: 20px;
+}
+
+.augmentation-edit-preview,
+.augmentation-saved-source,
+.augmentation-iterate {
+  padding: 18px;
+  margin-top: 18px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--subtle);
+}
+.augmentation-edit-preview strong,
+.augmentation-iterate h4,
+.augmentation-saved-source h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 550;
+}
+.augmentation-edit-preview p,
+.augmentation-iterate p,
+.augmentation-saved-source p,
+.augmentation-lineage {
+  margin: 8px 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.augmentation-edit-preview p {
+  color: var(--ink);
+}
+.augmentation-iterate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+.augmentation-saved-source {
+  display: grid;
+  grid-template-columns: minmax(160px, 280px) minmax(0, 1fr);
+  gap: 20px;
+  margin-top: 0;
+}
+.augmentation-saved-source video {
+  display: block;
+  width: 100%;
+  background: #111;
+  border-radius: 8px;
+}
+.augmentation-saved-source .text-button {
+  margin-top: 8px;
+}
+@media (max-width: 640px) {
+  .augmentation-saved-source {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .augmentation-iterate-actions {
+    flex-direction: column;
+  }
+  .augmentation-iterate-actions button {
+    width: 100%;
+  }
+}
+
+.augmentation-gallery {
+  padding: 26px 0;
+  border-top: 1px solid var(--line);
+}
+.augmentation-gallery h2 {
+  font-size: 17px;
+}
+.augmentation-playback {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  margin: 18px 0;
+}
+.augmentation-variant-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.augmentation-variant {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.augmentation-variant[data-selected] {
+  border-color: var(--accent);
+}
+.augmentation-variant-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.augmentation-variant-title h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.augmentation-variant-title span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.augmentation-variant video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #111;
+  border-radius: 7px;
+}
+.augmentation-variant-description {
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  margin: 12px 0;
+}
+.augmentation-variant-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+.augmentation-variant-actions button {
+  width: 100%;
+  white-space: normal;
+}
+.augmentation-variant .augmentation-provenance {
+  padding-top: 12px;
+  margin-top: 12px;
+}
+.augmentation-dataset-apply {
+  padding: 24px;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  margin: 24px 0;
+  background: var(--surface);
+}
+.augmentation-camera-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  border: 0;
+  padding: 16px 0;
+}
+.augmentation-camera-checks label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+}
+.augmentation-panel .augmentation-camera-checks input {
+  width: 17px;
+  min-height: 17px;
+}
+.augmentation-plan-summary {
+  margin: 20px 0;
+  padding: 18px;
+  background: var(--surface-subtle, var(--canvas));
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.augmentation-plan-summary ul {
+  padding-left: 20px;
+}
+@media (max-width: 1000px) {
+  .augmentation-variant-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .augmentation-variant-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .augmentation-dataset-apply {
+    padding: 16px;
+  }
+}
+
+.augmentation-variant-grid {
+  align-items: start;
+}
+.augmentation-variant-actions {
+  margin-top: 14px;
+}
+.augmentation-add-variant {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  min-width: 0;
+  min-height: 260px;
+  gap: 10px;
+  padding: 24px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+  color: var(--muted);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+.augmentation-add-variant:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+.augmentation-add-variant:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.augmentation-add-symbol {
+  font-size: 32px;
+  line-height: 1;
+  font-weight: 300;
+}
+.augmentation-add-variant strong {
+  font-size: 14px;
+  font-weight: 550;
+}
+.augmentation-add-variant > span:last-child {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* Keep source selection compact while styles are created at the gallery. */
+.augmentation-generator {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.augmentation-generator strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.augmentation-source-picker {
+  margin-bottom: 24px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.augmentation-source-picker > summary {
+  padding: 16px 18px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+.augmentation-source-picker > .augmentation-form {
+  padding: 0 18px 18px;
+}
+.augmentation-source-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-top: 22px;
+}
+.augmentation-style-dialog {
+  width: min(600px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  box-sizing: border-box;
+  padding: 24px;
+  overflow-y: auto;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 24px 80px #0003;
+}
+.augmentation-style-dialog::backdrop {
+  background: #0c172270;
+}
+.augmentation-style-dialog header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.augmentation-style-dialog h2 {
+  margin: 0 0 6px;
+  font-size: var(--text-section);
+}
+.augmentation-style-dialog header p,
+.augmentation-dialog-source p,
+.augmentation-dialog-selection {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.augmentation-dialog-close {
+  flex: 0 0 32px;
+  min-height: 32px;
+  font-size: 24px;
+  line-height: 1;
+}
+.augmentation-dialog-source {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 12px;
+  background: var(--subtle);
+  border-radius: 10px;
+}
+.augmentation-dialog-source video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #111;
+  border-radius: 6px;
+}
+.augmentation-dialog-source strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+.augmentation-dialog-selection {
+  margin-bottom: 18px;
+}
+.augmentation-style-dialog .augmentation-prompt-label {
+  margin: 0 0 8px;
+}
+.augmentation-style-dialog textarea {
+  min-height: 140px;
+}
+.augmentation-dialog-billing {
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.augmentation-style-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}
+@media (max-width: 600px) {
+  .augmentation-style-dialog {
+    padding: 18px;
+  }
+  .augmentation-dialog-source {
+    grid-template-columns: 1fr;
+  }
+  .augmentation-dialog-source video {
+    max-width: 200px;
+  }
+  .augmentation-source-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .augmentation-style-dialog footer > button {
+    flex: 1;
+  }
 }

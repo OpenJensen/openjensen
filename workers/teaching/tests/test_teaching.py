@@ -259,6 +259,98 @@ def test_genuine_lerobot_writer_roundtrip(tmp_path):
         read_local_dataset("local/teaching", output)
 
 
+def test_genuine_lerobot_agent_writer_roundtrip(session, tmp_path):
+    """Native writer proof from governed fixture actions, with no provider or real robot."""
+    pytest.importorskip("lerobot", reason="Requires the pinned native LeRobot writer runtime")
+    from jensen_teaching.agent import AgentCommand
+    from jensen_teaching.dataset import read_local_dataset
+
+    act(session, "task", {"instruction": "Generated agent fixture: bounded joint correction"})
+    act(session, "start")
+    episode_id = session.episode_id
+
+    def invoke(operation, arguments, ident):
+        return session.agent.execute(
+            AgentCommand.parse(
+                operation,
+                {
+                    "command_id": ident,
+                    "session_id": session.journal.session_id,
+                    "agent_session_id": "native_agent_fixture",
+                    "authority_epoch": 0 if operation == "acquire" else session.agent.epoch,
+                    "arguments": arguments,
+                },
+            )
+        )
+
+    invoke(
+        "acquire",
+        {
+            "clock_policy": "stepped",
+            "expected_revision": session.revision,
+            "episode_id": episode_id,
+        },
+        "native_acquire",
+    )
+    observations = []
+    for step in range(6):
+        observation = invoke("observe", {}, f"native_observe_{step}")["observation"]
+        observations.append(observation)
+        execution = invoke(
+            "execute",
+            {
+                "observation_id": observation["observation_id"],
+                "observation_sha256": observation["observation_sha256"],
+                "joint": "joint_0",
+                "delta_rad": 0.15 if step % 2 == 0 else -0.15,
+                "proposal_id": f"native_proposal_{step}",
+                "provider_model": "mock-native-v1",
+            },
+            f"native_execution_{step}",
+        )["execution"]
+        assert execution["status"] == "started"
+        session.tick()
+        assert execution["status"] == "completed"
+        assert execution["task_success_verified"] is False
+    act(session, "finish")
+    rows = [
+        json.loads(line)
+        for line in (session.journal.root / episode_id / "trajectory.jsonl")
+        .read_text()
+        .splitlines()
+    ]
+    assert rows[0]["requested_target_rad"][0] == 0.15
+    assert rows[0]["applied_target_rad"][0] == pytest.approx(2 / 30)
+    assert rows[0]["speed_limit_clipped"][0]
+
+    output = tmp_path / "agent-dataset"
+    result = convert(session.journal.root, output, [episode_id])
+    assert result["readback_verified"] and result["frames"] == 6
+    assert result["task_success_verified"] is False
+    demonstrations = json.loads((output / "meta/firebird-demonstrations.json").read_text())
+    episode = demonstrations["episodes"][0]
+    assert episode["capture_schema_version"] == 2
+    assert episode["environment_kind"] == "simulation" and episode["actors"] == ["llm_agent"]
+    assert episode["outcome"] == "unknown" and demonstrations["task_success_verified"] is False
+    actions = episode["action_provenance"]
+    assert len(actions) == 6
+    for step, (action, observation) in enumerate(zip(actions, observations, strict=True)):
+        assert action["actor"] == "llm_agent" and action["environment_kind"] == "simulation"
+        assert action["agent_session_id"] == "native_agent_fixture"
+        assert action["proposal_id"] == f"native_proposal_{step}"
+        assert action["execution_id"] == f"native_execution_{step}"
+        assert action["observation_id"] == observation["observation_id"]
+        assert action["observation_sha256"] == observation["observation_sha256"]
+        assert action["provider_model"] == "mock-native-v1" and action["clock_policy"] == "stepped"
+    loaded = read_local_dataset("local/teaching", output)
+    assert len(loaded) == 6
+    assert loaded[0]["action"].tolist() == pytest.approx(rows[0]["applied_target_rad"])
+    assert loaded[0]["teaching.requested_action"].tolist() == pytest.approx(
+        rows[0]["requested_target_rad"]
+    )
+    assert loaded[0]["teaching.next_state"].tolist() == pytest.approx(rows[0]["next_state_rad"])
+
+
 def test_correction_acknowledgement_waits_for_applied_and_durable_frame(session):
     act(session, "task", {"instruction": "test"})
     act(session, "start")

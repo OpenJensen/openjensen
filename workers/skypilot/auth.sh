@@ -12,7 +12,11 @@ fi
 _sim_auth() {
   # Sky's wrapper must refuse commands if this authentication attempt fails.
   unset SIM_PROJECT_ID
-  local sim_project='project-5693e83a-db3a-43e1-98c'
+  local sim_project="${SIM_AUTH_PROJECT_ID:-}"
+  if [[ -z "$sim_project" ]]; then
+    printf 'Set SIM_AUTH_PROJECT_ID to the service-account project ID.\n' >&2
+    return 1
+  fi
   local sim_account="sim-rollout-runner@$sim_project.iam.gserviceaccount.com"
   local sim_python="${SIM_PYTHON:-python3}"
   local sim_repo sim_key sim_state sim_active

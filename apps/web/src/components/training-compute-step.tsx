@@ -28,6 +28,7 @@ export function TrainingComputeStep({
     checkpointCount,
     checkpointInterval,
     cloudGpuMemory,
+    cloudInstalled,
     effectiveTiming,
     gpuChoices,
     headingRef,
@@ -243,6 +244,10 @@ export function TrainingComputeStep({
           {needsAccount ? (
             <button type="button" className="text-button" onClick={onComputeSettings}>
               Connect account
+            </button>
+          ) : !runtime && !cloudInstalled ? (
+            <button type="button" className="text-button" onClick={onComputeSettings}>
+              Configure local compute
             </button>
           ) : (
             <span role="status">{runStarting ? '' : blocked}</span>

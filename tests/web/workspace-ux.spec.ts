@@ -45,7 +45,7 @@ test('data tools are first-class pages with clear return paths and no job submis
   await expect(page.locator('.stage-order')).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Workflow context' })).toHaveCount(0);
   const navigation = page.getByRole('navigation', { name: 'Policy lifecycle' });
-  for (const name of ['Augmentation', 'Teaching', 'Decision Lab']) {
+  for (const name of ['Augmentation', 'AI teleoperation', 'Decision Lab']) {
     const entry = navigation.getByRole('link', { name, exact: true });
     await entry.click();
     await expect(entry).toHaveAttribute('aria-current', 'page');
@@ -89,7 +89,7 @@ test('workspace pages use a single title without introductory subtitles', async 
   for (const name of [
     'Datasets',
     'Augmentation',
-    'Teaching',
+    'AI teleoperation',
     'Fine-tune',
     'Distill',
     'Quantize',
@@ -144,8 +144,8 @@ test('the contextual guide covers every section and keeps API docs separate', as
     'Models',
     'Datasets',
     'Augmentation',
-    'Teaching',
-    'Robot Lab',
+    'AI teleoperation',
+    'Initial setup',
     'Fine-tune',
     'Distill',
     'Quantize',
@@ -160,10 +160,7 @@ test('the contextual guide covers every section and keeps API docs separate', as
     await expect(sections.getByRole('heading', { name, exact: true })).toBeVisible();
   }
   await expect(page.locator('#distill')).toContainText('ACT256');
-  await expect(page.locator('#distill').getByRole('link', { name: 'Adapter setup', exact: true })).toHaveAttribute(
-    'href',
-    'https://github.com/OpenJensen/openjensen/blob/main/workers/policy_distillation/README.md',
-  );
+  await expect(page.locator('#distill').getByRole('link', { name: 'Adapter setup', exact: true })).toHaveCount(0);
   await page.reload();
   await expect(page.locator('#distill')).toContainText('ACT256');
   await page.setViewportSize({ width: 320, height: 900 });
@@ -172,7 +169,7 @@ test('the contextual guide covers every section and keeps API docs separate', as
   ).toBe(true);
   await page
     .getByRole('navigation', { name: 'Guide sections' })
-    .getByRole('link', { name: 'Robot Lab', exact: true })
+    .getByRole('link', { name: 'Initial setup', exact: true })
     .click();
   await expect(page).toHaveURL(/#robot-lab$/);
   await expect(page.locator('#robot-lab')).toContainText('SO-101');
@@ -342,7 +339,7 @@ test('compact mobile navigation leaves useful stage content visible and every to
     await page.screenshot({ path: testInfo.outputPath(`workspace-empty-${width}.png`), fullPage: false });
   }
   for (const name of [
-    'Teaching',
+    'AI teleoperation',
     'Fine-tune',
     'Distill',
     'Quantize',

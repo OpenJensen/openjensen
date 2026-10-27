@@ -66,7 +66,7 @@
   padding-top: 20px;
   border-top: 1px solid var(--line);
 }
-.teaching-voice > [aria-label='Teaching room media']:empty {
+.teaching-voice > [aria-label='AI teleoperation room media']:empty {
   display: none;
 }
 @media (max-width: 700px) {

@@ -188,7 +188,7 @@ export function TeachingIntelligence({ context, online }: { context: Context | n
         reply.kind !== kind ||
         contextKey(reply.proposal.receipt.context) !== boundIdentity
       )
-        throw new Error('Teaching context changed; proposal withheld.');
+        throw new Error('AI teleoperation context changed; proposal withheld.');
       setResult(reply);
     } catch (problem) {
       if (alive.current && active.current === attempt) {

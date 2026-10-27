@@ -13,6 +13,7 @@ export function TrainingModelStep({ panel }: { panel: TrainingPanelState }) {
     availableMethods,
     batchFor,
     busy,
+    cloudInstalled,
     displayedModelId,
     headingRef,
     model,
@@ -54,7 +55,7 @@ export function TrainingModelStep({ panel }: { panel: TrainingPanelState }) {
             </h3>
             <div className="training-model-grid">
               {group.models.map((item) => {
-                const statusLabel = modelStatusLabel(item, modelSupported(item));
+                const statusLabel = modelStatusLabel(item, modelSupported(item), cloudInstalled);
                 const memory = item.minimum_gpu_memory_gb ?? item.suggested_gpu_memory_gb;
                 return (
                   <label

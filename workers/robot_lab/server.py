@@ -22,6 +22,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
+from agent_control import AgentExecutor
+from agent_control import strict_json as agent_json
 from assembled_session import AssembledSession, CalibrationRevisions, empty_assembled_state
 from calibration_draft import CalibrationDraft, file_hash
 from camera import MAX_CAMERA_INDEX, CameraPool
@@ -40,7 +42,8 @@ from hardware import (
     probe_bus,
 )
 from lerobot_control import PROFILE, LeRobotPositionControl
-from motion import MiddleMotion, control_limits, middle_targets, step_target
+from motion import MiddleMotion, RestMotion, control_limits, middle_targets, step_target
+from rest_position import RestPositions
 from verification import (
     MappingChecks,
     MappingVerification,
@@ -191,7 +194,8 @@ class RobotLab:
         self.bus = None
         self.leader = None
         self.pending_bus = None
-        self.generation = 0
+        # Random initial generation fences delayed preflight requests across restarts.
+        self.generation = secrets.randbits(48) + 1
         self.mode = "idle"
         self.port = self.robot_id = self.role = None
         self.torque = False
@@ -200,6 +204,10 @@ class RobotLab:
         self.action = {}
         self.commanded_raw = {}
         self.middle_motion = None
+        self.rest_positions = RestPositions(self.data_dir)
+        self.rest_targets = None
+        self.rest_motion = None
+        self.rest_phase = "idle"
         self.middle_tolerance = 2
         self.controller = None
         self.calibration = {}
@@ -237,6 +245,7 @@ class RobotLab:
         self.next_record = 0.0
         self.finished = threading.Event()
         self.threads = []
+        self.agent = AgentExecutor(self)
         if start_threads:
             for target in (self._loop, self._watchdog):
                 thread = threading.Thread(target=target, daemon=True)
@@ -331,6 +340,14 @@ class RobotLab:
             assembled = json.loads(json.dumps(self.assembled_state))
             copy_verification = json.loads(json.dumps(self.verification_state))
             middle_motion = self.middle_motion
+            rest_motion, rest_phase = self.rest_motion, self.rest_phase
+            rest_calibration = dict(self.calibration)
+            rest_targets = (
+                self.rest_targets
+                if self.mode in {"manual", "leader", "handguide"}
+                and set(self.calibration) == set(JOINTS)
+                else None
+            )
         try:
             assembled["calibration_required"] = self.calibration_revisions.required(
                 assembled["port"]
@@ -357,6 +374,8 @@ class RobotLab:
                 "calibration_persistence": hardware,
                 "control": hardware,
                 "lerobot_position_control": hardware,
+                "rest_position": hardware,
+                "agent_control": hardware,
                 "move_to_middle": hardware,
                 "middle_tolerance": hardware,
                 "partial_control": hardware,
@@ -365,20 +384,33 @@ class RobotLab:
                 "recording": hardware
                 and all(deps[key]["installed"] for key in ("pyarrow", "PIL", "numpy")),
             },
+            "agent_control": self.agent.status(),
             "session": {
+                "generation": self.generation,
                 "mode": self.mode,
                 "robot_id": self.robot_id,
                 "port": self.port,
                 "role": self.role,
                 "positions": dict(self.positions),
                 "active_joints": list(self.calibration)
-                if self.mode in {"manual", "leader", "handguide"}
+                if self.mode in {"manual", "leader", "handguide", "agent"}
                 else [],
-                "targets": dict(self.action) if self.mode in {"manual", "leader"} else {},
+                "targets": dict(self.action) if self.mode in {"manual", "leader", "agent"} else {},
                 "joint_limits": control_limits(self.calibration) if self.mode == "manual" else {},
                 "slider_targets": dict(self.action) if self.mode == "manual" else {},
                 "torque_limits": dict(self.controller.torque_limits) if self.controller else {},
                 "torque_enabled": self.torque,
+                "rest_position": {
+                    "saved": rest_targets is not None,
+                    "phase": rest_phase,
+                    "progress": rest_motion.progress
+                    if rest_motion
+                    else (1.0 if rest_phase == "holding" else 0.0),
+                    "targets": {
+                        j: normalized(j, v, rest_calibration)
+                        for j, v in (rest_targets or {}).items()
+                    },
+                },
                 "centering": {
                     "active": middle_motion is not None,
                     "progress": middle_motion.progress if middle_motion else 1.0,
@@ -1128,16 +1160,92 @@ class RobotLab:
                 self.middle_motion = (
                     MiddleMotion(raw, calibration, tolerance) if to_middle else None
                 )
+                self.rest_targets = (
+                    self.rest_positions.load(robot_id, calibration) if joints == JOINTS else None
+                )
+                self.rest_motion = None
+                self.rest_phase = "idle"
                 self.controller = control
                 self.torque = mode != "handguide"
                 self.error = None
                 self.heartbeat = time.monotonic()
         return self.status()
 
+    def control_heartbeat(self, payload):
+        if not isinstance(payload, dict) or set(payload) - {"expected_generation"}:
+            raise RequestError("Invalid manual heartbeat")
+        with self.lifecycle_lock:
+            if self.mode == "agent":
+                raise RequestError("Manual heartbeat cannot renew AI controller authority")
+            if "expected_generation" in payload and (
+                type(payload["expected_generation"]) is not int
+                or payload["expected_generation"] != self.generation
+            ):
+                raise RequestError("Manual controller generation changed")
+            self.heartbeat = time.monotonic()
+        return self.status()
+
+    def rest_position(self, payload, *, save=False):
+        require(payload, "confirm", "SAVE REST POSITION" if save else "RETURN TO REST")
+        with self.lock:
+            if self.mode not in {"manual", "leader", "handguide"} or set(self.calibration) != set(
+                JOINTS
+            ):
+                raise RequestError("Rest positions require an active session with all six joints")
+            if self.middle_motion is not None or self.rest_motion is not None:
+                raise RequestError("Wait for the current arm movement to finish")
+            if self.writer and self.writer.episode_active:
+                raise RequestError(
+                    "Save or discard the recording episode before using rest positions"
+                )
+            if time.monotonic() - self.heartbeat > 2:
+                raise RequestError("Control heartbeat expired; stop and reconnect")
+            if not save and (self.mode == "handguide" or not self.torque):
+                raise RequestError(
+                    "Start joint control or leader teleoperation before returning to rest"
+                )
+            bus, generation = self.bus, self.generation
+            if bus is None:
+                raise RequestError("Session has stopped")
+            with bus.lock:
+                if generation != self.generation:
+                    raise RequestError("Session has stopped")
+                raw = validate_raw(bus.positions(), self.calibration)
+                with self.lifecycle_lock:
+                    if generation != self.generation:
+                        raise RequestError("Session has stopped")
+                    if save:
+                        self.rest_targets = self.rest_positions.save(
+                            self.robot_id, raw, self.calibration
+                        )
+                        self.rest_phase = "idle"
+                    else:
+                        targets = self.rest_positions.load(self.robot_id, self.calibration)
+                        if targets is None:
+                            raise RequestError(
+                                "Save a rest position for this arm and calibration first"
+                            )
+                        if self.controller is None:
+                            raise HardwareError("Position controller is unavailable")
+                        # Cancel previous goals and leader tracking without releasing torque.
+                        sent = self.controller.command_raw(raw)
+                        self.commanded_raw = dict(sent)
+                        self.action = {
+                            j: normalized(j, v, self.calibration) for j, v in sent.items()
+                        }
+                        self.mode = "manual"
+                        self.rest_targets = targets
+                        self.rest_motion = RestMotion(raw, targets, self.calibration)
+                        self.rest_phase = "returning"
+                        self.error = None
+        return self.status()
+
     def jog(self, payload):
         with self.lock:
             if self.mode != "manual" or not self.torque:
                 raise RequestError("Start manual control before jogging a joint")
+            if self.rest_motion is not None:
+                raise RequestError("Wait for the return to rest to finish")
             if self.middle_motion is not None:
                 raise RequestError("Wait for movement to the recorded middle to finish")
             joint = payload.get("joint")
@@ -1186,21 +1294,31 @@ class RobotLab:
                     raise RequestError("Session has stopped")
                 self.commanded_raw.update(sent)
                 self.action[joint] = normalized(joint, sent[joint], self.calibration)
+                self.rest_phase = "idle"
                 self.last_jog = time.monotonic()
         return self.status()
 
-    def stop(self, reason=None):
+    def stop(self, reason=None, *, expected_generation=None, expected_mode=None):
         with self.stop_lock:
             self.stopping = True
             try:
-                return self._stop(reason)
+                return self._stop(
+                    reason, expected_generation=expected_generation, expected_mode=expected_mode
+                )
             finally:
                 self.stopping = False
 
-    def _stop(self, reason=None):
+    def _stop(self, reason=None, *, expected_generation=None, expected_mode=None):
         # Invalidate in-flight capture before waiting on any camera/serialization.
         with self.lifecycle_lock:
+            if expected_generation is not None and (
+                type(expected_generation) is not int or expected_generation != self.generation
+            ):
+                raise RequestError("Controller generation changed; stale cleanup was rejected")
+            if expected_mode is not None and self.mode != expected_mode:
+                raise RequestError("Controller mode changed; stale manual cleanup was rejected")
             self.generation += 1
+            self.agent.revoke(reason or "Stopped by operator")
             verification = self.verification_session
             self.verification_session = None
             if verification is not None:
@@ -1214,6 +1332,8 @@ class RobotLab:
             self.torque = False
             self.mode = "idle"
             self.middle_motion = None
+            self.rest_motion = None
+            self.rest_phase = "idle"
             self.controller = None
             if reason:
                 self.error = reason
@@ -1256,6 +1376,10 @@ class RobotLab:
             finally:
                 device.close()
         self.original_calibration = None
+        try:
+            self.agent.flush_revocations()
+        except Exception as caught:
+            errors.append("Agent evidence flush failed: " + str(caught))
         if errors:
             self.error = (
                 ((reason + ". ") if reason else "")
@@ -1285,6 +1409,8 @@ class RobotLab:
                 raise RequestError("Connect a calibrated arm in Teleoperate before recording")
             if set(self.calibration) != set(JOINTS):
                 raise RequestError("Dataset recording requires all six joints")
+            if self.rest_motion is not None:
+                raise RequestError("Wait for the return to rest before recording")
             if self.middle_motion is not None:
                 raise RequestError("Wait for movement to the recorded middle before recording")
             if self.writer and not self.writer.finalized:
@@ -1318,6 +1444,8 @@ class RobotLab:
             if action == "start":
                 if set(self.calibration) != set(JOINTS):
                     raise RequestError("Dataset recording requires all six joints")
+                if self.rest_motion is not None:
+                    raise RequestError("Wait for the return to rest before recording")
                 if self.middle_motion is not None:
                     raise RequestError("Wait for movement to the recorded middle before recording")
                 if self.mode not in ("manual", "leader", "handguide"):
@@ -1353,9 +1481,28 @@ class RobotLab:
         bus, leader, mode, generation = self.bus, self.leader, self.mode, self.generation
         if bus is None or mode == "idle":
             return
+        if mode == "agent":
+            # Agent admission and tick use lab->bus lock order. Stop invalidates
+            # generation without waiting for either lock, before torque-off I/O.
+            with self.lock, bus.lock:
+                if generation != self.generation:
+                    return
+                raw = validate_raw(bus.positions(), self.calibration)
+                if generation != self.generation or self.mode != "agent":
+                    return
+                self.positions = {
+                    j: normalized(j, value, self.calibration) for j, value in raw.items()
+                }
+                completed = self.agent.tick(raw)
+            if completed is not None:
+                # Disk acknowledgement cannot delay the independent Stop path's
+                # serial torque-off command.
+                self.agent._save(completed)
+            return
         with bus.lock:
             if generation != self.generation:
                 return
+            mode = self.mode
             raw = validate_raw(bus.positions(), None if mode == "calibration" else self.calibration)
             if mode == "calibration":
                 if self.calibration_state["phase"] == "ranges" and any(
@@ -1389,6 +1536,29 @@ class RobotLab:
             if mode == "manual":
                 if control is None:
                     raise HardwareError("LeRobot position controller is unavailable")
+                rest = self.rest_motion
+                if rest is not None:
+                    goals, arrived, expired = rest.step(raw)
+                    if expired and not arrived:
+                        goals = raw
+                    sent = control.command_raw(goals)
+                    if generation != self.generation:
+                        return
+                    self.commanded_raw.update(sent)
+                    self.action.update(
+                        {j: normalized(j, v, self.calibration) for j, v in sent.items()}
+                    )
+                    if arrived or expired:
+                        with self.lifecycle_lock:
+                            if generation == self.generation:
+                                self.rest_motion = None
+                                self.rest_phase = "holding" if arrived else "error"
+                                if not arrived:
+                                    self.error = (
+                                        "Return to rest timed out. Holding current position; "
+                                        "check the arm before retrying."
+                                    )
+                    return
                 motion = self.middle_motion
                 if motion is not None:
                     if motion.arrived(raw):
@@ -1447,27 +1617,48 @@ class RobotLab:
 
     def _loop(self):
         while not self.finished.wait(0.025):
+            generation, mode = self.generation, self.mode
             try:
                 self._tick()
                 self.camera.close_idle()
             except Exception as caught:
-                if self.writer and self.writer.episode_active:
-                    self.writer.episode_active = False
-                    self.recording_error = str(caught)
-                self.stop("Hardware session stopped: " + str(caught))
+                with self.lifecycle_lock:
+                    if generation != self.generation or mode != self.mode:
+                        continue
+                    if self.writer and self.writer.episode_active:
+                        self.writer.episode_active = False
+                        self.recording_error = str(caught)
+                try:
+                    self.stop(
+                        "Hardware session stopped: " + str(caught),
+                        expected_generation=generation,
+                        expected_mode=mode,
+                    )
+                except RequestError:
+                    pass  # An intervening takeover owns its independent lifecycle.
 
     def _watchdog(self):
         while not self.finished.wait(0.1):
-            # Calibration is unpowered and owned by this companion process. Browser
-            # connectivity must not discard a captured middle or joint ranges.
-            if self.mode not in {"idle", "calibration"} and time.monotonic() - self.heartbeat > (
-                10 if self.mode in {"setup", "verification"} else 2
+            # A delayed watchdog result cannot stop a later controller, including
+            # the manual-to-agent transfer that preserves the serial generation.
+            generation, mode = self.generation, self.mode
+            reason = None
+            if mode == "agent":
+                if self.agent.expired():
+                    reason = "AI operator or execution lease expired; torque disabled"
+            elif mode not in {"idle", "calibration"} and time.monotonic() - self.heartbeat > (
+                10 if mode in {"setup", "verification"} else 2
             ):
-                self.stop(
+                reason = (
                     "Setup heartbeat timed out; ID work stopped"
-                    if self.mode == "setup"
+                    if mode == "setup"
                     else "Browser heartbeat timed out; motor torque disabled"
                 )
+            if reason:
+                try:
+                    self.stop(reason, expected_generation=generation, expected_mode=mode)
+                except RequestError:
+                    pass
 
     def close(self):
         self.finished.set()
@@ -1521,6 +1712,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             parsed = urlsplit(self.path)
             path, query, lab = unquote(parsed.path), parse_qs(parsed.query), self.server.lab
+            if path.startswith("/v1/agent/executions/"):
+                return self._send(200, lab.agent.receipt(path.rsplit("/", 1)[-1]))
             if path == "/v1/status":
                 return self._send(200, lab.status())
             if path == "/v1/devices":
@@ -1577,11 +1770,24 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
             if not 0 <= length <= 16_384:
                 raise RequestError("Request body too large")
-            payload = json.loads(self.rfile.read(length) or b"{}")
+            raw = self.rfile.read(length) or b"{}"
+            payload = (
+                agent_json(raw)
+                if urlsplit(self.path).path.startswith("/v1/agent/")
+                else json.loads(raw)
+            )
             if not isinstance(payload, dict):
                 raise RequestError("Expected a JSON object")
             lab, path = self.server.lab, urlsplit(self.path).path
-            if path == "/v1/probe":
+            if path.startswith("/v1/agent/") and path.rsplit("/", 1)[-1] in {
+                "acquire",
+                "observe",
+                "execute",
+                "heartbeat",
+                "release",
+            }:
+                result = lab.agent.command(path.rsplit("/", 1)[-1], payload)
+            elif path == "/v1/probe":
                 result = lab.probe(payload)
             elif path == "/v1/setup/motor":
                 result = lab.setup_motor(payload)
@@ -1609,14 +1815,28 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/v1/calibration/cancel":
                 result = lab.calibration_cancel()
             elif path in ("/v1/control/stop", "/v1/stop"):
-                result = lab.stop()
+                if (
+                    set(payload) - {"expected_generation", "expected_mode"}
+                    or "expected_generation" in payload
+                    and type(payload["expected_generation"]) is not int
+                    or "expected_mode" in payload
+                    and payload["expected_mode"] != "manual"
+                ):
+                    raise RequestError("Invalid Stop request")
+                result = lab.stop(
+                    expected_generation=payload.get("expected_generation"),
+                    expected_mode=payload.get("expected_mode"),
+                )
             elif path == "/v1/control/start":
                 result = lab.control_start(payload)
+            elif path == "/v1/control/rest/save":
+                result = lab.rest_position(payload, save=True)
+            elif path == "/v1/control/rest/return":
+                result = lab.rest_position(payload)
             elif path == "/v1/control/jog":
                 result = lab.jog(payload)
             elif path == "/v1/control/heartbeat":
-                lab.heartbeat = time.monotonic()
-                result = lab.status()
+                result = lab.control_heartbeat(payload)
             elif path == "/v1/recording/start":
                 result = lab.recording_start(payload)
             elif path.startswith("/v1/recording/episode/") and path.rsplit("/", 1)[-1] in (

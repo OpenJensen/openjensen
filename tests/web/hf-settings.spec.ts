@@ -32,6 +32,20 @@ async function settings(page: Page, reject = false) {
       value = status;
     } else if (path === '/health') value = { status: 'ok', version: '0.1.0' };
     else if (path === '/projects') value = [{ id: 'hf-fixture', name: 'HF settings test', created_at: timestamp }];
+    else if (path === '/modules')
+      value = [
+        {
+          id: 'huggingface',
+          name: 'Hugging Face',
+          group: 'Cloud & APIs',
+          installed: true,
+          enabled: true,
+          available: true,
+          configured: false,
+          managed: false,
+          setup: 'Save a token.',
+        },
+      ];
     else if (path === '/capabilities' || path.endsWith('/jobs') || path.endsWith('/artifacts')) value = [];
     else if (path === '/policy-options')
       value = {
@@ -82,22 +96,21 @@ async function settings(page: Page, reject = false) {
     else return route.fulfill({ status: 404, json: { detail: 'Not used by this fixture' } });
     return route.fulfill({ json: value });
   });
-  await page.goto('/datasets/');
-  await page.getByRole('link', { name: 'Settings', exact: true }).click();
-  await page.getByRole('button', { name: 'Compute', exact: true }).click();
+  await page.goto('/cloud-apis/');
+  await expect(page.getByRole('heading', { name: 'Cloud & APIs', exact: true })).toBeVisible();
   return { panel: page.getByRole('region', { name: 'Hugging Face', exact: true }), requests };
 }
 
 test('HF token is optional, masked, cleared after save, and removable', async ({ page }) => {
   const { panel, requests } = await settings(page);
-  await expect(panel.getByText('Optional', { exact: true })).toBeVisible();
+  await expect(panel.getByText('Not configured', { exact: true })).toBeVisible();
   await expect(panel.getByText('For private or gated models.', { exact: true })).toBeVisible();
   const input = panel.getByLabel('Hugging Face access token');
   await expect(input).toHaveAttribute('type', 'password');
   await input.fill(fakeToken);
   await panel.getByRole('button', { name: 'Save token', exact: true }).click();
   await expect(input).toHaveValue('');
-  await expect(panel.getByText('Token saved', { exact: true })).toBeVisible();
+  await expect(panel.getByText('Configured', { exact: true })).toBeVisible();
   await expect(panel.getByText('robotic-user', { exact: true })).toBeVisible();
   await expect(panel.getByText('••••7890', { exact: true })).toBeVisible();
   await expect(panel).not.toContainText(fakeToken);
@@ -106,7 +119,7 @@ test('HF token is optional, masked, cleared after save, and removable', async ({
     await page.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } })),
   ).not.toContain(fakeToken);
   await panel.getByRole('button', { name: 'Remove token', exact: true }).click();
-  await expect(panel.getByText('Optional', { exact: true })).toBeVisible();
+  await expect(panel.getByText('Not configured', { exact: true })).toBeVisible();
   await expect(panel.getByText('Hugging Face token removed.', { exact: true })).toBeVisible();
   expect(requests[1]).toEqual({ method: 'DELETE', body: null });
 });
@@ -116,7 +129,7 @@ test('failed token verification shows a safe error without storing it', async ({
   await panel.getByLabel('Hugging Face access token').fill(fakeToken);
   await panel.getByRole('button', { name: 'Save token', exact: true }).click();
   await expect(panel.getByRole('alert')).toHaveText('Hugging Face rejected this token.');
-  await expect(panel.getByText('Optional', { exact: true })).toBeVisible();
+  await expect(panel.getByText('Not configured', { exact: true })).toBeVisible();
   await expect(panel).not.toContainText(fakeToken);
   expect(await page.evaluate(() => JSON.stringify({ ...localStorage }))).not.toContain(fakeToken);
 });

@@ -49,7 +49,7 @@ export function RobotLab() {
             <small>
               {online
                 ? active
-                  ? `${session?.mode === 'verification' ? 'Mapping check' : session?.mode === 'setup' ? 'Assembled motor setup' : session?.mode === 'calibration' ? 'Calibration' : session?.mode === 'handguide' ? 'Hand guiding' : session?.mode === 'leader' ? 'Leader teleoperation' : 'Manual control'} · ${session?.robot_id ?? robotId} · ${session?.mode === 'setup' ? 'Motor setup active' : session?.torque_enabled ? 'Torque command: on' : 'Torque command: off'}`
+                  ? `${session?.mode === 'verification' ? 'Mapping check' : session?.mode === 'setup' ? 'Assembled motor setup' : session?.mode === 'calibration' ? 'Calibration' : session?.mode === 'handguide' ? 'Hand guiding' : session?.mode === 'leader' ? 'Leader teleoperation' : session?.mode === 'agent' ? 'AI teleoperation' : 'Manual control'} · ${session?.robot_id ?? robotId} · ${session?.mode === 'setup' ? 'Motor setup active' : session?.torque_enabled ? 'Torque command: on' : 'Torque command: off'}`
                   : usbStatus
                 : (state?.message ?? status.error?.message ?? 'Check that the local companion is running.')}
             </small>

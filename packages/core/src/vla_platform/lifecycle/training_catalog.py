@@ -1,6 +1,5 @@
 """Training choices and pinned inputs, independent of optional GPU packages.
 
-The additional checkpoints come from the repository's open_weight_vlas catalog.
 A catalog entry is not an executable adapter: only a configured native worker can
 make it available. SmolVLA retains its dedicated quantized worker; other native policies use
 a separate pinned LeRobot environment.

@@ -4,12 +4,15 @@ import { WorkspaceDashboard } from '@/components/workspace-dashboard';
 import { useWorkspace } from '@/components/workspace-context';
 
 export default function DashboardSection() {
-  const { projects, workflowProjectId, navigateStage, setDatasetView, openDataset, setSettingsTab } = useWorkspace();
+  const { projects, workflowProjectId, navigateStage, setDatasetView, openDataset, setSettingsTab, modules } =
+    useWorkspace();
   return (
     <>
       <WorkspaceDashboard
         projects={projects.data ?? []}
         projectId={workflowProjectId}
+        installedModules={modules.data?.filter((item) => item.installed).map((item) => item.id) ?? []}
+        onCloudApis={() => navigateStage('cloud-apis')}
         onModels={() => navigateStage('models')}
         onDatasets={() => {
           navigateStage('datasets');

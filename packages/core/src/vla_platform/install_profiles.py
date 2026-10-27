@@ -56,7 +56,7 @@ PROFILES = (
             "Install on the computer holding the arm and camera USB cables.",
             "Includes hardware and LeRobot v3 dataset tools; no Torch, models or training stack.",
             "macOS camera permission, physical motor isolation and calibration remain required.",
-            "See deploy/macos/README.md for the managed Mac service and private pairing.",
+            "Run deploy/install_robot_lab.py locally, then pair the companion in Robot Lab.",
         ),
     ),
     InstallProfile(
@@ -92,8 +92,8 @@ PROFILES = (
         ),
         ("uv", "nvidia-smi"),
         (
-            "Use the documented CUDA environment; package checks do not prove GPU execution.",
-            "Other native workers use separate Python 3.12 environments and their own guides.",
+            "Use an isolated CUDA training environment; package checks do not prove GPU execution.",
+            "Other native workers require separate Python 3.12 environments.",
             "Installation excludes model weights and training jobs; scheduled jobs use SkyPilot.",
         ),
         20,
@@ -124,7 +124,7 @@ PROFILES = (
         ("docker", "nvidia-smi"),
         (
             "Install NVIDIA drivers/container runtime and obtain Isaac Sim under NVIDIA's terms.",
-            "Follow workers/isaac_sim/README.md to install worker dependencies inside Isaac.",
+            "Install simulation worker dependencies with Isaac Sim's bundled Python.",
             "This manual setup plan does not install or validate the simulator through pip.",
             "No image pulls, container launches or paid resources are started by this installer.",
         ),

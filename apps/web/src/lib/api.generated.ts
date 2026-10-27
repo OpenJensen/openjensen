@@ -4,6 +4,314 @@
  */
 
 export interface paths {
+    "/api/v1/agent-sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Session */
+        get: operations["session_api_v1_agent_sessions__session_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-sessions/{session_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve */
+        post: operations["approve_api_v1_agent_sessions__session_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-sessions/{session_id}/cancel-inference": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel */
+        post: operations["cancel_api_v1_agent_sessions__session_id__cancel_inference_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-sessions/{session_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Events */
+        get: operations["events_api_v1_agent_sessions__session_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-sessions/{session_id}/execution-observation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execution Observation */
+        post: operations["execution_observation_api_v1_agent_sessions__session_id__execution_observation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-sessions/{session_id}/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Heartbeat */
+        post: operations["heartbeat_api_v1_agent_sessions__session_id__heartbeat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-sessions/{session_id}/observations/{observation_id}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Observation Image */
+        get: operations["observation_image_api_v1_agent_sessions__session_id__observations__observation_id__image_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-sessions/{session_id}/observe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Observe */
+        post: operations["observe_api_v1_agent_sessions__session_id__observe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-sessions/{session_id}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pause */
+        post: operations["pause_api_v1_agent_sessions__session_id__pause_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-sessions/{session_id}/proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Propose */
+        post: operations["propose_api_v1_agent_sessions__session_id__proposals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-sessions/{session_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review Task */
+        post: operations["review_task_api_v1_agent_sessions__session_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-sessions/{session_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run Task */
+        post: operations["run_task_api_v1_agent_sessions__session_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-sessions/{session_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop */
+        post: operations["stop_api_v1_agent_sessions__session_id__stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Providers */
+        get: operations["providers_api_v1_agent_providers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/providers/{provider_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save Provider */
+        put: operations["save_provider_api_v1_agent_providers__provider_id__put"];
+        post?: never;
+        /** Delete Provider */
+        delete: operations["delete_provider_api_v1_agent_providers__provider_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/providers/{provider_id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check Provider */
+        post: operations["check_provider_api_v1_agent_providers__provider_id__check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/api-connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Connections */
+        get: operations["connections_api_v1_api_connections_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/api-connections/{ident}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save */
+        put: operations["save_api_v1_api_connections__ident__put"];
+        post?: never;
+        /** Disconnect */
+        delete: operations["disconnect_api_v1_api_connections__ident__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/augmentation-options": {
         parameters: {
             query?: never;
@@ -719,7 +1027,7 @@ export interface paths {
         };
         /**
          * Modules
-         * @description Report which optional modules this host has set up; nothing is contacted.
+         * @description List registered features and setup readiness without contacting providers.
          */
         get: operations["modules_api_v1_modules_get"];
         put?: never;
@@ -741,6 +1049,24 @@ export interface paths {
         /** Enable */
         put: operations["enable_api_v1_modules__ident__put"];
         post?: never;
+        /** Uninstall Feature */
+        delete: operations["uninstall_feature_api_v1_modules__ident__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/modules/{ident}/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Install Feature */
+        post: operations["install_feature_api_v1_modules__ident__install_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -776,6 +1102,24 @@ export interface paths {
         put?: never;
         /** Create Project */
         post: operations["create_project_api_v1_projects_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/agent-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sessions */
+        get: operations["sessions_api_v1_projects__project_id__agent_sessions_get"];
+        put?: never;
+        /** Create Session */
+        post: operations["create_session_api_v1_projects__project_id__agent_sessions_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -847,6 +1191,23 @@ export interface paths {
         put?: never;
         /** Augment Dataset */
         post: operations["augment_dataset_api_v1_projects__project_id__augmentations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/augmentations/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Plan Augmentation */
+        post: operations["plan_augmentation_api_v1_projects__project_id__augmentations_plan_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1202,6 +1563,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/robot-lab/agent/acquire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Agent Acquire */
+        post: operations["robot_lab_post_agent_acquire"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/agent/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Agent Execute */
+        post: operations["robot_lab_post_agent_execute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/agent/executions/{command_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Agent Execution */
+        get: operations["agent_execution_api_v1_robot_lab_agent_executions__command_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/agent/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Agent Heartbeat */
+        post: operations["robot_lab_post_agent_heartbeat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/agent/observe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Agent Observe */
+        post: operations["robot_lab_post_agent_observe"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/agent/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Agent Release */
+        post: operations["robot_lab_post_agent_release"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/robot-lab/calibration/cancel": {
         parameters: {
             query?: never;
@@ -1315,6 +1778,40 @@ export interface paths {
         put?: never;
         /** Robot Lab Post Control Jog */
         post: operations["robot_lab_post_control_jog"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/control/rest/return": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Control Rest Return */
+        post: operations["robot_lab_post_control_rest_return"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/robot-lab/control/rest/save": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robot Lab Post Control Rest Save */
+        post: operations["robot_lab_post_control_rest_save"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2003,6 +2500,38 @@ export interface components {
              */
             schema_version: 1;
         };
+        /** ApiConnectionStatus */
+        ApiConnectionStatus: {
+            /**
+             * Configured
+             * @default false
+             */
+            configured: boolean;
+            /**
+             * Id
+             * @enum {string}
+             */
+            id: "openai" | "gemini";
+            /** Message */
+            message?: string | null;
+            /** Name */
+            name: string;
+            /** Source */
+            source?: ("saved" | "environment" | "profile") | null;
+        };
+        /** ApiConnectionsStatus */
+        ApiConnectionsStatus: {
+            /** Providers */
+            providers: components["schemas"]["ApiConnectionStatus"][];
+        };
+        /** ApiKeyInput */
+        ApiKeyInput: {
+            /**
+             * Api Key
+             * Format: password
+             */
+            api_key: string;
+        };
         /** ApplicationVersion */
         ApplicationVersion: {
             /** Commit */
@@ -2011,6 +2540,39 @@ export interface components {
             host: string;
             /** Version */
             version: string;
+        };
+        /** Approval */
+        Approval: {
+            /** Authority Epoch */
+            authority_epoch: number;
+            /** Execution Observation Id */
+            execution_observation_id?: string | null;
+            /** Execution Observation Sha256 */
+            execution_observation_sha256?: string | null;
+            /** Proposal Id */
+            proposal_id: string;
+            /**
+             * Scene Unchanged Confirmed
+             * @default false
+             */
+            scene_unchanged_confirmed: boolean;
+        };
+        /** Arguments */
+        Arguments: {
+            /** Delta Rad */
+            delta_rad: number;
+            /** Joint */
+            joint: string;
+        };
+        /** Assessment */
+        Assessment: {
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "achieved" | "needs_help" | "cannot_proceed";
+            /** Summary */
+            summary: string;
         };
         /** AugmentationClip */
         AugmentationClip: {
@@ -2030,6 +2592,15 @@ export interface components {
             source_end_seconds: number;
             /** Source Start Seconds */
             source_start_seconds: number;
+        };
+        /** AugmentationDatasetScope */
+        AugmentationDatasetScope: {
+            /** Camera Keys */
+            camera_keys: string[];
+            /** Plan Sha256 */
+            plan_sha256?: string | null;
+            /** Recipe Job Id */
+            recipe_job_id: string;
         };
         /** AugmentationOptions */
         AugmentationOptions: {
@@ -2060,10 +2631,36 @@ export interface components {
              * @default gemini-omni-1.1-flash
              */
             model: string;
+            /**
+             * Preservation Prompt
+             * @default Edit only the scene attributes explicitly requested below. Preserve the exact robot geometry, joint articulation, gripper opening and closing, world-space trajectories, contact timing, action sequence, duration and frame order. Keep object positions and motion unchanged. Preserve camera viewpoint and object identity and shape unless the edit explicitly requests changing them. A requested camera-angle change must use one fixed camera for the entire clip and must not change the physical robot or object motion. A requested object replacement must preserve dimensions and contact surfaces at the grasp location, including the contact-to-contact span and gripper clearance. Keep all unmentioned surfaces, materials, colours, lighting and backgrounds unchanged. Maintain temporally consistent appearance. Do not retime motion, add or remove unrelated objects, or add text or audio. The requested edit follows:
+             */
+            preservation_prompt: string;
             /** Presets */
             presets?: components["schemas"]["AugmentationPreset"][];
             /** Setup Message */
             setup_message?: string | null;
+        };
+        /** AugmentationPlan */
+        AugmentationPlan: {
+            /** Camera Keys */
+            camera_keys: string[];
+            /** Model */
+            model: string;
+            /** Plan Sha256 */
+            plan_sha256: string;
+            /** Provider Requests */
+            provider_requests: number;
+            /** Recipe Prompts */
+            recipe_prompts: string[];
+            /** Total Clips */
+            total_clips: number;
+            /** Total Episodes */
+            total_episodes: number;
+            /** Total Source Seconds */
+            total_source_seconds: number;
+            /** Warnings */
+            warnings: string[];
         };
         /** AugmentationPreset */
         AugmentationPreset: {
@@ -2081,6 +2678,7 @@ export interface components {
         AugmentationRequest: {
             /** Camera Key */
             camera_key: string;
+            dataset_scope?: components["schemas"]["AugmentationDatasetScope"] | null;
             /**
              * Duration Seconds
              * @default 5
@@ -2105,6 +2703,7 @@ export interface components {
              * @default
              */
             prompt: string;
+            source_clip?: components["schemas"]["AugmentationSourceClip"] | null;
             /** Source Job Id */
             source_job_id: string;
             /**
@@ -2123,6 +2722,7 @@ export interface components {
             auth_mode: "google_cloud" | "gemini_api_key";
             /** Clips */
             clips: components["schemas"]["AugmentationClip"][];
+            dataset_scope?: components["schemas"]["AugmentationDatasetScope"] | null;
             /** Google Cloud Project */
             google_cloud_project?: string | null;
             /** Metadata Sha256 */
@@ -2140,6 +2740,8 @@ export interface components {
             operation: "dataset.augment";
             /** Prompt */
             prompt: string;
+            /** Recipe Prompts */
+            recipe_prompts?: string[] | null;
             /** Repo Id */
             repo_id: string;
             /**
@@ -2150,10 +2752,23 @@ export interface components {
             review_required: true;
             /** Revision */
             revision: string;
+            source_clip?: components["schemas"]["AugmentationSourceClip"] | null;
             /** Source Job Id */
             source_job_id: string;
             /** Warnings */
             warnings: string[];
+        };
+        /** AugmentationSourceClip */
+        AugmentationSourceClip: {
+            /** Clip Index */
+            clip_index: number;
+            /** Job Id */
+            job_id: string;
+            /**
+             * Variant
+             * @enum {string}
+             */
+            variant: "original" | "augmented";
         };
         /** CameraPreview */
         CameraPreview: {
@@ -2776,6 +3391,44 @@ export interface components {
              */
             warmups: number;
         };
+        /** Event */
+        Event: {
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: number;
+            /** Kind */
+            kind: string;
+            /** Record */
+            record: {
+                [key: string]: unknown;
+            };
+        };
+        /** ExecutionEvidence */
+        ExecutionEvidence: {
+            /** Applied Targets */
+            applied_targets: {
+                [key: string]: number;
+            };
+            /** Execution Elapsed Seconds */
+            execution_elapsed_seconds?: number | null;
+            /** Joint Limit Clipped */
+            joint_limit_clipped: boolean[];
+            /** Joint Names */
+            joint_names: string[];
+            /** Observed Next State */
+            observed_next_state: {
+                [key: string]: number;
+            };
+            /** Requested Targets */
+            requested_targets: {
+                [key: string]: number;
+            };
+            /** Simulated Seconds */
+            simulated_seconds?: number | null;
+            /** Speed Limit Clipped */
+            speed_limit_clipped: boolean[];
+        };
         /** FrameIdentity */
         FrameIdentity: {
             context: components["schemas"]["Context"];
@@ -2866,6 +3519,16 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** Heartbeat */
+        Heartbeat: {
+            /** Authority Epoch */
+            authority_epoch: number;
+            /**
+             * Operator Present
+             * @constant
+             */
+            operator_present: true;
         };
         /** HuggingFaceStatus */
         HuggingFaceStatus: {
@@ -3379,13 +4042,6 @@ export interface components {
             /** Units */
             units: string[];
         };
-        /** Observation */
-        Observation: {
-            /** Box */
-            box: number[];
-            /** Label */
-            label: string;
-        };
         /**
          * ParityLimits
          * @description Operator-declared tolerances; no unmeasured universal default.
@@ -3401,12 +4057,39 @@ export interface components {
         /** PerceptionProposal */
         PerceptionProposal: {
             /** Observations */
-            observations: components["schemas"]["Observation"][];
+            observations: components["schemas"]["vla_platform__teaching_intelligence_api__Observation"][];
             receipt: components["schemas"]["Provenance"];
             /** Summary */
             summary: string;
             /** Uncertain */
             uncertain: boolean;
+        };
+        /** PhysicalArming */
+        PhysicalArming: {
+            /** Camera Index */
+            camera_index: number;
+            /**
+             * Confirm
+             * @constant
+             */
+            confirm: "ARM AI CONTROL";
+            /** Expected Generation */
+            expected_generation: number;
+            /**
+             * Operator Present
+             * @constant
+             */
+            operator_present: true;
+            /**
+             * Workspace Clear
+             * @constant
+             */
+            workspace_clear: true;
+        };
+        /** PlanRequest */
+        PlanRequest: {
+            /** Request Id */
+            request_id: string;
         };
         /** PolicyArtifact */
         PolicyArtifact: {
@@ -3515,6 +4198,53 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** Proposal */
+        Proposal: {
+            /** Agent Session Id */
+            agent_session_id: string;
+            /** Arguments */
+            arguments: components["schemas"]["Arguments"] | components["schemas"]["SegmentArguments"];
+            /** Authority Epoch */
+            authority_epoch: number;
+            /** Created At */
+            created_at: string;
+            /** Expected Revision */
+            expected_revision: number;
+            /** Expires At */
+            expires_at: string;
+            /** Id */
+            id: string;
+            /** Model */
+            model: string;
+            /** Observation Id */
+            observation_id: string;
+            /** Observation Sha256 */
+            observation_sha256: string;
+            /** Prompt Sha256 */
+            prompt_sha256?: string | null;
+            /** Prompt Version */
+            prompt_version?: string | null;
+            /** Provider Revision */
+            provider_revision: string;
+            /**
+             * Purpose
+             * @default
+             */
+            purpose: string;
+            /** Request Id */
+            request_id: string;
+            /**
+             * Skill
+             * @default joint_correction
+             * @enum {string}
+             */
+            skill: "joint_correction" | "joint_segment";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "proposed" | "rejected" | "accepted" | "started" | "completed" | "stopped" | "unknown";
+        };
         /** Provenance */
         Provenance: {
             context: components["schemas"]["Context"];
@@ -3536,6 +4266,51 @@ export interface components {
             response_id: string | null;
             /** Returned Model */
             returned_model: string;
+        };
+        /** ProviderInput */
+        ProviderInput: {
+            /** Api Key */
+            api_key?: string | null;
+            /**
+             * Model
+             * @default gpt-6-astra
+             */
+            model: string;
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "mock" | "openai_responses";
+            /**
+             * Reasoning Effort
+             * @default low
+             * @enum {string}
+             */
+            reasoning_effort: "low" | "medium" | "high" | "xhigh" | "max";
+        };
+        /** ProviderStatus */
+        ProviderStatus: {
+            /** Capabilities */
+            capabilities: string[];
+            /** Checked */
+            checked: boolean;
+            /** Id */
+            id: string;
+            /** Message */
+            message: string;
+            /** Model */
+            model: string;
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "mock" | "openai_responses";
+            /** Reasoning Effort */
+            reasoning_effort: string;
+            /** Revision */
+            revision: string;
+            /** Saved */
+            saved: boolean;
         };
         /** PublicRuntime */
         PublicRuntime: {
@@ -3647,6 +4422,51 @@ export interface components {
             /** Unavailable Reason */
             unavailable_reason?: string | null;
         };
+        /** Receipt */
+        Receipt: {
+            /** Admission Observation Id */
+            admission_observation_id?: string | null;
+            /** Applied Targets */
+            applied_targets: {
+                [key: string]: number;
+            };
+            /** Arguments */
+            arguments: components["schemas"]["Arguments"] | components["schemas"]["SegmentArguments"];
+            /** Elapsed Seconds */
+            elapsed_seconds: number;
+            /** Execution Provenance */
+            execution_provenance?: {
+                [key: string]: unknown;
+            } | null;
+            executor_evidence?: components["schemas"]["ExecutionEvidence"] | null;
+            /** Id */
+            id: string;
+            /** Joint Units */
+            joint_units?: {
+                [key: string]: string;
+            };
+            /** Original Model Observation Id */
+            original_model_observation_id?: string | null;
+            /** Post Observation Id */
+            post_observation_id: string | null;
+            /** Pre Observation Id */
+            pre_observation_id: string;
+            /** Proposal Id */
+            proposal_id: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "rejected" | "completed" | "stopped" | "unknown" | "replayed";
+            /**
+             * Task Success Verified
+             * @default false
+             * @constant
+             */
+            task_success_verified: false;
+        };
         /** RecordingCapture */
         RecordingCapture: {
             /** Episodes */
@@ -3663,6 +4483,14 @@ export interface components {
              * @constant
              */
             action_units: "radians";
+            /**
+             * Actor Summary Source
+             * @default unavailable
+             * @enum {string}
+             */
+            actor_summary_source: "declared_events" | "legacy_operator" | "unavailable";
+            /** Actors */
+            actors?: ("human_operator" | "llm_agent")[];
             /**
              * Camera Key
              * @constant
@@ -3681,6 +4509,12 @@ export interface components {
              * @constant
              */
             controller: "joint_position_targets";
+            /**
+             * Environment Kind
+             * @default simulation
+             * @constant
+             */
+            environment_kind: "simulation";
             /** Episodes */
             episodes: components["schemas"]["RecordingEpisodeOption"][];
             /** Fps */
@@ -3700,6 +4534,12 @@ export interface components {
             physics_hz: number;
             /** Scene Sha256 */
             scene_sha256: string;
+            /**
+             * Schema Version
+             * @default 1
+             * @enum {integer}
+             */
+            schema_version: 1 | 2;
             /** Session Id */
             session_id: string;
             /** Session Sha256 */
@@ -3735,6 +4575,14 @@ export interface components {
         };
         /** RecordingEpisodeOption */
         RecordingEpisodeOption: {
+            /**
+             * Actor Summary Source
+             * @default unavailable
+             * @enum {string}
+             */
+            actor_summary_source: "declared_events" | "legacy_operator" | "unavailable";
+            /** Actors */
+            actors?: ("human_operator" | "llm_agent")[];
             /** Episode Id */
             episode_id: string;
             /** Frames */
@@ -3744,6 +4592,12 @@ export interface components {
              * @enum {string}
              */
             outcome: "unknown" | "operator_reported_failure";
+            /**
+             * Outcome Source
+             * @default unknown
+             * @enum {string}
+             */
+            outcome_source: "operator_reported" | "unknown";
             /** Receipt Sha256 */
             receipt_sha256: string;
             /**
@@ -3833,6 +4687,10 @@ export interface components {
         };
         /** RuntimePackage */
         RuntimePackage: {
+            /** Connected */
+            connected?: boolean | null;
+            /** Host */
+            host?: string | null;
             /**
              * Id
              * @enum {string}
@@ -3840,6 +4698,12 @@ export interface components {
             id: "robot" | "datasets" | "decision";
             /** Installable */
             installable: boolean;
+            /**
+             * Location
+             * @default server
+             * @enum {string}
+             */
+            location: "server" | "companion";
             /** Message */
             message: string;
             /** Minimum Free Gib */
@@ -3925,6 +4789,195 @@ export interface components {
             threads: 2;
             timing_ms: components["schemas"]["Timing"];
         };
+        /** SegmentArguments */
+        SegmentArguments: {
+            /** Duration Seconds */
+            duration_seconds: number;
+            /** Targets */
+            targets: {
+                [key: string]: number;
+            };
+        };
+        /** Session */
+        Session: {
+            /** Authority Epoch */
+            authority_epoch: number;
+            /**
+             * Calls Used
+             * @default 0
+             */
+            calls_used: number;
+            /** Clock Policy */
+            clock_policy: string;
+            /**
+             * Control Armed
+             * @default false
+             */
+            control_armed: boolean;
+            /** Created At */
+            created_at: string;
+            execution_observation?: components["schemas"]["vla_platform__agent_control__contracts__Observation"] | null;
+            /** Id */
+            id: string;
+            /**
+             * Input Tokens
+             * @default 0
+             */
+            input_tokens: number;
+            /** Max Calls */
+            max_calls: number;
+            /** Max Output Tokens */
+            max_output_tokens: number;
+            /** Max Seconds */
+            max_seconds: number;
+            /**
+             * Max Steps
+             * @default 12
+             */
+            max_steps: number;
+            /** Max Total Tokens */
+            max_total_tokens: number;
+            /**
+             * Message
+             * @default
+             */
+            message: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "advisory" | "shadow" | "supervised" | "bounded";
+            model_assessment?: components["schemas"]["Assessment"] | null;
+            observation?: components["schemas"]["vla_platform__agent_control__contracts__Observation"] | null;
+            /**
+             * Output Tokens
+             * @default 0
+             */
+            output_tokens: number;
+            pending_proposal?: components["schemas"]["Proposal"] | null;
+            /**
+             * Planning Mode
+             * @default task
+             * @enum {string}
+             */
+            planning_mode: "joint" | "task";
+            /** Project Id */
+            project_id: string;
+            /** Provider Id */
+            provider_id: string;
+            /** Provider Revision */
+            provider_revision: string;
+            /** Receipts */
+            receipts?: components["schemas"]["Receipt"][];
+            /**
+             * Reserved Tokens
+             * @default 0
+             */
+            reserved_tokens: number;
+            /**
+             * Run Enabled
+             * @default false
+             */
+            run_enabled: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "observing" | "ready" | "planning" | "waiting_for_acceptance" | "executing" | "paused" | "stopping" | "interrupted" | "complete" | "stopped" | "error";
+            /**
+             * Step Count
+             * @default 0
+             */
+            step_count: number;
+            /** Supported Skills */
+            supported_skills?: string[];
+            /**
+             * Target Kind
+             * @enum {string}
+             */
+            target_kind: "replay" | "teaching" | "robot_lab";
+            /** Task */
+            task: string;
+            task_review?: components["schemas"]["TaskReviewRecord"] | null;
+            /**
+             * Task Success Verified
+             * @default false
+             */
+            task_success_verified: boolean;
+            /** Teaching Job Id */
+            teaching_job_id: string | null;
+            /** Updated At */
+            updated_at: string;
+        };
+        /** SessionCreate */
+        SessionCreate: {
+            /**
+             * Clock Policy
+             * @default replay
+             * @enum {string}
+             */
+            clock_policy: "replay" | "stepped" | "continuous" | "physical";
+            /**
+             * Cloud Consent
+             * @default false
+             */
+            cloud_consent: boolean;
+            /**
+             * Max Calls
+             * @default 4
+             */
+            max_calls: number;
+            /**
+             * Max Output Tokens
+             * @default 1024
+             */
+            max_output_tokens: number;
+            /**
+             * Max Seconds
+             * @default 120
+             */
+            max_seconds: number;
+            /**
+             * Max Steps
+             * @default 12
+             */
+            max_steps: number;
+            /**
+             * Max Total Tokens
+             * @default 16000
+             */
+            max_total_tokens: number;
+            /**
+             * Mode
+             * @default supervised
+             * @enum {string}
+             */
+            mode: "advisory" | "shadow" | "supervised" | "bounded";
+            physical?: components["schemas"]["PhysicalArming"] | null;
+            /**
+             * Planning Mode
+             * @default task
+             * @enum {string}
+             */
+            planning_mode: "joint" | "task";
+            /**
+             * Provider Id
+             * @default mock
+             */
+            provider_id: string;
+            /** Replay Observation Id */
+            replay_observation_id?: string | null;
+            /**
+             * Target Kind
+             * @default replay
+             * @enum {string}
+             */
+            target_kind: "replay" | "teaching" | "robot_lab";
+            /** Task */
+            task: string;
+            /** Teaching Job Id */
+            teaching_job_id?: string | null;
+        };
         /** SessionStatus */
         SessionStatus: {
             job: components["schemas"]["Job"];
@@ -3975,6 +5028,48 @@ export interface components {
             provider: "gcp";
             /** Source Manifest Sha256 */
             source_manifest_sha256: string;
+        };
+        /** TaskReview */
+        TaskReview: {
+            /** Authority Epoch */
+            authority_epoch: number;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /** Observation Id */
+            observation_id: string;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "success" | "failure" | "unknown";
+        };
+        /** TaskReviewRecord */
+        TaskReviewRecord: {
+            /** Authority Epoch */
+            authority_epoch: number;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /** Observation Id */
+            observation_id: string;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "success" | "failure" | "unknown";
+            /** Reviewed At */
+            reviewed_at: string;
+            /**
+             * Source
+             * @default operator
+             * @constant
+             */
+            source: "operator";
         };
         /** TeachingCaptureRequest */
         TeachingCaptureRequest: {
@@ -4247,15 +5342,35 @@ export interface components {
         /** WorkspaceModule */
         WorkspaceModule: {
             /**
+             * Available
+             * @default true
+             */
+            available: boolean;
+            /**
              * Configured
              * @default false
              */
             configured: boolean;
             /**
+             * Default Installed
+             * @default false
+             */
+            default_installed: boolean;
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * Group
+             * @enum {string}
+             */
+            group: "Robot Lab" | "Data" | "Train" | "Test" | "Workspace" | "Cloud & APIs";
+            /**
              * Id
              * @enum {string}
              */
-            id: "robot-lab" | "teaching" | "augmentation" | "decision-lab" | "cloud-runs";
+            id: "datasets" | "models" | "robot-lab" | "teaching" | "augmentation" | "training" | "distillation" | "quantization" | "evaluation" | "simulation" | "decision-lab" | "cloud-runs" | "google-cloud" | "openai" | "gemini" | "huggingface";
             /** Installed */
             installed: boolean;
             /**
@@ -4273,6 +5388,69 @@ export interface components {
              */
             setup_url: string;
         };
+        /** Observation */
+        vla_platform__agent_control__contracts__Observation: {
+            /** Authority Epoch */
+            authority_epoch: number;
+            /** Calibration Sha256 */
+            calibration_sha256?: string | null;
+            /** Captured At */
+            captured_at: string;
+            /** Clock Policy */
+            clock_policy: string;
+            /** Embodiment Manifest Id */
+            embodiment_manifest_id: string;
+            /**
+             * Environment Kind
+             * @enum {string}
+             */
+            environment_kind: "replay" | "simulation" | "physical";
+            /** Episode Id */
+            episode_id: string | null;
+            /** Expires At */
+            expires_at: string;
+            /** Id */
+            id: string;
+            /** Image Sha256 */
+            image_sha256?: string | null;
+            /** Joint Units */
+            joint_units?: {
+                [key: string]: string;
+            };
+            /** Joints */
+            joints: {
+                [key: string]: number;
+            };
+            /** Revision */
+            revision: number;
+            /** Scene Id */
+            scene_id: string;
+            /** Sha256 */
+            sha256: string;
+            /** Source */
+            source: string;
+            /** Step */
+            step: number;
+            /** Target Session Id */
+            target_session_id: string;
+            /** Task Evidence */
+            task_evidence?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Units
+             * @default radians
+             * @enum {string}
+             */
+            units: "radians" | "mixed";
+        };
+        /** Observation */
+        vla_platform__teaching_intelligence_api__Observation: {
+            /** Box */
+            box: number[];
+            /** Label */
+            label: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -4282,6 +5460,631 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    session_api_v1_agent_sessions__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_api_v1_agent_sessions__session_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Approval"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_api_v1_agent_sessions__session_id__cancel_inference_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    events_api_v1_agent_sessions__session_id__events_get: {
+        parameters: {
+            query?: {
+                after?: number;
+            };
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Event"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    execution_observation_api_v1_agent_sessions__session_id__execution_observation_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    heartbeat_api_v1_agent_sessions__session_id__heartbeat_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Heartbeat"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    observation_image_api_v1_agent_sessions__session_id__observations__observation_id__image_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                observation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    observe_api_v1_agent_sessions__session_id__observe_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pause_api_v1_agent_sessions__session_id__pause_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    propose_api_v1_agent_sessions__session_id__proposals_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_task_api_v1_agent_sessions__session_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskReview"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_task_api_v1_agent_sessions__session_id__run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_api_v1_agent_sessions__session_id__stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    providers_api_v1_agent_providers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderStatus"][];
+                };
+            };
+        };
+    };
+    save_provider_api_v1_agent_providers__provider_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_provider_api_v1_agent_providers__provider_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_provider_api_v1_agent_providers__provider_id__check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    connections_api_v1_api_connections_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiConnectionsStatus"];
+                };
+            };
+        };
+    };
+    save_api_v1_api_connections__ident__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ident: "openai" | "gemini";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApiKeyInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiConnectionStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    disconnect_api_v1_api_connections__ident__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ident: "openai" | "gemini";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiConnectionStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     augmentation_options_api_v1_augmentation_options_get: {
         parameters: {
             query?: never;
@@ -5638,7 +7441,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                ident: "robot-lab" | "teaching" | "augmentation" | "decision-lab" | "cloud-runs";
+                ident: "datasets" | "models" | "robot-lab" | "teaching" | "augmentation" | "training" | "distillation" | "quantization" | "evaluation" | "simulation" | "decision-lab" | "cloud-runs" | "google-cloud" | "openai" | "gemini" | "huggingface";
             };
             cookie?: never;
         };
@@ -5647,6 +7450,68 @@ export interface operations {
                 "application/json": components["schemas"]["ModulePreference"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    uninstall_feature_api_v1_modules__ident__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ident: "datasets" | "models" | "robot-lab" | "teaching" | "augmentation" | "training" | "distillation" | "quantization" | "evaluation" | "simulation" | "decision-lab" | "cloud-runs" | "google-cloud" | "openai" | "gemini" | "huggingface";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    install_feature_api_v1_modules__ident__install_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ident: "datasets" | "models" | "robot-lab" | "teaching" | "augmentation" | "training" | "distillation" | "quantization" | "evaluation" | "simulation" | "decision-lab" | "cloud-runs" | "google-cloud" | "openai" | "gemini" | "huggingface";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -5730,6 +7595,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sessions_api_v1_projects__project_id__agent_sessions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_session_api_v1_projects__project_id__agent_sessions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
                 };
             };
             /** @description Validation Error */
@@ -5889,6 +7820,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    plan_augmentation_api_v1_projects__project_id__augmentations_plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AugmentationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AugmentationPlan"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
@@ -6604,6 +8570,137 @@ export interface operations {
             };
         };
     };
+    robot_lab_post_agent_acquire: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_agent_execute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    agent_execution_api_v1_robot_lab_agent_executions__command_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                command_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    robot_lab_post_agent_heartbeat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_agent_observe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_agent_release: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     robot_lab_post_calibration_cancel: {
         parameters: {
             query?: never;
@@ -6725,6 +8822,46 @@ export interface operations {
         };
     };
     robot_lab_post_control_jog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_control_rest_return: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    robot_lab_post_control_rest_save: {
         parameters: {
             query?: never;
             header?: never;

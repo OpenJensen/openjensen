@@ -32,7 +32,6 @@ jobs:
       unified_quantization: ${{ steps.changes.outputs.unified_quantization }}
       quantization: ${{ steps.changes.outputs.quantization }}
       training: ${{ steps.changes.outputs.training }}
-      benchmark: ${{ steps.changes.outputs.benchmark }}
       act: ${{ steps.changes.outputs.act }}
       teaching: ${{ steps.changes.outputs.teaching }}
       decision: ${{ steps.changes.outputs.decision }}
@@ -67,6 +66,9 @@ jobs:
           CI_PY_SHARDS: ${{ vars.CI_PY_SHARDS }}
           CI_DESKTOP_SHARDS: ${{ vars.CI_DESKTOP_SHARDS }}
           CI_MOBILE_SHARDS: ${{ vars.CI_MOBILE_SHARDS }}
+      # Runs on every change, including documentation-only ones that need no other job.
+      - name: Check documentation links
+        run: python3 .github/scripts/check_doc_links.py
   application:
     needs: scope
     if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.application != 'false') }}
@@ -385,31 +387,6 @@ jobs:
       - run: uv pip install --python .venv/bin/python -e '.[dev]'
       - run: .venv/bin/python -m pytest -q -rs
       - run: .venv/bin/ruff check src tests
-  benchmark:
-    needs: scope
-    if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.benchmark != 'false') }}
-    runs-on: ${{ fromJSON((vars.CI_RUNNER == 'gcp' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-24.04"]') }}
-    timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: workers/benchmark_gpu
-    steps:
-      - uses: actions/checkout@v4
-      - name: Protect disposable runner during package maintenance
-        if: runner.environment == 'self-hosted' && runner.os == 'Linux'
-        working-directory: ${{ github.workspace }}
-        run: sudo bash .github/scripts/prepare_runner.sh
-      - uses: astral-sh/setup-uv@v6
-        with:
-          version: '0.12.19'
-          python-version: '3.11'
-          enable-cache: true
-          cache-suffix: benchmark
-          cache-dependency-glob: workers/benchmark_gpu/pyproject.toml
-      - run: uv venv --python 3.11
-      - run: uv pip install --python .venv/bin/python pytest==8.4.2 ruff==0.13.2
-      - run: .venv/bin/python -m pytest -q -rs
-      - run: .venv/bin/ruff check scripts tests
   act-inference-export:
     needs: scope
     if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.act != 'false') }}
@@ -514,7 +491,7 @@ jobs:
           HF_HUB_OFFLINE: '1'
           CUDA_VISIBLE_DEVICES: ''
   native-worker-verification:
-    needs: [scope, quantization, unified-quantization, training, benchmark, act-inference-export, teaching, decision]
+    needs: [scope, quantization, unified-quantization, training, act-inference-export, teaching, decision]
     if: ${{ always() }}
     runs-on: ${{ fromJSON((vars.CI_RUNNER == 'gcp' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","x64","firebird-gcp"]' || '["ubuntu-24.04"]') }}
     timeout-minutes: 2
@@ -527,7 +504,7 @@ jobs:
           import json, os
           results = json.loads(os.environ['CHECK_RESULTS'])
           scope = results['scope']
-          required = {'quantization': 'quantization', 'unified-quantization': 'unified_quantization', 'training': 'training', 'benchmark': 'benchmark', 'act-inference-export': 'act', 'teaching': 'teaching', 'decision': 'decision'}
+          required = {'quantization': 'quantization', 'unified-quantization': 'unified_quantization', 'training': 'training', 'act-inference-export': 'act', 'teaching': 'teaching', 'decision': 'decision'}
           failures = []
           for job, output in required.items():
               result = results[job]['result']

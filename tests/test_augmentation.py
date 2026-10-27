@@ -23,6 +23,7 @@ from vla_platform.augmentation.contracts import (
 from vla_platform.contracts import IntakeRequest, Job, now
 from vla_platform.datasets.inspect import profile
 from vla_platform.lifecycle.contracts import LifecycleResult, PolicyRequest
+from vla_platform.modules import initialize_modules, set_module_installed
 from vla_platform.settings import Settings
 from vla_platform.storage import jobs
 
@@ -111,7 +112,12 @@ def wait(client, job_id):
 
 
 @pytest.fixture
-def doubles(monkeypatch):
+def doubles(monkeypatch, tmp_path):
+    initialize_modules(
+        Settings(data_dir=tmp_path), tmp_path / "robot-lab-connection.json", existing=False
+    )
+    set_module_installed(tmp_path, "augmentation", True)
+    set_module_installed(tmp_path, "gemini", True)
     state = SimpleNamespace(
         events=[],
         missing_camera=None,
@@ -129,8 +135,9 @@ def doubles(monkeypatch):
     monkeypatch.setattr(service.shutil, "which", lambda binary: f"/fixture/{binary}")
 
     class Explorer:
-        def __init__(self):
-            self.reader = self
+        def __init__(self, *, data_dir):
+            assert data_dir.is_dir()
+            self.client = self
 
         async def preview(self, source, episode):
             assert source.result.revision == SHA
@@ -149,11 +156,6 @@ def doubles(monkeypatch):
                     )
                 ],
             )
-
-        async def read(self, url, max_bytes, budget):
-            assert SHA in url
-            assert max_bytes == 48 * 1024 * 1024
-            return state.source_bytes
 
         async def close(self):
             state.explorer_closed = True
@@ -176,6 +178,11 @@ def doubles(monkeypatch):
         async def close(self):
             state.provider_closed = True
 
+    async def download_video(client, url, target):
+        assert isinstance(client, Explorer)
+        assert SHA in url
+        target.write_bytes(state.source_bytes)
+
     async def trim(source, target, start, seconds):
         assert source.read_bytes() == state.source_bytes
         state.events.append(("trim", start, seconds))
@@ -184,13 +191,19 @@ def doubles(monkeypatch):
         target.write_bytes(f"trimmed:{start}:{seconds}".encode())
 
     async def verify_output(path, seconds):
-        assert path.read_bytes().startswith(b"augmented:trimmed:")
+        assert path.read_bytes().startswith(b"augmented:")
         assert seconds == 5
         if state.verification_failure:
             raise ValueError("Gemini changed the clip duration")
 
+    async def saved_duration(path):
+        assert path.is_file()
+        return 5.0
+
+    monkeypatch.setattr(service, "duration", saved_duration)
     monkeypatch.setattr(service, "DatasetExplorer", Explorer)
     monkeypatch.setattr(service, "GeminiOmniProvider", Provider)
+    monkeypatch.setattr(service, "download_video", download_video)
     monkeypatch.setattr(service, "trim", trim)
     monkeypatch.setattr(service, "verify_output", verify_output)
     return state
@@ -213,6 +226,7 @@ def test_augmentation_persists_pinned_provenance_and_downloads_review_bundle(tmp
         completed = wait(client, jid)
         assert completed["status"] == "succeeded", completed
         assert completed["kind"] == completed["result"]["operation"] == "dataset.augment"
+        assert not (tmp_path / "jobs" / jid / "source.mp4").exists()
         result = completed["result"]
         assert result["review_required"] is True
         assert result["source_job_id"] == "inspected"
@@ -220,7 +234,7 @@ def test_augmentation_persists_pinned_provenance_and_downloads_review_bundle(tmp
         assert result["revision"] == SHA
         assert result["metadata_sha256"] == source.result.metadata_sha256
         assert "Preserve the exact robot" in result["prompt"]
-        assert "matte light oak" in result["prompt"] and "Use blue fabric." in result["prompt"]
+        assert "matte light oak" not in result["prompt"] and "Use blue fabric." in result["prompt"]
         assert len(result["warnings"]) >= 1
         # A v3 shared-video offset must be added to the user-selected episode-relative offset.
         assert [(c["source_start_seconds"], c["source_end_seconds"]) for c in result["clips"]] == [
@@ -300,6 +314,7 @@ def test_missing_server_configuration_rejects_before_scheduling(
 def test_saved_cloud_login_is_used_without_gemini_key(
     tmp_path, monkeypatch, doubles, api_key_present
 ):
+    set_module_installed(tmp_path, "google-cloud", True)
     if not api_key_present:
         monkeypatch.delenv("GEMINI_API_KEY")
     (tmp_path / "cloud-connections.json").write_text(
@@ -341,6 +356,7 @@ def test_saved_cloud_login_is_used_without_gemini_key(
 def test_saved_cloud_config_does_not_fall_back_to_key_when_cli_missing(
     tmp_path, monkeypatch, doubles
 ):
+    set_module_installed(tmp_path, "google-cloud", True)
     (tmp_path / "cloud-connections.json").write_text(
         json.dumps(
             {
@@ -446,6 +462,7 @@ def test_entire_selection_is_preflighted_before_first_paid_edit(tmp_path, double
         failed = wait(client, jid)
         assert failed["status"] == "failed"
         assert failed["result"] is None
+        assert not (tmp_path / "jobs" / jid / "source.mp4").exists()
         assert client.get(f"/api/v1/jobs/{jid}/augmentation/download").status_code == 422
         assert (
             client.get(f"/api/v1/jobs/{jid}/augmentation/clips/0?original=true").status_code == 422
@@ -565,3 +582,201 @@ def test_persisted_jobs_reject_mismatched_augmentation_operation():
     values.update(request=AugmentationRequest(**request_body()), result=None)
     with pytest.raises(ValidationError, match="kind must match"):
         Job.model_validate(values)
+
+
+@pytest.mark.parametrize("preset", ["lighting", "texture", "custom"])
+def test_written_edit_replaces_example_without_hidden_surface_changes(preset):
+    request = AugmentationRequest(**request_body(preset=preset, prompt="make the table metal"))
+    resolved = request.resolved_prompt()
+    assert resolved.endswith("\nmake the table metal")
+    assert "light oak" not in resolved
+    assert "plain grey" not in resolved
+    assert "late-afternoon" not in resolved
+    assert "Keep all unmentioned surfaces" in resolved
+
+
+def test_texture_default_only_targets_table_and_legacy_request_shape_is_preserved():
+    request = AugmentationRequest(**request_body(prompt=""))
+    assert "only the tabletop" in request.resolved_prompt()
+    assert "background and all other surfaces unchanged" in request.resolved_prompt()
+    assert "source_clip" not in request.model_dump(mode="json")
+    assert (
+        AugmentationRequest.model_validate(request.model_dump()).model_dump()
+        == request.model_dump()
+    )
+
+
+@pytest.mark.parametrize("variant", ["original", "augmented"])
+def test_saved_clip_reuse_preserves_exact_bytes_timing_parent_and_manifest(
+    tmp_path, doubles, variant
+):
+    app = create_app(Settings(data_dir=tmp_path))
+    with TestClient(app) as client:
+        pid = project(client)
+        seed(client, app, inspected_job(pid))
+        parent = wait(client, submit(client, pid).json()["id"])
+        assert parent["status"] == "succeeded"
+        reference = {"job_id": parent["id"], "clip_index": 1, "variant": variant}
+        source_path = tmp_path / "jobs" / parent["id"] / f"{variant}-1.mp4"
+        source_bytes = source_path.read_bytes()
+        doubles.events.clear()
+        response = submit(
+            client,
+            pid,
+            episode_indices=[2],
+            source_clip=reference,
+            prompt="Make only the table metal.",
+        )
+        assert response.status_code == 202, response.text
+        child = wait(client, response.json()["id"])
+        assert child["status"] == "succeeded", child
+        assert child["request"]["source_clip"] == child["result"]["source_clip"] == reference
+        clip = child["result"]["clips"][0]
+        assert (
+            clip["index"],
+            clip["episode_index"],
+            clip["source_start_seconds"],
+            clip["source_end_seconds"],
+        ) == (0, 2, 21, 26)
+        assert clip["input_sha256"] == hashlib.sha256(source_bytes).hexdigest()
+        assert [event[0] for event in doubles.events] == ["paid_edit"]
+        assert doubles.events[0][1] == source_bytes
+        assert source_path.read_bytes() == source_bytes
+        assert client.get(f"/api/v1/jobs/{parent['id']}").json() == parent
+        download = client.get(f"/api/v1/jobs/{child['id']}/augmentation/download")
+        with zipfile.ZipFile(io.BytesIO(download.content)) as archive:
+            assert archive.read("original-0.mp4") == source_bytes
+            assert json.loads(archive.read("manifest.json"))["result"]["source_clip"] == reference
+        # A second refinement keeps the initial dataset time interval as its provenance.
+        grandchild = wait(
+            client,
+            submit(
+                client,
+                pid,
+                episode_indices=[2],
+                source_clip={"job_id": child["id"], "clip_index": 0, "variant": "augmented"},
+            ).json()["id"],
+        )
+        assert grandchild["status"] == "succeeded", grandchild
+        assert grandchild["result"]["clips"][0]["source_start_seconds"] == 21
+        assert grandchild["result"]["clips"][0]["input_sha256"] == clip["output_sha256"]
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"episode_indices": [0]},
+        {"start_seconds": 0},
+        {"duration_seconds": 4},
+        {"episode_indices": [0, 2]},
+        {"source_clip": {"job_id": "missing", "clip_index": 0, "variant": "augmented"}},
+    ],
+)
+def test_saved_clip_cannot_be_relabelled_or_reference_missing_runs(tmp_path, doubles, change):
+    app = create_app(Settings(data_dir=tmp_path))
+    with TestClient(app) as client:
+        pid = project(client)
+        seed(client, app, inspected_job(pid))
+        parent = wait(client, submit(client, pid).json()["id"])
+        doubles.events.clear()
+        body = {
+            "episode_indices": [2],
+            "source_clip": {"job_id": parent["id"], "clip_index": 1, "variant": "augmented"},
+        } | change
+        response = submit(client, pid, **body)
+        assert response.status_code == 422, response.text
+        assert doubles.events == []
+
+
+def test_saved_clip_cannot_cross_projects(tmp_path, doubles):
+    app = create_app(Settings(data_dir=tmp_path))
+    with TestClient(app) as client:
+        pid = project(client)
+        seed(client, app, inspected_job(pid))
+        parent = wait(client, submit(client, pid).json()["id"])
+        other = project(client)
+        seed(client, app, inspected_job(other, id="other-inspection"))
+        doubles.events.clear()
+        response = submit(
+            client,
+            other,
+            source_job_id="other-inspection",
+            episode_indices=[2],
+            source_clip={"job_id": parent["id"], "clip_index": 1, "variant": "augmented"},
+        )
+        assert response.status_code == 422
+        assert "in this project" in response.json()["detail"]
+        assert doubles.events == []
+
+
+def test_changed_saved_clip_fails_before_any_provider_request(tmp_path, doubles):
+    app = create_app(Settings(data_dir=tmp_path))
+    with TestClient(app) as client:
+        pid = project(client)
+        seed(client, app, inspected_job(pid))
+        parent = wait(client, submit(client, pid).json()["id"])
+        (tmp_path / "jobs" / parent["id"] / "augmented-1.mp4").write_bytes(
+            b"changed after generation"
+        )
+        doubles.events.clear()
+        child = wait(
+            client,
+            submit(
+                client,
+                pid,
+                episode_indices=[2],
+                source_clip={"job_id": parent["id"], "clip_index": 1, "variant": "augmented"},
+            ).json()["id"],
+        )
+        assert child["status"] == "failed"
+        assert "recorded hash" in child["error"]
+        assert doubles.events == []
+        assert not (tmp_path / "jobs" / child["id"] / "source.mp4").exists()
+
+
+def test_large_saved_output_is_reencoded_from_zero_before_upload(tmp_path, monkeypatch, doubles):
+    app = create_app(Settings(data_dir=tmp_path))
+    with TestClient(app) as client:
+        pid = project(client)
+        seed(client, app, inspected_job(pid))
+        parent = wait(client, submit(client, pid).json()["id"])
+        path = tmp_path / "jobs" / parent["id"] / "augmented-1.mp4"
+        selected = path.read_bytes()
+        monkeypatch.setattr(service, "MAX_INPUT_BYTES", len(selected))
+
+        async def reencode(source, target, start, seconds):
+            assert source.read_bytes() == selected
+            assert (start, seconds) == (0, 5)
+            target.write_bytes(b"smaller clip")
+
+        monkeypatch.setattr(service, "trim", reencode)
+        doubles.events.clear()
+        response = submit(
+            client,
+            pid,
+            episode_indices=[2],
+            source_clip={"job_id": parent["id"], "clip_index": 1, "variant": "augmented"},
+        )
+        child = wait(client, response.json()["id"])
+        assert child["status"] == "succeeded", child
+        assert doubles.events[0][1] == b"smaller clip"
+        assert path.read_bytes() == selected
+        assert child["result"]["clips"][0]["source_start_seconds"] == 21
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        "Show the same action from a fixed camera ten degrees to the left.",
+        "Replace the cup with a blue canister with exactly the same width at the grasp point.",
+    ],
+)
+def test_explicit_camera_or_object_edits_keep_motion_and_grasp_constraints(edit):
+    request = AugmentationRequest(**request_body(preset="custom", prompt=edit))
+    prompt = request.resolved_prompt()
+    assert prompt.endswith("\n" + edit)
+    assert "unless the edit explicitly requests changing them" in prompt
+    assert "world-space trajectories" in prompt
+    assert "gripper opening and closing" in prompt
+    assert "contact-to-contact span and gripper clearance" in prompt
+    assert "Do not add or remove objects, introduce camera motion" not in prompt

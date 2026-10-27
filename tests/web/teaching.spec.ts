@@ -3,6 +3,10 @@ import { expect, test, type Page } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { installedModules } from './module-fixtures';
 
+async function selectSimulation(page: Page) {
+  await page.getByRole('combobox', { name: 'Agent target', exact: true }).selectOption('teaching');
+}
+
 async function teaching(page: Page, connected = true) {
   const commands: any[] = [];
   const changes = {
@@ -32,6 +36,12 @@ async function teaching(page: Page, connected = true) {
     if (await fulfillApplicationUpdateRead(route)) return;
     const request = route.request(),
       path = new URL(request.url()).pathname;
+    if (request.method() === 'GET' && (path === '/api/v1/agent/providers' || path.endsWith('/agent-sessions')))
+      return route.fulfill({ json: [] });
+    if (request.method() === 'GET' && path === '/api/v1/robot-lab/status')
+      return route.fulfill({
+        json: { ok: false, connected: false, message: 'No physical control in this simulator fixture.' },
+      });
     if (request.method() === 'GET' && path === '/api/v1/datasets') return route.fulfill({ json: [] });
     if (path === '/api/v1/teaching/frame') {
       changes.frames += 1;
@@ -85,7 +95,7 @@ async function teaching(page: Page, connected = true) {
       '/api/v1/health': { status: 'ok', version: 'test' },
       '/api/v1/capabilities': [],
       '/api/v1/modules': installedModules,
-      '/api/v1/projects': [{ id: 'teaching', name: 'Teaching test', created_at: '2026-09-27T00:00:00Z' }],
+      '/api/v1/projects': [{ id: 'teaching', name: 'AI teleoperation test', created_at: '2026-09-27T00:00:00Z' }],
       '/api/v1/projects/teaching/jobs': [],
       '/api/v1/projects/teaching/recordings/options': {
         configured: false,
@@ -110,8 +120,9 @@ async function teaching(page: Page, connected = true) {
     await route.fulfill({ status: 405, json: { detail: 'No external calls allowed by test.' } });
   });
   await page.goto('/datasets/');
-  await page.getByRole('link', { name: 'Teaching', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Teaching', level: 1 })).toBeVisible();
+  await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
+  await selectSimulation(page);
+  await expect(page.getByRole('heading', { name: 'AI teleoperation', level: 1 })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Control source', exact: true })).toContainText('Isaac Sim');
   return { commands, unexpected, changes };
 }
@@ -378,7 +389,8 @@ test('optional intelligence requires consent and never dispatches a control comm
   const base = await teaching(page);
   const fixture = await intelligence(page);
   await page.reload();
-  await page.getByRole('link', { name: 'Teaching', exact: true }).click();
+  await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
+  await selectSimulation(page);
   const ask = page.getByRole('button', { name: 'Suggest what to review' });
   await expect(ask).toBeDisabled();
   await consentAdvice(page);
@@ -403,7 +415,8 @@ test('camera advice displays captured scope and never sends browser pixels', asy
   await teaching(page);
   const fixture = await intelligence(page);
   await page.reload();
-  await page.getByRole('link', { name: 'Teaching', exact: true }).click();
+  await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
+  await selectSimulation(page);
   await consentAdvice(page);
   await page.getByRole('button', { name: 'Ask about the camera image' }).click();
   await expect(page.getByRole('article', { name: 'Intelligence suggestion' })).toContainText('captured frame 1');
@@ -424,7 +437,8 @@ test('private intelligence settings clear password without browser persistence o
   await teaching(page);
   const fixture = await intelligence(page);
   await page.reload();
-  await page.getByRole('link', { name: 'Teaching', exact: true }).click();
+  await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
+  await selectSimulation(page);
   await page.getByText('Configure optional services', { exact: true }).click();
   await page.getByLabel('OpenRouter API key').fill('fixture-private-key-not-real');
   await page.getByLabel('Voice chat model', { exact: true }).fill('provider/chat');
@@ -441,7 +455,8 @@ test('ambiguous intelligence failure never retries and requires renewed consent'
   await teaching(page);
   const fixture = await intelligence(page, { fail: true });
   await page.reload();
-  await page.getByRole('link', { name: 'Teaching', exact: true }).click();
+  await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
+  await selectSimulation(page);
   await consentAdvice(page);
   await page.getByRole('button', { name: 'Suggest what to review' }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'provider deadline expired' })).toBeVisible();
@@ -454,7 +469,8 @@ test('explicit intelligence cancel preserves request identity and withholds late
   await teaching(page);
   const fixture = await intelligence(page, { hold: true });
   await page.reload();
-  await page.getByRole('link', { name: 'Teaching', exact: true }).click();
+  await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
+  await selectSimulation(page);
   await consentAdvice(page);
   await page.getByRole('button', { name: 'Suggest what to review' }).click();
   await expect.poll(() => fixture.posts.filter((p) => p.path.endsWith('/decision')).length).toBe(1);
@@ -470,7 +486,8 @@ test('revision change cancels advice and cannot promote a late response', async 
   await teaching(page);
   const fixture = await intelligence(page, { hold: true });
   await page.reload();
-  await page.getByRole('link', { name: 'Teaching', exact: true }).click();
+  await page.getByRole('link', { name: 'AI teleoperation', exact: true }).click();
+  await selectSimulation(page);
   await consentAdvice(page);
   await page.getByRole('button', { name: 'Suggest what to review' }).click();
   await expect.poll(() => fixture.posts.length).toBe(1);
@@ -488,7 +505,7 @@ for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 });
     const { commands, unexpected } = await teaching(page, false);
     await page.getByText('Configure optional services', { exact: true }).click();
-    const controls = page.getByRole('region', { name: 'Teaching controls', exact: true });
+    const controls = page.getByRole('region', { name: 'AI teleoperation controls', exact: true });
     const geometry = await controls.evaluate((section) => {
       const rect = (element: Element) => {
         const value = element.getBoundingClientRect();
@@ -551,6 +568,6 @@ for (const width of [1440, 390, 320]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width + 1);
     const path = testInfo.outputPath(`teaching-form-${width}.png`);
     await controls.screenshot({ path });
-    await testInfo.attach(`Teaching form ${width}px`, { path, contentType: 'image/png' });
+    await testInfo.attach(`AI teleoperation form ${width}px`, { path, contentType: 'image/png' });
   });
 }

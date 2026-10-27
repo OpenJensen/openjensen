@@ -33,5 +33,16 @@ sim-rollout-runner*.json
 # Private deployment/run evidence and local screenshots.
 /output/
 
-# Presentation media is kept locally, separate from application releases.
-/artifacts/open-jensen-videos/
+# Generated artifacts and presentation media stay local.
+/artifacts/
+
+# Local agent worktrees and generated development records.
+/.codex/
+/.claude/
+/workers/smolvla_qlora/docs/training/qlora-model-inspection-*.json
+/workers/isaac_sim/scenes/so101-pickup/robot/build_report.json
+/workers/isaac_sim/scenes/so101-pickup/episode-*-report.json
+/workers/isaac_sim/scenes/so101-pickup/experiment.json
+/workers/isaac_sim/scenes/so101-pickup/preview.png
+/workers/isaac_sim/scenes/so101-pickup/evidence/calibration/report.json
+/workers/vla_cpp/configs/cuda-inputs.json

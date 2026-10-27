@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type HuggingFaceConnectionStatus } from '@/lib/api';
 import { Icon } from '@/components/icon';
-import './hf-settings.css';
+import './cloud-apis.css';
 
 export function HuggingFaceSettingsPanel() {
   const client = useQueryClient();
@@ -52,17 +52,19 @@ export function HuggingFaceSettingsPanel() {
 
   const status = connection.data;
   return (
-    <section className="hf-settings" aria-labelledby="hf-settings-title">
-      <header className="hf-settings-heading">
-        <Icon name="folder" size={22} />
-        <div>
-          <h2 id="hf-settings-title">Hugging Face</h2>
-        </div>
-        <span className="hf-settings-badge">{status?.configured ? 'Token saved' : 'Optional'}</span>
+    <section className="cloud-api-card" aria-labelledby="hf-settings-title">
+      <header className="cloud-api-heading">
+        <span className="cloud-api-mark" aria-hidden="true">
+          <Icon name="folder" size={20} />
+        </span>
+        <h2 id="hf-settings-title">Hugging Face</h2>
+        <span className="cloud-status">
+          {connection.isPending ? 'Loading…' : status?.configured ? 'Configured' : 'Not configured'}
+        </span>
       </header>
-      <p className="hf-settings-note">For private or gated models.</p>
+      <p className="cloud-api-description">For private or gated models.</p>
       {status?.configured && (
-        <p className="hf-settings-account">
+        <p className="cloud-api-account">
           <strong>{status.username}</strong>
           <span>{status.token_hint}</span>
         </p>
@@ -73,26 +75,26 @@ export function HuggingFaceSettingsPanel() {
           void save();
         }}
       >
-        <div className="hf-settings-fields">
-          <label>
-            Hugging Face access token
-            <input
-              type="password"
-              value={token}
-              maxLength={512}
-              autoComplete="off"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              placeholder={status?.configured ? 'Enter a replacement token' : 'hf_…'}
-              disabled={pending !== null}
-              onChange={(event) => {
-                setToken(event.target.value);
-                setError(null);
-                setFeedback(null);
-              }}
-            />
-          </label>
+        <label>
+          Hugging Face access token
+          <input
+            type="password"
+            value={token}
+            maxLength={512}
+            autoComplete="off"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            placeholder={status?.configured ? 'Enter a replacement token' : 'hf_…'}
+            disabled={pending !== null}
+            onChange={(event) => {
+              setToken(event.target.value);
+              setError(null);
+              setFeedback(null);
+            }}
+          />
+        </label>
+        <div className="cloud-provider-actions">
           <button type="submit" className="secondary-button" disabled={!token.trim() || pending !== null}>
             {pending === 'save' ? 'Verifying…' : status?.configured ? 'Replace token' : 'Save token'}
           </button>
@@ -102,29 +104,29 @@ export function HuggingFaceSettingsPanel() {
             </button>
           )}
         </div>
-        <p className="hf-settings-note">
+        <p className="cloud-auth-note">
           Stored privately on this server.{' '}
           <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer">
             Create a token <Icon name="external" size={11} />
           </a>
         </p>
         {status?.message && !status.configured && (
-          <p className="hf-settings-error" role="alert">
+          <p className="cloud-connection-error" role="alert">
             {status.message}
           </p>
         )}
         {connection.error && (
-          <p className="hf-settings-error" role="alert">
+          <p className="cloud-connection-error" role="alert">
             {connection.error.message}
           </p>
         )}
         {error && (
-          <p className="hf-settings-error" role="alert">
+          <p className="cloud-connection-error" role="alert">
             {error}
           </p>
         )}
         {feedback && (
-          <p className="hf-settings-feedback" role="status">
+          <p className="cloud-feedback" role="status">
             {feedback}
           </p>
         )}

@@ -327,6 +327,8 @@ class PublicGateway:
             if expanded == decoded:
                 break
             decoded = expanded
+        if "api-connections" in decoded.split("/"):
+            return self.error(request.scope, 403, "Manage API keys through the private workspace.")
         if "module-installations" in decoded.split("/") or (
             "modules" in decoded.split("/") and request.method not in SAFE_METHODS
         ):
@@ -336,6 +338,10 @@ class PublicGateway:
         if "updates" in decoded.split("/"):
             return self.error(
                 request.scope, 403, "Server updates are available in the private workspace"
+            )
+        if {"agent", "agent-sessions"}.intersection(decoded.split("/")):
+            return self.error(
+                request.scope, 403, "Agent Control is available in the private workspace"
             )
         if "robot-lab" in decoded.split("/"):
             return self.error(request.scope, 403, "Robot Lab is available in the private workspace")

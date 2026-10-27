@@ -4,11 +4,10 @@
     1920,
     1080
   ],
-  "method": "Approximate pinhole fit to shelf corners, followed by visual placement review",
+  "method": "Approximate pinhole scene configuration from shelf image correspondences",
   "measured_intrinsics": false,
   "lens_distortion": "not calibrated",
   "scale_anchor": "assumed 1.0 m shelf width; not a measurement",
-  "original_fit_rms_pixels": 13.9234,
   "correspondences_image_pixels": [
     [
       386,
@@ -43,5 +42,5 @@
       964
     ]
   ],
-  "note": "Shelf height and robot/box placement refined after first render; scene_config.json is authoritative."
+  "note": "scene_config.json defines scene geometry. Image correspondences are unverified example annotations."
 }

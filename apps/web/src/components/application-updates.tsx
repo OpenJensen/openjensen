@@ -218,18 +218,7 @@ export function ApplicationUpdates() {
                 ? 'Checking upstream main…'
                 : value?.message}
         </p>
-        {!value?.automatic_update && (
-          <p>
-            {value?.setup_message}{' '}
-            <a
-              href="https://github.com/OpenJensen/openjensen/blob/main/docs/upgrading.md"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Update setup
-            </a>
-          </p>
-        )}
+        {!value?.automatic_update && <p>{value?.setup_message}</p>}
         {available && value?.automatic_update && !busy && (
           <p>Update this server for everyone using it? The workspace will be backed up and the server will restart.</p>
         )}

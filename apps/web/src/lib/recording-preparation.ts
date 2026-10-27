@@ -42,8 +42,28 @@ function need(
 ): asserts ok {
   if (!ok) throw new Error(message);
 }
-function keys(v: unknown, names: string[]): asserts v is Record<string, unknown> {
-  need(record(v) && sameJson(Object.keys(v).sort(), [...names].sort()));
+function keys(v: unknown, names: string[], optional: string[] = []): asserts v is Record<string, unknown> {
+  need(
+    record(v) &&
+      sameJson(
+        Object.keys(v)
+          .filter((key) => !optional.includes(key))
+          .sort(),
+        [...names].sort(),
+      ),
+  );
+}
+function actorMetadata(v: Record<string, unknown>, version: unknown) {
+  if (v.actors === undefined && v.actor_summary_source === undefined) return;
+  need(
+    Array.isArray(v.actors) &&
+      v.actors.length <= 2 &&
+      new Set(v.actors).size === v.actors.length &&
+      v.actors.every((actor) => actor === 'human_operator' || actor === 'llm_agent'),
+  );
+  if (v.actor_summary_source === 'unavailable') need(v.actors.length === 0);
+  else if (v.actor_summary_source === 'legacy_operator') need(version !== 2 && sameJson(v.actors, ['human_operator']));
+  else need(version === 2 && v.actor_summary_source === 'declared_events' && v.actors.length > 0);
 }
 function strings(value: unknown, max: number): value is string[] {
   return (
@@ -118,26 +138,35 @@ export function recordingCatalog(v: unknown): RecordingCatalog {
   const sessions = new Set<string>(),
     episodes = new Set<string>();
   for (const c of v.captures) {
-    keys(c, [
-      'session_id',
-      'session_sha256',
-      'origin',
-      'lineage_group',
-      'controller',
-      'state_units',
-      'action_units',
-      'timebase',
-      'camera_key',
-      'joint_names',
-      'width',
-      'height',
-      'fps',
-      'physics_hz',
-      'scene_sha256',
-      'camera_prim',
-      'episodes',
-      'content_verified',
-    ]);
+    keys(
+      c,
+      [
+        'session_id',
+        'session_sha256',
+        'origin',
+        'lineage_group',
+        'controller',
+        'state_units',
+        'action_units',
+        'timebase',
+        'camera_key',
+        'joint_names',
+        'width',
+        'height',
+        'fps',
+        'physics_hz',
+        'scene_sha256',
+        'camera_prim',
+        'episodes',
+        'content_verified',
+      ],
+      ['schema_version', 'environment_kind', 'actors', 'actor_summary_source'],
+    );
+    need(
+      (c.schema_version === undefined || c.schema_version === 1 || c.schema_version === 2) &&
+        (c.environment_kind === undefined || c.environment_kind === 'simulation'),
+    );
+    actorMetadata(c, c.schema_version);
     need(id(c.session_id) && !sessions.has(c.session_id) && hash(c.session_sha256));
     sessions.add(c.session_id);
     need(
@@ -172,7 +201,17 @@ export function recordingCatalog(v: unknown): RecordingCatalog {
     );
     need(Array.isArray(c.episodes) && c.episodes.length > 0 && c.episodes.length <= 1000);
     for (const e of c.episodes) {
-      keys(e, ['episode_id', 'receipt_sha256', 'frames', 'outcome', 'termination']);
+      keys(
+        e,
+        ['episode_id', 'receipt_sha256', 'frames', 'outcome', 'termination'],
+        ['actors', 'actor_summary_source', 'outcome_source'],
+      );
+      actorMetadata(e, c.schema_version);
+      need(
+        e.outcome_source === undefined ||
+          e.outcome_source === 'unknown' ||
+          (e.outcome_source === 'operator_reported' && e.outcome === 'operator_reported_failure'),
+      );
       need(
         id(e.episode_id) &&
           !episodes.has(e.episode_id) &&

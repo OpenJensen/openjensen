@@ -14,6 +14,8 @@ export function WorkspaceDashboard({
   onDatasets,
   onDataset,
   onSettings,
+  onCloudApis,
+  installedModules,
 }: {
   projects: Project[];
   projectId: string;
@@ -21,8 +23,14 @@ export function WorkspaceDashboard({
   onDatasets: () => void;
   onDataset: (entry: LibraryDataset) => void;
   onSettings: () => void;
+  onCloudApis: () => void;
+  installedModules: string[];
 }) {
   const client = useQueryClient();
+  const trainingInstalled = installedModules.includes('training');
+  const cloudInstalled = installedModules.includes('google-cloud');
+  const hfInstalled = installedModules.includes('huggingface');
+  const hasResources = trainingInstalled || cloudInstalled || hfInstalled;
   // The collection link opens this project's library, so its count and recent
   // rows must use the same scope. Never substitute the global collection while
   // project membership is loading or unavailable.
@@ -45,11 +53,22 @@ export function WorkspaceDashboard({
   const compute = useQuery({
     queryKey: ['compute-settings'],
     queryFn: api.computeSettings,
+    enabled: trainingInstalled || cloudInstalled,
     retry: false,
     refetchInterval: 15000,
   });
-  const setup = useQuery({ queryKey: ['local-setup-status'], queryFn: api.localSetupStatus, retry: false });
-  const hf = useQuery({ queryKey: ['huggingface-connection'], queryFn: api.huggingFaceStatus, retry: false });
+  const setup = useQuery({
+    queryKey: ['local-setup-status'],
+    queryFn: api.localSetupStatus,
+    retry: false,
+    enabled: trainingInstalled,
+  });
+  const hf = useQuery({
+    queryKey: ['huggingface-connection'],
+    queryFn: api.huggingFaceStatus,
+    retry: false,
+    enabled: hfInstalled,
+  });
   const discovery = useQuery({
     queryKey: ['dashboard-local-discovery'],
     queryFn: api.checkLocalWorkers,
@@ -58,9 +77,13 @@ export function WorkspaceDashboard({
   });
   const check = useMutation({
     mutationFn: async () => {
-      const results = await Promise.allSettled([api.checkCloudCompute(), discovery.refetch({ throwOnError: true })]);
+      const checks = [];
+      if (cloudInstalled) checks.push(api.checkCloudCompute());
+      if (trainingInstalled) checks.push(discovery.refetch({ throwOnError: true }));
+      if (hfInstalled) checks.push(hf.refetch({ throwOnError: true }));
+      const results = await Promise.allSettled(checks);
       await client.invalidateQueries({ queryKey: ['compute-settings'] });
-      await setup.refetch();
+      if (trainingInstalled) await setup.refetch();
       const failed = results.find((result) => result.status === 'rejected');
       if (failed?.status === 'rejected') throw failed.reason;
     },
@@ -114,121 +137,129 @@ export function WorkspaceDashboard({
           <Icon name="arrow" size={20} />
         </button>
       </div>
-      <section className="dashboard-resources" aria-labelledby="dashboard-resources-title">
-        <div className="dashboard-section-heading">
-          <h2 id="dashboard-resources-title">Resources & connections</h2>
-          <button className="secondary-button" disabled={check.isPending} onClick={() => check.mutate()}>
-            {check.isPending ? 'Checking resources…' : 'Check resources'}
-          </button>
-        </div>
-        {compute.isError && (
-          <p role="alert" className="error-notice">
-            Resource settings unavailable.{' '}
-            <button className="text-button" onClick={() => void compute.refetch()}>
-              Retry
+      {hasResources && (
+        <section className="dashboard-resources" aria-labelledby="dashboard-resources-title">
+          <div className="dashboard-section-heading">
+            <h2 id="dashboard-resources-title">Resources & connections</h2>
+            <button className="secondary-button" disabled={check.isPending} onClick={() => check.mutate()}>
+              {check.isPending ? 'Checking resources…' : 'Check resources'}
             </button>
-          </p>
-        )}
-        <div className="dashboard-resource-grid">
-          <article>
-            <div className="dashboard-resource-heading">
-              <Icon name="gear" size={20} />
-              <h3>Local compute</h3>
-              <span
-                className={`resource-state${localReady && compute.data?.local.enabled && !discovery.isError ? ' ready' : ''}`}
-              >
-                {compute.isPending
-                  ? 'Loading'
-                  : discovery.isError
-                    ? 'Check failed'
-                    : localReady
-                      ? compute.data?.local.enabled
+          </div>
+          {compute.isError && (
+            <p role="alert" className="error-notice">
+              Resource settings unavailable.{' '}
+              <button className="text-button" onClick={() => void compute.refetch()}>
+                Retry
+              </button>
+            </p>
+          )}
+          <div className="dashboard-resource-grid">
+            {trainingInstalled && (
+              <article>
+                <div className="dashboard-resource-heading">
+                  <Icon name="gear" size={20} />
+                  <h3>Local compute</h3>
+                  <span
+                    className={`resource-state${localReady && compute.data?.local.enabled && !discovery.isError ? ' ready' : ''}`}
+                  >
+                    {compute.isPending
+                      ? 'Loading'
+                      : discovery.isError
+                        ? 'Check failed'
+                        : localReady
+                          ? compute.data?.local.enabled
+                            ? 'Ready'
+                            : 'Disabled'
+                          : setup.data?.status === 'succeeded'
+                            ? 'Installed'
+                            : 'Setup needed'}
+                  </span>
+                </div>
+                <p>{localName ?? compute.data?.local.label ?? 'App host'}</p>
+                <small>
+                  {discovery.error?.message ??
+                    (localReady
+                      ? 'SmolVLA training environment registered'
+                      : (candidate?.reason ??
+                        (setup.data?.status === 'succeeded'
+                          ? 'Training environment installed; check this machine to register it.'
+                          : 'Check this machine or install the training environment.')))}
+                </small>
+                <button className="text-link" onClick={onSettings}>
+                  {compute.data?.local.enabled ? 'Manage local runs' : 'Configure local runs'}
+                </button>
+              </article>
+            )}
+            {cloudInstalled && (
+              <article>
+                <div className="dashboard-resource-heading">
+                  <Icon name="cloud" size={20} />
+                  <h3>Google Cloud</h3>
+                  <span className={`resource-state${cloud?.status === 'ready' ? ' ready' : ''}`}>
+                    {compute.isPending
+                      ? 'Loading'
+                      : cloud?.status === 'ready'
                         ? 'Ready'
-                        : 'Disabled'
-                      : setup.data?.status === 'succeeded'
-                        ? 'Installed'
-                        : 'Setup needed'}
-              </span>
-            </div>
-            <p>{localName ?? compute.data?.local.label ?? 'App host'}</p>
-            <small>
-              {discovery.error?.message ??
-                (localReady
-                  ? 'SmolVLA training environment registered'
-                  : (candidate?.reason ??
-                    (setup.data?.status === 'succeeded'
-                      ? 'Training environment installed; check this machine to register it.'
-                      : 'Check this machine or install the training environment.')))}
-            </small>
-            <button className="text-link" onClick={onSettings}>
-              {compute.data?.local.enabled ? 'Manage local runs' : 'Configure local runs'}
-            </button>
-          </article>
-          <article>
-            <div className="dashboard-resource-heading">
-              <Icon name="cloud" size={20} />
-              <h3>Google Cloud</h3>
-              <span className={`resource-state${cloud?.status === 'ready' ? ' ready' : ''}`}>
-                {compute.isPending
-                  ? 'Loading'
-                  : cloud?.status === 'ready'
-                    ? 'Ready'
-                    : cloud?.configured
-                      ? 'Setup needed'
-                      : 'Not connected'}
-              </span>
-            </div>
-            <p>{cloud?.region ?? 'Cloud GPU resources'}</p>
-            <small>
-              {cloud?.status === 'ready'
-                ? `${
-                    compute.data?.gpu_options
-                      ?.filter((option) => option.available)
-                      .map((option) => option.label)
-                      .join(' · ') || 'Cloud GPUs configured'
-                  }`
-                : (cloud?.message ?? 'Connect Google Cloud to train on a larger GPU.')}
-            </small>
-            <button className="text-link" onClick={onSettings}>
-              Manage cloud resources
-            </button>
-          </article>
-          <article>
-            <div className="dashboard-resource-heading">
-              <Icon name="folder" size={20} />
-              <h3>Hugging Face</h3>
-              <span className={`resource-state${hf.data?.configured ? ' ready' : ''}`}>
-                {hf.isPending
-                  ? 'Loading'
-                  : hf.isError
-                    ? 'Unavailable'
-                    : hf.data?.configured
-                      ? 'Connected'
-                      : 'Public access'}
-              </span>
-            </div>
-            <p>{hf.data?.username ?? 'Datasets & model weights'}</p>
-            <small>
-              {hf.data?.configured
-                ? 'Token configured for private or gated repositories.'
-                : 'Public datasets work without a token. Add one for private or gated models.'}
-            </small>
-            <button className="text-link" onClick={onSettings}>
-              Manage connection
-            </button>
-          </article>
-        </div>
-        {check.error && (
-          <p className="error-notice" role="alert">
-            {check.error.message}
-          </p>
-        )}
-        {check.isSuccess && (
-          <p className="dashboard-checked" role="status">
-            Resources checked.
-          </p>
-        )}
-      </section>
+                        : cloud?.configured
+                          ? 'Setup needed'
+                          : 'Not connected'}
+                  </span>
+                </div>
+                <p>{cloud?.region ?? 'Cloud GPU resources'}</p>
+                <small>
+                  {cloud?.status === 'ready'
+                    ? `${
+                        compute.data?.gpu_options
+                          ?.filter((option) => option.available)
+                          .map((option) => option.label)
+                          .join(' · ') || 'Cloud GPUs configured'
+                      }`
+                    : (cloud?.message ?? 'Connect Google Cloud to train on a larger GPU.')}
+                </small>
+                <button className="text-link" onClick={onCloudApis}>
+                  Manage cloud resources
+                </button>
+              </article>
+            )}
+            {hfInstalled && (
+              <article>
+                <div className="dashboard-resource-heading">
+                  <Icon name="folder" size={20} />
+                  <h3>Hugging Face</h3>
+                  <span className={`resource-state${hf.data?.configured ? ' ready' : ''}`}>
+                    {hf.isPending
+                      ? 'Loading'
+                      : hf.isError
+                        ? 'Unavailable'
+                        : hf.data?.configured
+                          ? 'Connected'
+                          : 'Public access'}
+                  </span>
+                </div>
+                <p>{hf.data?.username ?? 'Datasets & model weights'}</p>
+                <small>
+                  {hf.data?.configured
+                    ? 'Token configured for private or gated repositories.'
+                    : 'Public datasets work without a token. Add one for private or gated models.'}
+                </small>
+                <button className="text-link" onClick={onCloudApis}>
+                  Manage connection
+                </button>
+              </article>
+            )}
+          </div>
+          {check.error && (
+            <p className="error-notice" role="alert">
+              {check.error.message}
+            </p>
+          )}
+          {check.isSuccess && (
+            <p className="dashboard-checked" role="status">
+              Resources checked.
+            </p>
+          )}
+        </section>
+      )}
       <section className="dashboard-recent" aria-label="Recent datasets">
         <div className="dashboard-section-heading">
           <h2>Recent datasets</h2>

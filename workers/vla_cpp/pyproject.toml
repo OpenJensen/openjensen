@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 license = {text = "Apache-2.0"}
 name = "policykit"
 version = "0.1.0"
-description = "SmolVLA quantization worker and CPU experiment harness"
+description = "SmolVLA quantization and native inference worker"
 requires-python = ">=3.11,<3.13"
 dependencies = ["PyYAML>=6.0"]
 
@@ -17,7 +17,6 @@ convert = ["gguf==0.17.1", "numpy==2.2.6", "torch==2.7.1", "safetensors==0.6.2"]
 test = ["pytest==8.4.2", "psutil==7.2.2", "safetensors==0.6.2"]
 
 [project.scripts]
-policykit = "policykit.cli:main"
 policykit-quantize = "policykit.quantization:main"
 policykit-worker = "policykit.worker:main"
 
