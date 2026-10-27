@@ -15,11 +15,11 @@ from typing import Literal
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
-from vla_platform import __version__, update_runner
+from vla_platform import __version__, native_launch, update_runner
 
 UPSTREAM = "https://api.github.com/repos/OpenJensen/openjensen"
 ROOT = Path(__file__).resolve().parents[4]
-ACTIVE_PHASES = {"queued", "building", "backing_up", "validating", "restarting"}
+ACTIVE_PHASES = update_runner.ACTIVE_PHASES
 SHA = re.compile(r"^[0-9a-f]{40}$")
 
 
@@ -89,6 +89,11 @@ class ApplicationUpdates:
         )
         configured = os.environ.get("JENSEN_UPDATE_CONFIG")
         self.config_path = config_path or (Path(configured) if configured else None)
+        self.native_path = (
+            Path(os.environ[native_launch.CONTEXT])
+            if os.environ.get(native_launch.CONTEXT)
+            else None
+        )
         self.data_dir = Path(data_dir).resolve() if data_dir is not None else None
         self.client = client or httpx.AsyncClient(
             timeout=httpx.Timeout(6, connect=3),
@@ -105,7 +110,20 @@ class ApplicationUpdates:
 
     def configuration(self):
         if self.config_path is None:
-            raise UpdateError("Automatic updates are not configured on this server.")
+            if unavailable := os.environ.get("JENSEN_UPDATE_UNAVAILABLE"):
+                raise UpdateError(unavailable)
+            if self.native_path is not None and self.data_dir is not None:
+                try:
+                    return native_launch.configuration(self.native_path, self.data_dir)
+                except (OSError, ValueError, KeyError, TypeError) as exc:
+                    raise UpdateError(
+                        "The application launcher is unavailable. Restart OpenJensen and retry."
+                    ) from exc
+            raise UpdateError(
+                "This server was started outside the OpenJensen launcher. "
+                "Restart it with jensen serve to enable built-in updates; "
+                "no update configuration is needed."
+            )
         if os.name != "posix":
             raise UpdateError("Automatic updates require a managed macOS/Linux server.")
         try:
@@ -197,6 +215,11 @@ class ApplicationUpdates:
                     "unknown",
                     "This build has no recorded commit; automatic update is unavailable.",
                 )
+                if commit is None and self.native_path is not None:
+                    state, message = (
+                        "available",
+                        "The latest upstream main can be installed for this build.",
+                    )
                 if target == commit:
                     state, message = "current", "Up to date with upstream main."
                 elif commit:
@@ -254,6 +277,10 @@ class ApplicationUpdates:
         from uuid import uuid4
 
         config = self.configuration()
+        try:
+            update_runner.update_tools(config)
+        except ValueError as exc:
+            raise UpdateError(str(exc)) from exc
         async with self.lock:
             operation = self.operation()
             if operation and operation.phase in ACTIVE_PHASES | {"recovery_required"}:
@@ -284,11 +311,11 @@ class ApplicationUpdates:
                             sys.executable,
                             str(Path(update_runner.__file__)),
                             "--config",
-                            str(self.config_path),
+                            str(self.config_path or self.native_path),
                             "--target",
                             payload.target_commit,
                             "--installed",
-                            self.installed.commit,
+                            self.installed.commit or "",
                             "--operation",
                             state["id"],
                         ],

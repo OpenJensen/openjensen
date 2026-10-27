@@ -18,6 +18,8 @@ build/
 target/
 *.tsbuildinfo
 .jensen/
+.openjensen-update-*/
+.openjensen-updates-*/
 # Alpha workspace compatibility.
 .firebird/
 .cache/
