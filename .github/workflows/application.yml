@@ -51,11 +51,11 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: sudo bash .github/scripts/prepare_runner.sh
       - uses: actions/setup-python@v6
-        if: github.event_name == 'pull_request' || inputs.version_pr != ''
+        if: github.event_name == 'pull_request' || inputs.version_pr != '' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         with:
           python-version: '3.14.7'
-      - name: Validate the PR patch version
-        if: github.event_name == 'pull_request' || inputs.version_pr != ''
+      - name: Validate the application patch version
+        if: github.event_name == 'pull_request' || inputs.version_pr != '' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         run: python3 .github/scripts/patch_release.py check-ci
         env:
           GH_TOKEN: ${{ github.token }}

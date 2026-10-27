@@ -1,7 +1,7 @@
 name: Prepare patch versions
 on:
   pull_request_target:
-    types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
+    types: [opened, reopened, synchronize, ready_for_review, edited, labeled, unlabeled]
     branches: [main]
   push:
     branches: [main]
