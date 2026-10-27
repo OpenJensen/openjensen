@@ -58,7 +58,4 @@ Open an application job or a configured external run to inspect its saved status
 
 Use Modules to manage optional features, Compute to manage workers and provider connections, and Workflow settings to edit recipes. Diagnostics starts checks for the selected project.
 
-
-## Application updates
-
 Open the version menu and choose **Update & restart** when an update is available. Normal macOS and Linux installations started with `jensen serve` handle updates automatically, without a separate update configuration. The app prepares the new version, backs up the workspace and restarts; a failed update restores the previous version and data. Finish active jobs and stop Robot Lab before updating.
