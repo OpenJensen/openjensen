@@ -195,6 +195,7 @@ export function AugmentationGallery({
                   <button
                     type="button"
                     className="secondary-button"
+                    aria-haspopup="dialog"
                     disabled={disabled || !!job.request.dataset_scope}
                     onClick={() => onReuse(job, item.index, 'original')}
                   >
@@ -205,6 +206,7 @@ export function AugmentationGallery({
                     <button
                       type="button"
                       className="secondary-button"
+                      aria-haspopup="dialog"
                       disabled={disabled || !!job.request.dataset_scope}
                       onClick={() => onReuse(job, item.index, 'augmented')}
                     >
@@ -234,6 +236,7 @@ export function AugmentationGallery({
         <button
           type="button"
           className="augmentation-add-variant"
+          aria-haspopup="dialog"
           disabled={disabled || !group.original || !!group.original.job.request.dataset_scope}
           onClick={() => {
             if (group.original) onAdd(group.original.job, group.original.clip.index);

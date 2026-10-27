@@ -326,107 +326,6 @@
   color: var(--error);
   font-size: 12px;
 }
-.augmentation-presets {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-.augmentation-preset {
-  overflow: hidden;
-}
-.augmentation-look {
-  display: block;
-  overflow: hidden;
-  border-bottom: 1px solid var(--line);
-  border-radius: 11px 11px 0 0;
-}
-.augmentation-look > svg {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-.augmentation-look-room {
-  fill: color-mix(in srgb, var(--ink) 3%, var(--surface));
-}
-.augmentation-look-wall {
-  fill: color-mix(in srgb, var(--ink) 6%, var(--surface));
-}
-.augmentation-look-table {
-  fill: color-mix(in srgb, var(--ink) 11%, var(--surface));
-}
-.augmentation-look-table-edge {
-  fill: color-mix(in srgb, var(--ink) 19%, var(--surface));
-}
-.augmentation-look-shadow {
-  fill: color-mix(in srgb, var(--ink) 14%, transparent);
-}
-.augmentation-look-object {
-  fill: #7395b9;
-  stroke: #577ba1;
-  stroke-width: 1;
-}
-.augmentation-look-object-edge {
-  stroke: #56779a;
-  stroke-width: 1;
-}
-.augmentation-look-arm {
-  stroke: #8b98a6;
-  stroke-width: 7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.augmentation-look-joint {
-  fill: #d2d7df;
-  stroke: #8b98a6;
-  stroke-width: 1.5;
-}
-.augmentation-look-gripper {
-  stroke: #6b7b8d;
-  stroke-width: 2.5;
-  stroke-linecap: round;
-}
-.augmentation-look-light {
-  fill: #e4bc65;
-  opacity: 0.13;
-}
-.augmentation-look-sun {
-  fill: #e3bf74;
-}
-.augmentation-look-texture .augmentation-look-table {
-  fill: #bda58e;
-}
-.augmentation-look-texture .augmentation-look-table-edge {
-  fill: #9d826d;
-}
-.augmentation-look-grain {
-  stroke: #967961;
-  stroke-width: 1;
-  opacity: 0.45;
-}
-.augmentation-look-custom .augmentation-look-object {
-  fill: #9a8bc0;
-  stroke: #8173a8;
-}
-.augmentation-look-custom .augmentation-look-object-edge {
-  stroke: #8173a8;
-}
-.augmentation-look-spark {
-  fill: #a797cb;
-}
-.augmentation-preset-copy {
-  display: block;
-  padding: 15px;
-}
-.augmentation-preset-heading {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.augmentation-preset-heading strong {
-  font-size: 12px;
-  font-weight: 550;
-  line-height: 1.5;
-}
 .augmentation-prompt-label {
   margin-top: 22px;
 }
@@ -1108,4 +1007,142 @@
 .augmentation-add-variant > span:last-child {
   font-size: 12px;
   line-height: 1.6;
+}
+
+/* Keep source selection compact while styles are created at the gallery. */
+.augmentation-generator {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.augmentation-generator strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.augmentation-source-picker {
+  margin-bottom: 24px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.augmentation-source-picker > summary {
+  padding: 16px 18px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+.augmentation-source-picker > .augmentation-form {
+  padding: 0 18px 18px;
+}
+.augmentation-source-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-top: 22px;
+}
+.augmentation-style-dialog {
+  width: min(600px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  box-sizing: border-box;
+  padding: 24px;
+  overflow-y: auto;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 24px 80px #0003;
+}
+.augmentation-style-dialog::backdrop {
+  background: #0c172270;
+}
+.augmentation-style-dialog header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.augmentation-style-dialog h2 {
+  margin: 0 0 6px;
+  font-size: var(--text-section);
+}
+.augmentation-style-dialog header p,
+.augmentation-dialog-source p,
+.augmentation-dialog-selection {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.augmentation-dialog-close {
+  flex: 0 0 32px;
+  min-height: 32px;
+  font-size: 24px;
+  line-height: 1;
+}
+.augmentation-dialog-source {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 12px;
+  background: var(--subtle);
+  border-radius: 10px;
+}
+.augmentation-dialog-source video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #111;
+  border-radius: 6px;
+}
+.augmentation-dialog-source strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+.augmentation-dialog-selection {
+  margin-bottom: 18px;
+}
+.augmentation-style-dialog .augmentation-prompt-label {
+  margin: 0 0 8px;
+}
+.augmentation-style-dialog textarea {
+  min-height: 140px;
+}
+.augmentation-dialog-billing {
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.augmentation-style-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}
+@media (max-width: 600px) {
+  .augmentation-style-dialog {
+    padding: 18px;
+  }
+  .augmentation-dialog-source {
+    grid-template-columns: 1fr;
+  }
+  .augmentation-dialog-source video {
+    max-width: 200px;
+  }
+  .augmentation-source-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .augmentation-style-dialog footer > button {
+    flex: 1;
+  }
 }
