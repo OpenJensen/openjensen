@@ -57,15 +57,21 @@ function connected(provider: Provider, config: NonNullable<Connection['config']>
 }
 
 async function openCompute(page: Page) {
-  await page.getByRole('link', { name: 'Settings', exact: true }).click();
-  await page.getByRole('button', { name: 'Compute', exact: true }).click();
+  await page.getByRole('link', { name: 'Cloud & APIs', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Google Cloud', exact: true })).toBeVisible();
+}
+
+async function openLocalCompute(page: Page) {
+  await page.getByRole('link', { name: 'Settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Local compute', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Local runs', exact: true })).toBeVisible();
 }
 
 async function mockWorkspace(
   page: Page,
   initial: Connection[] = [],
   initialCompute: {
+    view?: 'local';
     gcp?: Partial<CloudPreferences>;
     status?: Partial<ComputeStatus>;
     discovery?: Partial<LocalWorkerDiscovery>;
@@ -270,7 +276,20 @@ async function mockWorkspace(
       const responses: Record<string, unknown> = {
         '/api/v1/health': { status: 'ok', version: 'browser-fixture' },
         '/api/v1/capabilities': [],
-        '/api/v1/modules': installedModules,
+        '/api/v1/modules': [
+          ...installedModules.filter(
+            (item) => !['google-cloud', 'openai', 'gemini', 'huggingface', 'training'].includes(item.id),
+          ),
+          ...['google-cloud', 'training'].map((id) => ({
+            id,
+            name: id,
+            installed: true,
+            enabled: true,
+            available: true,
+            configured: true,
+            setup: 'Fixture integration',
+          })),
+        ],
         '/api/v1/datasets': [],
         '/api/v1/projects': [{ id: projectId, name: 'Cloud review', created_at: timestamp }],
         [`/api/v1/projects/${projectId}/jobs`]: [],
@@ -308,7 +327,8 @@ async function mockWorkspace(
     await route.fulfill({ status: 405, json: { detail: 'Blocked by cloud connection browser fixture.' } });
   });
   await page.goto('/datasets/');
-  await openCompute(page);
+  if (initialCompute.view === 'local') await openLocalCompute(page);
+  else await openCompute(page);
   return {
     providers,
     writes,
@@ -530,7 +550,7 @@ test('cloud cards and authentication setup fit at 320px in dark mode', async ({ 
 });
 
 test('local run preferences and machine label persist after saving and reloading', async ({ page }, testInfo) => {
-  const { writes, unexpected, computeWrites } = await mockWorkspace(page);
+  const { writes, unexpected, computeWrites } = await mockWorkspace(page, [], { view: 'local' });
   const local = page.getByRole('region', { name: 'Local runs', exact: true });
   await expect(local.getByRole('checkbox', { name: 'Enable local runs', exact: true })).not.toBeChecked();
   await local.getByRole('textbox', { name: 'Machine label', exact: true }).fill('Robotics lab RTX 4060');
@@ -539,7 +559,7 @@ test('local run preferences and machine label persist after saving and reloading
   await expect(local.getByRole('status')).toHaveText('Local settings saved.');
   expect(computeWrites).toEqual([{ local: { enabled: true, label: 'Robotics lab RTX 4060' } }]);
   await page.reload();
-  await openCompute(page);
+  await openLocalCompute(page);
   await expect(local.getByRole('textbox', { name: 'Machine label', exact: true })).toHaveValue('Robotics lab RTX 4060');
   await expect(local.getByRole('checkbox', { name: 'Enable local runs', exact: true })).toBeChecked();
   await local.getByRole('checkbox', { name: 'Enable local runs', exact: true }).uncheck();
@@ -555,7 +575,7 @@ test('local run preferences and machine label persist after saving and reloading
 test('local discovery and registration are explicit, preserve preferences, and survive reload', async ({
   page,
 }, testInfo) => {
-  const { mutations, unexpected, localWrites, computeWrites } = await mockWorkspace(page);
+  const { mutations, unexpected, localWrites, computeWrites } = await mockWorkspace(page, [], { view: 'local' });
   const local = page.getByRole('region', { name: 'Local runs', exact: true });
   await expect(local.getByRole('button', { name: 'Check this machine', exact: true })).toBeVisible();
   await expect(page.getByText('Existing GPU workers', { exact: true })).toHaveCount(0);
@@ -583,7 +603,7 @@ test('local discovery and registration are explicit, preserve preferences, and s
   await noOverflow(page);
   await local.screenshot({ path: testInfo.outputPath('local-worker-added.png') });
   await page.reload();
-  await openCompute(page);
+  await openLocalCompute(page);
   await expect(local.getByText('Local NVIDIA GPU', { exact: true })).toBeVisible();
   await expect(local.getByText('Configured', { exact: true })).toBeVisible();
   await expect(local.getByRole('checkbox', { name: 'Enable local runs', exact: true })).not.toBeChecked();
@@ -599,6 +619,7 @@ test('local discovery and registration are explicit, preserve preferences, and s
 
 test('local discovery without a compatible GPU explains its host scope without an install action', async ({ page }) => {
   const { mutations, unexpected, localWrites } = await mockWorkspace(page, [], {
+    view: 'local',
     discovery: {
       host: { name: 'application-server', platform: 'Darwin', architecture: 'arm64' },
       status: 'unavailable',
@@ -621,6 +642,7 @@ test('local discovery without a compatible GPU explains its host scope without a
 
 test('missing local worker dependencies are never represented as ready', async ({ page }, testInfo) => {
   const { mutations, unexpected } = await mockWorkspace(page, [], {
+    view: 'local',
     discovery: {
       host: {
         name: 'robotics-workstation-with-a-long-hostname.example.test',
@@ -660,6 +682,7 @@ test('automatic setup requires a click, survives reload, cancels and retries wit
   page,
 }) => {
   const { mutations, unexpected, computeWrites, completeSetup } = await mockWorkspace(page, [], {
+    view: 'local',
     discovery: {
       status: 'unavailable',
       candidates: [
@@ -684,7 +707,7 @@ test('automatic setup requires a click, survives reload, cancels and retries wit
   await expect(local.getByRole('status')).toContainText('Installing SmolVLA dependencies');
   await expect(local.getByRole('checkbox', { name: 'Enable local runs', exact: true })).toBeDisabled();
   await page.reload();
-  await openCompute(page);
+  await openLocalCompute(page);
   await expect(local.getByRole('status')).toContainText('Installing SmolVLA dependencies');
   await local.getByRole('button', { name: 'Cancel setup', exact: true }).click();
   await expect(local.getByRole('status')).toContainText('Setup cancelled');
@@ -704,7 +727,9 @@ test('automatic setup requires a click, survives reload, cancels and retries wit
 });
 
 test('failed local checks and registration remain retryable without enabling compute', async ({ page }) => {
-  const { mutations, unexpected, localReplies, localWrites, computeWrites } = await mockWorkspace(page);
+  const { mutations, unexpected, localReplies, localWrites, computeWrites } = await mockWorkspace(page, [], {
+    view: 'local',
+  });
   const local = page.getByRole('region', { name: 'Local runs', exact: true });
   localReplies.push({ status: 503, detail: 'Local discovery is temporarily unavailable.' });
   await local.getByRole('button', { name: 'Check this machine', exact: true }).click();
@@ -728,7 +753,7 @@ test('failed local checks and registration remain retryable without enabling com
 });
 
 test('a local check in progress blocks duplicate actions and announces the host scope', async ({ page }) => {
-  const { mutations, unexpected } = await mockWorkspace(page);
+  const { mutations, unexpected } = await mockWorkspace(page, [], { view: 'local' });
   let release: () => void = () => {};
   const held = new Promise<void>((resolve) => {
     release = resolve;
@@ -784,11 +809,7 @@ for (const gpu of ['L4', 'T4', 'A100']) {
     await panel.getByRole('button', { name: 'Save preferences', exact: true }).click();
     await expect(panel.getByRole('status')).toHaveText('Preferences saved.');
     expect(computeWrites).toEqual([{ gcp: { enabled: true, default_gpu: gpu, disk_size_gb: 300, idle_minutes: 15 } }]);
-    await expect(
-      page
-        .getByRole('region', { name: 'Local runs', exact: true })
-        .getByRole('checkbox', { name: 'Enable local runs', exact: true }),
-    ).not.toBeChecked();
+    await expect(page.getByRole('region', { name: 'Local runs', exact: true })).toHaveCount(0);
     await page.reload();
     await openCompute(page);
     await expect(preferences).not.toHaveAttribute('open', '');
@@ -866,4 +887,144 @@ test('training preferences GPU popover fits the screen without infrastructure de
   await testInfo.attach('cloud-gpu-preferences', { path: screenshot, contentType: 'image/png' });
   expect(mutations).toEqual([]);
   expect(unexpected).toEqual([]);
+});
+
+async function integrationFixture(page: Page, installed: string[]) {
+  const reads: string[] = [];
+  const writes: { path: string; method: string; body: unknown }[] = [];
+  const providers = [
+    { id: 'openai', name: 'OpenAI', configured: false, source: null as string | null },
+    { id: 'gemini', name: 'Gemini Omni', configured: false, source: null as string | null },
+  ];
+  await page.route('**/api/v1/**', async (route) => {
+    if (await fulfillApplicationUpdateRead(route)) return;
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (request.method() === 'GET') reads.push(path);
+    else writes.push({ path, method: request.method(), body: request.postData() ? request.postDataJSON() : null });
+    const provider = providers.find((item) => path === `/api/v1/api-connections/${item.id}`);
+    if (provider && request.method() !== 'GET') {
+      provider.configured = request.method() === 'PUT';
+      provider.source = provider.configured ? 'saved' : null;
+      return route.fulfill({ json: provider });
+    }
+    const responses: Record<string, unknown> = {
+      '/api/v1/health': { status: 'ok', version: 'fixture' },
+      '/api/v1/capabilities': [],
+      '/api/v1/projects': [],
+      '/api/v1/datasets': [],
+      '/api/v1/modules': ['google-cloud', 'openai', 'gemini', 'huggingface', 'training'].map((id) => ({
+        id,
+        name: id,
+        installed: installed.includes(id),
+        enabled: false,
+        available: true,
+        configured: false,
+        setup: 'Connect the service.',
+        managed: false,
+      })),
+      '/api/v1/api-connections': { providers },
+      '/api/v1/cloud-connections': { providers: [disconnected('gcp')] },
+      '/api/v1/huggingface-connection': {
+        configured: false,
+        username: null,
+        token_hint: null,
+        checked_at: null,
+        message: null,
+      },
+      '/api/v1/compute-settings': {
+        local: { enabled: false, label: 'Local machine' },
+        gcp: { enabled: false, default_gpu: 'A100', disk_size_gb: 200, idle_minutes: 10 },
+        runtimes: [],
+        gpu_options: [],
+      },
+      '/api/v1/policy-options': {
+        runtimes: [],
+        sources: [],
+        training_models: [],
+        training_methods: [],
+        default_training_method: 'lora',
+        quantization_defaults: {
+          cuda: { language: 'Q8_0', vision: null },
+          cpu: { language: 'Q8_0', vision: null },
+          note: '',
+        },
+      },
+      '/api/v1/module-installations': { host: 'fixture', profiles: [], operation: null },
+      '/api/v1/compute-settings/local/setup': { status: 'idle', stage: '', message: '' },
+    };
+    return route.fulfill({ json: responses[path] ?? {} });
+  });
+  return { reads, writes, providers };
+}
+
+test('Cloud & APIs has no provider forms or credential reads before an integration is installed', async ({ page }) => {
+  const state = await integrationFixture(page, []);
+  await page.goto('/cloud-apis/');
+  await expect(page.getByRole('heading', { name: 'Cloud & APIs', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open Modules', exact: true })).toBeVisible();
+  await expect(page.locator('input[type="password"]')).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Google Cloud', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Hugging Face', exact: true })).toHaveCount(0);
+  expect(state.reads.some((path) => /api-connections|cloud-connections|huggingface-connection/.test(path))).toBe(false);
+  expect(state.writes).toEqual([]);
+  await page.getByRole('button', { name: 'Open Modules', exact: true }).click();
+  await expect(page).toHaveURL(/\/modules\/$/);
+});
+
+test('installed OpenAI integration saves a private key and clears the password field', async ({ page }) => {
+  const state = await integrationFixture(page, ['openai']);
+  await page.goto('/cloud-apis/');
+  const panel = page.getByRole('region', { name: 'OpenAI', exact: true });
+  const input = panel.getByLabel('OpenAI API key', { exact: true });
+  await expect(input).toHaveAttribute('type', 'password');
+  await expect(input).toHaveValue('');
+  await input.fill('sk-fixture-private-key');
+  await panel.getByRole('button', { name: 'Save API key', exact: true }).click();
+  await expect(panel.getByRole('status')).toHaveText('OpenAI API key saved.');
+  await expect(input).toHaveValue('');
+  await expect(panel.getByText('Configured', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Gemini Omni API key', { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('Hugging Face access token', { exact: true })).toHaveCount(0);
+  expect(state.writes).toEqual([
+    { path: '/api/v1/api-connections/openai', method: 'PUT', body: { api_key: 'sk-fixture-private-key' } },
+  ]);
+  expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain('sk-fixture-private-key');
+  await page.reload();
+  await expect(input).toHaveValue('');
+  await expect(panel.getByText('Configured', { exact: true })).toBeVisible();
+  await panel.getByRole('button', { name: 'Remove saved key', exact: true }).click();
+  await expect(panel.getByRole('status')).toHaveText('OpenAI saved API key removed.');
+  await expect(panel.getByText('Not configured', { exact: true })).toBeVisible();
+  expect(state.reads.some((path) => /cloud-connections|huggingface-connection/.test(path))).toBe(false);
+});
+
+test('Gemini environment configuration shows metadata with an empty replacement field', async ({ page }) => {
+  const state = await integrationFixture(page, ['gemini']);
+  state.providers[1].configured = true;
+  state.providers[1].source = 'environment';
+  await page.goto('/cloud-apis/');
+  const panel = page.getByRole('region', { name: 'Gemini Omni', exact: true });
+  await expect(panel.getByLabel('Gemini Omni API key', { exact: true })).toHaveValue('');
+  await expect(panel.getByText('Configured in the server environment.', { exact: true })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Remove saved key', exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('OpenAI API key', { exact: true })).toHaveCount(0);
+  expect(state.writes).toEqual([]);
+});
+
+test('dashboard and Settings omit uninstalled cloud integrations and local setup controls', async ({ page }) => {
+  const state = await integrationFixture(page, []);
+  await page.goto('/dashboard/');
+  await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Resources & connections', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Check resources', exact: true })).toHaveCount(0);
+  await page.getByRole('link', { name: 'Settings', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Local compute', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Local runs', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Google Cloud', exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('Hugging Face access token', { exact: true })).toHaveCount(0);
+  expect(
+    state.reads.some((path) => /api-connections|cloud-connections|huggingface-connection|local\/setup/.test(path)),
+  ).toBe(false);
+  expect(state.writes).toEqual([]);
 });

@@ -73,7 +73,8 @@ export function useWorkbenchState() {
   const capabilities = useQuery({ queryKey: ['capabilities'], queryFn: api.capabilities, retry: false });
   const modules = useQuery({ queryKey: ['modules'], queryFn: api.modules, retry: false, staleTime: 60_000 });
   // Navigation follows the server's current availability, never a stale browser list.
-  const moduleInstalled = (id: ModuleId) => modules.data?.some((item) => item.id === id && item.installed) ?? false;
+  const moduleInstalled = (id: ModuleId) =>
+    modules.data?.some((item) => item.id === id && item.installed && item.enabled !== false) ?? false;
   useEffect(() => {
     if (!health.isSuccess || health.isError) return;
     // A successful health poll can be the first request after API startup or
@@ -245,7 +246,10 @@ export function useWorkbenchState() {
     setTeachingCapture(capture);
   }
   const choosingWorkflow =
-    activeStage === 'quantization' || activeStage === 'evaluation' || activeStage === 'simulation';
+    (activeStage === 'quantization' || activeStage === 'evaluation' || activeStage === 'simulation') &&
+    moduleInstalled(activeStage);
+  const choosingSimulation =
+    (activeStage === 'evaluation' || activeStage === 'simulation') && moduleInstalled(activeStage);
   const options = useQuery({
     queryKey: ['policy-options'],
     queryFn: api.policyOptions,
@@ -256,9 +260,9 @@ export function useWorkbenchState() {
   const simulation = useQuery({
     queryKey: ['simulation-options'],
     queryFn: simulationOptions,
-    enabled: activeStage === 'evaluation' || activeStage === 'simulation',
+    enabled: choosingSimulation,
     retry: false,
-    refetchInterval: activeStage === 'evaluation' || activeStage === 'simulation' ? 10_000 : false,
+    refetchInterval: choosingSimulation ? 10_000 : false,
   });
   const context = workflowProjectId ? entries[workflowProjectId] : undefined;
   const quantizeMode = context?.quantize?.mode;

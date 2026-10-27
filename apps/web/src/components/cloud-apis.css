@@ -1,0 +1,50 @@
+.cloud-apis {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+.cloud-api-card {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  min-width: 0;
+}
+.cloud-api-card header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+}
+.cloud-api-card h2,
+.cloud-api-card p {
+  margin: 0;
+}
+.cloud-api-card form {
+  display: grid;
+  gap: 12px;
+}
+.cloud-api-card label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.cloud-api-card input {
+  width: 100%;
+  min-width: 0;
+  max-width: 520px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  background: var(--surface);
+  font: inherit;
+}
+@media (max-width: 560px) {
+  .cloud-api-card {
+    padding: 14px;
+  }
+}

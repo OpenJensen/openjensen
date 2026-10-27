@@ -5,8 +5,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type CloudConnection, type CloudConnections, type CloudProvider } from '@/lib/api';
 import { Icon } from '@/components/icon';
 import { CloudGpuSettingsPanel } from '@/components/cloud-gpu-settings';
-import { HuggingFaceSettingsPanel } from '@/components/hf-settings';
-import { LocalComputeSettingsPanel } from '@/components/local-compute-settings';
 import './cloud-connections.css';
 
 const statusLabels: Record<CloudConnection['status'], string> = {
@@ -245,7 +243,7 @@ export function CloudConnectionsPanel() {
   );
   return (
     <div className="cloud-settings">
-      <h2>Cloud providers</h2>
+      <h2>Google Cloud</h2>
       {providers.isPending && (
         <p className="cloud-loading" role="status">
           Loading providers…
@@ -362,9 +360,7 @@ export function CloudConnectionsPanel() {
           {notice}
         </p>
       )}
-      <HuggingFaceSettingsPanel />
       <CloudGpuSettingsPanel />
-      <LocalComputeSettingsPanel />
       {workers.length > 0 && (
         <section className="cloud-workers" aria-labelledby="cloud-workers-title">
           <div className="cloud-workers-heading">

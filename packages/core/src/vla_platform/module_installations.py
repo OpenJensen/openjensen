@@ -26,7 +26,6 @@ from vla_platform.install_profiles import (
     interpreter,
     profile,
 )
-from vla_platform.modules import set_module_enabled
 from vla_platform.robot_lab_bridge import RobotLabBridge, RobotLabError
 
 InstallableProfile = Literal["robot", "datasets", "decision"]
@@ -390,13 +389,7 @@ class ModuleInstallations:
                 (target / ".openjensen-installed.json").write_text(
                     json.dumps({"profile": value.id})
                 )
-            module = {"robot": "robot-lab", "decision": "decision-lab"}.get(value.id)
-            if module:
-                # Respect an explicit operator visibility override.
-                try:
-                    await asyncio.to_thread(set_module_enabled, self.data_dir, module, True)
-                except ValueError:
-                    pass
+            # Runtime dependencies and feature registration have separate lifecycles.
             self.operation.status = "succeeded"
             self.operation.message = (
                 "Dependencies installed. Pair the companion on the USB computer in Robot Lab."

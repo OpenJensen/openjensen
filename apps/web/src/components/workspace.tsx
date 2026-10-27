@@ -171,33 +171,37 @@ function Workbench({ children }: { children: ReactNode }) {
           </div>
         )}
         {/* Retain intake drafts and pending uploads when another section opens. */}
-        {(datasetsVisited || activeStage === 'datasets') && <DatasetsSection />}
+        {moduleInstalled('datasets') && (datasetsVisited || activeStage === 'datasets') && <DatasetsSection />}
         {/* A compute-settings detour retains the exact unfinished training recipe. */}
-        {(activeStage === 'training' || activeStage === 'settings') && <TrainingSection />}
-        {entryPending && (!workflowProjectId || jobs.isPending || entryFailed || recoveryError) && (
-          <section className="panel" aria-label="Workflow selection status">
-            <p role={entryFailed || recoveryError ? 'alert' : 'status'}>
-              {!workflowProjectId
-                ? 'Select a project to see its workflow history.'
-                : (recoveryError ??
-                  (entryFailed
-                    ? 'Workflow availability or history could not be loaded. Choose a mode to inspect it, or retry these reads.'
-                    : 'Loading this project’s workflow history and configured workers…'))}
-            </p>
-            {entryFailed && (
-              <button
-                className="secondary-button"
-                onClick={() => {
-                  void jobs.refetch();
-                  void options.refetch();
-                  if (activeStage === 'simulation') void simulation.refetch();
-                }}
-              >
-                Retry workflow context
-              </button>
-            )}
-          </section>
+        {moduleInstalled('training') && (activeStage === 'training' || activeStage === 'settings') && (
+          <TrainingSection />
         )}
+        {(!isModule(activeStage) || moduleInstalled(activeStage)) &&
+          entryPending &&
+          (!workflowProjectId || jobs.isPending || entryFailed || recoveryError) && (
+            <section className="panel" aria-label="Workflow selection status">
+              <p role={entryFailed || recoveryError ? 'alert' : 'status'}>
+                {!workflowProjectId
+                  ? 'Select a project to see its workflow history.'
+                  : (recoveryError ??
+                    (entryFailed
+                      ? 'Workflow availability or history could not be loaded. Choose a mode to inspect it, or retry these reads.'
+                      : 'Loading this project’s workflow history and configured workers…'))}
+              </p>
+              {entryFailed && (
+                <button
+                  className="secondary-button"
+                  onClick={() => {
+                    void jobs.refetch();
+                    void options.refetch();
+                    if (activeStage === 'simulation') void simulation.refetch();
+                  }}
+                >
+                  Retry workflow context
+                </button>
+              )}
+            </section>
+          )}
         {isModule(activeStage) && !moduleInstalled(activeStage) ? (
           <section className="panel" aria-label="Module setup">
             {modules.isPending ? (
@@ -211,12 +215,11 @@ function Workbench({ children }: { children: ReactNode }) {
               </>
             ) : (
               <>
-                <p>This module is not available in the sidebar. Open Modules to install, configure or show it.</p>
+                <p>Install or show this feature in Modules to open it.</p>
                 <button
                   className="secondary-button"
                   onClick={() => {
-                    setSettingsTab('modules');
-                    navigateStage('settings');
+                    navigateStage('modules');
                   }}
                 >
                   Manage modules

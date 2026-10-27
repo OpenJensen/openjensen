@@ -11,6 +11,8 @@ const destinations = [
   ['evaluation', 'Evaluate'],
   ['simulation', 'Run'],
   ['settings', 'Settings'],
+  ['modules', 'Modules'],
+  ['cloud-apis', 'Cloud & APIs'],
   ['cloud-runs', 'Cloud runs'],
   ['augmentation', 'Augmentation'],
   ['teaching', 'Teaching'],
@@ -18,6 +20,37 @@ const destinations = [
   ['models', 'Models'],
   ['robot-lab', 'Robot Lab'],
 ] as const;
+
+const moduleGroups: Record<string, string> = {
+  'robot-lab': 'Robot Lab',
+  teaching: 'Robot Lab',
+  datasets: 'Data',
+  augmentation: 'Data',
+  training: 'Train',
+  distillation: 'Train',
+  quantization: 'Train',
+  evaluation: 'Test',
+  simulation: 'Test',
+  'decision-lab': 'Test',
+  models: 'Workspace',
+  'cloud-runs': 'Workspace',
+};
+const moduleFixture = (visible?: string[]) =>
+  destinations
+    .filter(([id]) => id in moduleGroups)
+    .map(([id, name]) => ({
+      id,
+      name,
+      group: moduleGroups[id],
+      installed: !visible || visible.includes(id),
+      available: true,
+      enabled: !visible || visible.includes(id),
+      configured: !visible || visible.includes(id),
+      managed: false,
+      setup: 'Configure this feature.',
+      setup_url: '/guide/',
+      default_installed: ['datasets', 'models'].includes(id),
+    }));
 
 async function fixture(page: Page) {
   const writes: string[] = [];
@@ -31,21 +64,7 @@ async function fixture(page: Page) {
       writes.push(path);
       return route.fulfill({ status: 405, json: { detail: 'Navigation must not submit work' } });
     }
-    if (path === '/api/v1/modules')
-      return route.fulfill({
-        json: destinations
-          .filter(([id]) => ['robot-lab', 'teaching', 'augmentation', 'decision-lab', 'cloud-runs'].includes(id))
-          .map(([id, name]) => ({
-            id,
-            name,
-            installed: true,
-            available: true,
-            enabled: true,
-            configured: true,
-            managed: false,
-            setup: 'Synthetic navigation fixture.',
-          })),
-      });
+    if (path === '/api/v1/modules') return route.fulfill({ json: moduleFixture() });
     if (path === '/api/v1/projects')
       return route.fulfill({
         json: [
@@ -90,35 +109,24 @@ test('home opens the dashboard and every section supports a direct visit and ref
   expect(errors).toEqual([]);
 });
 
-test('the sidebar lists installed modules and Settings shows how to add the rest', async ({ page }) => {
+test('the sidebar lists installed modules and Modules shows how to install the rest', async ({ page }) => {
   const { writes, errors } = await fixture(page);
-  await page.route('**/api/v1/modules', (route) =>
-    route.fulfill({
-      json: [
-        { id: 'robot-lab', name: 'Robot Lab', installed: true, setup: 'Install the robot profile.' },
-        { id: 'teaching', name: 'Teaching', installed: false, setup: 'Set JENSEN_TEACHING_URL.' },
-        { id: 'augmentation', name: 'Augmentation', installed: false, setup: 'Connect Google Cloud.' },
-        { id: 'decision-lab', name: 'Decision Lab', installed: false, setup: 'Configure the scorer.' },
-        { id: 'cloud-runs', name: 'Cloud runs', installed: false, setup: 'Set JENSEN_CLOUD_RUNS_DIR.' },
-      ],
-    }),
-  );
+  await page.route('**/api/v1/modules', (route) => route.fulfill({ json: moduleFixture(['robot-lab', 'datasets']) }));
   await page.goto('/dashboard/');
   const nav = page.getByRole('navigation', { name: 'Policy lifecycle' });
-  await expect(nav.getByRole('group', { name: 'Robot' }).getByRole('link')).toHaveText(['Robot Lab']);
+  await expect(nav.getByRole('group', { name: 'Robot Lab' }).getByRole('link')).toHaveText(['Robot Lab']);
   await expect(nav.getByRole('group', { name: 'Data' }).getByRole('link')).toHaveText(['Datasets']);
   for (const name of ['Teaching', 'Augmentation', 'Decision Lab', 'Cloud runs']) {
     await expect(nav.getByRole('link', { name, exact: true })).toHaveCount(0);
   }
-  await nav.getByRole('link', { name: 'Settings', exact: true }).click();
-  await page.getByRole('button', { name: 'Modules', exact: true }).click();
-  const modules = page.getByRole('list', { name: 'Workspace modules' }).getByRole('listitem');
-  await expect(modules).toHaveCount(5);
-  await expect(modules.filter({ hasText: 'Robot Lab' })).toContainText('Added');
+  await nav.getByRole('link', { name: 'Modules', exact: true }).click();
+  const modules = page.getByLabel('Workspace modules', { exact: true }).getByRole('listitem');
+  await expect(modules).toHaveCount(12);
+  await expect(modules.filter({ hasText: 'Robot Lab' })).toContainText('Installed');
   const teaching = modules.filter({ hasText: 'Teaching' });
   await expect(teaching).toContainText('Not installed');
-  await teaching.getByText('Setup required', { exact: true }).click();
-  await expect(teaching).toContainText('Set JENSEN_TEACHING_URL.');
+  await expect(teaching.getByText('Setup required', { exact: true })).toHaveCount(0);
+  await expect(teaching.getByRole('button', { name: 'Install module Teaching', exact: true })).toBeVisible();
   // Direct URLs explain setup without exposing an uninstalled module in navigation.
   await page.goto('/teaching/');
   await expect(nav.getByRole('link', { name: 'Teaching', exact: true })).toHaveCount(0);

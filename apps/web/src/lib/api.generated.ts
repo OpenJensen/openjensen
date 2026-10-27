@@ -4,6 +4,41 @@
  */
 
 export interface paths {
+    "/api/v1/api-connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Connections */
+        get: operations["connections_api_v1_api_connections_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/api-connections/{ident}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save */
+        put: operations["save_api_v1_api_connections__ident__put"];
+        post?: never;
+        /** Disconnect */
+        delete: operations["disconnect_api_v1_api_connections__ident__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/augmentation-options": {
         parameters: {
             query?: never;
@@ -719,7 +754,7 @@ export interface paths {
         };
         /**
          * Modules
-         * @description Report which optional modules this host has set up; nothing is contacted.
+         * @description List registered features and setup readiness without contacting providers.
          */
         get: operations["modules_api_v1_modules_get"];
         put?: never;
@@ -741,6 +776,24 @@ export interface paths {
         /** Enable */
         put: operations["enable_api_v1_modules__ident__put"];
         post?: never;
+        /** Uninstall Feature */
+        delete: operations["uninstall_feature_api_v1_modules__ident__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/modules/{ident}/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Install Feature */
+        post: operations["install_feature_api_v1_modules__ident__install_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2002,6 +2055,38 @@ export interface components {
              * @constant
              */
             schema_version: 1;
+        };
+        /** ApiConnectionStatus */
+        ApiConnectionStatus: {
+            /**
+             * Configured
+             * @default false
+             */
+            configured: boolean;
+            /**
+             * Id
+             * @enum {string}
+             */
+            id: "openai" | "gemini";
+            /** Message */
+            message?: string | null;
+            /** Name */
+            name: string;
+            /** Source */
+            source?: ("saved" | "environment" | "profile") | null;
+        };
+        /** ApiConnectionsStatus */
+        ApiConnectionsStatus: {
+            /** Providers */
+            providers: components["schemas"]["ApiConnectionStatus"][];
+        };
+        /** ApiKeyInput */
+        ApiKeyInput: {
+            /**
+             * Api Key
+             * Format: password
+             */
+            api_key: string;
         };
         /** ApplicationVersion */
         ApplicationVersion: {
@@ -4258,7 +4343,7 @@ export interface components {
         WorkspaceModule: {
             /**
              * Available
-             * @default false
+             * @default true
              */
             available: boolean;
             /**
@@ -4267,15 +4352,25 @@ export interface components {
              */
             configured: boolean;
             /**
+             * Default Installed
+             * @default false
+             */
+            default_installed: boolean;
+            /**
              * Enabled
              * @default false
              */
             enabled: boolean;
             /**
+             * Group
+             * @enum {string}
+             */
+            group: "Robot Lab" | "Data" | "Train" | "Test" | "Workspace" | "Cloud & APIs";
+            /**
              * Id
              * @enum {string}
              */
-            id: "robot-lab" | "teaching" | "augmentation" | "decision-lab" | "cloud-runs";
+            id: "datasets" | "models" | "robot-lab" | "teaching" | "augmentation" | "training" | "distillation" | "quantization" | "evaluation" | "simulation" | "decision-lab" | "cloud-runs" | "google-cloud" | "openai" | "gemini" | "huggingface";
             /** Installed */
             installed: boolean;
             /**
@@ -4302,6 +4397,92 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    connections_api_v1_api_connections_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiConnectionsStatus"];
+                };
+            };
+        };
+    };
+    save_api_v1_api_connections__ident__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ident: "openai" | "gemini";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApiKeyInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiConnectionStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    disconnect_api_v1_api_connections__ident__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ident: "openai" | "gemini";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiConnectionStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     augmentation_options_api_v1_augmentation_options_get: {
         parameters: {
             query?: never;
@@ -5658,7 +5839,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                ident: "robot-lab" | "teaching" | "augmentation" | "decision-lab" | "cloud-runs";
+                ident: "datasets" | "models" | "robot-lab" | "teaching" | "augmentation" | "training" | "distillation" | "quantization" | "evaluation" | "simulation" | "decision-lab" | "cloud-runs" | "google-cloud" | "openai" | "gemini" | "huggingface";
             };
             cookie?: never;
         };
@@ -5667,6 +5848,68 @@ export interface operations {
                 "application/json": components["schemas"]["ModulePreference"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    uninstall_feature_api_v1_modules__ident__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ident: "datasets" | "models" | "robot-lab" | "teaching" | "augmentation" | "training" | "distillation" | "quantization" | "evaluation" | "simulation" | "decision-lab" | "cloud-runs" | "google-cloud" | "openai" | "gemini" | "huggingface";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    install_feature_api_v1_modules__ident__install_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ident: "datasets" | "models" | "robot-lab" | "teaching" | "augmentation" | "training" | "distillation" | "quantization" | "evaluation" | "simulation" | "decision-lab" | "cloud-runs" | "google-cloud" | "openai" | "gemini" | "huggingface";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

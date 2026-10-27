@@ -1,6 +1,7 @@
 import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { chooseTransformationModel, selectedQuantizationModel } from './lifecycle-controls';
 import { selectProject } from './project-controls';
+import { installedModules } from './module-fixtures';
 import { expect, test, type Page } from '@playwright/test';
 
 const methods = new Set(['get', 'post', 'put', 'patch', 'delete', 'options', 'head', 'trace']);
@@ -867,7 +868,7 @@ async function mockTrainingWorkspace(
       const responses: Record<string, unknown> = {
         '/api/v1/health': { status: 'ok', version: 'browser-fixture' },
         '/api/v1/capabilities': [],
-        '/api/v1/modules': [],
+        '/api/v1/modules': installedModules,
         '/api/v1/datasets': [],
         '/api/v1/compute-settings/local/setup': {
           status: 'idle',
@@ -881,6 +882,12 @@ async function mockTrainingWorkspace(
         '/api/v1/projects': [{ id: trainingProject, name: 'Training review', created_at: trainingTimestamp }],
         [`/api/v1/projects/${trainingProject}/jobs`]: jobs,
         [`/api/v1/projects/${trainingProject}/artifacts`]: artifacts,
+        '/api/v1/api-connections': {
+          providers: [
+            { id: 'openai', name: 'OpenAI', configured: false, source: null },
+            { id: 'gemini', name: 'Gemini Omni', configured: false, source: null },
+          ],
+        },
         '/api/v1/huggingface-connection': {
           configured: false,
           username: null,
@@ -1739,7 +1746,7 @@ test('blank dataset revision uses latest and reused inspections keep one history
   expect(previews).toEqual(['index', 'episode']);
 });
 
-test('visiting compute settings preserves the draft through the jobs-first entry', async ({ page }) => {
+test('visiting Cloud & APIs preserves the draft through the jobs-first entry', async ({ page }) => {
   const { submitted, unexpectedRequests } = await mockTrainingWorkspace(page, {
     runtimes: trainingRuntimes.filter((runtime) => runtime.accelerator !== 'T4'),
   });
@@ -1755,7 +1762,8 @@ test('visiting compute settings preserves the draft through the jobs-first entry
   await page.getByRole('spinbutton', { name: 'Steps', exact: true }).fill('123');
   await page.getByRole('spinbutton', { name: 'Batch size', exact: true }).fill('2');
   await page.getByRole('button', { name: 'Connect account', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Cloud providers', exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/cloud-apis\/$/);
+  await expect(page.getByRole('region', { name: 'Google Cloud', exact: true })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Training setup', exact: true })).toBeHidden();
   await page.getByRole('link', { name: 'Fine-tune', exact: true }).click();
   await page.getByRole('button', { name: 'Start a new fine-tuning', exact: true }).click();

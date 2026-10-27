@@ -159,10 +159,10 @@ export function modelDatasetIssue(
   }
   return null;
 }
-export function modelStatusLabel(model: TrainingModel, supported: boolean): string | null {
+export function modelStatusLabel(model: TrainingModel, supported: boolean, cloudInstalled = true): string | null {
   switch (model.status) {
     case 'connect_account':
-      return 'Connect Google Cloud';
+      return cloudInstalled ? 'Connect Google Cloud' : 'Compute unavailable';
     case 'setup_required':
       return 'Setup required';
     case 'coming_soon':

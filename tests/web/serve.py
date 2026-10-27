@@ -14,8 +14,8 @@ from vla_platform.compute_settings import ComputeSettings, ComputeSettingsUpdate
 from vla_platform.environment import getenv
 from vla_platform.settings import Settings
 
-# Browser interaction suites intentionally open every module using synthetic
-# availability. Real installation, pairing and detection have separate API tests.
+# Browser interaction suites intentionally open every feature using synthetic
+# installation and visibility. Real installation, pairing and detection have separate API tests.
 # This fixture does not establish hardware, provider or model readiness.
 _real_workspace_modules = api_module.workspace_modules
 

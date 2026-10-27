@@ -39,7 +39,8 @@ def test_add_hide_survive_restart_and_keep_configuration(tmp_path):
             robot = next(
                 item for item in client.get("/api/v1/modules").json() if item["id"] == "robot-lab"
             )
-            assert robot["installed"] is enabled
+            assert robot["installed"] is True
+            assert robot["enabled"] is enabled
             assert robot["configured"] is True
         assert config.read_text() == saved_pairing
 
@@ -237,7 +238,7 @@ def test_invalid_optional_state_does_not_take_down_core(tmp_path):
 
 def test_cloud_snapshots_work_after_adding_module(tmp_path):
     with TestClient(create_app(Settings(data_dir=tmp_path))) as client:
-        assert client.put("/api/v1/modules/cloud-runs", json={"enabled": True}).status_code == 200
+        assert client.post("/api/v1/modules/cloud-runs/install").status_code == 200
         module = next(
             item for item in client.get("/api/v1/modules").json() if item["id"] == "cloud-runs"
         )
@@ -347,8 +348,10 @@ def test_verified_runtime_available_before_optional_configuration(tmp_path, monk
     monkeypatch.setattr(ModuleInstallations, "inspect", lambda self, ident: ready(ident, True))
     with TestClient(create_app(Settings(data_dir=tmp_path))) as client:
         values = {item["id"]: item for item in client.get("/api/v1/modules").json()}
-        assert values["robot-lab"]["available"] and values["robot-lab"]["installed"]
-        assert values["decision-lab"]["available"] and values["decision-lab"]["installed"]
+        assert values["robot-lab"]["available"] and not values["robot-lab"]["installed"]
+        assert values["decision-lab"]["available"] and not values["decision-lab"]["installed"]
+        assert client.post("/api/v1/modules/robot-lab/install").status_code == 200
+        assert client.post("/api/v1/modules/decision-lab/install").status_code == 200
         assert not values["robot-lab"]["configured"] and not values["decision-lab"]["configured"]
 
 
@@ -375,3 +378,32 @@ def test_status_refreshes_cached_local_runtime_readiness(tmp_path, monkeypatch):
     assert service.inspect("robot").ready
     status = asyncio.run(service.status())
     assert not next(item for item in status.profiles if item.id == "robot").ready
+
+
+def test_runtime_install_keeps_feature_uninstalled_and_preserves_visibility(tmp_path, monkeypatch):
+    from vla_platform.modules import (
+        initialize_modules,
+        module_installed,
+        set_module_enabled,
+        set_module_installed,
+    )
+
+    settings = Settings(data_dir=tmp_path)
+    initialize_modules(settings, tmp_path / "robot.json", existing=False)
+    service = ModuleInstallations(tmp_path)
+    monkeypatch.setattr(service, "inspect", lambda ident: ready(ident, True))
+
+    async def run():
+        await service.start(InstallRequest(profile="decision", operation_id="a" * 32))
+        await service.task
+        assert service.operation.status == "succeeded"
+        assert not module_installed(tmp_path, "decision-lab")
+        set_module_installed(tmp_path, "decision-lab", True)
+        set_module_enabled(tmp_path, "decision-lab", False)
+        await service.start(InstallRequest(profile="decision", operation_id="b" * 32))
+        await service.task
+        from vla_platform.modules import read_registry
+
+        assert not read_registry(tmp_path).enabled["decision-lab"]
+
+    asyncio.run(run())

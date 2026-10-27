@@ -50,6 +50,8 @@ export function useTrainingPanel({
   active: boolean;
 }) {
   const client = useQueryClient();
+  const modules = useQuery({ queryKey: ['modules'], queryFn: api.modules, enabled: active, staleTime: 60_000 });
+  const cloudInstalled = modules.data?.some((item) => item.id === 'google-cloud' && item.installed) ?? false;
   const [view, setView] = useState<'jobs' | 'new' | 'run'>(startNew ? 'new' : 'jobs');
   const [step, setStep] = useState(0);
   const [datasetId, setDatasetId] = useState(startNew?.datasetId ?? preferredDatasetId ?? '');
@@ -319,7 +321,9 @@ export function useTrainingPanel({
       description: mergedModels.get(item.id)?.description ?? item.description,
     } as TrainingModel);
   const models = [...mergedModels.values()];
-  const runtimes = options.data?.runtimes ?? [];
+  const runtimes = (options.data?.runtimes ?? []).filter(
+    (item) => cloudInstalled || (item.provider ?? 'local') === 'local',
+  );
   const cloudGpuMemory: Record<string, number> = { L4: 24, T4: 16, A100: 40, 'A100-80GB': 80 };
   const runtimeMemory = (item: (typeof runtimes)[number]) =>
     item.gpu_memory_mib ? item.gpu_memory_mib / 1024 : (cloudGpuMemory[item.accelerator ?? ''] ?? 0);
@@ -390,7 +394,7 @@ export function useTrainingPanel({
     item.enabled !== false &&
     selectedModels.length > 0 &&
     selectedModels.every((model) => hasAdapter(item, model));
-  const gpuChoices = ['L4', 'T4', 'A100', 'A100-80GB'].filter((gpu) =>
+  const gpuChoices = (cloudInstalled ? ['L4', 'T4', 'A100', 'A100-80GB'] : []).filter((gpu) =>
     selectedModels.every(
       (item) =>
         cloudGpuMemory[gpu] >=
@@ -419,7 +423,7 @@ export function useTrainingPanel({
     ? runtimes.find((item) => item.execution === 'skypilot' && item.accelerator === selectedGpu)
     : localRuntimes.find((item) => item.id === selectedGpu);
   const runtime = chosenRuntime && supportsModel(chosenRuntime) ? chosenRuntime : undefined;
-  const needsAccount = !chosenRuntime;
+  const needsAccount = cloudInstalled && !chosenRuntime;
   const priorDataset = allInspections.find((job) => job.id === priorRequest?.dataset_job_id);
   const activeDataset = resumeId ? priorDataset : dataset;
   const activeMethod = resumeId ? priorRequest?.training_method : trainingMethod;
@@ -744,6 +748,7 @@ export function useTrainingPanel({
     checkpointInterval,
     chooseRun,
     cloudGpuMemory,
+    cloudInstalled,
     dataset,
     datasetId,
     datasets,

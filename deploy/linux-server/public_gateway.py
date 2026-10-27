@@ -327,6 +327,8 @@ class PublicGateway:
             if expanded == decoded:
                 break
             decoded = expanded
+        if "api-connections" in decoded.split("/"):
+            return self.error(request.scope, 403, "Manage API keys through the private workspace.")
         if "module-installations" in decoded.split("/") or (
             "modules" in decoded.split("/") and request.method not in SAFE_METHODS
         ):

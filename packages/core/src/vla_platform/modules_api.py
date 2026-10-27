@@ -14,7 +14,7 @@ from vla_platform.modules import (
     ModuleId,
     ModulePreference,
     set_module_enabled,
-    workspace_modules,
+    set_module_installed,
 )
 from vla_platform.storage import jobs
 
@@ -24,21 +24,6 @@ router = APIRouter(prefix="/api/v1", tags=["Workspace modules"])
 @router.put("/modules/{ident}")
 async def enable(ident: ModuleId, payload: ModulePreference, request: Request):
     try:
-        if payload.enabled:
-            settings = request.app.state.execution.settings
-            modules = await asyncio.to_thread(
-                lambda: workspace_modules(
-                    settings,
-                    request.app.state.robot_lab.config_path,
-                    {
-                        key: request.app.state.module_installations.inspect(key).ready
-                        for key in ("robot", "decision")
-                    },
-                )
-            )
-            module = next(item for item in modules if item.id == ident)
-            if not module.available:
-                raise ValueError(module.setup)
         await asyncio.to_thread(
             set_module_enabled,
             request.app.state.execution.settings.data_dir,
@@ -51,6 +36,84 @@ async def enable(ident: ModuleId, payload: ModulePreference, request: Request):
             str(exc) if isinstance(exc, ValueError) else "Module preferences could not be saved.",
         ) from None
     return {"enabled": payload.enabled}
+
+
+@router.post("/modules/{ident}/install")
+async def install_feature(ident: ModuleId, request: Request):
+    try:
+        await asyncio.to_thread(
+            set_module_installed,
+            request.app.state.execution.settings.data_dir,
+            ident,
+            True,
+        )
+    except (ValueError, OSError) as exc:
+        raise HTTPException(
+            409,
+            str(exc) if isinstance(exc, ValueError) else "The module could not be installed.",
+        ) from None
+    return {"installed": True}
+
+
+@router.delete("/modules/{ident}")
+async def uninstall_feature(ident: ModuleId, request: Request):
+    try:
+        execution = request.app.state.execution
+        installer = request.app.state.module_installations
+        consuming = {"robot": "robot-lab", "decision": "decision-lab", "datasets": "datasets"}
+        if (
+            installer.pending
+            and installer.operation is not None
+            and consuming.get(installer.operation.profile) == ident
+        ):
+            raise HTTPException(409, "Finish or cancel this module's runtime installation first.")
+        setup = getattr(execution.lifecycle, "local_worker_setup", None)
+        if (
+            ident == "training"
+            and setup
+            and (setup.state.status == "running" or setup.lock.locked())
+        ):
+            raise HTTPException(
+                409, "Finish or cancel training setup before uninstalling Fine-tuning."
+            )
+        operations = {
+            "datasets": ("dataset.inspect", "dataset.inspect.local"),
+            "augmentation": ("dataset.augment",),
+            "training": ("policy.finetune", "policy.workflow"),
+            "distillation": ("policy.distill", "policy.workflow"),
+            "quantization": ("policy.quantize", "policy.export", "policy.workflow"),
+            "evaluation": ("policy.evaluate", "policy.workflow"),
+            "simulation": ("policy.run", "policy.workflow"),
+            "models": ("policy.import",),
+        }.get(ident, ())
+        if operations:
+            async with execution.storage.engine.connect() as connection:
+                active = (
+                    await connection.execute(
+                        select(jobs.c.id)
+                        .where(
+                            jobs.c.status.in_(["queued", "running"]),
+                            jobs.c.record["kind"].as_string().in_(operations),
+                        )
+                        .limit(1)
+                    )
+                ).first()
+            if active:
+                raise HTTPException(
+                    409, "Finish or cancel this module's active jobs before uninstalling it."
+                )
+        await asyncio.to_thread(
+            set_module_installed,
+            request.app.state.execution.settings.data_dir,
+            ident,
+            False,
+        )
+    except (ValueError, OSError) as exc:
+        raise HTTPException(
+            409,
+            str(exc) if isinstance(exc, ValueError) else "The module could not be uninstalled.",
+        ) from None
+    return {"installed": False}
 
 
 @router.get("/module-installations", response_model=ModuleInstallationStatus)
