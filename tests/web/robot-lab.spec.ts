@@ -1,6 +1,7 @@
 import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { selectProject } from './project-controls';
+import { installedModules } from './module-fixtures';
 
 const stamp = '2026-10-23T12:00:00Z';
 const port = '/dev/cu.usbmodem-test';
@@ -365,6 +366,8 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin') 
     if (path.includes('/robot-lab/datasets/') && path.endsWith('/import'))
       return route.fulfill({ json: { id: 'library-entry', project_id: path.split('/')[4], status: 'ready' } });
     if (path === '/api/v1/health') return route.fulfill({ json: { status: 'ok', version: 'fixture' } });
+    if (path === '/api/v1/modules')
+      return route.fulfill({ json: installedModules.filter((item) => ['datasets', 'robot-lab'].includes(item.id)) });
     if (path === '/api/v1/projects')
       return route.fulfill({ json: ['alpha', 'beta'].map((id) => ({ id, name: `Robot ${id}`, created_at: stamp })) });
     if (path === '/api/v1/policy-options')

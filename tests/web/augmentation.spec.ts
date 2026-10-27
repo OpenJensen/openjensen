@@ -678,3 +678,12 @@ test('late augmentation acknowledgement preserves a manually selected earlier re
   await expect(page.getByLabel('Augmented episode 1', { exact: true })).toBeVisible();
   expect(state.submitted).toHaveLength(1);
 });
+
+test('augmentation opens the dedicated Cloud and APIs page for connection setup', async ({ page }) => {
+  const { submitted } = await mockWorkspace(page, { configured: false });
+  await page.getByText('Setup details', { exact: true }).click();
+  await page.getByRole('button', { name: 'Cloud & APIs', exact: true }).click();
+  await expect(page).toHaveURL(/\/cloud-apis\/$/);
+  await expect(page.getByRole('heading', { name: 'Cloud & APIs', level: 1, exact: true })).toBeVisible();
+  expect(submitted).toEqual([]);
+});
