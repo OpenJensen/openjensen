@@ -219,12 +219,9 @@ def check_ci(api, event, root):
         if not re.fullmatch(r"[0-9a-f]{40}", before or "") or before == "0" * 40:
             raise ValueError("Main push is missing its previous commit.")
         merged = merged_pulls(api, sha)
-        if not merged:
-            print("Main push is not a merged PR; no merge version check is required.")
-            return
         # The push's before SHA is the previous main for merge, squash and rebase alike.
         version = validate(load(root), version_at(api, before), any(manual(pr) for pr in merged))
-        print("Validated merged version " + version)
+        print("Validated main version " + version)
         return
     pr = event.get("pull_request")
     if pr is None:

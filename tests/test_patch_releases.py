@@ -408,3 +408,17 @@ def test_main_advance_while_the_version_is_checked_rejects_the_run(monkeypatch):
     monkeypatch.setattr(release, "load", lambda root: versions.rewrite(api.values, "0.1.2"))
     with pytest.raises(ValueError, match="during version validation"):
         release.check_ci(api, {"pull_request": api.pr}, ROOT)
+
+
+def test_main_version_gate_does_not_depend_on_merged_pr_metadata(monkeypatch):
+    api = FakeGitHub()
+    api.merged = False
+    api.run["head_sha"] = "b" * 40
+    monkeypatch.setenv("GITHUB_SHA", api.run["head_sha"])
+    monkeypatch.setattr(release, "version_at", lambda client, sha: "0.1.3")
+    event = {"ref": "refs/heads/main", "before": "a" * 40, "after": api.run["head_sha"]}
+    monkeypatch.setattr(release, "load", lambda root: versions.rewrite(api.values, "0.1.3"))
+    with pytest.raises(ValueError, match="Expected patch"):
+        release.check_ci(api, event, ROOT)
+    monkeypatch.setattr(release, "load", lambda root: versions.rewrite(api.values, "0.1.4"))
+    release.check_ci(api, event, ROOT)
