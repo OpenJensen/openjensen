@@ -50,7 +50,7 @@ def wait_commit(port, commit, timeout=8):
             with urlopen(f"http://127.0.0.1:{port}/api/v1/updates", timeout=0.2) as response:
                 if json.load(response)["installed"]["commit"] == commit:
                     return
-        except (OSError, ValueError):
+        except OSError, ValueError:
             pass
         time.sleep(0.05)
     raise RuntimeError("Fixture application did not start")

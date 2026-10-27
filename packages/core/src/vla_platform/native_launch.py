@@ -181,7 +181,7 @@ class Launcher:
                     if result.stdout.strip():
                         return self.source
                 return selected
-        except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+        except OSError, ValueError, KeyError, subprocess.SubprocessError:
             pass
         return self.source
 
@@ -248,7 +248,7 @@ class Launcher:
 
         try:
             return read_private(self.root / "run/application-update.json")["phase"] in ACTIVE_PHASES
-        except (OSError, ValueError, KeyError):
+        except OSError, ValueError, KeyError:
             return False
 
     def handle_command(self):
@@ -311,7 +311,7 @@ def serve(port):
         return
     try:
         launcher = Launcher(ROOT, settings.data_dir, port)
-    except (OSError, ValueError):
+    except OSError, ValueError:
         os.environ["JENSEN_UPDATE_UNAVAILABLE"] = (
             "The application can run, but updates cannot write their private cache. "
             "Allow this user to write the application state directory, then restart and retry."
