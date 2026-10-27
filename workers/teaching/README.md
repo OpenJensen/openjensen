@@ -87,7 +87,7 @@ python -m jensen_teaching.voice_join --env-file /operator/livekit.env --port 876
 ```
 
 Start the agent and broker in separate shells with the same executor session.
-Use the Teaching page's explicit voice connection control. Restart voice services
+Use the AI teleoperation page's explicit voice connection control. Restart voice services
 after room-lease expiry or executor restart; use manual pause/finish as needed.
 
 ## HTTP requests
@@ -150,3 +150,6 @@ References: [LiveKit voice tools](https://docs.livekit.io/agents/logic/tools/),
 [OpenRouter plugin](https://docs.livekit.io/agents/models/llm/openrouter/),
 [LiveKit Inference](https://docs.livekit.io/agents/models/inference/),
 [LeRobot v3](https://huggingface.co/docs/lerobot/lerobot-dataset-v3).
+
+For finite native agent experiments, paired seeds, runtime/license gates and
+independent geometric evidence, see [native acceptance](NATIVE_ACCEPTANCE.md).

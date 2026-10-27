@@ -232,9 +232,13 @@ export function RobotLabTeleoperate({ lab }: { lab: RobotLabState }) {
             <Notice kind="success">
               <strong>
                 {session?.mode === 'manual'
-                  ? centering
-                    ? `Moving to recorded middle · ${Math.round((session.centering?.progress ?? 0) * 100)}%`
-                    : 'On-screen controls are active.'
+                  ? session?.rest_position?.phase === 'returning'
+                    ? `Returning to rest · ${Math.round(session.rest_position.progress * 100)}%`
+                    : session?.rest_position?.phase === 'holding'
+                      ? 'Rest position reached. Motors are holding.'
+                      : centering
+                        ? `Moving to recorded middle · ${Math.round((session.centering?.progress ?? 0) * 100)}%`
+                        : 'On-screen controls are active.'
                   : session?.mode === 'leader'
                     ? 'Leader teleoperation is active.'
                     : 'Hand guiding is active. Torque is off.'}
@@ -290,6 +294,62 @@ export function RobotLabTeleoperate({ lab }: { lab: RobotLabState }) {
               </>
             ) : (
               <RangeTable positions={session?.positions} />
+            )}
+            {state?.capabilities?.rest_position ? (
+              <section aria-label="Rest position" className="robot-lab-form">
+                <h3>Rest position</h3>
+                <p className="robot-lab-subtle">
+                  {session?.rest_position?.saved
+                    ? 'Return gradually to your saved pose, then hold it. Release the motors when the arm is supported.'
+                    : 'Position the full arm in your preferred closed or supported pose, then save it. Hand guiding keeps torque off while you position it.'}
+                </p>
+                <div className="robot-lab-actions">
+                  <button
+                    className="primary-button"
+                    disabled={
+                      !canAct ||
+                      !ownsSession ||
+                      jogging ||
+                      centering ||
+                      partialControl ||
+                      !session?.torque_enabled ||
+                      !session?.rest_position?.saved ||
+                      !!recording?.episode_active
+                    }
+                    onClick={() =>
+                      void perform(
+                        'Returning to rest. Keep this page visible; the motors will hold when it arrives.',
+                        robotApi.returnToRest,
+                        undefined,
+                        false,
+                      )
+                    }
+                  >
+                    Return to rest
+                  </button>
+                  <button
+                    className="secondary-button"
+                    disabled={
+                      !canAct || !ownsSession || jogging || centering || partialControl || !!recording?.episode_active
+                    }
+                    onClick={() =>
+                      void perform(
+                        'Current arm position saved as rest for this calibration.',
+                        robotApi.saveRestPosition,
+                      )
+                    }
+                  >
+                    {session?.rest_position?.saved
+                      ? 'Replace rest with current position'
+                      : 'Save current position as rest'}
+                  </button>
+                </div>
+                {partialControl && <p className="robot-lab-subtle">Rest positions require all six joints.</p>}
+              </section>
+            ) : (
+              online && (
+                <p className="robot-lab-subtle">Update the robot companion to save and return to a rest position.</p>
+              )
             )}
             <div className="robot-lab-actions">
               <button className="danger-button robot-lab-stop" onClick={stop}>

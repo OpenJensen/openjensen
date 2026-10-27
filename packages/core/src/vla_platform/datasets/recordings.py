@@ -231,8 +231,10 @@ def integer(value, low, high):
 
 
 def metadata(value):
-    if type(value.get("schema_version")) is not int or value["schema_version"] != 1:
+    if type(value.get("schema_version")) is not int or value["schema_version"] not in {1, 2}:
         raise RecordingError("Unsupported capture schema")
+    if value["schema_version"] == 2 and value.get("environment_kind") != "simulation":
+        raise RecordingError("Unsupported capture environment")
     if not isinstance(value.get("session_id"), str) or not ID.fullmatch(value["session_id"]):
         raise RecordingError("Invalid capture session identity")
     for name, expected in {
@@ -269,24 +271,28 @@ def metadata(value):
     if not isinstance(camera, str) or not 1 <= len(camera) <= 256 or not camera.isprintable():
         raise RecordingError("Invalid capture camera prim")
     return {
-        key: value[key]
-        for key in (
-            "session_id",
-            "origin",
-            "lineage_group",
-            "controller",
-            "state_units",
-            "action_units",
-            "timebase",
-            "camera_key",
-            "joint_names",
-            "width",
-            "height",
-            "fps",
-            "physics_hz",
-            "scene_sha256",
-            "camera_prim",
-        )
+        "environment_kind": "simulation",
+        **{
+            key: value[key]
+            for key in (
+                "schema_version",
+                "session_id",
+                "origin",
+                "lineage_group",
+                "controller",
+                "state_units",
+                "action_units",
+                "timebase",
+                "camera_key",
+                "joint_names",
+                "width",
+                "height",
+                "fps",
+                "physics_hz",
+                "scene_sha256",
+                "camera_prim",
+            )
+        },
     }
 
 
@@ -301,12 +307,88 @@ def _catalog(loaded, project):
         remaining -= len(raw)
         return raw
 
+    def actor_metadata(receipt, version):
+        # Catalog summaries describe finalized command metadata, not frame authorship.
+        # Full event/frame bindings remain a preparation-time verification boundary.
+        events = receipt.get("events", [])
+        agent_fields = (
+            "actor",
+            "actors",
+            "action_provenance",
+            "agent_session_id",
+            "proposal_id",
+            "execution_id",
+            "provider_model",
+            "prompt_version",
+            "prompt_sha256",
+            "observation_sha256",
+            "skill_manifest_version",
+        )
+        source = "legacy_operator" if version == 1 else "declared_events"
+        valid = isinstance(events, list) and len(events) <= 512
+        if version == 2:
+            valid = valid and bool(events)
+        if valid:
+            for event in events:
+                if not isinstance(event, dict):
+                    valid = False
+                    break
+                if version == 1:
+                    if (
+                        event.get("source") != "operator_command"
+                        or event.get("actor", "human_operator") != "human_operator"
+                        or event.get("environment_kind", "simulation") != "simulation"
+                        or any(key in event for key in agent_fields if key != "actor")
+                    ):
+                        valid = False
+                        break
+                elif (
+                    event.get("environment_kind") != "simulation"
+                    or event.get("actor") not in {"human_operator", "llm_agent"}
+                    or event.get("source")
+                    != (
+                        "operator_command"
+                        if event.get("actor") == "human_operator"
+                        else "agent_command"
+                    )
+                ):
+                    valid = False
+                    break
+        if version == 1 and (
+            any(key in receipt for key in agent_fields)
+            or receipt.get("environment_kind", "simulation") != "simulation"
+        ):
+            valid = False
+        if not valid:
+            return {
+                "actors": [],
+                "actor_summary_source": "unavailable",
+                "outcome_source": "unknown",
+            }
+        actors = (
+            ["human_operator"] if version == 1 else sorted({event["actor"] for event in events})
+        )
+        failure_annotation = receipt["outcome"] == "operator_reported_failure" and any(
+            event.get("operation") == "mark_failure"
+            and event.get("source") == "operator_command"
+            and event.get("actor", "human_operator") == "human_operator"
+            for event in events
+        )
+        return {
+            "actors": actors,
+            "actor_summary_source": source,
+            "outcome_source": "operator_reported" if failure_annotation else "unknown",
+        }
+
     for folder, is_dir in entries(root, 100):
         if not is_dir:
             raise RecordingError("Published capture roots may contain session directories only")
         capture = root / folder
         raw = bounded_read(capture / "session.json")
-        meta = metadata(decode(raw))
+        declared = decode(raw)
+        if declared.get("environment_kind", "simulation") != "simulation":
+            raise RecordingError("Unsupported capture environment")
+        meta = metadata(declared)
         ident = meta["session_id"]
         if ident in locations:
             raise RecordingError("Duplicate session identity in recording catalog")
@@ -327,7 +409,7 @@ def _catalog(loaded, project):
             receipt = decode(receipt_raw)
             if (
                 type(receipt.get("schema_version")) is not int
-                or receipt["schema_version"] != 1
+                or receipt["schema_version"] != meta["schema_version"]
                 or receipt.get("episode_id") != name
                 or receipt.get("finalized") is not True
                 or not isinstance(receipt.get("outcome"), str)
@@ -343,6 +425,7 @@ def _catalog(loaded, project):
                     "frames": integer(receipt.get("frames"), 1, 3600),
                     "outcome": receipt["outcome"],
                     "termination": receipt["termination"],
+                    **actor_metadata(receipt, meta["schema_version"]),
                 }
             )
         if episodes:
@@ -351,6 +434,18 @@ def _catalog(loaded, project):
                     **meta,
                     "session_sha256": digest(raw),
                     "episodes": episodes,
+                    "actors": []
+                    if any(episode["actor_summary_source"] == "unavailable" for episode in episodes)
+                    else sorted({actor for episode in episodes for actor in episode["actors"]}),
+                    "actor_summary_source": (
+                        "unavailable"
+                        if any(
+                            episode["actor_summary_source"] == "unavailable" for episode in episodes
+                        )
+                        else "legacy_operator"
+                        if meta["schema_version"] == 1
+                        else "declared_events"
+                    ),
                     "content_verified": False,
                 }
             )
@@ -611,6 +706,49 @@ def checked_conversion(response, job, selection, destination, *, deadline, stop)
                     "source_trajectory_sha256": receipt["trajectory_sha256"],
                 }
             )
+            if meta["schema_version"] == 2:
+                raw = read(root / episode["episode_id"] / "trajectory.jsonl", 16 * 1024**2)
+                if digest(raw) != receipt.get("trajectory_sha256") or not raw.endswith(b"\n"):
+                    raise RecordingError("Agent source trajectory changed during promotion")
+                rows = [decode(line) for line in raw.splitlines()]
+                if len(rows) != receipt["frames"]:
+                    raise RecordingError("Agent source trajectory count differs")
+                if any(
+                    row.get("actor") not in {"human_operator", "llm_agent"}
+                    or row.get("environment_kind") != "simulation"
+                    for row in rows
+                ):
+                    raise RecordingError("Agent source actor or environment is unsupported")
+                expected_details[-1].update(
+                    {
+                        "capture_schema_version": 2,
+                        "environment_kind": "simulation",
+                        "actors": sorted({row["actor"] for row in rows}),
+                        "action_provenance": [
+                            {
+                                key: row[key]
+                                for key in (
+                                    "step",
+                                    "actor",
+                                    "environment_kind",
+                                    "agent_session_id",
+                                    "proposal_id",
+                                    "execution_id",
+                                    "provider_model",
+                                    "prompt_version",
+                                    "prompt_sha256",
+                                    "observation_id",
+                                    "observation_sha256",
+                                    "authority_epoch",
+                                    "clock_policy",
+                                    "skill_manifest_version",
+                                )
+                                if key in row
+                            }
+                            for row in rows
+                        ],
+                    }
+                )
     expected_coordinates = {
         key: common[key]
         for key in ("controller", "state_units", "action_units", "timebase", "camera_prim")

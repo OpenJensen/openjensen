@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jensen-agent-control-worker"
+version = "0.1.0"
+license = "Apache-2.0"
+requires-python = ">=3.12,<3.15"
+dependencies = ["httpx==0.28.1"]
+
+[project.scripts]
+jensen-agent-control = "jensen_agent_control.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jensen_agent_control"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

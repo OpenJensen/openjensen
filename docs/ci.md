@@ -1,12 +1,12 @@
 # Development checks
 
-GitHub Actions runs Linux application, browser and worker checks for pushes and pull requests. Windows application and browser checks can be run manually; simulation has a separate manual workflow. Check the jobs for your pull request and include relevant test results in its description.
+GitHub Actions runs the Linux application, browser and worker checks on every push and pull request, and selects them from the files a change touches. Windows application and browser checks and the simulation workflow run on demand. Check your pull request's jobs; the pull request itself describes the change, not local results.
 
-Browser tests cover desktop and mobile web layouts. GPU training, Isaac simulation and desktop installation require their own environments. Run the checks relevant to the code you change and report any you could not run.
+Browser tests cover desktop and mobile layouts. GPU training, Isaac simulation and desktop installation need their own environments and are not covered by these checks.
 
-## Run locally
+## Run the checks locally
 
-Use the versions in `.node-version`, `package.json` and the workflows. From the repository root:
+Run the checks for the code you change, using the versions in `.node-version`, `package.json` and the workflows. From the repository root:
 
 ```sh
 uv sync --frozen --all-packages --extra tui
@@ -34,9 +34,11 @@ NEXT_PUBLIC_BASE_PATH=/jensen JENSEN_TEST_WEB_DIR="$PWD/apps/web/out/prefix-smok
 pnpm build:web
 ```
 
-Run browser checks with ports 8765, 8766 and 8767 available. Install the [isolated reader](../workers/_cpu_readers/README.md) and FFmpeg for dataset/video checks. Run worker checks in each worker's own environment.
+- Browser checks need ports 8765, 8766 and 8767 free.
+- Dataset and video checks need the [isolated reader](../workers/_cpu_readers/README.md) and FFmpeg.
+- Worker checks run in each worker's own environment.
 
-Check the change selector:
+To test which checks a change selects:
 
 ```sh
 uv run --no-sync pytest -q tests/test_ci_scope.py

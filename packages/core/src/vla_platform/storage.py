@@ -38,6 +38,50 @@ job_submissions = Table(
     Column("created_at", String, nullable=False),
 )
 
+agent_sessions = Table(
+    "agent_sessions",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("project_id", String, ForeignKey("projects.id"), nullable=False, index=True),
+    Column("status", String, nullable=False),
+    Column("record", JSON, nullable=False),
+    Column("private", JSON, nullable=False),
+)
+agent_observations = Table(
+    "agent_observations",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("session_id", String, ForeignKey("agent_sessions.id"), nullable=False, index=True),
+    Column("project_id", String, nullable=False),
+    Column("record", JSON, nullable=False),
+)
+agent_proposals = Table(
+    "agent_proposals",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("session_id", String, ForeignKey("agent_sessions.id"), nullable=False, index=True),
+    Column("request_id", String, nullable=False),
+    Column("request_sha256", String, nullable=False),
+    Column("record", JSON, nullable=False),
+)
+agent_receipts = Table(
+    "agent_receipts",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("session_id", String, ForeignKey("agent_sessions.id"), nullable=False, index=True),
+    Column("proposal_id", String, nullable=False, unique=True),
+    Column("record", JSON, nullable=False),
+)
+agent_events = Table(
+    "agent_events",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("session_id", String, ForeignKey("agent_sessions.id"), nullable=False, index=True),
+    Column("kind", String, nullable=False),
+    Column("created_at", String, nullable=False),
+    Column("record", JSON, nullable=False),
+)
+
 
 def upgrade(connection: Connection) -> None:
     config = Config()

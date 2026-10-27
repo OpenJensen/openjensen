@@ -87,6 +87,27 @@ class CameraPool:
             raise RuntimeError("Could not encode camera preview")
         return encoded.tobytes()
 
+    def capture_timed(self, index=0):
+        """Read a fresh frame with explicit host interval, never a cached preview.
+
+        OpenCV does not supply portable exposure timestamps for these cameras.
+        These are host read bounds, not a claim of sensor-clock synchronization.
+        """
+        import cv2
+
+        started = time.monotonic_ns()
+        frame = self.read(index)
+        ended = time.monotonic_ns()
+        ok, encoded = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        if not ok:
+            raise RuntimeError("Could not encode admitted camera observation")
+        return {
+            "jpeg": encoded.tobytes(),
+            "read_start_monotonic_ns": started,
+            "read_end_monotonic_ns": ended,
+            "image_sensor_timestamp_verified": False,
+        }
+
     def discover(self):
         # Inventory only: do not open every camera or compete with recording.
         if platform.system() == "Darwin":

@@ -13,6 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
+from .agent import AgentCommand
 from .contracts import MAX_JSON, Command, canonical, decode
 
 
@@ -27,9 +28,17 @@ class Mailbox:
         self.frame = None
         self.frame_published_monotonic_ns = None
 
-    def submit(self, payload: dict) -> dict:
-        command = Command.parse(payload)
-        digest = hashlib.sha256(canonical(payload)).hexdigest()
+    def submit(self, payload: dict, *, agent_operation: str | None = None) -> dict:
+        command = (
+            AgentCommand.parse(agent_operation, payload)
+            if agent_operation
+            else Command.parse(payload)
+        )
+        digest = hashlib.sha256(
+            canonical({"operation": agent_operation, "payload": payload})
+            if agent_operation
+            else canonical(payload)
+        ).hexdigest()
         with self.lock:
             if command.command_id in self.receipts:
                 receipt = self.receipts[command.command_id]
@@ -60,7 +69,14 @@ class Mailbox:
         with self.lock:
             if ident not in self.receipts:
                 raise ValueError("Unknown or expired command receipt")
-            return dict(self.receipts[ident])
+            result = dict(self.receipts[ident])
+            if "observation" in result:
+                result["observation_age_ms"] = max(
+                    0,
+                    (time.monotonic_ns() - result["observation"]["captured_monotonic_ns"])
+                    // 1_000_000,
+                )
+            return result
 
     def publish(self, session) -> None:
         session._owned()
@@ -75,8 +91,27 @@ class Mailbox:
                                 "error": "Execution did not complete; motion outcome is unverified",
                             }
                         )
+            for receipt in self.receipts.values():
+                if (
+                    receipt["status"] == "executing"
+                    and receipt.get("execution", {}).get("status") == "stopped"
+                ):
+                    receipt.update(
+                        status="rejected",
+                        error=(
+                            "Agent action stopped before completion; "
+                            "partial execution evidence is retained"
+                        ),
+                    )
             applied = session.last_applied_command_id
-            if applied in self.receipts and self.receipts[applied]["status"] == "executing":
+            if (
+                applied in self.receipts
+                and self.receipts[applied]["status"] == "executing"
+                and (
+                    "execution" not in self.receipts[applied]
+                    or self.receipts[applied]["execution"].get("status") == "completed"
+                )
+            ):
                 self.receipts[applied].update(
                     {
                         "status": "acknowledged",
@@ -115,15 +150,21 @@ class Mailbox:
         try:
             if self.clock() >= deadline:
                 raise ValueError("Command expired before execution; no operation applied")
-            result = session.execute(command)
+            result = (
+                session.agent.execute(command)
+                if isinstance(command, AgentCommand)
+                else session.execute(command)
+            )
         except Exception as error:
             update = {"status": "rejected", "error": str(error)}
         else:
             update = {
-                "status": "executing" if command.operation == "correct" else "acknowledged",
-                "state": result,
+                "status": "executing"
+                if command.operation in {"correct", "execute", "segment"}
+                else "acknowledged",
+                **(result if isinstance(command, AgentCommand) else {"state": result}),
             }
-            if command.operation != "correct":
+            if command.operation not in {"correct", "execute", "segment"}:
                 update["acknowledged_monotonic_ns"] = time.monotonic_ns()
         # Publish invalidation before acknowledging a changed command context.
         # Waiting for the next tick could otherwise expose old pixels as current.
@@ -168,6 +209,8 @@ def server(mailbox: Mailbox, token: str, port: int = 0) -> ThreadingHTTPServer:
                     value = mailbox.frame_payload()
                 elif self.path.startswith("/commands/"):
                     value = mailbox.get(self.path.removeprefix("/commands/"))
+                elif self.path.startswith("/agent/executions/"):
+                    value = mailbox.get(self.path.removeprefix("/agent/executions/"))
                 else:
                     raise ValueError("Unknown teaching endpoint")
                 self._reply(200, value)
@@ -178,7 +221,22 @@ def server(mailbox: Mailbox, token: str, port: int = 0) -> ThreadingHTTPServer:
             if not self._authorized():
                 return
             try:
-                if self.path != "/commands" or self.headers.get("Transfer-Encoding"):
+                agent_operation = (
+                    self.path.removeprefix("/agent/")
+                    if self.path
+                    in {
+                        "/agent/acquire",
+                        "/agent/observe",
+                        "/agent/execute",
+                        "/agent/release",
+                        "/agent/heartbeat",
+                        "/agent/segment",
+                    }
+                    else None
+                )
+                if (self.path != "/commands" and agent_operation is None) or self.headers.get(
+                    "Transfer-Encoding"
+                ):
                     raise ValueError("Unknown endpoint or unsupported transfer encoding")
                 length = int(self.headers.get("Content-Length", "0"))
                 if not 0 < length <= MAX_JSON:
@@ -187,7 +245,7 @@ def server(mailbox: Mailbox, token: str, port: int = 0) -> ThreadingHTTPServer:
                 raw = self.rfile.read(length)
                 if len(raw) != length:
                     raise ValueError("Incomplete control request")
-                self._reply(202, mailbox.submit(decode(raw)))
+                self._reply(202, mailbox.submit(decode(raw), agent_operation=agent_operation))
             except (ValueError, OSError) as error:
                 self._reply(400, {"error": str(error)})
 

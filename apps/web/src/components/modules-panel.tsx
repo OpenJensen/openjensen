@@ -12,8 +12,8 @@ import './cloud-connections.css';
 import './modules-panel.css';
 
 const purpose: Record<WorkspaceModule['id'], string> = {
-  'robot-lab': 'Arm setup, calibration and recording',
-  teaching: 'Simulator teaching and demonstration capture',
+  'robot-lab': 'Connect the arm, identify motors and calibrate',
+  teaching: 'Goal-directed AI teleoperation and recording',
   augmentation: 'Generate dataset variations',
   'decision-lab': 'Local advisory scoring',
   'cloud-runs': 'Cloud run snapshots',

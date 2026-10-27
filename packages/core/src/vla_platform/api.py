@@ -17,6 +17,9 @@ from starlette.background import BackgroundTask
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from vla_platform import __version__
+from vla_platform.agent_control.service import AgentControl
+from vla_platform.agent_control_api import register_errors as register_agent_errors
+from vla_platform.agent_control_api import router as agent_control_router
 from vla_platform.application_updates import ApplicationUpdates
 from vla_platform.augmentation.contracts import AugmentationOptions, AugmentationRequest
 from vla_platform.capabilities import registry
@@ -138,11 +141,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.robot_lab = RobotLabBridge(settings.data_dir)
             app.state.cloud_connections = CloudConnections(settings.data_dir)
             app.state.huggingface_connection = HuggingFaceConnection(settings.data_dir)
+            app.state.agent_control = AgentControl(
+                storage, settings, execution, robot_bridge=app.state.robot_lab
+            )
+            await app.state.agent_control.reconcile()
             yield
         finally:
             try:
                 if initialized:
                     try:
+                        if hasattr(app.state, "agent_control"):
+                            await app.state.agent_control.close()
                         if hasattr(app.state, "module_installations"):
                             await app.state.module_installations.close()
                         if hasattr(app.state, "application_updates"):
@@ -174,6 +183,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         redoc_url=None,
     )
 
+    register_agent_errors(app)
     app.state.active_writes = 0
 
     @app.exception_handler(TeachingError)
@@ -188,6 +198,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def submission_unavailable(_request: Request, exc: SubmissionUnavailable):
         return JSONResponse({"detail": str(exc)}, status_code=503)
 
+    app.include_router(agent_control_router)
     app.include_router(cloud_connections_router)
     app.include_router(compute_settings_router)
     app.include_router(huggingface_router)

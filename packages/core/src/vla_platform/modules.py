@@ -81,7 +81,9 @@ def _cloud_connected(data_dir: Path) -> bool:
 def workspace_modules(settings: Settings, robot_lab_config: Path) -> list[WorkspaceModule]:
     installed: dict[ModuleId, bool] = {
         "robot-lab": os.path.lexists(robot_lab_config),
-        "teaching": _any_env("JENSEN_TEACHING_URL")
+        "teaching": os.path.lexists(robot_lab_config)
+        or (settings.data_dir / "agent-providers.json").exists()
+        or _any_env("JENSEN_TEACHING_URL")
         or settings.teaching_session_config is not None
         or settings.recording_config is not None,
         "augmentation": _cloud_connected(settings.data_dir) or _any_env("GEMINI_API_KEY"),
@@ -101,12 +103,12 @@ def workspace_modules(settings: Settings, robot_lab_config: Path) -> list[Worksp
         installed = {key: "all" in chosen or key in chosen for key in installed}
     setup: dict[ModuleId, tuple[str, str]] = {
         "robot-lab": (
-            "Robot Lab",
+            "Initial setup",
             "Install the robot profile on the computer with the arm and pair it with this host.",
         ),
         "teaching": (
-            "Teaching",
-            "Set JENSEN_TEACHING_URL, JENSEN_TEACHING_SESSION_CONFIG or JENSEN_RECORDING_CONFIG.",
+            "AI teleoperation",
+            "Configure an AI provider, then select a simulator session or a calibrated robot.",
         ),
         "augmentation": ("Augmentation", "Connect Google Cloud or set GEMINI_API_KEY."),
         "decision-lab": ("Decision Lab", "Configure the local decision scorer on this host."),

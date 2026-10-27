@@ -608,3 +608,37 @@ test('journal read denial is a dedicated storage failure before pending ownershi
   expect([...f.values]).toEqual(before);
   expect(ownsRecordingAttempt('alpha', f.a.attempt_id, f.storage)).toBe(false);
 });
+
+test('catalog accepts declared actor metadata without turning command actors into verified frames', () => {
+  const source = catalog();
+  const capture = source.captures[0] as Record<string, any>;
+  Object.assign(capture, {
+    schema_version: 2,
+    environment_kind: 'simulation',
+    actors: ['human_operator', 'llm_agent'],
+    actor_summary_source: 'declared_events',
+  });
+  Object.assign(capture.episodes[0], {
+    actors: ['llm_agent'],
+    actor_summary_source: 'declared_events',
+    outcome_source: 'unknown',
+  });
+  const parsed = recordingCatalog(source);
+  expect(parsed.captures[0].actors).toEqual(['human_operator', 'llm_agent']);
+  expect(parsed.captures[0].content_verified).toBe(false);
+  expect(parsed.captures[0].episodes[0].outcome_source).toBe('unknown');
+  for (const patch of [
+    { environment_kind: 'physical' },
+    { schema_version: true },
+    { actors: ['human_operator'], actor_summary_source: 'unavailable' },
+    { actors: ['llm_agent'], actor_summary_source: 'legacy_operator' },
+    { actors: ['invented'], actor_summary_source: 'declared_events' },
+  ])
+    expect(() => recordingCatalog({ ...source, captures: [{ ...capture, ...patch }] })).toThrow();
+  expect(() =>
+    recordingCatalog({
+      ...source,
+      captures: [{ ...capture, episodes: [{ ...capture.episodes[0], outcome_source: 'operator_reported' }] }],
+    }),
+  ).toThrow();
+});

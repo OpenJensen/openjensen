@@ -42,12 +42,14 @@ export type RobotStatus = {
   platform?: string;
   dependencies?: Record<string, { installed: boolean; version: string | null }>;
   capabilities?: {
+    agent_control?: boolean;
     lerobot_position_control?: boolean;
     large_joint_steps?: boolean;
     arm_readiness?: boolean;
     joint_sliders?: boolean;
     calibration_persistence?: boolean;
     partial_control?: boolean;
+    rest_position?: boolean;
     move_to_middle?: boolean;
     middle_tolerance?: boolean;
     assembled_setup?: boolean;
@@ -60,7 +62,8 @@ export type RobotStatus = {
     recording: boolean;
   };
   session?: {
-    mode: 'idle' | 'calibration' | 'setup' | 'verification' | ControlMode;
+    mode: 'idle' | 'calibration' | 'setup' | 'verification' | 'agent' | ControlMode;
+    generation?: number;
     robot_id: string | null;
     port: string | null;
     role: RobotRole | null;
@@ -70,9 +73,30 @@ export type RobotStatus = {
     slider_targets?: JointValues;
     joint_limits?: Partial<Record<RobotJoint, { min: number; max: number }>>;
     torque_enabled: boolean;
+    rest_position?: {
+      saved: boolean;
+      phase: 'idle' | 'returning' | 'holding' | 'error';
+      progress: number;
+      targets: JointValues;
+    };
     centering?: { active: boolean; progress: number; tolerance?: number };
     watchdog_seconds: number | null;
     error: string | null;
+  };
+  agent_control?: {
+    schema_version: 1;
+    available: boolean;
+    owner: string | null;
+    authority_epoch: number;
+    target_session_id: string | null;
+    active_execution_id: string | null;
+    units: Partial<Record<RobotJoint, 'degrees' | 'percent'>>;
+    limits: Record<string, number>;
+    lease_seconds: number;
+    cartesian_control: false;
+    collision_avoidance: false;
+    contact_force_control: false;
+    image_sensor_timestamp_verified: false;
   };
   calibration?: {
     phase: 'idle' | 'center' | 'ranges' | 'saved' | 'interrupted';
@@ -272,12 +296,27 @@ export const robotApi = {
     leader_port?: string;
     leader_id?: string;
   }) => request<RobotStatus>('/control/start', { ...input, confirm: 'ENABLE MOTION' }, { timeoutMs: 45_000 }),
-  heartbeat: () => request<RobotStatus>('/control/heartbeat', {}, { timeoutMs: 2_000 }),
+  saveRestPosition: () => request<RobotStatus>('/control/rest/save', { confirm: 'SAVE REST POSITION' }),
+  returnToRest: () => request<RobotStatus>('/control/rest/return', { confirm: 'RETURN TO REST' }),
+  heartbeat: (expectedGeneration?: number) =>
+    request<RobotStatus>(
+      '/control/heartbeat',
+      expectedGeneration === undefined ? {} : { expected_generation: expectedGeneration },
+      { timeoutMs: 2_000 },
+    ),
   jog: (joint: RobotJoint, delta: number) =>
     request<RobotStatus>('/control/jog', { joint, delta }, { timeoutMs: 4_000 }),
   targetJoint: (joint: RobotJoint, target: number) =>
     request<RobotStatus>('/control/jog', { joint, target }, { timeoutMs: 4_000 }),
-  stop: (keepalive = false) => request<RobotStatus>('/stop', {}, { timeoutMs: 10_000, keepalive }),
+  stop: (keepalive = false, expectedGeneration?: number, expectedMode?: 'manual') =>
+    request<RobotStatus>(
+      '/stop',
+      {
+        ...(expectedGeneration === undefined ? {} : { expected_generation: expectedGeneration }),
+        ...(expectedMode === undefined ? {} : { expected_mode: expectedMode }),
+      },
+      { timeoutMs: 10_000, keepalive },
+    ),
   startRecording: (input: { dataset_id: string; task: string; fps: number; camera_index: number | null }) =>
     request<RobotStatus>('/recording/start', input, { timeoutMs: 90_000 }),
   startEpisode: () => request<RobotStatus>('/recording/episode/start', {}),

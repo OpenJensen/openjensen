@@ -24,7 +24,7 @@ import './teaching-panel.css';
 
 const active = (job: Job) => job.status === 'queued' || job.status === 'running';
 const message = (cause: unknown) =>
-  cause instanceof Error ? cause.message : 'Teaching request could not be verified.';
+  cause instanceof Error ? cause.message : 'AI teleoperation request could not be verified.';
 type StopState = { pending: boolean; uncertain: boolean; message: string };
 const noStop: StopState = { pending: false, uncertain: false, message: '' };
 
@@ -172,7 +172,8 @@ export function ManagedTeachingPanel({
         const originalRequest = managedTeachingRequest(original),
           options = await readManagedOptions(projectId);
         requireManagedProfile(options, originalRequest);
-        if (!live(version)) throw new Error('Teaching selection changed before starting; no session was requested.');
+        if (!live(version))
+          throw new Error('AI teleoperation selection changed before starting; no session was requested.');
       };
       const job =
         mode === 'check'
@@ -226,9 +227,9 @@ export function ManagedTeachingPanel({
     try {
       const fresh = await readManagedHistory(projectId);
       if (!live(version) || attempt !== historyReview.current || fresh.some(active))
-        throw new Error('Review the current teaching jobs before clearing recovery.');
+        throw new Error('Review the current simulation jobs before clearing recovery.');
       if (!submission.clearLegacy(attempt, fresh))
-        throw new Error('Teaching recovery changed. Refresh and review it again.');
+        throw new Error('AI teleoperation recovery changed. Refresh and review it again.');
       setReviewed(false);
       historyReview.current = null;
     } catch (cause) {
@@ -300,22 +301,22 @@ export function ManagedTeachingPanel({
     }
   }
   return (
-    <section className="panel teaching-panel" aria-label="Managed teaching sessions">
+    <section className="panel teaching-panel" aria-label="Managed simulation sessions">
       <div className="cloud-heading">
-        <h2>Record a teaching session</h2>
+        <h2>Record a simulation session</h2>
         <button
           type="button"
           className="secondary-button"
           disabled={!projectId || busy || history.isFetching}
           onClick={() => void refresh()}
         >
-          Refresh teaching sessions
+          Refresh simulation sessions
         </button>
       </div>
-      {!projectId && <p role="status">Select a project to see its teaching profiles.</p>}
+      {!projectId && <p role="status">Select a project to see its simulation profiles.</p>}
       {profiles.data && <p role="status">{profiles.data.message}</p>}
-      {profiles.error && <p role="alert">Teaching profiles could not be checked. Starting is disabled.</p>}
-      {history.error && <p role="alert">Saved teaching sessions could not be checked. Starting is disabled.</p>}
+      {profiles.error && <p role="alert">AI teleoperation profiles could not be checked. Starting is disabled.</p>}
+      {history.error && <p role="alert">Saved simulation sessions could not be checked. Starting is disabled.</p>}
       {accepted && retainedOnly && (
         <p role="status">
           Request accepted as job {accepted.id} ({accepted.status}). Select it below to follow it.
@@ -329,7 +330,7 @@ export function ManagedTeachingPanel({
         }}
       >
         <div className="workbench-field">
-          <label htmlFor={`teaching-profile-${projectId}`}>Teaching profile</label>
+          <label htmlFor={`teaching-profile-${projectId}`}>AI teleoperation profile</label>
           <select
             id={`teaching-profile-${projectId}`}
             value={profileId}
@@ -376,12 +377,12 @@ export function ManagedTeachingPanel({
           Start this session and record simulator observations.
         </label>
         <button type="submit" className="primary-button" disabled={!ready}>
-          Start teaching session
+          Start simulation session
         </button>
       </form>
       {knownActive && (
         <p role="status">
-          A saved teaching session is {knownActive.status}: {knownActive.id}. Select it below to inspect or stop it.
+          A saved simulation session is {knownActive.status}: {knownActive.id}. Select it below to inspect or stop it.
         </p>
       )}
       {submission.error && <p role="alert">{submission.error}</p>}
@@ -399,7 +400,7 @@ export function ManagedTeachingPanel({
                 disabled={busy || submission.busy}
                 onClick={() => void submit('check')}
               >
-                Check saved teaching request
+                Check saved simulation request
               </button>
               {submission.canRetry && (
                 <button
@@ -408,7 +409,7 @@ export function ManagedTeachingPanel({
                   disabled={busy || submission.busy}
                   onClick={() => void submit('retry')}
                 >
-                  Retry same teaching request
+                  Retry same simulation request
                 </button>
               )}
             </>
@@ -419,13 +420,13 @@ export function ManagedTeachingPanel({
               disabled={!reviewed || busy || history.isError || !!knownActive}
               onClick={() => void acknowledgeLegacy()}
             >
-              I reviewed teaching jobs; clear legacy recovery
+              I reviewed simulation jobs; clear legacy recovery
             </button>
           )}
         </div>
       )}
       <div className="workbench-field">
-        <label htmlFor={`teaching-saved-${projectId}`}>Saved teaching session</label>
+        <label htmlFor={`teaching-saved-${projectId}`}>Saved simulation session</label>
         <select id={`teaching-saved-${projectId}`} value={selectedId} onChange={(event) => choose(event.target.value)}>
           <option value="">Choose a saved session</option>
           {jobs.map((job) => (

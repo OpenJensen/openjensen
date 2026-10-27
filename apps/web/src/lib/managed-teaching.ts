@@ -140,7 +140,7 @@ export function requireManagedProfile(options: ManagedTeachingOptions, request: 
       profile &&
       profile.profile_sha256 === request.profile_sha256 &&
       request.timeout_seconds <= profile.max_seconds,
-    'Teaching profile is unavailable or changed. Refresh and review its limits before starting.',
+    'AI teleoperation profile is unavailable or changed. Refresh and review its limits before starting.',
   );
 }
 

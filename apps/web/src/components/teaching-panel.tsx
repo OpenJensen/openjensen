@@ -40,13 +40,17 @@ async function request<T>(path: string, body?: object, beforePost?: () => void):
       signal: controller.signal,
     });
     const value = await response.json();
-    if (!response.ok) throw new Error(typeof value.detail === 'string' ? value.detail : 'Teaching request failed.');
+    if (!response.ok)
+      throw new Error(typeof value.detail === 'string' ? value.detail : 'AI teleoperation request failed.');
     return value;
   } catch (error) {
     if (controller.signal.aborted)
-      throw new Error(body ? 'No response. Check the executor before retrying.' : 'Teaching connection timed out.', {
-        cause: error,
-      });
+      throw new Error(
+        body ? 'No response. Check the executor before retrying.' : 'AI teleoperation connection timed out.',
+        {
+          cause: error,
+        },
+      );
     throw error;
   } finally {
     clearTimeout(timeout);
@@ -118,8 +122,8 @@ function TeachingControls({ transport }: { transport?: TeachingTransport }) {
   const command = useMutation({
     mutationFn: async ({ operation, args = {} }: { operation: string; args?: object }) => {
       const current = await requestFor<Connection>('/state');
-      if (!mounted.current) throw new Error('Teaching controls changed before the command was sent.');
-      if (!current.connected || !current.state) throw new Error('Teaching executor is disconnected.');
+      if (!mounted.current) throw new Error('AI teleoperation controls changed before the command was sent.');
+      if (!current.connected || !current.state) throw new Error('AI teleoperation executor is disconnected.');
       if (!state?.session_id || current.state.session_id !== state.session_id) {
         void connection.refetch();
         throw new Error('The simulator session changed. Review it before sending another command.');
@@ -135,7 +139,7 @@ function TeachingControls({ transport }: { transport?: TeachingTransport }) {
           arguments: args,
         },
         () => {
-          if (!mounted.current) throw new Error('Teaching controls changed before the command was sent.');
+          if (!mounted.current) throw new Error('AI teleoperation controls changed before the command was sent.');
         },
       );
     },
@@ -267,15 +271,15 @@ function TeachingControls({ transport }: { transport?: TeachingTransport }) {
     }
   }
   return (
-    <section className="panel teaching-panel" aria-label="Teaching controls">
+    <section className="panel teaching-panel" aria-label="AI teleoperation controls">
       <WorkflowIntegration
         label="Control source"
         name="Isaac Sim"
-        meta="Teaching executor"
+        meta="AI teleoperation executor"
         icon="play"
         status={online ? 'Executor reachable' : 'Executor disconnected'}
       />
-      {!online && <p role="status">{connection.data?.message ?? 'Checking teaching executor…'}</p>}
+      {!online && <p role="status">{connection.data?.message ?? 'Checking simulation executor…'}</p>}
       <details className="teaching-setup">
         <summary>Connection details</summary>
         <dl className="cloud-run-facts">
@@ -302,7 +306,7 @@ function TeachingControls({ transport }: { transport?: TeachingTransport }) {
           </div>
         </dl>
       </details>
-      {connection.error && <p role="alert">Teaching connection could not be checked.</p>}
+      {connection.error && <p role="alert">AI teleoperation connection could not be checked.</p>}
       {state?.fault && <p role="alert">The executor stopped after a fault. Inspect the worker before continuing.</p>}
       {previewState?.session_id && (
         <TeachingPreview
@@ -492,7 +496,7 @@ function TeachingControls({ transport }: { transport?: TeachingTransport }) {
             {voiceState} · Voice agent {agentPresent ? 'present in room' : 'not observed'}
           </p>
           {voiceError && <p role="alert">{voiceError}</p>}
-          <div ref={media} aria-label="Teaching room media" />
+          <div ref={media} aria-label="AI teleoperation room media" />
         </section>
       )}
     </section>

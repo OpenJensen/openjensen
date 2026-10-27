@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "task": "Pick up the cup and hold it above its support. Ask for help if the available bounded joint skills cannot accomplish this safely.",
+  "clock_policy": "stepped",
+  "seeds": [
+    17,
+    29,
+    43
+  ],
+  "max_steps": 240,
+  "max_turns": 20,
+  "max_seconds": 300,
+  "max_output_tokens": 1024,
+  "max_total_tokens": 32000,
+  "object_xy_jitter_m": 0.005,
+  "evaluation": {
+    "task": "lift_hold",
+    "object_prim": "/World/Props/Cup",
+    "support_height_m": 0.2,
+    "lift_clearance_m": 0.01,
+    "lift_hold_seconds": 0.5,
+    "settle_seconds": 0.5,
+    "maximum_linear_speed_m_s": 0.02,
+    "maximum_angular_speed_rad_s": 0.1,
+    "placement_min_m": null,
+    "placement_max_m": null
+  },
+  "scripted_actions": [
+    {
+      "joint": "shoulder_pan",
+      "delta_rad": 0.03
+    }
+  ]
+}

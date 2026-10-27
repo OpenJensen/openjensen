@@ -1,6 +1,6 @@
 import type { Job, PolicyRequest } from '@/lib/api';
 
-export type SettingsTab = 'compute' | 'modules' | 'settings' | 'diagnostics';
+export type SettingsTab = 'compute' | 'modules' | 'providers' | 'settings' | 'diagnostics';
 
 export function policyRequest(job?: Job): PolicyRequest | undefined {
   return job && 'runtime_id' in job.request ? (job.request as PolicyRequest) : undefined;

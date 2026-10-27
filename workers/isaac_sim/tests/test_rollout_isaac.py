@@ -8,7 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-from sim_worker.rollout.contracts import SimSpec
+from sim_worker.rollout.contracts import ObjectState, SimSpec
+from sim_worker.rollout.evaluation import EvaluationSpec
 from sim_worker.rollout.isaac import IsaacSim
 
 _SPEC = SimSpec("scene.usda", "/World/Camera", "/World/Robot/root", ("pan", "elbow"), 2, 2, 30, 60)
@@ -173,6 +174,54 @@ class IsaacDriverTests(unittest.TestCase):
         self.world.rep.annotators.get.return_value.get_data.return_value = np.zeros((2, 2, 3))
         with self.assertRaisesRegex(RuntimeError, "RGB"):
             self.driver.observe()
+
+    def test_task_evidence_counts_physics_ticks_and_detects_unowned_object_changes(self):
+        spec = EvaluationSpec.parse(
+            {
+                "task": "lift_hold",
+                "object_prim": "/World/Props/Cup",
+                "support_height_m": 0.2,
+                "lift_clearance_m": 0.01,
+                "lift_hold_seconds": 0.01,
+                "settle_seconds": 0.01,
+                "maximum_linear_speed_m_s": 0.02,
+                "maximum_angular_speed_rad_s": 0.1,
+                "placement_min_m": None,
+                "placement_max_m": None,
+            }
+        )
+        body = ObjectState(
+            spec.object_prim,
+            (0, 0, 0.2),
+            (0, 0, 0, 1),
+            (0, 0, 0),
+            (0, 0, 0),
+            (-0.01, -0.01, 0),
+            (0.01, 0.01, 0.02),
+        )
+        self.driver._evaluation = spec
+        with patch("sim_worker.rollout.ground_truth.ObjectProbe") as probe:
+            probe.return_value.read.return_value = body
+            self.driver.reset("episode-object")
+            self.driver.observe()
+            self.driver.observe()
+            evidence = self.driver.task_evidence()
+            self.assertEqual(evidence["samples"], 1)
+            self.assertEqual(evidence["criteria_sha256"], spec.digest)
+            self.assertFalse(evidence["geometric_success"])
+            self.driver.apply((0.75, 0.25))
+            for _ in range(3):
+                self.driver.step()
+                probe.return_value.read.return_value = replace(body, position_m=(0, 0, 0.22))
+                self.driver.observe()
+            evidence = self.driver.task_evidence()
+            self.assertEqual(evidence["samples"], 4)
+            self.assertTrue(evidence["geometric_success"])
+            self.assertFalse(evidence["grasp_and_release_verified"])
+            self.assertFalse(evidence["physical_transfer_verified"])
+            probe.return_value.read.return_value = replace(body, position_m=(0, 0, 0.24))
+            with self.assertRaisesRegex(RuntimeError, "without an owned physics tick"):
+                self.driver.observe()
 
     def test_main_thread_only(self):
         errors = []

@@ -1,12 +1,14 @@
 """Single-threaded Isaac driver; only step() advances simulation time."""
 
+import json
 import logging
 import math
 import os
 import threading
+from dataclasses import asdict, replace
 
 from sim_worker.rollout.contracts import RGB_CHANNELS, Frame, Observation, SimSpec
-from sim_worker.rollout.evaluation import EvaluationSpec
+from sim_worker.rollout.evaluation import EpisodeEvaluator, EvaluationSpec
 
 _RENDERER = "RealTimePathTracing"
 _AA_DLSS = 3
@@ -74,6 +76,9 @@ class IsaacSim:
         self._spec = spec
         self._evaluation = evaluation
         self._object_probe = None
+        self._task_evaluator = None
+        self._last_task_observation = None
+        self._last_task_measurement = None
         self._app = None
         self._timeline = None
         self._manager = None
@@ -134,6 +139,17 @@ class IsaacSim:
         settings.set(_DLSS_MODE, _DLSS_QUALITY)
         self._rep.orchestrator.set_capture_on_play(False)
 
+    def select_scene(self, scene: str) -> None:
+        """Select an operator-authored scene between finite acceptance episodes."""
+        from pathlib import Path
+
+        self._require_open()
+        selected = Path(scene).resolve(strict=True)
+        if not selected.is_file() or selected.suffix.lower() not in {".usd", ".usda", ".usdc"}:
+            raise ValueError("Acceptance scene must be an existing USD file")
+        self._release()
+        self._spec = replace(self._spec, scene=str(selected))
+
     def reset(self, episode_id: str) -> None:
         self._require_open()
         if not isinstance(episode_id, str) or not episode_id:
@@ -166,6 +182,9 @@ class IsaacSim:
             from sim_worker.rollout.ground_truth import ObjectProbe
 
             self._object_probe = ObjectProbe(stage, self._view, self._evaluation)
+            self._task_evaluator = EpisodeEvaluator(
+                self._evaluation, fps=self._spec.fps, steps=72000
+            )
         logging.info("Physics ready; warming renderer")
 
         self._product = self._rep.create.render_product(
@@ -229,9 +248,41 @@ class IsaacSim:
             self._spec.width, self._spec.height, pixels[:, :, :RGB_CHANNELS].tobytes(order="C")
         )
         object_state = self._object_probe.read() if self._object_probe is not None else None
-        return Observation(
+        observation = Observation(
             self._episode, self._step, self._time() - self._origin, positions, frame, object_state
         )
+        if self._task_evaluator is not None:
+            if observation.step == self._task_evaluator.samples:
+                self._last_task_measurement = self._task_evaluator.observe(observation)
+                self._last_task_observation = observation.object_state
+            elif (
+                observation.step != self._task_evaluator.samples - 1
+                or observation.object_state != self._last_task_observation
+            ):
+                raise RuntimeError("Native task evidence changed without an owned physics tick")
+        return observation
+
+    def task_evidence(self):
+        """Return only live configured object geometry, separate from a model assessment."""
+        if self._task_evaluator is None or self._last_task_measurement is None:
+            return None
+        measured = self._last_task_measurement
+        return {
+            "schema_version": 1,
+            "source": "isaac_object_bounds_v1",
+            "criteria": json.loads(json.dumps(asdict(self._evaluation))),
+            "criteria_sha256": self._evaluation.digest,
+            "object_prim": self._evaluation.object_prim,
+            "step": measured["step"],
+            "sim_time": measured["sim_time"],
+            "samples": self._task_evaluator.samples,
+            "whole_object_clearance_m": measured["whole_object_clearance_m"],
+            "lift_hold_seconds": measured["lift_hold_seconds"],
+            "terminal_settle_seconds": measured["terminal_settle_seconds"],
+            "geometric_success": measured["geometric_success"],
+            "grasp_and_release_verified": False,
+            "physical_transfer_verified": False,
+        }
 
     def apply(self, targets: tuple[float, ...]) -> None:
         self._require_episode()
@@ -294,6 +345,9 @@ class IsaacSim:
     def _release(self) -> None:
         self._episode = None
         self._object_probe = None
+        self._task_evaluator = None
+        self._last_task_observation = None
+        self._last_task_measurement = None
         if self._annotator is not None:
             self._annotator.detach()
             self._annotator = None

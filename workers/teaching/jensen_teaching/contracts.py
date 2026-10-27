@@ -6,10 +6,11 @@ import hashlib
 import json
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from sim_worker.rollout.contracts import SimSpec
+from sim_worker.rollout.evaluation import EvaluationSpec
 
 OPERATIONS = frozenset({"task", "start", "pause", "reset", "correct", "mark_failure", "finish"})
 LINEAGE = re.compile(r"[a-zA-Z0-9_.:-]{1,128}\Z")
@@ -61,9 +62,15 @@ def integer(value: object, label: str, low: int, high: int) -> int:
 
 
 def finite(value: object, label: str) -> float:
-    if type(value) not in (float, int) or not math.isfinite(value):
+    if type(value) not in (float, int):
         raise ValueError(f"{label} must be finite")
-    return float(value)
+    try:
+        result = float(value)
+    except OverflowError:
+        raise ValueError(f"{label} must be finite") from None
+    if not math.isfinite(result):
+        raise ValueError(f"{label} must be finite")
+    return result
 
 
 @dataclass(frozen=True)
@@ -74,6 +81,7 @@ class Settings:
     max_steps: int = 300
     max_episode_bytes: int = 512 * 1024 * 1024
     origin: str = "recorded"
+    task_evaluation: EvaluationSpec | None = None
 
     @classmethod
     def load(cls, path: Path) -> Settings:
@@ -91,8 +99,10 @@ class Settings:
             "max_steps",
             "max_episode_bytes",
         }
-        if set(data) != required:
-            raise ValueError("Teaching settings require exactly: " + ", ".join(sorted(required)))
+        if not required <= set(data) or set(data) - required - {"task_evaluation"}:
+            raise ValueError(
+                "Teaching settings require the fixed simulator fields and optional task_evaluation"
+            )
         scene = (path.parent / text(data["scene"], "scene", 2048)).resolve(strict=True)
         if not scene.is_file() or scene.suffix.lower() not in {".usd", ".usda", ".usdc"}:
             raise ValueError("Scene must be an existing USD file")
@@ -133,6 +143,9 @@ class Settings:
             text(data["lineage_group"], "lineage_group", 128),
             integer(data["max_steps"], "max_steps", 1, 3600),
             integer(data["max_episode_bytes"], "max_episode_bytes", 1024, 2 * 1024**3),
+            task_evaluation=EvaluationSpec.parse(data["task_evaluation"])
+            if "task_evaluation" in data
+            else None,
         )
 
     def metadata(self) -> dict:
@@ -155,6 +168,7 @@ class Settings:
             "max_episode_bytes": self.max_episode_bytes,
             "origin": self.origin,
             "scope": "Simulator coordinates; no physical calibration or task-success claim",
+            **({"task_evaluation": asdict(self.task_evaluation)} if self.task_evaluation else {}),
         }
 
 

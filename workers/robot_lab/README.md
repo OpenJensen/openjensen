@@ -45,6 +45,10 @@ Powered control reuses the LeRobot v0.4.4 SO follower configuration and `send_ac
 
 **Watchdog.** Torque is disabled when the browser heartbeat is lost for 2 seconds (10 seconds during calibration). Stop and shutdown address every motor and close the ports the companion owns. A software stop needs working USB and power: support the arm before releasing torque, and switch motor power off if communication fails. Previews and status polling never command motion.
 
+## AI teleoperation
+
+The companion also provides [governed, lease-bound joint segments](AI_CONTROL.md) for AI teleoperation. Explicit full-arm manual startup precedes a separate AI ownership transfer. Fresh observations and exact named units are rechecked locally; models never own serial access or the heartbeat. This is not a Cartesian grasp planner or contact-force controller. Existing manual, rest-position and emergency Stop controls remain available outside the agent owner.
+
 ## Cameras
 
 Inventory never opens every camera; only an explicit preview or recording opens the selected one, and a recording's preview reuses its latest frame.
