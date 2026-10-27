@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { installedModules } from './module-fixtures';
@@ -45,6 +47,7 @@ function resultFor(body: Record<string, any>) {
     model: 'gemini-omni-1.1-flash',
     prompt: 'Preserve robot motion. Use soft side lighting.',
     source_job_id: body.source_job_id,
+    source_clip: body.source_clip ?? null,
     repo_id: 'fixture/robot',
     revision,
     metadata_sha256: 'b'.repeat(64),
@@ -76,6 +79,7 @@ async function mockWorkspace(
     failProjects?: () => boolean;
     submissionMode?: 'lost-ack' | 'lost-before-commit' | 'unsupported' | 'wrong-ack' | 'rejected' | 'delayed-ack';
     priorRuns?: boolean;
+    media?: { original: Buffer; augmented: Buffer };
   } = {},
 ) {
   let releaseAck!: () => void;
@@ -88,6 +92,7 @@ async function mockWorkspace(
   const lookups: string[] = [];
   const unexpected: string[] = [];
   const cancelled: string[] = [];
+  const plans: Record<string, any>[] = [];
   const jobs: Record<string, any>[] = config.empty
     ? []
     : [
@@ -142,6 +147,25 @@ async function mockWorkspace(
         status: bindings.has(key) ? 200 : 404,
         headers,
         json: bindings.get(key) ?? { detail: 'No accepted submission found for this project, operation and key' },
+      });
+      return;
+    }
+    if (request.method() === 'POST' && path === `/api/v1/projects/${projectId}/augmentations/plan`) {
+      const body = request.postDataJSON();
+      plans.push(body);
+      const count = body.dataset_scope.camera_keys.length;
+      await route.fulfill({
+        json: {
+          total_episodes: 12,
+          camera_keys: body.dataset_scope.camera_keys,
+          total_source_seconds: 60 * count,
+          total_clips: 12 * count,
+          provider_requests: 12 * count,
+          recipe_prompts: ['Preserve motion. Make the table metal.'],
+          plan_sha256: 'f'.repeat(64),
+          model: 'unpaid-fixture',
+          warnings: ['Full episodes are covered in segments of at most 10 seconds.'],
+        },
       });
       return;
     }
@@ -215,6 +239,7 @@ async function mockWorkspace(
         '/api/v1/augmentation-options': {
           configured: config.configured ?? true,
           model: 'gemini-omni-1.1-flash',
+          preservation_prompt: 'Preserve all unmentioned surfaces.\n',
           max_clips: 4,
           max_duration_seconds: 10,
           auth_mode: config.cloud ? 'google_cloud' : 'gemini_api_key',
@@ -238,8 +263,23 @@ async function mockWorkspace(
         return;
       }
       if (/\/augmentation\/clips\/\d+$/.test(path)) {
-        // Empty media deliberately exercises the accessible fallback links.
-        await route.fulfill({ status: 200, contentType: 'video/mp4', body: '' });
+        // Real playback fixtures support byte ranges, as the clip download endpoint does.
+        const original = new URL(request.url()).searchParams.get('original') === 'true';
+        const media = config.media?.[original ? 'original' : 'augmented'];
+        const range = request.headers().range?.match(/^bytes=(\d+)-(\d*)$/);
+        const start = Number(range?.[1] ?? 0);
+        const end = Math.min(Number(range?.[2] || (media?.length ?? 1) - 1), (media?.length ?? 1) - 1);
+        await route.fulfill({
+          status: media && range ? 206 : 200,
+          contentType: 'video/mp4',
+          headers: media
+            ? {
+                'Accept-Ranges': 'bytes',
+                ...(range ? { 'Content-Range': 'bytes ' + start + '-' + end + '/' + media.length } : {}),
+              }
+            : {},
+          body: media ? media.subarray(start, end + 1) : '',
+        });
         return;
       }
     }
@@ -250,7 +290,39 @@ async function mockWorkspace(
   await page.getByRole('link', { name: 'Augmentation', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Augmentation', exact: true, level: 1 })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Generator', exact: true })).toContainText('Gemini Omni');
-  return { submitted, unexpected, jobs, cancelled, keys, lookups, releaseAck, optionsAttempts: () => optionsAttempts };
+  return {
+    submitted,
+    unexpected,
+    jobs,
+    cancelled,
+    plans,
+    keys,
+    lookups,
+    releaseAck,
+    optionsAttempts: () => optionsAttempts,
+  };
+}
+
+async function openStyle(page: Page) {
+  const dialog = page.getByRole('dialog');
+  if (await dialog.isVisible()) return dialog;
+  const add = page.getByRole('button', { name: 'Add a style', exact: true });
+  if (!(await add.isVisible())) await page.getByText('Choose preview clips', { exact: true }).click();
+  await add.click();
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+async function fillStyle(page: Page, prompt: string) {
+  const dialog = await openStyle(page);
+  await dialog.getByLabel('Style prompt', { exact: true }).fill(prompt);
+}
+
+async function generateStyle(page: Page) {
+  const dialog = await openStyle(page);
+  if (!(await dialog.getByLabel('Style prompt', { exact: true }).inputValue()))
+    await dialog.getByLabel('Style prompt', { exact: true }).fill('Use soft side lighting.');
+  await dialog.getByRole('button', { name: 'Generate style', exact: true }).click();
 }
 
 async function noOverflow(page: Page) {
@@ -274,18 +346,17 @@ test('submits selected clips and texture instructions, then compares and downloa
   await page.getByLabel('Episode numbers', { exact: true }).fill('1, 3');
   await page.getByLabel('Start at (seconds)').fill('1.5');
   await page.getByLabel('Clip length (seconds)').fill('4');
-  await page.getByRole('radio', { name: 'Change textures', exact: true }).locator('..').click();
-  await page.getByLabel('Additional instructions (optional)').fill('Give the table a matte wood surface.');
+  await fillStyle(page, 'Give the table a matte wood surface.');
   await expect(page.getByText(/Clips and prompts are sent to Google’s Gemini API. Charges may apply./)).toBeVisible();
   await noOverflow(page);
-  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
+  await generateStyle(page);
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0]).toEqual({
     operation: 'dataset.augment',
     source_job_id: 'inspected-video',
     episode_indices: [1, 3],
     camera_key: 'observation.images.side',
-    preset: 'texture',
+    preset: 'custom',
     prompt: 'Give the table a matte wood surface.',
     start_seconds: 1.5,
     duration_seconds: 4,
@@ -316,7 +387,7 @@ test('submits selected clips and texture instructions, then compares and downloa
   // The only write is the requested augmentation; no training job is submitted.
   expect(unexpected).toEqual([]);
   await page.getByText('Prompt & source provenance', { exact: true }).click();
-  await expect(page.getByText('Preserve robot motion. Use soft side lighting.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Preserve robot motion. Use soft side lighting.', { exact: true }).last()).toBeVisible();
   await noOverflow(page);
   const screenshot = testInfo.outputPath('augmentation-review.png');
   await page.screenshot({ path: screenshot, fullPage: true });
@@ -324,29 +395,32 @@ test('submits selected clips and texture instructions, then compares and downloa
   expect(unexpected).toEqual([]);
 });
 
-test('validates episode selection, timing and required custom instructions before submitting', async ({ page }) => {
+test('validates source selection and requires a prompt in the style dialog', async ({ page }) => {
   const { submitted, unexpected } = await mockWorkspace(page);
-  const start = page.getByRole('button', { name: 'Generate augmented clips', exact: true });
-  await expect(start).toBeEnabled();
+  const add = page.getByRole('button', { name: 'Add a style', exact: true });
+  await expect(add).toBeEnabled();
   for (const value of ['', '-1', '1.5', '0,0', '0,1,2,3,4', '12']) {
     await page.getByLabel('Episode numbers', { exact: true }).fill(value);
-    await expect(start).toBeDisabled();
+    await expect(add).toBeDisabled();
   }
   await page.getByLabel('Episode numbers', { exact: true }).fill('0, 2');
   await page.getByLabel('Start at (seconds)').fill('-1');
-  await expect(start).toBeDisabled();
+  await expect(add).toBeDisabled();
   await page.getByLabel('Start at (seconds)').fill('0');
   for (const value of ['0', '11', '']) {
     await page.getByLabel('Clip length (seconds)').fill(value);
-    await expect(start).toBeDisabled();
+    await expect(add).toBeDisabled();
   }
   await page.getByLabel('Clip length (seconds)').fill('5');
-  await page.getByRole('radio', { name: 'Custom edit', exact: true }).focus();
-  await page.keyboard.press('Space');
+  const dialog = await openStyle(page);
+  const start = dialog.getByRole('button', { name: 'Generate style', exact: true });
   await expect(start).toBeDisabled();
-  await page.getByLabel('Edit instructions').fill('Use a blue tabletop and soft lighting.');
+  await dialog.getByLabel('Style prompt').fill('   ');
+  await expect(start).toBeDisabled();
+  await dialog.getByLabel('Style prompt').fill('Use a blue tabletop and soft lighting.');
   await expect(start).toBeEnabled();
   await start.click();
+  await expect(dialog).not.toBeVisible();
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0]).toMatchObject({
     episode_indices: [0, 2],
@@ -360,7 +434,7 @@ test('running augmentation persists across tab changes, polls for completion and
   page,
 }) => {
   const { submitted, unexpected, jobs, cancelled } = await mockWorkspace(page);
-  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
+  await generateStyle(page);
   await expect(page.getByRole('button', { name: 'Cancel augmentation', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await page.getByRole('link', { name: 'Augmentation', exact: true }).click();
@@ -373,7 +447,7 @@ test('running augmentation persists across tab changes, polls for completion and
       { exact: true },
     ),
   ).toBeVisible({ timeout: 8000 });
-  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
+  await generateStyle(page);
   await expect.poll(() => submitted.length).toBe(2);
   await page.getByRole('button', { name: 'Cancel augmentation', exact: true }).click();
   await expect.poll(() => cancelled).toEqual(['augmentation-2']);
@@ -394,7 +468,7 @@ test('requires server configuration, explains the setup, and keeps API keys out 
   await page.getByText('Setup details', { exact: true }).click();
   await expect(page.getByText(/Set GEMINI_API_KEY/)).toBeVisible();
   await expect(page.getByText(/ffmpeg and ffprobe/).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Add a style', exact: true })).toBeDisabled();
   await expect(page.locator('input[type=password]')).toHaveCount(0);
   await page.getByRole('button', { name: 'Check setup again', exact: true }).click();
   expect(submitted).toEqual([]);
@@ -404,12 +478,13 @@ test('requires server configuration, explains the setup, and keeps API keys out 
 test('shows the Google Cloud login and billing project before augmentation', async ({ page }) => {
   const { submitted, unexpected } = await mockWorkspace(page, { cloud: true });
   await expect(page.getByRole('group', { name: 'Generator', exact: true })).toContainText('Google Cloud');
-  await page.getByText('Connection details', { exact: true }).click();
+  await fillStyle(page, 'Use warm light.');
+  await page.getByText('Generation details', { exact: true }).click();
   await expect(page.getByText(/uses your Google Cloud login, without an API key/)).toBeVisible();
   await expect(
     page.getByText('Clips and prompts are sent to Google Cloud. Charges apply to robotics-demo.', { exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Generate style', exact: true })).toBeEnabled();
   await expect(page.locator('input[type=password]')).toHaveCount(0);
   expect(submitted).toEqual([]);
   expect(unexpected).toEqual([]);
@@ -423,30 +498,29 @@ test('recovers a failed configuration request and offers source import when no v
   await page.getByRole('button', { name: 'Retry augmentation setup', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Retry augmentation setup', exact: true })).toHaveCount(0);
   await expect(page.getByText('No video datasets', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Add a style', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Import a dataset', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Import a dataset', exact: true })).toBeVisible();
   expect(submitted).toEqual([]);
   expect(unexpected).toEqual([]);
 });
 
-test('augmentation remains keyboard usable without horizontal overflow at 320px', async ({ page }) => {
+test('style dialog remains keyboard usable without horizontal overflow at 320px', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 740 });
   const { submitted, unexpected } = await mockWorkspace(page, { complete: true });
   await page.getByRole('button', { name: 'Dark', exact: true }).click();
-  const custom = page.getByRole('radio', { name: 'Custom edit', exact: true });
-  await custom.focus();
-  await page.keyboard.press('Space');
-  await expect(custom).toBeChecked();
-  await page.getByLabel('Edit instructions').fill('Change only the lighting.');
+  const add = page.getByRole('button', { name: 'Add a style', exact: true });
+  await add.focus();
+  await page.keyboard.press('Enter');
+  const dialog = page.getByRole('dialog', { name: 'Add a style', exact: true });
+  await expect(dialog.getByLabel('Style prompt')).toBeFocused();
+  await fillStyle(page, 'Change only the lighting.');
+  const bounds = await dialog.boundingBox();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.width).toBeLessThanOrEqual(320);
   await noOverflow(page);
-  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
-  await expect(
-    page.getByText(
-      'Generated clips may not match the original action labels. Review motion and timing, and validate labels before training.',
-      { exact: true },
-    ),
-  ).toBeVisible();
+  await generateStyle(page);
+  await expect(dialog).not.toBeVisible();
   await page.getByText('Prompt & source provenance', { exact: true }).focus();
   await page.keyboard.press('Enter');
   await expect(page.getByText(revision, { exact: true }).last()).toBeVisible();
@@ -464,45 +538,38 @@ test('waits for confirmed project membership and preserves the first setup error
   });
   const fixture = await mockWorkspace(page, { projectsReady, failFirst: true });
   await expect(page.getByRole('region', { name: 'Project', exact: true }).getByRole('status')).toBeVisible();
-  await expect(page.getByLabel('Additional instructions (optional)')).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeDisabled();
+  await expect(page.getByLabel('Style prompt')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Add a style', exact: true })).toBeDisabled();
   expect(fixture.optionsAttempts()).toBe(0);
   releaseProjects();
   await expect(page.getByRole('radiogroup', { name: 'Dataset', exact: true }).getByRole('radio')).toBeChecked();
   await expect(page.getByText('Augmentation setup temporarily unavailable.', { exact: true })).toBeVisible();
   expect(fixture.optionsAttempts()).toBe(1);
   await page.getByRole('button', { name: 'Retry augmentation setup', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Add a style', exact: true })).toBeEnabled();
   expect(fixture.optionsAttempts()).toBe(2);
   expect(fixture.submitted).toEqual([]);
   expect(fixture.unexpected).toEqual([]);
 });
 
-test('retains edit instructions when inspections arrive and disables cached controls after project lookup failure', async ({
-  page,
-}) => {
+test('retains a style draft and blocks generation while project membership cannot be refreshed', async ({ page }) => {
   let releaseJobs!: () => void;
   const jobsReady = new Promise<void>((resolve) => {
     releaseJobs = resolve;
   });
   let failProjects = false;
   const fixture = await mockWorkspace(page, { jobsReady, failProjects: () => failProjects });
-  const prompt = page.getByLabel('Additional instructions (optional)');
-  await expect(prompt).toBeEnabled();
-  await prompt.fill('Preserve this lighting instruction.');
+  await expect(page.getByRole('button', { name: 'Add a style', exact: true })).toBeDisabled();
   releaseJobs();
-  await expect(page.getByRole('radiogroup', { name: 'Dataset', exact: true }).getByRole('radio')).toBeChecked();
-  await expect(prompt).toHaveValue('Preserve this lighting instruction.');
-  // The application retries projects on window focus. Expire the real query's
-  // five-second freshness; no provider/model request is allowed by the fixture.
+  await fillStyle(page, 'Preserve this lighting instruction.');
+  const prompt = page.getByLabel('Style prompt');
   await page.waitForTimeout(5100);
   failProjects = true;
   await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
-  await expect(page.getByText('Projects temporarily unavailable.', { exact: true })).toBeVisible();
   await expect(prompt).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Generate style', exact: true })).toBeDisabled();
   failProjects = false;
-  await page.getByRole('button', { name: 'Retry projects', exact: true }).click();
+  await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
   await expect(prompt).toBeEnabled();
   await expect(prompt).toHaveValue('Preserve this lighting instruction.');
   expect(fixture.submitted).toEqual([]);
@@ -525,7 +592,7 @@ test('episode quick picks enforce the clip limit and keep manual selection in sy
   await numbers.fill('6, 10');
   await expect(episode(6)).toHaveAttribute('aria-pressed', 'true');
   await expect(episode(0)).toHaveAttribute('aria-pressed', 'false');
-  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
+  await generateStyle(page);
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0].episode_indices).toEqual([6, 10]);
   expect(unexpected).toEqual([]);
@@ -584,7 +651,7 @@ test('dataset handoff only offers supported video sources and preserves the sele
     page.getByRole('radiogroup', { name: 'Dataset', exact: true }).getByRole('radio', { name: /^fixture\/second,/ }),
   ).toBeChecked();
   expect(submitted).toEqual([]);
-  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
+  await generateStyle(page);
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0].source_job_id).toBe('second-video');
   expect(unexpected).toEqual([]);
@@ -594,14 +661,14 @@ test('lost augmentation acknowledgement recovers its original job by saved key a
   page,
 }) => {
   const fixture = await mockWorkspace(page, { submissionMode: 'lost-ack', complete: true });
-  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
+  await generateStyle(page);
   const recovery = page.getByRole('complementary', { name: 'Request recovery' });
   await expect(recovery.getByRole('button', { name: 'Check saved request' })).toBeEnabled();
   expect(fixture.submitted).toHaveLength(1);
   expect(fixture.keys[0]).toMatch(/^[a-f0-9-]{36}$/);
   await page.reload();
   await page.getByRole('link', { name: 'Augmentation', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /Add one more/ })).toBeDisabled();
   await recovery.getByRole('button', { name: 'Check saved request' }).click();
   await expect(recovery).toHaveCount(0);
   await expect(page.getByLabel('Augmented episode 0', { exact: true })).toBeVisible();
@@ -614,14 +681,14 @@ test('a missing binding keeps new augmentation blocked and explicit retry preser
   page,
 }) => {
   const fixture = await mockWorkspace(page, { submissionMode: 'lost-before-commit', complete: true });
-  await page.getByLabel('Additional instructions (optional)').fill('Original saved lighting');
-  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
+  await fillStyle(page, 'Original saved lighting');
+  await generateStyle(page);
   const recovery = page.getByRole('complementary', { name: 'Request recovery' });
   await expect(recovery.getByRole('button', { name: 'Check saved request' })).toBeEnabled();
-  await page.getByLabel('Additional instructions (optional)').fill('Edited form must not replace saved request');
+  await fillStyle(page, 'Edited form must not replace saved request');
   await recovery.getByRole('button', { name: 'Check saved request' }).click();
   await expect(recovery.getByRole('button', { name: 'Retry same request' })).toBeEnabled();
-  await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Generate style', exact: true })).toBeDisabled();
   expect(fixture.submitted).toHaveLength(1);
   await recovery.getByRole('button', { name: 'Retry same request' }).click();
   await expect(recovery).toHaveCount(0);
@@ -633,10 +700,10 @@ test('a missing binding keeps new augmentation blocked and explicit retry preser
 
 test('an older server cannot receive an unprotected augmentation POST', async ({ page }) => {
   const fixture = await mockWorkspace(page, { submissionMode: 'unsupported' });
-  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
+  await generateStyle(page);
   const recovery = page.getByRole('complementary', { name: 'Request recovery' });
   await expect(recovery).toContainText('did not verify durable submission support');
-  await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Generate style', exact: true })).toBeDisabled();
   await expect(recovery.getByRole('button', { name: 'Retry same request' })).toHaveCount(0);
   expect(fixture.submitted).toEqual([]);
 });
@@ -645,10 +712,10 @@ test('a wrong-project augmentation acknowledgement remains unresolved until scop
   page,
 }) => {
   const fixture = await mockWorkspace(page, { submissionMode: 'wrong-ack' });
-  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
+  await generateStyle(page);
   const recovery = page.getByRole('complementary', { name: 'Request recovery' });
   await expect(recovery.getByRole('button', { name: 'Check saved request' })).toBeEnabled();
-  await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Generate style', exact: true })).toBeDisabled();
   await recovery.getByRole('button', { name: 'Check saved request' }).click();
   await expect(recovery).toHaveCount(0);
   expect(fixture.submitted).toHaveLength(1);
@@ -656,11 +723,12 @@ test('a wrong-project augmentation acknowledgement remains unresolved until scop
 
 test('definitive initial recipe rejection allows correction with a new key', async ({ page }) => {
   const fixture = await mockWorkspace(page, { submissionMode: 'rejected' });
-  const submit = page.getByRole('button', { name: 'Generate augmented clips', exact: true });
+  await fillStyle(page, 'Use soft light.');
+  const submit = page.getByRole('button', { name: 'Generate style', exact: true });
   await submit.click();
   await expect(page.getByText('Synthetic recipe rejection before admission.', { exact: true })).toBeVisible();
   await expect(submit).toBeEnabled();
-  await page.getByLabel('Additional instructions (optional)').fill('Corrected recipe');
+  await fillStyle(page, 'Corrected recipe');
   await submit.click();
   await expect.poll(() => fixture.submitted.length).toBe(2);
   expect(fixture.keys[1]).not.toBe(fixture.keys[0]);
@@ -669,12 +737,394 @@ test('definitive initial recipe rejection allows correction with a new key', asy
 
 test('late augmentation acknowledgement preserves a manually selected earlier result', async ({ page }) => {
   const state = await mockWorkspace(page, { submissionMode: 'delayed-ack', priorRuns: true, complete: true });
-  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
+  await generateStyle(page);
   await expect.poll(() => state.submitted.length).toBe(1);
+  await page.getByRole('button', { name: 'Close style dialog', exact: true }).click();
   await page.getByRole('button', { name: 'View run 1', exact: true }).click();
   await expect(page.getByLabel('Augmented episode 1', { exact: true })).toBeVisible();
   state.releaseAck();
   await expect(page.getByRole('complementary', { name: 'Request recovery' })).toHaveCount(0);
   await expect(page.getByLabel('Augmented episode 1', { exact: true })).toBeVisible();
   expect(state.submitted).toHaveLength(1);
+});
+
+test('style creation uses only the typed prompt with no preset choices or duplicate preview', async ({ page }) => {
+  const { submitted } = await mockWorkspace(page);
+  for (const name of ['Change lighting', 'Change textures', 'Custom edit'])
+    await expect(page.getByRole('radio', { name, exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('Style prompt')).toHaveCount(0);
+  await fillStyle(page, 'Make only the table metal. Keep the wall unchanged.');
+  await expect(page.getByRole('note', { name: 'Edit to send' })).toHaveCount(0);
+  await page.getByText('Generation details', { exact: true }).click();
+  await expect(
+    page.getByText('Preserve all unmentioned surfaces.\nMake only the table metal. Keep the wall unchanged.', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(submitted).toEqual([]);
+});
+
+test('another variation reuses the selected input clip and waits for an explicit generation', async ({ page }) => {
+  const { submitted, unexpected } = await mockWorkspace(page, { complete: true });
+  await page.getByLabel('Episode numbers', { exact: true }).fill('1, 3');
+  await page.getByLabel('Start at (seconds)').fill('1.5');
+  await page.getByLabel('Clip length (seconds)').fill('4');
+  await fillStyle(page, 'Make only the table metal.');
+  await generateStyle(page);
+  await page.getByRole('button', { name: 'Preview episode 3', exact: true }).click();
+  await page.getByRole('button', { name: 'New variation from original', exact: true }).click();
+  await expect(page.getByLabel('Selected source video')).toHaveAttribute(
+    'src',
+    /augmentation-1\/augmentation\/clips\/1\?original=true$/,
+  );
+  await expect(page.getByLabel('Style prompt')).toHaveValue('');
+  await fillStyle(page, 'Make only the table metal.');
+  await expect(page.getByRole('dialog').getByLabel('Episode numbers', { exact: true })).toHaveCount(0);
+  expect(submitted).toHaveLength(1);
+  await noOverflow(page);
+  await generateStyle(page);
+  await expect.poll(() => submitted.length).toBe(2);
+  expect(submitted[1]).toEqual({
+    ...submitted[0],
+    episode_indices: [3],
+    source_clip: { job_id: 'augmentation-1', clip_index: 1, variant: 'original' },
+  });
+  await expect(page.getByLabel('Original episode 3', { exact: true })).toBeVisible();
+  await expect(page.getByText('Another variation from', { exact: false }).last()).toBeVisible();
+  await page.getByRole('button', { name: 'Run 1', exact: true }).click();
+  // Returning to an earlier run keeps that episode's experiment selected.
+  await expect(page.getByLabel('Original episode 3', { exact: true })).toBeVisible();
+  expect(unexpected).toEqual([]);
+});
+
+test('refinement starts from the augmented result and retains its source in history', async ({ page }) => {
+  const { submitted, unexpected } = await mockWorkspace(page, { complete: true, priorRuns: true });
+  await page.getByRole('button', { name: 'Refine this result', exact: true }).click();
+  await expect(page.getByLabel('Selected source video')).toHaveAttribute(
+    'src',
+    /previous-2\/augmentation\/clips\/0\?original=false$/,
+  );
+  await expect(page.getByRole('dialog', { name: 'Refine style', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Style prompt', { exact: true })).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Generate style', exact: true })).toBeDisabled();
+  expect(submitted).toEqual([]);
+  await fillStyle(page, 'Make only the tabletop brushed steel.');
+  await noOverflow(page);
+  await generateStyle(page);
+  await expect.poll(() => submitted.length).toBe(1);
+  expect(submitted[0]).toMatchObject({
+    source_job_id: 'inspected-video',
+    episode_indices: [2],
+    camera_key: camera,
+    preset: 'custom',
+    prompt: 'Make only the tabletop brushed steel.',
+    source_clip: { job_id: 'previous-2', clip_index: 0, variant: 'augmented' },
+  });
+  await expect(page.getByLabel('Original episode 2', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Run 2', exact: true })).toBeVisible();
+  await noOverflow(page);
+  await page.getByText('Choose preview clips', { exact: true }).click();
+  await expect(page.getByLabel('Selected source video')).toHaveCount(0);
+  await expect(page.getByLabel('Episode numbers', { exact: true })).toHaveValue('2');
+  expect(submitted).toHaveLength(1);
+  expect(unexpected).toEqual([]);
+});
+
+test('keeps the original and all variants together when generating or changing run history', async ({
+  page,
+}, testInfo) => {
+  const fixture = await mockWorkspace(page, { complete: true });
+  await fillStyle(page, 'Make the table oak.');
+  await generateStyle(page);
+  await page.getByRole('button', { name: 'New variation from original', exact: true }).click();
+  await fillStyle(page, 'Make only the table metal.');
+  await generateStyle(page);
+  const gallery = page.getByRole('region', { name: 'Episode experiments', exact: true });
+  await expect(gallery.locator('video')).toHaveCount(3);
+  await expect(gallery.getByLabel('Original episode 0', { exact: true })).toHaveAttribute(
+    'src',
+    /augmentation-1.*original=true/,
+  );
+  await expect(gallery.getByLabel('Run 1 episode 0', { exact: true })).toHaveAttribute(
+    'src',
+    /augmentation-1.*original=false/,
+  );
+  await expect(gallery.getByLabel('Augmented episode 0', { exact: true })).toHaveAttribute(
+    'src',
+    /augmentation-2.*original=false/,
+  );
+  await page.getByRole('button', { name: 'View run 1', exact: true }).click();
+  await expect(gallery.locator('video')).toHaveCount(3);
+  await page.reload();
+  await expect(page.getByRole('region', { name: 'Episode experiments' }).locator('video')).toHaveCount(3);
+  await expect(page.getByRole('button', { name: 'Play all', exact: true })).toBeVisible();
+  await noOverflow(page);
+  expect(fixture.submitted).toHaveLength(2);
+  expect(fixture.unexpected).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath('all-three-variants.png'), fullPage: true });
+});
+
+test('plans full episodes for chosen cameras and requires explicit generation after review', async ({ page }) => {
+  const fixture = await mockWorkspace(page, { complete: true });
+  await fillStyle(page, 'Make the table metal.');
+  await generateStyle(page);
+  await page.getByRole('button', { name: 'Apply to full dataset', exact: true }).click();
+  const form = page.getByRole('region', { name: 'Apply augmentation to dataset', exact: true });
+  await expect(form.getByRole('checkbox', { name: 'front', exact: true })).toBeChecked();
+  await expect(form.getByRole('checkbox', { name: 'side', exact: true })).not.toBeChecked();
+  await expect(form.getByRole('checkbox', { name: 'wrist', exact: true })).toHaveCount(0);
+  await form.getByRole('checkbox', { name: 'side', exact: true }).check();
+  await form.getByRole('button', { name: 'Review dataset plan', exact: true }).click();
+  await expect(form).toContainText('12 full episodes · 2 cameras');
+  await expect(form).toContainText('24 generation requests');
+  expect(fixture.submitted).toHaveLength(1);
+  expect(fixture.plans[0]).toMatchObject({
+    episode_indices: [],
+    dataset_scope: { camera_keys: [camera, 'observation.images.side'], recipe_job_id: 'augmentation-1' },
+  });
+  await form.getByRole('checkbox', { name: 'front', exact: true }).uncheck();
+  await expect(form.getByRole('button', { name: 'Generate full-dataset augmentation', exact: true })).toHaveCount(0);
+  await form.getByRole('button', { name: 'Review dataset plan', exact: true }).click();
+  await expect(form).toContainText('12 generation requests');
+  await noOverflow(page);
+  await form.getByRole('button', { name: 'Generate full-dataset augmentation', exact: true }).click();
+  await expect.poll(() => fixture.submitted.length).toBe(2);
+  expect(fixture.submitted[1]).toMatchObject({
+    source_job_id: 'inspected-video',
+    episode_indices: [],
+    camera_key: 'observation.images.side',
+    start_seconds: 0,
+    dataset_scope: {
+      recipe_job_id: 'augmentation-1',
+      camera_keys: ['observation.images.side'],
+      plan_sha256: 'f'.repeat(64),
+    },
+  });
+  expect(fixture.unexpected).toEqual([]);
+});
+
+test('collapses variant prompts and adds a fresh style from the same original clip', async ({ page }) => {
+  const fixture = await mockWorkspace(page, { complete: true });
+  await page.getByLabel('Episode numbers', { exact: true }).fill('1, 3');
+  await fillStyle(page, 'Make only the table metal.');
+  await generateStyle(page);
+  await page.getByRole('button', { name: 'Preview episode 3', exact: true }).click();
+  const gallery = page.getByRole('region', { name: 'Episode experiments', exact: true });
+  const card = gallery.getByRole('article', { name: 'Run 1 video', exact: true });
+  await expect(card.getByText('Make only the table metal.', { exact: true })).not.toBeVisible();
+  await card.getByText('Prompt used', { exact: true }).click();
+  await expect(card.getByText('Make only the table metal.', { exact: true })).toBeVisible();
+  await card.getByText('Prompt used', { exact: true }).click();
+  await gallery.getByRole('button', { name: /Add one more/ }).click();
+  await expect(page.getByLabel('Style prompt', { exact: true })).toHaveValue('');
+  await expect(page.getByRole('dialog', { name: 'Add a style', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Selected source video')).toHaveAttribute(
+    'src',
+    /augmentation-1.*clips\/1\?original=true$/,
+  );
+  expect(fixture.submitted).toHaveLength(1);
+  await expect(page.getByRole('button', { name: 'Generate style', exact: true })).toBeDisabled();
+  await fillStyle(page, 'Change only the cup appearance.');
+  await generateStyle(page);
+  await expect.poll(() => fixture.submitted.length).toBe(2);
+  expect(fixture.submitted[1]).toMatchObject({
+    episode_indices: [3],
+    preset: 'custom',
+    prompt: 'Change only the cup appearance.',
+    source_clip: { job_id: 'augmentation-1', clip_index: 1, variant: 'original' },
+  });
+  await expect(gallery.locator('video')).toHaveCount(3);
+  await noOverflow(page);
+  expect(fixture.unexpected).toEqual([]);
+});
+
+test('add one more opens in place, makes the background inert and returns focus without submitting on dismissal', async ({
+  page,
+}, testInfo) => {
+  const fixture = await mockWorkspace(page, { complete: true, priorRuns: true });
+  const gallery = page.getByRole('region', { name: 'Episode experiments', exact: true });
+  const add = gallery.getByRole('button', { name: /Add one more/ });
+  await expect(page.getByLabel('Episode numbers', { exact: true })).not.toBeVisible();
+  await add.scrollIntoViewIfNeeded();
+  const before = await page.evaluate(() => window.scrollY);
+  await add.click();
+  const dialog = page.getByRole('dialog', { name: 'Add a style', exact: true });
+  await expect(dialog.getByLabel('Style prompt')).toBeFocused();
+  await expect(dialog.getByLabel('Selected source video')).toHaveAttribute('src', /previous-2.*original=true$/);
+  expect(Math.abs((await page.evaluate(() => window.scrollY)) - before)).toBeLessThan(5);
+  for (let i = 0; i < 12; i++) {
+    await page.keyboard.press('Tab');
+    // Native modal dialogs may move focus into browser chrome, but never into the background page.
+    expect(
+      await dialog.evaluate(
+        (node) =>
+          node.matches(':modal') && (document.activeElement === document.body || node.contains(document.activeElement)),
+      ),
+    ).toBe(true);
+  }
+  await dialog.getByLabel('Style prompt').fill('A draft that must not be submitted.');
+  await page.keyboard.press('Escape');
+  await expect(dialog).not.toBeVisible();
+  await expect(add).toBeFocused();
+  expect(Math.abs((await page.evaluate(() => window.scrollY)) - before)).toBeLessThan(5);
+  await add.click();
+  await expect(dialog.getByLabel('Style prompt')).toHaveValue('');
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(add).toBeFocused();
+  await add.click();
+  await page.mouse.click(2, 2);
+  await expect(dialog).not.toBeVisible();
+  expect(fixture.submitted).toEqual([]);
+  expect(fixture.unexpected).toEqual([]);
+  await add.click();
+  await page.screenshot({ path: testInfo.outputPath('style-dialog.png') });
+});
+
+test('shared playback holds visible final frames, replays and seeks clips of different lengths without feedback', async ({
+  page,
+}, testInfo) => {
+  function media(duration: number, name: string) {
+    const path = testInfo.outputPath(name + '.mp4');
+    execFileSync('ffmpeg', [
+      '-v',
+      'error',
+      '-y',
+      '-f',
+      'lavfi',
+      '-i',
+      'color=c=red:s=96x64:r=30:d=' + duration,
+      '-vf',
+      "drawbox=color=blue:t=fill:enable='gte(t,0.7)'",
+      '-an',
+      '-c:v',
+      'libx264',
+      '-threads',
+      '1',
+      '-pix_fmt',
+      'yuv420p',
+      '-movflags',
+      '+faststart',
+      path,
+    ]);
+    return readFileSync(path);
+  }
+  const fixture = await mockWorkspace(page, {
+    complete: true,
+    media: { original: media(1, 'original'), augmented: media(1.2, 'variant') },
+  });
+  await fillStyle(page, 'Change only the object color.');
+  await generateStyle(page);
+  const gallery = page.getByRole('region', { name: 'Episode experiments', exact: true });
+  await gallery.getByRole('button', { name: /Add one more/ }).click();
+  await fillStyle(page, 'Try a second color.');
+  await generateStyle(page);
+  const videos = gallery.locator('video');
+  await expect(videos).toHaveCount(3);
+  await expect
+    .poll(() =>
+      videos.evaluateAll((nodes) =>
+        nodes.every((node) => {
+          const v = node as HTMLVideoElement;
+          return v.readyState >= 2 && Number.isFinite(v.duration);
+        }),
+      ),
+    )
+    .toBe(true);
+  await videos.evaluateAll((nodes) =>
+    nodes.forEach((node) => {
+      const v = node as HTMLVideoElement;
+      v.dataset.seekCount = '0';
+      v.addEventListener('seeked', () => {
+        v.dataset.seekCount = String(Number(v.dataset.seekCount) + 1);
+      });
+    }),
+  );
+  async function expectFinalFrames() {
+    await expect
+      .poll(() =>
+        videos.evaluateAll((nodes) =>
+          nodes.map((node) => {
+            const v = node as HTMLVideoElement;
+            return v.paused && !v.seeking && v.currentTime >= v.duration - 0.1 && v.currentTime < v.duration
+              ? 'held'
+              : {
+                  time: v.currentTime,
+                  duration: v.duration,
+                  paused: v.paused,
+                  seeking: v.seeking,
+                  seeks: v.dataset.seekCount,
+                };
+          }),
+        ),
+      )
+      .toEqual(['held', 'held', 'held']);
+    const pixels = await videos.evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 1;
+        const context = canvas.getContext('2d')!;
+        context.drawImage(node as HTMLVideoElement, 0, 0, 1, 1);
+        return Array.from(context.getImageData(0, 0, 1, 1).data);
+      }),
+    );
+    for (const [red, green, blue] of pixels) {
+      expect(blue).toBeGreaterThan(200);
+      expect(red).toBeLessThan(30);
+      expect(green).toBeLessThan(30);
+    }
+  }
+  await gallery.getByRole('button', { name: 'Play all', exact: true }).click();
+  await expectFinalFrames();
+  const seekCounts = await videos.evaluateAll((nodes) =>
+    nodes.map((node) => Number((node as HTMLVideoElement).dataset.seekCount)),
+  );
+  for (const count of seekCounts) {
+    expect(count).toBeGreaterThan(0);
+    expect(count).toBeLessThanOrEqual(3);
+  }
+  await gallery.getByRole('button', { name: 'Play all', exact: true }).click();
+  await expect
+    .poll(() =>
+      videos.evaluateAll((nodes) =>
+        nodes.every((node) => {
+          const v = node as HTMLVideoElement;
+          return !v.paused && v.currentTime < 0.7;
+        }),
+      ),
+    )
+    .toBe(true);
+  await expectFinalFrames();
+  await gallery.getByRole('button', { name: 'Restart all', exact: true }).click();
+  await expect
+    .poll(() =>
+      videos.evaluateAll((nodes) =>
+        nodes.every((node) => {
+          const v = node as HTMLVideoElement;
+          return v.paused && !v.seeking && v.currentTime === 0;
+        }),
+      ),
+    )
+    .toBe(true);
+  await videos.first().evaluate((node) => {
+    (node as HTMLVideoElement).currentTime = 0.4;
+  });
+  await expect
+    .poll(() =>
+      videos.evaluateAll((nodes) =>
+        nodes.every((node) => {
+          const v = node as HTMLVideoElement;
+          return !v.seeking && Math.abs(v.currentTime - 0.4) < 0.02;
+        }),
+      ),
+    )
+    .toBe(true);
+  await videos.last().evaluate((node) => {
+    const v = node as HTMLVideoElement;
+    v.currentTime = v.duration;
+  });
+  await expectFinalFrames();
+  await page.screenshot({ path: testInfo.outputPath('final-frames.png') });
+  expect(fixture.submitted).toHaveLength(2);
+  expect(fixture.unexpected).toEqual([]);
 });

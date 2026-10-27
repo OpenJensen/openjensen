@@ -144,6 +144,7 @@ export type AugmentationJob = Job & {
   result?: AugmentationResult | null;
 };
 export type AugmentationOptions = components['schemas']['AugmentationOptions'];
+export type AugmentationPlan = components['schemas']['AugmentationPlan'];
 
 export function isAugmentationJob(job: Job): job is AugmentationJob {
   return (
@@ -291,6 +292,15 @@ export const api = {
   disconnectCloud: (provider: CloudProvider) =>
     request<CloudConnection>(`/cloud-connections/${provider}/disconnect`, { method: 'POST' }),
   augmentationOptions: () => request<AugmentationOptions>('/augmentation-options'),
+  augmentationPlan: (projectId: string, body: AugmentationRequest) =>
+    request<AugmentationPlan>(
+      `/projects/${encodeURIComponent(projectId)}/augmentations/plan`,
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+      },
+      310_000,
+    ),
   augment: (projectId: string, body: AugmentationRequest) =>
     request<Job>(`/projects/${encodeURIComponent(projectId)}/augmentations`, {
       method: 'POST',

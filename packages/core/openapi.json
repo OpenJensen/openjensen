@@ -308,6 +308,44 @@
         "title": "AugmentationClip",
         "type": "object"
       },
+      "AugmentationDatasetScope": {
+        "additionalProperties": false,
+        "properties": {
+          "camera_keys": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Camera Keys",
+            "type": "array"
+          },
+          "plan_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Sha256"
+          },
+          "recipe_job_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Recipe Job Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "recipe_job_id",
+          "camera_keys"
+        ],
+        "title": "AugmentationDatasetScope",
+        "type": "object"
+      },
       "AugmentationOptions": {
         "additionalProperties": false,
         "properties": {
@@ -362,6 +400,11 @@
             "title": "Model",
             "type": "string"
           },
+          "preservation_prompt": {
+            "default": "Edit only the scene attributes explicitly requested below. Preserve the exact robot geometry, joint articulation, gripper opening and closing, world-space trajectories, contact timing, action sequence, duration and frame order. Keep object positions and motion unchanged. Preserve camera viewpoint and object identity and shape unless the edit explicitly requests changing them. A requested camera-angle change must use one fixed camera for the entire clip and must not change the physical robot or object motion. A requested object replacement must preserve dimensions and contact surfaces at the grasp location, including the contact-to-contact span and gripper clearance. Keep all unmentioned surfaces, materials, colours, lighting and backgrounds unchanged. Maintain temporally consistent appearance. Do not retime motion, add or remove unrelated objects, or add text or audio. The requested edit follows:\n",
+            "title": "Preservation Prompt",
+            "type": "string"
+          },
           "presets": {
             "items": {
               "$ref": "#/components/schemas/AugmentationPreset"
@@ -385,6 +428,69 @@
           "configured"
         ],
         "title": "AugmentationOptions",
+        "type": "object"
+      },
+      "AugmentationPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "camera_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Camera Keys",
+            "type": "array"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "plan_sha256": {
+            "title": "Plan Sha256",
+            "type": "string"
+          },
+          "provider_requests": {
+            "title": "Provider Requests",
+            "type": "integer"
+          },
+          "recipe_prompts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Recipe Prompts",
+            "type": "array"
+          },
+          "total_clips": {
+            "title": "Total Clips",
+            "type": "integer"
+          },
+          "total_episodes": {
+            "title": "Total Episodes",
+            "type": "integer"
+          },
+          "total_source_seconds": {
+            "title": "Total Source Seconds",
+            "type": "number"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "total_episodes",
+          "camera_keys",
+          "total_source_seconds",
+          "total_clips",
+          "provider_requests",
+          "recipe_prompts",
+          "plan_sha256",
+          "model",
+          "warnings"
+        ],
+        "title": "AugmentationPlan",
         "type": "object"
       },
       "AugmentationPreset": {
@@ -425,6 +531,16 @@
             "title": "Camera Key",
             "type": "string"
           },
+          "dataset_scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AugmentationDatasetScope"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "duration_seconds": {
             "default": 5,
             "maximum": 10.0,
@@ -438,7 +554,7 @@
               "type": "integer"
             },
             "maxItems": 4,
-            "minItems": 1,
+            "minItems": 0,
             "title": "Episode Indices",
             "type": "array"
           },
@@ -463,6 +579,16 @@
             "maxLength": 2000,
             "title": "Prompt",
             "type": "string"
+          },
+          "source_clip": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AugmentationSourceClip"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "source_job_id": {
             "maxLength": 200,
@@ -502,10 +628,20 @@
             "items": {
               "$ref": "#/components/schemas/AugmentationClip"
             },
-            "maxItems": 4,
+            "maxItems": 1000,
             "minItems": 1,
             "title": "Clips",
             "type": "array"
+          },
+          "dataset_scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AugmentationDatasetScope"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "google_cloud_project": {
             "anyOf": [
@@ -538,6 +674,20 @@
             "title": "Prompt",
             "type": "string"
           },
+          "recipe_prompts": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipe Prompts"
+          },
           "repo_id": {
             "title": "Repo Id",
             "type": "string"
@@ -552,6 +702,16 @@
             "pattern": "^[a-f0-9]{40}$",
             "title": "Revision",
             "type": "string"
+          },
+          "source_clip": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AugmentationSourceClip"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "source_job_id": {
             "title": "Source Job Id",
@@ -575,6 +735,37 @@
           "warnings"
         ],
         "title": "AugmentationResult",
+        "type": "object"
+      },
+      "AugmentationSourceClip": {
+        "additionalProperties": false,
+        "properties": {
+          "clip_index": {
+            "minimum": 0.0,
+            "title": "Clip Index",
+            "type": "integer"
+          },
+          "job_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Job Id",
+            "type": "string"
+          },
+          "variant": {
+            "enum": [
+              "original",
+              "augmented"
+            ],
+            "title": "Variant",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "clip_index",
+          "variant"
+        ],
+        "title": "AugmentationSourceClip",
         "type": "object"
       },
       "CameraPreview": {
@@ -10388,6 +10579,55 @@
           }
         },
         "summary": "Augment Dataset"
+      }
+    },
+    "/api/v1/projects/{project_id}/augmentations/plan": {
+      "post": {
+        "operationId": "plan_augmentation_api_v1_projects__project_id__augmentations_plan_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AugmentationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AugmentationPlan"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Plan Augmentation"
       }
     },
     "/api/v1/projects/{project_id}/dataset-uploads": {
