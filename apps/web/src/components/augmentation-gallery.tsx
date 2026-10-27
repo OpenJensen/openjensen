@@ -10,6 +10,7 @@ export function AugmentationGallery({
   selectedRun,
   onReuse,
   onApply,
+  onAdd,
   disabled,
 }: {
   runs: AugmentationJob[];
@@ -17,6 +18,7 @@ export function AugmentationGallery({
   selectedRun?: AugmentationJob;
   onReuse: (job: AugmentationJob, index: number, variant: 'original' | 'augmented') => void;
   onApply: (job: AugmentationJob) => void;
+  onAdd: (job: AugmentationJob, index: number) => void;
   disabled: boolean;
 }) {
   const groups = augmentationGallery(runs, projectId);
@@ -181,9 +183,7 @@ export function AugmentationGallery({
                 src={url}
                 onSeeked={(event) => seek(event.currentTarget.currentTime, event.currentTarget)}
               />
-              <p className="augmentation-variant-description">
-                {original ? 'Unedited source clip' : job.request.prompt || 'Preset appearance edit'}
-              </p>
+              {original && <p className="augmentation-variant-description">Unedited source clip</p>}
               {!original && job.request.source_clip?.variant === 'augmented' && (
                 <p className="augmentation-hint">Refined from {label(job.request.source_clip.job_id)}</p>
               )}
@@ -221,12 +221,30 @@ export function AugmentationGallery({
               {!original && (
                 <details className="augmentation-provenance">
                   <summary>Prompt used</summary>
-                  <p className="augmentation-effective-prompt">{job.result?.prompt}</p>
+                  <p className="augmentation-variant-description">{job.request.prompt || 'Preset appearance edit'}</p>
+                  <details>
+                    <summary>Full generation instructions</summary>
+                    <p className="augmentation-effective-prompt">{job.result?.prompt}</p>
+                  </details>
                 </details>
               )}
             </article>
           );
         })}
+        <button
+          type="button"
+          className="augmentation-add-variant"
+          disabled={disabled || !group.original || !!group.original.job.request.dataset_scope}
+          onClick={() => {
+            if (group.original) onAdd(group.original.job, group.original.clip.index);
+          }}
+        >
+          <span className="augmentation-add-symbol" aria-hidden="true">
+            +
+          </span>
+          <strong>Add one more</strong>
+          <span>Try another style on this original clip</span>
+        </button>
       </div>
     </section>
   );

@@ -1062,3 +1062,50 @@
     padding: 16px;
   }
 }
+
+.augmentation-variant-grid {
+  align-items: start;
+}
+.augmentation-variant-actions {
+  margin-top: 14px;
+}
+.augmentation-add-variant {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  min-width: 0;
+  min-height: 260px;
+  gap: 10px;
+  padding: 24px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+  color: var(--muted);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+.augmentation-add-variant:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+.augmentation-add-variant:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.augmentation-add-symbol {
+  font-size: 32px;
+  line-height: 1;
+  font-weight: 300;
+}
+.augmentation-add-variant strong {
+  font-size: 14px;
+  font-weight: 550;
+}
+.augmentation-add-variant > span:last-child {
+  font-size: 12px;
+  line-height: 1.6;
+}

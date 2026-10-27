@@ -866,3 +866,38 @@ test('plans full episodes for chosen cameras and requires explicit generation af
   });
   expect(fixture.unexpected).toEqual([]);
 });
+
+test('collapses variant prompts and adds a fresh style from the same original clip', async ({ page }) => {
+  const fixture = await mockWorkspace(page, { complete: true });
+  await page.getByLabel('Episode numbers', { exact: true }).fill('1, 3');
+  await page.getByLabel('Edit instructions (optional)').fill('Make only the table metal.');
+  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
+  await page.getByRole('button', { name: 'Preview episode 3', exact: true }).click();
+  const gallery = page.getByRole('region', { name: 'Episode experiments', exact: true });
+  const card = gallery.getByRole('article', { name: 'Run 1 video', exact: true });
+  await expect(card.getByText('Make only the table metal.', { exact: true })).not.toBeVisible();
+  await card.getByText('Prompt used', { exact: true }).click();
+  await expect(card.getByText('Make only the table metal.', { exact: true })).toBeVisible();
+  await card.getByText('Prompt used', { exact: true }).click();
+  await gallery.getByRole('button', { name: /Add one more/ }).click();
+  await expect(page.getByLabel('Edit instructions', { exact: true })).toHaveValue('');
+  await expect(page.getByRole('radio', { name: 'Custom edit', exact: true })).toBeChecked();
+  await expect(page.getByLabel('Selected source video')).toHaveAttribute(
+    'src',
+    /augmentation-1.*clips\/1\?original=true$/,
+  );
+  expect(fixture.submitted).toHaveLength(1);
+  await expect(page.getByRole('button', { name: 'Generate augmented clips', exact: true })).toBeDisabled();
+  await page.getByLabel('Edit instructions', { exact: true }).fill('Change only the cup appearance.');
+  await page.getByRole('button', { name: 'Generate augmented clips', exact: true }).click();
+  await expect.poll(() => fixture.submitted.length).toBe(2);
+  expect(fixture.submitted[1]).toMatchObject({
+    episode_indices: [3],
+    preset: 'custom',
+    prompt: 'Change only the cup appearance.',
+    source_clip: { job_id: 'augmentation-1', clip_index: 1, variant: 'original' },
+  });
+  await expect(gallery.locator('video')).toHaveCount(3);
+  await noOverflow(page);
+  expect(fixture.unexpected).toEqual([]);
+});

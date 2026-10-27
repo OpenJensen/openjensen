@@ -845,6 +845,11 @@ export function AugmentationPanel({
         projectId={projectId}
         selectedRun={selectedRun}
         onReuse={reuseClip}
+        onAdd={(job, index) => {
+          reuseClip(job, index, 'original');
+          setPreset('custom');
+          setPrompt('');
+        }}
         disabled={!projectId || create.isPending || submission.busy || !!submission.attempt}
         onApply={(job) => {
           setApplyJob(job);

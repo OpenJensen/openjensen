@@ -754,3 +754,21 @@ def test_large_saved_output_is_reencoded_from_zero_before_upload(tmp_path, monke
         assert doubles.events[0][1] == b"smaller clip"
         assert path.read_bytes() == selected
         assert child["result"]["clips"][0]["source_start_seconds"] == 21
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        "Show the same action from a fixed camera ten degrees to the left.",
+        "Replace the cup with a blue canister with exactly the same width at the grasp point.",
+    ],
+)
+def test_explicit_camera_or_object_edits_keep_motion_and_grasp_constraints(edit):
+    request = AugmentationRequest(**request_body(preset="custom", prompt=edit))
+    prompt = request.resolved_prompt()
+    assert prompt.endswith("\n" + edit)
+    assert "unless the edit explicitly requests changing them" in prompt
+    assert "world-space trajectories" in prompt
+    assert "gripper opening and closing" in prompt
+    assert "contact-to-contact span and gripper clearance" in prompt
+    assert "Do not add or remove objects, introduce camera motion" not in prompt

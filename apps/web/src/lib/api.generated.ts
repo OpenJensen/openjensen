@@ -2088,7 +2088,7 @@ export interface components {
             model: string;
             /**
              * Preservation Prompt
-             * @default Edit this robotics dataset video by changing visual appearance only. Preserve the exact robot and object geometry, identities, positions, camera viewpoint, motion, contact events, action sequence, timing, duration and frame order. Keep the same scene throughout the clip with temporally consistent appearance. Do not add or remove objects, introduce camera motion, retime motion, crop the scene, or add text or audio. Change only what the edit explicitly requests. Keep all unmentioned surfaces, materials, colours, lighting and backgrounds unchanged. The requested appearance change follows:
+             * @default Edit only the scene attributes explicitly requested below. Preserve the exact robot geometry, joint articulation, gripper opening and closing, world-space trajectories, contact timing, action sequence, duration and frame order. Keep object positions and motion unchanged. Preserve camera viewpoint and object identity and shape unless the edit explicitly requests changing them. A requested camera-angle change must use one fixed camera for the entire clip and must not change the physical robot or object motion. A requested object replacement must preserve dimensions and contact surfaces at the grasp location, including the contact-to-contact span and gripper clearance. Keep all unmentioned surfaces, materials, colours, lighting and backgrounds unchanged. Maintain temporally consistent appearance. Do not retime motion, add or remove unrelated objects, or add text or audio. The requested edit follows:
              */
             preservation_prompt: string;
             /** Presets */
