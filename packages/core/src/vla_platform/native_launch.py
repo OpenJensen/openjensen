@@ -247,7 +247,17 @@ class Launcher:
         from vla_platform.update_runner import ACTIVE_PHASES
 
         try:
-            return read_private(self.root / "run/application-update.json")["phase"] in ACTIVE_PHASES
+            value = read_private(self.root / "run/application-update.json")
+            active = value["phase"] in ACTIVE_PHASES
+            # A container entrypoint also owns an updater orphaned by the replaced child.
+            pid = value.get("pid")
+            if os.getpid() == 1 and not active and isinstance(pid, int) and pid > 1:
+                if self.child is None or pid != self.child.pid:
+                    try:
+                        os.waitpid(pid, os.WNOHANG)
+                    except ChildProcessError:
+                        pass
+            return active
         except OSError, ValueError, KeyError:
             return False
 
@@ -289,7 +299,8 @@ class Launcher:
                 self.publish()
                 while not self.stopping:
                     self.handle_command()
-                    if self.child.poll() is not None and not self.updating():
+                    updating = self.updating()
+                    if self.child.poll() is not None and not updating:
                         return self.child.returncode
                     time.sleep(0.1)
                 return 0

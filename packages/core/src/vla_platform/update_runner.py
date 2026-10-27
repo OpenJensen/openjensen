@@ -96,7 +96,7 @@ def load_native_config(path):
         or root.stat().st_mode & 0o077
         or not (root / "current").is_symlink()
         or type(value["launcher_pid"]) is not int
-        or value["launcher_pid"] <= 1
+        or value["launcher_pid"] < 1
         or type(value["port"]) is not int
         or not 1 <= value["port"] <= 65535
         or not isinstance(value["session"], str)

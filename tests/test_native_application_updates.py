@@ -326,3 +326,35 @@ def test_normal_serve_exposes_updates_without_operator_setup(tmp_path, writable_
         process.wait(timeout=12)
         with socket.socket() as sock:
             assert sock.connect_ex(("127.0.0.1", port)) != 0
+
+
+def test_container_entrypoint_is_a_valid_launcher(ordinary_install, monkeypatch):
+    source, workspace, root, _, _, _ = ordinary_install
+    path = root / "run/container-launch.json"
+    config = json.loads((root / "run/native-launch.json").read_text())
+    config["launcher_pid"] = 1
+    update_runner.write_state(path, config)
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "getppid", lambda: 1)
+        patch.setattr(os, "kill", lambda *_: None)
+        assert native_launch.configuration(path, workspace, source)["launcher_pid"] == 1
+        config["launcher_pid"] = 0
+        update_runner.write_state(path, config)
+        with pytest.raises(ValueError):
+            native_launch.configuration(path, workspace, source)
+
+
+def test_container_launcher_reaps_only_its_finished_updater(tmp_path, monkeypatch):
+    launcher = object.__new__(native_launch.Launcher)
+    launcher.root = tmp_path
+    launcher.child = None
+    path = tmp_path / "run/application-update.json"
+    update_runner.write_state(path, {"phase": "building", "pid": 9876})
+    reaped = []
+    monkeypatch.setattr(os, "getpid", lambda: 1)
+    monkeypatch.setattr(os, "waitpid", lambda pid, flags: reaped.append((pid, flags)))
+    assert launcher.updating()
+    assert reaped == []
+    update_runner.write_state(path, {"phase": "complete", "pid": 9876})
+    assert not launcher.updating()
+    assert reaped == [(9876, os.WNOHANG)]
