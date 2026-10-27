@@ -360,7 +360,9 @@ test('Google Cloud opens a cancellable keyboard-accessible form without verifyin
   await expect(page.getByRole('region', { name: /Amazon|AWS/i })).toHaveCount(0);
   await expect(page.locator('.cloud-settings').getByText(/Amazon|AWS/i)).toHaveCount(0);
   await expect(page.locator('.cloud-settings').getByText('Connected', { exact: true })).toHaveCount(0);
-  await expect(page.locator('.cloud-provider-grid > .cloud-provider-card')).toHaveCount(1);
+  await expect(
+    page.locator('.cloud-provider-grid').getByRole('region', { name: 'Google Cloud', exact: true }),
+  ).toHaveCount(1);
   await expect(page.locator('.cloud-provider-grid').getByText('Firebird', { exact: true })).toHaveCount(0);
   const connect = gcp.getByRole('button', { name: 'Connect', exact: true });
   await connect.focus();

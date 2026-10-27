@@ -243,7 +243,6 @@ export function CloudConnectionsPanel() {
   );
   return (
     <div className="cloud-settings">
-      <h2>Google Cloud</h2>
       {providers.isPending && (
         <p className="cloud-loading" role="status">
           Loading providers…
@@ -270,12 +269,13 @@ export function CloudConnectionsPanel() {
               (disconnect.isPending && disconnect.variables === item.provider);
             const scope = item.config?.project_id;
             return (
-              <section className="cloud-provider-card" key={item.provider} aria-label={item.name}>
-                <div className="cloud-provider-top">
+              <section className="cloud-api-card" key={item.provider} aria-label={item.name}>
+                <header className="cloud-api-heading">
                   <ProviderMark provider={item.provider} />
-                  <h3>{item.name}</h3>
+                  <h2>{item.name}</h2>
                   <span className={`cloud-status cloud-status-${item.status}`}>{statusLabels[item.status]}</span>
-                </div>
+                </header>
+                <p className="cloud-api-description">Cloud GPU access for training and video augmentation.</p>
                 {item.config && (
                   <dl className="cloud-provider-details">
                     <div>
@@ -346,6 +346,7 @@ export function CloudConnectionsPanel() {
                     </time>
                   )}
                 </div>
+                <CloudGpuSettingsPanel />
               </section>
             );
           })}
@@ -360,7 +361,6 @@ export function CloudConnectionsPanel() {
           {notice}
         </p>
       )}
-      <CloudGpuSettingsPanel />
       {workers.length > 0 && (
         <section className="cloud-workers" aria-labelledby="cloud-workers-title">
           <div className="cloud-workers-heading">

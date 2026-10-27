@@ -6,6 +6,7 @@ import { api, type ApiConnection, type ApiConnections, type ApiProviderId } from
 import { CloudConnectionsPanel } from '@/components/cloud-connections';
 import { HuggingFaceSettingsPanel } from '@/components/hf-settings';
 import { useWorkspace } from '@/components/workspace-context';
+import { Icon } from '@/components/icon';
 import './cloud-connections.css';
 import './cloud-apis.css';
 
@@ -59,13 +60,18 @@ function ApiKeyPanel({ provider }: { provider: ApiProviderId }) {
   }
   return (
     <section className="cloud-api-card" aria-labelledby={`api-${provider}-title`}>
-      <header>
+      <header className="cloud-api-heading">
+        <span className="cloud-api-mark" aria-hidden="true">
+          <Icon name={provider === 'openai' ? 'robot' : 'spark'} size={20} />
+        </span>
         <h2 id={`api-${provider}-title`}>{name}</h2>
         <span className="cloud-status">
           {connections.isPending ? 'Loading…' : status?.configured ? 'Configured' : 'Not configured'}
         </span>
       </header>
-      <p>{provider === 'openai' ? 'API access for AI teleoperation.' : 'API access for video augmentation.'}</p>
+      <p className="cloud-api-description">
+        {provider === 'openai' ? 'API access for AI teleoperation.' : 'API access for video augmentation.'}
+      </p>
       {status?.configured && (
         <p className="cloud-auth-note">
           {status.source === 'environment'

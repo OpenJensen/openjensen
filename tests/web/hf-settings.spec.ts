@@ -103,14 +103,14 @@ async function settings(page: Page, reject = false) {
 
 test('HF token is optional, masked, cleared after save, and removable', async ({ page }) => {
   const { panel, requests } = await settings(page);
-  await expect(panel.getByText('Optional', { exact: true })).toBeVisible();
+  await expect(panel.getByText('Not configured', { exact: true })).toBeVisible();
   await expect(panel.getByText('For private or gated models.', { exact: true })).toBeVisible();
   const input = panel.getByLabel('Hugging Face access token');
   await expect(input).toHaveAttribute('type', 'password');
   await input.fill(fakeToken);
   await panel.getByRole('button', { name: 'Save token', exact: true }).click();
   await expect(input).toHaveValue('');
-  await expect(panel.getByText('Token saved', { exact: true })).toBeVisible();
+  await expect(panel.getByText('Configured', { exact: true })).toBeVisible();
   await expect(panel.getByText('robotic-user', { exact: true })).toBeVisible();
   await expect(panel.getByText('••••7890', { exact: true })).toBeVisible();
   await expect(panel).not.toContainText(fakeToken);
@@ -119,7 +119,7 @@ test('HF token is optional, masked, cleared after save, and removable', async ({
     await page.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } })),
   ).not.toContain(fakeToken);
   await panel.getByRole('button', { name: 'Remove token', exact: true }).click();
-  await expect(panel.getByText('Optional', { exact: true })).toBeVisible();
+  await expect(panel.getByText('Not configured', { exact: true })).toBeVisible();
   await expect(panel.getByText('Hugging Face token removed.', { exact: true })).toBeVisible();
   expect(requests[1]).toEqual({ method: 'DELETE', body: null });
 });
@@ -129,7 +129,7 @@ test('failed token verification shows a safe error without storing it', async ({
   await panel.getByLabel('Hugging Face access token').fill(fakeToken);
   await panel.getByRole('button', { name: 'Save token', exact: true }).click();
   await expect(panel.getByRole('alert')).toHaveText('Hugging Face rejected this token.');
-  await expect(panel.getByText('Optional', { exact: true })).toBeVisible();
+  await expect(panel.getByText('Not configured', { exact: true })).toBeVisible();
   await expect(panel).not.toContainText(fakeToken);
   expect(await page.evaluate(() => JSON.stringify({ ...localStorage }))).not.toContain(fakeToken);
 });
