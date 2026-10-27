@@ -169,3 +169,33 @@ test('unavailable browser storage keeps the workspace and update dialog usable',
   await expect(page.getByRole('heading', { name: 'Datasets', exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test('an available update replaces check with update even without legacy operator configuration', async ({ page }) => {
+  let writes = 0;
+  await page.route('**/api/v1/updates**', (route) => {
+    if (route.request().method() === 'POST') {
+      writes += 1;
+      return route.fulfill({
+        status: 409,
+        json: { detail: 'Restart this older installation with jensen serve, then retry.' },
+      });
+    }
+    return route.fulfill({
+      json: {
+        ...initial,
+        automatic_update: false,
+        setup_message: 'This installation uses the standard application launcher.',
+      },
+    });
+  });
+  await page.goto('/dashboard/');
+  await page.getByRole('button', { name: 'Version and updates' }).click();
+  const dialog = page.getByRole('dialog', { name: 'OpenJensen updates' });
+  await expect(dialog.getByRole('button', { name: 'Check for updates' })).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: 'Update & restart' })).toBeEnabled();
+  expect(writes).toBe(0);
+  await dialog.getByRole('button', { name: 'Update & restart' }).click();
+  await expect(dialog.getByRole('alert')).toContainText('Restart this older installation');
+  await expect(dialog.getByRole('button', { name: 'Update & restart' })).toBeEnabled();
+  expect(writes).toBe(1);
+});

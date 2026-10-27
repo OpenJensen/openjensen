@@ -219,7 +219,7 @@ export function ApplicationUpdates() {
                 : value?.message}
         </p>
         {!value?.automatic_update && <p>{value?.setup_message}</p>}
-        {available && value?.automatic_update && !busy && (
+        {available && !busy && (
           <p>Update this server for everyone using it? The workspace will be backed up and the server will restart.</p>
         )}
         {error && (
@@ -233,18 +233,20 @@ export function ApplicationUpdates() {
               Retry request
             </button>
           )}
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={busy || check.isFetching || refreshing}
-            onClick={() => void refresh()}
-          >
-            Check for updates
-          </button>
+          {!available && (
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={busy || check.isFetching || refreshing}
+              onClick={() => void refresh()}
+            >
+              Check for updates
+            </button>
+          )}
           <button type="button" className="secondary-button" onClick={() => setOpen(false)}>
             {busy ? 'Close' : 'Cancel'}
           </button>
-          {available && value?.automatic_update && (
+          {available && (
             <button type="button" className="primary-button" disabled={busy} onClick={() => void apply()}>
               {confirming ? 'Starting…' : busy ? 'Updating…' : 'Update & restart'}
             </button>

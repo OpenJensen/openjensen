@@ -76,9 +76,13 @@ def call(
 @app.command()
 def serve(port: Annotated[int, typer.Option(min=1, max=65535)] = 8000) -> None:
     """Start one loopback application owner. Remote hosting is not enabled yet."""
-    import uvicorn
+    from vla_platform.native_launch import child
+    from vla_platform.native_launch import serve as launch
 
-    uvicorn.run("vla_platform.api:create_app", factory=True, host="127.0.0.1", port=port, workers=1)
+    if os.environ.get("JENSEN_UPDATE_CONFIG"):
+        child(port)
+    else:
+        launch(port)
 
 
 @app.command()

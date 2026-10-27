@@ -17,6 +17,8 @@ import time
 from pathlib import Path
 from urllib.request import urlopen
 
+ACTIVE_PHASES = {"queued", "building", "backing_up", "validating", "restarting"}
+
 CANONICAL_REMOTES = {
     "https://github.com/OpenJensen/openjensen.git",
     "https://github.com/OpenJensen/openjensen",
@@ -27,6 +29,8 @@ CANONICAL_REMOTES = {
 
 def load_config(path):
     value = json.loads(Path(path).read_text())
+    if isinstance(value, dict) and value.get("kind") == "native":
+        return load_native_config(path)
     required = {
         "root",
         "repository",
@@ -55,6 +59,64 @@ def load_config(path):
     if type(value["port"]) is not int or not 1024 <= value["port"] <= 65535:
         raise ValueError("Invalid service port.")
     return value
+
+
+def load_native_config(path):
+    from vla_platform.native_launch import read_private
+
+    value = read_private(path)
+    required = {
+        "kind",
+        "root",
+        "workspace",
+        "repository",
+        "source",
+        "python",
+        "origin_source",
+        "origin_commit",
+        "origin_signature",
+        "port",
+        "launcher_pid",
+        "session",
+        "uv",
+        "pnpm",
+        "node_bin",
+    }
+    if set(value) != required or os.name != "posix":
+        raise ValueError("Invalid application launcher configuration.")
+    for key in ("root", "workspace", "repository", "source", "python", "origin_source"):
+        if not isinstance(value[key], str) or not Path(value[key]).is_absolute():
+            raise ValueError("Application paths must be absolute.")
+    root, workspace = Path(value["root"]), Path(value["workspace"])
+    if (
+        root.is_symlink()
+        or workspace.is_symlink()
+        or not workspace.is_dir()
+        or root.stat().st_uid != os.getuid()
+        or root.stat().st_mode & 0o077
+        or not (root / "current").is_symlink()
+        or type(value["launcher_pid"]) is not int
+        or value["launcher_pid"] <= 1
+        or type(value["port"]) is not int
+        or not 1 <= value["port"] <= 65535
+        or not isinstance(value["session"], str)
+        or not re.fullmatch(r"[0-9a-f]{32}", value["session"])
+    ):
+        raise ValueError("Invalid application launcher or workspace.")
+    if root == workspace or workspace in root.parents:
+        raise ValueError("The update cache must be outside the workspace.")
+    os.kill(value["launcher_pid"], 0)
+    return value
+
+
+def update_tools(config):
+    for name in ("uv", "pnpm", "node_bin"):
+        if not config.get(name) or not Path(config[name]).exists():
+            raise ValueError(
+                "The update needs "
+                + ("Node.js" if name == "node_bin" else name)
+                + " on this computer. Install the normal application prerequisites and retry."
+            )
 
 
 def write_state(path, value):
@@ -103,14 +165,31 @@ def git(config, *args):
 
 
 def verify_target(config, target, installed):
-    if not re.fullmatch(r"[0-9a-f]{40}", target) or not re.fullmatch(r"[0-9a-f]{40}", installed):
+    if (
+        not re.fullmatch(r"[0-9a-f]{40}", target)
+        or (installed and not re.fullmatch(r"[0-9a-f]{40}", installed))
+        or (not installed and config.get("kind") != "native")
+    ):
         raise ValueError("Invalid commit.")
+    if config.get("kind") == "native" and not Path(config["repository"]).exists():
+        run(
+            [
+                "git",
+                "clone",
+                "--bare",
+                "--filter=blob:none",
+                "https://github.com/OpenJensen/openjensen.git",
+                config["repository"],
+            ],
+            timeout=120,
+        )
     if git(config, "remote", "get-url", "origin") not in CANONICAL_REMOTES:
         raise ValueError("The update source must be OpenJensen/openjensen on GitHub.")
     git(config, "fetch", "--no-tags", "origin", "+refs/heads/main:refs/remotes/origin/main")
     if git(config, "rev-parse", "refs/remotes/origin/main") != target:
         raise ValueError("Upstream main changed. Check and confirm the new version.")
-    git(config, "merge-base", "--is-ancestor", installed, target)
+    if installed:
+        git(config, "merge-base", "--is-ancestor", installed, target)
     if installed == target:
         raise ValueError("This version is already installed.")
 
@@ -209,6 +288,10 @@ asyncio.run(main())
 
 
 def service(config, action):
+    if config.get("kind") == "native":
+        from vla_platform.native_launch import command
+
+        return command(config, action)
     args = [config["supervisorctl"], "-c", config["supervisor_config"]]
     try:
         run([*args, action, config["service"]], timeout=150)
@@ -282,17 +365,18 @@ def update(config, target, installed, operation):
         moved = False
         original_moved = False
         previous = (root / "current").resolve()
-        workspace = root / "data"
+        workspace = Path(config.get("workspace", root / "data"))
         private = root / "private/application-updates" / operation
         private.mkdir(mode=0o700, parents=True)
         try:
-            verify_target(config, target, installed)
+            update_tools(config)
             # Allow for a complete backup plus candidate and bounded application build output.
             data_bytes = sum(
                 p.stat().st_size for p in workspace.rglob("*") if p.is_file() and not p.is_symlink()
             )
             if shutil.disk_usage(root).free < 10 * 1024**3 + data_bytes * 2 + 4 * 1024**3:
                 raise ValueError("Insufficient disk space for a preserved backup and new release.")
+            verify_target(config, target, installed)
             release = prepare_release(config, target, operation)
             if (root / "current").resolve() != previous:
                 raise ValueError("The installed release changed during preparation.")
