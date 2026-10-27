@@ -169,6 +169,9 @@ def prepare_pr(api, pr, base_sha, base_version, force_ci=False):
 
 
 def prepare_all(api, event):
+    retargeted = event.get("action") == "edited" and "base" in event.get("changes", {})
+    if event.get("action") == "edited" and not retargeted:
+        return
     if (
         event.get("action") in {"labeled", "unlabeled"}
         and event.get("label", {}).get("name") != MANUAL
@@ -181,7 +184,11 @@ def prepare_all(api, event):
     for pr in api.pages("/pulls?state=open&base=main"):
         try:
             prepare_pr(
-                api, pr, base_sha, base_version, event.get("action") in {"labeled", "unlabeled"}
+                api,
+                pr,
+                base_sha,
+                base_version,
+                retargeted or event.get("action") in {"labeled", "unlabeled"},
             )
         except Exception as exc:
             failed.append(pr["number"])
@@ -190,7 +197,32 @@ def prepare_all(api, event):
         raise ValueError("Preparation needs attention for PRs: " + ", ".join(map(str, failed)))
 
 
+def version_at(api, sha):
+    value = api.request("GET", "/contents/pyproject.toml?ref=" + sha)
+    return tomllib.loads(base64.b64decode(value["content"]).decode())["project"]["version"]
+
+
+def merged_pulls(api, sha):
+    return [
+        pr
+        for pr in api.request("GET", f"/commits/{sha}/pulls")
+        if pr.get("merged_at") and pr["base"]["ref"] == "main" and pr["merge_commit_sha"] == sha
+    ]
+
+
 def check_ci(api, event, root):
+    if event.get("ref") == "refs/heads/main":
+        sha = event.get("after")
+        before = event.get("before")
+        if sha != os.environ.get("GITHUB_SHA"):
+            raise ValueError("Main CI must validate the checked-out push commit.")
+        if not re.fullmatch(r"[0-9a-f]{40}", before or "") or before == "0" * 40:
+            raise ValueError("Main push is missing its previous commit.")
+        merged = merged_pulls(api, sha)
+        # The push's before SHA is the previous main for merge, squash and rebase alike.
+        version = validate(load(root), version_at(api, before), any(manual(pr) for pr in merged))
+        print("Validated main version " + version)
+        return
     pr = event.get("pull_request")
     if pr is None:
         number = event.get("inputs", {}).get("version_pr", "")
@@ -205,14 +237,16 @@ def check_ci(api, event, root):
     if pr["base"]["ref"] != "main":
         print("Automatic patch versions apply only to PRs targeting main.")
         return
-    # Drafts must also validate: a green draft check must not survive ready-for-review
-    # with an unprepared version. Preparation starts when the author marks it ready.
-    # Read the base snapshot; no fork files or artifacts are executed.
-    base_file = api.request("GET", "/contents/pyproject.toml?ref=" + pr["base"]["sha"])
-    base_version = tomllib.loads(base64.b64decode(base_file["content"]).decode())["project"][
-        "version"
-    ]
-    version = validate(load(root), base_version, manual(pr))
+    # Validate against live main, not an older base embedded in an event payload.
+    base_sha = api.main()
+    if pr["base"]["sha"] != base_sha:
+        raise ValueError("Main advanced after this PR event; refresh the branch and rerun CI.")
+    comparison = api.request("GET", f"/compare/{base_sha}...{pr['head']['sha']}")
+    if comparison["behind_by"]:
+        raise ValueError("PR is behind main; refresh the branch before validating its version.")
+    version = validate(load(root), version_at(api, base_sha), manual(pr))
+    if api.main() != base_sha:
+        raise ValueError("Main advanced during version validation; rerun CI.")
     print("Validated PR version " + version)
 
 
@@ -230,12 +264,7 @@ def publish(api, run_id):
     relation = api.request("GET", f"/compare/{sha}...{api.main()}")
     if relation["behind_by"]:
         raise ValueError("Release commit is no longer on main.")
-    prs = api.request("GET", f"/commits/{sha}/pulls")
-    merged = [
-        pr
-        for pr in prs
-        if pr.get("merged_at") and pr["base"]["ref"] == "main" and pr["merge_commit_sha"] == sha
-    ]
+    merged = merged_pulls(api, sha)
     if not merged:
         print("Main push is not a merged PR; no automatic release.")
         return

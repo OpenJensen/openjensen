@@ -86,6 +86,7 @@ class FakeGitHub:
         self.base = "base"
         self.behind = 0
         self.values = versions.rewrite(versions.load(ROOT), "0.1.1")
+        self.base_values = dict(self.values)
         self.calls = []
         self.dispatched = []
         self.writes = []
@@ -105,8 +106,14 @@ class FakeGitHub:
     def main(self):
         return self.base
 
+    def pages(self, path):
+        assert path == "/pulls?state=open&base=main"
+        return [copy.deepcopy(self.pr)]
+
     def contents(self, sha):
-        return {"tree": {"sha": "tree"}}, dict(self.values)
+        return {"tree": {"sha": "tree"}}, dict(
+            self.base_values if sha == self.base else self.values
+        )
 
     def write_versions(self, pull, commit, before, after):
         if before == after:
@@ -132,7 +139,7 @@ class FakeGitHub:
             return {"check_runs": self.checks}
         if path.startswith("/actions/runs/"):
             return self.run
-        if path == "/commits/merged/pulls":
+        if path == f"/commits/{self.run['head_sha']}/pulls":
             return [self.pr] if self.merged else []
         if path.startswith("/contents/pyproject.toml"):
             return {"content": base64.b64encode(b'[project]\nversion = "0.1.1"').decode()}
@@ -288,7 +295,9 @@ def test_version_gate_pins_python_instead_of_relying_on_the_runner_system():
     workflow = yaml.safe_load((ROOT / ".github/workflows/application.yml").read_text())
     steps = workflow["jobs"]["scope"]["steps"]
     gate = next(
-        i for i, step in enumerate(steps) if step.get("name") == "Validate the PR patch version"
+        i
+        for i, step in enumerate(steps)
+        if step.get("name") == "Validate the application patch version"
     )
     assert any(
         step.get("uses") == "actions/setup-python@v6" and step["with"]["python-version"] == "3.14.7"
@@ -311,3 +320,105 @@ def test_prs_targeting_other_branches_do_not_require_a_main_patch():
     api.pr["base"]["ref"] = "feature"
     release.check_ci(api, {"pull_request": api.pr}, ROOT)
     assert not api.calls
+
+
+@pytest.mark.parametrize("before,after", [("0.1.2", "0.1.3"), ("0.1.3", "0.1.4")])
+def test_main_push_validates_the_increment_from_previous_main(monkeypatch, before, after):
+    api = FakeGitHub()
+    api.run["head_sha"] = "b" * 40
+    api.pr["merge_commit_sha"] = api.run["head_sha"]
+    values = versions.rewrite(api.values, after)
+    monkeypatch.setattr(release, "load", lambda root: values)
+    monkeypatch.setattr(
+        release,
+        "version_at",
+        lambda client, sha: before if sha == "a" * 40 else pytest.fail("wrong base"),
+    )
+    monkeypatch.setenv("GITHUB_SHA", api.run["head_sha"])
+    # Rebase can have several feature commits before its tip; event.before stays the prior main.
+    event = {"ref": "refs/heads/main", "before": "a" * 40, "after": api.run["head_sha"]}
+    release.check_ci(api, event, ROOT)
+    monkeypatch.setattr(release, "load", lambda root: versions.rewrite(values, before))
+    with pytest.raises(ValueError, match="Expected patch"):
+        release.check_ci(api, event, ROOT)
+
+
+def test_pr_event_with_an_old_main_snapshot_cannot_validate(monkeypatch):
+    api = FakeGitHub()
+    api.base = "new-main"
+    monkeypatch.setattr(release, "load", lambda root: versions.rewrite(api.values, "0.1.2"))
+    with pytest.raises(ValueError, match="Main advanced"):
+        release.check_ci(api, {"pull_request": api.pr}, ROOT)
+
+
+def test_pr_behind_main_cannot_validate_even_with_the_right_number(monkeypatch):
+    api = FakeGitHub()
+    api.behind = 1
+    monkeypatch.setattr(release, "load", lambda root: versions.rewrite(api.values, "0.1.2"))
+    with pytest.raises(ValueError, match="behind main"):
+        release.check_ci(api, {"pull_request": api.pr}, ROOT)
+
+
+def test_retarget_to_main_refreshes_ci_even_if_the_version_is_prepared():
+    api = FakeGitHub()
+    api.values = versions.rewrite(api.values, "0.1.2")
+    api.checks = [{"name": "application-verification"}]
+    release.prepare_all(
+        api, {"action": "edited", "changes": {"base": {"ref": {"from": "feature"}}}}
+    )
+    assert not api.writes
+    assert api.dispatched == ["head"]
+    api.calls.clear()
+    api.dispatched.clear()
+    release.prepare_all(api, {"action": "edited", "changes": {"title": {"from": "old title"}}})
+    assert not api.calls and not api.dispatched
+
+
+def test_main_gate_requires_the_exact_push_and_previous_main(monkeypatch):
+    api = FakeGitHub()
+    event = {"ref": "refs/heads/main", "before": "a" * 40, "after": "b" * 40}
+    monkeypatch.setenv("GITHUB_SHA", "c" * 40)
+    with pytest.raises(ValueError, match="checked-out"):
+        release.check_ci(api, event, ROOT)
+    monkeypatch.setenv("GITHUB_SHA", "b" * 40)
+    event["before"] = "0" * 40
+    with pytest.raises(ValueError, match="previous commit"):
+        release.check_ci(api, event, ROOT)
+
+
+def test_workflows_cover_retargets_and_main_push_version_validation():
+    import yaml
+
+    prepare = yaml.safe_load((ROOT / ".github/workflows/patch-versions.yml").read_text())
+    assert "edited" in prepare[True]["pull_request_target"]["types"]
+    application = yaml.safe_load((ROOT / ".github/workflows/application.yml").read_text())
+    steps = application["jobs"]["scope"]["steps"]
+    gate = next(
+        step for step in steps if step.get("name") == "Validate the application patch version"
+    )
+    setup = next(step for step in steps if step.get("uses") == "actions/setup-python@v6")
+    assert gate["if"] == setup["if"]
+    assert "github.event_name == 'push'" in gate["if"] and "refs/heads/main" in gate["if"]
+
+
+def test_main_advance_while_the_version_is_checked_rejects_the_run(monkeypatch):
+    api = FakeGitHub()
+    reads = iter(["base", "next-base"])
+    monkeypatch.setattr(api, "main", lambda: next(reads))
+    monkeypatch.setattr(release, "load", lambda root: versions.rewrite(api.values, "0.1.2"))
+    with pytest.raises(ValueError, match="during version validation"):
+        release.check_ci(api, {"pull_request": api.pr}, ROOT)
+
+
+def test_main_version_gate_does_not_depend_on_merged_pr_metadata(monkeypatch):
+    api = FakeGitHub()
+    api.merged = False
+    api.run["head_sha"] = "b" * 40
+    monkeypatch.setenv("GITHUB_SHA", api.run["head_sha"])
+    monkeypatch.setattr(release, "version_at", lambda client, sha: "0.1.3")
+    event = {"ref": "refs/heads/main", "before": "a" * 40, "after": api.run["head_sha"]}
+    monkeypatch.setattr(release, "load", lambda root: versions.rewrite(api.values, "0.1.3"))
+    with pytest.raises(ValueError, match="Expected patch"):
+        release.check_ci(api, event, ROOT)
+    monkeypatch.setattr(release, "load", lambda root: versions.rewrite(api.values, "0.1.4"))
+    release.check_ci(api, event, ROOT)
