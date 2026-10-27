@@ -141,9 +141,11 @@ def test_source_archive_updates_and_recovers_without_supervisor_or_source_change
         b"old schema" if fails else b"new schema"
     )
     assert json.loads((source / ".openjensen-build.json").read_text())["commit"] == OLD
-    assert (
-        root / "private/application-updates" / operation / "backup/workspace.sqlite3"
-    ).read_bytes() == b"old schema"
+    snapshots = workspace.parent / (".openjensen-update-" + operation)
+    assert (snapshots / "backup/workspace.sqlite3").read_bytes() == b"old schema"
+    assert json.loads(
+        (root / "private/application-updates" / operation / "workspace-backup.json").read_text()
+    )["directory"] == str(snapshots)
     assert json.loads((root / "run/application-update.json").read_text())["phase"] == (
         "rolled_back" if fails else "complete"
     )

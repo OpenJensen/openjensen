@@ -366,16 +366,31 @@ def update(config, target, installed, operation):
         original_moved = False
         previous = (root / "current").resolve()
         workspace = Path(config.get("workspace", root / "data"))
-        private = root / "private/application-updates" / operation
-        private.mkdir(mode=0o700, parents=True)
+        record = root / "private/application-updates" / operation
+        private = (
+            workspace.parent / (".openjensen-update-" + operation)
+            if config.get("kind") == "native"
+            else record
+        )
         try:
             update_tools(config)
             # Allow for a complete backup plus candidate and bounded application build output.
             data_bytes = sum(
                 p.stat().st_size for p in workspace.rglob("*") if p.is_file() and not p.is_symlink()
             )
-            if shutil.disk_usage(root).free < 10 * 1024**3 + data_bytes * 2 + 4 * 1024**3:
+            build_bytes = 4 * 1024**3
+            backup_bytes = data_bytes * 2
+            same_disk = root.stat().st_dev == workspace.stat().st_dev
+            if shutil.disk_usage(root).free < 10 * 1024**3 + build_bytes + (
+                backup_bytes if same_disk else 0
+            ) or shutil.disk_usage(workspace).free < 10 * 1024**3 + backup_bytes + (
+                build_bytes if same_disk else 0
+            ):
                 raise ValueError("Insufficient disk space for a preserved backup and new release.")
+            private.mkdir(mode=0o700, parents=True)
+            if private != record:
+                record.mkdir(mode=0o700, parents=True)
+                write_state(record / "workspace-backup.json", {"directory": str(private)})
             verify_target(config, target, installed)
             release = prepare_release(config, target, operation)
             if (root / "current").resolve() != previous:
