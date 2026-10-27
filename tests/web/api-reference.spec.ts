@@ -1561,6 +1561,8 @@ test('dataset intake waits for a confirmed project and preserves its draft durin
     if (request.method() !== 'GET' || path.includes('/submissions/'))
       return route.fulfill({ status: 405, json: { detail: 'Unexpected request blocked by intake fixture.' } });
     if (path === '/api/v1/health') return route.fulfill({ json: { status: 'ok', version: 'intake-fixture' } });
+    if (path === '/api/v1/modules')
+      return route.fulfill({ json: installedModules.filter((item) => item.id === 'datasets') });
     return route.fulfill({ json: [] });
   });
   await page.goto('/datasets/');

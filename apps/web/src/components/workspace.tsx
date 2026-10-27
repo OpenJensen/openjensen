@@ -172,8 +172,8 @@ function Workbench({ children }: { children: ReactNode }) {
         )}
         {/* Retain intake drafts and pending uploads when another section opens. */}
         {moduleInstalled('datasets') && (datasetsVisited || activeStage === 'datasets') && <DatasetsSection />}
-        {/* A compute-settings detour retains the exact unfinished training recipe. */}
-        {moduleInstalled('training') && (activeStage === 'training' || activeStage === 'settings') && (
+        {/* Configuration detours retain the exact unfinished training recipe. */}
+        {moduleInstalled('training') && ['training', 'settings', 'cloud-apis', 'modules'].includes(activeStage) && (
           <TrainingSection />
         )}
         {(!isModule(activeStage) || moduleInstalled(activeStage)) &&
