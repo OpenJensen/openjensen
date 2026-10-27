@@ -25,6 +25,8 @@ export function AugmentationGallery({
   const [selection, setSelection] = useState({ run: '', key: '' });
   const [playError, setPlayError] = useState('');
   const videos = useRef(new Map<string, HTMLVideoElement>());
+  const pendingSeeks = useRef(new WeakMap<HTMLVideoElement, number>());
+  const completed = useRef(new WeakSet<HTMLVideoElement>());
   const preferred = selectedRun?.result?.clips[0];
   const group =
     groups.find(
@@ -48,10 +50,32 @@ export function AugmentationGallery({
   function pause() {
     videos.current.forEach((video) => video.pause());
   }
+  function lastFrame(video: HTMLVideoElement) {
+    // Stay inside the final video frame instead of seeking beyond it to the media endpoint.
+    return Math.max(0, video.duration - 0.05);
+  }
+  function position(video: HTMLVideoElement, time: number) {
+    if (!video.readyState || !Number.isFinite(video.duration)) return;
+    const target = Math.max(0, Math.min(time, lastFrame(video)));
+    if (Math.abs(video.currentTime - target) < 0.005) return;
+    pendingSeeks.current.set(video, target);
+    video.currentTime = target;
+  }
   function seek(time: number, source?: HTMLVideoElement) {
     videos.current.forEach((video) => {
-      if (video !== source && video.readyState && Math.abs(video.currentTime - time) > 0.08) video.currentTime = time;
+      if (!video.readyState || !Number.isFinite(video.duration)) return;
+      const atEnd = time >= lastFrame(video);
+      if (atEnd) completed.current.add(video);
+      else completed.current.delete(video);
+      if (video !== source || atEnd) position(video, time);
     });
+  }
+  function onSeeked(video: HTMLVideoElement) {
+    const expected = pendingSeeks.current.get(video);
+    pendingSeeks.current.delete(video);
+    // A synchronized seek must not become another source seek and bounce around the grid.
+    if (expected !== undefined && Math.abs(video.currentTime - expected) < 0.08) return;
+    seek(video.currentTime, video);
   }
   const cards: { entry: GalleryEntry; original: boolean }[] = [
     ...(group.original ? [{ entry: group.original, original: true }] : []),
@@ -115,7 +139,9 @@ export function AugmentationGallery({
           onClick={async () => {
             setPlayError('');
             const reference = [...videos.current.values()][0];
-            seek(reference?.ended ? 0 : (reference?.currentTime ?? 0));
+            seek(
+              reference && (reference.ended || completed.current.has(reference)) ? 0 : (reference?.currentTime ?? 0),
+            );
             const results = await Promise.allSettled([...videos.current.values()].map((video) => video.play()));
             if (results.some((result) => result.status === 'rejected'))
               setPlayError('Some videos could not play. Use their individual controls or download links.');
@@ -181,7 +207,16 @@ export function AugmentationGallery({
                 preload="metadata"
                 aria-label={mediaLabel}
                 src={url}
-                onSeeked={(event) => seek(event.currentTarget.currentTime, event.currentTarget)}
+                onSeeked={(event) => onSeeked(event.currentTarget)}
+                onEnded={(event) => {
+                  const video = event.currentTarget;
+                  video.pause();
+                  completed.current.add(video);
+                  position(video, lastFrame(video));
+                }}
+                onPlay={(event) => {
+                  if (completed.current.has(event.currentTarget)) seek(0);
+                }}
               />
               {original && <p className="augmentation-variant-description">Unedited source clip</p>}
               {!original && job.request.source_clip?.variant === 'augmented' && (

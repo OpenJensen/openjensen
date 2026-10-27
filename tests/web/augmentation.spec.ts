@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { installedModules } from './module-fixtures';
@@ -77,6 +79,7 @@ async function mockWorkspace(
     failProjects?: () => boolean;
     submissionMode?: 'lost-ack' | 'lost-before-commit' | 'unsupported' | 'wrong-ack' | 'rejected' | 'delayed-ack';
     priorRuns?: boolean;
+    media?: { original: Buffer; augmented: Buffer };
   } = {},
 ) {
   let releaseAck!: () => void;
@@ -260,8 +263,23 @@ async function mockWorkspace(
         return;
       }
       if (/\/augmentation\/clips\/\d+$/.test(path)) {
-        // Empty media deliberately exercises the accessible fallback links.
-        await route.fulfill({ status: 200, contentType: 'video/mp4', body: '' });
+        // Real playback fixtures support byte ranges, as the clip download endpoint does.
+        const original = new URL(request.url()).searchParams.get('original') === 'true';
+        const media = config.media?.[original ? 'original' : 'augmented'];
+        const range = request.headers().range?.match(/^bytes=(\d+)-(\d*)$/);
+        const start = Number(range?.[1] ?? 0);
+        const end = Math.min(Number(range?.[2] || (media?.length ?? 1) - 1), (media?.length ?? 1) - 1);
+        await route.fulfill({
+          status: media && range ? 206 : 200,
+          contentType: 'video/mp4',
+          headers: media
+            ? {
+                'Accept-Ranges': 'bytes',
+                ...(range ? { 'Content-Range': 'bytes ' + start + '-' + end + '/' + media.length } : {}),
+              }
+            : {},
+          body: media ? media.subarray(start, end + 1) : '',
+        });
         return;
       }
     }
@@ -961,4 +979,152 @@ test('add one more opens in place, makes the background inert and returns focus 
   expect(fixture.unexpected).toEqual([]);
   await add.click();
   await page.screenshot({ path: testInfo.outputPath('style-dialog.png') });
+});
+
+test('shared playback holds visible final frames, replays and seeks clips of different lengths without feedback', async ({
+  page,
+}, testInfo) => {
+  function media(duration: number, name: string) {
+    const path = testInfo.outputPath(name + '.mp4');
+    execFileSync('ffmpeg', [
+      '-v',
+      'error',
+      '-y',
+      '-f',
+      'lavfi',
+      '-i',
+      'color=c=red:s=96x64:r=30:d=' + duration,
+      '-vf',
+      "drawbox=color=blue:t=fill:enable='gte(t,0.7)'",
+      '-an',
+      '-c:v',
+      'libx264',
+      '-threads',
+      '1',
+      '-pix_fmt',
+      'yuv420p',
+      '-movflags',
+      '+faststart',
+      path,
+    ]);
+    return readFileSync(path);
+  }
+  const fixture = await mockWorkspace(page, {
+    complete: true,
+    media: { original: media(1, 'original'), augmented: media(1.2, 'variant') },
+  });
+  await fillStyle(page, 'Change only the object color.');
+  await generateStyle(page);
+  const gallery = page.getByRole('region', { name: 'Episode experiments', exact: true });
+  await gallery.getByRole('button', { name: /Add one more/ }).click();
+  await fillStyle(page, 'Try a second color.');
+  await generateStyle(page);
+  const videos = gallery.locator('video');
+  await expect(videos).toHaveCount(3);
+  await expect
+    .poll(() =>
+      videos.evaluateAll((nodes) =>
+        nodes.every((node) => {
+          const v = node as HTMLVideoElement;
+          return v.readyState >= 2 && Number.isFinite(v.duration);
+        }),
+      ),
+    )
+    .toBe(true);
+  await videos.evaluateAll((nodes) =>
+    nodes.forEach((node) => {
+      const v = node as HTMLVideoElement;
+      v.dataset.seekCount = '0';
+      v.addEventListener('seeked', () => {
+        v.dataset.seekCount = String(Number(v.dataset.seekCount) + 1);
+      });
+    }),
+  );
+  async function expectFinalFrames() {
+    await expect
+      .poll(() =>
+        videos.evaluateAll((nodes) =>
+          nodes.map((node) => {
+            const v = node as HTMLVideoElement;
+            return v.paused && !v.seeking && v.currentTime >= v.duration - 0.1 && v.currentTime < v.duration
+              ? 'held'
+              : {
+                  time: v.currentTime,
+                  duration: v.duration,
+                  paused: v.paused,
+                  seeking: v.seeking,
+                  seeks: v.dataset.seekCount,
+                };
+          }),
+        ),
+      )
+      .toEqual(['held', 'held', 'held']);
+    const pixels = await videos.evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 1;
+        const context = canvas.getContext('2d')!;
+        context.drawImage(node as HTMLVideoElement, 0, 0, 1, 1);
+        return Array.from(context.getImageData(0, 0, 1, 1).data);
+      }),
+    );
+    for (const [red, green, blue] of pixels) {
+      expect(blue).toBeGreaterThan(200);
+      expect(red).toBeLessThan(30);
+      expect(green).toBeLessThan(30);
+    }
+  }
+  await gallery.getByRole('button', { name: 'Play all', exact: true }).click();
+  await expectFinalFrames();
+  const seekCounts = await videos.evaluateAll((nodes) =>
+    nodes.map((node) => Number((node as HTMLVideoElement).dataset.seekCount)),
+  );
+  for (const count of seekCounts) {
+    expect(count).toBeGreaterThan(0);
+    expect(count).toBeLessThanOrEqual(3);
+  }
+  await gallery.getByRole('button', { name: 'Play all', exact: true }).click();
+  await expect
+    .poll(() =>
+      videos.evaluateAll((nodes) =>
+        nodes.every((node) => {
+          const v = node as HTMLVideoElement;
+          return !v.paused && v.currentTime < 0.7;
+        }),
+      ),
+    )
+    .toBe(true);
+  await expectFinalFrames();
+  await gallery.getByRole('button', { name: 'Restart all', exact: true }).click();
+  await expect
+    .poll(() =>
+      videos.evaluateAll((nodes) =>
+        nodes.every((node) => {
+          const v = node as HTMLVideoElement;
+          return v.paused && !v.seeking && v.currentTime === 0;
+        }),
+      ),
+    )
+    .toBe(true);
+  await videos.first().evaluate((node) => {
+    (node as HTMLVideoElement).currentTime = 0.4;
+  });
+  await expect
+    .poll(() =>
+      videos.evaluateAll((nodes) =>
+        nodes.every((node) => {
+          const v = node as HTMLVideoElement;
+          return !v.seeking && Math.abs(v.currentTime - 0.4) < 0.02;
+        }),
+      ),
+    )
+    .toBe(true);
+  await videos.last().evaluate((node) => {
+    const v = node as HTMLVideoElement;
+    v.currentTime = v.duration;
+  });
+  await expectFinalFrames();
+  await page.screenshot({ path: testInfo.outputPath('final-frames.png') });
+  expect(fixture.submitted).toHaveLength(2);
+  expect(fixture.unexpected).toEqual([]);
 });
