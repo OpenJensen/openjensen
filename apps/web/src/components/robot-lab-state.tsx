@@ -106,7 +106,7 @@ export function useRobotLab() {
   const calibrationStage = calibration?.phase === 'interrupted' ? calibration.interrupted_stage : calibration?.phase;
   const calibrationError = step === 2 ? error || calibration?.error || session?.error : null;
   const recording = state?.recording;
-  const assembled = state?.assembled;
+  const assembled = state?.assembled?.port === port ? state.assembled : undefined;
   const verification = state?.verification;
   const mappingComplete = assembled?.phase === 'complete' && assembled.port === port;
   const active = !!session && session.mode !== 'idle';
