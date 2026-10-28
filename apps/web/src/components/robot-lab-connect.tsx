@@ -8,6 +8,7 @@ import type { RobotLabState } from './robot-lab-state';
 export function RobotLabConnect({ lab }: { lab: RobotLabState }) {
   const {
     active,
+    armLabel,
     canAct,
     canUseArm,
     checkArm,
@@ -26,7 +27,7 @@ export function RobotLabConnect({ lab }: { lab: RobotLabState }) {
   } = lab;
   return (
     <>
-      <Heading title="Devices" />
+      <Heading title={`Connect ${armLabel.toLowerCase()} arm`} />
       <div className="robot-lab-form">
         {!online && (
           <Notice>
