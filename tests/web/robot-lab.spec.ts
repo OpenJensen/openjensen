@@ -1008,7 +1008,7 @@ test('wiggle identification requires explicit motion then observed-joint confirm
 
 test('motor identification distinguishes preparation, listening and a stopped session', async ({ page }) => {
   const state = await fixture(page);
-  state.status.assembled = { ...state.status.assembled, phase: 'stopped', ids: [2], progress: 1 };
+  state.status.assembled = { ...state.status.assembled, port, phase: 'stopped', ids: [2], progress: 1 };
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
   await tab(page, 'Motor IDs').click();
   const status = page.getByRole('status', { name: 'Motor identification status', exact: true });
