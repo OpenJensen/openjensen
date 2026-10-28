@@ -749,11 +749,20 @@ test('leader selection renders the leader handle and trigger and switching roles
     if (path.startsWith('/robots/so101/assets/')) meshes.push(path.split('/').at(-1)!);
   });
   const state = await fixture(page);
+  state.status.assembled = {
+    ...state.status.assembled,
+    port,
+    phase: 'complete',
+    ids: [1, 2, 3, 4, 5, 6],
+    mapping: Object.fromEntries(joints.map((name, index) => [name, index + 1])),
+  };
+  await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
   const picker = page.getByRole('combobox', { name: 'Devices', exact: true });
   await picker.selectOption('leader');
   await tab(page, 'Motor IDs').click();
   const guide = page.getByRole('region', { name: 'SO-101 joint illustration', exact: true });
   await expect(guide).toHaveAttribute('data-arm-role', 'leader');
+  await expect(page.getByText('IDs saved', { exact: true })).toHaveCount(0);
   await expect(guide.locator('canvas')).toHaveAttribute('data-renderer', 'webgl');
   await expect(guide.getByRole('heading', { name: 'Trigger', exact: true })).toBeVisible();
   await expect(guide.getByText('Leader arm ·', { exact: false })).toBeVisible();
