@@ -77,7 +77,6 @@ export function RobotLab() {
           )}
         </div>
       </div>
-      {step <= 2 && <RobotLabArmRole lab={lab} />}
       {readiness}
       {step !== 2 && (session?.error || error) && <HardwareNotice message={(session?.error || error)!} />}
       {(reconnecting || (!online && localCalibrationRef.current)) && (
@@ -95,6 +94,7 @@ export function RobotLab() {
       {recording?.error && <HardwareNotice message={recording.error} />}
       <div className="robot-lab-grid">
         <section className="robot-lab-main" aria-label={steps[step].title}>
+          {step <= 2 && <RobotLabArmRole lab={lab} />}
           {step === 0 && <RobotLabConnect lab={lab} />}
           {step === 1 && <RobotLabMotorIds lab={lab} />}
           {step === 2 && <RobotLabCalibrate lab={lab} />}
