@@ -2,6 +2,7 @@
 
 import { steps, HardwareNotice } from './robot-lab-shared';
 import { useRobotLab } from './robot-lab-state';
+import { RobotLabArmRole } from './robot-lab-arm-role';
 import { RobotLabConnect } from './robot-lab-connect';
 import { RobotLabMotorIds } from './robot-lab-motor-ids';
 import { RobotLabCalibrate } from './robot-lab-calibrate';
@@ -76,6 +77,7 @@ export function RobotLab() {
           )}
         </div>
       </div>
+      {step <= 2 && <RobotLabArmRole lab={lab} />}
       {readiness}
       {step !== 2 && (session?.error || error) && <HardwareNotice message={(session?.error || error)!} />}
       {(reconnecting || (!online && localCalibrationRef.current)) && (
