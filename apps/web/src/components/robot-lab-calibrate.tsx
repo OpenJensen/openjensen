@@ -57,7 +57,7 @@ export function RobotLabCalibrate({ lab }: { lab: RobotLabState }) {
         </div>
         {calibrationError && <HardwareNotice label="Calibration error" message={calibrationError} />}
         {calibration?.recoverable ? (
-          <Notice kind="warning">
+          <Notice kind={calibrationError ? 'warning' : 'info'}>
             <strong>Calibration paused</strong>
             <p>
               {calibration.interrupted_stage === 'center' ||

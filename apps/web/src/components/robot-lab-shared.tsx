@@ -38,10 +38,17 @@ export function Heading({ title }: { title: string }) {
 export function Notice({ children, kind = 'info' }: { children: ReactNode; kind?: 'info' | 'warning' | 'success' }) {
   return <SharedNotice tone={kind}>{children}</SharedNotice>;
 }
-export function HardwareNotice({ message, label }: { message: string; label?: string }) {
+export function HardwareNotice({ message, label, context }: { message: string; label?: string; context?: string }) {
   const described = describeHardwareError(message);
   return (
-    <SharedNotice tone="danger" live="alert" label={label} title={described.title} details={described.details}>
+    <SharedNotice
+      tone="danger"
+      live="alert"
+      label={label}
+      title={context ?? described.title}
+      details={described.details}
+    >
+      {context && <p>{described.title}</p>}
       {described.next}
     </SharedNotice>
   );

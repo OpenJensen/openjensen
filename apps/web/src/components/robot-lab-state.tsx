@@ -104,7 +104,15 @@ export function useRobotLab() {
   const calibration = state?.calibration;
   localCalibrationRef.current = session?.mode === 'calibration' && !!state?.capabilities?.calibration_persistence;
   const calibrationStage = calibration?.phase === 'interrupted' ? calibration.interrupted_stage : calibration?.phase;
-  const calibrationError = step === 2 ? error || calibration?.error || session?.error : null;
+  const calibrationSession = session?.mode === 'calibration' || calibration?.phase === 'interrupted';
+  // Older companions put this informational recovery message in the error field.
+  const recoveredCheckpoint =
+    calibration?.recoverable && calibration.error === 'Calibration checkpoint recovered on the robot computer';
+  const calibrationError =
+    step === 2
+      ? error || (!recoveredCheckpoint && calibration?.error) || (calibrationSession && session?.error) || null
+      : null;
+  const previousSessionError = step === 2 && !calibrationSession && session?.error !== error ? session?.error : null;
   const recording = state?.recording;
   const assembled = state?.assembled?.port === port ? state.assembled : undefined;
   const verification = state?.verification;
@@ -938,6 +946,7 @@ export function useRobotLab() {
     calibrated,
     calibration,
     calibrationError,
+    previousSessionError,
     calibrationStage,
     calibrationSummary,
     cameraError,
