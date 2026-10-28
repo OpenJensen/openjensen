@@ -237,7 +237,7 @@ class RobotLab:
                     phase="interrupted",
                     interrupted_stage=draft["state"]["phase"],
                     recoverable=True,
-                    error="Calibration checkpoint recovered on the robot computer",
+                    error=None,
                     robot_id=draft["robot_id"],
                     role=draft["role"],
                     port=draft["port"],

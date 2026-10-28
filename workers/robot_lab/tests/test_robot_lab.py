@@ -954,6 +954,8 @@ class SafetyTests(unittest.TestCase):
             self.assertEqual(len(self.buses), count)
             self.assertEqual(recovered.mode, "idle")
             self.assertTrue(recovered.calibration_state["recoverable"])
+            self.assertIsNone(recovered.calibration_state["error"])
+            self.assertIsNone(recovered.error)
             self.assertEqual(recovered.calibration_state["mins"]["shoulder_pan"], 1500)
             recovered.calibration_start({"resume": True, "confirm": "START CALIBRATION"})
             self.assertEqual(recovered.calibration_state["phase"], "ranges")

@@ -81,6 +81,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin') 
     cameraFailure: false,
     stopError: null as string | null,
     centerError: null as string | null,
+    calibrationStartError: null as string | null,
     portsConnected: true,
     middleInProgress: false,
     encoderLag: false,
@@ -230,6 +231,8 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin') 
         state.status.assembled.phase = 'stopped';
         state.status.session.mode = 'idle';
       } else if (action === '/calibration/start') {
+        if (state.calibrationStartError)
+          return route.fulfill({ status: 409, json: { detail: state.calibrationStartError } });
         state.status.session = {
           ...state.status.session,
           mode: 'calibration',
@@ -499,6 +502,13 @@ test('range and current faults give recovery steps without stale success or read
   await page.screenshot({ path: testInfo.outputPath('range-error.png'), fullPage: true });
   state.status.session.error = 'Motor 5 write Torque_Enable=0 failed: [RxPacketError] OverEle error!';
   await tab(page, 'Calibrate').click();
+  await expect(page.getByRole('alert', { name: 'Previous session error' })).toContainText(
+    'Previous hardware session stopped',
+  );
+  await expect(page.getByRole('alert', { name: 'Calibration error' })).toHaveCount(0);
+  // A real failure from starting calibration still appears as a calibration error.
+  state.calibrationStartError = 'Motor 5 write Torque_Enable=0 failed: [RxPacketError] OverEle error!';
+  await page.getByRole('button', { name: 'Recalibrate arm', exact: true }).click();
   await expect(page.getByRole('alert', { name: 'Calibration error' })).toContainText(
     'Motor 5 (wrist roll) reports overcurrent.',
   );
@@ -1393,13 +1403,16 @@ test('calibration survives page reload, hidden tab and a temporary web disconnec
   await page.screenshot({ path: testInfo.outputPath('calibration-reconnected.png'), fullPage: true });
 });
 
-test('calibration can resume a Mac checkpoint without repeating middle capture', async ({ page }) => {
+test('calibration recovery is informational and resumes without repeating middle capture', async ({
+  page,
+}, testInfo) => {
   const state = await fixture(page);
   state.status.calibration = {
     ...state.status.calibration,
     phase: 'interrupted',
     interrupted_stage: 'ranges',
     recoverable: true,
+    error: 'Calibration checkpoint recovered on the robot computer',
     port,
     robot_id: 'my-so101',
     role: 'follower',
@@ -1408,6 +1421,10 @@ test('calibration can resume a Mac checkpoint without repeating middle capture',
     offsets: values(10),
   };
   await tab(page, 'Calibrate').click();
+  await expect(page.getByText('Calibration paused', { exact: true })).toBeVisible();
+  await expect(page.getByRole('alert', { name: 'Calibration error' })).toHaveCount(0);
+  await expect(page.locator('.notice-info').filter({ hasText: 'Calibration paused' })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('calibration-recovery.png'), fullPage: true });
   await page.getByRole('button', { name: 'Resume captured calibration', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Save calibration', exact: true })).toBeEnabled();
   expect(writes(state, '/calibration/start')[0].body).toEqual({ resume: true, confirm: 'START CALIBRATION' });
