@@ -157,7 +157,11 @@ export function useRobotLab() {
     ),
   ) as typeof localMotionChecks;
   const leaderCalibrated = profileFor(leaderId, 'leader')?.valid !== false && !!profileFor(leaderId, 'leader');
-  const selectedMotor = robotJoints.find((item) => item.name === setupOrder[motorIndex])!;
+  const motorDefinition = robotJoints.find((item) => item.name === setupOrder[motorIndex])!;
+  const selectedMotor =
+    role === 'leader' && motorDefinition.name === 'gripper'
+      ? { ...motorDefinition, label: 'Trigger' }
+      : motorDefinition;
   const availableCameras = devices.data?.cameras ?? [];
   const busy = !!pending;
   const canAct = online && !busy && !reconnecting;
@@ -454,6 +458,7 @@ export function useRobotLab() {
     ) : undefined;
   const jointGuide = (
     <So101JointGuide
+      role={role}
       previewControls={!(step === 1 && mappingComplete && !reidentify)}
       feedback={detectionFeedback}
       selected={selectedMotor.name}
