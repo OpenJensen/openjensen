@@ -140,7 +140,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin') 
       if (action === '/probe')
         return route.fulfill({
           json: {
-            port,
+            port: body.port,
             baudrate: 1000000,
             motors: [{ id: 1, model: 777, stable: true, responses: 3 }],
             ready: false,
@@ -386,7 +386,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin') 
   });
   await page.goto('/robot-lab/');
   await expect(page.getByRole('heading', { level: 1, name: 'Initial setup', exact: true })).toBeVisible();
-  await expect(page.getByLabel('Robot USB port')).toHaveValue(hostPlatform === 'Linux' ? '/dev/ttyACM0' : port);
+  await expect(page.getByLabel('Follower USB port')).toHaveValue(hostPlatform === 'Linux' ? '/dev/ttyACM0' : port);
   return state;
 }
 const tab = (page: Page, title: string) =>
@@ -442,6 +442,108 @@ test('motor IDs require a fresh isolation acknowledgement for every motor', asyn
     },
   ]);
   expect(writes(state, '/control/start')).toEqual([]);
+});
+
+test('arm role is visible throughout setup and keeps separate USB ports and names', async ({ page }, testInfo) => {
+  const state = await fixture(page);
+  const devicePicker = page.getByRole('combobox', { name: 'Devices', exact: true });
+  await expect(devicePicker).toHaveValue('follower');
+  await page.getByLabel('Follower name', { exact: true }).fill('task-arm');
+  await devicePicker.selectOption('leader');
+  await expect(devicePicker).toHaveValue('leader');
+  await expect(page.getByRole('heading', { name: 'Devices', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Leader USB port')).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Scan motor IDs', exact: true })).toBeDisabled();
+  await page.getByLabel('Leader USB port').selectOption('/dev/cu.usbmodem-leader');
+  await page.getByLabel('Leader name', { exact: true }).fill('guide-arm');
+  for (const title of ['Motor IDs', 'Calibrate', 'Connect']) {
+    await tab(page, title).click();
+    await expect(devicePicker).toHaveValue('leader');
+  }
+  await devicePicker.selectOption('follower');
+  await expect(page.getByLabel('Follower USB port')).toHaveValue(port);
+  await expect(page.getByLabel('Follower name', { exact: true })).toHaveValue('task-arm');
+  await devicePicker.selectOption('leader');
+  await expect(page.getByLabel('Leader USB port')).toHaveValue('/dev/cu.usbmodem-leader');
+  await expect(page.getByLabel('Leader name', { exact: true })).toHaveValue('guide-arm');
+  expect(state.writes).toEqual([]);
+  await page.getByRole('heading', { name: 'Devices' }).click();
+  await page.screenshot({ path: testInfo.outputPath('leader-setup.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Scan motor IDs', exact: true }).click();
+  await expect.poll(() => writes(state, '/probe').length).toBe(1);
+  expect(writes(state, '/probe')[0].body).toEqual({
+    port: '/dev/cu.usbmodem-leader',
+    robot_id: 'guide-arm',
+    role: 'leader',
+  });
+  await page.reload();
+  await expect(page.getByLabel('Leader USB port')).toHaveValue('/dev/cu.usbmodem-leader');
+  await devicePicker.selectOption('follower');
+  await expect(page.getByLabel('Follower USB port')).toHaveValue(port);
+  await expect(page.getByLabel('Follower name', { exact: true })).toHaveValue('task-arm');
+  expect(state.errors).toEqual([]);
+});
+
+test('device names save independently of motor communication and remain selected after reload', async ({ page }) => {
+  const state = await fixture(page);
+  const corruption =
+    'Motor safety check failed: Corrupt motor replies: disconnect the other motors and check cabling/power';
+  state.status.session.error = corruption;
+  await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
+  await expect(page.getByText('A motor reply was corrupted.', { exact: true })).toBeVisible();
+  const devicePicker = page.getByRole('combobox', { name: 'Devices', exact: true });
+  await devicePicker.selectOption('leader');
+  const name = page.getByLabel('Leader name', { exact: true });
+  const save = page.getByRole('button', { name: 'Save name', exact: true });
+  await name.fill('my leader arm');
+  await expect(name).toHaveAttribute('aria-invalid', 'true');
+  await expect(save).toBeDisabled();
+  await expect(page.getByText('Use 1–64 letters, numbers, hyphens or underscores.', { exact: true })).toBeVisible();
+  await name.fill('my-so101-leader');
+  await expect(name).toHaveAttribute('aria-invalid', 'false');
+  await save.click();
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Leader name saved in this browser: my-so101-leader.' }),
+  ).toBeVisible();
+  expect(state.writes).toEqual([]);
+  await page.reload();
+  await expect(devicePicker).toHaveValue('leader');
+  await expect(name).toHaveValue('my-so101-leader');
+  await expect(page.getByText('A motor reply was corrupted.', { exact: true })).toBeVisible();
+  await devicePicker.selectOption('follower');
+  await expect(page.getByLabel('Follower name', { exact: true })).toHaveValue('my-so101');
+  expect(state.status.calibrations).toEqual([]);
+  expect(state.writes).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
+test('leader calibration retains its role after reload and returns to the follower for control', async ({ page }) => {
+  const state = await fixture(page, true);
+  const devicePicker = page.getByRole('combobox', { name: 'Devices', exact: true });
+  await devicePicker.selectOption('leader');
+  await page.getByLabel('Leader USB port').selectOption('/dev/cu.usbmodem-leader');
+  await tab(page, 'Calibrate').click();
+  await expect(page.getByRole('heading', { name: 'Leader calibration', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Begin calibration', exact: true }).click();
+  await expect(devicePicker).toBeDisabled();
+  await expect(tab(page, 'Teleoperate')).toBeDisabled();
+  expect(writes(state, '/calibration/start')[0].body).toEqual({
+    port: '/dev/cu.usbmodem-leader',
+    robot_id: 'my-so101-leader',
+    role: 'leader',
+    confirm: 'START CALIBRATION',
+  });
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Leader calibration', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Leader USB port')).toHaveValue('/dev/cu.usbmodem-leader');
+  await page.getByRole('button', { name: 'Cancel calibration', exact: true }).click();
+  await tab(page, 'Teleoperate').click();
+  await expect(page.getByLabel('Follower USB port')).toHaveValue(port);
+  await expect(page.getByLabel('Follower name', { exact: true })).toHaveValue('my-so101');
+  await expect(page.getByRole('button', { name: /Leader → follower/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByLabel('Leader USB port')).toHaveValue('/dev/cu.usbmodem-leader');
+  expect(writes(state, '/control/start')).toEqual([]);
+  expect(state.errors).toEqual([]);
 });
 
 test('calibration center and range save are explicit and use the official companion contract', async ({ page }) => {
@@ -638,6 +740,56 @@ test('hand guiding is an explicit torque-off session and leader mode needs a sec
   await expect(page.getByRole('button', { name: 'Start hand guiding', exact: true })).toBeVisible();
 });
 
+test('leader selection renders the leader handle and trigger and switching roles replaces the CAD', async ({
+  page,
+}, testInfo) => {
+  const meshes: string[] = [];
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith('/robots/so101/assets/')) meshes.push(path.split('/').at(-1)!);
+  });
+  const state = await fixture(page);
+  state.status.assembled = {
+    ...state.status.assembled,
+    port,
+    phase: 'complete',
+    ids: [1, 2, 3, 4, 5, 6],
+    mapping: Object.fromEntries(joints.map((name, index) => [name, index + 1])),
+  };
+  await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
+  const picker = page.getByRole('combobox', { name: 'Devices', exact: true });
+  await picker.selectOption('leader');
+  await tab(page, 'Motor IDs').click();
+  const guide = page.getByRole('region', { name: 'SO-101 joint illustration', exact: true });
+  await expect(guide).toHaveAttribute('data-arm-role', 'leader');
+  await expect(page.getByText('IDs saved', { exact: true })).toHaveCount(0);
+  await expect(guide.locator('canvas')).toHaveAttribute('data-renderer', 'webgl');
+  await expect(guide.getByRole('heading', { name: 'Trigger', exact: true })).toBeVisible();
+  await expect(guide.getByText('Leader arm ·', { exact: false })).toBeVisible();
+  await expect(guide.getByRole('button', { name: 'Joint 6: Trigger', exact: true })).toBeVisible();
+  for (const mesh of ['Handle_SO101.stl', 'Trigger_SO101.stl', 'Wrist_Roll_SO101.stl']) expect(meshes).toContain(mesh);
+  expect(meshes).not.toContain('moving_jaw_so101_v1.stl');
+  expect(meshes).not.toContain('wrist_roll_follower_so101_v1.stl');
+  await page.getByRole('heading', { level: 1 }).click();
+  await page.screenshot({ path: testInfo.outputPath('leader-cad.png'), fullPage: true });
+  await guide.screenshot({ path: testInfo.outputPath('leader-guide.png') });
+  const angle = guide.getByRole('slider', { name: 'Illustrated joint angle', exact: true });
+  await angle.fill('20');
+  await expect(guide).toHaveAttribute('data-angle', '20.00');
+  await picker.selectOption('follower');
+  await expect(guide).toHaveAttribute('data-arm-role', 'follower');
+  await expect(guide.locator('canvas')).toHaveAttribute('data-renderer', 'webgl');
+  await expect(guide.getByRole('heading', { name: 'Gripper', exact: true })).toBeVisible();
+  await expect(guide).toHaveAttribute('data-angle', '0.00');
+  expect(meshes).toContain('moving_jaw_so101_v1.stl');
+  expect(meshes).toContain('wrist_roll_follower_so101_v1.stl');
+  await picker.selectOption('leader');
+  await expect(guide.locator('canvas')).toHaveAttribute('data-renderer', 'webgl');
+  await expect(guide.getByRole('heading', { name: 'Trigger', exact: true })).toBeVisible();
+  expect(state.writes).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
 test('all six illustrated joints work by pointer and keyboard without idle hardware requests', async ({
   page,
 }, testInfo) => {
@@ -745,10 +897,10 @@ test('assembled setup prepares explicitly then picks start only encoder observat
   expect(state.writes).toEqual([]);
   const consent = page.getByRole('checkbox', { name: /Six STS3215 motors; arm supported/ });
   await consent.check();
-  await page.getByLabel('Robot USB port').selectOption('/dev/cu.usbmodem-leader');
+  await page.getByLabel('Follower USB port').selectOption('/dev/cu.usbmodem-leader');
   await expect(consent).not.toBeChecked();
   await expect(start).toBeDisabled();
-  await page.getByLabel('Robot USB port').selectOption(port);
+  await page.getByLabel('Follower USB port').selectOption(port);
   await consent.check();
   await start.click();
   expect(writes(state, '/setup/assembled/start')[0].body).toEqual({
@@ -856,7 +1008,7 @@ test('wiggle identification requires explicit motion then observed-joint confirm
 
 test('motor identification distinguishes preparation, listening and a stopped session', async ({ page }) => {
   const state = await fixture(page);
-  state.status.assembled = { ...state.status.assembled, phase: 'stopped', ids: [2], progress: 1 };
+  state.status.assembled = { ...state.status.assembled, port, phase: 'stopped', ids: [2], progress: 1 };
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
   await tab(page, 'Motor IDs').click();
   const status = page.getByRole('status', { name: 'Motor identification status', exact: true });
@@ -1035,13 +1187,13 @@ test('USB disconnect disables remembered motor controls and reconnect requires f
   await expect(wiggle).toBeEnabled();
   state.portsConnected = false;
   await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
-  await expect(page.getByText('Robot USB disconnected', { exact: true })).toBeVisible();
+  await expect(page.getByText('Follower USB disconnected', { exact: true })).toBeVisible();
   await expect(wiggle).toBeDisabled();
   await expect(acknowledge).not.toBeChecked();
   await expect(acknowledge).toBeDisabled();
   await expect(page.getByRole('heading', { name: 'Saved IDs', exact: true })).toBeVisible();
-  await expect(page.getByLabel('Robot USB port')).toHaveValue(port);
-  await expect(page.getByLabel('Robot USB port').locator('option:checked')).toContainText('Disconnected');
+  await expect(page.getByLabel('Follower USB port')).toHaveValue(port);
+  await expect(page.getByLabel('Follower USB port').locator('option:checked')).toContainText('Disconnected');
   await tab(page, 'Calibrate').click();
   await expect(page.getByRole('button', { name: 'Begin calibration', exact: true })).toBeDisabled();
   state.status.calibrations = [{ robot_id: 'my-so101', role: 'follower', path: 'saved.json' }];
@@ -1057,7 +1209,7 @@ test('USB disconnect disables remembered motor controls and reconnect requires f
   await tab(page, 'Motor IDs').click();
   state.portsConnected = true;
   // Idle inventory polling notices USB return without refreshing or starting a session.
-  await expect(page.getByText('Robot USB connected · Idle', { exact: true })).toBeVisible({ timeout: 8_000 });
+  await expect(page.getByText('Follower USB connected · Idle', { exact: true })).toBeVisible({ timeout: 8_000 });
   await expect(tab(page, 'Teleoperate')).toContainText('Ready');
   await expect(acknowledge).toBeEnabled();
   await expect(acknowledge).not.toBeChecked();
@@ -1403,7 +1555,7 @@ test('readiness separates USB, motor responses, mapping and selected calibration
   await expect(page.getByRole('button', { name: 'Start assembled setup', exact: true })).toBeDisabled();
   await readiness.getByRole('button', { name: /Calibrate/ }).click();
   await expect(page.getByLabel('Selected arm calibration')).toContainText('Saved · not checked');
-  await page.getByLabel('Robot name').fill('different-arm');
+  await page.getByLabel('Follower name').fill('different-arm');
   await expect(page.getByLabel('Selected arm calibration')).toContainText('Not saved');
   expect(writes(state, '/calibration/start')).toEqual([]);
   expect(writes(state, '/control/start')).toEqual([]);
@@ -1533,7 +1685,7 @@ test('large joint steps are hidden when the connected companion does not support
 test('Linux companion discovers USB and camera without motor commands', async ({ page }) => {
   const state = await fixture(page, false, 'Linux');
   await expect(page.getByText('Linux robot computer connected', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('Robot USB port')).toHaveValue('/dev/ttyACM0');
+  await expect(page.getByLabel('Follower USB port')).toHaveValue('/dev/ttyACM0');
   await tab(page, 'Record').click();
   await expect(page.getByRole('heading', { name: 'Datasets on the robot computer', exact: true })).toBeVisible();
   state.cameraFailure = true;

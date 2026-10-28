@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { robotJoints, type RobotJoint } from '@/lib/robot-api';
+import { robotJoints, type RobotJoint, type RobotRole } from '@/lib/robot-api';
 import {
   add3,
   cameraForModel,
@@ -31,11 +31,11 @@ const markerOffsets: Record<RobotJoint, [number, number]> = {
   wrist_roll: [10, -40],
   gripper: [45, -20],
 };
-const reference = jointPose();
 const names = robotJoints.map((joint) => joint.name);
 
 export function So101JointGuide({
   selected,
+  role = 'follower',
   onSelect,
   calibrationActive = false,
   detecting = false,
@@ -45,6 +45,7 @@ export function So101JointGuide({
   previewControls = true,
 }: {
   selected: RobotJoint;
+  role?: RobotRole;
   onSelect: (joint: RobotJoint) => void;
   calibrationActive?: boolean;
   detecting?: boolean;
@@ -53,6 +54,10 @@ export function So101JointGuide({
   feedback?: ReactNode;
   previewControls?: boolean;
 }) {
+  const joints = robotJoints.map((joint) =>
+    role === 'leader' && joint.name === 'gripper' ? { ...joint, label: 'Trigger' } : joint,
+  );
+  const reference = useMemo(() => jointPose(undefined, 0, undefined, role), [role]);
   const id = useId().replaceAll(':', ''),
     buttons = useRef<Partial<Record<RobotJoint, HTMLButtonElement | null>>>({});
   const [angle, setAngle] = useState(0),
@@ -63,11 +68,14 @@ export function So101JointGuide({
   const drag = useRef<{ pointer: number; x: number; y: number; yaw: number; pitch: number } | null>(null);
   const camera = useMemo(() => cameraForModel(orbit.yaw, orbit.pitch, orbit.zoom), [orbit]);
   const project = (point: Parameters<typeof projectJoint>[0]) => projectJoint(point, camera);
-  const joint = robotJoints.find((joint) => joint.name === selected)!,
-    pose = useMemo(() => jointPose(selected, angle), [selected, angle]),
+  const joint = joints.find((joint) => joint.name === selected)!,
+    pose = useMemo(() => jointPose(selected, angle, undefined, role), [selected, angle, role]),
     frame = pose.joints[selected],
     pivot = project(frame.origin),
-    range = previewRanges[selected];
+    range = useMemo(
+      () => (role === 'leader' && selected === 'gripper' ? [-18, 20] : previewRanges[selected]),
+      [role, selected],
+    );
   const axisA = project(add3(frame.origin, scale3(frame.axis, -0.044))),
     axisB = project(add3(frame.origin, scale3(frame.axis, 0.044)));
   const x = normalize3(transformVector(frame.matrix, [1, 0, 0])),
@@ -93,7 +101,7 @@ export function So101JointGuide({
   useEffect(() => {
     setPlaying(false);
     setAngle(0);
-  }, [selected]);
+  }, [selected, role]);
   useEffect(() => {
     if (!playing || reduced) return;
     let frameId = 0,
@@ -136,6 +144,7 @@ export function So101JointGuide({
       className="so101-guide"
       aria-label="SO-101 joint illustration"
       data-selected-joint={selected}
+      data-arm-role={role}
       data-motion={reduced ? 'reduced' : playing ? 'playing' : angle === 0 ? 'static' : 'paused'}
       data-angle={angle.toFixed(2)}
     >
@@ -144,8 +153,10 @@ export function So101JointGuide({
           <span aria-hidden="true">{joint.id}</span>
           {joint.label}
         </h3>
-        <span>{axes[selected]}</span>
-        <small>CAD · not live</small>
+        <span>{role === 'leader' && selected === 'gripper' ? 'Trigger hinge' : axes[selected]}</span>
+        <small>
+          {role === 'leader' ? 'Leader arm' : 'Follower arm'} · <span>CAD · not live</span>
+        </small>
       </header>
       <div
         className="so101-cad-scene"
@@ -221,7 +232,7 @@ export function So101JointGuide({
           <line className="so101-cad-axis" x1={axisA.x} y1={axisA.y} x2={axisB.x} y2={axisB.y} />
           <polyline className="so101-cad-rotation" points={arc} markerEnd={`url(#${id}-arrow)`} />
           <circle className="so101-cad-pivot" cx={pivot.x} cy={pivot.y} r="3" />
-          {robotJoints.map((item) => {
+          {joints.map((item) => {
             const anchor = project(reference.joints[item.name].origin),
               position = project(pose.joints[item.name].origin),
               offset = markerOffsets[item.name];
@@ -238,7 +249,7 @@ export function So101JointGuide({
           })}
         </svg>
         <div className="so101-guide-markers" role="group" aria-label="Choose an illustrated joint">
-          {robotJoints.map((item) => {
+          {joints.map((item) => {
             const p = project(reference.joints[item.name].origin),
               offset = markerOffsets[item.name];
             return (

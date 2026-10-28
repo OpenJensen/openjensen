@@ -1,14 +1,14 @@
 'use client';
 
 import { Icon } from '@/components/icon';
-import { robotApi, type RobotRole } from '@/lib/robot-api';
+import { robotApi } from '@/lib/robot-api';
 import { Heading, Notice, HardwareNotice, RangeTable } from './robot-lab-shared';
 import type { RobotLabState } from './robot-lab-state';
 
 export function RobotLabCalibrate({ lab }: { lab: RobotLabState }) {
   const {
     active,
-    busy,
+    armLabel,
     calibration,
     calibrationError,
     calibrationStage,
@@ -32,12 +32,11 @@ export function RobotLabCalibrate({ lab }: { lab: RobotLabState }) {
     selectedProfile,
     session,
     setOwnsSession,
-    setRole,
     state,
   } = lab;
   return (
     <>
-      <Heading title="Calibration" />
+      <Heading title={`${armLabel} calibration`} />
       <div className="robot-lab-form">
         {calibrationSummary}
         {localCalibrationRef.current && (
@@ -47,18 +46,6 @@ export function RobotLabCalibrate({ lab }: { lab: RobotLabState }) {
         )}
         {jointGuide}
         {identity}
-        <label>
-          Arm role
-          <select
-            value={role}
-            aria-label="Calibration arm role"
-            onChange={(event) => setRole(event.target.value as RobotRole)}
-            disabled={active || busy}
-          >
-            <option value="follower">Follower / single arm</option>
-            <option value="leader">Leader arm</option>
-          </select>
-        </label>
         <div className="robot-lab-calibration-steps">
           <span className={calibration?.phase === 'idle' || calibration?.phase === 'saved' ? 'current' : ''}>
             1. Prepare

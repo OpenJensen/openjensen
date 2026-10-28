@@ -2,7 +2,7 @@
 
 import { Icon } from '@/components/icon';
 import { robotJoints } from '@/lib/robot-api';
-import { Heading, Notice } from './robot-lab-shared';
+import { Notice } from './robot-lab-shared';
 import type { RobotLabState } from './robot-lab-state';
 
 export function RobotLabConnect({ lab }: { lab: RobotLabState }) {
@@ -26,7 +26,6 @@ export function RobotLabConnect({ lab }: { lab: RobotLabState }) {
   } = lab;
   return (
     <>
-      <Heading title="Devices" />
       <div className="robot-lab-form">
         {!online && (
           <Notice>

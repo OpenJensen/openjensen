@@ -1,9 +1,9 @@
-import type { RobotJoint } from './robot-api';
+import type { RobotJoint, RobotRole } from './robot-api';
 
 export type Vec3 = [number, number, number];
 export type Mat4 = number[];
 export type JointFrame = { origin: Vec3; axis: Vec3; matrix: Mat4 };
-export type RobotPose = { links: Record<string, Mat4>; joints: Record<RobotJoint, JointFrame> };
+export type RobotPose = { role: RobotRole; links: Record<string, Mat4>; joints: Record<RobotJoint, JointFrame> };
 export type Camera = { matrix: Mat4; right: Vec3; up: Vec3; forward: Vec3; target: Vec3; span: number };
 
 /** Exact joint/visual transforms extracted from the pinned SO-101 URDF below.
@@ -198,6 +198,52 @@ export const so101Description = {
   ],
 } as const;
 
+// The leader shares the five arm joints and replaces the follower jaw with a handle and trigger.
+export const so101LeaderDescription = {
+  ...so101Description,
+  urdfSha256: 'bc947e2fea65dfc91b0fc40e4cff0c01c6bf426687995937e62e2b0f41122db5',
+  joints: so101Description.joints.map((joint) =>
+    joint.name === 'gripper' ? { ...joint, child: 'trigger_link' as const, lower: 0, upper: 0.785398163397 } : joint,
+  ),
+  visuals: [
+    ...so101Description.visuals.filter(
+      (visual) => !['wrist_roll_follower_so101_v1.stl', 'moving_jaw_so101_v1.stl'].includes(visual.mesh),
+    ),
+    ...([
+      {
+        link: 'gripper_link',
+        mesh: 'Wrist_Roll_SO101.stl',
+        xyz: [0.0, 0.0, 0.0],
+        rpy: [3.14159265359, 0.0, 0.0],
+        material: '3d_printed',
+      },
+      {
+        link: 'gripper_link',
+        mesh: 'Handle_SO101.stl',
+        xyz: [0.0, 0.0, 0.0],
+        rpy: [3.14159265359, 0.0, 0.0],
+        material: '3d_printed',
+      },
+      {
+        link: 'trigger_link',
+        mesh: 'Trigger_SO101.stl',
+        xyz: [0.0, 0.0, 0.0],
+        rpy: [3.14159265359, 0.0, 2.44346095279],
+        material: '3d_printed',
+      },
+    ] as const),
+  ],
+} as const;
+export const descriptionForRole = (role: RobotRole = 'follower') =>
+  role === 'leader' ? so101LeaderDescription : so101Description;
+export type CadVisual = {
+  link: string;
+  mesh: string;
+  xyz: readonly number[];
+  rpy: readonly number[];
+  material: string;
+};
+
 export const jointOrder: RobotJoint[] = [
   'shoulder_pan',
   'shoulder_lift',
@@ -279,11 +325,17 @@ export function originMatrix(xyz: readonly number[], rpy: readonly number[]): Ma
     1,
   ];
 }
-export function jointPose(selected?: RobotJoint, offsetDegrees = 0, reference = referenceDegrees): RobotPose {
+export function jointPose(
+  selected?: RobotJoint,
+  offsetDegrees = 0,
+  reference = referenceDegrees,
+  role: RobotRole = 'follower',
+): RobotPose {
+  const description = descriptionForRole(role);
   const links: Record<string, Mat4> = { base_link: identity4() },
     frames = {} as Record<RobotJoint, JointFrame>;
   for (const name of jointOrder) {
-    const joint = so101Description.joints.find((value) => value.name === name)!;
+    const joint = description.joints.find((value) => value.name === name)!;
     const frame = multiply4(links[joint.parent], originMatrix(joint.xyz, joint.rpy));
     const q = ((reference[name] + (name === selected ? offsetDegrees : 0)) * Math.PI) / 180;
     const child = multiply4(frame, originMatrix([0, 0, 0], [0, 0, q]));
@@ -294,7 +346,7 @@ export function jointPose(selected?: RobotJoint, offsetDegrees = 0, reference = 
     };
     links[joint.child] = child;
   }
-  return { links, joints: frames };
+  return { role, links, joints: frames };
 }
 export function cameraForModel(yaw = 0, pitch = 0, zoom = 1): Camera {
   const azimuth = Math.atan2(1, -0.7) + (yaw * Math.PI) / 180,
@@ -333,13 +385,12 @@ export function projectJoint(point: Vec3, camera = so101Camera): { x: number; y:
   const p = add3(point, scale3(camera.target, -1));
   return { x: 300 + (dot3(p, camera.right) * 420) / camera.span, y: 210 - (dot3(p, camera.up) * 420) / camera.span };
 }
-export function affectedLink(selected: RobotJoint, link: string): boolean {
+export function affectedLink(selected: RobotJoint, link: string, role: RobotRole = 'follower'): boolean {
+  const description = descriptionForRole(role);
   const start = jointOrder.indexOf(selected),
-    index = jointOrder.findIndex(
-      (name) => so101Description.joints.find((value) => value.name === name)!.child === link,
-    );
+    index = jointOrder.findIndex((name) => description.joints.find((value) => value.name === name)!.child === link);
   return index >= start;
 }
-export function visualMatrix(pose: RobotPose, visual: (typeof so101Description.visuals)[number]): Mat4 {
+export function visualMatrix(pose: RobotPose, visual: CadVisual): Mat4 {
   return multiply4(pose.links[visual.link], originMatrix(visual.xyz, visual.rpy));
 }
