@@ -42,7 +42,14 @@ from hardware import (
     probe_bus,
 )
 from lerobot_control import PROFILE, LeRobotPositionControl
-from motion import MiddleMotion, RestMotion, control_limits, middle_targets, step_target
+from motion import (
+    ENCODER_RANGE_TOLERANCE,
+    MiddleMotion,
+    RestMotion,
+    control_limits,
+    middle_targets,
+    step_target,
+)
 from rest_position import RestPositions
 from verification import (
     MappingChecks,
@@ -131,7 +138,7 @@ def valid_calibration(value):
     return value
 
 
-def validate_raw(raw, calibration=None):
+def validate_raw(raw, calibration=None, *, range_tolerance=0):
     if set(raw) != set(calibration if calibration is not None else JOINTS) or any(
         isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 4095
         for value in raw.values()
@@ -140,7 +147,7 @@ def validate_raw(raw, calibration=None):
     if calibration is not None:
         for joint, value in raw.items():
             low, high = calibration[joint]["range_min"], calibration[joint]["range_max"]
-            if not low <= value <= high:
+            if not low - range_tolerance <= value <= high + range_tolerance:
                 raise HardwareError(
                     f"{joint.replace('_', ' ').capitalize()} is outside its saved range "
                     f"({value} ticks; allowed {low}–{high}). Motion stopped"
@@ -1210,7 +1217,9 @@ class RobotLab:
             with bus.lock:
                 if generation != self.generation:
                     raise RequestError("Session has stopped")
-                raw = validate_raw(bus.positions(), self.calibration)
+                raw = validate_raw(
+                    bus.positions(), self.calibration, range_tolerance=ENCODER_RANGE_TOLERANCE
+                )
                 with self.lifecycle_lock:
                     if generation != self.generation:
                         raise RequestError("Session has stopped")
@@ -1279,7 +1288,9 @@ class RobotLab:
             with bus.lock:
                 if generation != self.generation:
                     raise RequestError("Session has stopped")
-                validate_raw(bus.positions(), self.calibration)
+                validate_raw(
+                    bus.positions(), self.calibration, range_tolerance=ENCODER_RANGE_TOLERANCE
+                )
                 if generation != self.generation:
                     raise RequestError("Session has stopped")
                 target = (
@@ -1503,7 +1514,16 @@ class RobotLab:
             if generation != self.generation:
                 return
             mode = self.mode
-            raw = validate_raw(bus.positions(), None if mode == "calibration" else self.calibration)
+            # Saved endpoints come from sampled encoder extrema. Allow bounded
+            # measurement jitter during human control; never expand goals or
+            # weaken the strict startup/agent/calibration checks.
+            raw = validate_raw(
+                bus.positions(),
+                None if mode == "calibration" else self.calibration,
+                range_tolerance=ENCODER_RANGE_TOLERANCE
+                if mode in ("manual", "leader", "handguide")
+                else 0,
+            )
             if mode == "calibration":
                 if self.calibration_state["phase"] == "ranges" and any(
                     joint != "wrist_roll"
@@ -1584,7 +1604,11 @@ class RobotLab:
                 if control is None:
                     raise HardwareError("LeRobot position controller is unavailable")
                 with leader.lock:
-                    leader_raw = validate_raw(leader.positions(), self.leader_calibration)
+                    leader_raw = validate_raw(
+                        leader.positions(),
+                        self.leader_calibration,
+                        range_tolerance=ENCODER_RANGE_TOLERANCE,
+                    )
                 desired = {
                     joint: normalized(joint, leader_raw[joint], self.leader_calibration)
                     for joint in JOINTS

@@ -160,7 +160,8 @@ export function RobotLabCalibrate({ lab }: { lab: RobotLabState }) {
         {session?.mode === 'calibration' && calibration?.phase === 'ranges' && (
           <>
             <Notice>
-              Move each joint through its usable range without forcing it. Wrist roll uses its full encoder range.
+              Move each joint through its full travel without forcing it. Keep cables clear. Wrist roll uses its full
+              encoder range.
             </Notice>
             <div className="robot-lab-mapping-heading">
               <h3>Joint ranges</h3>

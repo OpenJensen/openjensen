@@ -21,6 +21,7 @@ from pprint import pformat
 from types import SimpleNamespace
 
 from hardware import IDS, HardwareError, denormalized, normalized
+from motion import ENCODER_RANGE_TOLERANCE
 
 RobotAction = dict[str, float]
 
@@ -276,4 +277,5 @@ PROFILE = {
     "acceleration": 254,
     "maximum_acceleration": 254,
     "goal_velocity": 0,
+    "encoder_range_tolerance_ticks": ENCODER_RANGE_TOLERANCE,
 }
