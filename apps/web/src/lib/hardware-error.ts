@@ -8,6 +8,13 @@ const NO_RESPONSE =
  * The original text stays available as `details` for diagnosis.
  */
 export function describeHardwareError(message: string): DescribedError {
+  if (/corrupt motor repl(?:y|ies)|COMM_RX_CORRUPT/i.test(message)) {
+    return {
+      title: 'A motor reply was corrupted.',
+      next: 'Check motor power and USB/servo cables, then scan again. If this repeats, check for duplicate motor IDs.',
+      details: message,
+    };
+  }
   if (NO_RESPONSE.test(message)) {
     return {
       title: 'The motors stopped responding.',

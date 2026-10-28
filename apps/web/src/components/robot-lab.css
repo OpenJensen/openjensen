@@ -1028,3 +1028,24 @@
   background: var(--subtle);
   color: var(--ink);
 }
+
+.robot-lab-name-field {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+.robot-lab-name-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.robot-lab-name-controls .secondary-button {
+  flex-shrink: 0;
+  white-space: nowrap;
+  padding: 10px 12px;
+}
+.robot-lab-name-field > small {
+  color: var(--muted);
+  font-size: 11px;
+}
