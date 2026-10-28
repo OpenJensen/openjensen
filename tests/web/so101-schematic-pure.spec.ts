@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 import {
+  affectedLink,
+  so101LeaderDescription,
   jointOrder,
   jointPose,
   previewRanges,
@@ -77,4 +79,26 @@ test('URDF visual transforms retain real mesh offsets instead of replacing links
   expect(origin[0]).toBeCloseTo(-0.00636471, 8);
   expect(origin[2]).toBeCloseTo(-0.0024, 8);
   expect(new Set(so101Description.visuals.map((part) => part.mesh)).size).toBe(13);
+});
+
+test('leader CAD uses its handle and trigger while retaining the five shared arm joints', () => {
+  expect(so101LeaderDescription.urdfSha256).not.toBe(so101Description.urdfSha256);
+  for (const joint of so101Description.joints.filter((joint) => joint.name !== 'gripper')) {
+    expect(so101LeaderDescription.joints.find((other) => other.name === joint.name)).toEqual(joint);
+  }
+  const meshes = new Set<string>(so101LeaderDescription.visuals.map((part) => part.mesh));
+  for (const mesh of ['Handle_SO101.stl', 'Trigger_SO101.stl', 'Wrist_Roll_SO101.stl'])
+    expect(meshes.has(mesh)).toBe(true);
+  for (const mesh of ['moving_jaw_so101_v1.stl', 'wrist_roll_follower_so101_v1.stl'])
+    expect(meshes.has(mesh)).toBe(false);
+  const a = jointPose('gripper', -18, undefined, 'leader');
+  const b = jointPose('gripper', 20, undefined, 'leader');
+  expect(a.role).toBe('leader');
+  expect(a.links.trigger_link).not.toEqual(b.links.trigger_link);
+  expect(a.links.moving_jaw_so101_v1_link).toBeUndefined();
+  expect(a.joints.gripper.origin).toEqual(b.joints.gripper.origin);
+  for (const visual of so101LeaderDescription.visuals.filter((part) => part.link !== 'trigger_link'))
+    expect(visualMatrix(a, visual)).toEqual(visualMatrix(b, visual));
+  expect(affectedLink('gripper', 'trigger_link', 'leader')).toBe(true);
+  expect(affectedLink('gripper', 'gripper_link', 'leader')).toBe(false);
 });

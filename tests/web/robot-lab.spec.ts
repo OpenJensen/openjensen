@@ -740,6 +740,47 @@ test('hand guiding is an explicit torque-off session and leader mode needs a sec
   await expect(page.getByRole('button', { name: 'Start hand guiding', exact: true })).toBeVisible();
 });
 
+test('leader selection renders the leader handle and trigger and switching roles replaces the CAD', async ({
+  page,
+}, testInfo) => {
+  const meshes: string[] = [];
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith('/robots/so101/assets/')) meshes.push(path.split('/').at(-1)!);
+  });
+  const state = await fixture(page);
+  const picker = page.getByRole('combobox', { name: 'Devices', exact: true });
+  await picker.selectOption('leader');
+  await tab(page, 'Motor IDs').click();
+  const guide = page.getByRole('region', { name: 'SO-101 joint illustration', exact: true });
+  await expect(guide).toHaveAttribute('data-arm-role', 'leader');
+  await expect(guide.locator('canvas')).toHaveAttribute('data-renderer', 'webgl');
+  await expect(guide.getByRole('heading', { name: 'Trigger', exact: true })).toBeVisible();
+  await expect(guide.getByText('Leader arm ·', { exact: false })).toBeVisible();
+  await expect(guide.getByRole('button', { name: 'Joint 6: Trigger', exact: true })).toBeVisible();
+  for (const mesh of ['Handle_SO101.stl', 'Trigger_SO101.stl', 'Wrist_Roll_SO101.stl']) expect(meshes).toContain(mesh);
+  expect(meshes).not.toContain('moving_jaw_so101_v1.stl');
+  expect(meshes).not.toContain('wrist_roll_follower_so101_v1.stl');
+  await page.getByRole('heading', { level: 1 }).click();
+  await page.screenshot({ path: testInfo.outputPath('leader-cad.png'), fullPage: true });
+  await guide.screenshot({ path: testInfo.outputPath('leader-guide.png') });
+  const angle = guide.getByRole('slider', { name: 'Illustrated joint angle', exact: true });
+  await angle.fill('20');
+  await expect(guide).toHaveAttribute('data-angle', '20.00');
+  await picker.selectOption('follower');
+  await expect(guide).toHaveAttribute('data-arm-role', 'follower');
+  await expect(guide.locator('canvas')).toHaveAttribute('data-renderer', 'webgl');
+  await expect(guide.getByRole('heading', { name: 'Gripper', exact: true })).toBeVisible();
+  await expect(guide).toHaveAttribute('data-angle', '0.00');
+  expect(meshes).toContain('moving_jaw_so101_v1.stl');
+  expect(meshes).toContain('wrist_roll_follower_so101_v1.stl');
+  await picker.selectOption('leader');
+  await expect(guide.locator('canvas')).toHaveAttribute('data-renderer', 'webgl');
+  await expect(guide.getByRole('heading', { name: 'Trigger', exact: true })).toBeVisible();
+  expect(state.writes).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
 test('all six illustrated joints work by pointer and keyboard without idle hardware requests', async ({
   page,
 }, testInfo) => {
