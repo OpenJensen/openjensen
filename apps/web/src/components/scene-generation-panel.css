@@ -1,5 +1,5 @@
 .scene-generation {
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: var(--radius-lg, 12px);
   padding: 24px;
   margin-bottom: 24px;
@@ -18,11 +18,11 @@
   margin: 0;
 }
 .scene-generation p {
-  color: var(--text-secondary);
+  color: var(--muted);
   line-height: 1.55;
 }
 .scene-profile {
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   padding: 5px 10px;
   border-radius: 20px;
   font-size: 12px;
@@ -47,9 +47,9 @@
 }
 .scene-generation select,
 .scene-generation input {
-  color: var(--text-primary);
+  color: var(--ink);
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: 6px;
   padding: 10px;
   min-height: 42px;
@@ -59,13 +59,13 @@
   width: 85px;
 }
 .scene-generation button {
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: 6px;
   padding: 10px 16px;
   min-height: 42px;
   cursor: pointer;
-  color: var(--text-primary);
-  background: var(--surface-raised, var(--surface));
+  color: var(--ink);
+  background: var(--subtle, var(--surface));
 }
 .scene-generation button:disabled {
   opacity: 0.5;
@@ -75,7 +75,7 @@
   font-size: 12px;
 }
 .scene-run {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--line);
   padding-top: 22px;
   margin-top: 22px;
 }
@@ -93,8 +93,8 @@
 }
 .scene-gates li {
   padding: 10px;
-  background: var(--surface-raised, var(--surface));
-  border: 1px solid var(--border);
+  background: var(--subtle, var(--surface));
+  border: 1px solid var(--line);
   border-radius: 6px;
 }
 .scene-gates [data-passed='true'] span {
