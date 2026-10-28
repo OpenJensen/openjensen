@@ -37,12 +37,12 @@ class VoiceSettings:
         from .intelligence_config import voice_environment
 
         source = voice_environment()
-        mode = source.get("FIREBIRD_VOICE_MODE", "openrouter")
+        mode = source.get("JENSEN_VOICE_MODE", "openrouter")
         if mode not in {"openrouter", "openrouter-custom-speech"}:
-            raise ValueError("FIREBIRD_VOICE_MODE must be openrouter or openrouter-custom-speech")
+            raise ValueError("JENSEN_VOICE_MODE must be openrouter or openrouter-custom-speech")
         required = [
-            "FIREBIRD_TEACHING_CONTROL_URL",
-            "FIREBIRD_VOICE_MODEL",
+            "JENSEN_TEACHING_CONTROL_URL",
+            "JENSEN_VOICE_MODEL",
             "OPENROUTER_API_KEY",
             "LIVEKIT_URL",
             "LIVEKIT_API_KEY",
@@ -50,32 +50,32 @@ class VoiceSettings:
         ]
         if mode == "openrouter-custom-speech":
             required += [
-                "FIREBIRD_VOICE_MODEL",
+                "JENSEN_VOICE_MODEL",
                 "OPENROUTER_API_KEY",
-                "FIREBIRD_STT_MODEL",
-                "FIREBIRD_STT_BASE_URL",
-                "FIREBIRD_STT_API_KEY",
-                "FIREBIRD_TTS_MODEL",
-                "FIREBIRD_TTS_BASE_URL",
-                "FIREBIRD_TTS_API_KEY",
-                "FIREBIRD_TTS_VOICE",
+                "JENSEN_STT_MODEL",
+                "JENSEN_STT_BASE_URL",
+                "JENSEN_STT_API_KEY",
+                "JENSEN_TTS_MODEL",
+                "JENSEN_TTS_BASE_URL",
+                "JENSEN_TTS_API_KEY",
+                "JENSEN_TTS_VOICE",
             ]
         missing = [name for name in required if not source.get(name, "").strip()]
         if missing:
             raise VoiceConfigurationError("Voice configuration missing: " + ", ".join(missing))
         result = cls(
-            control_url=source["FIREBIRD_TEACHING_CONTROL_URL"],
+            control_url=source["JENSEN_TEACHING_CONTROL_URL"],
             control_token=control_token(),
             mode=mode,
-            model=source.get("FIREBIRD_VOICE_MODEL", cls.model),
-            stt_model=source.get("FIREBIRD_STT_MODEL", cls.stt_model),
-            tts_model=source.get("FIREBIRD_TTS_MODEL", cls.tts_model),
-            tts_voice=source.get("FIREBIRD_TTS_VOICE", cls.tts_voice),
+            model=source.get("JENSEN_VOICE_MODEL", cls.model),
+            stt_model=source.get("JENSEN_STT_MODEL", cls.stt_model),
+            tts_model=source.get("JENSEN_TTS_MODEL", cls.tts_model),
+            tts_voice=source.get("JENSEN_TTS_VOICE", cls.tts_voice),
             openrouter_key=source.get("OPENROUTER_API_KEY", ""),
-            stt_url=source.get("FIREBIRD_STT_BASE_URL", ""),
-            stt_key=source.get("FIREBIRD_STT_API_KEY", ""),
-            tts_url=source.get("FIREBIRD_TTS_BASE_URL", ""),
-            tts_key=source.get("FIREBIRD_TTS_API_KEY", ""),
+            stt_url=source.get("JENSEN_STT_BASE_URL", ""),
+            stt_key=source.get("JENSEN_STT_API_KEY", ""),
+            tts_url=source.get("JENSEN_TTS_BASE_URL", ""),
+            tts_key=source.get("JENSEN_TTS_API_KEY", ""),
         )
         Client(result.control_url, result.control_token)
         livekit = urlsplit(source["LIVEKIT_URL"])
