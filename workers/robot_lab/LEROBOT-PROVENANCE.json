@@ -23,7 +23,8 @@
     "Clear the previous companion goal-velocity cap to zero/default.",
     "No relative target clipping; stock SO follower default max_relative_target=None.",
     "The upstream connectivity decorator is replaced by the generation/port-open gate; copied function bodies are unchanged.",
-    "Restore volatile Torque_Limit (48) to the saved EEPROM Max_Torque_Limit (16), matching power-on behavior and clearing an interrupted 10% identification cap; gripper stays at 500."
+    "Restore volatile Torque_Limit (48) to the saved EEPROM Max_Torque_Limit (16), matching power-on behavior and clearing an interrupted 10% identification cap; gripper stays at 500.",
+    "Human control observations tolerate up to eight encoder ticks beyond sampled calibration endpoints; startup and agent admission remain strict, and commanded goals retain their existing eight-tick inset. Upstream range-based normalization already clamps gripper observations to 0\u2013100 percent."
   ],
   "ast_python": "3.14",
   "servo_memory_reference": "https://docs.waveshare.com/Memory_Map_Explanation/ST_Servo_Memory_Map_Explanation"

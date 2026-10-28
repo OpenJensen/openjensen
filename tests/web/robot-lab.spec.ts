@@ -484,6 +484,28 @@ test('arm role is visible throughout setup and keeps separate USB ports and name
   expect(state.errors).toEqual([]);
 });
 
+test('range and current faults give recovery steps without stale success or readiness', async ({ page }, testInfo) => {
+  const state = await fixture(page, true);
+  await startManual(page);
+  state.status.session.mode = 'idle';
+  state.status.session.torque_enabled = false;
+  state.status.session.error =
+    'Hardware session stopped: Gripper is outside its saved range (1733 ticks; allowed 1734–2948). Motion stopped';
+  // Let normal polling deliver the fault so the preceding success notice is still in state.
+  await expect(page.getByText('Gripper is outside its calibrated range.', { exact: true })).toBeVisible();
+  await expect(page.getByText(/The reading is 1 tick below/)).toBeVisible();
+  await expect(page.getByText('Control session started. Stop releases the motors.', { exact: true })).toHaveCount(0);
+  await expect(tab(page, 'Teleoperate')).toContainText('Needs attention');
+  await page.screenshot({ path: testInfo.outputPath('range-error.png'), fullPage: true });
+  state.status.session.error = 'Motor 5 write Torque_Enable=0 failed: [RxPacketError] OverEle error!';
+  await tab(page, 'Calibrate').click();
+  await expect(page.getByRole('alert', { name: 'Calibration error' })).toContainText(
+    'Motor 5 (wrist roll) reports overcurrent.',
+  );
+  await expect(page.getByRole('alert', { name: 'Calibration error' })).toContainText('switch off motor power');
+  expect(state.errors).toEqual([]);
+});
+
 test('device names save independently of motor communication and remain selected after reload', async ({ page }) => {
   const state = await fixture(page);
   const corruption =

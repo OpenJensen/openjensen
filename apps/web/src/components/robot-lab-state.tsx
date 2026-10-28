@@ -839,17 +839,19 @@ export function useRobotLab() {
         profileCheck?.state === 'mismatch',
     },
     {
-      value: controlling
-        ? 'Active'
-        : !portConnected
-          ? 'Needs connection'
-          : role === 'leader'
-            ? 'Needs follower'
-            : selectedCalibrated
-              ? 'Ready'
-              : 'Needs calibration',
-      good: controlling,
-      warn: false,
+      value: session?.error
+        ? 'Needs attention'
+        : controlling
+          ? 'Active'
+          : !portConnected
+            ? 'Needs connection'
+            : role === 'leader'
+              ? 'Needs follower'
+              : selectedCalibrated
+                ? 'Ready'
+                : 'Needs calibration',
+      good: controlling && !session?.error,
+      warn: !!session?.error,
     },
     {
       value: recording?.active ? 'Recording' : controlling && !partialControl ? 'Ready' : 'Needs teleoperation',

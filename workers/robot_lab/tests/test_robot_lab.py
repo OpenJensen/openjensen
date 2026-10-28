@@ -14,7 +14,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from dataset import DatasetWriter
 from hardware import IDS, JOINTS, HardwareError, denormalized, normalized
-from server import RequestError, RobotLab, create_server, is_usb_serial
+from server import RequestError, RobotLab, create_server, is_usb_serial, validate_raw
 
 DATASET_AVAILABLE = all(
     importlib.util.find_spec(name) is not None for name in ("numpy", "PIL", "pyarrow")
@@ -142,6 +142,81 @@ class SafetyTests(unittest.TestCase):
                 **extras,
             }
         )
+
+    def test_human_control_accepts_small_endpoint_jitter_without_expanding_goals(self):
+        self.start()
+        bus = self.buses[-1]
+        before = json.loads(json.dumps(self.lab.calibration))
+        bus.follow_goals = False
+        bus.raw["gripper"] = 99
+        self.lab._tick()
+        self.assertEqual(self.lab.mode, "manual")
+        self.assertEqual(self.lab.positions["gripper"], 0)
+        self.lab.jog({"joint": "gripper", "delta": -1})
+        for register, motor_id, value in bus.writes:
+            if register == "Goal_Position":
+                entry = before[JOINTS[motor_id - 1]]
+                self.assertGreaterEqual(value, entry["range_min"])
+                self.assertLessEqual(value, entry["range_max"])
+        self.assertEqual(self.lab.calibration, before)
+        for value in [92, 4008]:
+            bus.raw["gripper"] = value
+            self.lab._tick()
+        bus.raw["gripper"] = 91
+        with self.assertRaisesRegex(HardwareError, "outside its saved range"):
+            self.lab._tick()
+
+    def test_eight_tick_observation_allowance_is_bounded_at_each_joint_endpoint(self):
+        for joint in JOINTS:
+            for endpoint, direction in [(100, -1), (4000, 1)]:
+                raw = dict.fromkeys(JOINTS, 2047)
+                raw[joint] = endpoint + direction * 8
+                self.assertEqual(validate_raw(raw, CALIBRATION, range_tolerance=8), raw)
+                raw[joint] += direction
+                with self.assertRaisesRegex(HardwareError, "outside its saved range"):
+                    validate_raw(raw, CALIBRATION, range_tolerance=8)
+
+    def test_encoder_noise_tolerance_keeps_invalid_samples_and_startup_strict(self):
+        raw = dict.fromkeys(JOINTS, 2047)
+        for value in [False, 1.5, -1, 4096]:
+            raw["gripper"] = value
+            with self.assertRaisesRegex(HardwareError, "Invalid encoder reading"):
+                validate_raw(raw, CALIBRATION, range_tolerance=8)
+        raw["gripper"] = 99
+        with self.assertRaisesRegex(HardwareError, "outside its saved range"):
+            validate_raw(raw, CALIBRATION)
+        original_factory = self.lab.bus_factory
+
+        def outside_factory(*args):
+            bus = original_factory(*args)
+            bus.raw["gripper"] = 99
+            return bus
+
+        self.lab.bus_factory = outside_factory
+        with self.assertRaisesRegex(HardwareError, "outside its saved range"):
+            self.start()
+        self.assertFalse(
+            any(name == "Torque_Enable" and value == 1 for name, _, value in self.buses[-1].writes)
+        )
+
+    def test_leader_and_handguide_observations_share_the_bounded_noise_allowance(self):
+        self.start(mode="handguide")
+        bus = self.buses[-1]
+        bus.raw["gripper"] = 4008
+        self.lab._tick()
+        self.assertEqual(self.lab.positions["gripper"], 100)
+        self.lab.stop()
+        leader_path = self.lab.calibration_path("guide", "leader")
+        leader_path.parent.mkdir(parents=True)
+        leader_path.write_text(json.dumps(CALIBRATION))
+        self.lab.port_provider = lambda: [{"device": "/dev/cu.fake"}, {"device": "/dev/cu.guide"}]
+        self.start(mode="leader", leader_port="/dev/cu.guide", leader_id="guide")
+        self.lab.leader.raw["gripper"] = 99
+        self.lab._tick()
+        self.assertEqual(self.lab.action["gripper"], normalized("gripper", 108, CALIBRATION))
+        self.lab.leader.raw["gripper"] = 91
+        with self.assertRaisesRegex(HardwareError, "outside its saved range"):
+            self.lab._tick()
 
     def test_probe_is_read_only_and_closes(self):
         result = self.lab.probe({"port": "/dev/cu.fake"})

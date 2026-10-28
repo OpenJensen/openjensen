@@ -33,6 +33,7 @@ export type RobotStatus = {
     acceleration: number;
     maximum_acceleration: number;
     goal_velocity: number;
+    encoder_range_tolerance_ticks?: number;
   };
   ok?: boolean;
   connected?: boolean;

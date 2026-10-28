@@ -31,3 +31,22 @@ test('corrupt replies explain serial communication separately from the device na
   expect(described.next).not.toContain('disconnect the other motors');
   expect(described.details).toBe(message);
 });
+
+test('servo current faults identify the motor and keep the driver detail', () => {
+  const message = 'Motor 5 write Torque_Enable=0 failed: [RxPacketError] OverEle error!';
+  expect(describeHardwareError(message)).toEqual({
+    title: 'Motor 5 (wrist roll) reports overcurrent.',
+    next: 'Support the arm and switch off motor power. Check for binding, obstructions and tight cables before powering on and scanning again.',
+    details: message,
+  });
+});
+
+test('saved-range errors explain the measured excess and recovery', () => {
+  const message =
+    'Hardware session stopped: Gripper is outside its saved range (1733 ticks; allowed 1734–2948). Motion stopped';
+  const error = describeHardwareError(message);
+  expect(error.title).toBe('Gripper is outside its calibrated range.');
+  expect(error.next).toContain('1 tick below');
+  expect(error.next).toContain('1734–2948');
+  expect(error.details).toBe(message);
+});
