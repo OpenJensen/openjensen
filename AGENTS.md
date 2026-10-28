@@ -1,8 +1,8 @@
 # Working safely in this repository
 
-Read the current issue/task record and source before editing. Preserve working configuration, user data and previously verified behavior. Keep application code and concise in-app help here. Extended setup guides, standalone experiment/benchmark suites and unused configuration examples belong outside this repository. Local verification results, experiment outputs, benchmarks and run reports stay local: never commit them or put them in commit messages or pull requests. Upstream files never name the maintainers' machines, hardware, hostnames, usernames or local paths. Use the designated planning location for larger coordination records. The coordinator owns shared interfaces and integration.
+Read the current issue/task record and source before editing. Preserve working configuration, user data and previously verified behavior. Keep application code, concise in-app help, the README and the essential guides in `docs/` (getting started, SO-101 Robot Lab setup, backup and upgrade) here. Other extended setup guides, standalone experiment/benchmark suites and unused configuration examples belong outside this repository. Local verification results, experiment outputs, benchmarks and run reports stay local: never commit them or put them in commit messages or pull requests. Upstream files never name the maintainers' machines, hardware, hostnames, usernames or local paths. Use the designated planning location for larger coordination records. The coordinator owns shared interfaces and integration.
 
-Run `python3 .github/scripts/check_doc_links.py` before committing documentation.
+Write documentation by [docs/writing-docs.md](docs/writing-docs.md) and run `python3 .github/scripts/check_doc_links.py` before committing it.
 
 ## Local verification and publication
 
