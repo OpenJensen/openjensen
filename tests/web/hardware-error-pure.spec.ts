@@ -21,3 +21,13 @@ test('short messages stay as written and long ones keep their first sentence', (
   const long = `Calibration could not be saved. ${'The profile write was refused. '.repeat(8)}`;
   expect(describeHardwareError(long)).toEqual({ title: 'Calibration could not be saved.', details: long });
 });
+
+test('corrupt replies explain serial communication separately from the device name', () => {
+  const message =
+    'Motor safety check failed: Corrupt motor replies: disconnect the other motors and check cabling/power';
+  const described = describeHardwareError(message);
+  expect(described.title).toBe('A motor reply was corrupted.');
+  expect(described.next).toContain('check for duplicate motor IDs');
+  expect(described.next).not.toContain('disconnect the other motors');
+  expect(described.details).toBe(message);
+});

@@ -32,6 +32,7 @@ export function useRobotLab() {
   const setPort = role === 'leader' ? setLeaderPort : setFollowerDevice;
   const setRobotId = role === 'leader' ? setLeaderId : setFollowerId;
   const armLabel = role === 'leader' ? 'Leader' : 'Follower';
+  const validRobotName = /^[A-Za-z0-9_-]{1,64}$/.test(robotId);
   const [mode, setMode] = useState<ControlMode>('manual');
   const [isolated, setIsolated] = useState(false);
   const [assembledReady, setAssembledReady] = useState(false);
@@ -536,9 +537,21 @@ export function useRobotLab() {
         'openjensen.robot-lab.preferences',
         JSON.stringify({ port: followerDevice, robotId: followerId, role, leaderPort, leaderId, middleTolerance }),
       );
+      return true;
     } catch {
-      /* Preferences are optional. */
+      return false;
     }
+  }
+  function saveDeviceName() {
+    if (active || busy || !validRobotName) return;
+    if (!remember()) {
+      setError('The browser could not save this name. Check that local storage is available.');
+      return;
+    }
+    setError(null);
+    setNotice(
+      `${armLabel} name saved in this browser: ${robotId}. ${selectedProfile?.valid !== false && selectedProfile ? 'Saved calibration found; scan the arm to check it.' : 'Calibrate this arm to save motor settings under this name.'}`,
+    );
   }
   async function jog(joint: RobotJoint, delta: number) {
     return commandJoint(() => robotApi.jog(joint, delta));
@@ -622,20 +635,39 @@ export function useRobotLab() {
   const identity = (
     <div className="robot-lab-fields">
       {followerPort}
-      <label>
-        {armLabel} name
-        <input
-          aria-label={`${armLabel} name`}
-          value={robotId}
-          disabled={active || busy}
-          onChange={(event) => {
-            setRobotId(event.target.value);
-            setMotionReady(false);
-          }}
-          maxLength={64}
-          pattern="[A-Za-z0-9_-]+"
-        />
-      </label>
+      <div className="robot-lab-name-field">
+        <label htmlFor="robot-profile-name">{armLabel} name</label>
+        <div className="robot-lab-name-controls">
+          <input
+            id="robot-profile-name"
+            aria-label={`${armLabel} name`}
+            aria-describedby="robot-profile-name-help"
+            aria-invalid={!validRobotName}
+            value={robotId}
+            disabled={active || busy}
+            onChange={(event) => {
+              setRobotId(event.target.value);
+              setMotionReady(false);
+              setNotice(null);
+            }}
+            maxLength={64}
+            pattern="[A-Za-z0-9_-]+"
+          />
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={active || busy || !validRobotName}
+            onClick={saveDeviceName}
+          >
+            Save name
+          </button>
+        </div>
+        <small id="robot-profile-name-help">
+          {validRobotName
+            ? 'Used for this arm’s calibration profile.'
+            : 'Use 1–64 letters, numbers, hyphens or underscores.'}
+        </small>
+      </div>
     </div>
   );
 

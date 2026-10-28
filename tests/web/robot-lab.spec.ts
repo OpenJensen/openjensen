@@ -484,6 +484,39 @@ test('arm role is visible throughout setup and keeps separate USB ports and name
   expect(state.errors).toEqual([]);
 });
 
+test('device names save independently of motor communication and remain selected after reload', async ({ page }) => {
+  const state = await fixture(page);
+  const corruption =
+    'Motor safety check failed: Corrupt motor replies: disconnect the other motors and check cabling/power';
+  state.status.session.error = corruption;
+  await page.getByRole('button', { name: 'Refresh devices', exact: true }).click();
+  await expect(page.getByText('A motor reply was corrupted.', { exact: true })).toBeVisible();
+  const devicePicker = page.getByRole('combobox', { name: 'Devices', exact: true });
+  await devicePicker.selectOption('leader');
+  const name = page.getByLabel('Leader name', { exact: true });
+  const save = page.getByRole('button', { name: 'Save name', exact: true });
+  await name.fill('my leader arm');
+  await expect(name).toHaveAttribute('aria-invalid', 'true');
+  await expect(save).toBeDisabled();
+  await expect(page.getByText('Use 1–64 letters, numbers, hyphens or underscores.', { exact: true })).toBeVisible();
+  await name.fill('my-so101-leader');
+  await expect(name).toHaveAttribute('aria-invalid', 'false');
+  await save.click();
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Leader name saved in this browser: my-so101-leader.' }),
+  ).toBeVisible();
+  expect(state.writes).toEqual([]);
+  await page.reload();
+  await expect(devicePicker).toHaveValue('leader');
+  await expect(name).toHaveValue('my-so101-leader');
+  await expect(page.getByText('A motor reply was corrupted.', { exact: true })).toBeVisible();
+  await devicePicker.selectOption('follower');
+  await expect(page.getByLabel('Follower name', { exact: true })).toHaveValue('my-so101');
+  expect(state.status.calibrations).toEqual([]);
+  expect(state.writes).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
 test('leader calibration retains its role after reload and returns to the follower for control', async ({ page }) => {
   const state = await fixture(page, true);
   const devicePicker = page.getByRole('combobox', { name: 'Devices', exact: true });
