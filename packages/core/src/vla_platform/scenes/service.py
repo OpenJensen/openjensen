@@ -98,7 +98,7 @@ class Scenes:
         for path in self.directory.glob("*/run.json"):
             try:
                 run = self.get(path.parent.name)
-            except (SceneError, ValueError, OSError):
+            except SceneError, ValueError, OSError:
                 continue
             if run.project_id == project:
                 found.append(run)
@@ -109,7 +109,7 @@ class Scenes:
             for path in self.directory.glob("*/run.json"):
                 try:
                     run = self.get(path.parent.name)
-                except (SceneError, ValueError, OSError):
+                except SceneError, ValueError, OSError:
                     continue
                 if run.status in ACTIVE:
                     run.status = "interrupted"
