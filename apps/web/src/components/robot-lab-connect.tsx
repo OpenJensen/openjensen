@@ -2,13 +2,12 @@
 
 import { Icon } from '@/components/icon';
 import { robotJoints } from '@/lib/robot-api';
-import { Heading, Notice } from './robot-lab-shared';
+import { Notice } from './robot-lab-shared';
 import type { RobotLabState } from './robot-lab-state';
 
 export function RobotLabConnect({ lab }: { lab: RobotLabState }) {
   const {
     active,
-    armLabel,
     canAct,
     canUseArm,
     checkArm,
@@ -27,7 +26,6 @@ export function RobotLabConnect({ lab }: { lab: RobotLabState }) {
   } = lab;
   return (
     <>
-      <Heading title={`Connect ${armLabel.toLowerCase()} arm`} />
       <div className="robot-lab-form">
         {!online && (
           <Notice>

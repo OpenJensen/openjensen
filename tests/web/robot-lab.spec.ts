@@ -446,29 +446,28 @@ test('motor IDs require a fresh isolation acknowledgement for every motor', asyn
 
 test('arm role is visible throughout setup and keeps separate USB ports and names', async ({ page }, testInfo) => {
   const state = await fixture(page);
-  const chooseLeader = page.getByRole('button', { name: /^Leader arm You move/ });
-  const chooseFollower = page.getByRole('button', { name: /^Follower arm This arm/ });
-  await expect(chooseFollower).toHaveAttribute('aria-pressed', 'true');
+  const devicePicker = page.getByRole('combobox', { name: 'Devices', exact: true });
+  await expect(devicePicker).toHaveValue('follower');
   await page.getByLabel('Follower name', { exact: true }).fill('task-arm');
-  await chooseLeader.click();
-  await expect(chooseLeader).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('heading', { name: 'Connect leader arm', exact: true })).toBeVisible();
+  await devicePicker.selectOption('leader');
+  await expect(devicePicker).toHaveValue('leader');
+  await expect(page.getByRole('heading', { name: 'Devices', exact: true })).toBeVisible();
   await expect(page.getByLabel('Leader USB port')).toHaveValue('');
   await expect(page.getByRole('button', { name: 'Scan motor IDs', exact: true })).toBeDisabled();
   await page.getByLabel('Leader USB port').selectOption('/dev/cu.usbmodem-leader');
   await page.getByLabel('Leader name', { exact: true }).fill('guide-arm');
   for (const title of ['Motor IDs', 'Calibrate', 'Connect']) {
     await tab(page, title).click();
-    await expect(page.getByText('Setting up: Leader arm', { exact: true })).toBeVisible();
+    await expect(devicePicker).toHaveValue('leader');
   }
-  await chooseFollower.click();
+  await devicePicker.selectOption('follower');
   await expect(page.getByLabel('Follower USB port')).toHaveValue(port);
   await expect(page.getByLabel('Follower name', { exact: true })).toHaveValue('task-arm');
-  await chooseLeader.click();
+  await devicePicker.selectOption('leader');
   await expect(page.getByLabel('Leader USB port')).toHaveValue('/dev/cu.usbmodem-leader');
   await expect(page.getByLabel('Leader name', { exact: true })).toHaveValue('guide-arm');
   expect(state.writes).toEqual([]);
-  await page.getByRole('heading', { name: 'Which arm are you setting up?' }).click();
+  await page.getByRole('heading', { name: 'Devices' }).click();
   await page.screenshot({ path: testInfo.outputPath('leader-setup.png'), fullPage: true });
   await page.getByRole('button', { name: 'Scan motor IDs', exact: true }).click();
   await expect.poll(() => writes(state, '/probe').length).toBe(1);
@@ -479,7 +478,7 @@ test('arm role is visible throughout setup and keeps separate USB ports and name
   });
   await page.reload();
   await expect(page.getByLabel('Leader USB port')).toHaveValue('/dev/cu.usbmodem-leader');
-  await chooseFollower.click();
+  await devicePicker.selectOption('follower');
   await expect(page.getByLabel('Follower USB port')).toHaveValue(port);
   await expect(page.getByLabel('Follower name', { exact: true })).toHaveValue('task-arm');
   expect(state.errors).toEqual([]);
@@ -487,13 +486,13 @@ test('arm role is visible throughout setup and keeps separate USB ports and name
 
 test('leader calibration retains its role after reload and returns to the follower for control', async ({ page }) => {
   const state = await fixture(page, true);
-  const chooseLeader = page.getByRole('button', { name: /^Leader arm You move/ });
-  await chooseLeader.click();
+  const devicePicker = page.getByRole('combobox', { name: 'Devices', exact: true });
+  await devicePicker.selectOption('leader');
   await page.getByLabel('Leader USB port').selectOption('/dev/cu.usbmodem-leader');
   await tab(page, 'Calibrate').click();
   await expect(page.getByRole('heading', { name: 'Leader calibration', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Begin calibration', exact: true }).click();
-  await expect(chooseLeader).toBeDisabled();
+  await expect(devicePicker).toBeDisabled();
   await expect(tab(page, 'Teleoperate')).toBeDisabled();
   expect(writes(state, '/calibration/start')[0].body).toEqual({
     port: '/dev/cu.usbmodem-leader',
