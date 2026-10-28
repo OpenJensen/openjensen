@@ -71,6 +71,8 @@ from vla_platform.projects import Projects
 from vla_platform.recordings_api import router as recordings_router
 from vla_platform.robot_lab_api import router as robot_lab_router
 from vla_platform.robot_lab_bridge import RobotLabBridge
+from vla_platform.scenes.service import Scenes
+from vla_platform.scenes_api import router as scenes_router
 from vla_platform.settings import Settings
 from vla_platform.storage import Storage
 from vla_platform.submissions import (
@@ -145,6 +147,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await storage.initialize()
             initialized = True
             await execution.reconcile()
+            app.state.scenes = Scenes(settings.data_dir)
+            await app.state.scenes.reconcile()
             app.state.module_installations = ModuleInstallations(settings.data_dir)
             app.state.application_updates = ApplicationUpdates(data_dir=settings.data_dir)
             app.state.projects, app.state.execution = Projects(storage), execution
@@ -181,6 +185,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             try:
                 if initialized:
+                    if hasattr(app.state, "scenes"):
+                        await app.state.scenes.close()
                     try:
                         if hasattr(app.state, "agent_control"):
                             await app.state.agent_control.close()
@@ -241,6 +247,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(recordings_router)
     app.include_router(dataset_library_router)
     app.include_router(robot_lab_router)
+    app.include_router(scenes_router)
     app.include_router(updates_router)
     app.include_router(modules_router)
 

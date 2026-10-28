@@ -5950,6 +5950,143 @@
         "title": "RuntimePackage",
         "type": "object"
       },
+      "SceneRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "camera_key": {
+            "default": "observation.images.front",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Camera Key",
+            "type": "string"
+          },
+          "episode_index": {
+            "default": 3,
+            "maximum": 99999.0,
+            "minimum": 0.0,
+            "title": "Episode Index",
+            "type": "integer"
+          },
+          "max_attempts": {
+            "default": 2,
+            "maximum": 3.0,
+            "minimum": 1.0,
+            "title": "Max Attempts",
+            "type": "integer"
+          },
+          "request_id": {
+            "pattern": "^[a-f0-9]{32}$",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "source_job_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Source Job Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "source_job_id"
+        ],
+        "title": "SceneRequest",
+        "type": "object"
+      },
+      "SceneRun": {
+        "additionalProperties": false,
+        "properties": {
+          "artifacts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Artifacts",
+            "type": "array"
+          },
+          "attempt": {
+            "default": 0,
+            "title": "Attempt",
+            "type": "integer"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "gates": {
+            "additionalProperties": true,
+            "title": "Gates",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "request": {
+            "$ref": "#/components/schemas/SceneRequest"
+          },
+          "source": {
+            "additionalProperties": true,
+            "title": "Source",
+            "type": "object"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "needs_simulation",
+              "needs_review",
+              "failed",
+              "cancelled",
+              "interrupted"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "usage": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Usage",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "request",
+          "status",
+          "stage",
+          "created_at",
+          "updated_at",
+          "message"
+        ],
+        "title": "SceneRun",
+        "type": "object"
+      },
       "Score": {
         "additionalProperties": false,
         "properties": {
@@ -11548,6 +11685,102 @@
         ]
       }
     },
+    "/api/v1/projects/{project_id}/scenes": {
+      "get": {
+        "operationId": "scenes_api_v1_projects__project_id__scenes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SceneRun"
+                  },
+                  "title": "Response Scenes Api V1 Projects  Project Id  Scenes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scenes",
+        "tags": [
+          "Scene generation"
+        ]
+      },
+      "post": {
+        "operationId": "create_api_v1_projects__project_id__scenes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SceneRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create",
+        "tags": [
+          "Scene generation"
+        ]
+      }
+    },
     "/api/v1/projects/{project_id}/submissions/{key}": {
       "get": {
         "description": "Observe an accepted job without resolving inputs, dispatching or retrying it.",
@@ -12861,6 +13094,158 @@
         "summary": "Robot Lab Post Stop",
         "tags": [
           "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/scene-generation/options": {
+      "get": {
+        "operationId": "options_api_v1_scene_generation_options_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Options",
+        "tags": [
+          "Scene generation"
+        ]
+      }
+    },
+    "/api/v1/scenes/{ident}": {
+      "get": {
+        "operationId": "scene_api_v1_scenes__ident__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scene",
+        "tags": [
+          "Scene generation"
+        ]
+      }
+    },
+    "/api/v1/scenes/{ident}/artifact": {
+      "get": {
+        "operationId": "artifact_api_v1_scenes__ident__artifact_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Artifact",
+        "tags": [
+          "Scene generation"
+        ]
+      }
+    },
+    "/api/v1/scenes/{ident}/cancel": {
+      "post": {
+        "operationId": "cancel_api_v1_scenes__ident__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ident",
+            "required": true,
+            "schema": {
+              "title": "Ident",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel",
+        "tags": [
+          "Scene generation"
         ]
       }
     },

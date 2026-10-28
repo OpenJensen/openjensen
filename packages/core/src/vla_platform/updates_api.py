@@ -44,6 +44,7 @@ async def require_idle(request):
     setup = getattr(execution.lifecycle, "local_worker_setup", None)
     if (
         getattr(getattr(request.app.state, "agent_control", None), "pending", False)
+        or any(not task.done() for task in request.app.state.scenes.tasks.values())
         or request.app.state.active_writes
         or getattr(request.app.state, "module_install_reserving", False)
         or getattr(request.app.state, "module_installations", None)

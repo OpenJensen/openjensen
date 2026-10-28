@@ -113,6 +113,18 @@ async function fixture(page: Page) {
       }
       return route.fulfill({ status: 405, json: { detail: 'Unexpected test mutation' } });
     }
+    if (path === '/api/v1/scene-generation/options')
+      return route.fulfill({
+        json: {
+          configured: false,
+          codex_available: false,
+          builder_available: false,
+          supported_repo: 'codywang/so101_pickup_test',
+          supported_revision: 'ecef85bc07005f771ad86deeff1427f9d72953ed',
+          message: 'Fixture runtime is unconfigured.',
+        },
+      });
+    if (path.endsWith('/scenes') || path === '/api/v1/datasets') return route.fulfill({ json: [] });
     if (path === '/api/v1/simulation-options')
       return route.fulfill(
         state.optionsError
@@ -1159,3 +1171,72 @@ for (const both of [false, true])
     ).toContain('Original native launch');
     expect(state.posts).toEqual([]);
   });
+
+test('scene generation exposes missing setup without starting agents or a GPU job', async ({ page }) => {
+  const state = await fixture(page);
+  const scene = page.getByRole('region', { name: 'Scene generation', exact: true });
+  await expect(scene).toBeVisible();
+  await expect(scene.getByRole('button', { name: 'Generate scene', exact: true })).toBeDisabled();
+  await expect(scene).toContainText('Scene runtime needs setup');
+  expect(state.posts).toEqual([]);
+});
+
+test('generated USD keeps unverified simulator gates visible and bundles downloadable', async ({ page }) => {
+  await fixture(page);
+  const revision = 'ecef85bc07005f771ad86deeff1427f9d72953ed';
+  const run = {
+    id: 'a'.repeat(32),
+    status: 'needs_simulation',
+    stage: 'validation',
+    attempt: 1,
+    message: 'USD structure passed. Isaac validation is still required.',
+    request: { episode_index: 3, max_attempts: 2 },
+    gates: {
+      source_evidence: true,
+      agent_review: true,
+      usd_structure: true,
+      isaac_runtime: false,
+      visual_match: false,
+      calibrated_replay: false,
+    },
+    artifacts: ['scene-bundle.zip'],
+    usage: {},
+    events: [],
+  };
+  await page.route('**/api/v1/scene-generation/options', (route) =>
+    route.fulfill({
+      json: {
+        configured: true,
+        codex_available: true,
+        builder_available: true,
+        supported_repo: 'codywang/so101_pickup_test',
+        supported_revision: revision,
+        message: '',
+      },
+    }),
+  );
+  await page.route('**/api/v1/datasets?*', (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: 'inspection:source',
+          job_id: 'source',
+          name: 'SO101 real episodes',
+          status: 'ready',
+          profile: { repo_id: 'codywang/so101_pickup_test', revision, total_episodes: 30 },
+        },
+      ],
+    }),
+  );
+  await page.route('**/api/v1/projects/alpha/scenes', (route) => route.fulfill({ json: [run] }));
+  await page.reload();
+  const scene = page.getByRole('region', { name: 'Scene generation', exact: true });
+  await expect(scene).toContainText('USD structure: passed');
+  await expect(scene).toContainText('Isaac runtime: unverified');
+  await expect(scene).toContainText('Rendered image match: unverified');
+  await expect(scene.getByRole('link', { name: 'Download Isaac scene bundle' })).toHaveAttribute(
+    'href',
+    /scene-bundle.zip$/,
+  );
+  await expect(scene.getByRole('button', { name: 'Generate scene', exact: true })).toBeEnabled();
+});
