@@ -86,7 +86,7 @@ export function RobotLab() {
             : 'Reconnecting… Motion controls are paused; the motor watchdog remains active.'}
         </p>
       )}
-      {notice && !session?.error && (
+      {notice && (
         <p className="robot-lab-event" role="status">
           {notice}
         </p>

@@ -229,6 +229,9 @@ export function useRobotLab() {
     setProbe(null);
   }, [robotId, role]);
   useEffect(() => {
+    if (session?.error) setNotice(null);
+  }, [session?.error]);
+  useEffect(() => {
     if (session?.mode === 'setup' || session?.mode === 'calibration') setProbe(null);
   }, [session?.mode]);
   useEffect(() => {
