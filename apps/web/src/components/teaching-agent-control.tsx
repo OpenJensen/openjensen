@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { agentApi, type AgentSession, type AgentSessionRequest } from '@/lib/agent-api';
+import { agentModelName } from '@/lib/agent-models';
 import { AiPhysicalConnection, useAiPhysicalConnection } from './ai-physical-connection';
 import './workbench-form.css';
 import './agent-control.css';
@@ -396,7 +397,7 @@ function AgentControls({
             >
               {providers.data?.map((profile) => (
                 <option key={profile.id} value={profile.id}>
-                  {profile.id} · {profile.model}
+                  {agentModelName(profile.model)} · {profile.id}
                   {profile.checked ? '' : ' · unverified'}
                 </option>
               ))}

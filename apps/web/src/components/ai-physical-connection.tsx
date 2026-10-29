@@ -69,9 +69,8 @@ export function useAiPhysicalConnection(enabled: boolean, onSession: (session: A
   const profileReady =
     !!profile &&
     profile.valid !== false &&
-    profile.setup_fresh !== false &&
-    !!profile.sha256 &&
-    (!profile.setup_port || profile.setup_port === port);
+    (profile.setup_port !== port || profile.setup_fresh !== false) &&
+    !!profile.sha256;
   const portReady = !!port && !devices.isError && !!devices.data?.ports.some((item) => item.device === port);
   const cameraReady =
     preview &&
@@ -109,6 +108,25 @@ export function useAiPhysicalConnection(enabled: boolean, onSession: (session: A
     !connecting &&
     !owned &&
     typeof generation === 'number';
+  const connectionIssue = !profile
+    ? 'Choose a saved arm by name, then review its USB connection.'
+    : profile.valid === false
+      ? 'This saved calibration is invalid. Review it in Initial setup.'
+      : !portReady
+        ? profile.setup_port
+          ? `The saved connection (${profile.setup_port}) is unavailable. Connect the arm or select its current USB port.`
+          : 'Select the current USB port for this saved arm.'
+        : !profile.sha256
+          ? 'The saved calibration identity is unavailable. Refresh readiness or update the companion.'
+          : !profileReady
+            ? 'Motor setup changed on this arm’s saved connection. Review its calibration in Initial setup.'
+            : !cameraReady
+              ? 'Start the workspace camera preview and wait for a current image.'
+              : !operatorPresent || !workspaceClear
+                ? 'Review the camera image and confirm operator presence and workspace clearance.'
+                : state?.session?.mode !== 'idle' && !owned
+                  ? 'Stop the existing controller before connecting from this page.'
+                  : null;
 
   const stop = useCallback(
     async (reason = 'Physical control stopped.', force = false) => {
@@ -316,6 +334,7 @@ export function useAiPhysicalConnection(enabled: boolean, onSession: (session: A
     operatorPresent,
     workspaceClear,
     canConnect,
+    connectionIssue,
     canArm,
     generation,
     connect,
@@ -341,11 +360,17 @@ export function useAiPhysicalConnection(enabled: boolean, onSession: (session: A
     },
     chooseRobot: (value: string) => {
       setRobotId(value);
+      const saved = state?.calibrations?.find((item) => item.robot_id === value && item.role === 'follower');
+      if (saved?.setup_port) {
+        setPort(devices.data?.ports.some((item) => item.device === saved.setup_port) ? saved.setup_port : '');
+      }
       setOperatorPresent(false);
       setWorkspaceClear(false);
     },
     chooseCamera: (value: number | null) => {
       setCameraIndex(value);
+      setPreview(value !== null);
+      setPreviewStamp(Date.now());
       setImageLoadedAt(0);
       setCameraError('');
       setOperatorPresent(false);
@@ -392,6 +417,24 @@ export function AiPhysicalConnection({ physical }: { physical: ReturnType<typeof
       )}
       <div className="workbench-field-grid">
         <label className="workbench-field">
+          Saved arm
+          <select
+            value={physical.robotId}
+            disabled={owned || connecting}
+            onChange={(event) => physical.chooseRobot(event.target.value)}
+          >
+            <option value="">Select a saved arm</option>
+            {state?.calibrations
+              ?.filter((profile) => profile.role === 'follower')
+              .map((profile) => (
+                <option key={profile.robot_id} value={profile.robot_id} disabled={profile.valid === false}>
+                  {profile.robot_id}
+                  {profile.valid === false ? ' · invalid' : profile.setup_fresh === false ? ' · stale' : ''}
+                </option>
+              ))}
+          </select>
+        </label>
+        <label className="workbench-field">
           Robot USB port
           <select
             value={physical.port}
@@ -406,28 +449,15 @@ export function AiPhysicalConnection({ physical }: { physical: ReturnType<typeof
             ))}
           </select>
         </label>
-        <label className="workbench-field">
-          Calibrated follower
-          <select
-            value={physical.robotId}
-            disabled={owned || connecting}
-            onChange={(event) => physical.chooseRobot(event.target.value)}
-          >
-            <option value="">Select a saved calibration</option>
-            {state?.calibrations
-              ?.filter((profile) => profile.role === 'follower')
-              .map((profile) => (
-                <option
-                  key={profile.robot_id}
-                  value={profile.robot_id}
-                  disabled={profile.valid === false || profile.setup_fresh === false}
-                >
-                  {profile.robot_id}
-                  {profile.valid === false ? ' · invalid' : profile.setup_fresh === false ? ' · stale' : ''}
-                </option>
-              ))}
-          </select>
-        </label>
+      </div>
+      {physical.robotId && (
+        <p>
+          Saved arm names remember their last verified USB connection. If the port changed, select the current
+          connection; the arm’s calibration is checked again before torque is enabled.
+        </p>
+      )}
+      <section className="agent-workspace-camera" aria-label="Workspace camera">
+        <h4>Workspace camera</h4>
         <label className="workbench-field">
           Physical camera
           <select
@@ -443,27 +473,36 @@ export function AiPhysicalConnection({ physical }: { physical: ReturnType<typeof
             ))}
           </select>
         </label>
-      </div>
-      <label className="workbench-check">
-        <input
-          type="checkbox"
-          checked={physical.preview}
-          disabled={connecting}
-          onChange={(event) => physical.togglePreview(event.target.checked)}
-        />
-        Show the local camera preview
-      </label>
-      {physical.imageUrl && (
-        <img
-          className="agent-control-camera"
-          src={physical.imageUrl}
-          alt="Local SO101 camera preview"
-          onLoad={physical.imageLoaded}
-          onError={physical.imageFailed}
-        />
-      )}
-      {physical.preview && <p>Preview only. Execution uses a separately identified encoder and camera observation.</p>}
-      {physical.cameraError && <p role="alert">{physical.cameraError}</p>}
+        <label className="workbench-check">
+          <input
+            type="checkbox"
+            checked={physical.preview}
+            disabled={connecting || physical.cameraIndex === null}
+            onChange={(event) => physical.togglePreview(event.target.checked)}
+          />
+          Show the local camera preview
+        </label>
+        {physical.imageUrl ? (
+          <div className="agent-camera-preview">
+            <img
+              key={physical.cameraIndex}
+              className="agent-control-camera"
+              src={physical.imageUrl}
+              alt="Local SO101 camera preview"
+              onLoad={physical.imageLoaded}
+              onError={physical.imageFailed}
+            />
+            {!physical.cameraReady && !physical.cameraError && <p role="status">Loading camera preview…</p>}
+          </div>
+        ) : (
+          <div className="agent-camera-placeholder">
+            <p>Select a camera to preview your workspace before connecting the arm.</p>
+          </div>
+        )}
+        {physical.preview && <p>Local preview. AI planning sends images only after you enable cloud consent.</p>}
+        {devices.data?.camera_error && <p role="alert">{devices.data.camera_error}</p>}
+        {physical.cameraError && <p role="alert">{physical.cameraError}</p>}
+      </section>
       <label className="workbench-check">
         <input
           type="checkbox"
@@ -480,6 +519,7 @@ export function AiPhysicalConnection({ physical }: { physical: ReturnType<typeof
         />
         The arm and its full movement path are clear; the selected camera shows the intended workspace.
       </label>
+      {!owned && physical.connectionIssue && <p role="status">{physical.connectionIssue}</p>}
       <div className="workbench-actions">
         <button
           type="button"

@@ -47,10 +47,12 @@ def test_only_stable_unambiguous_versions(value):
 
 def test_real_manifests_are_consistent_and_rewrite_is_idempotent():
     original = versions.load(ROOT)
-    changed = versions.rewrite(original, "0.1.10")
-    assert versions.validate(changed, "0.1.9") == "0.1.10"
+    before = versions.current(original)
+    after = versions.next_patch(before)
+    changed = versions.rewrite(original, after)
+    assert versions.validate(changed, before) == after
     assert len(versions.versions(changed)) == 11
-    assert versions.rewrite(changed, "0.1.10") == changed
+    assert versions.rewrite(changed, after) == changed
     # Third-party lock entries and every other dependency stay byte-for-byte identical.
     restored = versions.rewrite(changed, versions.current(original))
     assert restored == original
@@ -59,11 +61,13 @@ def test_real_manifests_are_consistent_and_rewrite_is_idempotent():
     with pytest.raises(ValueError, match="disagree"):
         versions.validate(mismatched)
     with pytest.raises(ValueError, match="Expected patch"):
-        versions.validate(changed, "0.1.8")
-    manual = versions.rewrite(original, "0.2.0")
-    assert versions.validate(manual, "0.1.9", manual=True) == "0.2.0"
+        versions.validate(changed, after)
+    major, minor, _ = versions.parse(before)
+    manual_version = f"{major}.{minor + 1}.0"
+    manual = versions.rewrite(original, manual_version)
+    assert versions.validate(manual, before, manual=True) == manual_version
     with pytest.raises(ValueError):
-        versions.validate(manual, "0.1.9")
+        versions.validate(manual, before)
 
 
 def pr():

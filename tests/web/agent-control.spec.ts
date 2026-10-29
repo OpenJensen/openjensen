@@ -12,6 +12,9 @@ async function fixture(
     deferManualHeartbeat?: boolean;
     holdAdmissionImages?: boolean;
     emptyPorts?: boolean;
+    alternatePort?: boolean;
+    staleCalibration?: boolean;
+    cameraFailure?: boolean;
   } = {},
 ) {
   const requests: { path: string; body: Record<string, unknown> }[] = [];
@@ -113,7 +116,7 @@ async function fixture(
         robot_id: 'fixture-arm',
         role: 'follower',
         valid: true,
-        setup_fresh: true,
+        setup_fresh: !options.staleCalibration,
         setup_port: '/dev/fixture',
         sha256: 'b'.repeat(64),
         path: 'fixture-only',
@@ -190,12 +193,18 @@ async function fixture(
     if (path === '/robot-lab/devices')
       return route.fulfill({
         json: {
-          ports: options.emptyPorts ? [] : [{ device: '/dev/fixture', description: 'Synthetic USB' }],
+          ports: options.emptyPorts
+            ? []
+            : [
+                ...(options.alternatePort ? [{ device: '/dev/other-arm', description: 'Other synthetic USB' }] : []),
+                { device: '/dev/fixture', description: 'Synthetic USB' },
+              ],
           cameras: [{ index: 0, name: 'Synthetic local camera', width: 1, height: 1 }],
           camera_error: null,
         },
       });
     if (path === '/robot-lab/camera.jpg' || path.endsWith('/image')) {
+      if (options.cameraFailure && path === '/robot-lab/camera.jpg') return route.fulfill({ status: 503, body: '' });
       if (options.holdAdmissionImages && path.includes('/observations/admission-')) await admissionImagesReady;
       return route.fulfill({ contentType: 'image/png', body: pixel });
     }
@@ -237,13 +246,14 @@ async function fixture(
       return route.fulfill({ json: apiConnection('openai') });
     }
     if (path === '/agent/providers') return route.fulfill({ json: profiles });
+    if (path === '/agent/openai/models') return route.fulfill({ json: ['gpt-6-astra', 'gpt-6.1-sol'] });
     if (path === '/agent/providers/openai' && request.method() === 'PUT') {
       profiles = [
         ...profiles.filter((p) => p.id !== 'openai'),
         {
           id: 'openai',
           provider: 'openai_responses',
-          model: 'gpt-6-astra',
+          model: request.postDataJSON().model,
           reasoning_effort: 'medium',
           revision: 'profile-v1',
           saved: true,
@@ -534,7 +544,7 @@ async function connectPhysical(page: Page) {
   await page.getByLabel('Task goal', { exact: true }).fill('Pick up the object');
   await page.getByRole('combobox', { name: 'Agent target', exact: true }).selectOption('robot_lab');
   await page.getByRole('combobox', { name: 'Robot USB port', exact: true }).selectOption('/dev/fixture');
-  await page.getByRole('combobox', { name: 'Calibrated follower', exact: true }).selectOption('fixture-arm');
+  await page.getByRole('combobox', { name: 'Saved arm', exact: true }).selectOption('fixture-arm');
   await page.getByRole('combobox', { name: 'Physical camera', exact: true }).selectOption('0');
   await page.getByLabel('Show the local camera preview', { exact: true }).check();
   await expect
@@ -548,6 +558,77 @@ async function connectPhysical(page: Page) {
     .check();
   await page.getByRole('button', { name: 'Connect arm and hold current pose', exact: true }).click();
 }
+
+test('saved arm names choose their own connection and selecting a camera starts its visible preview', async ({
+  page,
+}) => {
+  const { requests } = await fixture(page, { physical: true, alternatePort: true });
+  await page.goto('/ai-teleoperation/');
+  await openModuleTask(page);
+  const camera = page.getByRole('region', { name: 'Workspace camera', exact: true });
+  await expect(camera).toContainText('Select a camera to preview your workspace');
+  await page.getByRole('combobox', { name: 'Saved arm', exact: true }).selectOption('fixture-arm');
+  await expect(page.getByRole('combobox', { name: 'Robot USB port', exact: true })).toHaveValue('/dev/fixture');
+  await page.getByRole('combobox', { name: 'Physical camera', exact: true }).selectOption('0');
+  await expect(page.getByLabel('Show the local camera preview', { exact: true })).toBeChecked();
+  await expect(camera.getByAltText('Local SO101 camera preview')).toBeVisible();
+  expect(requests).toEqual([]);
+});
+
+test('a disconnected saved arm explains the missing connection without starting motion', async ({ page }) => {
+  const { requests } = await fixture(page, { physical: true, emptyPorts: true });
+  await page.goto('/ai-teleoperation/');
+  await openModuleTask(page);
+  await page.getByRole('combobox', { name: 'Saved arm', exact: true }).selectOption('fixture-arm');
+  await expect(page.getByRole('combobox', { name: 'Robot USB port', exact: true })).toHaveValue('');
+  await expect(page.getByText('The saved connection (/dev/fixture) is unavailable.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Connect arm and hold current pose', exact: true })).toBeDisabled();
+  expect(requests).toEqual([]);
+});
+
+test('a genuinely stale selected connection stays blocked and explains why', async ({ page }) => {
+  const { requests } = await fixture(page, { physical: true, staleCalibration: true });
+  await page.goto('/ai-teleoperation/');
+  await openModuleTask(page);
+  await page.getByRole('combobox', { name: 'Saved arm', exact: true }).selectOption('fixture-arm');
+  await expect(page.getByText('Motor setup changed on this arm’s saved connection.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Connect arm and hold current pose', exact: true })).toBeDisabled();
+  expect(requests).toEqual([]);
+});
+
+test('a failed preview never admits a physical connection', async ({ page }) => {
+  const { requests } = await fixture(page, { physical: true, cameraFailure: true });
+  await page.goto('/ai-teleoperation/');
+  await openModuleTask(page);
+  await page.getByRole('combobox', { name: 'Saved arm', exact: true }).selectOption('fixture-arm');
+  await page.getByRole('combobox', { name: 'Physical camera', exact: true }).selectOption('0');
+  await expect(page.getByText('The physical camera preview is unavailable.', { exact: true })).toBeVisible();
+  await page.getByLabel('I am at the arm, supporting it where needed, with Stop within reach.').check();
+  await page
+    .getByLabel('The arm and its full movement path are clear; the selected camera shows the intended workspace.')
+    .check();
+  await expect(page.getByRole('button', { name: 'Connect arm and hold current pose', exact: true })).toBeDisabled();
+  expect(requests).toEqual([]);
+});
+
+test('OpenAI model names load explicitly and save their exact model IDs', async ({ page }) => {
+  const { requests, reads } = await fixture(page);
+  await page.goto('/cloud-apis/');
+  await page.getByText('Advanced OpenAI profiles', { exact: true }).click();
+  expect(reads).not.toContain('/agent/openai/models');
+  await page.getByRole('button', { name: 'Load available OpenAI models', exact: true }).click();
+  const models = page.getByRole('combobox', { name: 'OpenAI model', exact: true });
+  await expect(models.getByRole('option', { name: 'GPT-6.1 Sol · gpt-6.1-sol', exact: true })).toBeAttached();
+  await models.selectOption({ label: 'GPT-6.1 Sol · gpt-6.1-sol' });
+  await page.getByRole('button', { name: 'Save provider profile', exact: true }).click();
+  expect(requests.find((request) => request.path === '/agent/providers/openai')?.body.model).toBe('gpt-6.1-sol');
+  expect(requests.filter((request) => request.path.endsWith('/check'))).toEqual([]);
+  await page.goto('/ai-teleoperation/');
+  await openModuleTask(page);
+  await expect(page.getByRole('combobox', { name: 'Agent provider profile', exact: true })).toContainText(
+    'GPT-6.1 Sol · openai',
+  );
+});
 
 test('physical arming, current-image admission and focus loss retain explicit operator authority', async ({ page }) => {
   const { requests, releaseAdmissionImages } = await fixture(page, {
@@ -672,7 +753,7 @@ test('AI teleoperation opens physical preparation without starting a simulator, 
     'href',
     '/cloud-apis/',
   );
-  await expect(page.getByRole('combobox', { name: 'Calibrated follower', exact: true })).toHaveValue('');
+  await expect(page.getByRole('combobox', { name: 'Saved arm', exact: true })).toHaveValue('');
   await expect(page.getByLabel('Show the local camera preview', { exact: true })).not.toBeChecked();
   await expect(page.getByRole('region', { name: 'Simulation tools' })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Recording dataset preparation', exact: true })).toHaveCount(0);
