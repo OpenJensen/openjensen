@@ -108,17 +108,31 @@ def _script(record):
     prefix = record["results_prefix"]
     quote = shlex.quote
     # Credentials stay on the VM host; only immutable inputs reach the container.
-    return "\n".join(
+    body = "\n".join(
         [
             "set -euo pipefail",
             "mkdir -p job-output",
+            "chmod 0777 job-output",
             'scene_inputs="$PWD"',
+            "scene_container=" + quote(record["cluster"]),
             "upload_scene_results() {",
-            "  gcloud storage cp --recursive job-output/* " + quote(prefix + "/") + " || true",
+            '  timeout --kill-after=5s 20s docker rm -f "$scene_container" >/dev/null 2>&1 || true',
+            "  for scene_file in " + " ".join(quote(name) for name in FILES) + "; do",
+            '    scene_path="job-output/$scene_file"',
+            '    if [ -f "$scene_path" ] && [ ! -L "$scene_path" ]; then',
+            '      sudo chmod a+r -- "$scene_path" || continue',
+            '      timeout --kill-after=10s 90s gcloud storage cp "$scene_path" '
+            + quote(prefix + "/")
+            + " || true",
+            "    fi",
+            "  done",
             "}",
             "trap upload_scene_results EXIT",
-            "docker pull " + quote(config["image"]),
-            "docker run --rm --gpus all --cpus 8 --memory 42g --pids-limit 1024 "
+            "trap 'exit 143' TERM",
+            "trap 'exit 130' INT",
+            "timeout --kill-after=30s 600s docker pull " + quote(config["image"]),
+            'timeout --kill-after=30s 3000s docker run --rm --name "$scene_container" '
+            "--gpus all --cpus 8 --memory 42g --pids-limit 1024 "
             "--ipc host --network none --env ACCEPT_EULA=Y --env PRIVACY_CONSENT=Y "
             "--env PYTHONUNBUFFERED=1 --env NVIDIA_DRIVER_CAPABILITIES=all "
             '--mount "type=bind,src=$scene_inputs,dst=/inputs,readonly" '
@@ -129,6 +143,9 @@ def _script(record):
             "--bundle /inputs/bundle --trajectory /inputs/trajectory.json --output /outputs",
         ]
     )
+    # API loss cannot leave the remote job running indefinitely. Its signal
+    # handler stops only the named job container before attempting publication.
+    return "timeout --signal=TERM --kill-after=45s 3300s bash -c " + quote(body)
 
 
 def _setup(config):
