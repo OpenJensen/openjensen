@@ -7,6 +7,9 @@ from hardware import normalized
 
 MIDDLE_TICKS = 2047
 TICKS_PER_DEGREE = 4095 / 360
+# Measurement allowance only: about 0.7 encoder degrees. Commanded goals
+# retain their existing eight-tick inset and calibration files stay exact.
+ENCODER_RANGE_TOLERANCE = 8
 
 
 def middle_targets(calibration):
