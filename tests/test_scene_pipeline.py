@@ -463,7 +463,7 @@ def test_saved_scene_retry_creates_new_job_without_repeating_provider_or_builder
             assert inventory(scenes.folder(parent.id)) == parent_files
             assert scenes.get(parent.id).status == parent_status
             assert (await execution.get(parent.job_id)).status == parent_status
-            assert "resource_cleanup" not in resumed.source
+            assert resumed.source["resource_cleanup"] == "unverified"
             assert service.digest(
                 scenes.folder(resumed.id) / "attempt-1/bundle/scene.usda"
             ) == service.digest(scenes.folder(parent.id) / "attempt-1/bundle/scene.usda")
@@ -614,5 +614,38 @@ def test_cancellation_drains_owned_saved_scene_copy_before_returning(tmp_path, m
             assert scenes.get(child.request.request_id).status == "cancelled"
             assert inventory(scenes.folder(parent.id)) == previous
             assert roles == ["proposal", "review"] and not renders
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("reported", ["cluster_removed", "unverified", None])
+def test_render_completion_preserves_resource_cleanup_observation(tmp_path, monkeypatch, reported):
+    async def exercise():
+        async with pipeline(tmp_path, monkeypatch) as (execution, scenes, roles, renders):
+            original = runtime.run
+
+            async def rendered(owner, run, *args):
+                result = await original(owner, run, *args)
+                raw_path = owner.folder(run.id) / "simulation/result.json"
+                raw = json.loads(raw_path.read_text())
+                raw["resource_cleanup"] = "unverified"
+                service.write(raw_path, raw)
+                if reported is not None:
+                    result["resource_cleanup"] = reported
+                return result
+
+            monkeypatch.setattr(runtime, "run", rendered)
+            accepted = await execution.submit("project", body())
+            await execution.run(accepted.id)
+            job = await execution.get(accepted.id)
+            scene = scenes.get(accepted.request.request_id)
+            assert job.status == "succeeded" and job.result.validation_status == "needs_review"
+            assert scene.stage == "complete"
+            assert scene.source["resource_cleanup"] == (reported or "unverified")
+            assert "simulation/result.json" in job.result.scene_artifacts
+            original_receipt = json.loads(
+                scenes.artifact(scene.id, "simulation/result.json").read_text()
+            )
+            assert original_receipt["resource_cleanup"] == "unverified"
 
     asyncio.run(exercise())

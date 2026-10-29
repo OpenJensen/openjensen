@@ -365,6 +365,8 @@ async def run(scenes, scene, bundle, trajectory):
 
         cleanup_status = await _finish(asyncio.create_task(cleanup()))
         write(runtime / "cleanup.json", {"resource_cleanup": cleanup_status})
+        scene.source["resource_cleanup"] = cleanup_status
+        scenes.save(scene)
         if result is not None:
             result["resource_cleanup"] = cleanup_status
         if completed and cleanup_status in {"cluster_removed", "not_launched"}:

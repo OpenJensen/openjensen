@@ -457,6 +457,7 @@ class Scenes:
             "Rendering the environment and replaying the selected recorded episode.",
         )
         rendered = await simulate(self, run, bundle, self.folder(run.id) / "trajectory.json")
+        run.source["resource_cleanup"] = rendered.get("resource_cleanup", "unverified")
         run.gates["isaac_runtime"] = True
         for media in rendered["media"]:
             run.artifacts.append(media["path"])

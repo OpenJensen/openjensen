@@ -244,8 +244,14 @@ async def test_runtime_uses_one_submission_and_owned_teardown(tmp_path, config, 
     async def progress(*args):
         events.append(args[1:])
 
-    scenes = SimpleNamespace(root=ROOT, folder=lambda _: folder, progress=progress)
-    scene = SimpleNamespace(id="d" * 32)
+    saved_cleanup = []
+    scenes = SimpleNamespace(
+        root=ROOT,
+        folder=lambda _: folder,
+        progress=progress,
+        save=lambda value: saved_cleanup.append(dict(value.source)),
+    )
+    scene = SimpleNamespace(id="d" * 32, source={})
 
     async def command(args, **kwargs):
         operation = args[2]
@@ -266,6 +272,7 @@ async def test_runtime_uses_one_submission_and_owned_teardown(tmp_path, config, 
     result = await runtime.run(scenes, scene, bundle, trajectory)
     assert calls == ["launch", "observe", "collect", "down"]
     assert result["resource_cleanup"] == "cluster_removed"
+    assert saved_cleanup == [{"resource_cleanup": "cluster_removed"}]
     assert not (folder / "simulation-runtime/inputs").exists()
     assert (folder / "simulation-runtime/ownership.json").is_file()
     assert (folder / "simulation/replay.mp4").is_file()
@@ -273,7 +280,11 @@ async def test_runtime_uses_one_submission_and_owned_teardown(tmp_path, config, 
 
 
 @pytest.mark.anyio
-async def test_cancellation_still_cleans_up_owned_resources(tmp_path, config, monkeypatch):
+@pytest.mark.parametrize("abort_kind", ["failed", "cancelled"])
+@pytest.mark.parametrize("cleanup_status", ["cluster_removed", "not_launched", "unverified"])
+async def test_unsuccessful_runtime_persists_cleanup_without_media(
+    tmp_path, config, monkeypatch, abort_kind, cleanup_status
+):
     import asyncio
 
     folder = tmp_path / "scene"
@@ -287,26 +298,41 @@ async def test_cancellation_still_cleans_up_owned_resources(tmp_path, config, mo
     async def progress(*args):
         pass
 
-    scenes = SimpleNamespace(root=ROOT, folder=lambda _: folder, progress=progress)
+    saved_cleanup = []
+    scenes = SimpleNamespace(
+        root=ROOT,
+        folder=lambda _: folder,
+        progress=progress,
+        save=lambda value: saved_cleanup.append(dict(value.source)),
+    )
+    scene = SimpleNamespace(id="e" * 32, source={})
     calls = []
+    error = asyncio.CancelledError if abort_kind == "cancelled" else SceneError
 
     async def command(args, **kwargs):
-        calls.append(args[2])
-        if args[2] == "launch":
-            raise asyncio.CancelledError
+        operation = args[2]
+        calls.append(operation)
         request = runner.request(args[-1])
         saved = runner.receipt(request)
-        saved["resource_cleanup"] = "cluster_removed"
+        if operation == "launch":
+            saved["launch_attempted"] = cleanup_status != "not_launched"
+            runner.write(request["receipt"], saved)
+            raise error("Synthetic interrupted launch")
+        if cleanup_status == "unverified":
+            raise SceneError("Synthetic teardown verification unavailable")
+        saved["resource_cleanup"] = cleanup_status
         runner.write(request["receipt"], saved)
 
     monkeypatch.setattr(runtime, "command", command)
-    with pytest.raises(asyncio.CancelledError):
-        await runtime.run(scenes, SimpleNamespace(id="e" * 32), bundle, trajectory)
+    with pytest.raises(error):
+        await runtime.run(scenes, scene, bundle, trajectory)
     assert calls == ["launch", "down"]
-    assert (
-        json.loads((folder / "simulation-runtime/cleanup.json").read_text())["resource_cleanup"]
-        == "cluster_removed"
-    )
+    assert json.loads((folder / "simulation-runtime/cleanup.json").read_text()) == {
+        "resource_cleanup": cleanup_status
+    }
+    assert scene.source["resource_cleanup"] == cleanup_status
+    assert saved_cleanup == [{"resource_cleanup": cleanup_status}]
+    assert not (folder / "simulation").exists()
 
 
 def test_preflight_checks_resources_and_status_without_launch_or_ownership(owned, tmp_path):
@@ -369,3 +395,48 @@ async def test_production_preflight_requires_structured_success(tmp_path, config
     monkeypatch.setattr(runtime, "command", checked)
     await runtime.preflight(scenes, scene)
     assert not (folder / "simulation-runtime").exists()
+
+
+def test_down_verifies_removed_cluster_using_supported_sdk_refresh_enum(owned, monkeypatch):
+    from enum import StrEnum
+    from types import ModuleType
+
+    class StatusRefreshMode(StrEnum):
+        NONE = "NONE"
+        AUTO = "AUTO"
+        FORCE = "FORCE"
+
+    sky_package = ModuleType("sky")
+    utils_package = ModuleType("sky.utils")
+    common_module = ModuleType("sky.utils.common")
+    common_module.StatusRefreshMode = StatusRefreshMode
+    sky_package.utils = utils_package
+    utils_package.common = common_module
+    for name, module in {
+        "sky": sky_package,
+        "sky.utils": utils_package,
+        "sky.utils.common": common_module,
+    }.items():
+        monkeypatch.setitem(sys.modules, name, module)
+
+    saved = runner.receipt(owned)
+    saved.update(launch_attempted=True, state="SUCCEEDED")
+    runner.write(owned["receipt"], saved)
+    sky = MagicMock()
+    sky.down.return_value = "owned-down-request"
+    sky.status.return_value = "owned-status-request"
+    sky.get.side_effect = [None, []]
+
+    runner.down(owned, sky)
+
+    sky.down.assert_called_once_with(owned["cluster"])
+    sky.status.assert_called_once_with(
+        cluster_names=[owned["cluster"]], refresh=StatusRefreshMode.FORCE
+    )
+    assert [call.args[0] for call in sky.get.call_args_list] == [
+        "owned-down-request",
+        "owned-status-request",
+    ]
+    result = runner.receipt(owned)
+    assert result["down_request_id"] == "owned-down-request"
+    assert result["resource_cleanup"] == "cluster_removed"
