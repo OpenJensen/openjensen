@@ -1,5 +1,6 @@
 """Shared workload history and admission without executing workers or providers."""
 
+import asyncio
 import json
 from types import SimpleNamespace
 
@@ -531,3 +532,67 @@ def test_scene_alias_diagnostics_use_the_scoped_core_owner(client):
     client.app.state.scenes.save(run)
     for suffix in ("logs", "failure", "diagnostics.zip"):
         assert client.get(endpoint + "/" + suffix).status_code == 404
+
+
+def test_active_scene_alias_cancellation_stops_the_owning_core_job(client):
+    ident, dataset, parent, child, run = saved_scene_retry_fixture(client)
+    state = client.app.state
+    parent.status, parent.result = "running", None
+    client.portal.call(state.execution.save, parent)
+    run.status = "running"
+    state.scenes.save(run)
+    stopped = []
+
+    async def attach_worker():
+        async def worker():
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                current = state.scenes.get(run.id)
+                current.status = "cancelled"
+                state.scenes.event(current, "cancelled", "Owned fixture worker stopped")
+                stopped.append(True)
+                raise
+
+        task = asyncio.create_task(worker())
+        state.execution.tasks[parent.id] = task
+        await asyncio.sleep(0)
+
+    client.portal.call(attach_worker)
+    endpoint = f"/api/v1/projects/{ident}/work-jobs/scene:{run.id}/cancel"
+    response = client.post(endpoint)
+    assert response.status_code == 200, response.text
+    assert response.json()["id"] == "scene:" + run.id
+    assert response.json()["status"] == "cancelled"
+    owner = client.portal.call(state.execution.get, parent.id)
+    assert owner.status == "cancelled" and owner.cancellation.cleanup == "succeeded"
+    assert stopped == [True] and state.execution.tasks[parent.id].done()
+
+
+@pytest.mark.parametrize("mismatch", ["missing", "project", "scene", "operation"])
+def test_scene_alias_cancellation_rejects_forged_or_missing_core_ownership(client, mismatch):
+    ident, dataset, parent, child, run = saved_scene_retry_fixture(client)
+    state = client.app.state
+    run.status = "running"
+    if mismatch == "missing":
+        run.job_id = "missing-scene-job"
+        owner = None
+    elif mismatch == "operation":
+        run.job_id = dataset["source_id"]
+        owner = client.portal.call(state.execution.get, run.job_id)
+    else:
+        owner = parent.model_copy(update={"id": "forged-scene-job", "status": "running"})
+        if mismatch == "project":
+            owner.project_id = project(client, "Other scene owner")
+        else:
+            owner.request = owner.request.model_copy(update={"request_id": "b" * 32})
+        client.portal.call(state.execution._accept, owner, None)
+        run.job_id = owner.id
+    state.scenes.save(run)
+    response = client.post(f"/api/v1/projects/{ident}/work-jobs/scene:{run.id}/cancel")
+    assert response.status_code == 404
+    assert state.scenes.get(run.id).status == "running"
+    if owner is not None:
+        current = client.portal.call(state.execution.get, owner.id)
+        assert current.status == owner.status
+        assert current.cancellation is None

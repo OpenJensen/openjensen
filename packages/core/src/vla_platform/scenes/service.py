@@ -158,7 +158,8 @@ class Scenes:
                     )
                     from vla_platform.scenes.runtime import recover
 
-                    await recover(self, run)
+                    run.source["resource_cleanup"] = await recover(self, run)
+                    self.save(run)
                 # Credentials are short-lived and never survive reconciliation.
                 for auth in path.parent.glob("*/.codex-runtime/auth.json"):
                     auth.unlink(missing_ok=True)
@@ -473,6 +474,7 @@ class Scenes:
             "Rendering the environment and replaying the selected recorded episode.",
         )
         rendered = await simulate(self, run, bundle, self.folder(run.id) / "trajectory.json")
+        run.source["resource_cleanup"] = rendered.get("resource_cleanup", "unverified")
         run.gates["isaac_runtime"] = True
         for media in rendered["media"]:
             run.artifacts.append(media["path"])

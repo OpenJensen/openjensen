@@ -264,7 +264,7 @@ def down(record, sky=None):
         sky,
         sky.status(
             cluster_names=[record["cluster"]],
-            refresh=StatusRefreshMode.ALL,
+            refresh=StatusRefreshMode.FORCE,
         ),
     )
     if remaining:
