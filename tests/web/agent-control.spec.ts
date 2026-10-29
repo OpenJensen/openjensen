@@ -564,6 +564,7 @@ test('saved arm names choose their own connection and selecting a camera starts 
 }) => {
   const { requests } = await fixture(page, { physical: true, alternatePort: true });
   await page.goto('/ai-teleoperation/');
+  await openModuleTask(page);
   const camera = page.getByRole('region', { name: 'Workspace camera', exact: true });
   await expect(camera).toContainText('Select a camera to preview your workspace');
   await page.getByRole('combobox', { name: 'Saved arm', exact: true }).selectOption('fixture-arm');
@@ -577,6 +578,7 @@ test('saved arm names choose their own connection and selecting a camera starts 
 test('a disconnected saved arm explains the missing connection without starting motion', async ({ page }) => {
   const { requests } = await fixture(page, { physical: true, emptyPorts: true });
   await page.goto('/ai-teleoperation/');
+  await openModuleTask(page);
   await page.getByRole('combobox', { name: 'Saved arm', exact: true }).selectOption('fixture-arm');
   await expect(page.getByRole('combobox', { name: 'Robot USB port', exact: true })).toHaveValue('');
   await expect(page.getByText('The saved connection (/dev/fixture) is unavailable.', { exact: false })).toBeVisible();
@@ -587,6 +589,7 @@ test('a disconnected saved arm explains the missing connection without starting 
 test('a genuinely stale selected connection stays blocked and explains why', async ({ page }) => {
   const { requests } = await fixture(page, { physical: true, staleCalibration: true });
   await page.goto('/ai-teleoperation/');
+  await openModuleTask(page);
   await page.getByRole('combobox', { name: 'Saved arm', exact: true }).selectOption('fixture-arm');
   await expect(page.getByText('Motor setup changed on this arm’s saved connection.', { exact: false })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Connect arm and hold current pose', exact: true })).toBeDisabled();
@@ -596,6 +599,7 @@ test('a genuinely stale selected connection stays blocked and explains why', asy
 test('a failed preview never admits a physical connection', async ({ page }) => {
   const { requests } = await fixture(page, { physical: true, cameraFailure: true });
   await page.goto('/ai-teleoperation/');
+  await openModuleTask(page);
   await page.getByRole('combobox', { name: 'Saved arm', exact: true }).selectOption('fixture-arm');
   await page.getByRole('combobox', { name: 'Physical camera', exact: true }).selectOption('0');
   await expect(page.getByText('The physical camera preview is unavailable.', { exact: true })).toBeVisible();
@@ -620,6 +624,7 @@ test('OpenAI model names load explicitly and save their exact model IDs', async 
   expect(requests.find((request) => request.path === '/agent/providers/openai')?.body.model).toBe('gpt-6.1-sol');
   expect(requests.filter((request) => request.path.endsWith('/check'))).toEqual([]);
   await page.goto('/ai-teleoperation/');
+  await openModuleTask(page);
   await expect(page.getByRole('combobox', { name: 'Agent provider profile', exact: true })).toContainText(
     'GPT-6.1 Sol · openai',
   );
