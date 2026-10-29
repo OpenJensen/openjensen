@@ -12,7 +12,7 @@ Connect the computer beside your SO-101, preview its camera, and work through **
 
 ### Understanding an unexpected stop
 
-Robot Lab releases motor torque when an encoder reading is outside its saved calibration range, even by one tick. The error names the joint, measured value, allowed range and distance beyond it. Support the arm, then check the physical pose and calibration before enabling control again. The reading alone cannot establish whether the cause is an incomplete calibration sweep or a hardware problem.
+An encoder reading beyond the saved calibration range can stop motor torque. The error names the joint, measured value, allowed range and distance beyond it. Support the arm, then check the physical pose and calibration before enabling control again. The reading alone cannot establish whether the cause is an incomplete calibration sweep or a hardware problem.
 
 Open **Robot logs** to see the last stop and download recent events and readings. Logging is automatic, separate from dataset recording, and survives reconnects and companion restarts. Stops are saved separately from the rolling position history. If saving fails, the panel shows the storage error. Motor checks still run independently of logging.
 
