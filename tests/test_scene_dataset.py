@@ -257,17 +257,116 @@ def test_replay_episode_must_have_been_inspected(tmp_path, monkeypatch):
 
 
 def test_final_round_cannot_accept_new_video_evidence_the_agent_never_viewed(tmp_path, monkeypatch):
+    rounds = dataset.investigation_rounds(30)
+    selections = [
+        decision(clip(17, start=index / rounds, end=(index + 1) / rounds))
+        for index in range(rounds - 1)
+    ]
+    selections.append(decision(clip(17, start=(rounds - 1) / rounds), ready=True))
     scenes, run, source_job, explorer, observed, _, _ = prepared(
         tmp_path,
         monkeypatch,
-        [decision(clip(2), replay=2), decision(clip(9), replay=9), decision(clip(17), ready=True)],
+        selections,
     )
 
     async def exercise():
         with pytest.raises(SceneError, match="budget|evidence|view"):
             await dataset.investigate(scenes, run, source_job, explorer)
+        assert len(observed["roles"]) == rounds
+        assert len(observed["roles"][-1]["frames"]) == 5 * (rounds - 1)
         assert not observed["reads"]
         assert not list(scenes.folder(run.id).glob(".source-*.mp4"))
+
+    asyncio.run(exercise())
+
+
+def test_agent_can_inspect_every_video_in_the_complete_thirty_episode_dataset(
+    tmp_path, monkeypatch
+):
+    selections = [
+        decision(*[clip(episode) for episode in range(start, min(start + 4, 30))])
+        for start in range(0, 30, 4)
+    ]
+    selections.append(decision(ready=True))
+    scenes, run, source_job, explorer, observed, _, _ = prepared(
+        tmp_path,
+        monkeypatch,
+        selections,
+    )
+
+    async def exercise():
+        frames, evidence = await dataset.investigate(scenes, run, source_job, explorer)
+        assert len(observed["roles"]) == dataset.investigation_rounds(30) == 9
+        assert len(observed["downloads"]) == 30
+        assert len(set(observed["downloads"])) == 30
+        assert len(observed["roles"][-1]["frames"]) == len(frames) == 150
+        assert run.source["inspected_episodes"] == list(range(30))
+        assert len(evidence["inspected_clips"]) == 30
+        assert evidence["replay"]["episode_index"] == 17
+        assert run.gates["source_evidence"] is True
+        assert not list(scenes.folder(run.id).glob(".source-*.mp4"))
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    "videos,rounds", [(1, 3), (4, 3), (5, 3), (8, 3), (9, 4), (30, 9), (96, 25)]
+)
+def test_round_budget_can_cover_all_videos_and_a_final_ready_decision(videos, rounds):
+    assert dataset.investigation_rounds(videos) == rounds
+    assert (rounds - 1) * 4 >= videos
+
+
+def test_catalog_includes_every_advertised_camera_without_eager_video_downloads(
+    tmp_path, monkeypatch
+):
+    scenes, run, source_job, explorer, observed, _, _ = prepared(tmp_path, monkeypatch)
+    side = "observation.images.side"
+    source_job.result.features[side] = {"dtype": "video", "shape": [1080, 1920, 3]}
+    original = explorer.cameras
+
+    async def cameras(*args, **kwargs):
+        front = (await original(*args, **kwargs))[0]
+        return [
+            front,
+            front.model_copy(update={"key": side, "url": front.url.replace("/videos/", "/side/")}),
+        ]
+
+    explorer.cameras = cameras
+
+    async def exercise():
+        catalog, _, _ = await dataset.catalog(scenes, run, source_job, explorer)
+        assert len(catalog["episodes"]) == 30
+        assert all(len(episode["cameras"]) == 2 for episode in catalog["episodes"])
+        total = sum(len(episode["cameras"]) for episode in catalog["episodes"])
+        assert dataset.investigation_rounds(total) == 16
+        assert not observed["roles"] and not observed["downloads"]
+
+    asyncio.run(exercise())
+
+
+def test_excessive_dataset_video_scope_rejects_before_provider_work(tmp_path, monkeypatch):
+    scenes, run, source_job, explorer, observed, _, _ = prepared(tmp_path, monkeypatch)
+    sides = ["observation.images." + name for name in ("left", "side", "top")]
+    for key in sides:
+        source_job.result.features[key] = {"dtype": "video", "shape": [1080, 1920, 3]}
+    original = explorer.cameras
+
+    async def cameras(*args, **kwargs):
+        front = (await original(*args, **kwargs))[0]
+        return [front] + [
+            front.model_copy(
+                update={"key": key, "url": front.url.replace("/videos/", f"/{index}/")}
+            )
+            for index, key in enumerate(sides)
+        ]
+
+    explorer.cameras = cameras
+
+    async def exercise():
+        with pytest.raises(SceneError, match="96|limit|video"):
+            await dataset.investigate(scenes, run, source_job, explorer)
+        assert not observed["roles"] and not observed["downloads"]
 
     asyncio.run(exercise())
 

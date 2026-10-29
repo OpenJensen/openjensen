@@ -160,16 +160,7 @@ def _setup(config):
     return "\n".join(commands)
 
 
-def launch(record, sky=None):
-    sky = sky or _sdk()
-    saved = receipt(record)
-    if saved.get("launch_attempted"):
-        raise ValueError("Scene launch is already owned; it must not be repeated")
-    existing = _get(sky, sky.status(cluster_names=[record["cluster"]]))
-    if existing:
-        saved.update(state="name_collision")
-        write(record["receipt"], saved)
-        raise ValueError("Scene cluster name is already in use")
+def _task(record, sky):
     config = record["config"]
     task = sky.Task(
         name=record["cluster"],
@@ -180,17 +171,39 @@ def launch(record, sky=None):
     )
     task.set_resources(
         sky.Resources(
-            infra="gcp",
+            infra="gcp/" + config["region"],
             accelerators="L4:1",
             cpus="8+",
             memory="48+",
             disk_size=150,
-            region=config["region"],
             image_id=config["machine_image"],
             use_spot=False,
             labels={"openjensen-scene": record["run_id"]},
         )
     )
+    return task
+
+
+def preflight(record, sky=None):
+    sky = sky or _sdk()
+    _task(record, sky)
+    existing = _get(sky, sky.status(cluster_names=[record["cluster"]]))
+    if existing:
+        raise ValueError("Scene cluster name is already in use")
+    write(record["preflight_output"], {"passed": True, "skypilot": SDK_VERSION})
+
+
+def launch(record, sky=None):
+    sky = sky or _sdk()
+    saved = receipt(record)
+    if saved.get("launch_attempted"):
+        raise ValueError("Scene launch is already owned; it must not be repeated")
+    existing = _get(sky, sky.status(cluster_names=[record["cluster"]]))
+    if existing:
+        saved.update(state="name_collision")
+        write(record["receipt"], saved)
+        raise ValueError("Scene cluster name is already in use")
+    task = _task(record, sky)
     saved.update(launch_attempted=True, state="submitting")
     write(record["receipt"], saved)
     pending = _request_id(
@@ -306,7 +319,7 @@ def collect(record):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=("launch", "observe", "collect", "down"))
+    parser.add_argument("operation", choices=("preflight", "launch", "observe", "collect", "down"))
     parser.add_argument("--request", type=Path, required=True)
     args = parser.parse_args()
     record = request(args.request)

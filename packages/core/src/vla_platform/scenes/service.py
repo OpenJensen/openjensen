@@ -438,6 +438,11 @@ class Scenes:
         folder = self.folder(run.id)
         run.status = "running"
         try:
+            if run.job_id:
+                from vla_platform.scenes.runtime import preflight
+
+                await self.progress(run, "preparing", "Checking the simulation runner.")
+                await preflight(self, run)
             await self.progress(
                 run,
                 "evidence",

@@ -96,7 +96,12 @@ async def pipeline(tmp_path, monkeypatch):
         service.write(folder / "result.json", result)
         return result
 
+    async def preflight(owner, run):
+        assert run.stage == "preparing"
+        assert (await execution.get(run.job_id)).stage == "preparing"
+
     monkeypatch.setattr(dataset, "investigate", investigate)
+    monkeypatch.setattr(runtime, "preflight", preflight)
     monkeypatch.setattr(runtime, "run", rendered)
     await execution._accept(source(), None)
     try:
@@ -313,5 +318,37 @@ def test_partial_render_media_cannot_publish_job_success(tmp_path, monkeypatch, 
             assert current.status == "failed" and len(renders) == 1
             assert scenes.artifact(scene.id, "scene-bundle.zip").is_file()
             assert all(scene.gates[name] for name in CORE_GATES)
+
+    asyncio.run(exercise())
+
+
+def test_runner_preflight_failure_stops_before_dataset_or_provider_work(tmp_path, monkeypatch):
+    async def exercise():
+        async with pipeline(tmp_path, monkeypatch) as (execution, scenes, roles, renders):
+            preflight_stages = []
+            data_calls = []
+
+            async def unavailable(owner, run):
+                preflight_stages.append((run.stage, (await execution.get(run.job_id)).stage))
+                raise SceneError("Scene runner preflight is unavailable.")
+
+            async def forbidden(*args):
+                data_calls.append(True)
+                pytest.fail("Preflight failure must stop before dataset investigation")
+
+            monkeypatch.setattr(runtime, "preflight", unavailable)
+            monkeypatch.setattr(dataset, "investigate", forbidden)
+            job = await execution.submit("project", body())
+            await execution.run(job.id)
+            current = await execution.get(job.id)
+            scene = scenes.get(job.request.request_id)
+            assert preflight_stages == [("preparing", "preparing")]
+            assert current.status == "failed" and scene.status == "failed"
+            assert "Stopped during preparing" in current.error
+            assert all(scene.gates[name] is False for name in CORE_GATES)
+            assert not data_calls and not roles and not renders
+            assert not scene.artifacts and not scene.media
+            assert [event["stage"] for event in scene.events] == ["preparing", "failed"]
+            assert not (scenes.folder(scene.id) / "dataset-catalog.json").exists()
 
     asyncio.run(exercise())
