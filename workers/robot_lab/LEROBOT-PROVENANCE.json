@@ -23,7 +23,8 @@
     "Clear the previous companion goal-velocity cap to zero/default.",
     "No relative target clipping; stock SO follower default max_relative_target=None.",
     "The upstream connectivity decorator is replaced by the generation/port-open gate; copied function bodies are unchanged.",
-    "Restore volatile Torque_Limit (48) to the saved EEPROM Max_Torque_Limit (16), matching power-on behavior and clearing an interrupted 10% identification cap; gripper stays at 500."
+    "Restore volatile Torque_Limit (48) to the saved EEPROM Max_Torque_Limit (16), matching power-on behavior and clearing an interrupted 10% identification cap; gripper stays at 500.",
+    "Validated follower gripper Present_Position replies carrying only overload status 0x20 continue after upstream protection settings are verified; gripper torque-off with this alarm requires exact zero read-back. Other faults remain fatal. Semantics checked against huggingface/lerobot@baf68724e867113e6052bb3159b04dcb97e88866 motors_bus.py read/write/sync_read, which distinguish alarms from refused operations."
   ],
   "ast_python": "3.14",
   "servo_memory_reference": "https://docs.waveshare.com/Memory_Map_Explanation/ST_Servo_Memory_Map_Explanation"

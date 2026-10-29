@@ -272,6 +272,7 @@ class RobotLab:
         self.agent = AgentExecutor(self)
         self.last_raw = {}
         self.last_fault = None
+        self.motor_alarms = {}
         self.diagnostics = Diagnostics(self.data_dir)
         if start_threads:
             for target in (self._loop, self._watchdog):
@@ -289,6 +290,9 @@ class RobotLab:
             "torque_enabled": self.torque,
             "heartbeat_age_seconds": round(max(0, time.monotonic() - self.heartbeat), 3),
             "raw_positions": {key: dict(value) for key, value in dict(self.last_raw).items()},
+            "motor_alarms": {
+                source: dict(alarms) for source, alarms in dict(self.motor_alarms).items()
+            },
             "commanded_raw": dict(self.commanded_raw),
             "targets": dict(self.action),
             "calibration": {joint: dict(entry) for joint, entry in dict(self.calibration).items()},
@@ -298,7 +302,25 @@ class RobotLab:
         }
 
     def _read_positions(self, bus, calibration=None, *, source="follower"):
-        raw = bus.positions()
+        try:
+            raw = bus.positions()
+        except HardwareError as error:
+            self.last_fault = {
+                "source": source,
+                "generation": self.generation,
+                "message": str(error),
+                "exception": type(error).__name__,
+                **getattr(error, "details", {"code": "motor_read_failed"}),
+            }
+            self.diagnostics.emit("motor_fault", fault=self.last_fault)
+            raise
+        alarms = {
+            str(motor): status
+            for motor, status in dict(getattr(bus, "motor_status", {})).items()
+            if status
+        }
+        previous_alarms = self.motor_alarms.get(source, {})
+        self.motor_alarms[source] = alarms
         # Capture the offending reading before validation; no additional serial I/O.
         self.last_raw[source] = {
             joint: value for joint, value in raw.items() if joint in JOINTS and type(value) is int
@@ -317,6 +339,19 @@ class RobotLab:
             }
             self.diagnostics.emit("encoder_fault", fault=self.last_fault)
             raise
+        if alarms != previous_alarms:
+            self.diagnostics.emit(
+                "gripper_load_alarm" if alarms else "gripper_load_cleared",
+                reason=(
+                    f"{source.capitalize()} gripper overload alarm: control continues with "
+                    "the motor's configured torque/current protection"
+                    if alarms
+                    else f"{source.capitalize()} gripper overload alarm cleared"
+                ),
+                source=source,
+                status_errors=alarms,
+                context=self._diagnostic_context(),
+            )
         if self.mode != "idle":
             self.diagnostics.sample(context=self._diagnostic_context())
         return result
@@ -445,6 +480,7 @@ class RobotLab:
                 "lerobot_position_control": hardware,
                 "rest_position": hardware,
                 "persistent_diagnostics": True,
+                "gripper_load_tolerance": True,
                 "agent_control": hardware,
                 "move_to_middle": hardware,
                 "middle_tolerance": hardware,
@@ -1129,6 +1165,7 @@ class RobotLab:
             control_generation = [generation]
             self.last_fault = None
             self.last_raw = {}
+            self.motor_alarms = {}
             leader, control, bus = None, None, self.bus_factory(port)
             bus.joints = joints
             with self.stop_lock, self.lifecycle_lock:

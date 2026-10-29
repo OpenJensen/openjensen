@@ -222,6 +222,7 @@ class LeRobotPositionControl:
         self.torque_limits = {}
 
     def configure(self):
+        self.bridge.bus.gripper_load_tolerance = False
         self.follower.configure()
         # Earlier companions leave a 100-tick/s speed cap in the volatile goal
         # register. Restore the position-mode zero/default before enabling.
@@ -240,6 +241,9 @@ class LeRobotPositionControl:
                 )
             self.bridge.write("Torque_Limit", joint, limit)
             self.torque_limits[joint] = limit
+        # Arm load-alarm handling after all upstream gripper protection
+        # settings and the runtime torque ceiling have passed read-back.
+        self.bridge.bus.gripper_load_tolerance = "gripper" in self.bridge.motors
 
     def command(self, positions):
         action = {joint + ".pos": value for joint, value in positions.items()}
@@ -276,4 +280,5 @@ PROFILE = {
     "acceleration": 254,
     "maximum_acceleration": 254,
     "goal_velocity": 0,
+    "gripper_load_response": "continue_with_motor_protection",
 }
