@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { agentApi, type AgentSession, type AgentSessionRequest } from '@/lib/agent-api';
 import { agentModelName } from '@/lib/agent-models';
 import { AiPhysicalConnection, useAiPhysicalConnection } from './ai-physical-connection';
+import { LocalAgentConnection } from './local-agent-connection';
 import './workbench-form.css';
 import './agent-control.css';
 
@@ -160,6 +161,7 @@ function AgentControls({
   }, []);
   const provider = providers.data?.find((item) => item.id === providerId);
   const cloud = provider?.provider === 'openai_responses';
+  const localProvider = provider?.provider === 'local_mcp';
   const session = selected.data?.project_id === projectId && selected.data.id === selectedId ? selected.data : null;
   const reservedTokens =
     session && 'reserved_tokens' in session && typeof session.reserved_tokens === 'number'
@@ -170,6 +172,7 @@ function AgentControls({
   });
   if (session) physical.updateLease(session);
   const physicalSession = session?.target_kind === 'robot_lab';
+  const localSession = session?.provider_id === 'local-mcp';
   const proposal = session?.pending_proposal;
   const proposalId = proposal?.id;
   const proposalFresh =
@@ -180,7 +183,8 @@ function AgentControls({
   const observation = session?.observation;
   const canCreate =
     !!provider &&
-    (provider.provider === 'mock' || (provider.checked && consent)) &&
+    (provider.provider === 'mock' || (provider.checked && (!cloud || consent))) &&
+    (provider.provider !== 'local_mcp' || target === 'robot_lab') &&
     !!task.trim() &&
     (target === 'replay' ||
       (target === 'robot_lab' && physical.canArm) ||
@@ -361,9 +365,9 @@ function AgentControls({
   return (
     <div className="agent-control-body">
       <p>
-        Describe the intended outcome. Astra can choose only the skills enabled for the selected target and must ask for
-        help when observations or calibration are missing. Replay uses a saved observation or a labeled synthetic
-        fixture.
+        Describe the intended outcome. Your agent can choose only the skills enabled for the selected target and must
+        ask for help when observations or calibration are missing. Replay uses a saved observation or a labeled
+        synthetic fixture.
       </p>
       <form
         className="workbench-form"
@@ -396,7 +400,11 @@ function AgentControls({
               }}
             >
               {providers.data?.map((profile) => (
-                <option key={profile.id} value={profile.id}>
+                <option
+                  key={profile.id}
+                  value={profile.id}
+                  disabled={profile.provider === 'local_mcp' && target !== 'robot_lab'}
+                >
                   {agentModelName(profile.model)} · {profile.id}
                   {profile.checked ? '' : ' · unverified'}
                 </option>
@@ -474,6 +482,9 @@ function AgentControls({
             </label>
           ) : null}
         </div>
+        {provider?.provider === 'local_mcp' && (
+          <p>Use Codex, Claude or another MCP client. After arming, create its session connection below.</p>
+        )}
         {target === 'robot_lab' && provider?.provider === 'mock' && (
           <p role="status">
             The mock provider cannot plan a live physical task. Configure Astra in{' '}
@@ -520,7 +531,7 @@ function AgentControls({
               />
             </label>
             <label className="workbench-field">
-              Maximum model calls
+              {localProvider ? 'Maximum planning requests' : 'Maximum model calls'}
               <input
                 type="number"
                 value={maxCalls}
@@ -543,30 +554,34 @@ function AgentControls({
                 onChange={(event) => setMaxSeconds(Number(event.target.value))}
               />
             </label>
-            <label className="workbench-field">
-              Maximum output tokens per call
-              <input
-                type="number"
-                value={maxOutput}
-                min={128}
-                max={4096}
-                required
-                disabled={busy}
-                onChange={(event) => setMaxOutput(Number(event.target.value))}
-              />
-            </label>
-            <label className="workbench-field">
-              Maximum total tokens
-              <input
-                type="number"
-                value={maxTokens}
-                min={1024}
-                max={1000000}
-                required
-                disabled={busy}
-                onChange={(event) => setMaxTokens(Number(event.target.value))}
-              />
-            </label>
+            {!localProvider && (
+              <>
+                <label className="workbench-field">
+                  Maximum output tokens per call
+                  <input
+                    type="number"
+                    value={maxOutput}
+                    min={128}
+                    max={4096}
+                    required
+                    disabled={busy}
+                    onChange={(event) => setMaxOutput(Number(event.target.value))}
+                  />
+                </label>
+                <label className="workbench-field">
+                  Maximum total tokens
+                  <input
+                    type="number"
+                    value={maxTokens}
+                    min={1024}
+                    max={1000000}
+                    required
+                    disabled={busy}
+                    onChange={(event) => setMaxTokens(Number(event.target.value))}
+                  />
+                </label>
+              </>
+            )}
           </div>
         </details>
         {cloud && (
@@ -606,6 +621,9 @@ function AgentControls({
           </button>
         </div>
       </form>
+      {session?.provider_id === 'local-mcp' && session.control_armed && (
+        <LocalAgentConnection key={session.id} session={session} owned={physical.owned} onSession={cacheSession} />
+      )}
       <label className="workbench-field">
         Saved agent session
         <select
@@ -651,7 +669,7 @@ function AgentControls({
             {session.run_enabled ? 'Task loop running' : 'Task loop paused'}
           </p>
           {session.model_assessment && (
-            <section aria-label="Astra task assessment">
+            <section aria-label={localSession ? 'Local agent task assessment' : 'Astra task assessment'}>
               <h4>Model assessment</h4>
               <p>
                 {session.model_assessment.outcome.replaceAll('_', ' ')} · {session.model_assessment.summary}
@@ -681,20 +699,27 @@ function AgentControls({
               </dd>
             </div>
             <div>
-              <dt>Calls used</dt>
+              <dt>{localSession ? 'Planning turns' : 'Calls used'}</dt>
               <dd>
                 {session.calls_used} / {session.max_calls} · {Math.max(0, session.max_calls - session.calls_used)}{' '}
                 remaining
               </dd>
             </div>
-            <div>
-              <dt>Tokens reported</dt>
-              <dd>
-                {session.input_tokens} input + {session.output_tokens} output · {reservedTokens} reserved ·{' '}
-                {Math.max(0, session.max_total_tokens - session.input_tokens - session.output_tokens - reservedTokens)}{' '}
-                remaining
-              </dd>
-            </div>
+            {!localSession && (
+              <>
+                <div>
+                  <dt>Tokens reported</dt>
+                  <dd>
+                    {session.input_tokens} input + {session.output_tokens} output · {reservedTokens} reserved ·{' '}
+                    {Math.max(
+                      0,
+                      session.max_total_tokens - session.input_tokens - session.output_tokens - reservedTokens,
+                    )}{' '}
+                    remaining
+                  </dd>
+                </div>
+              </>
+            )}
             <div>
               <dt>Wall time</dt>
               <dd>
