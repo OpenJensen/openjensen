@@ -9,6 +9,7 @@ import { RobotLabCalibrate } from './robot-lab-calibrate';
 import { RobotLabTeleoperate } from './robot-lab-teleoperate';
 import { RobotLabRecord } from './robot-lab-record';
 import { RobotLabCamera } from './robot-lab-camera';
+import { RobotLabDiagnostics } from './robot-lab-diagnostics';
 import './robot-lab.css';
 
 export function RobotLab() {
@@ -92,6 +93,7 @@ export function RobotLab() {
         </p>
       )}
       {recording?.error && <HardwareNotice message={recording.error} />}
+      <RobotLabDiagnostics diagnostics={state?.diagnostics} />
       <div className="robot-lab-grid">
         <section className="robot-lab-main" aria-label={steps[step].title}>
           {step <= 2 && <RobotLabArmRole lab={lab} />}

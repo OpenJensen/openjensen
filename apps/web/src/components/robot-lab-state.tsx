@@ -200,7 +200,15 @@ export function useRobotLab() {
     }
     return () => {
       mounted.current = false;
-      if (ownedRef.current && !localCalibrationRef.current) void robotApi.stop(true).catch(() => undefined);
+      if (ownedRef.current && !localCalibrationRef.current)
+        void robotApi
+          .stop(
+            true,
+            undefined,
+            undefined,
+            lastConnectedState.current?.capabilities?.persistent_diagnostics ? 'page_closed' : undefined,
+          )
+          .catch(() => undefined);
     };
   }, []);
   useEffect(() => {
@@ -330,7 +338,12 @@ export function useRobotLab() {
         setNotice(null);
         setError('Robot Lab was hidden; stopping the session. Keep this page visible during setup or control.');
         void robotApi
-          .stop(true)
+          .stop(
+            true,
+            undefined,
+            undefined,
+            lastConnectedState.current?.capabilities?.persistent_diagnostics ? 'page_hidden' : undefined,
+          )
           .then((next) => {
             if (mounted.current) client.setQueryData(statusKey, next);
           })

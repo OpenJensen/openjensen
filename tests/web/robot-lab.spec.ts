@@ -133,6 +133,7 @@ async function fixture(page: Page, calibrated = false, hostPlatform = 'Darwin') 
         return state.cameraFailure
           ? route.fulfill({ status: 503, json: { detail: 'Camera disconnected.' } })
           : route.fulfill({ contentType: 'image/png', body: pixel });
+      if (action === '/diagnostics') return route.fulfill({ json: { ...state.status.diagnostics, samples: [] } });
       if (action === '/datasets') {
         state.robotDatasetReads++;
         return route.fulfill({ json: { datasets: state.status.datasets } });
@@ -1732,4 +1733,74 @@ test('rest position is saved explicitly and returns while holding motors', async
   await page.getByRole('button', { name: 'Stop & release motors', exact: true }).click();
   await expect.poll(() => writes(state, '/stop').length).toBe(1);
   expect(state.status.session.torque_enabled).toBe(false);
+});
+
+test('saved robot stop remains visible after reconnect and logs download without motion', async ({
+  page,
+}, testInfo) => {
+  const state = await fixture(page);
+  state.status.diagnostics = {
+    enabled: true,
+    directory: '/private/robot-lab/diagnostics',
+    error: null,
+    dropped_entries: 0,
+    retention_bytes: 64 * 1024 * 1024,
+    last_stop: {
+      id: 'stop-1',
+      time: stamp,
+      event: 'session_stopped',
+      reason:
+        'Gripper is outside its saved range (1838 ticks; allowed 1839–3402; 1 tick below minimum). Motion stopped.',
+      context: { mode: 'manual', robot_id: 'my-so101', fault: { source: 'follower' } },
+      cleanup_errors: [],
+    },
+    events: [{ id: 'start-2', time: stamp, event: 'companion_started' }],
+  };
+  await page.goto('/robot-lab/');
+  const logs = page.locator('.robot-lab-diagnostics');
+  await logs.locator('summary').click();
+  await expect(logs).toContainText('1838 ticks');
+  await expect(logs).toContainText('follower arm');
+  await expect(logs).toContainText('History survives reconnects and restarts.');
+  await page.reload();
+  await logs.locator('summary').click();
+  await expect(logs).toContainText('Last stop');
+  const downloadPromise = page.waitForEvent('download');
+  await logs.getByRole('button', { name: 'Download robot logs' }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe('openjensen-robot-logs.json');
+  expect(state.writes).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath('persistent-robot-logs.png'), fullPage: true });
+});
+
+test('robot log storage failure is visible', async ({ page }) => {
+  const state = await fixture(page);
+  state.status.diagnostics = {
+    enabled: true,
+    error: 'Cannot save diagnostics: disk full',
+    dropped_entries: 1,
+    retention_bytes: 64 * 1024 * 1024,
+    last_stop: null,
+    events: [],
+  };
+  await page.goto('/robot-lab/');
+  const logs = page.locator('.robot-lab-diagnostics');
+  await logs.locator('summary').click();
+  await expect(logs.getByRole('alert')).toContainText('disk full');
+  expect(state.writes).toEqual([]);
+});
+
+test('hiding Robot Lab records a distinct browser stop cause on capable companions', async ({ page }) => {
+  const state = await fixture(page);
+  state.status.capabilities.persistent_diagnostics = true;
+  await tab(page, 'Motor IDs').click();
+  await page.getByRole('checkbox', { name: /Six STS3215 motors; arm supported/ }).check();
+  await page.getByRole('button', { name: 'Start assembled setup', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Start movement detection', exact: true })).toBeEnabled();
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect.poll(() => writes(state, '/stop').length).toBe(1);
+  expect(writes(state, '/stop')[0].body).toEqual({ cause: 'page_hidden' });
 });

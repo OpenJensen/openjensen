@@ -24,7 +24,27 @@ export type RobotDataset = {
   abandoned?: boolean;
   pending_frames?: number;
 };
+export type RobotDiagnosticEvent = {
+  id: string;
+  time: string;
+  event: string;
+  reason?: string;
+  message?: string;
+  torque_disable_acknowledged?: boolean;
+  cleanup_errors?: string[];
+  context?: { mode: string; robot_id: string | null; fault?: { source: string; message: string } | null };
+};
+export type RobotDiagnostics = {
+  enabled: boolean;
+  directory: string;
+  error: string | null;
+  dropped_entries: number;
+  retention_bytes: number;
+  last_stop: RobotDiagnosticEvent | null;
+  events: RobotDiagnosticEvent[];
+};
 export type RobotStatus = {
+  diagnostics?: RobotDiagnostics;
   controller?: {
     name: string;
     upstream: string;
@@ -42,6 +62,7 @@ export type RobotStatus = {
   platform?: string;
   dependencies?: Record<string, { installed: boolean; version: string | null }>;
   capabilities?: {
+    persistent_diagnostics?: boolean;
     agent_control?: boolean;
     lerobot_position_control?: boolean;
     large_joint_steps?: boolean;
@@ -245,6 +266,7 @@ async function request<T>(
 
 export const robotApi = {
   status: () => request<RobotStatus>('/status'),
+  diagnostics: () => request<RobotDiagnostics>('/diagnostics'),
   devices: () => request<RobotDevices>('/devices', undefined, { timeoutMs: 30_000 }),
   datasets: () => request<{ datasets: RobotDataset[] }>('/datasets'),
   probe: (port: string, robot_id?: string, role: RobotRole = 'follower') =>
@@ -308,12 +330,18 @@ export const robotApi = {
     request<RobotStatus>('/control/jog', { joint, delta }, { timeoutMs: 4_000 }),
   targetJoint: (joint: RobotJoint, target: number) =>
     request<RobotStatus>('/control/jog', { joint, target }, { timeoutMs: 4_000 }),
-  stop: (keepalive = false, expectedGeneration?: number, expectedMode?: 'manual') =>
+  stop: (
+    keepalive = false,
+    expectedGeneration?: number,
+    expectedMode?: 'manual',
+    cause?: 'page_hidden' | 'page_closed',
+  ) =>
     request<RobotStatus>(
       '/stop',
       {
         ...(expectedGeneration === undefined ? {} : { expected_generation: expectedGeneration }),
         ...(expectedMode === undefined ? {} : { expected_mode: expectedMode }),
+        ...(cause === undefined ? {} : { cause }),
       },
       { timeoutMs: 10_000, keepalive },
     ),

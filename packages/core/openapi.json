@@ -7749,7 +7749,7 @@
   },
   "info": {
     "title": "OPEN JENSEN local VLA application",
-    "version": "0.1.6"
+    "version": "0.1.7"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -12481,6 +12481,25 @@
           }
         },
         "summary": "Robot Lab Get Devices",
+        "tags": [
+          "Robot Lab"
+        ]
+      }
+    },
+    "/api/v1/robot-lab/diagnostics": {
+      "get": {
+        "operationId": "robot_lab_get_diagnostics",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robot Lab Get Diagnostics",
         "tags": [
           "Robot Lab"
         ]
