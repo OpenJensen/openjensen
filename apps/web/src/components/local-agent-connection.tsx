@@ -113,7 +113,9 @@ export function LocalAgentConnection({
       <h3>Local agent (MCP)</h3>
       <p>
         Connect your Codex or Claude through OpenJensen’s MCP adapter. It can read this session’s state and admitted
-        images, propose bounded actions, and Stop. Review and accept each action here.
+        images, propose bounded actions, and Stop. Review and accept each action here. With gripper position targets
+        enabled, use propose_gripper_position with base_link coordinates in metres; OpenJensen solves the next bounded
+        waypoint.
       </p>
       <p>
         Motion uses OpenJensen’s calibrated controller and existing gripper handling. The local agent owns its model,

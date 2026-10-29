@@ -127,7 +127,17 @@ class LocalAgents:
                 raise error("Local result does not match the pending observation and authority")
             if s.observation is None or s.observation.id != context["observation_id"]:
                 raise error("The planning observation changed")
-            if request.arguments is not None:
+            if request.position is not None:
+                # Validate before acknowledging, so an invalid target leaves this nonce open.
+                self.position_proposal(s, p, request.position.model_dump())
+                result = {
+                    "status": "proposed",
+                    "skill": "gripper_position",
+                    "arguments": request.position.model_dump(),
+                    "purpose": request.purpose,
+                    "model": request.agent_name,
+                }
+            elif request.arguments is not None:
                 args = SegmentArguments.model_validate(request.arguments.model_dump())
                 if not set(args.targets) <= set(s.observation.joints):
                     raise error("Local agent selected an unknown joint", 422)

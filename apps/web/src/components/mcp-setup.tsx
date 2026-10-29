@@ -53,7 +53,9 @@ function McpSetupDialog({ onClose }: { onClose: () => void }) {
             Open AI teleoperation, create a task, and select <strong>Local agent (MCP)</strong> as the agent provider.
           </li>
           <li>
-            Select your saved arm and camera, complete physical preflight, then choose <strong>Arm AI session</strong>.
+            Select your saved arm and camera and complete physical preflight. For XYZ targets, enable
+            <strong> gripper position targets for a standard SO101</strong>, then choose <strong>Arm AI session</strong>
+            .
           </li>
           <li>
             In <strong>Local agent connection</strong>, enter the application’s loopback URL reachable from your agent.
@@ -70,7 +72,9 @@ function McpSetupDialog({ onClose }: { onClose: () => void }) {
         </ol>
         <p>
           Review and accept each proposed action here. Motion uses the same calibrated controller, limits and gripper
-          handling as regular teleoperation.
+          handling as regular teleoperation. Position targets use the gripper’s base_link frame in metres. The agent
+          reads each new position estimate and repeats the target through reviewed waypoints. Camera pixels require a
+          camera-to-base calibration before they can supply metric targets.
         </p>
         <p>
           The connection credential belongs to this session. Stop or Revoke invalidates it. Your agent controls its

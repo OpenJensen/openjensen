@@ -91,6 +91,7 @@ function AgentControls({
   const [maxOutput, setMaxOutput] = useState(2048);
   const [maxTokens, setMaxTokens] = useState(64000);
   const [consent, setConsent] = useState(false);
+  const [positionControl, setPositionControl] = useState(false);
   const [selectedId, setSelectedId] = useState(preferredSessionId ?? '');
   useEffect(() => {
     if (preferredSessionId) setSelectedId(preferredSessionId);
@@ -356,6 +357,7 @@ function AgentControls({
       planning_mode: planningMode,
       max_steps: maxSteps,
       physical: target === 'robot_lab' ? arming : null,
+      gripper_position_control: target === 'robot_lab' && positionControl,
       max_calls: maxCalls,
       max_seconds: maxSeconds,
       max_output_tokens: maxOutput,
@@ -496,7 +498,28 @@ function AgentControls({
             and check its capabilities before live planning.
           </p>
         )}
-        {target === 'robot_lab' && <AiPhysicalConnection physical={physical} />}
+        {target === 'robot_lab' && (
+          <>
+            <AiPhysicalConnection physical={physical} />
+            <label className="workbench-check">
+              <input
+                type="checkbox"
+                checked={positionControl}
+                disabled={busy}
+                onChange={(event) => setPositionControl(event.target.checked)}
+              />
+              Enable gripper position targets for a standard SO101
+            </label>
+            {positionControl && (
+              <p>
+                Use the standard SO101 assembly and midpoint joint calibration. Targets use metres in base_link, with Z
+                up. OpenJensen solves each bounded waypoint; review each one here. Gripper opening is controlled
+                separately. The geometry estimates position without camera-to-base calibration or collision avoidance.
+                Longer reaches may need more steps in Run limits.
+              </p>
+            )}
+          </>
+        )}
         {target === 'teaching' && (
           <label className="workbench-field">
             Managed AI teleoperation job ID
@@ -754,6 +777,19 @@ function AgentControls({
               <p>
                 Embodiment: {observation.embodiment_manifest_id} · {observation.units}
               </p>
+              {observation.gripper_position_estimate && (
+                <section aria-label="Gripper position estimate">
+                  <h4>Gripper position · base_link</h4>
+                  <p>
+                    {observation.gripper_position_estimate.position_m
+                      .map((value, i) => `${'XYZ'[i]} ${(value * 1000).toFixed(1)} mm`)
+                      .join(' · ')}
+                  </p>
+                  <p>
+                    Model estimate from joint readings and standard SO101 geometry. Tool orientation is not controlled.
+                  </p>
+                </section>
+              )}
               <p>
                 Measured joints:{' '}
                 {Object.entries(observation.joints)
@@ -799,6 +835,28 @@ function AgentControls({
                 {proposal.skill} · {proposal.status}
                 {proposal.purpose ? ` · ${proposal.purpose}` : ''}
               </p>
+              {proposal.gripper_position_plan && (
+                <section aria-label="Gripper target waypoint">
+                  <h4>Gripper target · base_link</h4>
+                  <p>
+                    Target:{' '}
+                    {proposal.gripper_position_plan.target_m
+                      .map((value, i) => `${'XYZ'[i]} ${(value * 1000).toFixed(1)} mm`)
+                      .join(' · ')}
+                  </p>
+                  <p>
+                    Next waypoint:{' '}
+                    {proposal.gripper_position_plan.next_m
+                      .map((value, i) => `${'XYZ'[i]} ${(value * 1000).toFixed(1)} mm`)
+                      .join(' · ')}
+                  </p>
+                  <p>
+                    Estimated remaining distance after this step:{' '}
+                    {(proposal.gripper_position_plan.remaining_m * 1000).toFixed(1)} mm. Verify the measured result
+                    before the next proposal.
+                  </p>
+                </section>
+              )}
               <pre className="agent-control-json">{JSON.stringify(proposal.arguments, null, 2)}</pre>
               <p>
                 Model {proposal.model} ·{' '}

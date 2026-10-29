@@ -75,6 +75,7 @@ class SessionCreate(Strict):
     planning_mode: Literal["joint", "task"] = "task"
     max_steps: int = Field(default=12, ge=1, le=60)
     physical: PhysicalArming | None = None
+    gripper_position_control: bool = False
 
     @model_validator(mode="after")
     def target(self):
@@ -99,9 +100,34 @@ class SessionCreate(Strict):
             self.physical is not None or self.clock_policy == "physical"
         ):
             raise ValueError("Physical authority belongs only to a physical target")
+        if self.gripper_position_control and self.target_kind != "robot_lab":
+            raise ValueError("Gripper position targets require a physical SO101 session")
         if not self.task.strip():
             raise ValueError("Task is empty")
         return self
+
+
+class PositionEstimate(Strict):
+    model: str
+    frame: Literal["base_link"]
+    units: Literal["metres"]
+    position_m: list[float] = Field(min_length=3, max_length=3)
+    evidence: Literal["model_estimate"]
+    orientation_controlled: Literal[False]
+
+
+class PositionPlan(Strict):
+    model: str
+    frame: Literal["base_link"]
+    units: Literal["metres"]
+    target_m: list[float] = Field(min_length=3, max_length=3)
+    from_m: list[float] = Field(min_length=3, max_length=3)
+    next_m: list[float] = Field(min_length=3, max_length=3)
+    remaining_m: float = Field(ge=0)
+    tolerance_m: float = Field(gt=0)
+    final_waypoint: bool
+    orientation_controlled: Literal[False]
+    evidence: Literal["model_estimate"]
 
 
 class Observation(Strict):
@@ -123,6 +149,7 @@ class Observation(Strict):
     joint_units: dict[str, str] = Field(default_factory=dict)
     calibration_sha256: str | None = None
     task_evidence: dict | None = None
+    gripper_position_estimate: PositionEstimate | None = None
     image_sha256: str | None = None
     source: str
 
@@ -135,6 +162,14 @@ class Arguments(Strict):
 class SegmentArguments(Strict):
     targets: dict[str, float] = Field(min_length=1, max_length=6)
     duration_seconds: float = Field(ge=0.2, le=10)
+
+
+class PositionArguments(Strict):
+    frame: Literal["base_link"] = "base_link"
+    x_m: float = Field(ge=-0.6, le=0.6)
+    y_m: float = Field(ge=-0.6, le=0.6)
+    z_m: float = Field(ge=0, le=0.6)
+    duration_seconds: float = Field(default=2.0, ge=0.5, le=5.0)
 
 
 class Assessment(Strict):
@@ -175,6 +210,7 @@ class Proposal(Strict):
     prompt_sha256: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     skill: Literal["joint_correction", "joint_segment"] = "joint_correction"
     purpose: str = ""
+    gripper_position_plan: PositionPlan | None = None
     arguments: Arguments | SegmentArguments
     status: Literal[
         "proposed", "rejected", "accepted", "started", "completed", "stopped", "unknown"
@@ -263,6 +299,7 @@ class Session(Strict):
     run_enabled: bool = False
     control_armed: bool = False
     supported_skills: list[str] = Field(default_factory=list)
+    gripper_position_control: bool = False
     model_assessment: Assessment | None = None
     task_review: TaskReviewRecord | None = None
     execution_observation: Observation | None = None
@@ -312,11 +349,15 @@ class LocalAgentResult(Strict):
     observation_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     agent_name: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9._ :/-]+$")
     arguments: SegmentArguments | None = None
+    position: PositionArguments | None = None
     assessment: Assessment | None = None
     purpose: str = Field(default="", max_length=512)
 
     @model_validator(mode="after")
     def one_result(self):
-        if (self.arguments is None) == (self.assessment is None):
-            raise ValueError("Submit either one bounded action or one assessment")
+        if (
+            sum(value is not None for value in (self.arguments, self.position, self.assessment))
+            != 1
+        ):
+            raise ValueError("Submit one joint action, gripper position or assessment")
         return self

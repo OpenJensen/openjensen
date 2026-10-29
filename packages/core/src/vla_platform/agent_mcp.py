@@ -10,7 +10,11 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from vla_platform.agent_control.contracts import LocalAgentResult, SegmentArguments
+from vla_platform.agent_control.contracts import (
+    LocalAgentResult,
+    PositionArguments,
+    SegmentArguments,
+)
 
 TOKEN_ENV = "OPENJENSEN_AGENT_TOKEN"
 
@@ -83,6 +87,10 @@ def make_server(client):
         instructions=(
             "Read get_context for the pending request, measured state, units and limits. "
             "Propose small joint segments: gripper in percent, arm in degrees. "
+            "When get_context advertises gripper_position, you can supply a base_link "
+            "position in metres. OpenJensen solves the next bounded waypoint. Read the "
+            "new measured estimate and repeat the target until within tolerance. "
+            "Position estimates are model geometry, not camera-to-base calibration. "
             "Read the admitted camera image. Proposals need operator approval "
             "and a fresh admission image. Motion receipts do not verify a grasp. "
             "Tools cannot arm, approve, renew presence, calibrate or write motors. "
@@ -127,6 +135,40 @@ def make_server(client):
             agent_name=agent_name,
             purpose=purpose,
             arguments=SegmentArguments(targets=targets, duration_seconds=duration_seconds),
+        )
+        session = await client.request("POST", "result", result.model_dump())
+        return {"received_for_validation": True, "session": session}
+
+    @server.tool(annotations=write)
+    async def propose_gripper_position(
+        request_id: str,
+        authority_epoch: int,
+        observation_id: str,
+        observation_sha256: str,
+        x_m: float,
+        y_m: float,
+        z_m: float,
+        purpose: str,
+        duration_seconds: float = 2.0,
+        agent_name: str = "local-agent",
+    ) -> dict:
+        """Propose the next reviewed waypoint to a base_link position in metres.
+
+        Available only when the operator enables standard SO101 geometry. The
+        gripper opening stays unchanged. Read the new observation after each
+        action and repeat the desired target until its estimate is within 3 mm.
+        Orientation, camera-to-base transforms and collision avoidance are not provided.
+        """
+        result = LocalAgentResult(
+            request_id=request_id,
+            authority_epoch=authority_epoch,
+            observation_id=observation_id,
+            observation_sha256=observation_sha256,
+            agent_name=agent_name,
+            purpose=purpose,
+            position=PositionArguments(
+                x_m=x_m, y_m=y_m, z_m=z_m, duration_seconds=duration_seconds
+            ),
         )
         session = await client.request("POST", "result", result.model_dump())
         return {"received_for_validation": True, "session": session}

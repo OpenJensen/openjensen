@@ -44,7 +44,7 @@ def prompt_metadata(request, *, mock=False):
         )
     else:
         task = request.get("planning_mode") == "task"
-        version = "agent-goal-v1" if task else "agent-joint-v1"
+        version = "agent-goal-v2" if task else "agent-joint-v1"
         instruction = task_tools.TASK_PROMPT if task else SYSTEM_PROMPT
     return {
         "prompt_version": version,

@@ -4272,6 +4272,16 @@
             "title": "Observation Sha256",
             "type": "string"
           },
+          "position": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PositionArguments"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "purpose": {
             "default": "",
             "maxLength": 512,
@@ -5494,6 +5504,182 @@
         "title": "PolicyRequest",
         "type": "object"
       },
+      "PositionArguments": {
+        "additionalProperties": false,
+        "properties": {
+          "duration_seconds": {
+            "default": 2.0,
+            "maximum": 5.0,
+            "minimum": 0.5,
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "frame": {
+            "const": "base_link",
+            "default": "base_link",
+            "title": "Frame",
+            "type": "string"
+          },
+          "x_m": {
+            "maximum": 0.6,
+            "minimum": -0.6,
+            "title": "X M",
+            "type": "number"
+          },
+          "y_m": {
+            "maximum": 0.6,
+            "minimum": -0.6,
+            "title": "Y M",
+            "type": "number"
+          },
+          "z_m": {
+            "maximum": 0.6,
+            "minimum": 0.0,
+            "title": "Z M",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x_m",
+          "y_m",
+          "z_m"
+        ],
+        "title": "PositionArguments",
+        "type": "object"
+      },
+      "PositionEstimate": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence": {
+            "const": "model_estimate",
+            "title": "Evidence",
+            "type": "string"
+          },
+          "frame": {
+            "const": "base_link",
+            "title": "Frame",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "orientation_controlled": {
+            "const": false,
+            "title": "Orientation Controlled",
+            "type": "boolean"
+          },
+          "position_m": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "title": "Position M",
+            "type": "array"
+          },
+          "units": {
+            "const": "metres",
+            "title": "Units",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model",
+          "frame",
+          "units",
+          "position_m",
+          "evidence",
+          "orientation_controlled"
+        ],
+        "title": "PositionEstimate",
+        "type": "object"
+      },
+      "PositionPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence": {
+            "const": "model_estimate",
+            "title": "Evidence",
+            "type": "string"
+          },
+          "final_waypoint": {
+            "title": "Final Waypoint",
+            "type": "boolean"
+          },
+          "frame": {
+            "const": "base_link",
+            "title": "Frame",
+            "type": "string"
+          },
+          "from_m": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "title": "From M",
+            "type": "array"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "next_m": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "title": "Next M",
+            "type": "array"
+          },
+          "orientation_controlled": {
+            "const": false,
+            "title": "Orientation Controlled",
+            "type": "boolean"
+          },
+          "remaining_m": {
+            "minimum": 0.0,
+            "title": "Remaining M",
+            "type": "number"
+          },
+          "target_m": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "title": "Target M",
+            "type": "array"
+          },
+          "tolerance_m": {
+            "exclusiveMinimum": 0.0,
+            "title": "Tolerance M",
+            "type": "number"
+          },
+          "units": {
+            "const": "metres",
+            "title": "Units",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model",
+          "frame",
+          "units",
+          "target_m",
+          "from_m",
+          "next_m",
+          "remaining_m",
+          "tolerance_m",
+          "final_waypoint",
+          "orientation_controlled",
+          "evidence"
+        ],
+        "title": "PositionPlan",
+        "type": "object"
+      },
       "Precision": {
         "additionalProperties": false,
         "properties": {
@@ -5600,6 +5786,16 @@
           "expires_at": {
             "title": "Expires At",
             "type": "string"
+          },
+          "gripper_position_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PositionPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "id": {
             "title": "Id",
@@ -7383,6 +7579,11 @@
               }
             ]
           },
+          "gripper_position_control": {
+            "default": false,
+            "title": "Gripper Position Control",
+            "type": "boolean"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -7613,6 +7814,11 @@
           "cloud_consent": {
             "default": false,
             "title": "Cloud Consent",
+            "type": "boolean"
+          },
+          "gripper_position_control": {
+            "default": false,
+            "title": "Gripper Position Control",
             "type": "boolean"
           },
           "max_calls": {
@@ -9169,6 +9375,16 @@
           "expires_at": {
             "title": "Expires At",
             "type": "string"
+          },
+          "gripper_position_estimate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PositionEstimate"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "id": {
             "title": "Id",
