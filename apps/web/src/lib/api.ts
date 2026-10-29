@@ -347,9 +347,9 @@ export const api = {
   setModuleEnabled: (id: WorkspaceModule['id'], enabled: boolean) =>
     request<{ enabled: boolean }>(`/modules/${id}`, { method: 'PUT', body: JSON.stringify({ enabled }) }),
   installWorkspaceModule: (id: WorkspaceModule['id']) =>
-    request<{ installed: boolean }>(`/modules/${id}/install`, { method: 'POST' }),
+    request<{ installed: boolean } | InstallOperation | LocalSetupState>(`/modules/${id}/install`, { method: 'POST' }),
   uninstallWorkspaceModule: (id: WorkspaceModule['id']) =>
-    request<{ installed: boolean }>(`/modules/${id}`, { method: 'DELETE' }),
+    request<{ installed: boolean; runtime_removed: boolean }>(`/modules/${id}`, { method: 'DELETE' }),
   moduleInstallations: () => request<ModuleInstallationStatus>('/module-installations', undefined, 60_000),
   installModule: (profile: InstallableProfile, operationId: string) =>
     request<InstallOperation>(
