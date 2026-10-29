@@ -366,6 +366,7 @@ export function WorkJobs({
         <label>
           Search jobs
           <input
+            disabled={!projectId}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Name, operation, or compute"
@@ -376,6 +377,7 @@ export function WorkJobs({
           <label>
             Module
             <select
+              disabled={!projectId}
               value={filter}
               onChange={(event) => {
                 setFilter(event.target.value);
@@ -394,6 +396,7 @@ export function WorkJobs({
         <label>
           Status
           <select
+            disabled={!projectId}
             value={state}
             onChange={(event) => {
               setState(event.target.value);
