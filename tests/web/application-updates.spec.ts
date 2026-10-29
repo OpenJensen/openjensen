@@ -74,7 +74,10 @@ test('accepted update reports progress and reloads once the confirmed version is
   await page.getByRole('button', { name: 'Update & restart' }).click();
   await expect(page.getByRole('dialog')).toContainText('Building the new version…');
   complete = true;
-  await expect.poll(() => page.evaluate(() => performance.timeOrigin)).not.toBe(initialOrigin);
+  // A successful reload can destroy the context between polling and evaluate.
+  await expect(async () => {
+    expect(await page.evaluate(() => performance.timeOrigin)).not.toBe(initialOrigin);
+  }).toPass();
   await expect(page.getByRole('button', { name: 'Version and updates' })).toHaveText('v0.1.0');
   await expect(page.getByRole('button', { name: 'Version and updates' })).toHaveText('v0.1.0');
   expect(writes).toBe(1);
@@ -143,7 +146,10 @@ test('lost acceptance reply reconnects to the same update without submitting twi
   await page.getByRole('button', { name: 'Update & restart' }).click();
   await expect(page.getByRole('dialog')).toContainText('Building the new version…');
   complete = true;
-  await expect.poll(() => page.evaluate(() => performance.timeOrigin)).not.toBe(initialOrigin);
+  // A successful reload can destroy the context between polling and evaluate.
+  await expect(async () => {
+    expect(await page.evaluate(() => performance.timeOrigin)).not.toBe(initialOrigin);
+  }).toPass();
   await expect(page.getByRole('button', { name: 'Version and updates' })).toHaveText('v0.1.0');
   expect(writes).toBe(1);
   expect(await page.evaluate(() => sessionStorage.getItem('openjensen-pending-update'))).toBeNull();
