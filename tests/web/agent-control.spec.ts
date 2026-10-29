@@ -630,7 +630,7 @@ test('OpenAI model names load explicitly and save their exact model IDs', async 
   );
 });
 
-test('physical arming, current-image admission and focus loss retain explicit operator authority', async ({ page }) => {
+test('physical arming and current-image admission retain authority across app switching', async ({ page }) => {
   const { requests, releaseAdmissionImages } = await fixture(page, {
     planningMode: 'task',
     physical: true,
@@ -688,11 +688,42 @@ test('physical arming, current-image admission and focus loss retain explicit op
   expect(String(requests.find((request) => request.path.endsWith('/review'))?.body.observation_id)).toMatch(
     /^admission-/,
   );
-  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  const heartbeats = requests.filter((request) => request.path === '/agent-sessions/agent-fixture/heartbeat').length;
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    Object.defineProperty(document, 'hasFocus', { configurable: true, value: () => false });
+    window.dispatchEvent(new Event('blur'));
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
   await expect
-    .poll(() => requests.filter((request) => request.path === '/agent-sessions/agent-fixture/stop').length)
-    .toBeGreaterThan(0);
-  await expect(page.getByRole('region', { name: 'Physical SO101 preflight' })).toContainText('lost focus');
+    .poll(() => requests.filter((request) => request.path === '/agent-sessions/agent-fixture/heartbeat').length)
+    .toBeGreaterThan(heartbeats + 1);
+  expect(requests.filter((request) => request.path.endsWith('/stop'))).toEqual([]);
+  await page.evaluate(() => {
+    delete (document as any).visibilityState;
+    delete (document as any).hasFocus;
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await page.getByRole('button', { name: 'Stop arm and disable torque', exact: true }).click();
+  await expect.poll(() => requests.some((request) => request.path.endsWith('/stop'))).toBe(true);
+});
+
+test('physical preflight hold survives app switching and navigation still stops it', async ({ page }) => {
+  const { requests } = await fixture(page, { physical: true });
+  await connectPhysical(page);
+  const heartbeats = requests.filter((request) => request.path === '/robot-lab/control/heartbeat').length;
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    Object.defineProperty(document, 'hasFocus', { configurable: true, value: () => false });
+    window.dispatchEvent(new Event('blur'));
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect
+    .poll(() => requests.filter((request) => request.path === '/robot-lab/control/heartbeat').length)
+    .toBeGreaterThan(heartbeats + 1);
+  expect(requests.filter((request) => request.path.endsWith('/stop'))).toEqual([]);
+  await page.getByRole('button', { name: 'Back to jobs', exact: true }).click();
+  await expect.poll(() => requests.some((request) => request.path === '/robot-lab/stop')).toBe(true);
 });
 
 test('a rejected in-flight manual heartbeat cannot stop a legitimate AI ownership transfer', async ({ page }) => {
@@ -712,7 +743,7 @@ test('implicit manual cleanup is fenced against a newer controller', async ({ pa
   const { requests, robot } = await fixture(page, { physical: true });
   await connectPhysical(page);
   robot.session.generation = 8;
-  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await page.getByLabel('I am at the arm, supporting it where needed, with Stop within reach.').uncheck();
   await expect.poll(() => requests.some((request) => request.path === '/robot-lab/stop')).toBe(true);
   expect(requests.find((request) => request.path === '/robot-lab/stop')?.body).toMatchObject({
     expected_generation: 7,
@@ -727,7 +758,7 @@ test('implicit preflight cleanup cannot stop an agent that took over the same ge
   await connectPhysical(page);
   robot.session.mode = 'agent';
   robot.agent_control.owner = 'different-controller';
-  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await page.getByLabel('I am at the arm, supporting it where needed, with Stop within reach.').uncheck();
   await expect.poll(() => requests.some((request) => request.path === '/robot-lab/stop')).toBe(true);
   expect(requests.find((request) => request.path === '/robot-lab/stop')?.body).toMatchObject({
     expected_generation: 7,

@@ -1,6 +1,6 @@
 [project]
 name = "openjensen-workspace"
-version = "0.1.10"
+version = "0.1.11"
 license = "Apache-2.0"
 requires-python = ">=3.14,<3.15"
 dependencies = ["vla-platform"]
