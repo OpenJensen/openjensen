@@ -1,11 +1,14 @@
 """Private module management and bounded, allowlisted dependency installation."""
 
 import asyncio
+from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 
 from vla_platform.module_installations import (
+    RUNTIME_MODULES,
     InstallOperation,
     InstallRequest,
     ModuleInstallationStatus,
@@ -13,6 +16,8 @@ from vla_platform.module_installations import (
 from vla_platform.modules import (
     ModuleId,
     ModulePreference,
+    _editable,
+    read_registry,
     set_module_enabled,
     set_module_installed,
 )
@@ -41,12 +46,37 @@ async def enable(ident: ModuleId, payload: ModulePreference, request: Request):
 @router.post("/modules/{ident}/install")
 async def install_feature(ident: ModuleId, request: Request):
     try:
-        await asyncio.to_thread(
-            set_module_installed,
-            request.app.state.execution.settings.data_dir,
-            ident,
-            True,
-        )
+        _editable()
+        execution = request.app.state.execution
+        # Validate saved membership before doing any network or filesystem work.
+        if read_registry(execution.settings.data_dir) is None:
+            raise ValueError("The module registry has not been initialized.")
+        if ident in RUNTIME_MODULES:
+            installer = request.app.state.module_installations
+            if installer.pending and installer.operation and installer.operation.module == ident:
+                return JSONResponse(
+                    status_code=202, content=installer.operation.model_dump(mode="json")
+                )
+            operation = await install(
+                InstallRequest(
+                    profile=RUNTIME_MODULES[ident], operation_id=uuid4().hex, activate_module=True
+                ),
+                request,
+            )
+            return JSONResponse(status_code=202, content=operation.model_dump(mode="json"))
+        if ident == "training":
+            from vla_platform.compute_api import local_worker_discovery, local_worker_setup
+
+            setup = getattr(execution.lifecycle, "local_worker_setup", None)
+            if setup is None:
+                setup = await local_worker_setup(
+                    execution.lifecycle, await local_worker_discovery(execution.lifecycle)
+                )
+            if request.app.state.module_installations.pending:
+                raise ValueError("Wait for module installation to finish.")
+            state = await setup.start(activate_module=True)
+            return JSONResponse(status_code=202, content=state.model_dump(mode="json"))
+        await asyncio.to_thread(set_module_installed, execution.settings.data_dir, ident, True)
     except (ValueError, OSError) as exc:
         raise HTTPException(
             409,
@@ -102,18 +132,40 @@ async def uninstall_feature(ident: ModuleId, request: Request):
                 raise HTTPException(
                     409, "Finish or cancel this module's active jobs before uninstalling it."
                 )
-        await asyncio.to_thread(
-            set_module_installed,
-            request.app.state.execution.settings.data_dir,
-            ident,
-            False,
-        )
+        removed = False
+        _editable()
+        if read_registry(execution.settings.data_dir) is None:
+            raise ValueError("The module registry has not been initialized.")
+        if ident in RUNTIME_MODULES or ident == "training":
+            async with execution.storage.engine.connect() as connection:
+                active = (
+                    await connection.execute(
+                        select(jobs.c.id).where(jobs.c.status.in_(["queued", "running"])).limit(1)
+                    )
+                ).first()
+            if active:
+                raise HTTPException(409, "Finish active jobs before uninstalling runtime packages.")
+            async with installer.lock:
+                if ident == "training":
+                    from vla_platform.compute_api import local_worker_discovery, local_worker_setup
+
+                    setup = await local_worker_setup(
+                        execution.lifecycle, await local_worker_discovery(execution.lifecycle)
+                    )
+                    removed = await asyncio.to_thread(setup.remove)
+                else:
+                    removed = await asyncio.to_thread(installer.remove, RUNTIME_MODULES[ident])
+                await asyncio.to_thread(
+                    set_module_installed, execution.settings.data_dir, ident, False
+                )
+        else:
+            await asyncio.to_thread(set_module_installed, execution.settings.data_dir, ident, False)
     except (ValueError, OSError) as exc:
         raise HTTPException(
             409,
             str(exc) if isinstance(exc, ValueError) else "The module could not be uninstalled.",
         ) from None
-    return {"installed": False}
+    return {"installed": False, "runtime_removed": removed}
 
 
 @router.get("/module-installations", response_model=ModuleInstallationStatus)

@@ -3562,6 +3562,8 @@ export interface components {
             id: string;
             /** Message */
             message: string;
+            /** Module */
+            module?: ("datasets" | "robot-lab" | "decision-lab") | null;
             /** Pid */
             pid?: number | null;
             /**
@@ -3581,6 +3583,11 @@ export interface components {
         };
         /** InstallRequest */
         InstallRequest: {
+            /**
+             * Activate Module
+             * @default false
+             */
+            activate_module: boolean;
             /** Operation Id */
             operation_id: string;
             /**
@@ -4704,6 +4711,11 @@ export interface components {
              * @enum {string}
              */
             location: "server" | "companion";
+            /**
+             * Managed
+             * @default false
+             */
+            managed: boolean;
             /** Message */
             message: string;
             /** Minimum Free Gib */

@@ -112,24 +112,24 @@ def test_every_feature_has_a_group(tmp_path):
 
 def test_install_hide_uninstall_and_runtime_setup_are_independent(tmp_path):
     with TestClient(create_app(Settings(data_dir=tmp_path))) as client:
-        assert client.put("/api/v1/modules/training", json={"enabled": True}).status_code == 409
-        assert client.post("/api/v1/modules/training/install").status_code == 200
-        training = modules(client)["training"]
-        assert training["installed"] and training["enabled"] and not training["configured"]
+        assert client.put("/api/v1/modules/teaching", json={"enabled": True}).status_code == 409
+        assert client.post("/api/v1/modules/teaching/install").status_code == 200
+        teaching = modules(client)["teaching"]
+        assert teaching["installed"] and teaching["enabled"] and not teaching["configured"]
         assert not (tmp_path / "module-environments").exists()
-        assert client.put("/api/v1/modules/training", json={"enabled": False}).status_code == 200
-        training = modules(client)["training"]
-        assert training["installed"] and not training["enabled"]
-    saved_data = tmp_path / "training-output"
+        assert client.put("/api/v1/modules/teaching", json={"enabled": False}).status_code == 200
+        teaching = modules(client)["teaching"]
+        assert teaching["installed"] and not teaching["enabled"]
+    saved_data = tmp_path / "teaching-output"
     saved_data.write_text("retain user output")
     with TestClient(create_app(Settings(data_dir=tmp_path))) as client:
-        assert modules(client)["training"]["installed"]
-        assert not modules(client)["training"]["enabled"]
-        assert client.delete("/api/v1/modules/training").status_code == 200
-        assert not modules(client)["training"]["installed"]
-        assert client.put("/api/v1/modules/training", json={"enabled": True}).status_code == 409
-        assert client.post("/api/v1/modules/training/install").status_code == 200
-        assert modules(client)["training"]["enabled"]
+        assert modules(client)["teaching"]["installed"]
+        assert not modules(client)["teaching"]["enabled"]
+        assert client.delete("/api/v1/modules/teaching").status_code == 200
+        assert not modules(client)["teaching"]["installed"]
+        assert client.put("/api/v1/modules/teaching", json={"enabled": True}).status_code == 409
+        assert client.post("/api/v1/modules/teaching/install").status_code == 200
+        assert modules(client)["teaching"]["enabled"]
     assert saved_data.read_text() == "retain user output"
 
 
@@ -350,7 +350,7 @@ def test_uninstall_preserves_access_to_running_dependency_install(tmp_path, monk
 
     app = create_app(Settings(data_dir=tmp_path))
     with TestClient(app) as client:
-        assert client.post("/api/v1/modules/robot-lab/install").status_code == 200
+        set_module_installed(tmp_path, "robot-lab", True)
         app.state.module_installations.operation = InstallOperation(
             id="a" * 32,
             profile="robot",
@@ -372,7 +372,7 @@ def test_uninstall_preserves_access_to_running_training_setup(tmp_path):
         return None
 
     with TestClient(app) as client:
-        assert client.post("/api/v1/modules/training/install").status_code == 200
+        set_module_installed(tmp_path, "training", True)
         app.state.execution.lifecycle.local_worker_setup = SimpleNamespace(
             state=SimpleNamespace(status="running"),
             lock=SimpleNamespace(locked=lambda: False),
@@ -387,7 +387,7 @@ def test_uninstall_rejects_matching_active_jobs_and_allows_unrelated_feature(tmp
 
     app = create_app(Settings(data_dir=tmp_path))
     with TestClient(app) as client:
-        assert client.post("/api/v1/modules/training/install").status_code == 200
+        set_module_installed(tmp_path, "training", True)
         project = client.post("/api/v1/projects", json={"name": "Fixture"}).json()
 
         async def insert_job():

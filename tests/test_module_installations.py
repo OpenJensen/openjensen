@@ -82,7 +82,7 @@ def ready(ident, installed=False):
         ready=installed,
         installable=True,
         message="fixture",
-        minimum_free_gib=11,
+        minimum_free_gib=0,
     )
 
 
@@ -346,12 +346,18 @@ def test_runtime_tools_still_required_without_installer(tmp_path, monkeypatch):
 
 def test_verified_runtime_available_before_optional_configuration(tmp_path, monkeypatch):
     monkeypatch.setattr(ModuleInstallations, "inspect", lambda self, ident: ready(ident, True))
-    with TestClient(create_app(Settings(data_dir=tmp_path))) as client:
+    app = create_app(Settings(data_dir=tmp_path))
+    with TestClient(app) as client:
         values = {item["id"]: item for item in client.get("/api/v1/modules").json()}
         assert values["robot-lab"]["available"] and not values["robot-lab"]["installed"]
         assert values["decision-lab"]["available"] and not values["decision-lab"]["installed"]
-        assert client.post("/api/v1/modules/robot-lab/install").status_code == 200
-        assert client.post("/api/v1/modules/decision-lab/install").status_code == 200
+        assert client.post("/api/v1/modules/robot-lab/install").status_code == 202
+
+        async def finish():
+            await app.state.module_installations.task
+
+        client.portal.call(finish)
+        assert client.post("/api/v1/modules/decision-lab/install").status_code == 202
         assert not values["robot-lab"]["configured"] and not values["decision-lab"]["configured"]
 
 
@@ -407,3 +413,107 @@ def test_runtime_install_keeps_feature_uninstalled_and_preserves_visibility(tmp_
         assert not read_registry(tmp_path).enabled["decision-lab"]
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize("verified", [True, False])
+def test_feature_install_downloads_and_only_activates_after_verification(
+    tmp_path, monkeypatch, verified
+):
+    import vla_platform.module_installations as module
+    from vla_platform.modules import module_installed
+
+    entered = None
+    release = None
+    calls = []
+    app = create_app(Settings(data_dir=tmp_path))
+    monkeypatch.setattr(ModuleInstallations, "inspect", lambda self, ident: ready(ident))
+    monkeypatch.setattr(module.shutil, "which", lambda name: "/trusted/uv")
+    monkeypatch.setattr(
+        module, "check_profile", lambda *args: {"ready": verified, "message": "Verification failed"}
+    )
+
+    async def command(self, argv, stage):
+        calls.append(argv)
+        entered.set()
+        await release.wait()
+        (self.target("datasets") / "bin").mkdir(parents=True, exist_ok=True)
+        (self.target("datasets") / "bin/python").touch()
+
+    monkeypatch.setattr(ModuleInstallations, "_command", command)
+    with TestClient(app) as client:
+
+        async def initialize():
+            nonlocal entered, release
+            entered, release = asyncio.Event(), asyncio.Event()
+
+        client.portal.call(initialize)
+        assert client.delete("/api/v1/modules/datasets").status_code == 200
+        assert not calls
+        response = client.post("/api/v1/modules/datasets/install")
+        assert response.status_code == 202
+        client.portal.call(entered.wait)
+        assert not module_installed(tmp_path, "datasets")
+        again = client.post("/api/v1/modules/datasets/install")
+        assert again.json()["id"] == response.json()["id"]
+
+        async def finish():
+            release.set()
+            await app.state.module_installations.task
+
+        client.portal.call(finish)
+        assert module_installed(tmp_path, "datasets") is verified
+        assert app.state.module_installations.operation.status == (
+            "succeeded" if verified else "failed"
+        )
+        assert any("pip" in call and "install" in call for call in calls)
+        assert not any("/core/" in " ".join(call) for call in calls)
+
+
+def test_uninstall_reclaims_only_owned_environment_and_keeps_data(tmp_path):
+    service = ModuleInstallations(tmp_path)
+    target = service.target("decision")
+    target.mkdir(parents=True)
+    (target / ".openjensen-installed.json").write_text('{"profile":"decision"}')
+    (target / "package.bin").write_bytes(b"runtime")
+    saved = tmp_path / "models/user-model"
+    saved.parent.mkdir()
+    saved.write_bytes(b"saved model")
+    shared = tmp_path / "shared-runtime"
+    shared.mkdir()
+    (shared / "python").touch()
+    assert service.remove("decision")
+    assert not target.exists()
+    assert saved.read_bytes() == b"saved model"
+    assert (shared / "python").is_file()
+    assert not service.remove("decision")
+
+
+def test_uninstall_rejects_unowned_and_symlinked_environments(tmp_path):
+    service = ModuleInstallations(tmp_path)
+    target = service.target("robot")
+    target.mkdir(parents=True)
+    with pytest.raises(ValueError, match="receipt"):
+        service.remove("robot")
+    target.rmdir()
+    shared = tmp_path / "external"
+    shared.mkdir()
+    target.symlink_to(shared, target_is_directory=True)
+    with pytest.raises(ValueError, match="symbolic"):
+        service.remove("robot")
+    assert shared.is_dir()
+
+
+def test_uninstall_blocks_an_independent_runtime_process(tmp_path):
+    import subprocess
+
+    from vla_platform.module_installations import require_runtime_unused
+
+    process = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)", str(tmp_path / "runtime")]
+    )
+    try:
+        with pytest.raises(ValueError, match="in use"):
+            require_runtime_unused(tmp_path / "runtime")
+    finally:
+        process.terminate()
+        process.wait(timeout=5)

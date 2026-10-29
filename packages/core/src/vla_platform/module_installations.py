@@ -10,6 +10,7 @@ import os
 import platform
 import shutil
 import signal
+import subprocess
 import tempfile
 import time
 from datetime import UTC, datetime
@@ -32,12 +33,14 @@ InstallableProfile = Literal["robot", "datasets", "decision"]
 ROOT = Path(__file__).resolve().parents[4]
 TIMEOUT = 3600
 LOG_LIMIT = 2 * 1024**2
+RUNTIME_MODULES = {"datasets": "datasets", "robot-lab": "robot", "decision-lab": "decision"}
 
 
 class InstallRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     profile: InstallableProfile
     operation_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    activate_module: bool = False
 
 
 class InstallOperation(BaseModel):
@@ -49,6 +52,7 @@ class InstallOperation(BaseModel):
     started_at: str
     finished_at: str | None = None
     pid: int | None = None
+    module: Literal["datasets", "robot-lab", "decision-lab"] | None = None
 
 
 class RuntimePackage(BaseModel):
@@ -61,6 +65,7 @@ class RuntimePackage(BaseModel):
     location: Literal["server", "companion"] = "server"
     host: str | None = None
     connected: bool | None = None
+    managed: bool = False
 
 
 class ModuleInstallationStatus(BaseModel):
@@ -72,6 +77,15 @@ class ModuleInstallationStatus(BaseModel):
 
 def now():
     return datetime.now(UTC).isoformat()
+
+
+def require_runtime_unused(target):
+    """Jobs are checked by the caller; also protect independently running companions."""
+    result = subprocess.run(
+        ["ps", "-ax", "-o", "command="], capture_output=True, text=True, timeout=5, check=True
+    )
+    if str(target) in result.stdout:
+        raise ValueError("This runtime is in use by a process. Stop it before uninstalling.")
 
 
 class ModuleInstallations:
@@ -219,6 +233,7 @@ class ModuleInstallations:
             message=message,
             minimum_free_gib=10 + value.estimated_install_gib,
             host=platform.node(),
+            managed=checked["ready"] and target == self.target(ident),
         )
         self.cached[ident] = (time.monotonic(), result)
         return result
@@ -264,15 +279,23 @@ class ModuleInstallations:
             if self.problem:
                 raise ValueError(self.problem)
             if self.operation and payload.operation_id == self.operation.id:
-                if payload.profile != self.operation.profile:
+                if payload.profile != self.operation.profile or (
+                    payload.activate_module != (self.operation.module is not None)
+                ):
                     raise ValueError("This request already belongs to another module.")
                 return self.operation.model_copy(deep=True)
             if self.pending:
                 raise ValueError("Wait for the current module installation to finish.")
+            if payload.activate_module:
+                from vla_platform.modules import _editable, read_registry
+
+                _editable()
+                if read_registry(self.data_dir) is None:
+                    raise ValueError("The module registry has not been initialized.")
             value = profile(payload.profile)
             self.cached.pop(value.id, None)
             state = await asyncio.to_thread(self.inspect, value.id)
-            if state.location == "companion":
+            if state.location == "companion" and not payload.activate_module:
                 raise ValueError(
                     "Robot Lab is installed on the paired computer. Open or reconnect it there."
                 )
@@ -293,8 +316,16 @@ class ModuleInstallations:
                 profile=value.id,
                 status="running",
                 stage="Preparing",
-                message="Installing dependencies on " + platform.node() + ".",
+                message="Downloading pinned dependencies from upstream package indexes on "
+                + platform.node()
+                + ".",
                 started_at=now(),
+                module=next(
+                    (key for key, value in RUNTIME_MODULES.items() if value == payload.profile),
+                    None,
+                )
+                if payload.activate_module
+                else None,
             )
             self._save()
             self.task = asyncio.create_task(self._install(value, target, state.ready))
@@ -326,6 +357,7 @@ class ModuleInstallations:
             UV_NO_CONFIG="1",
             UV_DEFAULT_INDEX="https://pypi.org/simple",
             UV_LINK_MODE="copy",
+            UV_NO_CACHE="1",
             PYTHONDONTWRITEBYTECODE="1",
             UV_CONCURRENT_BUILDS="1",
             UV_CONCURRENT_INSTALLS="1",
@@ -389,7 +421,13 @@ class ModuleInstallations:
                 (target / ".openjensen-installed.json").write_text(
                     json.dumps({"profile": value.id})
                 )
-            # Runtime dependencies and feature registration have separate lifecycles.
+            if self.operation.module:
+                from vla_platform.modules import set_module_installed
+
+                await asyncio.to_thread(
+                    set_module_installed, self.data_dir, self.operation.module, True
+                )
+            # Only verified dependencies can activate a requested feature.
             self.operation.status = "succeeded"
             self.operation.message = (
                 "Dependencies installed. Pair the companion on the USB computer in Robot Lab."
@@ -414,6 +452,33 @@ class ModuleInstallations:
             self.operation.finished_at = now()
             self.cached.pop(value.id, None)
             self._save()
+
+    def remove(self, ident):
+        """Remove only this manager's environment, never a companion or a shared runtime."""
+        if self.pending:
+            raise ValueError("Finish or cancel the current installation first.")
+        target = self.target(ident)
+        if self.directory.is_symlink() or target.is_symlink():
+            raise ValueError("Managed module environments must not be symbolic links.")
+        if not target.exists():
+            return False
+        receipt = target / ".openjensen-installed.json"
+        owned = False
+        if receipt.is_file() and not receipt.is_symlink():
+            try:
+                owned = json.loads(receipt.read_text()).get("profile") == ident
+            except OSError, ValueError, AttributeError:
+                pass
+        # A failed/cancelled installation also owns its partial environment.
+        owned |= self.operation is not None and self.operation.profile == ident
+        if not owned:
+            raise ValueError(
+                "No installation receipt was found. This environment needs administrator review."
+            )
+        require_runtime_unused(target)
+        shutil.rmtree(target)
+        self.cached.pop(ident, None)
+        return True
 
     async def cancel(self):
         async with self.lock:

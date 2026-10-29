@@ -3028,6 +3028,22 @@
             "title": "Message",
             "type": "string"
           },
+          "module": {
+            "anyOf": [
+              {
+                "enum": [
+                  "datasets",
+                  "robot-lab",
+                  "decision-lab"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Module"
+          },
           "pid": {
             "anyOf": [
               {
@@ -3082,6 +3098,11 @@
       "InstallRequest": {
         "additionalProperties": false,
         "properties": {
+          "activate_module": {
+            "default": false,
+            "title": "Activate Module",
+            "type": "boolean"
+          },
           "operation_id": {
             "pattern": "^[0-9a-f]{32}$",
             "title": "Operation Id",
@@ -5921,6 +5942,11 @@
             ],
             "title": "Location",
             "type": "string"
+          },
+          "managed": {
+            "default": false,
+            "title": "Managed",
+            "type": "boolean"
           },
           "message": {
             "title": "Message",
