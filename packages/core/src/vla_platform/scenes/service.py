@@ -158,7 +158,8 @@ class Scenes:
                     )
                     from vla_platform.scenes.runtime import recover
 
-                    await recover(self, run)
+                    run.source["resource_cleanup"] = await recover(self, run)
+                    self.save(run)
                 # Credentials are short-lived and never survive reconciliation.
                 for auth in path.parent.glob("*/.codex-runtime/auth.json"):
                     auth.unlink(missing_ok=True)

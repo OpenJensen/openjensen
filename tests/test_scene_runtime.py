@@ -440,3 +440,78 @@ def test_down_verifies_removed_cluster_using_supported_sdk_refresh_enum(owned, m
     result = runner.receipt(owned)
     assert result["down_request_id"] == "owned-down-request"
     assert result["resource_cleanup"] == "cluster_removed"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("cleanup_status", ["cluster_removed", "unverified", "not_launched"])
+async def test_restart_reconciliation_persists_owned_cleanup_in_the_public_scene(
+    tmp_path,
+    config,
+    monkeypatch,
+    cleanup_status,
+):
+    from vla_platform.contracts import now
+    from vla_platform.scenes.contracts import SceneRequest, SceneRun
+    from vla_platform.scenes.service import Scenes
+
+    value, _ = config
+    scenes = Scenes(tmp_path / "workspace")
+    ident = "f" * 32
+    folder = scenes.folder(ident)
+    folder.mkdir(parents=True)
+    scene = SceneRun(
+        id=ident,
+        job_id="interrupted-core-job",
+        project_id="project",
+        request=SceneRequest(request_id=ident, source_job_id="dataset"),
+        status="running",
+        stage="simulation",
+        message="Owned simulation fixture",
+        created_at=now(),
+        updated_at=now(),
+        source={"resource_cleanup": "unverified"},
+        gates={"isaac_runtime": False},
+    )
+    scenes.save(scene)
+    calls = []
+    if cleanup_status != "not_launched":
+        owned = folder / "simulation-runtime"
+        owned.mkdir()
+        request = {
+            "run_id": ident,
+            "cluster": "scene-" + ident[:16],
+            "config": value,
+            "receipt": str(owned / "ownership.json"),
+        }
+        runner.write(owned / "request.json", request)
+        runner.write(
+            owned / "ownership.json",
+            {
+                "run_id": ident,
+                "cluster": request["cluster"],
+                "launch_attempted": True,
+                "resource_cleanup": "unverified",
+                "state": "RUNNING",
+            },
+        )
+
+    async def command(args, **kwargs):
+        calls.append(args[2])
+        assert args[2] == "down"
+        request = json.loads(Path(args[-1]).read_text())
+        receipt = Path(request["receipt"])
+        saved = json.loads(receipt.read_text())
+        if cleanup_status == "unverified":
+            raise SceneError("Synthetic teardown confirmation unavailable")
+        saved["resource_cleanup"] = cleanup_status
+        runner.write(receipt, saved)
+        return b""
+
+    monkeypatch.setattr(runtime, "command", command)
+    await scenes.reconcile()
+    current = scenes.get(ident)
+    assert current.status == "interrupted"
+    assert current.source["resource_cleanup"] == cleanup_status
+    assert current.gates["isaac_runtime"] is False
+    assert calls == ([] if cleanup_status == "not_launched" else ["down"])
+    assert not scenes.tasks
