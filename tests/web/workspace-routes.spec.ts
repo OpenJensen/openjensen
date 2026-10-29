@@ -65,6 +65,33 @@ async function fixture(page: Page) {
       return route.fulfill({ status: 405, json: { detail: 'Navigation must not submit work' } });
     }
     if (path === '/api/v1/modules') return route.fulfill({ json: moduleFixture() });
+    if (path === '/api/v1/module-installations')
+      return route.fulfill({
+        json: {
+          host: 'fixture-server',
+          operation: null,
+          profiles: [
+            {
+              id: 'robot',
+              name: 'Robot Lab',
+              ready: true,
+              installable: false,
+              location: 'companion',
+              host: 'USB computer',
+              message: 'Paired runtime.',
+              minimum_free_gib: 11,
+            },
+            {
+              id: 'datasets',
+              name: 'Dataset tools',
+              ready: true,
+              installable: true,
+              message: 'Installed readers.',
+              minimum_free_gib: 11,
+            },
+          ],
+        },
+      });
     if (path === '/api/v1/projects')
       return route.fulfill({
         json: [
@@ -124,9 +151,9 @@ test('the sidebar lists installed modules and Modules shows how to install the r
   await expect(modules).toHaveCount(12);
   await expect(modules.filter({ hasText: 'Initial setup' })).toContainText('Installed');
   const teaching = modules.filter({ hasText: 'AI teleoperation' });
-  await expect(teaching).toContainText('Not installed');
+  await expect(teaching).toContainText('Disabled');
   await expect(teaching.getByText('Setup required', { exact: true })).toHaveCount(0);
-  await expect(teaching.getByRole('button', { name: 'Install module AI teleoperation', exact: true })).toBeVisible();
+  await expect(teaching.getByRole('button', { name: 'Enable module AI teleoperation', exact: true })).toBeVisible();
   // The legacy teaching URL explains setup without exposing an uninstalled module in navigation.
   await page.goto('/teaching/');
   await expect(nav.getByRole('link', { name: 'AI teleoperation', exact: true })).toHaveCount(0);
