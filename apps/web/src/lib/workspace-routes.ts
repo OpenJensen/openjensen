@@ -5,12 +5,13 @@ import { basePath } from '@/lib/base-path';
 export type ModuleId = WorkspaceModule['id'];
 export type IntegrationModuleId = 'google-cloud' | 'openai' | 'gemini' | 'huggingface';
 export type FeatureModuleId = Exclude<ModuleId, IntegrationModuleId>;
-export type StageId = 'dashboard' | 'modules' | 'cloud-apis' | 'settings' | FeatureModuleId;
+export type StageId = 'jobs' | 'dashboard' | 'modules' | 'cloud-apis' | 'settings' | FeatureModuleId;
 export type WorkspaceRoute = { name: string; icon: IconName; path: string; module?: true };
 
 // Stage keys preserve saved module IDs. Canonical addresses may differ from
 // those IDs; legacy addresses stay mapped to the same workspace state.
 export const workspaceRoutes: Record<StageId, WorkspaceRoute> = {
+  jobs: { name: 'Jobs', icon: 'layers', path: '/jobs/' },
   dashboard: { name: 'Dashboard', icon: 'home', path: '/dashboard/' },
   'robot-lab': { name: 'Initial setup', icon: 'robot', path: '/robot-lab/', module: true },
   teaching: { name: 'AI teleoperation', icon: 'record', path: '/ai-teleoperation/', module: true },
@@ -33,12 +34,12 @@ export const workspaceRoutes: Record<StageId, WorkspaceRoute> = {
 export const isModule = (id: StageId): id is FeatureModuleId => !!workspaceRoutes[id].module;
 
 export const navigationGroups: { name?: string; items: StageId[] }[] = [
-  { items: ['dashboard'] },
+  { items: ['dashboard', 'jobs'] },
   { name: 'Robot Lab', items: ['robot-lab', 'teaching'] },
   { name: 'Data', items: ['datasets', 'augmentation', 'real-to-sim'] },
   { name: 'Train', items: ['training', 'distillation', 'quantization'] },
   { name: 'Test', items: ['evaluation', 'simulation', 'decision-lab'] },
-  { name: 'Workspace', items: ['models', 'cloud-runs', 'modules', 'cloud-apis', 'settings'] },
+  { name: 'Manage', items: ['models', 'cloud-runs', 'modules', 'cloud-apis', 'settings'] },
 ];
 
 export function moduleStage(id: ModuleId): StageId {

@@ -193,7 +193,23 @@ test('cancelling a started worker remains cancelled after browser reload and in 
   // A recorded stdout event proves the registered worker process actually started.
   await waitForJob(request, submitted.id, 'worker_started');
   await page.getByRole('button', { name: 'Cancel run', exact: true }).click();
-  const cancelled = await waitForJob(request, submitted.id, 'cancelled');
+  let cancelled = await waitForJob(request, submitted.id, 'cancelled');
+  // The terminal status fences publication before the worker cleanup receipt is persisted.
+  await expect
+    .poll(
+      async () => {
+        const response = await request.get(`/api/v1/jobs/${submitted.id}`);
+        expect(response.status()).toBe(200);
+        cancelled = await response.json();
+        return cancelled;
+      },
+      { timeout: 45_000 },
+    )
+    .toMatchObject({
+      status: 'cancelled',
+      result: null,
+      cancellation: { cleanup: 'succeeded', finished_at: expect.any(String) },
+    });
   expect(await cli('jobs', 'show', submitted.id)).toEqual(cancelled);
   await page.reload();
   await page.getByRole('link', { name: 'Quantize', exact: true }).click();
@@ -201,7 +217,9 @@ test('cancelling a started worker remains cancelled after browser reload and in 
   await page.locator(`.job-history-entry[data-job-id="${submitted.id}"]`).click();
   await expect(page.getByRole('button', { name: 'Cancel run', exact: true })).toHaveCount(0);
   await expect(page.getByRole('link', { name: /^Download / })).toHaveCount(0);
-  expect((await cli('jobs', 'show', submitted.id)).result).toBeNull();
+  const reloaded = await cli('jobs', 'show', submitted.id);
+  expect(reloaded).toEqual(cancelled);
+  expect(reloaded.result).toBeNull();
 });
 
 test('a real worker failure is visible and does not prevent a subsequent successful run', async ({

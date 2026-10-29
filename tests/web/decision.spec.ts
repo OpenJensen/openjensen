@@ -1,39 +1,98 @@
+import { openModuleTask } from './work-job-controls';
 import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { installedModules } from './module-fixtures';
 
 async function lab(page: Page, configured = true) {
-  const posts: any[] = [];
+  const posts: any[] = [],
+    keys: string[] = [];
   const controls = { fail: false, slow: false };
+  const jobs = new Map<string, any>();
+  const stamp = '2026-01-01T12:00:00Z';
   await page.route('**/api/v1/**', async (route) => {
     if (await fulfillApplicationUpdateRead(route)) return;
     const req = route.request(),
-      path = new URL(req.url()).pathname;
-    if (path === '/api/v1/decision/score') {
-      posts.push(req.postDataJSON());
-      if (controls.slow) await new Promise((resolve) => setTimeout(resolve, 1000));
+      path = decodeURIComponent(new URL(req.url()).pathname);
+    if (req.method() === 'POST' && path === '/api/v1/projects/project/work-jobs') {
+      const body = req.postDataJSON(),
+        key = req.headers()['idempotency-key'];
+      posts.push(body.inputs);
+      keys.push(key);
       if (controls.fail) {
         await route.fulfill({ status: 503, json: { detail: 'PRIVATE must not show' } });
         return;
       }
+      const prior = [...jobs.values()].find((job) => job.key === key);
+      const accepted = prior ?? {
+        id: `core:score-${jobs.size + 1}`,
+        source_id: `score-${jobs.size + 1}`,
+        project_id: 'project',
+        operation: 'decision.score',
+        module: 'decision-lab',
+        title: 'Decision scoring',
+        status: controls.slow ? 'running' : 'succeeded',
+        source_status: controls.slow ? 'running' : 'succeeded',
+        stage: 'scoring',
+        message: null,
+        created_at: stamp,
+        updated_at: stamp,
+        execution: { adapter: 'local', infrastructure: 'local', target_id: 'decision', label: 'Decision scorer' },
+        inputs: body.inputs,
+        outputs: [],
+        parent_ids: [],
+        events: [],
+        can_cancel: controls.slow,
+        key,
+        result: controls.slow
+          ? null
+          : {
+              selected_id: 'criterion-1',
+              revision: '5afb8eeff127621fea2d66fc63f56798ada12eda',
+              request_sha256: 'a'.repeat(64),
+              scores: body.inputs.criteria.map((item: any) => ({
+                id: item.id,
+                logit: 0,
+                relative_weight: 0.5,
+                tokens: 12,
+              })),
+              timing_ms: { load: 123, score: 10 },
+            },
+      };
+      jobs.set(accepted.id, accepted);
       await route.fulfill({
-        json: {
-          selected_id: 'criterion-1',
-          revision: '5afb8eeff127621fea2d66fc63f56798ada12eda',
-          request_sha256: 'a'.repeat(64),
-          scores: posts
-            .at(-1)
-            .criteria.map((item: any) => ({ id: item.id, logit: 0, relative_weight: 0.5, tokens: 12 })),
-          timing_ms: { load: 123, score: 10 },
-        },
+        status: 202,
+        headers: { 'Idempotency-Key': key, 'Cache-Control': 'no-store' },
+        json: accepted,
       });
+      return;
+    }
+    const job = [...jobs.values()].find(
+      (item) =>
+        path === `/api/v1/projects/project/work-jobs/${item.id}` ||
+        path === `/api/v1/projects/project/work-jobs/${item.id}/cancel`,
+    );
+    if (job) {
+      if (path.endsWith('/cancel'))
+        Object.assign(job, { status: 'cancelled', can_cancel: false, message: 'Cancelled by the user.' });
+      await route.fulfill({ json: job });
       return;
     }
     const replies: Record<string, unknown> = {
       '/api/v1/health': { status: 'ok', version: 'test' },
       '/api/v1/capabilities': [],
       '/api/v1/modules': installedModules,
-      '/api/v1/projects': [],
+      '/api/v1/projects': [{ id: 'project', name: 'Scoring workspace', created_at: stamp }],
+      '/api/v1/projects/project/jobs': [],
+      '/api/v1/projects/project/work-jobs': [...jobs.values()],
+      '/api/v1/job-operations': [
+        {
+          id: 'decision.score',
+          title: 'Decision scoring',
+          module: 'decision-lab',
+          path: '/decision-lab/',
+          submission: 'job',
+        },
+      ],
       '/api/v1/decision/status': {
         configured,
         available: configured,
@@ -45,11 +104,11 @@ async function lab(page: Page, configured = true) {
     };
     await route.fulfill({ json: replies[path] ?? [] });
   });
-  await page.goto('/datasets/');
-  await page.getByRole('link', { name: 'Decision Lab', exact: true }).click();
+  await page.goto('/decision-lab/');
   await expect(page.getByRole('heading', { name: 'Decision Lab', level: 1 })).toBeVisible();
+  await openModuleTask(page);
   await expect(page.getByRole('group', { name: 'Advisory model', exact: true })).toContainText('Muose-50M');
-  return { posts, controls };
+  return { posts, controls, keys, jobs };
 }
 async function fill(page: Page) {
   await page.getByLabel('State to compare').fill('The dataset is ready.');
@@ -60,7 +119,7 @@ async function fill(page: Page) {
 test('Decision Lab is disabled without explicit operator configuration', async ({ page }) => {
   const { posts } = await lab(page, false);
   await fill(page);
-  await expect(page.getByRole('button', { name: 'Score criteria' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Start job' })).toBeDisabled();
   await expect(page.getByText('Experimental · advisory only', { exact: true })).toBeVisible();
   await expect(page.getByText(/Not evaluated on robotics tasks/)).not.toBeVisible();
   await page.getByText('Model details', { exact: true }).click();
@@ -71,7 +130,7 @@ test('Decision Lab is disabled without explicit operator configuration', async (
 test('manual scoring submits only bounded text and displays uncalibrated result', async ({ page }) => {
   const { posts } = await lab(page);
   await fill(page);
-  await page.getByRole('button', { name: 'Score criteria' }).click();
+  await page.getByRole('button', { name: 'Start job' }).click();
   await expect(page.getByRole('region', { name: 'Advisory score result' })).toBeVisible();
   await expect(page.getByText(/no action was taken/)).toBeVisible();
   expect(posts).toHaveLength(1);
@@ -86,8 +145,8 @@ test('failed scoring does not retry or expose private diagnostics', async ({ pag
   const { posts, controls } = await lab(page);
   controls.fail = true;
   await fill(page);
-  await page.getByRole('button', { name: 'Score criteria' }).click();
-  await expect(page.getByRole('alert').filter({ hasText: 'No score was accepted' })).toBeVisible();
+  await page.getByRole('button', { name: 'Start job' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'could not confirm the job request' })).toBeVisible();
   await expect(page.getByText('PRIVATE must not show')).toHaveCount(0);
   await page.waitForTimeout(350);
   expect(posts).toHaveLength(1);
@@ -97,7 +156,7 @@ test('criteria enforce uniqueness and two to eight choices', async ({ page }) =>
   await lab(page);
   await fill(page);
   await page.getByLabel('Criterion 2', { exact: true }).fill('Inspect the dataset');
-  await expect(page.getByRole('button', { name: 'Score criteria' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Start job' })).toBeDisabled();
   for (let i = 0; i < 6; i++) await page.getByRole('button', { name: 'Add criterion' }).click();
   await expect(page.getByRole('button', { name: 'Add criterion' })).toBeDisabled();
   for (let i = 8; i > 2; i--) await page.getByRole('button', { name: `Remove criterion ${i}`, exact: true }).click();
@@ -148,7 +207,7 @@ for (const width of [1440, 560, 320])
       else expect(Math.abs(fields[2].controlTop - fields[3].controlTop)).toBeLessThanOrEqual(1);
       const add = await page.getByRole('button', { name: 'Add criterion', exact: true }).boundingBox();
       expect(add!.y - Math.max(fields[2].controlBottom, fields[3].controlBottom)).toBeGreaterThanOrEqual(12);
-      const submit = page.getByRole('button', { name: 'Score criteria', exact: true });
+      const submit = page.getByRole('button', { name: 'Start job', exact: true });
       await expect(submit).toBeDisabled();
       expect((await submit.boundingBox())!.height).toBeGreaterThanOrEqual(44);
       expect(
@@ -174,34 +233,45 @@ test('adding and removing criteria preserves keyboard focus without submitting',
 });
 
 test('pending scoring locks fields while cancellation stays reachable', async ({ page }) => {
+  const { posts, controls } = await lab(page);
+  controls.slow = true;
+  await fill(page);
+  await page.getByRole('button', { name: 'Start job', exact: true }).click();
+  await expect.poll(() => posts.length).toBe(1);
+  await expect(page.getByLabel('State to compare')).toBeDisabled();
+  await expect(page.getByLabel('Criterion 1', { exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Add criterion', exact: true })).toBeDisabled();
+  const stop = page.getByRole('button', { name: 'Stop scoring', exact: true });
+  await expect(stop).toBeEnabled();
+  await stop.click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Cancelled by the user' })).toBeVisible();
+  await expect(page.getByLabel('State to compare')).toBeEnabled();
+  expect(posts).toHaveLength(1);
+});
+
+test('uncertain scoring preserves the exact request and key until explicit recovery', async ({ page }) => {
+  const { posts, controls, keys } = await lab(page);
+  controls.fail = true;
+  await fill(page);
+  await page.getByRole('button', { name: 'Start job', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Recover submission', exact: true })).toBeEnabled();
+  await expect(page.getByLabel('State to compare')).toBeDisabled();
+  await page.waitForTimeout(350);
+  expect(posts).toHaveLength(1);
+  controls.fail = false;
+  await page.getByRole('button', { name: 'Recover submission', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Advisory score result' })).toBeVisible();
+  expect(keys[1]).toBe(keys[0]);
+  expect(posts[1]).toEqual(posts[0]);
+});
+
+test('accepted scoring result is restored after reload without another submission', async ({ page }) => {
   const { posts } = await lab(page);
-  let release!: () => void;
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  await page.route('**/api/v1/decision/score', async (route) => {
-    posts.push(route.request().postDataJSON());
-    await held;
-    try {
-      await route.abort();
-    } catch {
-      /* The client may already have stopped scoring. */
-    }
-  });
-  try {
-    await fill(page);
-    await page.getByRole('button', { name: 'Score criteria', exact: true }).click();
-    await expect.poll(() => posts.length).toBe(1);
-    await expect(page.getByLabel('State to compare')).toBeDisabled();
-    await expect(page.getByLabel('Criterion 1', { exact: true })).toBeDisabled();
-    await expect(page.getByRole('button', { name: 'Add criterion', exact: true })).toBeDisabled();
-    const stop = page.getByRole('button', { name: 'Stop scoring', exact: true });
-    await expect(stop).toBeEnabled();
-    await stop.click();
-    await expect(page.getByRole('alert').filter({ hasText: 'Scoring stopped' })).toBeVisible();
-    await expect(page.getByLabel('State to compare')).toBeEnabled();
-    expect(posts).toHaveLength(1);
-  } finally {
-    release();
-  }
+  await fill(page);
+  await page.getByRole('button', { name: 'Start job', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Advisory score result' })).toBeVisible();
+  await page.reload();
+  await openModuleTask(page);
+  await expect(page.getByRole('region', { name: 'Advisory score result' })).toBeVisible();
+  expect(posts).toHaveLength(1);
 });

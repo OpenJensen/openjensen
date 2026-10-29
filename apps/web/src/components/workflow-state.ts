@@ -31,6 +31,7 @@ function resultOf(job?: Job): LifecycleResult | undefined {
 // Owns WorkflowPanel's preferences, job and policy queries, start and cancel mutations, and view navigation.
 export function useWorkflowPanel({
   projectId,
+  startNew,
   stage,
   preferredArtifactId,
   preferredJobId,
@@ -39,6 +40,7 @@ export function useWorkflowPanel({
   onBackToModels,
 }: {
   projectId: string;
+  startNew?: boolean;
   stage: string;
   preferredArtifactId?: string;
   preferredJobId?: string;
@@ -58,7 +60,7 @@ export function useWorkflowPanel({
   const [selectedJobId, setSelectedJobId] = useState(preferredJobId ?? '');
   const [detailsJobId, setDetailsJobId] = useState<string | null>(null);
   const [view, setView] = useState<'history' | 'new' | 'detail'>(
-    preferredArtifactId ? 'new' : preferredJobId ? 'detail' : 'history',
+    preferredJobId ? 'detail' : preferredArtifactId || startNew ? 'new' : 'history',
   );
   const options = useQuery({
     queryKey: ['policy-options'],

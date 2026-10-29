@@ -415,3 +415,29 @@ def test_cancellation_acknowledged_after_last_await_cannot_return_advice(monkeyp
     with pytest.raises(ProviderError) as error:
         service.run("decision", PAYLOAD)
     assert error.value.code == "cancelled"
+
+
+def test_config_reads_canonical_and_legacy_setting_names(tmp_path, monkeypatch):
+    path, _ = saved(tmp_path)
+    canonical = config.load_config(
+        {"OPENROUTER_API_KEY": KEY, "JENSEN_VOICE_MODEL": "provider/canonical"}
+    )
+    legacy = config.load_config({"OPENROUTER_API_KEY": KEY, "FIREBIRD_VOICE_MODEL": "provider/old"})
+    both = config.load_config(
+        {
+            "OPENROUTER_API_KEY": KEY,
+            "JENSEN_VOICE_MODEL": "provider/canonical",
+            "FIREBIRD_VOICE_MODEL": "provider/old",
+        }
+    )
+    assert canonical.voice_model == both.voice_model == "provider/canonical"
+    assert legacy.voice_model == "provider/old"
+    # The documented file setting works, and so does the alpha name.
+    for name in ("JENSEN_TEACHING_INTELLIGENCE_FILE", "FIREBIRD_TEACHING_INTELLIGENCE_FILE"):
+        assert config.load_config({name: str(path)}).key == KEY
+    monkeypatch.setenv("JENSEN_TEACHING_INTELLIGENCE_FILE", str(path))
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("JENSEN_VOICE_MODEL", raising=False)
+    monkeypatch.delenv("FIREBIRD_VOICE_MODEL", raising=False)
+    environment = config.voice_environment()
+    assert environment["OPENROUTER_API_KEY"] == KEY and environment["JENSEN_VOICE_MODEL"]

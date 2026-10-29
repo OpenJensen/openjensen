@@ -28,6 +28,7 @@ from assembled_session import AssembledSession, CalibrationRevisions, empty_asse
 from calibration_draft import CalibrationDraft, file_hash
 from camera import MAX_CAMERA_INDEX, CameraPool
 from dataset import DatasetWriter, atomic_json, dataset_file, list_datasets, manifest, safe_slug
+from diagnostics import Diagnostics
 from dispatch import MainThreadDispatcher
 from hardware import (
     BAUDRATES,
@@ -41,15 +42,13 @@ from hardware import (
     normalized,
     probe_bus,
 )
-from lerobot_control import PROFILE, LeRobotPositionControl
-from motion import (
-    ENCODER_RANGE_TOLERANCE,
-    MiddleMotion,
-    RestMotion,
-    control_limits,
-    middle_targets,
-    step_target,
+from lerobot_control import (
+    PROFILE,
+    LeRobotPositionControl,
+    configure_passive_leader,
+    prepare_single_turn_feedback,
 )
+from motion import MiddleMotion, RestMotion, control_limits, middle_targets, step_target
 from rest_position import RestPositions
 from verification import (
     MappingChecks,
@@ -138,20 +137,43 @@ def valid_calibration(value):
     return value
 
 
-def validate_raw(raw, calibration=None, *, range_tolerance=0):
+class EncoderRangeError(HardwareError):
+    def __init__(self, joint, value, low, high):
+        outside = low - value if value < low else value - high
+        direction = "below minimum" if value < low else "above maximum"
+        distance = outside * (100 / (high - low) if joint == "gripper" else 360 / 4095)
+        unit = "%" if joint == "gripper" else "°"
+        self.details = {
+            "code": "encoder_out_of_range",
+            "joint": joint,
+            "motor_id": IDS[joint],
+            "measured_ticks": value,
+            "min_ticks": low,
+            "max_ticks": high,
+            "outside_ticks": outside,
+            "direction": direction,
+            "outside_units": distance,
+            "unit": "percent" if joint == "gripper" else "degrees",
+        }
+        super().__init__(
+            f"{joint.replace('_', ' ').capitalize()} is outside its saved range "
+            f"({value} ticks; allowed {low}–{high}; {outside} ticks {direction}, "
+            f"about {distance:.2f}{unit}). Motion stopped. Support the arm; "
+            "check its pose and saved calibration before enabling again"
+        )
+
+
+def validate_raw(raw, calibration=None, *, calibration_bounds=True, range_tolerance=0):
     if set(raw) != set(calibration if calibration is not None else JOINTS) or any(
         isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 4095
         for value in raw.values()
     ):
         raise HardwareError("Invalid encoder reading; inspect cabling and motor setup")
-    if calibration is not None:
+    if calibration is not None and calibration_bounds:
         for joint, value in raw.items():
             low, high = calibration[joint]["range_min"], calibration[joint]["range_max"]
             if not low - range_tolerance <= value <= high + range_tolerance:
-                raise HardwareError(
-                    f"{joint.replace('_', ' ').capitalize()} is outside its saved range "
-                    f"({value} ticks; allowed {low}–{high}). Motion stopped"
-                )
+                raise EncoderRangeError(joint, value, low, high)
     return raw
 
 
@@ -253,11 +275,126 @@ class RobotLab:
         self.finished = threading.Event()
         self.threads = []
         self.agent = AgentExecutor(self)
+        self.last_raw = {}
+        self.last_fault = None
+        self.motor_alarms = {}
+        self.range_excursions = {}
+        self.diagnostics = Diagnostics(self.data_dir)
         if start_threads:
             for target in (self._loop, self._watchdog):
                 thread = threading.Thread(target=target, daemon=True)
                 thread.start()
                 self.threads.append(thread)
+
+    def _diagnostic_context(self):
+        return {
+            "generation": self.generation,
+            "mode": self.mode,
+            "robot_id": self.robot_id,
+            "role": self.role,
+            "port": self.port,
+            "torque_enabled": self.torque,
+            "heartbeat_age_seconds": round(max(0, time.monotonic() - self.heartbeat), 3),
+            "raw_positions": {key: dict(value) for key, value in dict(self.last_raw).items()},
+            "motor_alarms": {
+                source: dict(alarms) for source, alarms in dict(self.motor_alarms).items()
+            },
+            "calibration_excursions": {
+                source: dict(value) for source, value in dict(self.range_excursions).items()
+            },
+            "commanded_raw": dict(self.commanded_raw),
+            "targets": dict(self.action),
+            "calibration": {joint: dict(entry) for joint, entry in dict(self.calibration).items()},
+            "fault": self.last_fault
+            if self.last_fault and self.last_fault.get("generation") == self.generation
+            else None,
+        }
+
+    def _read_positions(self, bus, calibration=None, *, source="follower"):
+        try:
+            raw = bus.positions()
+        except HardwareError as error:
+            self.last_fault = {
+                "source": source,
+                "generation": self.generation,
+                "message": str(error),
+                "exception": type(error).__name__,
+                **getattr(error, "details", {"code": "motor_read_failed"}),
+            }
+            self.diagnostics.emit("motor_fault", fault=self.last_fault)
+            raise
+        alarms = {
+            str(motor): status
+            for motor, status in dict(getattr(bus, "motor_status", {})).items()
+            if status
+        }
+        previous_alarms = self.motor_alarms.get(source, {})
+        self.motor_alarms[source] = alarms
+        # Capture the offending reading before validation; no additional serial I/O.
+        self.last_raw[source] = {
+            joint: value for joint, value in raw.items() if joint in JOINTS and type(value) is int
+        }
+        try:
+            # LeRobot normalizes observations without rejecting sampled-range
+            # crossings: degree observations remain measured, gripper values
+            # saturate at 0/100. Admission and agent execution remain strict.
+            result = validate_raw(
+                raw,
+                calibration,
+                calibration_bounds=self.mode not in {"manual", "leader", "handguide"},
+            )
+        except HardwareError as error:
+            self.last_fault = {
+                "source": source,
+                "generation": self.generation,
+                "message": str(error),
+                "exception": type(error).__name__,
+                **getattr(error, "details", {"code": "invalid_encoder_reading"}),
+                "raw_positions": dict(self.last_raw[source]),
+                "calibration": {joint: dict(entry) for joint, entry in (calibration or {}).items()},
+            }
+            self.diagnostics.emit("encoder_fault", fault=self.last_fault)
+            raise
+        excursions = {
+            joint: {
+                "measured_ticks": value,
+                "min_ticks": calibration[joint]["range_min"],
+                "max_ticks": calibration[joint]["range_max"],
+            }
+            for joint, value in raw.items()
+            if calibration is not None
+            and not calibration[joint]["range_min"] <= value <= calibration[joint]["range_max"]
+        }
+        previous_joints = set(self.range_excursions.get(source, {}))
+        self.range_excursions[source] = excursions
+        if set(excursions) != previous_joints:
+            self.diagnostics.emit(
+                "calibration_endpoint_observed" if excursions else "calibration_endpoint_cleared",
+                reason=(
+                    f"{source.capitalize()} {', '.join(j.replace('_', ' ') for j in excursions)} "
+                    "crossed a sampled calibration endpoint; bounded control continues"
+                    if excursions
+                    else f"{source.capitalize()} readings returned within sampled endpoints"
+                ),
+                source=source,
+                context=self._diagnostic_context(),
+            )
+        if alarms != previous_alarms:
+            self.diagnostics.emit(
+                "gripper_load_alarm" if alarms else "gripper_load_cleared",
+                reason=(
+                    f"{source.capitalize()} gripper overload alarm: control continues with "
+                    "the motor's configured torque/current protection"
+                    if alarms
+                    else f"{source.capitalize()} gripper overload alarm cleared"
+                ),
+                source=source,
+                status_errors=alarms,
+                context=self._diagnostic_context(),
+            )
+        if self.mode != "idle":
+            self.diagnostics.sample(context=self._diagnostic_context())
+        return result
 
     def calibration_path(self, robot_id, role):
         safe_slug(robot_id)
@@ -382,6 +519,10 @@ class RobotLab:
                 "control": hardware,
                 "lerobot_position_control": hardware,
                 "rest_position": hardware,
+                "persistent_diagnostics": True,
+                "gripper_load_tolerance": True,
+                "lerobot_observation_ranges": True,
+                "background_recording_io": True,
                 "agent_control": hardware,
                 "move_to_middle": hardware,
                 "middle_tolerance": hardware,
@@ -391,6 +532,7 @@ class RobotLab:
                 "recording": hardware
                 and all(deps[key]["installed"] for key in ("pyarrow", "PIL", "numpy")),
             },
+            "diagnostics": self.diagnostics.snapshot(),
             "agent_control": self.agent.status(),
             "session": {
                 "generation": self.generation,
@@ -819,6 +961,7 @@ class RobotLab:
                             raise RequestError("Resume cancelled by Stop")
                         self.original_calibration = expected
                     bus.disable()
+                    prepare_single_turn_feedback(bus, lambda: generation == self.generation)
                     if generation != self.generation:
                         raise RequestError("Resume cancelled by Stop")
                     if current != temporary:
@@ -832,7 +975,7 @@ class RobotLab:
                             raise RequestError("Resume cancelled by Stop")
                         bus.write("Lock", motor_id, 0)
                         bus.write("Operating_Mode", motor_id, 0)
-                    raw = validate_raw(bus.positions())
+                    raw = self._read_positions(bus)
             except Exception:
                 try:
                     with bus.lock:
@@ -888,6 +1031,7 @@ class RobotLab:
                     if generation != self.generation:
                         raise RequestError("Session cancelled by Stop")
                     bus.disable()
+                    prepare_single_turn_feedback(bus, lambda: generation == self.generation)
                     for motor_id in IDS.values():
                         bus.write("Lock", motor_id, 0)
                         bus.write("Operating_Mode", motor_id, 0)
@@ -941,8 +1085,13 @@ class RobotLab:
                         bus.write("Homing_Offset", motor_id, 0)
                         bus.write("Min_Position_Limit", motor_id, 0)
                         bus.write("Max_Position_Limit", motor_id, 4095)
-                    raw = validate_raw(bus.positions())
-                    offsets = {joint: position - 2047 for joint, position in raw.items()}
+                    raw = self._read_positions(bus)
+                    # Match upstream sign-magnitude homing: raw 4095 needs
+                    # offset 2048, clamped to the register's representable 2047.
+                    offsets = {
+                        joint: max(-2047, min(2047, position - 2047))
+                        for joint, position in raw.items()
+                    }
                     if any(abs(value) > 2047 for value in offsets.values()):
                         raise RequestError(
                             "Invalid middle pose encoder reading; "
@@ -950,7 +1099,7 @@ class RobotLab:
                         )
                     for joint, offset in offsets.items():
                         bus.write("Homing_Offset", IDS[joint], offset)
-                    raw = validate_raw(bus.positions())
+                    raw = self._read_positions(bus)
                 except Exception as error:
                     raise HardwareError(f"Middle-position capture failed: {error}") from error
             # Publish only after a concurrent Stop has fully completed, or
@@ -1063,6 +1212,10 @@ class RobotLab:
                 middle_targets(calibration)
             generation = self.generation
             control_generation = [generation]
+            self.last_fault = None
+            self.last_raw = {}
+            self.motor_alarms = {}
+            self.range_excursions = {}
             leader, control, bus = None, None, self.bus_factory(port)
             bus.joints = joints
             with self.stop_lock, self.lifecycle_lock:
@@ -1085,7 +1238,8 @@ class RobotLab:
                             "before motion"
                         )
                     bus.disable()
-                    raw = validate_raw(bus.positions(), calibration)
+                    prepare_single_turn_feedback(bus, lambda: generation == self.generation)
+                    raw = self._read_positions(bus, calibration)
                     if any(
                         not calibration[j]["range_min"] <= raw[j] <= calibration[j]["range_max"]
                         for j in joints
@@ -1113,8 +1267,10 @@ class RobotLab:
                                 raise RequestError(
                                     "Leader calibration differs from its saved profile"
                                 )
-                            leader.disable()
-                            validate_raw(leader.positions(), leader_calibration)
+                            configure_passive_leader(
+                                leader, leader_calibration, lambda: generation == self.generation
+                            )
+                            self._read_positions(leader, leader_calibration, source="leader")
                         self.leader_calibration = leader_calibration
                     if mode != "handguide":
                         control = LeRobotPositionControl(
@@ -1122,7 +1278,7 @@ class RobotLab:
                         )
                         control.configure()
                         # Sample again after configuration, immediately before holding.
-                        raw = validate_raw(bus.positions(), calibration)
+                        raw = self._read_positions(bus, calibration)
                         for joint in joints:
                             motor_id = IDS[joint]
                             if generation != self.generation:
@@ -1176,6 +1332,7 @@ class RobotLab:
                 self.torque = mode != "handguide"
                 self.error = None
                 self.heartbeat = time.monotonic()
+                self.diagnostics.emit("control_started", context=self._diagnostic_context())
         return self.status()
 
     def control_heartbeat(self, payload):
@@ -1217,9 +1374,7 @@ class RobotLab:
             with bus.lock:
                 if generation != self.generation:
                     raise RequestError("Session has stopped")
-                raw = validate_raw(
-                    bus.positions(), self.calibration, range_tolerance=ENCODER_RANGE_TOLERANCE
-                )
+                raw = self._read_positions(bus, self.calibration)
                 with self.lifecycle_lock:
                     if generation != self.generation:
                         raise RequestError("Session has stopped")
@@ -1288,9 +1443,7 @@ class RobotLab:
             with bus.lock:
                 if generation != self.generation:
                     raise RequestError("Session has stopped")
-                validate_raw(
-                    bus.positions(), self.calibration, range_tolerance=ENCODER_RANGE_TOLERANCE
-                )
+                self._read_positions(bus, self.calibration)
                 if generation != self.generation:
                     raise RequestError("Session has stopped")
                 target = (
@@ -1328,6 +1481,7 @@ class RobotLab:
                 raise RequestError("Controller generation changed; stale cleanup was rejected")
             if expected_mode is not None and self.mode != expected_mode:
                 raise RequestError("Controller mode changed; stale manual cleanup was rejected")
+            stop_context = self._diagnostic_context()
             self.generation += 1
             self.agent.revoke(reason or "Stopped by operator")
             verification = self.verification_session
@@ -1412,6 +1566,19 @@ class RobotLab:
                 )
             else:
                 self.calibration_state["phase"] = "idle"
+        self.diagnostics.emit(
+            "session_stopped",
+            reason=reason or "Stopped by operator",
+            context=stop_context,
+            cleanup_errors=list(errors),
+            torque_disable_attempted=bus is not None or leader is not None,
+            torque_disable_acknowledged=not errors
+            if bus is not None or leader is not None
+            else None,
+            retain_as_last_stop=stop_context["mode"] != "idle"
+            or bool(reason and reason != "Companion shutting down")
+            or bool(errors),
+        )
         return self.status()
 
     def recording_start(self, payload):
@@ -1435,6 +1602,8 @@ class RobotLab:
             if camera_index is not None:
                 integer(camera_index, 0, MAX_CAMERA_INDEX, "Camera index")
                 image_shape = tuple(self.camera.read(camera_index).shape)
+                if hasattr(self.camera, "start_reader"):
+                    self.camera.start_reader(camera_index)
             if shutil.disk_usage(self.datasets_dir).free < 1024**3:
                 raise RequestError(
                     "Less than 1 GiB disk space remains; free space before recording"
@@ -1498,7 +1667,7 @@ class RobotLab:
             with self.lock, bus.lock:
                 if generation != self.generation:
                     return
-                raw = validate_raw(bus.positions(), self.calibration)
+                raw = self._read_positions(bus, self.calibration)
                 if generation != self.generation or self.mode != "agent":
                     return
                 self.positions = {
@@ -1514,16 +1683,7 @@ class RobotLab:
             if generation != self.generation:
                 return
             mode = self.mode
-            # Saved endpoints come from sampled encoder extrema. Allow bounded
-            # measurement jitter during human control; never expand goals or
-            # weaken the strict startup/agent/calibration checks.
-            raw = validate_raw(
-                bus.positions(),
-                None if mode == "calibration" else self.calibration,
-                range_tolerance=ENCODER_RANGE_TOLERANCE
-                if mode in ("manual", "leader", "handguide")
-                else 0,
-            )
+            raw = self._read_positions(bus, None if mode == "calibration" else self.calibration)
             if mode == "calibration":
                 if self.calibration_state["phase"] == "ranges" and any(
                     joint != "wrist_roll"
@@ -1604,10 +1764,8 @@ class RobotLab:
                 if control is None:
                     raise HardwareError("LeRobot position controller is unavailable")
                 with leader.lock:
-                    leader_raw = validate_raw(
-                        leader.positions(),
-                        self.leader_calibration,
-                        range_tolerance=ENCODER_RANGE_TOLERANCE,
+                    leader_raw = self._read_positions(
+                        leader, self.leader_calibration, source="leader"
                     )
                 desired = {
                     joint: normalized(joint, leader_raw[joint], self.leader_calibration)
@@ -1626,21 +1784,39 @@ class RobotLab:
                 self.action = dict(positions)
         writer = self.writer
         if writer and writer.episode_active and time.monotonic() >= self.next_record:
-            image = None
-            if self.camera_index is not None:
-                image = self.camera.read(self.camera_index)[:, :, ::-1].copy()  # OpenCV BGR -> RGB
-            with self.lock:
-                if (
-                    generation == self.generation
-                    and writer is self.writer
-                    and writer.episode_active
-                ):
-                    captured_at = time.monotonic()
-                    writer.add_frame(dict(self.positions), dict(self.action), image, captured_at)
-                    self.next_record += 1.0 / writer.fps
+            try:
+                image = None
+                if self.camera_index is not None:
+                    read_image = getattr(self.camera, "read_latest", self.camera.read)
+                    image = read_image(self.camera_index)[:, :, ::-1].copy()
+                with self.lock:
+                    if (
+                        generation == self.generation
+                        and writer is self.writer
+                        and writer.episode_active
+                    ):
+                        captured_at = time.monotonic()
+                        writer.add_frame(
+                            dict(self.positions), dict(self.action), image, captured_at
+                        )
+                        self.next_record += 1.0 / writer.fps
+            except Exception as error:
+                # A recorder failure pauses collection, without conflating it
+                # with motor feedback or bypassing the independent Stop/watchdog.
+                with self.lifecycle_lock:
+                    if generation != self.generation or writer is not self.writer:
+                        return
+                    writer.episode_active = False
+                    self.recording_error = "Recording paused: " + str(error)
+                self.diagnostics.emit(
+                    "recording_paused",
+                    reason=self.recording_error,
+                    context=self._diagnostic_context(),
+                )
 
     def _loop(self):
-        while not self.finished.wait(0.025):
+        while not self.finished.is_set():
+            cycle_started = time.monotonic()
             generation, mode = self.generation, self.mode
             try:
                 self._tick()
@@ -1660,6 +1836,10 @@ class RobotLab:
                     )
                 except RequestError:
                     pass  # An intervening takeover owns its independent lifecycle.
+            # LeRobot CycleTimer pacing: account for work already done, without
+            # bursting missed commands after a slow read or camera operation.
+            if self.finished.wait(max(0.0, 0.025 - (time.monotonic() - cycle_started))):
+                break
 
     def _watchdog(self):
         while not self.finished.wait(0.1):
@@ -1688,8 +1868,14 @@ class RobotLab:
         self.finished.set()
         self.stop("Companion shutting down")
         self.camera.close()
+        if self.writer and hasattr(self.writer, "close"):
+            try:
+                self.writer.close()
+            except Exception as error:
+                self.diagnostics.emit("recording_write_error", reason=str(error))
         for thread in self.threads:
             thread.join(timeout=1)
+        self.diagnostics.close()
 
 
 class Server(ThreadingHTTPServer):
@@ -1738,6 +1924,8 @@ class Handler(BaseHTTPRequestHandler):
             path, query, lab = unquote(parsed.path), parse_qs(parsed.query), self.server.lab
             if path.startswith("/v1/agent/executions/"):
                 return self._send(200, lab.agent.receipt(path.rsplit("/", 1)[-1]))
+            if path == "/v1/diagnostics":
+                return self._send(200, lab.diagnostics.snapshot(full=True))
             if path == "/v1/status":
                 return self._send(200, lab.status())
             if path == "/v1/devices":
@@ -1840,14 +2028,20 @@ class Handler(BaseHTTPRequestHandler):
                 result = lab.calibration_cancel()
             elif path in ("/v1/control/stop", "/v1/stop"):
                 if (
-                    set(payload) - {"expected_generation", "expected_mode"}
+                    set(payload) - {"expected_generation", "expected_mode", "cause"}
                     or "expected_generation" in payload
                     and type(payload["expected_generation"]) is not int
                     or "expected_mode" in payload
                     and payload["expected_mode"] != "manual"
+                    or "cause" in payload
+                    and payload["cause"] not in ("page_hidden", "page_closed")
                 ):
                     raise RequestError("Invalid Stop request")
                 result = lab.stop(
+                    {
+                        "page_hidden": "Robot Lab page was hidden; motor torque disabled",
+                        "page_closed": "Robot Lab page was closed; motor torque disabled",
+                    }.get(payload.get("cause")),
                     expected_generation=payload.get("expected_generation"),
                     expected_mode=payload.get("expected_mode"),
                 )
@@ -1881,6 +2075,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def _error(self, error):
         if isinstance(error, HardwareError):
+            self.server.lab.diagnostics.emit(
+                "hardware_request_failed", exception=type(error).__name__, message=str(error)
+            )
             self.server.lab.stop("Motor safety check failed: " + str(error))
         if isinstance(error, (ValueError, KeyError, TypeError)):
             self._send(422, {"error": str(error), "code": "invalid_request"})

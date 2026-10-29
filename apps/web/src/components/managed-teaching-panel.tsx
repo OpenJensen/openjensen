@@ -32,8 +32,10 @@ const noStop: StopState = { pending: false, uncertain: false, message: '' };
 export function ManagedTeachingPanel({
   projectId,
   onPublishedCapture,
+  preferredJobId,
 }: {
   projectId: string;
+  preferredJobId?: string;
   onPublishedCapture: (capture: ManagedPublishedCapture) => void | Promise<void>;
 }) {
   const client = useQueryClient();
@@ -45,7 +47,10 @@ export function ManagedTeachingPanel({
   const [profileId, setProfileId] = useState(''),
     [seconds, setSeconds] = useState('300');
   const [consent, setConsent] = useState(false),
-    [selectedId, setSelectedId] = useState('');
+    [selectedId, setSelectedId] = useState(preferredJobId ?? '');
+  useEffect(() => {
+    if (preferredJobId) setSelectedId(preferredJobId);
+  }, [preferredJobId]);
   const [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
     [confirmStop, setConfirmStop] = useState(false);

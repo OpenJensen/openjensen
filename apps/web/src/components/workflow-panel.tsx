@@ -13,6 +13,7 @@ export { currentStage, precisionName, type SettingsTab } from './workflow-shared
 
 export function WorkflowPanel({
   projectId,
+  startNew,
   stage,
   tab,
   onTabChange: setTab,
@@ -26,6 +27,7 @@ export function WorkflowPanel({
   onModel,
 }: {
   projectId: string;
+  startNew?: boolean;
   stage: string;
   tab: SettingsTab;
   onTabChange: (tab: SettingsTab) => void;
@@ -40,6 +42,7 @@ export function WorkflowPanel({
 }) {
   const workflow = useWorkflowPanel({
     projectId,
+    startNew,
     stage,
     preferredArtifactId,
     preferredJobId,

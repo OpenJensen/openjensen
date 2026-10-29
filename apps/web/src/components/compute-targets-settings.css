@@ -1,0 +1,55 @@
+.compute-target-settings {
+  display: grid;
+  gap: 18px;
+}
+.compute-target-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.compute-target-heading h2,
+.compute-target-heading h3 {
+  margin: 0;
+}
+.compute-target-heading p {
+  margin: 6px 0 0;
+}
+.compute-target-entry {
+  padding-block: 16px;
+  border-top: 1px solid var(--border);
+}
+.compute-target-summary {
+  overflow-wrap: anywhere;
+}
+.compute-target-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 16px;
+}
+.compute-target-fields label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.compute-target-fields input,
+.compute-target-fields select {
+  width: 100%;
+  min-height: 40px;
+}
+.compute-target-operations {
+  display: flex;
+  gap: 12px 22px;
+  flex-wrap: wrap;
+  margin-block: 12px;
+}
+.compute-target-form {
+  display: grid;
+  gap: 20px;
+}
+
+.compute-target-resource-note {
+  grid-column: 1 / -1;
+  margin: 0;
+}

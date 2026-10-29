@@ -29,6 +29,7 @@ export function TrainingComputeStep({
     checkpointInterval,
     cloudGpuMemory,
     cloudInstalled,
+    configuredTarget,
     effectiveTiming,
     gpuChoices,
     headingRef,
@@ -187,23 +188,38 @@ export function TrainingComputeStep({
           </>
         )}
       </section>
-      <GpuPicker
-        value={selectedGpu}
-        onChange={setRuntimeId}
-        disabled={busy}
-        choices={[
-          ...gpuChoices.map((gpu) => ({
-            id: gpu,
-            label: gpu === 'A100-80GB' ? 'A100' : gpu,
-            memory: `${cloudGpuMemory[gpu]} GB`,
-          })),
-          ...localRuntimes.map((item) => ({
-            id: item.id,
-            label: item.label,
-            memory: item.gpu_memory_mib ? `${number(item.gpu_memory_mib / 1024)} GB` : undefined,
-          })),
-        ]}
-      />
+      {configuredTarget ? (
+        <section className="training-summary" aria-label="Configured compute target">
+          <h3>Compute target</h3>
+          <p>{configuredTarget.label}</p>
+          <p>
+            {runtime
+              ? `${runtime.label} · ${runtime.gpu_name ?? runtime.accelerator ?? 'Configured resources'}`
+              : 'The target is unavailable or does not support this recipe.'}
+          </p>
+          <button type="button" className="text-button" onClick={onComputeSettings}>
+            Manage compute targets
+          </button>
+        </section>
+      ) : (
+        <GpuPicker
+          value={selectedGpu}
+          onChange={setRuntimeId}
+          disabled={busy}
+          choices={[
+            ...gpuChoices.map((gpu) => ({
+              id: gpu,
+              label: gpu === 'A100-80GB' ? 'A100' : gpu,
+              memory: `${cloudGpuMemory[gpu]} GB`,
+            })),
+            ...localRuntimes.map((item) => ({
+              id: item.id,
+              label: item.label,
+              memory: item.gpu_memory_mib ? `${number(item.gpu_memory_mib / 1024)} GB` : undefined,
+            })),
+          ]}
+        />
+      )}
       <details className="training-disclosure">
         <summary>Advanced settings</summary>
         <TrainingAdvancedSettings
@@ -247,7 +263,7 @@ export function TrainingComputeStep({
             </button>
           ) : !runtime && !cloudInstalled ? (
             <button type="button" className="text-button" onClick={onComputeSettings}>
-              Configure local compute
+              Configure compute
             </button>
           ) : (
             <span role="status">{runStarting ? '' : blocked}</span>

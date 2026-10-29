@@ -61,11 +61,16 @@ test('project switching and keyboard navigation preserve scope without creating 
   await expect(current(page)).toHaveAttribute('data-project-id', 'beta');
   await current(page).focus();
   await page.keyboard.press('ArrowDown');
+  await expect(menu(page).getByRole('menuitemradio', { name: 'PushT benchmark', exact: true })).toBeFocused();
   await page.keyboard.press('Home');
+  await expect(menu(page).getByRole('menuitemradio', { name: 'Robotics examples', exact: true })).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(current(page)).toHaveAttribute('data-project-id', 'alpha');
+  await expect(current(page)).toBeFocused();
   await page.keyboard.press('ArrowDown');
+  await expect(menu(page).getByRole('menuitemradio', { name: 'Robotics examples', exact: true })).toBeFocused();
   await page.keyboard.press('p');
+  await expect(menu(page).getByRole('menuitemradio', { name: 'PushT benchmark', exact: true })).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(current(page)).toHaveAttribute('data-project-id', 'beta');
   await current(page).click();

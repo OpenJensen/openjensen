@@ -59,6 +59,24 @@ async function fixture(page: Page, options: { companion?: 'connected' | 'offline
       if (request.method() === 'DELETE') {
         item.installed = item.enabled = false;
       } else if (path.endsWith('/install')) {
+        const profiles: Record<string, string> = {
+          datasets: 'datasets',
+          'robot-lab': 'robot',
+          'decision-lab': 'decision',
+        };
+        if (profiles[id]) {
+          const payload = { profile: profiles[id], operation_id: 'a'.repeat(32), module: id };
+          state.runtimeInstalls.push(payload);
+          state.operation = {
+            ...payload,
+            id: payload.operation_id,
+            status: 'running',
+            stage: 'Downloading from upstream',
+            message: 'Installing on fixture-server.',
+            started_at: 'fixture',
+          };
+          return route.fulfill({ status: 202, json: state.operation });
+        }
         item.installed = item.enabled = true;
       } else {
         item.enabled = request.postDataJSON().enabled;
@@ -89,13 +107,38 @@ async function fixture(page: Page, options: { companion?: 'connected' | 'offline
         };
         return route.fulfill({ status: 202, json: state.operation });
       }
-      if (state.ready && state.operation)
+      if (state.ready && state.operation) {
         state.operation = { ...state.operation, status: 'succeeded', message: 'Dataset readers installed.' };
+        if (state.operation.module) {
+          const item = modules.find((value) => value.id === state.operation.module)!;
+          item.installed = item.enabled = true;
+        }
+      }
       return route.fulfill({
         json: {
           host: 'fixture-server',
           operation: state.operation,
           profiles: [
+            ...(!options.companion
+              ? [
+                  {
+                    id: 'robot',
+                    name: 'Robot Lab',
+                    ready: false,
+                    installable: true,
+                    message: 'Pinned USB dependencies.',
+                    minimum_free_gib: 11,
+                  },
+                ]
+              : []),
+            {
+              id: 'decision',
+              name: 'Decision scorer',
+              ready: false,
+              installable: true,
+              message: 'CPU packages.',
+              minimum_free_gib: 14,
+            },
             ...(options.companion
               ? [
                   {
@@ -177,27 +220,25 @@ test('install, hide, show and uninstall persist independently of readiness and d
   const state = await fixture(page);
   const card = moduleCard(page, 'AI teleoperation');
   const nav = page.getByRole('navigation', { name: 'Policy lifecycle' });
-  await card.getByRole('button', { name: 'Install module AI teleoperation', exact: true }).click();
+  await card.getByRole('button', { name: 'Enable module AI teleoperation', exact: true }).click();
   await expect(nav.getByRole('link', { name: 'AI teleoperation', exact: true })).toBeVisible();
   await expect(card.getByText('Setup required', { exact: true })).toBeVisible();
   expect(state.modules.find((item) => item.id === 'teaching')?.configured).toBe(false);
   await page.reload();
   await card.getByRole('button', { name: 'Hide AI teleoperation', exact: true }).click();
-  await expect(card).toContainText('Installed · Hidden');
+  await expect(card).toContainText('Enabled · Hidden');
   await expect(nav.getByRole('link', { name: 'AI teleoperation', exact: true })).toHaveCount(0);
   await page.reload();
   await expect(card.getByRole('button', { name: 'Show AI teleoperation', exact: true })).toBeVisible();
   await card.getByRole('button', { name: 'Show AI teleoperation', exact: true }).click();
   await expect(nav.getByRole('link', { name: 'AI teleoperation', exact: true })).toBeVisible();
-  await card.getByRole('button', { name: 'Uninstall AI teleoperation', exact: true }).click();
+  await card.getByRole('button', { name: 'Disable AI teleoperation', exact: true }).click();
   await expect(nav.getByRole('link', { name: 'AI teleoperation', exact: true })).toHaveCount(0);
-  await expect(card.getByRole('button', { name: 'Install module AI teleoperation', exact: true })).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Enable module AI teleoperation', exact: true })).toBeVisible();
   await expect(card.getByText('Setup required', { exact: true })).toHaveCount(0);
-  await expect(
-    page.getByRole('status').filter({ hasText: 'Your data and runtime dependencies are kept.' }),
-  ).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'Your data is kept.' })).toBeVisible();
   await page.reload();
-  await expect(card.getByRole('button', { name: 'Install module AI teleoperation', exact: true })).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Enable module AI teleoperation', exact: true })).toBeVisible();
   expect(state.runtimeInstalls).toEqual([]);
   expect(state.writes).toEqual([
     'POST /api/v1/modules/teaching/install',
@@ -227,7 +268,7 @@ test('integration modules install separately and open the permanent Cloud & APIs
   const state = await fixture(page);
   const card = moduleCard(page, 'OpenAI');
   await expect(card.getByText('Setup required', { exact: true })).toHaveCount(0);
-  await card.getByRole('button', { name: 'Install module OpenAI', exact: true }).click();
+  await card.getByRole('button', { name: 'Enable module OpenAI', exact: true }).click();
   await expect(card.getByRole('button', { name: 'Hide OpenAI', exact: true })).toHaveCount(0);
   await card.getByRole('button', { name: 'Open OpenAI', exact: true }).click();
   await expect(page).toHaveURL(/\/cloud-apis\/$/);
@@ -298,4 +339,32 @@ test('unreadable module state reveals no feature navigation from stale browser h
   for (const name of ['Modules', 'Cloud & APIs', 'Settings'])
     await expect(nav.getByRole('link', { name, exact: true })).toBeVisible();
   expect(state.writes).toEqual([]);
+});
+
+test('the module Install button downloads first and only then adds the page to the sidebar', async ({ page }) => {
+  const state = await fixture(page);
+  const card = moduleCard(page, 'Datasets');
+  await card.getByRole('button', { name: 'Uninstall Datasets', exact: true }).click();
+  const nav = page.getByRole('navigation', { name: 'Policy lifecycle' });
+  await card.getByRole('button', { name: 'Install module Datasets', exact: true }).click();
+  await expect(card).toContainText('Installing…');
+  await expect(nav.getByRole('link', { name: 'Datasets', exact: true })).toHaveCount(0);
+  await expect(page.getByText('Downloading from upstream', { exact: true })).toBeVisible();
+  expect(state.runtimeInstalls).toHaveLength(1);
+  state.ready = true;
+  await expect(nav.getByRole('link', { name: 'Datasets', exact: true })).toBeVisible();
+  await expect(card).toContainText('Installed');
+});
+
+test('a failed upstream installation stays uninstalled and can be retried', async ({ page }) => {
+  const state = await fixture(page);
+  const card = moduleCard(page, 'Decision Lab');
+  await card.getByRole('button', { name: 'Install module Decision Lab', exact: true }).click();
+  state.operation = { ...state.operation, status: 'failed', message: 'Upstream download failed.' };
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect(page.getByText('Upstream download failed.', { exact: true })).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Install module Decision Lab', exact: true })).toBeEnabled();
+  await expect(
+    page.getByRole('navigation', { name: 'Policy lifecycle' }).getByRole('link', { name: 'Decision Lab', exact: true }),
+  ).toHaveCount(0);
 });

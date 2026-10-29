@@ -304,3 +304,25 @@ def test_saved_success_keeps_registered_external_training_environment_installed(
     result = service.public()
     assert result.status == "succeeded" and result.runtime_id == "registered-worker"
     assert not service.path.exists()  # Status reads never rewrite installation history.
+
+
+def test_modules_install_verifies_training_before_activation_and_uninstall_removes_packages(host):
+    from vla_platform.modules import module_installed
+
+    settings, calls = host
+    with TestClient(create_app(settings)) as client:
+        assert not module_installed(settings.data_dir, "training")
+        assert client.post("/api/v1/modules/training/install").status_code == 202
+        assert terminal(client)["status"] == "succeeded"
+        assert calls and module_installed(settings.data_dir, "training")
+        target = settings.data_dir / "local-environments/smolvla-cu126"
+        assert (target / "bin/python").is_file()
+        saved = settings.data_dir / "saved-dataset.txt"
+        saved.write_text("preserve")
+        response = client.delete("/api/v1/modules/training")
+        assert response.status_code == 200, response.text
+        assert response.json()["runtime_removed"]
+        assert not target.exists()
+        assert not module_installed(settings.data_dir, "training")
+        assert saved.read_text() == "preserve"
+        assert client.get("/api/v1/compute-settings/local/setup").json()["status"] == "idle"

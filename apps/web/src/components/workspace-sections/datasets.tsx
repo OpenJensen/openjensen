@@ -428,6 +428,7 @@ export default function DatasetsSection() {
     setIntakeSelection,
     jobs,
     navigateStage,
+    setModuleJobView,
     startTrainingOnDataset,
   } = useWorkspace();
   return (
@@ -542,7 +543,13 @@ export default function DatasetsSection() {
                   (selectedJob.result?.source === 'huggingface' || selectedJob.result?.snapshot) && (
                     <div className="dataset-train-action">
                       {isAugmentationSource(selectedJob) && (
-                        <button className="secondary-button" onClick={() => navigateStage('augmentation')}>
+                        <button
+                          className="secondary-button"
+                          onClick={() => {
+                            navigateStage('augmentation');
+                            setModuleJobView('workspace');
+                          }}
+                        >
                           <Icon name="spark" size={16} />
                           Augment this dataset
                         </button>

@@ -1,3 +1,4 @@
+import { openModuleTask } from './work-job-controls';
 import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { selectProject } from './project-controls';
 import { startReplay, cancelReplay } from '../../apps/web/src/lib/native-replay';
@@ -157,6 +158,7 @@ async function fixture(page: Page) {
   await page.goto('/datasets/');
   await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
   await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await openModuleTask(page);
   await page.getByRole('button', { name: 'Replay observations', exact: true }).click();
   await expect(page.getByRole('region', { name: 'CPU observation replay', exact: true })).toBeVisible();
   return state;
@@ -254,6 +256,7 @@ for (const outcome of ['lost', 'wrong'])
     await expect(page.getByText(/request outcome is unverified/).first()).toBeVisible();
     await page.reload();
     await page.getByRole('link', { name: 'Run', exact: true }).click();
+    await openModuleTask(page);
     await page.getByRole('button', { name: 'Replay observations', exact: true }).click();
     const acknowledgment = page.getByRole('button', { name: 'I checked replay jobs; allow a new request' });
     await expect(acknowledgment).toBeDisabled();
@@ -374,6 +377,7 @@ test('journal cleanup failure after navigation preserves recovery guidance', asy
     .poll(() => page.evaluate(() => (window as unknown as { journalCleanupFailures?: number }).journalCleanupFailures))
     .toBe(1);
   await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await openModuleTask(page);
   await page.getByRole('button', { name: 'Replay observations', exact: true }).click();
   await expect(page.getByRole('button', { name: 'I checked replay jobs; allow a new request' })).toBeVisible();
   await expect(page.getByText(/^Submitting one /)).toHaveCount(0);
@@ -668,6 +672,7 @@ async function confirmCancellation(page: Page) {
 }
 async function reopenCancellationLane(page: Page) {
   await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await openModuleTask(page);
   const choice = page.getByRole('button', { name: 'Replay observations', exact: true });
   await expect(panel(page).or(choice).first()).toBeVisible();
   if (await choice.isVisible()) await choice.click();

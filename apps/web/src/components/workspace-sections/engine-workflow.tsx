@@ -6,6 +6,9 @@ import { useWorkspace } from '@/components/workspace-context';
 export default function EngineWorkflowSection() {
   const {
     workflowProjectId,
+    requestedWorkJob,
+    requestedJobOperation,
+    setModuleJobView,
     activeStage,
     workflowNavigation,
     settingsTab,
@@ -18,6 +21,8 @@ export default function EngineWorkflowSection() {
   } = useWorkspace();
   return (
     <WorkflowPanel
+      startNew={requestedJobOperation?.module === activeStage}
+      onBackToJobs={activeStage === 'simulation' ? () => setModuleJobView('jobs') : undefined}
       key={`${workflowProjectId}-${activeStage}-${workflowNavigation}`}
       projectId={workflowProjectId}
       tab={settingsTab}
@@ -27,7 +32,9 @@ export default function EngineWorkflowSection() {
       preferredJobId={
         activeStage === 'quantization' && openQuantizationRun?.projectId === workflowProjectId
           ? openQuantizationRun.id
-          : undefined
+          : requestedWorkJob?.project_id === workflowProjectId && requestedWorkJob.module === activeStage
+            ? requestedWorkJob.source_id
+            : undefined
       }
       preferredArtifactId={
         activeStage === 'quantization' && quantizeArtifact?.projectId === workflowProjectId

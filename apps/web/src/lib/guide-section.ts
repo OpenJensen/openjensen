@@ -1,6 +1,7 @@
 /** The workbench and static Markdown guide share stable section anchors. */
 export function guideSectionId(title: string) {
   const stable: Record<string, string> = {
+    Jobs: 'jobs',
     'AI teleoperation': 'teaching',
     'Initial setup': 'robot-lab',
   };

@@ -9,6 +9,7 @@ export default function DistillationSection() {
     workflowNavigation,
     openSavedModel,
     workflowProjectId,
+    requestedJobOperation,
     distillationModels,
     distillTeachers,
     navigateStage,
@@ -22,6 +23,7 @@ export default function DistillationSection() {
   return (
     <>
       <DistillationPanel
+        startNew={requestedJobOperation?.id === 'policy.distill'}
         key={`${workflowProjectId}-${workflowNavigation}`}
         preferredJobId={openDistillationRun?.projectId === workflowProjectId ? openDistillationRun.id : undefined}
         onModel={openSavedModel}

@@ -6,6 +6,7 @@ const catalog = [
   ['teaching', 'Robot Lab'],
   ['datasets', 'Data'],
   ['augmentation', 'Data'],
+  ['real-to-sim', 'Data'],
   ['training', 'Train'],
   ['distillation', 'Train'],
   ['quantization', 'Train'],

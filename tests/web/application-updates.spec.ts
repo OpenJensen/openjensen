@@ -73,8 +73,13 @@ test('accepted update reports progress and reloads once the confirmed version is
   await page.getByRole('button', { name: 'Version and updates' }).click();
   await page.getByRole('button', { name: 'Update & restart' }).click();
   await expect(page.getByRole('dialog')).toContainText('Building the new version…');
+  const reloaded = page.waitForEvent('framenavigated', {
+    predicate: (frame) => frame === page.mainFrame(),
+  });
   complete = true;
-  await expect.poll(() => page.evaluate(() => performance.timeOrigin)).not.toBe(initialOrigin);
+  await reloaded;
+  await page.waitForLoadState('domcontentloaded');
+  expect(await page.evaluate(() => performance.timeOrigin)).not.toBe(initialOrigin);
   await expect(page.getByRole('button', { name: 'Version and updates' })).toHaveText('v0.1.0');
   await expect(page.getByRole('button', { name: 'Version and updates' })).toHaveText('v0.1.0');
   expect(writes).toBe(1);

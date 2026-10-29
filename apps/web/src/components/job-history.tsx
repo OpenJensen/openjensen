@@ -1,6 +1,6 @@
 'use client';
 
-import type { Job } from '@/lib/api';
+import type { WorkJob } from '@/lib/work-jobs';
 import { Icon } from '@/components/icon';
 import './job-history.css';
 
@@ -8,7 +8,8 @@ export type JobHistoryEntry = {
   id: string;
   title: string;
   subtitle?: string;
-  status: Job['status'];
+  status: WorkJob['status'];
+  statusLabel?: string;
   createdAt: string;
   progress?: string;
 };
@@ -72,7 +73,7 @@ export function JobHistory({
                 <span className="job-history-meta">
                   <span className={`status status-${entry.status}`}>
                     <span className="status-dot" />
-                    {entry.status}
+                    {entry.statusLabel ?? entry.status}
                   </span>
                   <time dateTime={entry.createdAt}>{new Date(entry.createdAt).toLocaleString()}</time>
                 </span>

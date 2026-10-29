@@ -1,3 +1,4 @@
+import { withJobCompute } from './job-compute-selection';
 import { type DatasetJob, type Job, type PolicyArtifact, type PolicyOptions, type PolicyRequest } from './api';
 import { policyJobRequest, record, sameJson, UncertainPolicyJob } from './policy-job-mutation';
 
@@ -80,6 +81,7 @@ function accepted(value: unknown, project: string, expected: ReplayRequest, id?:
   return value as unknown as ReplayJob;
 }
 export async function startReplay(project: string, request: ReplayRequest): Promise<ReplayJob> {
+  request = withJobCompute(project, request);
   return accepted(
     await policyJobRequest(`/projects/${encodeURIComponent(project)}/policy-jobs`, request),
     project,

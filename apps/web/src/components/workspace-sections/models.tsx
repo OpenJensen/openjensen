@@ -11,6 +11,7 @@ export default function ModelsSection() {
     workflowProjectId,
     openModelWorkflow,
     navigateStage,
+    navigateTask,
     setStartTraining,
     chooseRun,
     setImportModel,
@@ -30,7 +31,7 @@ export default function ModelsSection() {
           setStartTraining({ id: Date.now() });
         }}
         onImport={() => {
-          navigateStage('simulation');
+          navigateTask('simulation');
           chooseRun('native', 'handoff');
           setImportModel(true);
         }}

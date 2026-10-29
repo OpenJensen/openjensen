@@ -1,3 +1,4 @@
+import { withJobCompute } from './job-compute-selection';
 import type { components } from './api.generated';
 import { basePath, publicPath } from './base-path';
 import type { TrainingModel } from './training-models';
@@ -22,7 +23,7 @@ export type HuggingFaceConnectionStatus = {
   checked_at: string | null;
   message: string | null;
 };
-export type ComputeProvider = CloudProvider | 'local';
+export type ComputeProvider = CloudProvider | 'local' | 'ssh' | 'runpod' | 'nebius' | 'slurm';
 export type LocalComputeSettings = { enabled: boolean; label: string };
 export type LocalWorkerDiscovery = {
   host: { name: string; platform: string; architecture: string };
@@ -338,7 +339,7 @@ export const api = {
   policyJob: (id: string, body: PolicyRequest) =>
     request<Job>(`/projects/${encodeURIComponent(id)}/policy-jobs`, {
       method: 'POST',
-      body: JSON.stringify(body),
+      body: JSON.stringify(withJobCompute(id, body)),
     }),
   health: () => request<{ status: string; version: string }>('/health'),
   capabilities: () => request<Capability[]>('/capabilities'),
@@ -346,9 +347,9 @@ export const api = {
   setModuleEnabled: (id: WorkspaceModule['id'], enabled: boolean) =>
     request<{ enabled: boolean }>(`/modules/${id}`, { method: 'PUT', body: JSON.stringify({ enabled }) }),
   installWorkspaceModule: (id: WorkspaceModule['id']) =>
-    request<{ installed: boolean }>(`/modules/${id}/install`, { method: 'POST' }),
+    request<{ installed: boolean } | InstallOperation | LocalSetupState>(`/modules/${id}/install`, { method: 'POST' }),
   uninstallWorkspaceModule: (id: WorkspaceModule['id']) =>
-    request<{ installed: boolean }>(`/modules/${id}`, { method: 'DELETE' }),
+    request<{ installed: boolean; runtime_removed: boolean }>(`/modules/${id}`, { method: 'DELETE' }),
   moduleInstallations: () => request<ModuleInstallationStatus>('/module-installations', undefined, 60_000),
   installModule: (profile: InstallableProfile, operationId: string) =>
     request<InstallOperation>(

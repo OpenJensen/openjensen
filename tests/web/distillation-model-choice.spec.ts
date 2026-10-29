@@ -90,7 +90,7 @@ function savedJob(id: string, project = 'alpha', adapter = 'act-act-v1') {
     },
   };
 }
-const overview = (page: Page) => page.getByRole('region', { name: 'Distillation workspace', exact: true });
+const overview = (page: Page) => page.getByRole('region', { name: 'Distillation setup', exact: true });
 const act = (page: Page) => page.getByRole('button', { name: 'Choose Saved ACT teacher · teacher', exact: true });
 const panel = (page: Page) => page.getByRole('region', { name: 'ACT distillation', exact: true });
 const openDistill = (page: Page) =>
