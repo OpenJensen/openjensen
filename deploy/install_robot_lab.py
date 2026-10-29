@@ -21,6 +21,7 @@ REQUIREMENTS = [
 ]
 SOURCE_MODULES = (
     "dispatch.py",
+    "diagnostics.py",
     "server.py",
     "agent_control.py",
     "hardware.py",
