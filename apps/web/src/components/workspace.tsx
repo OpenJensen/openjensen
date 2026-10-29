@@ -66,7 +66,10 @@ function Workbench({ children }: { children: ReactNode }) {
     'teaching',
     'decision-lab',
   ].includes(activeStage);
-  const showingJobs = workloadModule && moduleJobView === 'jobs';
+  const hasJobHistory = ['training', 'distillation', 'quantization', 'evaluation', 'datasets', 'models'].includes(
+    activeStage,
+  );
+  const showingJobs = workloadModule && !hasJobHistory && moduleJobView === 'jobs';
   const retainedComposer =
     ['augmentation', 'real-to-sim', 'decision-lab'].includes(activeStage) && !showingJobs ? activeStage : null;
   const [lastComposer, setLastComposer] = useState(retainedComposer);
@@ -225,23 +228,23 @@ function Workbench({ children }: { children: ReactNode }) {
             {workNavigationError}
           </p>
         )}
-        {workloadModule && moduleInstalled(activeStage as Parameters<typeof moduleInstalled>[0]) && (
-          <div className="workbench-actions work-module-navigation" role="group" aria-label="Module view">
-            <button
-              className={showingJobs ? 'primary-button' : 'secondary-button'}
-              aria-pressed={showingJobs}
-              onClick={() => setModuleJobView('jobs')}
-            >
-              <Icon name="layers" size={16} /> Jobs
+        {workloadModule &&
+          !hasJobHistory &&
+          !showingJobs &&
+          !(activeStage === 'simulation' && state.runMode === 'engine') && (
+            <div className="workbench-actions work-task-navigation">
+              <button className="text-button" onClick={() => setModuleJobView('jobs')}>
+                <Icon name="arrow" size={14} /> Back to jobs
+              </button>
+            </div>
+          )}
+        {showingJobs && activeStage === 'simulation' && state.context?.run?.origin === 'recovery' && (
+          <section className="panel" aria-label="Pending run request">
+            <p>A previous run request needs review before another request in that workflow.</p>
+            <button className="secondary-button" onClick={() => setModuleJobView('workspace')}>
+              Review pending run
             </button>
-            <button
-              className={!showingJobs ? 'primary-button' : 'secondary-button'}
-              aria-pressed={!showingJobs}
-              onClick={() => setModuleJobView('workspace')}
-            >
-              Workspace
-            </button>
-          </div>
+          </section>
         )}
         {showingJobs && moduleInstalled(activeStage as Parameters<typeof moduleInstalled>[0]) && (
           <WorkJobs
@@ -257,6 +260,7 @@ function Workbench({ children }: { children: ReactNode }) {
             key={`${workflowProjectId}:${activeStage}:${state.requestedJobOperation?.id ?? ''}`}
             projectId={workflowProjectId}
             module={activeStage}
+            operation={state.requestedJobOperation?.id}
             onSettings={() => {
               setSettingsTab('compute');
               state.openStage('settings');
@@ -351,7 +355,7 @@ function Workbench({ children }: { children: ReactNode }) {
         ) : showingJobs ? null : state.isSectionCurrent(activeStage) ? (
           children
         ) : (
-          <p role="status">Opening workspace section…</p>
+          <p role="status">Opening section…</p>
         )}
       </WorkspaceShell>
     </WorkspaceContext.Provider>

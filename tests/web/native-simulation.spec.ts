@@ -1,4 +1,4 @@
-import { openModuleWorkspace } from './work-job-controls';
+import { openModuleTask } from './work-job-controls';
 import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { selectProject } from './project-controls';
 import { createServer } from 'node:http';
@@ -192,6 +192,7 @@ async function fixture(page: Page) {
   await page.goto('/datasets/');
   await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
   await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await openModuleTask(page);
   await page.getByRole('button', { name: '3D simulation', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Native Isaac simulation', exact: true })).toBeVisible();
   return state;
@@ -215,6 +216,7 @@ test('a packed CPU profile is never selected automatically on direct Run entry',
   state.artifacts.push(artifact('packed-policy', 'act', 'native_quantized', { format: 'firebird_quant' }));
   await page.reload();
   await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await openModuleTask(page);
   await page.getByRole('button', { name: '3D simulation', exact: true }).click();
   const profiles = page.getByRole('radiogroup', { name: 'Isaac profile', exact: true });
   const policies = page.getByRole('radiogroup', { name: 'Native policy', exact: true });
@@ -234,6 +236,7 @@ test('native Run preserves engine navigation and fails closed when profiles are 
   state.profiles = [];
   await page.reload();
   await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await openModuleTask(page);
   await expect(page.getByRole('group', { name: 'Run mode', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Run jobs', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: '3D simulation' }).click();
@@ -407,6 +410,7 @@ test('failed run and project changes cannot reuse selected source or expose succ
   await page.getByRole('radio', { name: 'Generated smol-export', exact: true }).check();
   await acknowledge(page);
   await selectProject(page, 'beta');
+  await openModuleTask(page);
   await expect(page.getByRole('button', { name: 'Check inference', exact: true })).toHaveAttribute(
     'aria-pressed',
     'false',
@@ -766,6 +770,7 @@ async function openNativeAgain(page: Page, reload = false) {
     await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
   } else await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await openModuleTask(page);
   await page.getByRole('button', { name: '3D simulation', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Native Isaac simulation', exact: true })).toBeVisible();
 }
@@ -1126,9 +1131,12 @@ test('native pending restart preserves original context and project isolation wi
   await expect(page.getByRole('region', { name: 'Native simulation recovery' })).toContainText('Policy: act-export');
   await expect(page.getByRole('button', { name: 'I checked the jobs; allow a new request' })).toBeDisabled();
   await selectProject(page, 'beta');
+  await openModuleTask(page);
   await page.getByRole('button', { name: '3D simulation', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Native simulation recovery' })).toHaveCount(0);
   await selectProject(page, 'alpha');
+  await openModuleTask(page);
+  await page.getByRole('button', { name: '3D simulation', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Native simulation recovery' })).toContainText('Policy: act-export');
   expect(state.posts).toEqual([]);
 });
@@ -1163,6 +1171,7 @@ for (const both of [false, true])
     await page.reload();
     await expect(page.getByLabel('Current project')).toHaveAttribute('data-project-id', 'alpha');
     await page.getByRole('link', { name: 'Run', exact: true }).click();
+    await openModuleTask(page);
     const nativeMode = page.getByRole('button', { name: '3D simulation', exact: true });
     if (both) {
       await expect(page.getByRole('region', { name: 'Workflow selection status' })).toContainText(
@@ -1177,6 +1186,7 @@ for (const both of [false, true])
     await page.getByRole('button', { name: 'Check inference', exact: true }).click();
     await page.getByRole('link', { name: 'Datasets', exact: true }).click();
     await page.getByRole('link', { name: 'Run', exact: true }).click();
+    await openModuleTask(page);
     await expect(page.getByRole('button', { name: 'Check inference', exact: true })).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -1268,7 +1278,7 @@ test('scene jobs expose missing setup without starting agents or a GPU job', asy
     .getByRole('link', { name: 'Real to sim', exact: true })
     .click();
   await expect(page.getByRole('heading', { name: 'Real to sim', level: 1, exact: true })).toBeVisible();
-  await openModuleWorkspace(page);
+  await openModuleTask(page);
   const scene = page.getByRole('region', { name: 'Scene generation', exact: true });
   await expect(scene.getByRole('region', { name: 'Real to sim jobs', exact: true })).toBeVisible();
   await scene.getByRole('button', { name: 'New job', exact: true }).click();
@@ -1291,7 +1301,7 @@ test('legacy scenes stay readable without presenting source frames as simulation
   );
   await page.route('**/api/v1/projects/alpha/scenes', (route) => route.fulfill({ json: [run] }));
   await page.getByRole('link', { name: 'Real to sim', exact: true }).click();
-  await openModuleWorkspace(page);
+  await openModuleTask(page);
   const scene = page.getByRole('region', { name: 'Scene generation', exact: true });
   await scene.getByText('Saved scenes (1)', { exact: true }).click();
   await scene.getByRole('button', { name: 'SO101 real episodes · Episode 3', exact: true }).click();
@@ -1325,7 +1335,7 @@ test('scene jobs use the full dataset and pin model and power through a lost rec
     return route.fulfill({ status: 202, json: created });
   });
   await page.getByRole('link', { name: 'Real to sim', exact: true }).click();
-  await openModuleWorkspace(page);
+  await openModuleTask(page);
   const scene = page.getByRole('region', { name: 'Scene generation', exact: true });
   await scene.getByRole('button', { name: 'New job', exact: true }).click();
   await expect(scene).toContainText('All 30 episodes');
@@ -1343,7 +1353,7 @@ test('scene jobs use the full dataset and pin model and power through a lost rec
   await expect(model).toBeDisabled();
   await expect(power).toBeDisabled();
   await page.reload();
-  await openModuleWorkspace(page);
+  await openModuleTask(page);
   await expect(scene.getByRole('status').filter({ hasText: 'gpt-6-luna · High' })).toBeVisible();
   await expect(scene.getByRole('button', { name: 'Check request', exact: true })).toBeEnabled();
   await scene.getByRole('button', { name: 'Check request', exact: true }).click();
@@ -1361,7 +1371,7 @@ test('scene jobs use the full dataset and pin model and power through a lost rec
   expect(requests[1]).toEqual(requests[0]);
   expect(state.jobs).toHaveLength(1);
   await page.reload();
-  await openModuleWorkspace(page);
+  await openModuleTask(page);
   await expect(scene.locator('[data-job-id="scene-job"]')).toBeVisible();
   await scene.getByRole('button', { name: 'New job', exact: true }).click();
   await expect(power).toHaveValue('high');
@@ -1411,7 +1421,7 @@ test('historical scene jobs reopen their environment images and episode replay',
     },
   });
   await page.getByRole('link', { name: 'Real to sim', exact: true }).click();
-  await openModuleWorkspace(page);
+  await openModuleTask(page);
   const scene = page.getByRole('region', { name: 'Scene generation', exact: true });
   await scene.locator('[data-job-id="older-scene-job"]').click();
   const images = scene.getByRole('region', { name: 'Environment images', exact: true });
@@ -1464,7 +1474,7 @@ test('active scene jobs cancel through the shared job endpoint', async ({ page }
     return route.fulfill({ json: state.jobs[0] });
   });
   await page.getByRole('link', { name: 'Real to sim', exact: true }).click();
-  await openModuleWorkspace(page);
+  await openModuleTask(page);
   const scene = page.getByRole('region', { name: 'Scene generation', exact: true });
   await scene.locator('[data-job-id="running-scene-job"]').click();
   await expect(scene.getByRole('progressbar', { name: 'Scene job in progress' })).toBeVisible();
@@ -1496,7 +1506,7 @@ test('scene job terminal updates fetch partial media without claiming a successf
     stage: 'simulating',
   });
   await page.getByRole('link', { name: 'Real to sim', exact: true }).click();
-  await openModuleWorkspace(page);
+  await openModuleTask(page);
   const scene = page.getByRole('region', { name: 'Scene generation', exact: true });
   await scene.locator('[data-job-id="partial-scene-job"]').click();
   await expect(scene).toContainText('Simulation media pending');
@@ -1536,13 +1546,13 @@ test('switching projects during scene submission keeps its receipt with the orig
     return route.fulfill({ status: 202, json: created });
   });
   await page.getByRole('link', { name: 'Real to sim', exact: true }).click();
-  await openModuleWorkspace(page);
+  await openModuleTask(page);
   const scene = page.getByRole('region', { name: 'Scene generation', exact: true });
   await scene.getByRole('button', { name: 'New job', exact: true }).click();
   await scene.getByRole('button', { name: 'Start job', exact: true }).click();
   await expect.poll(() => original).toBeTruthy();
   await selectProject(page, 'beta');
-  await openModuleWorkspace(page);
+  await openModuleTask(page);
   release();
   await expect.poll(() => page.evaluate(() => localStorage.getItem('jensen-scene-request:alpha'))).toBeNull();
   await expect(page.getByRole('button', { name: 'Current project', exact: true })).toHaveAttribute(
@@ -1553,7 +1563,7 @@ test('switching projects during scene submission keeps its receipt with the orig
   await expect(scene.locator('[data-job-id="late-alpha-job"]')).toHaveCount(0);
   expect(await page.evaluate(() => localStorage.getItem('jensen-scene-request:beta'))).toBeNull();
   await selectProject(page, 'alpha');
-  await openModuleWorkspace(page);
+  await openModuleTask(page);
   await expect(scene.locator('[data-job-id="late-alpha-job"]')).toBeVisible();
 });
 
@@ -1568,7 +1578,7 @@ test('a mismatched scene job receipt keeps the original request recoverable', as
     });
   });
   await page.getByRole('link', { name: 'Real to sim', exact: true }).click();
-  await openModuleWorkspace(page);
+  await openModuleTask(page);
   const scene = page.getByRole('region', { name: 'Scene generation', exact: true });
   await scene.getByRole('button', { name: 'New job', exact: true }).click();
   await scene.getByLabel('Scene agent power', { exact: true }).selectOption('high');
@@ -1630,7 +1640,7 @@ test('retrying simulation creates a new job and retains its scene lineage throug
     return route.fulfill({ status: 202, json: state.jobs[0] });
   });
   await page.getByRole('link', { name: 'Real to sim', exact: true }).click();
-  await openModuleWorkspace(page);
+  await openModuleTask(page);
   const scene = page.getByRole('region', { name: 'Scene generation', exact: true });
   await scene.locator('[data-job-id="failed-scene-job"]').click();
   await scene.getByRole('button', { name: 'Retry simulation', exact: true }).click();
@@ -1648,7 +1658,7 @@ test('retrying simulation creates a new job and retains its scene lineage throug
   });
   expect(requests[0].request_id).not.toBe(original.request_id);
   await page.reload();
-  await openModuleWorkspace(page);
+  await openModuleTask(page);
   await expect(scene.getByRole('heading', { name: 'Retry simulation', exact: true })).toBeVisible();
   await expect(scene.getByLabel('Scene agent model', { exact: true })).toHaveValue(original.model);
   await expect(scene.getByText('Scene setup required', { exact: true })).toHaveCount(0);

@@ -1,3 +1,4 @@
+import { openModuleTask } from './work-job-controls';
 import { fulfillApplicationUpdateRead } from './application-update-controls';
 import {
   chooseTransformationModel,
@@ -409,6 +410,7 @@ test('completed candidate shows measured storage and drift separately from exact
   }));
   expect(widths.scroll, JSON.stringify(widths)).toBeLessThanOrEqual(widths.width + 1);
   await page.getByRole('link', { name: 'Run', exact: true }).click();
+  await openModuleTask(page);
   await page.getByRole('button', { name: '3D simulation', exact: true }).click();
   await expect(page.locator('.native-simulation').locator('input[type=radio][value="packed-result"]')).toHaveCount(0);
   expect(state.posts).toEqual([]);

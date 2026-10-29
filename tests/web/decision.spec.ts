@@ -1,3 +1,4 @@
+import { openModuleTask } from './work-job-controls';
 import { fulfillApplicationUpdateRead } from './application-update-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { installedModules } from './module-fixtures';
@@ -105,10 +106,7 @@ async function lab(page: Page, configured = true) {
   });
   await page.goto('/decision-lab/');
   await expect(page.getByRole('heading', { name: 'Decision Lab', level: 1 })).toBeVisible();
-  await page
-    .getByRole('group', { name: 'Module view', exact: true })
-    .getByRole('button', { name: 'Workspace', exact: true })
-    .click();
+  await openModuleTask(page);
   await expect(page.getByRole('group', { name: 'Advisory model', exact: true })).toContainText('Muose-50M');
   return { posts, controls, keys, jobs };
 }
@@ -273,10 +271,7 @@ test('accepted scoring result is restored after reload without another submissio
   await page.getByRole('button', { name: 'Start job', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Advisory score result' })).toBeVisible();
   await page.reload();
-  await page
-    .getByRole('group', { name: 'Module view', exact: true })
-    .getByRole('button', { name: 'Workspace', exact: true })
-    .click();
+  await openModuleTask(page);
   await expect(page.getByRole('region', { name: 'Advisory score result' })).toBeVisible();
   expect(posts).toHaveLength(1);
 });

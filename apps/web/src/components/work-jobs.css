@@ -87,17 +87,11 @@
   }
 }
 
-.work-module-navigation {
+.work-task-navigation {
   margin-bottom: 18px;
 }
 .work-job-back {
   justify-self: start;
-}
-.work-job-compose {
-  display: grid;
-  justify-items: start;
-  gap: 14px;
-  margin-top: 22px;
 }
 .work-job-compute {
   display: grid;

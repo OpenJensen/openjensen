@@ -7,134 +7,41 @@ import { WorkbenchDisclosure } from './workbench-disclosure';
 import { Icon } from './icon';
 import { JobHistory } from './job-history';
 import { WorkJobLogs } from './work-job-logs';
-import { workJobs, workStatusLabels, isWorkActive, type WorkJob, type JobOperation } from '@/lib/work-jobs';
-import { computeTargets } from '@/lib/compute-targets';
-import { selectedJobCompute, saveJobCompute } from '@/lib/job-compute-selection';
+import {
+  workJobs,
+  workStatusLabels,
+  jobCategoryActions,
+  jobResultLabel,
+  isWorkActive,
+  type WorkJob,
+  type JobOperation,
+} from '@/lib/work-jobs';
 import { Notice } from './ui/notice';
 import './work-jobs.css';
 
 function NewWorkJob({
-  projectId,
   choices,
   onBack,
   onNew,
 }: {
-  projectId: string;
   choices: JobOperation[];
   onBack: () => void;
   onNew: (operation: JobOperation) => void;
 }) {
-  const [chosen, setChosen] = useState<JobOperation | null>(null);
-  const [targetId, setTargetId] = useState('');
-  const [error, setError] = useState('');
-  const targets = useQuery({ queryKey: ['compute-targets'], queryFn: () => computeTargets.list(), retry: false });
-  const options = (targets.data?.targets ?? []).filter((target) => target.operations.includes(chosen?.id ?? ''));
-  const target = options.find((item) => item.definition.id === targetId);
-  const configurable = chosen?.id.startsWith('policy.') && chosen.submission === 'job';
-  function choose(operation: JobOperation) {
-    setChosen(operation);
-    setError('');
-    try {
-      setTargetId(selectedJobCompute(projectId, operation.id)?.id ?? '');
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Compute selection could not be read.');
-    }
-  }
-  function configure() {
-    if (!chosen) return;
-    try {
-      if (configurable) {
-        if (targetId && (!target || !target.launchable))
-          throw new Error('Review the selected compute target before continuing.');
-        saveJobCompute(
-          projectId,
-          chosen.id,
-          target
-            ? {
-                id: target.definition.id,
-                label: target.definition.label,
-                runtimeId: target.definition.runtime_id,
-                operation: chosen.id,
-              }
-            : null,
-        );
-      }
-      onNew(chosen);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Compute selection could not be saved.');
-    }
-  }
   return (
     <section className="panel work-job-picker" aria-label="New job">
       <button className="text-button" onClick={onBack}>
         ← Jobs
       </button>
-      <h2>New job</h2>
-      <p>Choose an operation, then configure its inputs and settings.</p>
+      <h2>What would you like to do?</h2>
       <div className="work-job-operations" role="group" aria-label="Job operation">
         {choices.map((operation) => (
-          <button
-            key={operation.id}
-            className={chosen?.id === operation.id ? 'primary-button' : 'secondary-button'}
-            aria-pressed={chosen?.id === operation.id}
-            onClick={() => choose(operation)}
-          >
+          <button key={operation.id} className="secondary-button" onClick={() => onNew(operation)}>
             {operation.title}
             <Icon name="arrow" size={15} />
           </button>
         ))}
       </div>
-      {chosen && (
-        <div className="work-job-compose">
-          {configurable && (
-            <>
-              <label className="work-job-compute">
-                Compute target
-                <select
-                  value={targetId}
-                  onChange={(event) => {
-                    setTargetId(event.target.value);
-                    setError('');
-                  }}
-                >
-                  <option value="">Use module compute settings</option>
-                  {targetId && !target && (
-                    <option value={targetId} disabled>
-                      Saved target is unavailable
-                    </option>
-                  )}
-                  {options.map((item) => (
-                    <option key={item.definition.id} value={item.definition.id} disabled={!item.launchable}>
-                      {item.definition.label}
-                      {!item.launchable ? ` — ${item.status.replaceAll('_', ' ')}` : ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {targets.isError && (
-                <p role="alert">Compute targets could not be loaded. Retry before using a configured target.</p>
-              )}
-              {target && <p>{target.message}</p>}
-              {!options.length && targets.isSuccess && (
-                <p>Add compatible compute targets in Settings, or use the module’s existing compute settings.</p>
-              )}
-            </>
-          )}
-          {chosen.submission === 'interactive' && (
-            <p>
-              This operation continues in an interactive workspace. Required confirmations remain part of that workflow.
-            </p>
-          )}
-          {error && <Notice tone="danger" title={error} live="alert" />}
-          <button
-            className="primary-button"
-            disabled={!!(configurable && targetId && (!target || !target.launchable))}
-            onClick={configure}
-          >
-            Configure {chosen.title.toLowerCase()}
-          </button>
-        </div>
-      )}
     </section>
   );
 }
@@ -184,7 +91,7 @@ function JobDetail({
         </p>
         <div className="workbench-actions">
           <button className="secondary-button" onClick={() => onOpen(job)}>
-            Open workspace
+            {jobResultLabel(job.operation)}
           </button>
           {job.can_cancel && (
             <button className="secondary-button" disabled={cancel.isPending} onClick={() => cancel.mutate()}>
@@ -255,9 +162,7 @@ function JobDetail({
           )}
           <section className="panel">
             <h3>Overview</h3>
-            {job.status === 'waiting' && (
-              <p>Continue in the workspace to review the result or provide the next input.</p>
-            )}
+            {job.status === 'waiting' && <p>Review the result or open the job controls to continue.</p>}
             <dl className="work-job-facts">
               <div>
                 <dt>Operation</dt>
@@ -298,7 +203,7 @@ function JobDetail({
               <p>
                 {isWorkActive(job)
                   ? 'Results appear here when the job publishes them.'
-                  : 'No downloadable outputs were published. Open the workspace for its saved result.'}
+                  : 'No downloadable outputs were published. Open the saved result for more detail.'}
               </p>
             )}
           </section>
@@ -403,11 +308,14 @@ export function WorkJobs({
   const current = detail.data?.project_id === projectId && detail.data.id === selected ? detail.data : undefined;
   const choices = (operations.data ?? []).filter((operation) => !module || operation.module === module);
   const modules = [...new Set((operations.data ?? []).map((item) => item.module))];
+  const category = module ? jobCategoryActions[module] : undefined;
+  const primary = category && choices.find((item) => item.id === category.operation);
+  const additional = module ? choices.filter((item) => item !== primary) : [];
+
   if (creating)
     return (
       <NewWorkJob
         key={`${projectId}:${module ?? 'all'}`}
-        projectId={projectId}
         choices={choices}
         onBack={() => setCreating(false)}
         onNew={onNew}
@@ -496,8 +404,8 @@ export function WorkJobs({
         />
       )}
       <JobHistory
-        title="Jobs"
-        newLabel="New job"
+        title={category?.title ?? 'Jobs'}
+        newLabel={category?.label ?? 'New job'}
         loading={jobs.isPending && !!projectId}
         error={jobs.error}
         disabled={!projectId || operations.isError || operations.isPending}
@@ -517,9 +425,23 @@ export function WorkJobs({
           createdAt: job.created_at,
           progress: isWorkActive(job) ? job.stage?.replaceAll('_', ' ') : undefined,
         }))}
-        onNew={() => setCreating(true)}
+        onNew={() => (primary ? onNew(primary) : setCreating(true))}
         onSelect={setSelected}
       />
+      {additional.length > 0 && (
+        <div className="workbench-actions work-job-secondary-actions" role="group" aria-label="Other jobs">
+          {additional.map((operation) => (
+            <button
+              key={operation.id}
+              className="secondary-button"
+              disabled={!projectId}
+              onClick={() => onNew(operation)}
+            >
+              {operation.title}
+            </button>
+          ))}
+        </div>
+      )}
       {(offset > 0 || (jobs.data?.nextOffset !== null && jobs.data?.nextOffset !== undefined)) && (
         <nav className="workbench-actions work-job-pagination" aria-label="Job history pages">
           <button

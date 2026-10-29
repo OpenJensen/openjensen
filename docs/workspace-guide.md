@@ -8,7 +8,7 @@ Open Models or Datasets, or inspect the current resource and connection status.
 
 ## Jobs
 
-Open **Jobs** to review work across the selected project, or use a module’s **Jobs** view for its history. Choose **New job**, select an operation and an available compute target, then configure the inputs in its workspace. Maintenance remains in Settings and Modules.
+Each work category opens its job history. Start a new distillation, training run, augmentation or teleoperation to open its setup directly. Open **Jobs** for history across the selected project. Select compute while configuring a new job. Maintenance remains in Settings and Modules.
 
 Open a job for its status, inputs, results and source jobs. **Timeline** explains lifecycle changes; **Logs** follows retained messages with severity, output and text filters. Pause live following to inspect earlier output, or download the redacted diagnostics bundle. Failed jobs retain an explanation and available technical evidence. Cancellation stays pending until execution and cleanup are reconciled.
 
@@ -34,7 +34,7 @@ Inspect a public dataset or import local files. Open an episode to play its came
 
 ## Real to sim
 
-Open **Real to sim** under **Data**. Choose **New job**, then select a dataset, agent model and power before starting. Codex can inspect episodes across the full dataset. Open the saved job for environment images, a recorded-episode replay video and the scene bundle. Use **Retry simulation** to create a new job from the saved scene and evidence without repeating model work. Physical calibration remains a separate validation step.
+Open **Real to sim** under **Data**. Choose **New scene**, then select a dataset, agent model and power before starting. Codex can inspect episodes across the full dataset. Open the saved job for environment images, a recorded-episode replay video and the scene bundle. Use **Retry simulation** to create a new job from the saved scene and evidence without repeating model work. Physical calibration remains a separate validation step.
 
 ## Augmentation
 

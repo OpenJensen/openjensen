@@ -7,6 +7,8 @@ export default function EngineWorkflowSection() {
   const {
     workflowProjectId,
     requestedWorkJob,
+    requestedJobOperation,
+    setModuleJobView,
     activeStage,
     workflowNavigation,
     settingsTab,
@@ -19,6 +21,8 @@ export default function EngineWorkflowSection() {
   } = useWorkspace();
   return (
     <WorkflowPanel
+      startNew={requestedJobOperation?.module === activeStage}
+      onBackToJobs={activeStage === 'simulation' ? () => setModuleJobView('jobs') : undefined}
       key={`${workflowProjectId}-${activeStage}-${workflowNavigation}`}
       projectId={workflowProjectId}
       tab={settingsTab}

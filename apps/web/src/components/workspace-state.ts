@@ -44,7 +44,9 @@ export function useWorkbenchState() {
   const activeStage = workspaceStage(pathname);
   const moduleJobView =
     moduleJobViewOverride ??
-    (['augmentation', 'real-to-sim', 'decision-lab', 'teaching'].includes(activeStage) ? 'jobs' : 'workspace');
+    (['augmentation', 'real-to-sim', 'decision-lab', 'teaching', 'simulation'].includes(activeStage)
+      ? 'jobs'
+      : 'workspace');
   // Fence delayed preflight reads as soon as navigation is requested, before
   // Next finishes fetching and committing the destination's route payload.
   const routeSelection = useRef({ pathname, stage: activeStage });
@@ -119,7 +121,9 @@ export function useWorkbenchState() {
   }, [projects.data, projectId]);
   function navigateStage(id: StageId) {
     setRequestedWorkJob(null);
-    setModuleJobView(['augmentation', 'real-to-sim', 'decision-lab', 'teaching'].includes(id) ? 'jobs' : 'workspace');
+    setModuleJobView(
+      ['augmentation', 'real-to-sim', 'decision-lab', 'teaching', 'simulation'].includes(id) ? 'jobs' : 'workspace',
+    );
     setRequestedJobOperation(null);
     setOpenQuantizationRun(null);
     setOpenDistillationRun(null);
@@ -144,6 +148,10 @@ export function useWorkbenchState() {
     if (id === 'datasets') setDatasetView('sources');
     openStage(id);
   }
+  function navigateTask(id: StageId) {
+    navigateStage(id);
+    setModuleJobView('workspace');
+  }
   function startTrainingOnDataset(datasetId: string) {
     const id = trainingNavigation + 1;
     setTrainingNavigation(id);
@@ -155,7 +163,9 @@ export function useWorkbenchState() {
     setWorkNavigationError('');
     setRequestedWorkJob(null);
     setModuleJobView(
-      ['augmentation', 'real-to-sim', 'decision-lab', 'teaching'].includes(activeStage) ? 'jobs' : 'workspace',
+      ['augmentation', 'real-to-sim', 'decision-lab', 'teaching', 'simulation'].includes(activeStage)
+        ? 'jobs'
+        : 'workspace',
     );
     setRequestedJobOperation(null);
     setDistillationModels({});
@@ -221,6 +231,7 @@ export function useWorkbenchState() {
             ? 'evaluation'
             : 'simulation';
     navigateStage(target);
+    setModuleJobView('workspace');
     setModelInput({ projectId: artifact.project_id, artifactId: artifact.id });
     setWorkflowNavigation((value) => value + 1);
     if (action === 'distill') {
@@ -274,11 +285,18 @@ export function useWorkbenchState() {
       setTrainingNavigation(id);
       setStartTraining({ id });
     }
+    if (operation.id === 'policy.run') {
+      setEntries((previous) => ({
+        ...previous,
+        [workflowProjectId]: { ...previous[workflowProjectId], run: undefined },
+      }));
+    }
     if (operation.id === 'teaching.capture') setTeachingMode('managed');
     if (operation.id === 'policy.import') {
       navigateStage('simulation');
       chooseRun('native', 'handoff');
       setImportModel(true);
+      setModuleJobView('workspace');
     }
   }
   async function openWorkJob(job: WorkJob) {
@@ -399,7 +417,7 @@ export function useWorkbenchState() {
   }
   useEffect(() => {
     const stage = activeStage === 'simulation' ? 'run' : null;
-    if (!stage || !workflowProjectId || context?.[stage]) return;
+    if (!stage || !workflowProjectId || context?.[stage] || requestedJobOperation?.id === 'policy.run') return;
     // An unfinished request has priority over restoring owned history.
     // Read only: the child owns its journal and explicit recovery acknowledgement.
     let recovery: boolean,
@@ -443,7 +461,16 @@ export function useWorkbenchState() {
           : { ...previous, [workflowProjectId]: { ...previous[workflowProjectId], [stage]: next } },
       );
     setEntryError(null);
-  }, [activeStage, workflowProjectId, context, jobs.data, jobs.isSuccess, jobs.isError, queryClient]);
+  }, [
+    activeStage,
+    workflowProjectId,
+    context,
+    jobs.data,
+    jobs.isSuccess,
+    jobs.isError,
+    queryClient,
+    requestedJobOperation,
+  ]);
   const ownedJobs = (jobs.data ?? []).filter((job) => job.project_id === workflowProjectId);
   const replayHistory = ownedJobs.some((job) => runJobMode(job, workflowProjectId) === 'replay');
   const simulationHistory = ownedJobs.some((job) => runJobMode(job, workflowProjectId) === 'native');
@@ -553,6 +580,7 @@ export function useWorkbenchState() {
     setIntakeSelection,
     openStage,
     navigateStage,
+    navigateTask,
     startTrainingOnDataset,
     selectProject,
     openDataset,

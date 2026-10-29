@@ -39,7 +39,7 @@ export const navigationGroups: { name?: string; items: StageId[] }[] = [
   { name: 'Data', items: ['datasets', 'augmentation', 'real-to-sim'] },
   { name: 'Train', items: ['training', 'distillation', 'quantization'] },
   { name: 'Test', items: ['evaluation', 'simulation', 'decision-lab'] },
-  { name: 'Workspace', items: ['models', 'cloud-runs', 'modules', 'cloud-apis', 'settings'] },
+  { name: 'Manage', items: ['models', 'cloud-runs', 'modules', 'cloud-apis', 'settings'] },
 ];
 
 export function moduleStage(id: ModuleId): StageId {

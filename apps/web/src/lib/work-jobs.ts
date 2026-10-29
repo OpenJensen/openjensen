@@ -8,6 +8,34 @@ export type JobOperation = components['schemas']['JobOperation'];
 export type WorkSubmission = Omit<components['schemas']['WorkSubmission'], 'inputs'> & {
   inputs: NonNullable<components['schemas']['WorkSubmission']['inputs']>;
 };
+export const jobCategoryActions: Record<string, { operation: string; label: string; title: string }> = {
+  training: { operation: 'policy.finetune', label: 'Start a new fine-tuning', title: 'Fine-tuning jobs' },
+  distillation: { operation: 'policy.distill', label: 'Start a new distillation', title: 'Distillation jobs' },
+  quantization: { operation: 'policy.quantize', label: 'Start a new quantization', title: 'Quantization jobs' },
+  evaluation: { operation: 'policy.evaluate', label: 'New evaluation', title: 'Evaluation jobs' },
+  simulation: { operation: 'policy.run', label: 'New run', title: 'Run jobs' },
+  augmentation: { operation: 'dataset.augment', label: 'New augmentation', title: 'Augmentation jobs' },
+  'real-to-sim': { operation: 'scene.generate', label: 'New scene', title: 'Real-to-sim jobs' },
+  teaching: { operation: 'agent.control', label: 'New teleoperation', title: 'Teleoperation jobs' },
+  'decision-lab': { operation: 'decision.score', label: 'New scoring', title: 'Decision scoring jobs' },
+};
+const jobResultLabels: Record<string, string> = {
+  'dataset.inspect': 'View dataset',
+  'dataset.import': 'View dataset',
+  'dataset.convert': 'View dataset',
+  'dataset.augment': 'View augmentation',
+  'scene.generate': 'Review scene',
+  'policy.finetune': 'View training run',
+  'policy.distill': 'View distillation',
+  'policy.quantize': 'View quantization',
+  'policy.evaluate': 'View evaluation',
+  'policy.run': 'View run',
+  'teaching.capture': 'Open recording',
+  'agent.control': 'Open controls',
+  'decision.score': 'View scoring',
+};
+export const jobResultLabel = (operation: string) => jobResultLabels[operation] ?? 'View result';
+
 export const workStatusLabels: Record<string, string> = {
   queued: 'Queued',
   running: 'Running',

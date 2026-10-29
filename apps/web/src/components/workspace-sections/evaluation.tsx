@@ -15,7 +15,7 @@ export default function EvaluationSection() {
     replayHistory,
     simulationConfigured,
     simulationHistory,
-    navigateStage,
+    navigateTask,
     chooseRun,
   } = useWorkspace();
   return (
@@ -46,7 +46,7 @@ export default function EvaluationSection() {
             <button
               className="text-link"
               onClick={() => {
-                navigateStage('simulation');
+                navigateTask('simulation');
                 chooseRun('replay', 'handoff');
               }}
             >
@@ -57,7 +57,7 @@ export default function EvaluationSection() {
             <button
               className="text-link"
               onClick={() => {
-                navigateStage('simulation');
+                navigateTask('simulation');
                 chooseRun('native', 'handoff');
               }}
             >

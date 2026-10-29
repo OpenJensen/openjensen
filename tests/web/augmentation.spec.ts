@@ -1,4 +1,4 @@
-import { fulfillWorkJobRead, openModuleWorkspace } from './work-job-controls';
+import { fulfillWorkJobRead, openModuleTask } from './work-job-controls';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fulfillApplicationUpdateRead } from './application-update-controls';
@@ -290,9 +290,11 @@ async function mockWorkspace(
   });
   await page.goto('/datasets/');
   await page.getByRole('link', { name: 'Augmentation', exact: true }).click();
-  await openModuleWorkspace(page);
+  if (!config.projectsReady) {
+    await openModuleTask(page);
+    await expect(page.getByRole('group', { name: 'Generator', exact: true })).toContainText('Gemini Omni');
+  }
   await expect(page.getByRole('heading', { name: 'Augmentation', exact: true, level: 1 })).toBeVisible();
-  await expect(page.getByRole('group', { name: 'Generator', exact: true })).toContainText('Gemini Omni');
   return {
     submitted,
     unexpected,
@@ -441,7 +443,7 @@ test('running augmentation persists across tab changes, polls for completion and
   await expect(page.getByRole('button', { name: 'Cancel augmentation', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Datasets', exact: true }).click();
   await page.getByRole('link', { name: 'Augmentation', exact: true }).click();
-  await openModuleWorkspace(page);
+  await openModuleTask(page);
   await expect(page.getByRole('button', { name: 'Cancel augmentation', exact: true })).toBeVisible();
   jobs[0].status = 'succeeded';
   jobs[0].result = resultFor(submitted[0]);
@@ -545,9 +547,10 @@ test('waits for confirmed project membership and preserves the first setup error
   const fixture = await mockWorkspace(page, { projectsReady, failFirst: true });
   await expect(page.getByRole('region', { name: 'Project', exact: true }).getByRole('status')).toBeVisible();
   await expect(page.getByLabel('Style prompt')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Add a style', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'New augmentation', exact: true })).toBeDisabled();
   expect(fixture.optionsAttempts()).toBe(0);
   releaseProjects();
+  await openModuleTask(page);
   await expect(page.getByRole('radiogroup', { name: 'Dataset', exact: true }).getByRole('radio')).toBeChecked();
   await expect(page.getByText('Augmentation setup temporarily unavailable.', { exact: true })).toBeVisible();
   expect(fixture.optionsAttempts()).toBe(1);
@@ -674,7 +677,7 @@ test('lost augmentation acknowledgement recovers its original job by saved key a
   expect(fixture.keys[0]).toMatch(/^[a-f0-9-]{36}$/);
   await page.reload();
   await page.getByRole('link', { name: 'Augmentation', exact: true }).click();
-  await openModuleWorkspace(page);
+  await openModuleTask(page);
   await expect(page.getByRole('button', { name: /Add one more/ })).toBeDisabled();
   await recovery.getByRole('button', { name: 'Check saved request' }).click();
   await expect(recovery).toHaveCount(0);
@@ -863,7 +866,7 @@ test('keeps the original and all variants together when generating or changing r
   await page.getByRole('button', { name: 'View run 1', exact: true }).click();
   await expect(gallery.locator('video')).toHaveCount(3);
   await page.reload();
-  await openModuleWorkspace(page);
+  await openModuleTask(page);
   await expect(page.getByRole('region', { name: 'Episode experiments' }).locator('video')).toHaveCount(3);
   await expect(page.getByRole('button', { name: 'Play all', exact: true })).toBeVisible();
   await noOverflow(page);
