@@ -307,7 +307,9 @@ test('a queued scene result stays pending and terminal transition fetches its fi
   await page.goto('/jobs/');
   await page.locator('[data-job-id="core:scene-result"]').click();
   await expect(page.getByRole('status').filter({ hasText: 'Simulation results pending' })).toBeVisible();
-  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(
+    page.getByRole('region', { name: 'Job details', exact: true }).locator('.notice[role="alert"]'),
+  ).toHaveCount(0);
   ready = true;
   const item = state.items.find((item) => item.id === 'core:scene-result')!;
   item.status = 'succeeded';
@@ -331,6 +333,8 @@ test('a scene result from another job cannot expose its media in shared results'
   );
   await page.goto('/jobs/');
   await page.locator('[data-job-id="core:scene-result"]').click();
-  await expect(page.getByRole('alert')).toContainText('Simulation results unavailable');
+  await expect(
+    page.getByRole('region', { name: 'Job details', exact: true }).locator('.notice[role="alert"]'),
+  ).toContainText('Simulation results unavailable');
   await expect(page.getByRole('img', { name: 'Other job environment', exact: true })).toHaveCount(0);
 });
