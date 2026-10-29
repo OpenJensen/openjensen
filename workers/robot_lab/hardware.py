@@ -22,6 +22,7 @@ REGISTERS = {
     "Max_Position_Limit": (11, 2),
     "Homing_Offset": (31, 2),
     "Operating_Mode": (33, 1),
+    "Phase": (18, 1),
     "P_Coefficient": (21, 1),
     "D_Coefficient": (22, 1),
     "I_Coefficient": (23, 1),
@@ -58,7 +59,7 @@ def normalized(joint: str, raw: int, calibration: dict) -> float:
     entry = calibration[joint]
     low, high = entry["range_min"], entry["range_max"]
     if joint == "gripper":
-        return max(0.0, min(100.0, (raw - low) * 100 / (high - low)))
+        return (min(high, max(low, raw)) - low) / (high - low) * 100
     return (raw - (low + high) / 2) * 360 / 4095
 
 
@@ -68,7 +69,7 @@ def denormalized(joint: str, value: float, calibration: dict) -> int:
     entry = calibration[joint]
     low, high = entry["range_min"], entry["range_max"]
     raw = (
-        value * (high - low) / 100 + low
+        (min(100.0, max(0.0, value)) / 100) * (high - low) + low
         if joint == "gripper"
         else value * 4095 / 360 + (low + high) / 2
     )
@@ -89,6 +90,8 @@ class ServoBus:
         self.lock = threading.RLock()
         self.opened = False
         self.corrupt = False
+        self.gripper_load_tolerance = False
+        self.motor_status = {}
         try:
             if not self.port.openPort() or not self.port.setBaudRate(baudrate):
                 raise HardwareError("Could not open serial port at requested baudrate")
@@ -132,7 +135,7 @@ class ServoBus:
         # returning a bogus byte or raising IndexError for a two-byte register.
         # Reads are safe to repeat. The SDK reports both truncated replies and
         # checksum failures as RX_CORRUPT. Discard them and request fresh data;
-        # persistent communication failures or any motor fault still stop.
+        # persistent communication failures and unhandled motor faults still stop.
         for attempt in range(3):
             request = [0, 0, motor_id, 4, 2, address, size, 0]
             try:
@@ -142,7 +145,7 @@ class ServoBus:
                 self.port.is_using = False
                 reply, result, error = [], self.sdk.COMM_RX_CORRUPT, 0
             value = 0
-            if result == self.sdk.COMM_SUCCESS and not error:
+            if result == self.sdk.COMM_SUCCESS:
                 if (
                     not isinstance(reply, list)
                     or len(reply) != size + 6
@@ -150,6 +153,7 @@ class ServoBus:
                     or reply[2] != motor_id
                     or reply[3] != size + 2
                     or reply[-1] != (~sum(reply[2:-1]) & 255)
+                    or reply[4] != error
                 ):
                     result = self.sdk.COMM_RX_CORRUPT
                 else:
@@ -165,7 +169,25 @@ class ServoBus:
             # SDK clearPort() only flushes output. Remove a partial/stale input
             # packet before sending the next read, never reuse its value.
             self.port.ser.reset_input_buffer()
-        self._check(result, error, motor_id, f"read {register}")
+        # An overload alarm is feedback, not a rejected read, in current
+        # LeRobot. Admit it only with a complete, validated gripper packet.
+        if result == self.sdk.COMM_SUCCESS and register == "Present_Position":
+            if not hasattr(self, "motor_status"):
+                self.motor_status = {}
+            self.motor_status[motor_id] = error
+        self._check(
+            result,
+            error,
+            motor_id,
+            f"read {register}",
+            allow_gripper_load=(
+                register == "Torque_Enable"
+                or (
+                    register == "Present_Position"
+                    and getattr(self, "gripper_load_tolerance", False)
+                )
+            ),
+        )
         if register == "Homing_Offset":
             return decode_sign(int(value), 11)
         if register == "Present_Position":
@@ -185,7 +207,7 @@ class ServoBus:
         except IndexError:
             self.port.is_using = False
             reply, result, error = [], self.sdk.COMM_RX_CORRUPT, 0
-        if result == self.sdk.COMM_SUCCESS and not error:
+        if result == self.sdk.COMM_SUCCESS:
             if (
                 not isinstance(reply, list)
                 or len(reply) != 6
@@ -193,6 +215,7 @@ class ServoBus:
                 or reply[2] != motor_id
                 or reply[3] != 2
                 or reply[-1] != (~sum(reply[2:-1]) & 255)
+                or reply[4] != error
             ):
                 result = self.sdk.COMM_RX_CORRUPT
             else:
@@ -206,6 +229,7 @@ class ServoBus:
                 "Min_Position_Limit",
                 "Max_Position_Limit",
                 "Operating_Mode",
+                "Phase",
                 "Lock",
                 "Max_Torque_Limit",
                 "Torque_Limit",
@@ -239,7 +263,15 @@ class ServoBus:
                 f"Motor {motor_id} write {register} acknowledgement unverified; "
                 f"read-back was {actual}, expected {requested}"
             )
-        self._check(result, error, motor_id, f"write {register}={requested}")
+        self._check(
+            result,
+            error,
+            motor_id,
+            f"write {register}={requested}",
+            # An alarm does not establish that torque-off was refused. A fresh,
+            # validated zero read-back below still has to prove it took effect.
+            allow_gripper_load=register == "Torque_Enable" and requested == 0,
+        )
         if register == "Torque_Enable" and self.read(register, motor_id) != requested:
             raise HardwareError(
                 f"Motor {motor_id} torque read-back did not match requested state {requested}"
@@ -265,12 +297,29 @@ class ServoBus:
             finally:
                 writer.clearParam()
 
-    def _check(self, result, error, motor_id, operation):
+    def _check(self, result, error, motor_id, operation, *, allow_gripper_load=False):
+        # Only gripper overload is tolerated. Other joints, mixed/unknown flags,
+        # temperature, current, voltage and encoder faults still stop control.
+        if (
+            result == self.sdk.COMM_SUCCESS
+            and error == 0x20
+            and motor_id == IDS["gripper"]
+            and allow_gripper_load
+        ):
+            return
         if result != self.sdk.COMM_SUCCESS or error:
             reason = (
                 self.packet.getTxRxResult(result) if result else self.packet.getRxPacketError(error)
             )
-            raise HardwareError(f"Motor {motor_id} {operation} failed: {reason}")
+            fault = HardwareError(f"Motor {motor_id} {operation} failed: {reason}")
+            fault.details = {
+                "code": "motor_status_fault" if error else "motor_communication_fault",
+                "motor_id": motor_id,
+                "operation": operation,
+                "communication_result": result,
+                "status_error": error,
+            }
+            raise fault
 
     def positions(self):
         with self.lock:

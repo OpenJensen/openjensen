@@ -14,7 +14,6 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from diagnostics import Diagnostics
 from hardware import HardwareError
-from motion import ENCODER_RANGE_TOLERANCE
 from server import EncoderRangeError, RequestError, RobotLab, create_server, validate_raw
 from test_robot_lab import CALIBRATION, FakeBus, FakeCamera
 
@@ -120,22 +119,21 @@ class IncidentTests(unittest.TestCase):
         self.assertFalse(thread.is_alive())
         self.assertEqual(self.lab.mode, "idle")
 
-    def test_range_fault_keeps_bad_reading_limits_and_pre_stop_context(self):
+    def test_agent_range_fault_keeps_bad_reading_limits_and_pre_stop_context(self):
         self.start()
-        bad_ticks = 100 - ENCODER_RANGE_TOLERANCE - 1
-        self.buses[-1].raw["gripper"] = bad_ticks
+        self.lab.mode = "agent"
+        self.buses[-1].raw["gripper"] = 99
         self.run_loop_until_stopped(self.lab._loop)
         stop = self.lab.status()["diagnostics"]["last_stop"]
-        self.assertIn(f"{ENCODER_RANGE_TOLERANCE + 1} ticks below minimum", stop["reason"])
-        self.assertEqual(stop["context"]["mode"], "manual")
-        self.assertEqual(stop["context"]["raw_positions"]["follower"]["gripper"], bad_ticks)
+        self.assertIn("1 ticks below minimum", stop["reason"])
+        self.assertEqual(stop["context"]["mode"], "agent")
+        self.assertEqual(stop["context"]["raw_positions"]["follower"]["gripper"], 99)
         fault = stop["context"]["fault"]
         self.assertEqual(
             (fault["source"], fault["joint"], fault["motor_id"]), ("follower", "gripper", 6)
         )
         self.assertEqual(
-            (fault["min_ticks"], fault["max_ticks"], fault["outside_ticks"]),
-            (100, 4000, ENCODER_RANGE_TOLERANCE + 1),
+            (fault["min_ticks"], fault["max_ticks"], fault["outside_ticks"]), (100, 4000, 1)
         )
         self.assertTrue(stop["torque_disable_acknowledged"])
         self.assertFalse(self.lab.torque)
@@ -143,8 +141,9 @@ class IncidentTests(unittest.TestCase):
         self.lab.error = None
         self.assertEqual(self.lab.status()["diagnostics"]["last_stop"]["id"], stop["id"])
 
-    def test_leader_fault_is_attributed_to_leader_calibration(self):
+    def test_leader_admission_fault_is_attributed_to_leader_calibration(self):
         self.start()
+        self.lab.stop()
         leader = FakeBus()
         leader.raw["shoulder_lift"] = 4001
         with self.assertRaises(EncoderRangeError):

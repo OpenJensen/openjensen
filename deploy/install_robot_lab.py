@@ -31,6 +31,7 @@ SOURCE_MODULES = (
     "camera.py",
     "calibration_draft.py",
     "dataset.py",
+    "image_writer.py",
     "assembled.py",
     "identify.py",
     "verification.py",
