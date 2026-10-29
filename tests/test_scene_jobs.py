@@ -14,7 +14,7 @@ from vla_platform.scenes.contracts import SceneJobResult, SceneRequest, SceneRun
 from vla_platform.scenes.service import Scenes
 from vla_platform.settings import Settings
 from vla_platform.storage import Storage
-from vla_platform.submissions import SubmissionConflict
+from vla_platform.submissions import SubmissionConflict, lookup
 
 MODEL = "fixture-scene"
 
@@ -360,3 +360,23 @@ def test_bound_scene_media_is_inline_ranged_and_allowlisted(tmp_path, monkeypatc
         run.job_id = "not-the-bound-job"
         app.state.scenes.save(run)
         assert client.get(base).status_code == 404
+
+
+def test_saved_scene_field_preserves_existing_submission_request_fingerprints(tmp_path):
+    async def exercise():
+        async with owner(tmp_path) as (execution, _):
+            await add_source(execution)
+            original = request()
+            legacy_record = original.model_dump(mode="json")
+            assert "source_scene_id" not in legacy_record
+            accepted = await execution.submit("project", original, idempotency_key="old-scene")
+            restored = SceneRequest.model_validate(legacy_record)
+            assert restored.source_scene_id is None
+            assert restored.model_dump(mode="json") == legacy_record
+            previous = await lookup(execution.storage, "project", "scene.generate", "old-scene")
+            assert previous.id == accepted.id
+            assert (
+                await execution.submit("project", restored, idempotency_key="old-scene")
+            ).id == accepted.id
+
+    asyncio.run(exercise())

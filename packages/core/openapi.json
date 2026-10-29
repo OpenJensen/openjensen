@@ -6908,6 +6908,18 @@
             "minLength": 1,
             "title": "Source Job Id",
             "type": "string"
+          },
+          "source_scene_id": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{32}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Scene Id"
           }
         },
         "required": [

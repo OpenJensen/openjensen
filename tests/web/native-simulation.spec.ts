@@ -1403,7 +1403,12 @@ test('historical scene jobs reopen their environment images and episode replay',
       'replay/episode-7.mp4',
       'evidence/episode-7.jpg',
     ],
-    source: { total_episodes: 30, inspected_episodes: [1, 7, 18], replay_episode: 7 },
+    source: {
+      total_episodes: 30,
+      inspected_episodes: [1, 7, 18],
+      replay_episode: 7,
+      resource_cleanup: 'cluster_removed',
+    },
   });
   await page.getByRole('link', { name: 'Real to sim', exact: true }).click();
   await openModuleWorkspace(page);
@@ -1428,6 +1433,8 @@ test('historical scene jobs reopen their environment images and episode replay',
   ).toBeVisible();
   await expect(images.getByRole('img', { name: 'Dataset episode 7' })).toHaveCount(0);
   await expect(scene).toContainText('Dataset: 30 episodes · Inspected: 1, 7, 18 · Replay: 7');
+  await expect(scene).toContainText('Compute: Released');
+  await expect(scene.getByText('Compute cleanup unverified', { exact: true })).toHaveCount(0);
   await scene.getByRole('button', { name: '← Back to jobs', exact: true }).click();
   await expect(scene.locator('[data-job-id="newer-scene-job"]')).toBeVisible();
   expect(state.native.posts).toEqual([]);
@@ -1498,6 +1505,7 @@ test('scene job terminal updates fetch partial media without claiming a successf
     status: 'failed',
     media: [{ role: 'environment_image', path: 'renders/front.png', label: 'Partial environment render' }],
     artifacts: ['renders/front.png'],
+    source: { resource_cleanup: 'unverified' },
   });
   state.jobs[0].status = 'failed';
   state.jobs[0].error = 'Episode replay failed';
@@ -1505,6 +1513,7 @@ test('scene job terminal updates fetch partial media without claiming a successf
     timeout: 10000,
   });
   await expect(scene.getByRole('alert')).toContainText('Episode replay failed');
+  await expect(scene.getByRole('status').filter({ hasText: 'Compute cleanup unverified' })).toBeVisible();
   await expect(scene.getByRole('region', { name: 'Episode replay', exact: true })).toHaveCount(0);
   await expect(scene.getByRole('progressbar')).toHaveCount(0);
 });
@@ -1570,4 +1579,92 @@ test('a mismatched scene job receipt keeps the original request recoverable', as
   await expect(scene.getByRole('region', { name: 'Real to sim job details', exact: true })).toHaveCount(0);
   const saved = await page.evaluate(() => localStorage.getItem('jensen-scene-request:alpha'));
   expect(JSON.parse(saved!)).toEqual(submitted);
+});
+
+test('retrying simulation creates a new job and retains its scene lineage through a lost receipt', async ({ page }) => {
+  const state = await sceneFixture(page);
+  await page.route('**/api/v1/scene-generation/options', (route) =>
+    route.fulfill({
+      json: {
+        configured: false,
+        simulation_available: true,
+        codex_available: false,
+        builder_available: false,
+        models: [sceneModels[0]],
+        default_model: sceneModels[0].id,
+        supported_repo: 'codywang/so101_pickup_test',
+        supported_revision: 'ecef85bc07005f771ad86deeff1427f9d72953ed',
+      },
+    }),
+  );
+  const original = {
+    request_id: 'f'.repeat(32),
+    source_job_id: 'source',
+    scope: 'dataset',
+    camera_key: 'observation.images.front',
+    max_attempts: 2,
+    model: 'gpt-6-luna',
+    reasoning_effort: 'high',
+  };
+  state.jobs.push(sceneJob('failed-scene-job', original, 'failed'));
+  state.jobs[0].error = 'Simulation worker was interrupted';
+  state.runs[original.request_id] = sceneRun(original.request_id, original, {
+    job_id: 'failed-scene-job',
+    status: 'failed',
+    gates: { source_evidence: true, agent_review: true, usd_structure: true, isaac_runtime: false },
+  });
+  const requests: Record<string, unknown>[] = [];
+  await page.route('**/api/v1/projects/alpha/scene-jobs', (route) => {
+    const request = route.request().postDataJSON();
+    requests.push(request);
+    if (requests.length === 1) {
+      const created = sceneJob('simulation-retry-job', request, 'running');
+      state.jobs.unshift(created);
+      state.runs[String(request.request_id)] = sceneRun(String(request.request_id), request, {
+        job_id: created.id,
+        status: 'running',
+        stage: 'simulating',
+      });
+      return route.fulfill({ status: 503, json: { detail: 'Reply unavailable' } });
+    }
+    return route.fulfill({ status: 202, json: state.jobs[0] });
+  });
+  await page.getByRole('link', { name: 'Real to sim', exact: true }).click();
+  await openModuleWorkspace(page);
+  const scene = page.getByRole('region', { name: 'Scene generation', exact: true });
+  await scene.locator('[data-job-id="failed-scene-job"]').click();
+  await scene.getByRole('button', { name: 'Retry simulation', exact: true }).click();
+  await expect(scene.getByRole('alert').filter({ hasText: 'Reply unavailable' })).toBeVisible();
+  await expect(scene.getByRole('button', { name: 'Check request', exact: true })).toBeEnabled();
+  expect(requests).toHaveLength(1);
+  expect(requests[0]).toMatchObject({
+    source_scene_id: original.request_id,
+    source_job_id: original.source_job_id,
+    scope: 'dataset',
+    camera_key: original.camera_key,
+    max_attempts: original.max_attempts,
+    model: original.model,
+    reasoning_effort: original.reasoning_effort,
+  });
+  expect(requests[0].request_id).not.toBe(original.request_id);
+  await page.reload();
+  await openModuleWorkspace(page);
+  await expect(scene.getByRole('heading', { name: 'Retry simulation', exact: true })).toBeVisible();
+  await expect(scene.getByLabel('Scene agent model', { exact: true })).toHaveValue(original.model);
+  await expect(scene.getByText('Scene setup required', { exact: true })).toHaveCount(0);
+  await expect(scene.getByRole('button', { name: 'Check request', exact: true })).toBeEnabled();
+  await scene.getByRole('button', { name: 'Check request', exact: true }).click();
+  await expect(scene.getByRole('button', { name: 'Cancel job', exact: true })).toBeVisible();
+  expect(requests).toHaveLength(2);
+  expect(requests[1]).toEqual(requests[0]);
+  expect(state.jobs).toHaveLength(2);
+  expect(state.jobs.find((item) => item.id === 'failed-scene-job')?.status).toBe('failed');
+  expect(await page.evaluate(() => localStorage.getItem('jensen-scene-request:alpha'))).toBeNull();
+  await scene.getByText('Details', { exact: true }).click();
+  await expect(scene).toContainText('Reused reconstruction');
+  await scene.getByRole('button', { name: 'Original job', exact: true }).click();
+  await expect(scene.getByRole('alert')).toContainText('Simulation worker was interrupted');
+  await scene.getByRole('button', { name: '← Back to jobs', exact: true }).click();
+  await expect(scene.locator('[data-job-id="failed-scene-job"]')).toContainText('failed');
+  await expect(scene.locator('[data-job-id="simulation-retry-job"]')).toContainText('running');
 });

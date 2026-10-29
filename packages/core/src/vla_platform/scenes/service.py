@@ -199,11 +199,20 @@ class Scenes:
             raise SceneError("This scene profile supports only the pinned SO101 pickup dataset.")
         if request.episode_index is not None:
             raise SceneError("Scene jobs use the full dataset. Remove the episode selection.")
-        if not self.options()["configured"]:
-            raise SceneError(
-                "Configure the Codex, OpenUSD and simulation runtimes before starting a scene job."
-            )
-        resolve(request, self.options())
+        if request.source_scene_id:
+            from vla_platform.scenes.saved import verify
+
+            await asyncio.to_thread(verify, self, project, request, source)
+            if not self.options().get("simulation_available"):
+                raise SceneError(
+                    "Configure the simulation runtime before retrying the saved scene."
+                )
+        else:
+            if not self.options()["configured"]:
+                raise SceneError(
+                    "Configure Codex, OpenUSD and simulation runtimes before starting a scene job."
+                )
+            resolve(request, self.options())
         try:
             previous = self.get(request.request_id)
         except SceneError:
@@ -434,6 +443,73 @@ class Scenes:
         finally:
             video.unlink(missing_ok=True)
 
+    def archive_bundle(self, run, bundle):
+        manifest = {
+            str(path.relative_to(bundle)): digest(path)
+            for path in sorted(bundle.rglob("*"))
+            if path.is_file() and path != bundle / "manifest.json"
+        }
+        write(
+            bundle / "manifest.json",
+            {
+                "files": manifest,
+                "source": run.source,
+                "episode_index": run.source.get("replay_episode", run.request.episode_index),
+            },
+        )
+        target = self.folder(run.id) / "scene-bundle.zip"
+        with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as archive:
+            for path in sorted(bundle.rglob("*")):
+                if path.is_file():
+                    archive.write(path, path.relative_to(bundle))
+        run.artifacts.append("scene-bundle.zip")
+
+    async def render(self, run, bundle):
+        from vla_platform.scenes.runtime import run as simulate
+
+        await self.progress(
+            run,
+            "simulating",
+            "Rendering the environment and replaying the selected recorded episode.",
+        )
+        rendered = await simulate(self, run, bundle, self.folder(run.id) / "trajectory.json")
+        run.gates["isaac_runtime"] = True
+        for media in rendered["media"]:
+            run.artifacts.append(media["path"])
+            run.media.append(
+                SceneMedia.model_validate(
+                    {key: value for key, value in media.items() if key in SceneMedia.model_fields}
+                )
+            )
+        run.artifacts.append("simulation/result.json")
+        run.status = "needs_review"
+        await self.progress(
+            run,
+            "complete",
+            "Results ready. Dataset joint mapping remains uncalibrated.",
+        )
+
+    def cleanup_roles(self, run):
+        """Remove only this run's generated Codex homes after workers are reaped."""
+        failures = 0
+        for work in self.folder(run.id).iterdir():
+            if (
+                not re.fullmatch(
+                    r"(?:attempt-[1-3]|investigation-(?:[1-9]|1[0-9]|2[0-5]))", work.name
+                )
+                or work.is_symlink()
+                or not work.is_dir()
+            ):
+                continue
+            home = work / ".codex-runtime"
+            if home.is_symlink() or not home.is_dir():
+                continue
+            try:
+                shutil.rmtree(home)
+            except OSError:
+                failures += 1
+        return failures
+
     async def execute(self, run, source, explorer):
         folder = self.folder(run.id)
         run.status = "running"
@@ -443,6 +519,16 @@ class Scenes:
 
                 await self.progress(run, "preparing", "Checking the simulation runner.")
                 await preflight(self, run)
+            if run.job_id and run.request.source_scene_id:
+                from vla_platform.scenes.saved import restore_owned, verify
+
+                await self.progress(run, "restoring", "Opening the saved reconstruction.")
+                saved = await asyncio.to_thread(verify, self, run.project_id, run.request, source)
+                bundle = await restore_owned(self, run, saved)
+                self.save(run)
+                self.archive_bundle(run, bundle)
+                await self.render(run, bundle)
+                return
             await self.progress(
                 run,
                 "evidence",
@@ -608,57 +694,9 @@ class Scenes:
                         "uncertainties": proposal.uncertainties + review.uncertainties,
                     },
                 )
-                manifest = {
-                    str(p.relative_to(bundle)): digest(p)
-                    for p in sorted(bundle.rglob("*"))
-                    if p.is_file()
-                }
-                write(
-                    bundle / "manifest.json",
-                    {
-                        "files": manifest,
-                        "source": run.source,
-                        "episode_index": run.source.get(
-                            "replay_episode", run.request.episode_index
-                        ),
-                    },
-                )
-                target = folder / "scene-bundle.zip"
-                with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as archive:
-                    for p in sorted(bundle.rglob("*")):
-                        if p.is_file():
-                            archive.write(p, p.relative_to(bundle))
-                run.artifacts += ["scene-bundle.zip"]
+                self.archive_bundle(run, bundle)
                 if run.job_id:
-                    from vla_platform.scenes.runtime import run as simulate
-
-                    await self.progress(
-                        run,
-                        "simulating",
-                        "Rendering the environment and replaying the selected recorded episode.",
-                    )
-                    rendered = await simulate(self, run, bundle, folder / "trajectory.json")
-                    run.gates["isaac_runtime"] = True
-                    run.source["resource_cleanup"] = rendered.get("resource_cleanup", "unverified")
-                    for media in rendered["media"]:
-                        relative = media["path"]
-                        run.artifacts.append(relative)
-                        run.media.append(
-                            SceneMedia.model_validate(
-                                {
-                                    key: value
-                                    for key, value in media.items()
-                                    if key in SceneMedia.model_fields
-                                }
-                            )
-                        )
-                    run.artifacts.append("simulation/result.json")
-                    run.status = "needs_review"
-                    await self.progress(
-                        run,
-                        "complete",
-                        "Results ready. Dataset joint mapping remains uncalibrated.",
-                    )
+                    await self.render(run, bundle)
                 else:
                     run.status = "needs_simulation"
                     await self.progress(
@@ -694,7 +732,25 @@ class Scenes:
                 ),
             )
         finally:
+            cleanup = asyncio.create_task(asyncio.to_thread(self.cleanup_roles, run))
+            cancelled = False
+            while not cleanup.done():
+                try:
+                    await asyncio.shield(cleanup)
+                except asyncio.CancelledError:
+                    cancelled = True
+            if cleanup.result():
+                run.events.append(
+                    {
+                        "at": now(),
+                        "stage": "cleanup",
+                        "attempt": run.attempt,
+                        "message": "Temporary agent runtime cleanup needs administrator attention.",
+                    }
+                )
             self.save(run)
+            if cancelled:
+                raise asyncio.CancelledError
 
     def artifact(self, ident, name):
         run = self.get(ident)

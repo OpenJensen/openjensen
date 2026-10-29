@@ -31,7 +31,7 @@ from vla_platform.job_observability import JobObservability, redact
 from vla_platform.lifecycle.contracts import PolicyRequest, SimulationTarget
 from vla_platform.lifecycle.service import Lifecycle
 from vla_platform.scenes.agent import SceneError
-from vla_platform.scenes.contracts import SceneRequest
+from vla_platform.scenes.contracts import AgentSettings, SceneRequest
 from vla_platform.scenes.models import resolve as resolve_scene_agent
 from vla_platform.scenes.service import Scenes
 from vla_platform.settings import Settings
@@ -205,7 +205,11 @@ class Execution:
             if source is None or source.project_id != project_id:
                 raise ValueError("Choose an inspected dataset in this project")
             await self.scenes.validate(project_id, request, source)
-            agent = resolve_scene_agent(request, self.scenes.options())
+            agent = (
+                AgentSettings(model=request.model, reasoning_effort=request.reasoning_effort)
+                if request.source_scene_id
+                else resolve_scene_agent(request, self.scenes.options())
+            )
             # Freeze the selected catalog default into the accepted job, so a
             # later configuration change cannot change an already queued run.
             request = request.model_copy(update={"model": agent.model})
