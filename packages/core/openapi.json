@@ -1089,6 +1089,7 @@
               "dataset.inspect",
               "dataset.inspect.local",
               "dataset.augment",
+              "scene.generate",
               "policy.finetune",
               "policy.distill",
               "policy.export",
@@ -3295,6 +3296,9 @@
               },
               {
                 "$ref": "#/components/schemas/TeachingCaptureRequest"
+              },
+              {
+                "$ref": "#/components/schemas/SceneRequest"
               }
             ],
             "title": "Request"
@@ -3312,6 +3316,9 @@
               },
               {
                 "$ref": "#/components/schemas/TeachingCaptureResult"
+              },
+              {
+                "$ref": "#/components/schemas/SceneJobResult"
               },
               {
                 "type": "null"
@@ -5984,6 +5991,83 @@
         "title": "RuntimePackage",
         "type": "object"
       },
+      "SceneJobResult": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "scene_generation",
+            "default": "scene_generation",
+            "title": "Kind",
+            "type": "string"
+          },
+          "scene_artifacts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scene Artifacts",
+            "type": "array"
+          },
+          "scene_id": {
+            "title": "Scene Id",
+            "type": "string"
+          },
+          "validation_status": {
+            "title": "Validation Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scene_id",
+          "validation_status"
+        ],
+        "title": "SceneJobResult",
+        "type": "object"
+      },
+      "SceneMedia": {
+        "additionalProperties": false,
+        "properties": {
+          "episode_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Index"
+          },
+          "label": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "path": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "environment_image",
+              "episode_replay",
+              "source_image",
+              "source_video"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "path",
+          "label"
+        ],
+        "title": "SceneMedia",
+        "type": "object"
+      },
       "SceneRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5995,11 +6079,17 @@
             "type": "string"
           },
           "episode_index": {
-            "default": 3,
-            "maximum": 99999.0,
-            "minimum": 0.0,
-            "title": "Episode Index",
-            "type": "integer"
+            "anyOf": [
+              {
+                "maximum": 99999.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Index"
           },
           "max_attempts": {
             "default": 2,
@@ -6020,6 +6110,12 @@
             ],
             "title": "Model"
           },
+          "operation": {
+            "const": "scene.generate",
+            "default": "scene.generate",
+            "title": "Operation",
+            "type": "string"
+          },
           "reasoning_effort": {
             "default": "medium",
             "enum": [
@@ -6036,6 +6132,12 @@
           "request_id": {
             "pattern": "^[a-f0-9]{32}$",
             "title": "Request Id",
+            "type": "string"
+          },
+          "scope": {
+            "const": "dataset",
+            "default": "dataset",
+            "title": "Scope",
             "type": "string"
           },
           "source_job_id": {
@@ -6097,6 +6199,24 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "media": {
+            "items": {
+              "$ref": "#/components/schemas/SceneMedia"
+            },
+            "title": "Media",
+            "type": "array"
           },
           "message": {
             "title": "Message",
@@ -10395,6 +10515,97 @@
         "summary": "Job Events"
       }
     },
+    "/api/v1/jobs/{job_id}/scene": {
+      "get": {
+        "operationId": "job_scene_api_v1_jobs__job_id__scene_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Job Scene",
+        "tags": [
+          "Scene generation"
+        ]
+      }
+    },
+    "/api/v1/jobs/{job_id}/scene/artifact": {
+      "get": {
+        "operationId": "job_artifact_api_v1_jobs__job_id__scene_artifact_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Job Artifact",
+        "tags": [
+          "Scene generation"
+        ]
+      }
+    },
     "/api/v1/jobs/{job_id}/simulation-media/video": {
       "get": {
         "operationId": "simulation_video_api_v1_jobs__job_id__simulation_media_video_get",
@@ -11758,6 +11969,80 @@
         ]
       }
     },
+    "/api/v1/projects/{project_id}/scene-jobs": {
+      "post": {
+        "operationId": "create_job_api_v1_projects__project_id__scene_jobs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SceneRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "Submission conflicts with an accepted request or runtime setup"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Saved acceptance cannot be verified; no replacement work is submitted"
+          }
+        },
+        "summary": "Create Job",
+        "tags": [
+          "Scene generation"
+        ]
+      }
+    },
     "/api/v1/projects/{project_id}/scenes": {
       "get": {
         "operationId": "scenes_api_v1_projects__project_id__scenes_get",
@@ -11887,6 +12172,7 @@
                 "teaching.capture",
                 "dataset.inspect",
                 "dataset.augment",
+                "scene.generate",
                 "policy.finetune",
                 "policy.distill",
                 "policy.quantize",

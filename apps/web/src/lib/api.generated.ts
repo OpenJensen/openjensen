@@ -932,6 +932,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/jobs/{job_id}/scene": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Job Scene */
+        get: operations["job_scene_api_v1_jobs__job_id__scene_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{job_id}/scene/artifact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Job Artifact */
+        get: operations["job_artifact_api_v1_jobs__job_id__scene_artifact_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/jobs/{job_id}/simulation-media/video": {
         parameters: {
             query?: never;
@@ -1381,6 +1415,23 @@ export interface paths {
         put?: never;
         /** Import Recording */
         post: operations["import_recording_api_v1_projects__project_id__robot_lab_datasets__dataset_id__import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/scene-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Job */
+        post: operations["create_job_api_v1_projects__project_id__scene_jobs_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2928,7 +2979,7 @@ export interface components {
              * Operation
              * @enum {string}
              */
-            operation: "dataset.inspect" | "dataset.inspect.local" | "dataset.augment" | "policy.finetune" | "policy.distill" | "policy.export" | "policy.quantize" | "policy.evaluate" | "policy.run";
+            operation: "dataset.inspect" | "dataset.inspect.local" | "dataset.augment" | "scene.generate" | "policy.finetune" | "policy.distill" | "policy.export" | "policy.quantize" | "policy.evaluate" | "policy.run";
             /**
              * Schema Version
              * @default 1
@@ -3749,9 +3800,9 @@ export interface components {
             /** Project Id */
             project_id: string;
             /** Request */
-            request: components["schemas"]["IntakeRequest"] | components["schemas"]["PolicyRequest"] | components["schemas"]["AugmentationRequest"] | components["schemas"]["TeachingCaptureRequest"];
+            request: components["schemas"]["IntakeRequest"] | components["schemas"]["PolicyRequest"] | components["schemas"]["AugmentationRequest"] | components["schemas"]["TeachingCaptureRequest"] | components["schemas"]["SceneRequest"];
             /** Result */
-            result?: components["schemas"]["DatasetProfile"] | components["schemas"]["LifecycleResult"] | components["schemas"]["AugmentationResult"] | components["schemas"]["TeachingCaptureResult"] | null;
+            result?: components["schemas"]["DatasetProfile"] | components["schemas"]["LifecycleResult"] | components["schemas"]["AugmentationResult"] | components["schemas"]["TeachingCaptureResult"] | components["schemas"]["SceneJobResult"] | null;
             simulation_target?: components["schemas"]["SimulationTarget"] | null;
             /** Stage */
             stage?: string | null;
@@ -4816,6 +4867,35 @@ export interface components {
             /** Ready */
             ready: boolean;
         };
+        /** SceneJobResult */
+        SceneJobResult: {
+            /**
+             * Kind
+             * @default scene_generation
+             * @constant
+             */
+            kind: "scene_generation";
+            /** Scene Artifacts */
+            scene_artifacts?: string[];
+            /** Scene Id */
+            scene_id: string;
+            /** Validation Status */
+            validation_status: string;
+        };
+        /** SceneMedia */
+        SceneMedia: {
+            /** Episode Index */
+            episode_index?: number | null;
+            /** Label */
+            label: string;
+            /** Path */
+            path: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "environment_image" | "episode_replay" | "source_image" | "source_video";
+        };
         /** SceneRequest */
         SceneRequest: {
             /**
@@ -4823,11 +4903,8 @@ export interface components {
              * @default observation.images.front
              */
             camera_key: string;
-            /**
-             * Episode Index
-             * @default 3
-             */
-            episode_index: number;
+            /** Episode Index */
+            episode_index?: number | null;
             /**
              * Max Attempts
              * @default 2
@@ -4836,6 +4913,12 @@ export interface components {
             /** Model */
             model?: string | null;
             /**
+             * Operation
+             * @default scene.generate
+             * @constant
+             */
+            operation: "scene.generate";
+            /**
              * Reasoning Effort
              * @default medium
              * @enum {string}
@@ -4843,6 +4926,12 @@ export interface components {
             reasoning_effort: "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
             /** Request Id */
             request_id: string;
+            /**
+             * Scope
+             * @default dataset
+             * @constant
+             */
+            scope: "dataset";
             /** Source Job Id */
             source_job_id: string;
         };
@@ -4868,6 +4957,10 @@ export interface components {
             };
             /** Id */
             id: string;
+            /** Job Id */
+            job_id?: string | null;
+            /** Media */
+            media?: components["schemas"]["SceneMedia"][];
             /** Message */
             message: string;
             /** Project Id */
@@ -7428,6 +7521,70 @@ export interface operations {
             };
         };
     };
+    job_scene_api_v1_jobs__job_id__scene_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SceneRun"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    job_artifact_api_v1_jobs__job_id__scene_artifact_get: {
+        parameters: {
+            query: {
+                name: string;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     simulation_video_api_v1_jobs__job_id__simulation_media_video_get: {
         parameters: {
             query?: never;
@@ -8400,6 +8557,57 @@ export interface operations {
             };
         };
     };
+    create_job_api_v1_projects__project_id__scene_jobs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "idempotency-key"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SceneRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"];
+                };
+            };
+            /** @description Submission conflicts with an accepted request or runtime setup */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Saved acceptance cannot be verified; no replacement work is submitted */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     scenes_api_v1_projects__project_id__scenes_get: {
         parameters: {
             query?: never;
@@ -8469,7 +8677,7 @@ export interface operations {
     saved_submission_api_v1_projects__project_id__submissions__key__get: {
         parameters: {
             query: {
-                operation: "teaching.capture" | "dataset.inspect" | "dataset.augment" | "policy.finetune" | "policy.distill" | "policy.quantize" | "policy.evaluate" | "policy.run" | "policy.export" | "policy.workflow" | "policy.import";
+                operation: "teaching.capture" | "dataset.inspect" | "dataset.augment" | "scene.generate" | "policy.finetune" | "policy.distill" | "policy.quantize" | "policy.evaluate" | "policy.run" | "policy.export" | "policy.workflow" | "policy.import";
             };
             header?: never;
             path: {

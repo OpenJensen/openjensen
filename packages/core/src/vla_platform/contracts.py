@@ -23,6 +23,7 @@ from vla_platform.lifecycle.contracts import (
     PolicyRequest,
     SimulationTarget,
 )
+from vla_platform.scenes.contracts import SceneJobResult, SceneRequest
 from vla_platform.teaching_sessions.contracts import TeachingCaptureRequest, TeachingCaptureResult
 
 NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
@@ -330,14 +331,21 @@ class Job(Record):
     project_id: NonEmptyString
     kind: NonEmptyString = "dataset.inspect"
     status: JobStatus = "queued"
-    request: IntakeRequest | PolicyRequest | AugmentationRequest | TeachingCaptureRequest
+    request: (
+        IntakeRequest | PolicyRequest | AugmentationRequest | TeachingCaptureRequest | SceneRequest
+    )
     compute_target: CloudExecutionTarget | None = None
     simulation_target: SimulationTarget | None = None
     created_at: Timestamp
     updated_at: Timestamp
-    result: DatasetProfile | LifecycleResult | AugmentationResult | TeachingCaptureResult | None = (
-        None
-    )
+    result: (
+        DatasetProfile
+        | LifecycleResult
+        | AugmentationResult
+        | TeachingCaptureResult
+        | SceneJobResult
+        | None
+    ) = None
     error: str | None = None
     stage: str | None = None
 
@@ -346,14 +354,17 @@ class Job(Record):
         expected = (
             self.request.operation
             if isinstance(
-                self.request, (PolicyRequest, AugmentationRequest, TeachingCaptureRequest)
+                self.request,
+                (PolicyRequest, AugmentationRequest, TeachingCaptureRequest, SceneRequest),
             )
             else "dataset.inspect"
         )
         if self.kind != expected:
             raise ValueError("Job kind must match its registered request operation")
         result_type = (
-            TeachingCaptureResult
+            SceneJobResult
+            if isinstance(self.request, SceneRequest)
+            else TeachingCaptureResult
             if isinstance(self.request, TeachingCaptureRequest)
             else AugmentationResult
             if isinstance(self.request, AugmentationRequest)
@@ -371,6 +382,7 @@ Operation = Literal[
     "dataset.inspect",
     "dataset.inspect.local",
     "dataset.augment",
+    "scene.generate",
     "policy.finetune",
     "policy.distill",
     "policy.export",
@@ -382,6 +394,7 @@ OPERATION_STAGES: dict[Operation, Stage] = {
     "dataset.inspect": "Dataset",
     "dataset.inspect.local": "Dataset",
     "dataset.augment": "Dataset",
+    "scene.generate": "Dataset",
     "policy.finetune": "Fine-tune",
     "policy.distill": "Distill",
     "policy.export": "Run",
@@ -396,6 +409,7 @@ IMPLEMENTED_OPERATIONS = frozenset(
         "dataset.inspect",
         "dataset.inspect.local",
         "dataset.augment",
+        "scene.generate",
         "policy.finetune",
         "policy.distill",
         "policy.export",

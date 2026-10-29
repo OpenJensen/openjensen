@@ -11,6 +11,7 @@ export function runLabel(job: Job) {
         'policy.export': 'Export',
         'policy.import': 'Import',
         'policy.run': 'Policy run',
+        'scene.generate': 'Real to sim',
       } as Record<string, string>
     )[job.kind] ?? 'Run'
   );
@@ -24,7 +25,7 @@ export function runSummary(job: Job, phase = job.stage, status: string = job.sta
   if (status === 'succeeded') return `${label} complete`;
   if (status === 'queued') return phase === 'preparing' ? 'Preparing your GPU' : `${label} queued`;
   if (phase === 'preparing') return 'Preparing your GPU';
-  if (phase === 'validation') return 'Validating the model';
+  if (phase === 'validation') return job.kind === 'scene.generate' ? 'Validating the scene' : 'Validating the model';
   if (phase === 'checkpoint') return 'Saving a checkpoint';
   if (phase === 'verifying') return 'Checking the saved model';
   return `${label} in progress`;

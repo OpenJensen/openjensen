@@ -34,7 +34,7 @@
 }
 .scene-fields {
   display: grid;
-  grid-template-columns: minmax(200px, 2fr) 90px minmax(180px, 1.5fr) 120px;
+  grid-template-columns: minmax(220px, 2fr) minmax(180px, 1.5fr) 120px;
   gap: 14px;
 }
 .scene-generation label {
@@ -98,7 +98,8 @@
   gap: 8px;
   margin: 20px 0;
 }
-.scene-evidence img {
+.scene-evidence img,
+.scene-evidence video {
   display: block;
   width: 100%;
   border-radius: 8px;
@@ -159,5 +160,79 @@
   }
   .scene-evidence a {
     flex: 0 0 120px;
+  }
+}
+
+.scene-field-meta {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+.scene-job-heading,
+.scene-result-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 24px 0 18px;
+}
+.scene-job-heading h2,
+.scene-result-heading h3 {
+  margin: 0;
+}
+.scene-run h3 {
+  font-size: 14px;
+  font-weight: 600;
+}
+.scene-current-stage {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-transform: capitalize;
+}
+.scene-current-stage progress {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.scene-environment {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.scene-environment figure,
+.scene-replays figure {
+  margin: 0;
+  min-width: 0;
+}
+.scene-environment img,
+.scene-replays video {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.scene-environment img {
+  aspect-ratio: 4 / 3;
+  object-fit: contain;
+}
+.scene-environment figcaption,
+.scene-replays figcaption {
+  margin: 8px 0 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.scene-replays {
+  margin: 22px 0;
+}
+.scene-replays video {
+  max-height: 500px;
+}
+@media (max-width: 600px) {
+  .scene-environment {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
