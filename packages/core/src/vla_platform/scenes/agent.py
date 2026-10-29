@@ -9,6 +9,15 @@ from pathlib import Path
 
 from vla_platform.api_connections import ApiConnections
 
+ROLE_TIMEOUTS = {
+    "low": 300,
+    "medium": 600,
+    "high": 900,
+    "xhigh": 1200,
+    "max": 1800,
+    "ultra": 1800,
+}
+
 
 class SceneError(ValueError):
     pass
@@ -125,7 +134,13 @@ async def run_role(directory, role, schema, prompt, frames, data_dir, *, model, 
         args += ["--image", frame]
     args += ["-"]
     try:
-        raw = await command(args, cwd=directory, prompt=prompt, env=env, timeout=240)
+        raw = await command(
+            args,
+            cwd=directory,
+            prompt=prompt,
+            env=env,
+            timeout=ROLE_TIMEOUTS[reasoning_effort],
+        )
         if answer.is_symlink() or not answer.is_file() or answer.stat().st_size > 65536:
             raise SceneError("Agent did not produce a bounded structured response.")
         result = schema.model_validate_json(answer.read_bytes())
