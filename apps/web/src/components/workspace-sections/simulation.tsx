@@ -2,7 +2,6 @@
 
 import { NativeReplayPanel } from '@/components/native-replay-panel';
 import { NativeSimulationPanel } from '@/components/native-simulation-panel';
-import { SceneGenerationPanel } from '@/components/scene-generation-panel';
 import { ModeCard } from '@/components/workspace-ui';
 import EngineWorkflowSection from './engine-workflow';
 import { useWorkspace } from '@/components/workspace-context';
@@ -26,7 +25,6 @@ export default function SimulationSection() {
   } = useWorkspace();
   return (
     <>
-      <SceneGenerationPanel key={workflowProjectId} projectId={workflowProjectId} />
       <section className="workflow-choices" aria-label="Run workflow">
         <h2 className="workflow-choice-title">Workflows</h2>
         <div className="mode-card-grid" role="group" aria-label="Run mode">

@@ -18,6 +18,10 @@ Open **ROBOT LAB → AI teleoperation** for physical SO101 control. **Agent Cont
 
 Inspect a public dataset or import local files. Open an episode to play its cameras, inspect samples, and edit labels before exporting.
 
+## Real to sim
+
+Open **Real to sim** under **Data** to turn a real dataset episode into an Isaac Sim scene. Choose the dataset, episode, agent model and power, then generate a scene. Saved runs retain source evidence, agent settings and scene bundles; Isaac rendering, physics validation and calibrated replay remain separate acceptance steps.
+
 ## Augmentation
 
 Select a dataset, camera and clip interval. Choose an appearance edit, review the request, and compare the returned clips before downloading.
