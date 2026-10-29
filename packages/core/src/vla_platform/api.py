@@ -164,7 +164,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.cloud_connections = CloudConnections(settings.data_dir)
             app.state.huggingface_connection = HuggingFaceConnection(settings.data_dir)
             app.state.agent_control = AgentControl(
-                storage, settings, execution, robot_bridge=app.state.robot_lab
+                storage,
+                settings,
+                execution,
+                robot_bridge=app.state.robot_lab,
+                source_commit=app.state.application_updates.installed.commit,
             )
             await app.state.agent_control.reconcile()
             try:

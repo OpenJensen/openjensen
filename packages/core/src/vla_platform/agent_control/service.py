@@ -57,15 +57,15 @@ def digest(value):
 
 
 class AgentControl(TaskControl, LocalAgents):
-    def __init__(self, storage, settings, execution, planner=None, *, robot_bridge=None):
+    def __init__(
+        self, storage, settings, execution, planner=None, *, robot_bridge=None, source_commit=None
+    ):
         self.storage = storage
         self.settings = settings
         self.execution = execution
         self.profiles = Profiles(settings.data_dir)
         self.planner = planner or runtime.run
-        from vla_platform.application_updates import installed_commit
-
-        self.local_source_commit = installed_commit()
+        self.local_source_commit = source_commit
         self.local_pending = {}
         self.tasks = {}
         self.runners = {}

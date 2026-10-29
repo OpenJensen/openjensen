@@ -426,3 +426,21 @@ def test_local_task_start_refreshes_the_observation_after_agent_startup(local):
     assert current["session"]["observation"]["id"] != original
     assert current["planning_request"]["observation_id"] == current["session"]["observation"]["id"]
     assert not robot.executions
+
+
+def test_local_launcher_pins_the_running_application_revision_without_new_discovery(
+    local, monkeypatch
+):
+    from vla_platform import application_updates
+
+    client, _, _, route, _ = local
+
+    def unexpected_probe(*_args):
+        raise AssertionError(
+            "Local connection setup must not rediscover the application's revision"
+        )
+
+    monkeypatch.setattr(application_updates, "installed_commit", unexpected_probe)
+    access = client.post(route + "/local/access")
+    assert access.status_code == 200, access.text
+    assert access.json()["source_commit"] == client.app.state.application_updates.installed.commit
