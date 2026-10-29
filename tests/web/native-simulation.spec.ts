@@ -1198,7 +1198,7 @@ test('scene generation exposes missing setup without starting agents or a GPU jo
   const scene = page.getByRole('region', { name: 'Scene generation', exact: true });
   await expect(scene).toBeVisible();
   await expect(scene.getByRole('button', { name: 'Generate scene', exact: true })).toBeDisabled();
-  await expect(scene).toContainText('Scene runtime needs setup');
+  await expect(scene).toContainText('Scene setup required');
   expect(state.posts).toEqual([]);
 });
 
@@ -1260,7 +1260,7 @@ test('generated USD keeps unverified simulator gates visible and bundles downloa
   await expect(scene).toContainText('USD structure: passed');
   await expect(scene).toContainText('Isaac runtime: unverified');
   await expect(scene).toContainText('Rendered image match: unverified');
-  await expect(scene.getByRole('link', { name: 'Download Isaac scene bundle' })).toHaveAttribute(
+  await expect(scene.getByRole('link', { name: 'Download scene', exact: true })).toHaveAttribute(
     'href',
     /scene-bundle.zip$/,
   );
