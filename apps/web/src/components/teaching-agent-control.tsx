@@ -39,7 +39,9 @@ export function TeachingAgentControl({
   };
   return (
     <section className="panel agent-control-panel" aria-labelledby="agent-control-heading">
-      <h2 id="agent-control-heading">Agent Control</h2>
+      <h2 id="agent-control-heading" tabIndex={-1}>
+        Agent Control
+      </h2>
       {projectId ? (
         <AgentControls
           key={projectId}

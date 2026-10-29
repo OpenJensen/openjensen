@@ -937,3 +937,56 @@ test('local MCP connection failures never show a usable credential', async ({ pa
   await expect(panel.getByRole('button', { name: 'Copy Codex configuration', exact: true })).toHaveCount(0);
   await expect(panel.getByRole('button', { name: 'Create local agent connection', exact: true })).toBeEnabled();
 });
+
+test('MCP setup is reachable without starting hardware or navigating away', async ({ page }, testInfo) => {
+  const { requests } = await fixture(page, { physical: true, localMcp: true });
+  await page.goto('/ai-teleoperation/');
+  const setup = page.getByRole('button', { name: 'MCP setup', exact: true }).filter({ visible: true });
+  await expect(setup).toBeVisible();
+  await setup.click();
+  const dialog = page.getByRole('dialog', { name: 'MCP setup', exact: true });
+  await expect(dialog).toContainText('Local agent (MCP)');
+  await expect(dialog.getByRole('link', { name: 'Open AI teleoperation', exact: true })).toHaveAttribute(
+    'href',
+    '/ai-teleoperation/',
+  );
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1))
+    .toBe(true);
+  const box = await dialog.boundingBox();
+  expect(box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+  await dialog.screenshot({ path: testInfo.outputPath('mcp-setup.png') });
+  expect(requests).toEqual([]);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(setup).toBeFocused();
+  await expect(page).toHaveURL(/\/ai-teleoperation\/$/);
+});
+
+test('MCP setup keeps the armed session alive and returns to its existing connection', async ({ page }) => {
+  const { requests, robot } = await fixture(page, { physical: true, localMcp: true });
+  await connectPhysical(page);
+  await page.getByRole('combobox', { name: 'Agent provider profile', exact: true }).selectOption('local-mcp');
+  await page.getByRole('button', { name: 'Arm AI session', exact: true }).click();
+  const panel = page.getByRole('region', { name: 'Local agent connection', exact: true });
+  await expect(panel).toBeVisible();
+  const count = () => requests.filter((request) => request.path.endsWith('/heartbeat')).length;
+  const heartbeats = count();
+  await page.getByRole('button', { name: 'MCP setup', exact: true }).filter({ visible: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'MCP setup', exact: true });
+  await expect(dialog).toBeVisible();
+  await expect.poll(count).toBeGreaterThan(heartbeats + 1);
+  expect(robot.session.torque_enabled).toBe(true);
+  expect(
+    requests.filter((request) => request.path.endsWith('/stop') || request.path.endsWith('/local/access')),
+  ).toEqual([]);
+  await dialog.getByRole('button', { name: 'Show session connection', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(panel).toBeFocused();
+  await expect(panel.getByRole('button', { name: 'Create local agent connection', exact: true })).toBeVisible();
+  expect(requests.filter((request) => request.path.endsWith('/stop'))).toEqual([]);
+  await page.getByRole('button', { name: 'MCP setup', exact: true }).filter({ visible: true }).click();
+  await dialog.getByRole('button', { name: 'Close MCP setup', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await page.getByRole('button', { name: 'Stop arm and disable torque', exact: true }).click();
+});

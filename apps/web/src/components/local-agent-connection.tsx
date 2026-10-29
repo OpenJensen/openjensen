@@ -104,7 +104,12 @@ export function LocalAgentConnection({
   }
   const pending = ['observing', 'planning', 'executing', 'stopping'].includes(session.status);
   return (
-    <section className="agent-provider-card" aria-label="Local agent connection">
+    <section
+      id="local-agent-connection"
+      className="agent-provider-card"
+      aria-label="Local agent connection"
+      tabIndex={-1}
+    >
       <h3>Local agent (MCP)</h3>
       <p>
         Connect your Codex or Claude through OpenJensen’s MCP adapter. It can read this session’s state and admitted
