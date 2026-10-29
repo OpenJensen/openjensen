@@ -128,7 +128,7 @@ function Workbench({ children }: { children: ReactNode }) {
                             <li key={id}>
                               <Link
                                 href={item.path}
-                                prefetch={false}
+                                prefetch
                                 className={`stage-button${activeStage === id ? ' selected' : ''}`}
                                 onNavigate={(event) => {
                                   event.preventDefault();
